@@ -7,7 +7,6 @@ const DRAG_THRESHOLD = 8;
 const DIST_MIN = 4, DIST_MAX = 14;
 const PITCH_MIN = 0.35, PITCH_MAX = 1.25, PITCH_DEFAULT = 0.8;
 const SWIPE_MIN = 40;
-const JUMP_V = 4.2, GRAVITY = 14;
 
 const defaultDist = () => (window.innerWidth < window.innerHeight ? 11 : 8.5);
 
@@ -28,12 +27,12 @@ export class Player {
     this.dom = dom;
     this.world = world;
     this.character = character;
-    this.events = events;           // { onArrivePainting, onRoomChange, onInput(kind) }
+    this.events = events;           // { onArrivePainting, onArriveMirror, onJump, onRoomChange, onInput(kind) }
     this.pos = new THREE.Vector3(0, 0, -2);
     this.heading = Math.PI;
     this.path = [];
-    this.pending = null;            // 正要走去看的畫
-    this.focus = null;              // 正在看的畫
+    this.pending = null;            // 正要走去看的畫或鏡子
+    this.focus = null;              // 正在看的畫或鏡子
     this.camYaw = 0;
     this.camPitch = PITCH_DEFAULT;
     this.camDist = defaultDist();
@@ -44,8 +43,6 @@ export class Player {
     this.goal = null;
     this.room = -1;
     this.speed = 0;
-    this.jumpY = 0;
-    this.jumpV = 0;
     this.raycaster = new THREE.Raycaster();
     this.marker = this.makeMarker();
     this.markerT = 1;
@@ -95,7 +92,7 @@ export class Player {
       if (!p.drag && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) > DRAG_THRESHOLD) {
         p.drag = true;
         // 觸控看畫時，左右滑是切換作品，不轉鏡頭
-        p.swipe = !!this.focus && !p.mouse && Math.abs(e.clientX - p.sx) > Math.abs(e.clientY - p.sy);
+        p.swipe = this.focus?.kind === 'painting' && !p.mouse && Math.abs(e.clientX - p.sx) > Math.abs(e.clientY - p.sy);
       }
       if (p.drag && !multi && !p.swipe) this.orbit(dx, dy, p.mouse);
     });
@@ -154,6 +151,7 @@ export class Player {
     if (!hit) return;
     this.events.onInput('tap');
     if (hit.object.userData.painting) return this.goToPainting(hit.object.userData.painting);
+    if (hit.object.userData.mirror) return this.goToMirror();
     const t = this.world.findWalkable(hit.point.x, hit.point.z, this.pos.x, this.pos.z);
     if (!t) return;
     this.exitFocus();
@@ -181,16 +179,39 @@ export class Player {
     }
     if (!stand) stand = this.world.findWalkable(p.wall.x + n.x * 1.5, p.wall.z + n.z * 1.5, this.pos.x, this.pos.z) || { x: this.pos.x, z: this.pos.z };
     return {
-      p, stand,
+      kind: 'painting', p, n, stand,
       camPos: new THREE.Vector3(p.wall.x + n.x * fd, p.cy, p.wall.z + n.z * fd),
       look: p.center.clone(),
       fadeTarget: p.center.clone().addScaledVector(n, 0.3),
     };
   }
 
+  // 照鏡子：站在鏡前，鏡頭從鏡子的位置看回來，看得到自己的正面
+  // 距離依螢幕比例算，手機下方被面板蓋住的部分要扣掉，全身才看得到
+  planMirror() {
+    const m = this.world.mirror, n = m.n;
+    const visH = window.innerWidth >= 900 ? 1 : 0.6;
+    const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    const d = 0.35 + Math.max(1.8, 2.0 / 2 / (tanV * visH));
+    const stand = this.world.findWalkable(m.x + n.x * d, m.z + n.z * d, this.pos.x, this.pos.z) || { x: this.pos.x, z: this.pos.z };
+    return {
+      kind: 'mirror', n, stand,
+      camPos: new THREE.Vector3(m.x + n.x * 0.35, 1.05, m.z + n.z * 0.35),
+      look: new THREE.Vector3(stand.x, 0.85, stand.z),
+      fadeTarget: new THREE.Vector3(stand.x, 0, stand.z),
+    };
+  }
+
   goToPainting(p) {
+    this.goTo(this.planFocus(p));
+  }
+
+  goToMirror() {
+    if (this.world.mirror) this.goTo(this.planMirror());
+  }
+
+  goTo(plan) {
     this.exitFocus();
-    const plan = this.planFocus(p);
     this.pending = plan;
     if (Math.hypot(this.pos.x - plan.stand.x, this.pos.z - plan.stand.z) < 0.25) {
       this.path = [];
@@ -210,7 +231,7 @@ export class Player {
 
   // 看畫時換到前一幅或後一幅，順序同 gallery.json，到頭就停
   switchPainting(dir) {
-    if (!this.focus) return;
+    if (this.focus?.kind !== 'painting') return;
     const list = this.world.paintings, i = list.indexOf(this.focus.p) + dir;
     if (i >= 0 && i < list.length) this.showPainting(list[i]);
   }
@@ -252,18 +273,27 @@ export class Player {
     return best;
   }
 
+  // 附近的畫或鏡子，取比較近的那個（給動作按鈕用）。回傳畫、'mirror' 或 null
+  nearbyTarget() {
+    const p = this.nearbyPainting(), m = this.world.mirror;
+    if (!m || this.focus || this.pending) return p;
+    const dx = this.pos.x - m.x, dz = this.pos.z - m.z, d = Math.hypot(dx, dz);
+    if (dx * m.n.x + dz * m.n.z < 0.3 || d > 3) return p;
+    return p && Math.hypot(this.pos.x - p.wall.x, this.pos.z - p.wall.z) < d ? p : 'mirror';
+  }
+
   action() {
-    const p = this.nearbyPainting();
-    if (p) {
-      this.events.onInput('tap');
-      this.goToPainting(p);
-    }
+    const t = this.nearbyTarget();
+    if (!t) return;
+    this.events.onInput('tap');
+    if (t === 'mirror') this.goToMirror();
+    else this.goToPainting(t);
   }
 
   jump() {
-    if (this.jumpY > 0 || this.jumpV > 0) return;
+    if (!this.character.jump()) return;
     this.events.onInput('key');
-    this.jumpV = JUMP_V;
+    this.events.onJump?.();
   }
 
   arrive() {
@@ -271,13 +301,14 @@ export class Player {
     if (!plan) return;
     this.pending = null;
     this.focus = plan;
-    this.events.onArrivePainting(plan.p);
+    if (plan.kind === 'mirror') this.events.onArriveMirror?.();
+    else this.events.onArrivePainting(plan.p);
   }
 
   exitFocus() {
     if (!this.focus) return;
-    // 鏡頭退到角色背後、面向剛才的畫。看畫時鏡頭在角色和畫之間，照原方位拉遠會跑到牆後
-    const n = this.focus.p.n;
+    // 鏡頭退到角色背後、面向剛才的畫或鏡子。看畫時鏡頭在角色和畫之間，照原方位拉遠會跑到牆後
+    const n = this.focus.n;
     this.focus = null;
     this.camYaw = Math.atan2(n.x, n.z);
   }
@@ -383,24 +414,14 @@ export class Player {
     const mx = this.pos.x - ox, mz = this.pos.z - oz;
     this.speed = Math.hypot(mx, mz) / Math.max(dt, 1e-4);
 
-    // 角色轉向：走路時面向前進方向，看畫時面向畫
+    // 角色轉向：走路時面向前進方向，看畫或照鏡子時面向它
     let want = null;
     if (this.speed > 0.05) want = Math.atan2(mx, mz);
-    else if (this.focus) want = Math.atan2(-this.focus.p.n.x, -this.focus.p.n.z);
+    else if (this.focus) want = Math.atan2(-this.focus.n.x, -this.focus.n.z);
     if (want !== null) this.heading += wrapAngle(want - this.heading) * Math.min(1, dt * 10);
-
-    if (this.jumpY > 0 || this.jumpV > 0) {
-      this.jumpV -= GRAVITY * dt;
-      this.jumpY = Math.max(0, this.jumpY + this.jumpV * dt);
-      if (this.jumpY === 0) this.jumpV = 0;
-    }
 
     const ch = this.character;
     ch.group.position.copy(this.pos);
-    ch.group.position.y = this.jumpY;
-    // 影子留在地面，越高越小
-    ch.shadow.position.y = 0.012 - this.jumpY;
-    ch.shadow.scale.setScalar(1 - Math.min(0.4, this.jumpY * 0.5));
     ch.group.rotation.y = this.heading;
     ch.update(dt, this.speed);
 
@@ -413,7 +434,7 @@ export class Player {
     this.camera.lookAt(this.camLook);
     const settling = this.camPos.distanceToSquared(dPos) > 1e-4 || this.camLook.distanceToSquared(dLook) > 1e-4;
 
-    this.moving = this.speed > 0.05 || settling || turn !== 0 || this.jumpY > 0;
+    this.moving = this.speed > 0.05 || settling || turn !== 0 || ch.busy;
     if (this.markerT < 1) {
       this.markerT = Math.min(1, this.markerT + dt * 1.4);
       this.marker.material.opacity = (1 - this.markerT) * 0.9;

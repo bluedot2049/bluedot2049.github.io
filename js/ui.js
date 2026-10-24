@@ -1,4 +1,6 @@
-// 畫面上的 HTML 介面：作品資訊、房間名稱、平面清單。
+// 畫面上的 HTML 介面：作品資訊、換裝、房間名稱、平面清單。
+import { ROBES, HATS, SCARVES } from './character.js';
+
 const $ = (s) => document.querySelector(s);
 
 function esc(s) {
@@ -28,12 +30,14 @@ export class UI {
   constructor(gallery) {
     this.gallery = gallery;
     this.sheet = $('#sheet');
+    this.dress = $('#dress');
     this.toastEl = $('#toast');
     this.list = $('#list');
     this.onGoTo = null;
     this.onSheet = null;
     this.onClose = null;
     $('#sheet-close').addEventListener('click', () => { this.hidePainting(); this.onClose?.(); });
+    $('#dress-close').addEventListener('click', () => { this.hideDress(); this.onClose?.(); });
     $('#sheet-thumb').addEventListener('click', () => this.openViewer($('#sheet-img').src));
     $('#viewer-close').addEventListener('click', () => this.closeViewer());
     this.bindViewer();
@@ -63,6 +67,36 @@ export class UI {
 
   get sheetOpen() {
     return this.sheet.classList.contains('open');
+  }
+
+  // 目前打開的抽屜，主程式用它的高度挪畫面
+  get panel() {
+    return [this.sheet, this.dress].find((el) => el.classList.contains('open')) || null;
+  }
+
+  // 換裝：三排色塊，點了馬上換。onPick(部位, 色號)
+  showDress(outfit, onPick) {
+    const parts = [['長袍', ROBES], ['帽子', HATS], ['圍巾', SCARVES]];
+    const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+    const rows = $('#dress-rows');
+    rows.innerHTML = parts.map(([name, list], i) => `
+      <div class="dress-row">
+        <span>${name}</span>
+        <div class="swatches">${list.map((c, k) => `<button data-part="${i}" data-k="${k}" class="${outfit[i] === k ? 'on' : ''}" style="background:${hex(c)}" aria-label="${name}第 ${k + 1} 色"></button>`).join('')}</div>
+      </div>`).join('');
+    rows.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+      const part = +b.dataset.part;
+      rows.querySelectorAll(`button[data-part="${part}"]`).forEach((x) => x.classList.toggle('on', x === b));
+      onPick(part, +b.dataset.k);
+    }));
+    this.dress.classList.add('open');
+    this.onSheet?.(true);
+  }
+
+  hideDress() {
+    if (!this.dress.classList.contains('open')) return;
+    this.dress.classList.remove('open');
+    this.onSheet?.(false);
   }
 
   // 全螢幕看大圖：雙指縮放、拖曳移動、點兩下切換放大

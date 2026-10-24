@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import * as TX from './textures.js';
 import { PROPS, SETS, Kit, rng, newBucket, mergeBucket, weightedPick, buildWindow } from './props.js';
+import { buildMirror } from './mirror.js';
 
 export const WALL_H = 3.2;
 export const DOOR_W = 2;
@@ -660,6 +661,7 @@ function stringLights(room, R, bucket) {
 
 export function buildWorld(scene, gallery) {
   const rooms = [], paintings = [], entries = [], raycastTargets = [];
+  let mirror = null;
   let z = 0;
 
   gallery.rooms.forEach((data, i) => {
@@ -713,6 +715,22 @@ export function buildWorld(scene, gallery) {
           if (b > a) sp.occ.push([(a - th0) * room.r, (b - th0) * room.r]);
         }
       }
+    }
+
+    // 第一間房入口那面牆留給換裝鏡（圓廳沒有平的入口牆，就不放）
+    if (room.index === 0 && room.frontEntry) {
+      const sp = boxSpan(room, 'front'), s0 = Math.max(1.0, room.w / 2 - 1.4);
+      sp.occ.push([s0 - 0.9, s0 + 0.9]);
+      const pt = sp.at(s0), rot = Math.atan2(pt.nx, pt.nz);
+      const { group, glass } = buildMirror();
+      const x = pt.x + pt.nx * 0.2, z = pt.z + pt.nz * 0.2;
+      group.position.set(x, 0, z);
+      group.rotation.y = rot;
+      room.group.add(group);
+      group.traverse((m) => { if (m.isMesh) sp.entry.tall.push(m); });
+      room.obstacles.push({ x, z, hw: 0.55, hd: 0.25, rot });
+      raycastTargets.push(glass);
+      mirror = { x, z, n: { x: pt.nx, z: pt.nz } };
     }
 
     const slots = slotsFor(room);
@@ -945,5 +963,5 @@ export function buildWorld(scene, gallery) {
     }
   }
 
-  return { rooms, paintings, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, setCurrentRoom, update };
+  return { rooms, paintings, mirror, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, setCurrentRoom, update };
 }

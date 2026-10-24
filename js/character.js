@@ -5,26 +5,28 @@ function mat(color) {
   return new THREE.MeshLambertMaterial({ color, flatShading: true });
 }
 
-// 自己的配色；其他訪客從 OTHER_COLORS 挑一組
-const OWN_COLORS = { robe: 0x2f5d62, hat: 0x4a2f66, scarf: 0xc0392b };
-export const OTHER_COLORS = [
-  { robe: 0x7a3b2e, hat: 0x2c3e50, scarf: 0xe0b44c },
-  { robe: 0x3d5a2a, hat: 0x6b3a1f, scarf: 0xd9d2c0 },
-  { robe: 0x5b3f78, hat: 0x1f3d5a, scarf: 0xe58a3a },
-  { robe: 0x8a6a2f, hat: 0x2b1f3d, scarf: 0x4fa3a5 },
-  { robe: 0x2a3f6b, hat: 0x7a2a3a, scarf: 0xf0d48a },
-  { robe: 0x6b2a4a, hat: 0x2f4a3a, scarf: 0x9ad0e0 },
-  { robe: 0x9a4a2a, hat: 0x3a2a1a, scarf: 0x6fbf73 },
-  { robe: 0x4a4a52, hat: 0x8a2a2a, scarf: 0xf2c94c },
-];
+// 換裝的三個部位，各 8 色。第 i 套預設配色就是三排各取第 i 個
+export const ROBES = [0x2f5d62, 0x7a3b2e, 0x3d5a2a, 0x5b3f78, 0x8a6a2f, 0x2a3f6b, 0x6b2a4a, 0x4a4a52];
+export const HATS = [0x4a2f66, 0x2c3e50, 0x6b3a1f, 0x1f5a4a, 0x2b1f3d, 0x7a2a3a, 0x2f4a3a, 0x8a2a2a];
+export const SCARVES = [0xc0392b, 0xe0b44c, 0xd9d2c0, 0xe58a3a, 0x4fa3a5, 0xe27a9a, 0x9ad0e0, 0x6fbf73];
+export const JUMP_V = 4.2, GRAVITY = 14;
+const ACT_TIME = 1.6;
+
+export const presetOutfit = (i) => [i, i, i];
+export const randomOutfit = () => presetOutfit(Math.floor(Math.random() * ROBES.length));
+// 長袍、帽子、圍巾的色號；外來資料要先過這關
+export const isOutfit = (o) => Array.isArray(o) && o.length === 3 && o.every((v) => Number.isInteger(v) && v >= 0 && v < ROBES.length);
+
+const smooth = (t) => t * t * (3 - 2 * t);
 
 export class Character {
-  constructor(shadowTex, colors = OWN_COLORS) {
+  constructor(shadowTex, outfit) {
     const g = new THREE.Group();
     const body = new THREE.Group();
     g.add(body);
 
-    const robe = mat(colors.robe), skin = mat(0xf1c9a5), hat = mat(colors.hat), dark = mat(0x3a2414), scarf = mat(colors.scarf), hair = mat(0x5a3a22);
+    const robe = mat(0), skin = mat(0xf1c9a5), hat = mat(0), dark = mat(0x3a2414), scarf = mat(0), hair = mat(0x5a3a22);
+    this.mats = [robe, hat, scarf];
 
     const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.3, 0.7, 8), robe);
     torso.position.y = 0.45;
@@ -126,6 +128,36 @@ export class Character {
     this.body = body;
     this.phase = 0;
     this.time = 0;
+    this.jumpY = 0;
+    this.jumpV = 0;
+    this.act = null;               // 正在做的表情動作 { e, t }
+    this.setOutfit(outfit);
+  }
+
+  setOutfit(o) {
+    if (!isOutfit(o)) o = presetOutfit(0);
+    this.outfit = o.slice();
+    [ROBES, HATS, SCARVES].forEach((list, i) => this.mats[i].color.setHex(list[o[i]]));
+  }
+
+  // 已經在空中就不再跳，回傳有沒有起跳
+  jump() {
+    if (this.airborne) return false;
+    this.jumpV = JUMP_V;
+    return true;
+  }
+
+  get airborne() {
+    return this.jumpY > 0 || this.jumpV > 0;
+  }
+
+  emote(e) {
+    this.act = { e, t: 0 };
+  }
+
+  // 還有動畫在播（跳躍、表情），主迴圈不能降幀
+  get busy() {
+    return this.airborne || !!this.act;
   }
 
   update(dt, speed) {
@@ -151,5 +183,62 @@ export class Character {
     this.body.scale.y = 1 + breath * 0.015;
     this.hat.rotation.z = -0.12 + Math.sin(this.time * 1.7) * 0.04 * (1 - w) + s * 0.06 * w;
     this.scarfTail.rotation.x = 0.2 + w * 0.5 + Math.sin(this.time * 6) * 0.08 * w;
+    this.body.rotation.y = 0;
+    this.hat.position.y = 0.13;
+
+    if (this.airborne) {
+      this.jumpV -= GRAVITY * dt;
+      this.jumpY = Math.max(0, this.jumpY + this.jumpV * dt);
+      if (this.jumpY === 0) this.jumpV = 0;
+    }
+    this.group.position.y = this.jumpY;
+    // 影子留在地面，越高越小
+    this.shadow.position.y = 0.012 - this.jumpY;
+    this.shadow.scale.setScalar(1 - Math.min(0.4, this.jumpY * 0.5));
+
+    if (this.act) this.pose(dt, w);
+  }
+
+  // 表情動作疊在走路動作上面。走路時只動手，站著時整個身體一起演
+  pose(dt, walk) {
+    const a = this.act;
+    a.t += dt;
+    const t = a.t;
+    if (t >= ACT_TIME) { this.act = null; return; }
+    const k = smooth(Math.min(1, t / 0.15, (ACT_TIME - t) / 0.25));
+    const kb = k * (1 - walk);
+    const L = this.armL.rotation, R = this.armR.rotation, B = this.body.rotation;
+    const arms = (lx, lz, rx, rz) => {
+      L.x += (lx - L.x) * k; L.z += (lz - L.z) * k;
+      R.x += (rx - R.x) * k; R.z += (rz - R.z) * k;
+    };
+    switch (a.e) {
+      case '👋':
+        arms(L.x, L.z, -0.25, 2.5 + Math.sin(t * 12) * 0.35);
+        B.z += -0.06 * kb;
+        break;
+      case '👏': {
+        const open = Math.abs(Math.sin(t * Math.PI * 3)) * 0.45;
+        arms(-1.3, 0.6 - open, -1.3, -0.6 + open);
+        B.x += 0.06 * kb;
+        break;
+      }
+      case '❤️':
+        arms(-1.0, 0.75, -1.0, -0.75);
+        B.x += 0.12 * kb;
+        B.z += Math.sin(t * 4) * 0.08 * kb;
+        break;
+      case '✨':
+        arms(-0.3, -2.4, -0.3, 2.4);
+        // 原地轉一圈，像施法
+        B.y = smooth(Math.min(1, t / 0.8)) * Math.PI * 2 * (1 - walk);
+        this.hat.rotation.z -= Math.sin(Math.min(1, t / 0.8) * Math.PI) * 0.3 * kb;
+        break;
+      case '😮':
+        arms(-2.2, 0.5, -2.2, -0.5);
+        B.x += -0.25 * kb;
+        this.hat.position.y += Math.max(0, Math.sin(Math.min(1, t / 0.35) * Math.PI)) * 0.1 * kb;
+        break;
+    }
   }
 }

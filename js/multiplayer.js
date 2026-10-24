@@ -1,7 +1,7 @@
 // 多人同遊：透過 Supabase Realtime 互傳位置和表情。gallery.json 沒填 realtime 就不啟用。
-// 其他訪客用不同配色的學徒顯示，不取名、不聊天。
+// 其他訪客的學徒用對方自己選的配色，不取名、不聊天。
 import * as THREE from 'three';
-import { Character, OTHER_COLORS } from './character.js';
+import { Character, isOutfit, presetOutfit, ROBES } from './character.js';
 
 const SEND_MOVING = 200;    // 走動時每 0.2 秒送一次位置
 const SEND_IDLE = 8000;     // 站著不動時偶爾報一次，確認還在
@@ -12,6 +12,8 @@ const MAX_UNVERIFIED = 5;   // 在線名單還沒認可的新面孔，同時最�
 const UNVERIFIED_TTL = 10000; // 超過這麼久還沒被認可就丟掉
 const COORD_LIMIT = 200;    // 畫廊遠小於這個範圍，超過的座標一律當作亂送
 const EMOTE_GAP = 800;      // 自己送表情的最短間隔
+const JUMP_GAP = 400;       // 自己送跳躍的最短間隔
+const OUTFIT_DELAY = 1000;  // 換裝停手這麼久才送出，連點色塊不會一直送
 const EMOTE_TIME = 2;       // 表情在頭上停留的秒數
 export const EMOTES = ['❤️', '✨', '👏', '😮', '👋'];
 
@@ -34,11 +36,17 @@ function loadScript(src) {
   });
 }
 
-// 同一個人每次都是同一組顏色
-function colorsFor(id) {
+// 還沒收到對方的配色前，先用代號算一套，收到後再換
+function fallbackOutfit(id) {
   let h = 0;
   for (const c of id) h = (h * 31 + c.charCodeAt(0)) | 0;
-  return OTHER_COLORS[Math.abs(h) % OTHER_COLORS.length];
+  return presetOutfit(Math.abs(h) % ROBES.length);
+}
+
+// 在線名單裡對方最新的配色
+function outfitIn(metas) {
+  const o = Array.isArray(metas) ? metas[metas.length - 1]?.o : null;
+  return isOutfit(o) ? o : null;
 }
 
 const emojiTextures = new Map();
@@ -66,7 +74,7 @@ function dispose(obj) {
 }
 
 export class Multiplayer {
-  constructor(scene, shadowTex, player, cfg, events) {
+  constructor(scene, shadowTex, player, cfg, events, outfit) {
     this.scene = scene;
     this.shadowTex = shadowTex;
     this.player = player;
@@ -75,11 +83,14 @@ export class Multiplayer {
     this.id = Math.random().toString(36).slice(2, 10);
     this.others = new Map();        // id -> { ch, pos, target, heading, seen, speed }
     this.present = new Set();       // 目前在線上的訪客 id（來自 presence）
+    this.outfits = new Map();       // id -> 配色（來自 presence）
+    this.outfit = outfit;
     this.fx = [];                   // 正在飄的表情
     this.active = false;
     this.last = null;
     this.lastSent = 0;
     this.lastEmote = 0;
+    this.lastJump = 0;
   }
 
   async connect() {
@@ -90,18 +101,34 @@ export class Multiplayer {
     });
     ch.on('broadcast', { event: 'pos' }, ({ payload }) => this.onPos(payload))
       .on('broadcast', { event: 'emote' }, ({ payload }) => this.onEmote(payload))
+      .on('broadcast', { event: 'jump' }, ({ payload }) => this.onJump(payload))
       .on('presence', { event: 'sync' }, () => {
-        this.present = new Set(Object.keys(ch.presenceState()));
+        const state = ch.presenceState();
+        this.present = new Set(Object.keys(state));
+        this.outfits.clear();
+        for (const [id, metas] of Object.entries(state)) {
+          const o = outfitIn(metas);
+          if (o) this.outfits.set(id, o);
+        }
+        for (const [id, o] of this.others) {
+          const want = this.outfits.get(id);
+          if (want && want.join() !== o.ch.outfit.join()) o.ch.setOutfit(want);
+        }
         this.events.onCount(this.present.size);
       })
       // 有人進來就馬上報一次位置，對方才不用等
       .on('presence', { event: 'join' }, ({ key }) => { this.present.add(key); this.last = null; })
-      .on('presence', { event: 'leave' }, ({ key }) => { this.present.delete(key); this.remove(key); })
+      // 換裝重新登記時也會先收到一次離開，那個人還有其他登記就不算走了
+      .on('presence', { event: 'leave' }, ({ key, currentPresences }) => {
+        if (currentPresences?.length) return;
+        this.present.delete(key);
+        this.remove(key);
+      })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           this.active = true;
           this.last = null;
-          ch.track({});
+          ch.track({ o: this.outfit });
           this.events.onReady();
         } else {
           this.active = false;
@@ -130,7 +157,7 @@ export class Multiplayer {
       if (this.others.size >= MAX_TRACKED) return;
       // 在線名單同步比訊息慢，新來的人先暫時放行，但名額很少，認可不了就丟掉
       if (!this.present.has(m.id) && [...this.others.values()].filter((x) => !x.verified).length >= MAX_UNVERIFIED) return;
-      const ch = new Character(this.shadowTex, colorsFor(m.id));
+      const ch = new Character(this.shadowTex, this.outfits.get(m.id) || fallbackOutfit(m.id));
       this.scene.add(ch.group);
       o = { ch, pos: new THREE.Vector3(m.x, 0, m.z), heading: m.h, speed: 0, verified: this.present.has(m.id), born: performance.now() };
       this.others.set(m.id, o);
@@ -153,11 +180,34 @@ export class Multiplayer {
     this.lastEmote = now;
     this.channel.send({ type: 'broadcast', event: 'emote', payload: { id: this.id, e } });
     this.pop(this.player.character.group, e);
+    this.player.character.emote(e);
   }
 
   onEmote(m) {
     const o = m && isId(m.id) ? this.others.get(m.id) : null;
-    if (o && o.ch.group.visible && EMOTES.includes(m.e)) this.pop(o.ch.group, m.e);
+    if (o && o.ch.group.visible && EMOTES.includes(m.e)) {
+      this.pop(o.ch.group, m.e);
+      o.ch.emote(m.e);
+    }
+  }
+
+  // 只送「跳了」這件事，高度由各自的畫面照同樣的重力算
+  jump() {
+    const now = performance.now();
+    if (!this.active || now - this.lastJump < JUMP_GAP) return;
+    this.lastJump = now;
+    this.channel.send({ type: 'broadcast', event: 'jump', payload: { id: this.id } });
+  }
+
+  onJump(m) {
+    const o = m && isId(m.id) ? this.others.get(m.id) : null;
+    if (o && o.ch.group.visible) o.ch.jump();
+  }
+
+  setOutfit(o) {
+    this.outfit = o.slice();
+    clearTimeout(this.outfitTimer);
+    this.outfitTimer = setTimeout(() => { if (this.active) this.channel.track({ o: this.outfit }); }, OUTFIT_DELAY);
   }
 
   // 頭上冒出表情，往上飄再淡出
@@ -203,7 +253,7 @@ export class Multiplayer {
       g.position.copy(o.pos);
       g.rotation.y = o.heading;
       o.ch.update(dt, o.speed);
-      if (o.speed > 0.05) moving = true;
+      if (o.speed > 0.05 || o.ch.busy) moving = true;
     });
 
     for (const f of this.fx) {

@@ -110,7 +110,7 @@ img, canvas {
 }
 #online[hidden], #emote[hidden] { display: none; }
 
-/* 表情：左下「看畫」上方，點開往上排出一列 */
+/* 表情：左下「跳」上方，點開往上排出一列 */
 #emote {
   position: fixed; z-index: 20;
   left: calc(20px + env(safe-area-inset-left)); bottom: calc(130px + env(safe-area-inset-bottom));
@@ -154,12 +154,12 @@ img, canvas {
 }
 body.touch #joy { display: block; }
 
-/* 跳躍按鈕：只在觸控裝置顯示，放在搖桿上方 */
+/* 跳躍按鈕：只在觸控裝置顯示，放在左下 */
 #jump-btn {
   position: fixed; z-index: 20;
-  right: calc(52px + env(safe-area-inset-right)); bottom: calc(166px + env(safe-area-inset-bottom));
-  width: 56px; height: 56px; padding: 0; border-radius: 50%;
-  font: inherit; font-size: 16px; color: var(--gold);
+  left: calc(26px + env(safe-area-inset-left)); bottom: calc(44px + env(safe-area-inset-bottom));
+  width: 68px; height: 68px; padding: 0; border-radius: 50%;
+  font: inherit; font-size: 18px; color: var(--gold);
   background: rgba(38, 26, 18, 0.55); border: 1.5px solid var(--line);
   display: none; touch-action: none; cursor: pointer;
   transition: opacity .3s;
@@ -168,10 +168,10 @@ body.touch #joy { display: block; }
 body.touch #jump-btn { display: block; }
 body.panel-open #jump-btn { opacity: 0; pointer-events: none; }
 
-/* 靠近畫作時出現的按鈕 */
+/* 靠近畫作或鏡子時出現的按鈕：手機在搖桿正上方，電腦在右下 */
 #action-btn {
   position: fixed; z-index: 20;
-  left: calc(20px + env(safe-area-inset-left)); bottom: calc(44px + env(safe-area-inset-bottom));
+  right: calc(22px + env(safe-area-inset-right)); bottom: calc(44px + env(safe-area-inset-bottom));
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   min-width: 96px; max-width: 150px; height: 72px; padding: 0 18px;
   font: inherit; color: #2a1a0c;
@@ -181,14 +181,15 @@ body.panel-open #jump-btn { opacity: 0; pointer-events: none; }
   opacity: 0; transform: scale(.7); pointer-events: none;
   transition: opacity .2s, transform .2s;
 }
+body.touch #action-btn { bottom: calc(166px + env(safe-area-inset-bottom)); right: calc(22px + env(safe-area-inset-right)); }
 #action-btn.show { opacity: 1; transform: none; pointer-events: auto; }
 #action-btn .a1 { font-size: 18px; letter-spacing: .3em; padding-left: .3em; font-weight: 600; }
 #action-btn .a2 { font-size: 11px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .75; }
 body.panel-open #joy, body.panel-open #action-btn, body.panel-open #emote { opacity: 0; pointer-events: none; }
 body.touch #hint { bottom: auto; top: calc(74px + env(safe-area-inset-top)); }
 
-/* 作品資訊：手機是精簡的底部抽屜，電腦是右側面板 */
-#sheet {
+/* 作品資訊和換裝：手機是精簡的底部抽屜，電腦是右側面板 */
+#sheet, #dress {
   position: fixed; z-index: 30;
   left: 0; right: 0; bottom: 0;
   max-height: 46vh; overflow-y: auto;
@@ -199,8 +200,19 @@ body.touch #hint { bottom: auto; top: calc(74px + env(safe-area-inset-top)); }
   transform: translateY(105%);
   transition: transform .35s cubic-bezier(.2,.8,.2,1);
 }
-#sheet.open { transform: none; }
-#sheet-close { position: absolute; top: 10px; right: 10px; padding: 0; }
+#sheet.open, #dress.open { transform: none; }
+#sheet-close, #dress-close { position: absolute; top: 10px; right: 10px; padding: 0; }
+
+#dress h2 { margin: 4px 0 12px; font-size: 18px; font-weight: 600; letter-spacing: .3em; color: var(--gold); }
+.dress-row { margin-bottom: 12px; }
+.dress-row > span { display: block; font-size: 13px; letter-spacing: .2em; color: var(--muted); margin-bottom: 6px; }
+.swatches { display: grid; grid-template-columns: repeat(8, minmax(0, 40px)); gap: 6px; }
+.swatches button {
+  aspect-ratio: 1; padding: 0; border-radius: 50%; cursor: pointer;
+  border: 2px solid rgba(0,0,0,.35);
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,.18);
+}
+.swatches button.on { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(232,184,106,.35); }
 .sheet-head { display: flex; gap: 14px; align-items: center; padding-right: 44px; }
 #sheet-thumb {
   position: relative; flex: 0 0 auto;
@@ -234,7 +246,7 @@ body.touch #hint { bottom: auto; top: calc(74px + env(safe-area-inset-top)); }
 .btn.disabled { color: var(--muted); cursor: default; }
 
 @media (min-width: 900px) {
-  #sheet {
+  #sheet, #dress {
     left: auto; top: 0; width: 400px; max-height: none;
     border-top: 0; border-left: 1px solid var(--line); border-radius: 0;
     padding: 64px 22px 22px;

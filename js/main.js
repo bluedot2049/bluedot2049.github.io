@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildWorld } from './world.js';
 import { Player } from './player.js';
-import { Character } from './character.js';
+import { Character, isOutfit, randomOutfit } from './character.js';
 import { Manatee } from './manatee.js';
 import { UI } from './ui.js';
 import { bindJoystick } from './joystick.js';
@@ -42,6 +42,21 @@ document.addEventListener('touchmove', (e) => {
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('dragstart', (e) => { if (e.target.tagName === 'IMG') e.preventDefault(); });
 
+// 自己的配色存在這台裝置上，下次來還是同一套。第一次來隨機配一套
+function loadOutfit() {
+  try {
+    const o = JSON.parse(localStorage.getItem('outfit'));
+    if (isOutfit(o)) return o;
+  } catch {}
+  const o = randomOutfit();
+  saveOutfit(o);
+  return o;
+}
+
+function saveOutfit(o) {
+  try { localStorage.setItem('outfit', JSON.stringify(o)); } catch {}
+}
+
 async function start() {
   let gallery;
   try {
@@ -81,7 +96,8 @@ async function start() {
 
   const world = buildWorld(scene, gallery);
   const shadowTex = TX.shadowTexture();
-  const character = new Character(shadowTex);
+  const outfit = loadOutfit();
+  const character = new Character(shadowTex, outfit);
   scene.add(character.group);
   // 前廳的海牛頭人：擋住一小塊地面，玩家靠近時會轉過來面對
   const spot = world.findWalkable(1.9, -3.4, 0, -2) || { x: 1.9, z: -3.4 };
@@ -90,12 +106,26 @@ async function start() {
   world.rooms[0].obstacles.push({ x: spot.x, z: spot.z, hw: 0.4, hd: 0.4, rot: 0 });
   let lastInput = performance.now();
   let swipeHinted = false;
+  let mp = null;
 
   const player = new Player(camera, renderer.domElement, world, character, {
     onInput(kind) {
       lastInput = performance.now();
       ui.hidePainting();
+      ui.hideDress();
       ui.hideHint();
+    },
+    onArriveMirror() {
+      ui.showDress(outfit, (part, k) => {
+        outfit[part] = k;
+        character.setOutfit(outfit);
+        saveOutfit(outfit);
+        mp?.setOutfit(outfit);
+        lastInput = performance.now();
+      });
+    },
+    onJump() {
+      mp?.jump();
     },
     onArrivePainting(p) {
       ui.showPainting(p, p.url);
@@ -122,32 +152,34 @@ async function start() {
   ui.onClose = () => player.exitFocus();
   document.getElementById('recenter-btn').addEventListener('click', () => player.recenter());
 
-  // 手機操作：搖桿走路，靠近畫作時出現「看畫」按鈕
+  // 手機操作：搖桿走路，靠近畫作或鏡子時出現按鈕
   if (coarse) document.body.classList.add('touch');
   bindJoystick(document.getElementById('joy'), document.getElementById('joy-knob'), (x, y) => player.setJoystick(x, y));
   document.getElementById('jump-btn').addEventListener('pointerdown', (e) => { e.preventDefault(); player.jump(); });
   const actionBtn = document.getElementById('action-btn');
   actionBtn.addEventListener('click', () => player.action());
+  const actionLabel = actionBtn.querySelector('.a1');
   let nearP = null;
   function updateAction() {
-    const p = player.nearbyPainting();
+    const p = player.nearbyTarget();
     if (p === nearP) return;
     nearP = p;
     actionBtn.classList.toggle('show', !!p);
-    if (p) document.getElementById('action-title').textContent = p.data.title || '';
+    if (!p) return;
+    actionLabel.textContent = p === 'mirror' ? '照鏡子' : '看畫';
+    actionBtn.setAttribute('aria-label', actionLabel.textContent);
+    document.getElementById('action-title').textContent = p === 'mirror' ? '' : p.data.title || '';
   }
 
-  // 作品面板打開時挪動畫面中心，畫才不會被擋住：電腦往左，手機往上
-  let sheetOpen = false;
+  // 作品或換裝面板打開時挪動畫面中心，畫和角色才不會被擋住：電腦往左，手機往上
   function applyViewOffset() {
-    const w = window.innerWidth, h = window.innerHeight;
-    if (!sheetOpen) camera.clearViewOffset();
+    const w = window.innerWidth, h = window.innerHeight, panel = ui.panel;
+    if (!panel) camera.clearViewOffset();
     else if (w >= 900) camera.setViewOffset(w, h, 200, 0, w, h);
-    else camera.setViewOffset(w, h, 0, Math.round(ui.sheet.offsetHeight / 2), w, h);
+    else camera.setViewOffset(w, h, 0, Math.round(panel.offsetHeight / 2), w, h);
   }
   ui.onSheet = (open) => {
-    sheetOpen = open;
-    document.body.classList.toggle('panel-open', open);
+    document.body.classList.toggle('panel-open', !!ui.panel);
     applyViewOffset();
     lastInput = performance.now();
   };
@@ -161,7 +193,6 @@ async function start() {
   });
 
   // 多人同遊：gallery.json 有填 realtime 才連線，連不上就當單人
-  let mp = null;
   const rt = gallery.realtime;
   if (rt?.url && rt?.key) {
     let ready = false;
@@ -172,7 +203,7 @@ async function start() {
         ready = true;
         ui.bindEmotes(EMOTES, (e) => mp.emote(e));
       },
-    });
+    }, outfit.slice());
     mp.connect().catch((e) => console.warn('多人連線失敗：', e));
     // 電腦：數字鍵 1–5 送表情
     window.addEventListener('keydown', (e) => {
