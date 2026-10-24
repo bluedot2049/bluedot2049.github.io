@@ -4,6 +4,7 @@ import { Player } from './player.js';
 import { Character } from './character.js';
 import { UI } from './ui.js';
 import { bindJoystick } from './joystick.js';
+import { Multiplayer, EMOTES } from './multiplayer.js';
 import * as TX from './textures.js';
 
 async function loadJSON(url) {
@@ -30,6 +31,14 @@ function hasWebGL() {
 
 // 關掉右鍵選單和圖片拖曳，避免操作時跳出「另存圖片」
 document.addEventListener('contextmenu', (e) => e.preventDefault());
+// iOS 不一定遵守 touch-action，拖搖桿時會把整頁往下拉；只留抽屜和清單可以捲動
+// 萬一頁面已經被放大，就不擋，讓人能用雙指縮回來
+document.addEventListener('touchmove', (e) => {
+  if (window.visualViewport && window.visualViewport.scale > 1.01) return;
+  if (!e.target.closest('#sheet, #list')) e.preventDefault();
+}, { passive: false });
+// iOS 的雙指縮放整頁
+document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('dragstart', (e) => { if (e.target.tagName === 'IMG') e.preventDefault(); });
 
 async function start() {
@@ -70,9 +79,11 @@ async function start() {
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 80);
 
   const world = buildWorld(scene, gallery);
-  const character = new Character(TX.shadowTexture());
+  const shadowTex = TX.shadowTexture();
+  const character = new Character(shadowTex);
   scene.add(character.group);
   let lastInput = performance.now();
+  let swipeHinted = false;
 
   const player = new Player(camera, renderer.domElement, world, character, {
     onInput(kind) {
@@ -82,6 +93,10 @@ async function start() {
     },
     onArrivePainting(p) {
       ui.showPainting(p, p.url);
+      if (coarse && !swipeHinted) {
+        swipeHinted = true;
+        ui.hint('左右滑動切換作品', 4000);
+      }
     },
     onRoomChange(i) {
       world.setCurrentRoom(i);
@@ -95,13 +110,11 @@ async function start() {
   ui.onGoTo = (ri, pi) => {
     const p = world.rooms[ri]?.paintings[pi];
     if (!p) return;
-    const plan = player.planFocus(p);
-    player.teleport(plan.stand.x, plan.stand.z);
-    player.pending = plan;
-    player.arrive();
+    player.showPainting(p);
     lastInput = performance.now();
   };
   ui.onClose = () => player.exitFocus();
+  document.getElementById('recenter-btn').addEventListener('click', () => player.recenter());
 
   // 手機操作：搖桿走路，靠近畫作時出現「看畫」按鈕
   if (coarse) document.body.classList.add('touch');
@@ -140,10 +153,31 @@ async function start() {
     lastInput = performance.now();
   });
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer };
+  // 多人同遊：gallery.json 有填 realtime 才連線，連不上就當單人
+  let mp = null;
+  const rt = gallery.realtime;
+  if (rt?.url && rt?.key) {
+    let ready = false;
+    mp = new Multiplayer(scene, shadowTex, player, rt, {
+      onCount: (n) => ui.online(n),
+      onReady() {
+        if (ready) return;
+        ready = true;
+        ui.bindEmotes(EMOTES, (e) => mp.emote(e));
+      },
+    });
+    mp.connect().catch((e) => console.warn('多人連線失敗：', e));
+    // 電腦：數字鍵 1–5 送表情
+    window.addEventListener('keydown', (e) => {
+      const i = e.key.length === 1 ? '12345'.indexOf(e.key) : -1;
+      if (i >= 0) mp.emote(EMOTES[i]);
+    });
+  }
+
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp };
 
   ui.loading(null);
-  ui.hint(coarse ? '左下搖桿或點地面走路　拖曳轉視角' : '點地面或 WASD 走路　拖曳轉視角　Enter 看畫', 6000);
+  ui.hint(coarse ? '右下搖桿或點地面走路　拖曳轉視角' : '點地面或 WASD 走路　拖曳轉視角　Enter 看畫', 6000);
 
   // 沒在動的時候降到約 30fps，省電
   const clock = new THREE.Clock();
@@ -151,10 +185,11 @@ async function start() {
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
     player.update(dt);
+    const othersMoving = mp ? mp.update(dt, performance.now()) : false;
     if (frame % 6 === 0) updateAction();
     world.update(clock.elapsedTime, player.camPos, player.fadeTarget());
     frame++;
-    const idle = !player.moving && performance.now() - lastInput > 2000;
+    const idle = !player.moving && !othersMoving && performance.now() - lastInput > 2000;
     if (idle && frame % 2) return;
     renderer.render(scene, camera);
   });

@@ -125,6 +125,24 @@ export class UI {
     }, { passive: false });
   }
 
+  online(n) {
+    const el = $('#online');
+    el.hidden = false;
+    el.textContent = `${n} 人在線`;
+  }
+
+  // 表情按鈕：點一下展開，選了就收起來
+  bindEmotes(list, onPick) {
+    const box = $('#emote'), bar = $('#emote-bar');
+    bar.innerHTML = list.map((e) => `<button aria-label="${esc(e)}">${esc(e)}</button>`).join('');
+    bar.querySelectorAll('button').forEach((b, i) => b.addEventListener('click', () => {
+      box.classList.remove('open');
+      onPick(list[i]);
+    }));
+    $('#emote-btn').addEventListener('click', () => box.classList.toggle('open'));
+    box.hidden = false;
+  }
+
   toast(title, sub) {
     const el = this.toastEl;
     el.innerHTML = `<div class="t1">${esc(title)}</div>${sub ? `<div class="t2">${esc(sub)}</div>` : ''}`;

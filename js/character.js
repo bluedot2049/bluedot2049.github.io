@@ -5,13 +5,26 @@ function mat(color) {
   return new THREE.MeshLambertMaterial({ color, flatShading: true });
 }
 
+// 自己的配色；其他訪客從 OTHER_COLORS 挑一組
+const OWN_COLORS = { robe: 0x2f5d62, hat: 0x4a2f66, scarf: 0xc0392b };
+export const OTHER_COLORS = [
+  { robe: 0x7a3b2e, hat: 0x2c3e50, scarf: 0xe0b44c },
+  { robe: 0x3d5a2a, hat: 0x6b3a1f, scarf: 0xd9d2c0 },
+  { robe: 0x5b3f78, hat: 0x1f3d5a, scarf: 0xe58a3a },
+  { robe: 0x8a6a2f, hat: 0x2b1f3d, scarf: 0x4fa3a5 },
+  { robe: 0x2a3f6b, hat: 0x7a2a3a, scarf: 0xf0d48a },
+  { robe: 0x6b2a4a, hat: 0x2f4a3a, scarf: 0x9ad0e0 },
+  { robe: 0x9a4a2a, hat: 0x3a2a1a, scarf: 0x6fbf73 },
+  { robe: 0x4a4a52, hat: 0x8a2a2a, scarf: 0xf2c94c },
+];
+
 export class Character {
-  constructor(shadowTex) {
+  constructor(shadowTex, colors = OWN_COLORS) {
     const g = new THREE.Group();
     const body = new THREE.Group();
     g.add(body);
 
-    const robe = mat(0x2f5d62), skin = mat(0xf1c9a5), hat = mat(0x4a2f66), dark = mat(0x3a2414), scarf = mat(0xc0392b), hair = mat(0x5a3a22);
+    const robe = mat(colors.robe), skin = mat(0xf1c9a5), hat = mat(colors.hat), dark = mat(0x3a2414), scarf = mat(colors.scarf), hair = mat(0x5a3a22);
 
     const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.3, 0.7, 8), robe);
     torso.position.y = 0.45;

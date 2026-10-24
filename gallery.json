@@ -1,6 +1,10 @@
 {
   "title": "煉金畫廊",
   "contact": "",
+  "realtime": {
+    "url": "https://wllkfibvoqdqrmaigppe.supabase.co",
+    "key": "sb_publishable_xmVbDKt2g_EdYEiP1CYc7Q_qNZKgxuL"
+  },
   "order": [
     "01-vestibule",
     "02-nigredo",

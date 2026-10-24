@@ -5,7 +5,10 @@ import * as THREE from 'three';
 const SPEED = 2.6;
 const DRAG_THRESHOLD = 8;
 const DIST_MIN = 4, DIST_MAX = 14;
-const PITCH_MIN = 0.35, PITCH_MAX = 1.25;
+const PITCH_MIN = 0.35, PITCH_MAX = 1.25, PITCH_DEFAULT = 0.8;
+const SWIPE_MIN = 40;
+
+const defaultDist = () => (window.innerWidth < window.innerHeight ? 11 : 8.5);
 
 function wrapAngle(a) {
   while (a > Math.PI) a -= Math.PI * 2;
@@ -31,8 +34,8 @@ export class Player {
     this.pending = null;            // 正要走去看的畫
     this.focus = null;              // 正在看的畫
     this.camYaw = 0;
-    this.camPitch = 0.8;
-    this.camDist = window.innerWidth < window.innerHeight ? 11 : 8.5;
+    this.camPitch = PITCH_DEFAULT;
+    this.camDist = defaultDist();
     this.camPos = new THREE.Vector3();
     this.camLook = new THREE.Vector3();
     this.keys = new Set();
@@ -86,14 +89,19 @@ export class Player {
         this.events.onInput('drag');
         return;
       }
-      if (!p.drag && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) > DRAG_THRESHOLD) p.drag = true;
-      if (p.drag && !multi) this.orbit(dx, dy, p.mouse);
+      if (!p.drag && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) > DRAG_THRESHOLD) {
+        p.drag = true;
+        // 觸控看畫時，左右滑是切換作品，不轉鏡頭
+        p.swipe = !!this.focus && !p.mouse && Math.abs(e.clientX - p.sx) > Math.abs(e.clientY - p.sy);
+      }
+      if (p.drag && !multi && !p.swipe) this.orbit(dx, dy, p.mouse);
     });
     const up = (e) => {
       const p = pts.get(e.pointerId);
       if (!p) return;
       pts.delete(e.pointerId);
       if (e.type === 'pointerup' && !p.drag && !multi) this.tap(e.clientX, e.clientY);
+      if (e.type === 'pointerup' && p.swipe && !multi && Math.abs(e.clientX - p.sx) > SWIPE_MIN) this.switchPainting(e.clientX < p.sx ? 1 : -1);
       if (pts.size < 2) pinch = null;
       if (pts.size === 0) multi = false;
     };
@@ -109,6 +117,10 @@ export class Player {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         this.action();
+        return;
+      }
+      if (e.key === 'r' || e.key === 'R') {
+        this.recenter();
         return;
       }
       this.keys.add(e.key.toLowerCase());
@@ -180,6 +192,30 @@ export class Player {
     }
   }
 
+  // 瞬移到畫前直接看（清單「前往」、左右滑切換都用這個）
+  showPainting(p) {
+    const plan = this.planFocus(p);
+    this.teleport(plan.stand.x, plan.stand.z);
+    this.pending = plan;
+    this.arrive();
+  }
+
+  // 看畫時換到前一幅或後一幅，順序同 gallery.json，到頭就停
+  switchPainting(dir) {
+    if (!this.focus) return;
+    const list = this.world.paintings, i = list.indexOf(this.focus.p) + dir;
+    if (i >= 0 && i < list.length) this.showPainting(list[i]);
+  }
+
+  // 鏡頭轉回角色背後，俯角和距離恢復預設
+  recenter() {
+    this.events.onInput('tap');
+    this.exitFocus();
+    this.camYaw = this.heading + Math.PI;
+    this.camPitch = PITCH_DEFAULT;
+    this.camDist = defaultDist();
+  }
+
   // 用尋路找出繞過家具的路線
   walkTo(x, z) {
     this.goal = { x, z };
@@ -226,8 +262,10 @@ export class Player {
 
   exitFocus() {
     if (!this.focus) return;
+    // 鏡頭退到角色背後、面向剛才的畫。看畫時鏡頭在角色和畫之間，照原方位拉遠會跑到牆後
+    const n = this.focus.p.n;
     this.focus = null;
-    this.camYaw = Math.atan2(this.camPos.x - this.pos.x, this.camPos.z - this.pos.z);
+    this.camYaw = Math.atan2(n.x, n.z);
   }
 
   stop() {

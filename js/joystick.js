@@ -1,4 +1,4 @@
-// 手機左下角的虛擬搖桿。回傳 -1 ~ 1 的 x、y（往上推是 y 負值）。
+// 手機右下角的虛擬搖桿。回傳 -1 ~ 1 的 x、y（往上推是 y 負值）。
 export function bindJoystick(base, knob, onChange) {
   let id = null, cx = 0, cy = 0, R = 1;
 
