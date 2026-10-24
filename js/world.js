@@ -6,6 +6,7 @@ import * as TX from './textures.js';
 import { PROPS, SETS, Kit, rng, newBucket, mergeBucket, weightedPick, buildWindow } from './props.js';
 import { buildMirror } from './mirror.js';
 import { buildOutdoor, OUTDOOR_ROOM } from './outdoor.js';
+import { catRoomOf } from './animals.js';
 
 export const WALL_H = 3.2;
 export const DOOR_W = 2;
@@ -456,7 +457,8 @@ function hitObstacle(list, x, z, pad) {
   return false;
 }
 
-function furnish(room, R, set) {
+// noCat：黑貓住的房間，不再擺睡著的貓
+function furnish(room, R, set, noCat) {
   const s = shared();
   const roomBucket = newBucket();
   const entryBuckets = new Map();
@@ -546,7 +548,7 @@ function furnish(room, R, set) {
   }
   const inside = set.inside.slice();
   const count = { hall: 4, corridor: 1, rotunda: 3 }[room.type];
-  let placed = 0, catDone = false;
+  let placed = 0, catDone = noCat;
   for (let tries = 0; tries < 80 && placed < count; tries++) {
     let name = inside[Math.floor(R() * inside.length)];
     if (name === 'cat' && catDone) continue;
@@ -700,6 +702,7 @@ export function buildWorld(scene, gallery) {
     room.group.add(room.floor);
   }
   for (let i = 1; i < rooms.length; i++) buildBoundary(rooms[i - 1], rooms[i], entries);
+  const catRoom = catRoomOf(rooms);
 
   for (const e of entries) {
     let owner = rooms[Math.max(...e.rooms)];
@@ -760,7 +763,7 @@ export function buildWorld(scene, gallery) {
       paintings.push(p);
     });
 
-    furnish(room, rng(room.id + (room.data.seed || '')), SETS[room.propSet]);
+    furnish(room, rng(room.id + (room.data.seed || '')), SETS[room.propSet], room === catRoom);
     room.group.add(dust(room));
     scene.add(room.group);
   }

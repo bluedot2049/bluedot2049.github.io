@@ -3,6 +3,7 @@ import { buildWorld } from './world.js';
 import { Player } from './player.js';
 import { Character, isOutfit, randomOutfit } from './character.js';
 import { Manatee } from './manatee.js';
+import { Animals, ANIMAL_LAYER } from './animals.js';
 import { UI } from './ui.js';
 import { bindJoystick } from './joystick.js';
 import { Multiplayer, EMOTES } from './multiplayer.js';
@@ -118,6 +119,7 @@ async function start() {
   }
 
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 300);
+  camera.layers.enable(ANIMAL_LAYER);   // 海面反射的鏡頭只看圖層 0，動物不會被多畫一次
 
   const world = buildWorld(scene, gallery);
   const shadowTex = TX.shadowTexture();
@@ -132,7 +134,7 @@ async function start() {
   // 陽台長桌的主人，也是一隻海牛頭人
   const host = world.outdoor ? new Manatee(shadowTex, world.outdoor.host.x, world.outdoor.host.z) : null;
   if (host) scene.add(host.group);
-  const ambience = world.outdoor ? new Ambience() : null;
+  const ambience = new Ambience();
   let lastInput = performance.now();
   let swipeHinted = false;
   let mp = null;
@@ -169,6 +171,10 @@ async function start() {
       mp?.sendNow();
       lastInput = performance.now();
     },
+    onPet(a) {
+      mp?.pet(a.index);
+      lastInput = performance.now();
+    },
     onArrivePainting(p) {
       ui.showPainting(p, p.url);
       if (coarse && !swipeHinted) {
@@ -184,6 +190,8 @@ async function start() {
     },
   });
   scene.add(player.marker);
+  const animals = new Animals({ world, shadowTex, player, camera, ambience });
+  player.animals = animals;
 
   ui.buildList(true);
   ui.onGoTo = (ri, pi) => {
@@ -204,11 +212,11 @@ async function start() {
   const actionBtn = document.getElementById('action-btn');
   actionBtn.addEventListener('click', () => player.action());
   const actionLabel = actionBtn.querySelector('.a1');
-  const LABELS = { painting: '看畫', mirror: '照鏡子', seat: '坐下', table: '拿點心', eat: '吃一口', stand: '起來' };
+  const LABELS = { painting: '看畫', mirror: '照鏡子', seat: '坐下', table: '拿點心', pet: '摸摸', eat: '吃一口', stand: '起來' };
   let nearKey = null;
   function updateAction() {
     const t = player.actionTarget();
-    const key = t ? (t.kind === 'painting' ? t.p : t.kind) : null;
+    const key = t ? (t.kind === 'painting' || t.kind === 'pet' ? t.p : t.kind) : null;
     const sitting = player.sitCode !== 0;
     if (sitting !== document.body.classList.contains('sitting')) {
       document.body.classList.toggle('sitting', sitting);
@@ -221,21 +229,20 @@ async function start() {
     if (!t) return;
     actionLabel.textContent = LABELS[t.kind];
     actionBtn.setAttribute('aria-label', actionLabel.textContent);
-    document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : '';
+    document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : t.kind === 'pet' ? t.p.name : '';
   }
 
-  // 聲音開關：只在聽得到風聲的地方出現
+  // 聲音開關：戶外的風聲和動物叫聲共用，室內也有貓，所以一直都在
   const soundBtn = document.getElementById('sound-btn');
-  if (ambience) {
-    const label = () => {
-      const text = ambience.muted ? '開啟聲音' : '靜音';
-      soundBtn.classList.toggle('muted', ambience.muted);
-      soundBtn.setAttribute('aria-label', text);
-      soundBtn.title = text;
-    };
-    label();
-    soundBtn.addEventListener('click', () => { ambience.setMuted(!ambience.muted); label(); });
-  }
+  const soundLabel = () => {
+    const text = ambience.muted ? '開啟聲音' : '靜音';
+    soundBtn.classList.toggle('muted', ambience.muted);
+    soundBtn.setAttribute('aria-label', text);
+    soundBtn.title = text;
+  };
+  soundLabel();
+  soundBtn.hidden = false;
+  soundBtn.addEventListener('click', () => { ambience.setMuted(!ambience.muted); soundLabel(); });
 
   // 作品或換裝面板打開時挪動畫面中心，畫和角色才不會被擋住：電腦往左，手機往上
   function applyViewOffset() {
@@ -269,6 +276,14 @@ async function start() {
         ready = true;
         ui.bindEmotes(EMOTES, (e) => mp.emote(e));
       },
+      // 別人摸了動物：那位訪客的學徒也做出摸的動作
+      onPet(o, i) {
+        const a = animals.remotePet(i, o);
+        if (a) o.ch.pet(a.spec.high);
+      },
+      onJump(o) {
+        animals.startle(o.pos.x, o.pos.z);
+      },
     }, outfit.slice());
     mp.connect().catch((e) => console.warn('多人連線失敗：', e));
     // 電腦：數字鍵 1–5 送表情
@@ -278,7 +293,7 @@ async function start() {
     });
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals };
 
   ui.loading(null);
   ui.hint(coarse ? '右下搖桿或點地面走路　拖曳轉視角' : '點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下　Enter 看畫', 6000);
@@ -289,6 +304,7 @@ async function start() {
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
     player.update(dt);
+    animals.update(dt);
     manatee.update(dt, player.pos.x, player.pos.z);
     const othersMoving = mp ? mp.update(dt, performance.now()) : false;
     if (host) {
@@ -300,7 +316,6 @@ async function start() {
       const t = world.outdoor.outdoorness(player.pos.z);
       applyEnv(t);
       ambience.setLevel(t);
-      soundBtn.hidden = t === 0;
       const meadow = player.room === world.rooms.length - 1 && world.outdoor.inMeadow(player.pos.z);
       if (meadow !== inMeadow) {
         inMeadow = meadow;

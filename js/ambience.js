@@ -1,12 +1,144 @@
-// 戶外的風聲、草葉沙沙聲、遠處的海浪和鳥叫，全部用 Web Audio 現場合成，不下載音檔。
+// 戶外的風聲、草葉沙沙聲、遠處的海浪和鳥叫，還有動物的叫聲，全部用 Web Audio 現場合成，不下載音檔。
 // 瀏覽器規定要等使用者點過畫面才能出聲，所以第一次點擊或按鍵時才建立。
 // 低頻壓掉、音量放輕、起伏放慢，聽起來是貼耳的空氣聲而不是轟轟的風
 const GUST_EVERY = 4;   // 每隔幾秒換一次風勢
+
+// ---------- 動物叫聲 ----------
+// 每個叫聲排好振盪器、濾波器、音量包絡後回傳長度（秒）。p 是音高倍率，同種動物各叫各的高低
+
+function envelope(ctx, t, attack, dur, peak = 1) {
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + attack);
+  g.gain.setValueAtTime(peak, t + Math.max(attack, dur * 0.6));
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  return g;
+}
+
+// pts：[[離開始幾秒, 頻率], ...]，頻率在兩點之間直線滑過去
+function osc(ctx, type, t, dur, pts) {
+  const o = ctx.createOscillator();
+  o.type = type;
+  o.frequency.setValueAtTime(pts[0][1], t);
+  for (const [dt, f] of pts.slice(1)) o.frequency.linearRampToValueAtTime(f, t + dt);
+  o.start(t);
+  o.stop(t + dur + 0.05);
+  return o;
+}
+
+function biquad(ctx, type, freq, Q = 1) {
+  const f = ctx.createBiquadFilter();
+  f.type = type;
+  f.frequency.value = freq;
+  f.Q.value = Q;
+  return f;
+}
+
+function lfo(ctx, t, dur, rate, depth, param) {
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.frequency.value = rate;
+  g.gain.value = depth;
+  o.connect(g).connect(param);
+  o.start(t);
+  o.stop(t + dur + 0.05);
+}
+
+const VOICES = {
+  // 哞——：低沉的鋸齒波，共振峰從閉著嘴的「m」慢慢打開成「o」
+  moo(ctx, out, t, p) {
+    const d = 1.3 + Math.random() * 0.5;
+    const o = osc(ctx, 'sawtooth', t, d, [[0, 92 * p], [0.3, 128 * p], [d * 0.7, 116 * p], [d, 78 * p]]);
+    lfo(ctx, t, d, 5.5, 3 * p, o.frequency);
+    const bp = biquad(ctx, 'bandpass', 320, 2.2);
+    bp.frequency.setValueAtTime(320, t);
+    bp.frequency.linearRampToValueAtTime(820, t + 0.35);
+    bp.frequency.linearRampToValueAtTime(480, t + d);
+    o.connect(bp).connect(envelope(ctx, t, 0.18, d, 1.6)).connect(out);
+    return d;
+  },
+  // 咯咯咯，偶爾最後拉一聲高的
+  cluck(ctx, out, t, p) {
+    const n = 2 + Math.floor(Math.random() * 3);
+    let tt = t;
+    for (let i = 0; i < n; i++) {
+      const long = i === n - 1 && Math.random() < 0.5, d = long ? 0.22 : 0.07;
+      const o = osc(ctx, 'square', tt, d, [[0, (long ? 520 : 430) * p], [d, (long ? 760 : 300) * p]]);
+      o.connect(biquad(ctx, 'bandpass', 1100 * p, 2.5)).connect(envelope(ctx, tt, 0.006, d)).connect(out);
+      tt += d + 0.07 + Math.random() * 0.06;
+    }
+    return tt - t;
+  },
+  // 呱：鼻音很重的鋸齒波
+  quack(ctx, out, t, p) {
+    const n = 1 + Math.floor(Math.random() * 3);
+    let tt = t;
+    for (let i = 0; i < n; i++) {
+      const d = 0.13 + Math.random() * 0.05;
+      const o = osc(ctx, 'sawtooth', tt, d, [[0, 250 * p], [d * 0.3, 270 * p], [d, 185 * p]]);
+      o.connect(biquad(ctx, 'bandpass', 1250, 4)).connect(envelope(ctx, tt, 0.01, d, 2)).connect(out);
+      tt += d + 0.09;
+    }
+    return tt - t;
+  },
+  // 小鴨啾啾
+  peep(ctx, out, t, p) {
+    const n = 2 + Math.floor(Math.random() * 2);
+    let tt = t;
+    for (let i = 0; i < n; i++) {
+      const d = 0.07;
+      osc(ctx, 'sine', tt, d, [[0, 4200 * p], [d, 3300 * p]]).connect(envelope(ctx, tt, 0.01, d)).connect(out);
+      tt += d + 0.08;
+    }
+    return tt - t;
+  },
+  // 汪：短促的鋸齒波加一點氣音
+  bark(ctx, out, t, p, noise) {
+    const n = Math.random() < 0.6 ? 2 : 1;
+    for (let i = 0; i < n; i++) {
+      const tt = t + i * 0.22, d = 0.14;
+      osc(ctx, 'sawtooth', tt, d, [[0, 380 * p], [0.04, 420 * p], [d, 210 * p]])
+        .connect(biquad(ctx, 'lowpass', 1600)).connect(envelope(ctx, tt, 0.005, d, 1.4)).connect(out);
+      const src = ctx.createBufferSource();
+      src.buffer = noise;
+      src.connect(biquad(ctx, 'bandpass', 900)).connect(envelope(ctx, tt, 0.003, 0.08, 1.2)).connect(out);
+      src.start(tt, Math.random() * 7);
+      src.stop(tt + 0.1);
+    }
+    return n * 0.22;
+  },
+  // 喵——：音高先揚後抑，共振峰從「咪」張開成「嗷」
+  meow(ctx, out, t, p) {
+    const d = 0.55 + Math.random() * 0.25;
+    const o = osc(ctx, 'sawtooth', t, d, [[0, 480 * p], [d * 0.3, 760 * p], [d, 540 * p]]);
+    const bp = biquad(ctx, 'bandpass', 900, 3);
+    bp.frequency.setValueAtTime(900, t);
+    bp.frequency.linearRampToValueAtTime(2300, t + d * 0.3);
+    bp.frequency.linearRampToValueAtTime(1100, t + d);
+    o.connect(bp).connect(envelope(ctx, t, 0.06, d, 1.6)).connect(out);
+    return d;
+  },
+  // 呼嚕：低頻雜訊一秒抖二十幾下
+  purr(ctx, out, t, p, noise) {
+    const d = 2.6, am = ctx.createGain();
+    am.gain.value = 0.5;
+    lfo(ctx, t, d, 23, 0.5, am.gain);
+    const src = ctx.createBufferSource();
+    src.buffer = noise;
+    src.loop = true;
+    src.connect(biquad(ctx, 'lowpass', 260)).connect(am);
+    osc(ctx, 'sawtooth', t, d, [[0, 46 * p]]).connect(biquad(ctx, 'lowpass', 180)).connect(am);
+    am.connect(envelope(ctx, t, 0.3, d, 2.5)).connect(out);
+    src.start(t, Math.random() * 5);
+    src.stop(t + d + 0.05);
+    return d;
+  },
+};
 
 export class Ambience {
   constructor() {
     this.ctx = null;
     this.level = 0;          // 0 室內、1 戶外
+    this.voiceUntil = 0;     // 動物叫聲播到什麼時候（performance.now），播完才能暫停音訊
     try { this.muted = localStorage.getItem('muted') === '1'; } catch { this.muted = false; }
     const unlock = () => {
       window.removeEventListener('pointerdown', unlock);
@@ -25,6 +157,9 @@ export class Ambience {
     this.master = ctx.createGain();
     this.master.gain.value = 0;
     this.master.connect(ctx.destination);
+    // 動物叫聲另走一條，不跟著室內外的比例變小，室內的貓叫也聽得到
+    this.sfx = ctx.createGain();
+    this.sfx.connect(ctx.destination);
 
     // 八秒的立體聲粉紅雜訊，左右聲道各自生成，聽起來有寬度；夠長就聽不出循環
     const len = ctx.sampleRate * 8, buf = ctx.createBuffer(2, len, ctx.sampleRate);
@@ -39,6 +174,7 @@ export class Ambience {
         d[i] = (b0 + b1 + b2 + w * 0.05) * 0.9;
       }
     }
+    this.noise = buf;
     // 每個聲音從雜訊的不同位置開始播，彼此不會同步
     const noise = (offset, ...nodes) => {
       const src = ctx.createBufferSource();
@@ -144,6 +280,23 @@ export class Ambience {
     }
   }
 
+  // 動物叫聲：vol 已經照距離算好，pan 是左右
+  voice(kind, vol, pan = 0, pitch = 1) {
+    const ctx = this.ctx;
+    if (!ctx || this.muted || document.hidden || !VOICES[kind] || vol < 0.002) return;
+    if (ctx.state === 'suspended') ctx.resume();
+    const out = ctx.createGain();
+    out.gain.value = vol;
+    if (ctx.createStereoPanner) {
+      const p = ctx.createStereoPanner();
+      p.pan.value = pan;
+      out.connect(p).connect(this.sfx);
+    } else out.connect(this.sfx);
+    const dur = VOICES[kind](ctx, out, ctx.currentTime + 0.03, pitch, this.noise);
+    this.voiceUntil = Math.max(this.voiceUntil, performance.now() + dur * 1000 + 300);
+    if (this.quiet) this.sleepSoon();
+  }
+
   // 室內外的比例。有變化才更新，室內完全安靜時暫停音訊省電
   setLevel(v) {
     if (v === this.level || (Math.abs(v - this.level) < 0.01 && v > 0 && v < 1)) return;
@@ -161,10 +314,23 @@ export class Ambience {
   apply() {
     const ctx = this.ctx;
     if (!ctx) return;
-    const v = this.muted || document.hidden ? 0 : this.level * 0.7;
+    const off = this.muted || document.hidden, v = off ? 0 : this.level * 0.7;
     if (v > 0 && ctx.state === 'suspended') ctx.resume();
     this.master.gain.setTargetAtTime(v, ctx.currentTime, 0.4);
+    this.sfx.gain.setTargetAtTime(off ? 0 : 1, ctx.currentTime, 0.05);
+    this.quiet = v === 0;
     clearTimeout(this.sleepTimer);
-    if (v === 0) this.sleepTimer = setTimeout(() => { if (ctx.state === 'running') ctx.suspend(); }, 1500);
+    if (this.quiet) this.sleepSoon();
+  }
+
+  // 環境聲是零的時候，等叫聲播完再暫停
+  sleepSoon() {
+    clearTimeout(this.sleepTimer);
+    const ctx = this.ctx;
+    this.sleepTimer = setTimeout(() => {
+      if (!this.quiet || ctx.state !== 'running') return;
+      if (performance.now() < this.voiceUntil) this.sleepSoon();
+      else ctx.suspend();
+    }, Math.max(1500, this.voiceUntil - performance.now()));
   }
 }

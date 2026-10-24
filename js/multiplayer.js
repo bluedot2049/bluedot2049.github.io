@@ -13,6 +13,7 @@ const UNVERIFIED_TTL = 10000; // 超過這麼久還沒被認可就丟掉
 const COORD_LIMIT = 200;    // 畫廊遠小於這個範圍，超過的座標一律當作亂送
 const EMOTE_GAP = 800;      // 自己送表情的最短間隔
 const JUMP_GAP = 400;       // 自己送跳躍的最短間隔
+const PET_GAP = 1500;       // 自己送摸動物的最短間隔
 const OUTFIT_DELAY = 1000;  // 換裝停手這麼久才送出，連點色塊不會一直送
 const EMOTE_TIME = 2;       // 表情在頭上停留的秒數
 export const EMOTES = ['❤️', '✨', '👏', '😮', '👋'];
@@ -79,7 +80,7 @@ export class Multiplayer {
     this.shadowTex = shadowTex;
     this.player = player;
     this.cfg = cfg;
-    this.events = events;           // { onCount(n), onReady() }
+    this.events = events;           // { onCount(n), onReady(), onPet(other, i), onJump(other) }
     this.id = Math.random().toString(36).slice(2, 10);
     this.others = new Map();        // id -> { ch, pos, target, heading, seen, speed }
     this.present = new Set();       // 目前在線上的訪客 id（來自 presence）
@@ -91,6 +92,7 @@ export class Multiplayer {
     this.lastSent = 0;
     this.lastEmote = 0;
     this.lastJump = 0;
+    this.lastPet = 0;
   }
 
   async connect() {
@@ -102,6 +104,7 @@ export class Multiplayer {
     ch.on('broadcast', { event: 'pos' }, ({ payload }) => this.onPos(payload))
       .on('broadcast', { event: 'emote' }, ({ payload }) => this.onEmote(payload))
       .on('broadcast', { event: 'jump' }, ({ payload }) => this.onJump(payload))
+      .on('broadcast', { event: 'pet' }, ({ payload }) => this.onPet(payload))
       .on('presence', { event: 'sync' }, () => {
         const state = ch.presenceState();
         this.present = new Set(Object.keys(state));
@@ -212,7 +215,23 @@ export class Multiplayer {
 
   onJump(m) {
     const o = m && isId(m.id) ? this.others.get(m.id) : null;
-    if (o && o.ch.group.visible) o.ch.jump();
+    if (o && o.ch.group.visible) {
+      o.ch.jump();
+      this.events.onJump?.(o);
+    }
+  }
+
+  // 動物的行程每台算出來都一樣，摸了哪一隻只要傳編號
+  pet(i) {
+    const now = performance.now();
+    if (!this.active || now - this.lastPet < PET_GAP) return;
+    this.lastPet = now;
+    this.channel.send({ type: 'broadcast', event: 'pet', payload: { id: this.id, a: i } });
+  }
+
+  onPet(m) {
+    const o = m && isId(m.id) ? this.others.get(m.id) : null;
+    if (o && o.ch.group.visible && Number.isInteger(m.a)) this.events.onPet?.(o, m.a);
   }
 
   setOutfit(o) {

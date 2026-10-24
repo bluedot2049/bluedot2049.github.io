@@ -11,6 +11,7 @@ export const HATS = [0x4a2f66, 0x2c3e50, 0x6b3a1f, 0x1f5a4a, 0x2b1f3d, 0x7a2a3a,
 export const SCARVES = [0xc0392b, 0xe0b44c, 0xd9d2c0, 0xe58a3a, 0x4fa3a5, 0xe27a9a, 0x9ad0e0, 0x6fbf73];
 export const JUMP_V = 4.2, GRAVITY = 14;
 const ACT_TIME = 1.6;
+const PET_TIME = 2.4;      // 摸動物摸多久
 // 長袍上窄下寬，手臂要從肩膀往外張開一點，手才會沿著袍子外側垂下，不會插進身體
 const SHOULDER_X = 0.24, ARM_OUT = 0.28;
 const SIT_TIME = 0.8;      // 坐下或站起來花幾秒
@@ -235,6 +236,11 @@ export class Character {
     this.act = { e, t: 0 };
   }
 
+  // 摸動物：小動物彎腰伸手往下摸，乳牛手往前上方伸
+  pet(high) {
+    this.act = { e: 'pet', t: 0, high, dur: PET_TIME };
+  }
+
   // 還有動畫在播（跳躍、表情），主迴圈不能降幀
   get busy() {
     return this.airborne || !!this.act || this.biteT > 0 || this.sitP !== (this.sitting ? 1 : 0);
@@ -333,9 +339,9 @@ export class Character {
   pose(dt, walk) {
     const a = this.act;
     a.t += dt;
-    const t = a.t;
-    if (t >= ACT_TIME) { this.act = null; return; }
-    const k = smooth(Math.min(1, t / 0.15, (ACT_TIME - t) / 0.25));
+    const t = a.t, dur = a.dur || ACT_TIME;
+    if (t >= dur) { this.act = null; return; }
+    const k = smooth(Math.min(1, t / 0.15, (dur - t) / 0.25));
     const kb = k * (1 - walk);
     const L = this.armL.rotation, R = this.armR.rotation, B = this.body.rotation;
     const arms = (lx, lz, rx, rz) => {
@@ -376,6 +382,16 @@ export class Character {
         B.x += -0.25 * kb;
         this.hat.position.y += Math.max(0, Math.sin(Math.min(1, t / 0.35) * Math.PI)) * 0.1 * kb;
         break;
+      case 'pet': {
+        // 右手來回順毛
+        const s = Math.sin(t * 6) * 0.18;
+        if (a.high) arms(L.x, L.z, -1.9 + s, 0.12);
+        else {
+          arms(L.x, L.z, -0.5 + s, 0.12);
+          B.x += 0.5 * kb;
+        }
+        break;
+      }
     }
   }
 }

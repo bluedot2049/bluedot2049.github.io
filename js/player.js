@@ -29,7 +29,7 @@ export class Player {
     this.dom = dom;
     this.world = world;
     this.character = character;
-    this.events = events;           // { onArrivePainting, onArriveMirror, onJump, onSit(seat), onFood, onRoomChange, onInput(kind) }
+    this.events = events;           // { onArrivePainting, onArriveMirror, onJump, onSit(seat), onFood, onPet(animal), onRoomChange, onInput(kind) }
     this.pos = new THREE.Vector3(0, 0, -2);
     this.heading = Math.PI;
     this.path = [];
@@ -46,6 +46,8 @@ export class Player {
     this.room = -1;
     this.speed = 0;
     this.raycaster = new THREE.Raycaster();
+    this.raycaster.layers.enable(1);   // 動物在圖層 1
+    this.animals = null;            // 主程式建好動物後填進來
     this.marker = this.makeMarker();
     this.markerT = 1;
     this.moving = true;
@@ -158,7 +160,8 @@ export class Player {
     this.events.onInput('tap');
     if (hit.object.userData.painting) return this.goToPainting(hit.object.userData.painting);
     if (hit.object.userData.mirror) return this.goToMirror();
-    const t = this.world.findWalkable(hit.point.x, hit.point.z, this.pos.x, this.pos.z);
+    if (hit.object.userData.animal) return this.goToAnimal(hit.object.userData.animal);
+    const t =this.world.findWalkable(hit.point.x, hit.point.z, this.pos.x, this.pos.z);
     if (!t) return;
     this.exitFocus();
     this.pending = null;
@@ -213,6 +216,12 @@ export class Player {
 
   goToMirror() {
     if (this.world.mirror) this.goTo(this.planMirror());
+  }
+
+  // 摸動物：牠先停下來轉向自己，走到牠面前再伸手
+  goToAnimal(a) {
+    a.waitFor(this);
+    this.goTo(a.planPet(this));
   }
 
   goTo(plan) {
@@ -309,7 +318,7 @@ export class Player {
     this.events.onSit?.(true);
   }
 
-  // 動作按鈕現在該做什麼：看畫、照鏡子、坐下、拿點心、吃一口、起來。回傳 { kind, p? } 或 null
+  // 動作按鈕現在該做什麼：看畫、照鏡子、坐下、拿點心、摸動物、吃一口、起來。回傳 { kind, p? } 或 null
   actionTarget() {
     const ch = this.character;
     if (this.sitting) {
@@ -334,6 +343,8 @@ export class Player {
       const t = out.table, d = Math.hypot(Math.max(0, Math.abs(x - t.x) - t.hw), Math.max(0, Math.abs(z - t.z) - t.hd));
       if (d < 1.5) list.push({ kind: 'table', d: d + 0.2 });
     }
+    const an = this.animals?.nearest(x, z);
+    if (an) list.push({ kind: 'pet', p: an.a, d: an.d });
     if (list.length) return list.reduce((a, b) => (b.d < a.d ? b : a));
     return ch.food ? { kind: 'eat' } : null;
   }
@@ -347,6 +358,7 @@ export class Player {
       case 'painting': this.goToPainting(t.p); break;
       case 'mirror': this.goToMirror(); break;
       case 'seat': this.goTo(this.planSeat(t.p)); break;
+      case 'pet': this.goToAnimal(t.p); break;
       case 'stand': this.exitFocus(); break;
       case 'table':
         ch.hold(1 + Math.floor(Math.random() * 5));
@@ -365,6 +377,7 @@ export class Player {
     if (!this.character.jump()) return;
     this.events.onInput('key');
     this.events.onJump?.();
+    this.animals?.startle(this.pos.x, this.pos.z);
   }
 
   arrive() {
@@ -374,7 +387,12 @@ export class Player {
     this.focus = plan;
     if (plan.kind === 'mirror') this.events.onArriveMirror?.();
     else if (plan.kind === 'seat') this.events.onSit?.(true);   // 真正坐下去要等挪進座位，見 update
-    else this.events.onArrivePainting(plan.p);
+    else if (plan.kind === 'pet') {
+      if (!plan.a.within(this)) { this.focus = null; return; }   // 走到時牠已經跑掉了
+      this.character.pet(plan.a.spec.high);
+      plan.a.pettedBy(this.pos);
+      this.events.onPet?.(plan.a);
+    } else this.events.onArrivePainting(plan.p);
   }
 
   exitFocus() {
@@ -441,7 +459,10 @@ export class Player {
   tryMove(vx, vz, deflect) {
     const w = this.world, ox = this.pos.x, oz = this.pos.z;
     const stuck = !w.walkable(ox, oz);   // 已經卡在家具裡（例如瞬移進去），允許往任何方向脫困
-    const go = (x, z) => { if (stuck || w.walkable(x, z)) { this.pos.x = x; this.pos.z = z; return true; } return false; };
+    const go = (x, z) => {
+      if (stuck || (w.walkable(x, z) && !this.animals?.blocks(x, z, ox, oz))) { this.pos.x = x; this.pos.z = z; return true; }
+      return false;
+    };
     if (go(ox + vx, oz + vz)) return true;
     if (Math.abs(vx) > 1e-5 && go(ox + vx, oz)) return true;
     if (Math.abs(vz) > 1e-5 && go(ox, oz + vz)) return true;
@@ -528,6 +549,7 @@ export class Player {
     if (want !== null) this.heading += wrapAngle(want - this.heading) * Math.min(1, dt * 10);
 
     const ch = this.character;
+    if (this.focus?.kind === 'pet' && !ch.act) this.exitFocus();   // 摸完了
     ch.group.position.copy(this.pos);
     ch.group.rotation.y = this.heading;
     ch.update(dt, this.speed);
