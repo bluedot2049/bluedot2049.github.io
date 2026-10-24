@@ -27,7 +27,7 @@ export class Player {
     this.dom = dom;
     this.world = world;
     this.character = character;
-    this.events = events;           // { onArrivePainting, onArriveMirror, onJump, onRoomChange, onInput(kind) }
+    this.events = events;           // { onArrivePainting, onArriveMirror, onJump, onSit(seat), onFood, onRoomChange, onInput(kind) }
     this.pos = new THREE.Vector3(0, 0, -2);
     this.heading = Math.PI;
     this.path = [];
@@ -157,8 +157,7 @@ export class Player {
     this.exitFocus();
     this.pending = null;
     this.walkTo(t.x, t.z);
-    this.marker.position.x = t.x;
-    this.marker.position.z = t.z;
+    this.marker.position.set(t.x, this.world.groundY(t.x, t.z) + 0.03, t.z);
     this.markerT = 0;
   }
 
@@ -273,24 +272,75 @@ export class Player {
     return best;
   }
 
-  // 附近的畫或鏡子，取比較近的那個（給動作按鈕用）。回傳畫、'mirror' 或 null
-  nearbyTarget() {
-    const p = this.nearbyPainting(), m = this.world.mirror;
-    if (!m || this.focus || this.pending) return p;
-    const dx = this.pos.x - m.x, dz = this.pos.z - m.z, d = Math.hypot(dx, dz);
-    if (dx * m.n.x + dz * m.n.z < 0.3 || d > 3) return p;
-    return p && Math.hypot(this.pos.x - p.wall.x, this.pos.z - p.wall.z) < d ? p : 'mirror';
+  // 坐下：先走到座位後面，到了再滑進座位。鏡頭退到側後方，望向前面的風景
+  planSeat(i) {
+    const st = this.world.outdoor.seats[i], fx = Math.sin(st.h), fz = Math.cos(st.h);
+    const gy = this.world.groundY(st.x, st.z);
+    return {
+      kind: 'seat', seat: i, n: { x: -fx, z: -fz },
+      stand: { x: st.ax, z: st.az },
+      camPos: new THREE.Vector3(st.x - fx * 3.8 - fz * 0.7, gy + 1.8, st.z - fz * 3.8 + fx * 0.7),
+      look: new THREE.Vector3(st.x + fx * 14, gy + 2.2, st.z + fz * 14),
+      fadeTarget: new THREE.Vector3(st.x, gy, st.z),
+    };
+  }
+
+  get seat() {
+    return this.focus?.kind === 'seat' ? this.focus.seat : -1;
+  }
+
+  // 動作按鈕現在該做什麼：看畫、照鏡子、坐下、拿點心、吃一口、起來。回傳 { kind, p? } 或 null
+  actionTarget() {
+    const ch = this.character;
+    if (this.focus?.kind === 'seat') {
+      if (ch.food) return { kind: 'eat' };
+      return { kind: this.world.outdoor.seats[this.focus.seat].table ? 'table' : 'stand' };
+    }
+    if (this.focus || this.pending) return null;
+    const x = this.pos.x, z = this.pos.z, list = [];
+    const p = this.nearbyPainting();
+    if (p) list.push({ kind: 'painting', p, d: Math.hypot(x - p.wall.x, z - p.wall.z) });
+    const m = this.world.mirror;
+    if (m) {
+      const dx = x - m.x, dz = z - m.z, d = Math.hypot(dx, dz);
+      if (dx * m.n.x + dz * m.n.z > 0.3 && d < 3) list.push({ kind: 'mirror', d });
+    }
+    const out = this.world.outdoor;
+    if (out && this.room === this.world.rooms.length - 1) {
+      out.seats.forEach((st, i) => {
+        const d = Math.min(Math.hypot(x - st.x, z - st.z), Math.hypot(x - st.ax, z - st.az));
+        if (d < 1.3) list.push({ kind: 'seat', p: i, d });
+      });
+      const t = out.table, d = Math.hypot(Math.max(0, Math.abs(x - t.x) - t.hw), Math.max(0, Math.abs(z - t.z) - t.hd));
+      if (d < 1.5) list.push({ kind: 'table', d: d + 0.2 });
+    }
+    if (list.length) return list.reduce((a, b) => (b.d < a.d ? b : a));
+    return ch.food ? { kind: 'eat' } : null;
   }
 
   action() {
-    const t = this.nearbyTarget();
+    const t = this.actionTarget();
     if (!t) return;
     this.events.onInput('tap');
-    if (t === 'mirror') this.goToMirror();
-    else this.goToPainting(t);
+    const ch = this.character;
+    switch (t.kind) {
+      case 'painting': this.goToPainting(t.p); break;
+      case 'mirror': this.goToMirror(); break;
+      case 'seat': this.goTo(this.planSeat(t.p)); break;
+      case 'stand': this.exitFocus(); break;
+      case 'table':
+        ch.hold(1 + Math.floor(Math.random() * 5));
+        this.events.onFood?.();
+        break;
+      case 'eat':
+        ch.bite();
+        this.events.onFood?.();
+        break;
+    }
   }
 
   jump() {
+    if (this.focus?.kind === 'seat') this.exitFocus();
     if (!this.character.jump()) return;
     this.events.onInput('key');
     this.events.onJump?.();
@@ -302,15 +352,24 @@ export class Player {
     this.pending = null;
     this.focus = plan;
     if (plan.kind === 'mirror') this.events.onArriveMirror?.();
-    else this.events.onArrivePainting(plan.p);
+    else if (plan.kind === 'seat') {
+      const st = this.world.outdoor.seats[plan.seat];
+      this.character.sitting = true;
+      this.character.lift = st.lift;
+      this.events.onSit?.(plan.seat);
+    } else this.events.onArrivePainting(plan.p);
   }
 
   exitFocus() {
     if (!this.focus) return;
     // 鏡頭退到角色背後、面向剛才的畫或鏡子。看畫時鏡頭在角色和畫之間，照原方位拉遠會跑到牆後
-    const n = this.focus.n;
+    const n = this.focus.n, wasSeat = this.focus.kind === 'seat';
     this.focus = null;
     this.camYaw = Math.atan2(n.x, n.z);
+    if (wasSeat) {
+      this.character.sitting = false;
+      this.events.onSit?.(-1);
+    }
   }
 
   stop() {
@@ -320,6 +379,7 @@ export class Player {
   }
 
   teleport(x, z) {
+    this.exitFocus();
     this.pos.set(x, 0, z);
     this.stop();
   }
@@ -336,7 +396,7 @@ export class Player {
     }
     // 注視點放在角色前方一點，直式螢幕上角色才會落在畫面下方，前方留出空間
     const ahead = window.innerWidth < window.innerHeight ? 1.8 : 0.8;
-    outLook.set(this.pos.x - Math.sin(this.camYaw) * ahead, 0.9, this.pos.z - Math.cos(this.camYaw) * ahead);
+    outLook.set(this.pos.x - Math.sin(this.camYaw) * ahead, this.pos.y + 0.9, this.pos.z - Math.cos(this.camYaw) * ahead);
     const c = Math.cos(this.camPitch);
     outPos.set(
       outLook.x + Math.sin(this.camYaw) * c * this.camDist,
@@ -413,6 +473,13 @@ export class Player {
     }
     const mx = this.pos.x - ox, mz = this.pos.z - oz;
     this.speed = Math.hypot(mx, mz) / Math.max(dt, 1e-4);
+    // 坐下時從座位後面慢慢滑進座位，不算走路
+    if (this.focus?.kind === 'seat') {
+      const st = w.outdoor.seats[this.focus.seat], k = Math.min(1, dt * 5);
+      this.pos.x += (st.x - this.pos.x) * k;
+      this.pos.z += (st.z - this.pos.z) * k;
+    }
+    this.pos.y = w.groundY(this.pos.x, this.pos.z);
 
     // 角色轉向：走路時面向前進方向，看畫或照鏡子時面向它
     let want = null;
@@ -427,7 +494,8 @@ export class Player {
 
     const dPos = new THREE.Vector3(), dLook = new THREE.Vector3();
     this.desiredCamera(dPos, dLook);
-    const f = 1 - Math.exp(-dt * (this.focus ? 3.2 : 5));
+    // 坐下時鏡頭退得特別慢
+    const f = 1 - Math.exp(-dt * (this.focus ? (this.focus.kind === 'seat' ? 1.2 : 3.2) : 5));
     this.camPos.lerp(dPos, f);
     this.camLook.lerp(dLook, f);
     this.camera.position.copy(this.camPos);

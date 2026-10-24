@@ -1,7 +1,7 @@
 // 多人同遊：透過 Supabase Realtime 互傳位置和表情。gallery.json 沒填 realtime 就不啟用。
 // 其他訪客的學徒用對方自己選的配色，不取名、不聊天。
 import * as THREE from 'three';
-import { Character, isOutfit, presetOutfit, ROBES } from './character.js';
+import { Character, isOutfit, isFood, presetOutfit, ROBES } from './character.js';
 
 const SEND_MOVING = 200;    // 走動時每 0.2 秒送一次位置
 const SEND_IDLE = 8000;     // 站著不動時偶爾報一次，確認還在
@@ -137,11 +137,18 @@ export class Multiplayer {
     this.channel = ch;
   }
 
+  // 坐下、拿點心這類狀態改變時，下一幀就送，不等節流
+  sendNow() {
+    this.last = null;
+    this.lastSent = 0;
+  }
+
   send(now) {
     const p = this.player;
-    const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room };
+    // s：坐在第幾個座位（+1，0 是沒坐）；f：手上的點心
+    const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room, s: p.seat + 1, f: p.character.foodCode };
     const l = this.last;
-    const changed = !l || Math.abs(st.x - l.x) > 0.02 || Math.abs(st.z - l.z) > 0.02 || Math.abs(wrapAngle(st.h - l.h)) > 0.05 || st.r !== l.r;
+    const changed = !l || Math.abs(st.x - l.x) > 0.02 || Math.abs(st.z - l.z) > 0.02 || Math.abs(wrapAngle(st.h - l.h)) > 0.05 || st.r !== l.r || st.s !== l.s || st.f !== l.f;
     if (now - this.lastSent < (changed ? SEND_MOVING : SEND_IDLE)) return;
     this.channel.send({ type: 'broadcast', event: 'pos', payload: { id: this.id, ...st } });
     this.last = st;
@@ -152,6 +159,10 @@ export class Multiplayer {
     // 頻道是公開的，任何人都能亂送，所以內容和身分都要先過濾
     if (!m || !isId(m.id) || m.id === this.id) return;
     if (!isNum(m.x, COORD_LIMIT) || !isNum(m.z, COORD_LIMIT) || !isNum(m.h, 100) || !isNum(m.r, 100)) return;
+    // 舊版網頁不會送這兩項，當作沒坐、空手
+    const seats = this.player.world.outdoor?.seats || [];
+    m.s = Number.isInteger(m.s) && m.s > 0 && m.s <= seats.length ? m.s : 0;
+    m.f = isFood(m.f) ? m.f : 0;
     let o = this.others.get(m.id);
     if (!o) {
       if (this.others.size >= MAX_TRACKED) return;
@@ -250,9 +261,14 @@ export class Multiplayer {
       o.pos.z += (t.z - o.pos.z) * k;
       o.speed = Math.hypot(o.pos.x - ox, o.pos.z - oz) / Math.max(dt, 1e-4);
       o.heading += wrapAngle(t.h - o.heading) * Math.min(1, dt * 8);
+      const world = this.player.world, seat = t.s ? world.outdoor.seats[t.s - 1] : null;
+      o.pos.y = world.groundY(o.pos.x, o.pos.z);
+      o.ch.sitting = !!seat;
+      if (seat) o.ch.lift = seat.lift;
+      if (t.f !== o.ch.foodCode) o.ch.setFoodCode(t.f);
       g.position.copy(o.pos);
       g.rotation.y = o.heading;
-      o.ch.update(dt, o.speed);
+      o.ch.update(dt, seat ? 0 : o.speed);
       if (o.speed > 0.05 || o.ch.busy) moving = true;
     });
 

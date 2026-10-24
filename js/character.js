@@ -19,6 +19,34 @@ export const isOutfit = (o) => Array.isArray(o) && o.length === 3 && o.every((v)
 
 const smooth = (t) => t * t * (3 - 2 * t);
 
+// 陽台長桌上拿得起來的點心，編號從 1 開始，0 是空手
+export const FOODS = ['bread', 'apple', 'pomegranate', 'cheese', 'grapes'];
+const BITES = 3;
+const BITE_TIME = 0.5;
+
+function foodModel(kind) {
+  const g = new THREE.Group();
+  const add = (geo, color, x, y, z, sx = 1, sy = 1, sz = 1) => {
+    const m = new THREE.Mesh(geo, mat(color));
+    m.position.set(x, y, z);
+    m.scale.set(sx, sy, sz);
+    g.add(m);
+  };
+  switch (FOODS[kind - 1]) {
+    case 'bread': add(new THREE.IcosahedronGeometry(0.07, 1), 0xc8843f, 0, 0, 0, 1.5, 0.75, 0.9); break;
+    case 'apple': add(new THREE.IcosahedronGeometry(0.055, 1), 0xc8382a, 0, 0, 0); add(new THREE.BoxGeometry(0.008, 0.03, 0.008), 0x4a3020, 0, 0.065, 0); break;
+    case 'pomegranate': add(new THREE.IcosahedronGeometry(0.06, 1), 0x9c1f2a, 0, 0, 0); add(new THREE.ConeGeometry(0.022, 0.035, 6), 0x7a1820, 0, 0.07, 0); break;
+    case 'cheese': add(new THREE.CylinderGeometry(0.08, 0.08, 0.06, 3), 0xf0cc70, 0, 0, 0); break;
+    case 'grapes':
+      for (let i = 0; i < 8; i++) add(new THREE.IcosahedronGeometry(0.024, 0), i % 3 ? 0x5a2a5a : 0x7a3a6a, ((i % 3) - 1) * 0.03, -Math.floor(i / 3) * 0.035, (i % 2) * 0.02);
+      break;
+  }
+  return g;
+}
+
+// 外來的「手上拿什麼」：0 或 種類 × 10 + 已咬幾口
+export const isFood = (f) => f === 0 || (Number.isInteger(f) && f >= 10 && Math.floor(f / 10) <= FOODS.length && f % 10 < BITES);
+
 export class Character {
   constructor(shadowTex, outfit) {
     const g = new THREE.Group();
@@ -131,7 +159,52 @@ export class Character {
     this.jumpY = 0;
     this.jumpV = 0;
     this.act = null;               // 正在做的表情動作 { e, t }
+    this.sitting = false;
+    this.sitK = 0;
+    this.lift = 0;                 // 坐的地方離地多高
+    this.food = 0;                 // 手上的點心種類，0 是空手
+    this.bites = 0;
+    this.foodMesh = null;
+    this.holdK = 0;
+    this.biteT = 0;
     this.setOutfit(outfit);
+  }
+
+  // 拿起點心。kind 為 0 就是空手
+  hold(kind, bites = 0) {
+    if (this.foodMesh) {
+      this.armR.remove(this.foodMesh);
+      this.foodMesh.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+      this.foodMesh = null;
+    }
+    this.food = kind;
+    this.bites = bites;
+    if (!kind) return;
+    this.foodMesh = foodModel(kind);
+    this.foodMesh.position.set(0, -0.37, 0.07);
+    this.armR.add(this.foodMesh);
+    this.foodMesh.scale.setScalar(1 - bites * 0.28);
+  }
+
+  // 咬一口，咬完最後一口手上就空了
+  bite() {
+    if (!this.food) return;
+    this.biteT = BITE_TIME;
+    this.bites++;
+    if (this.bites >= BITES) setTimeout(() => this.hold(0), BITE_TIME * 500);
+    else this.foodMesh.scale.setScalar(1 - this.bites * 0.28);
+  }
+
+  // 傳給別人的狀態
+  get foodCode() {
+    return this.food ? this.food * 10 + Math.min(this.bites, BITES - 1) : 0;
+  }
+
+  setFoodCode(f) {
+    if (f === this.foodCode) return;
+    const kind = Math.floor(f / 10), bites = f % 10;
+    if (kind === this.food && bites > this.bites) { this.bites = bites - 1; this.bite(); }
+    else this.hold(kind, bites);
   }
 
   setOutfit(o) {
@@ -157,7 +230,7 @@ export class Character {
 
   // 還有動畫在播（跳躍、表情），主迴圈不能降幀
   get busy() {
-    return this.airborne || !!this.act;
+    return this.airborne || !!this.act || this.biteT > 0 || Math.abs(this.sitK - (this.sitting ? 1 : 0)) > 0.01;
   }
 
   update(dt, speed) {
@@ -185,18 +258,51 @@ export class Character {
     this.scarfTail.rotation.x = 0.2 + w * 0.5 + Math.sin(this.time * 6) * 0.08 * w;
     this.body.rotation.y = 0;
     this.hat.position.y = 0.13;
+    this.armL.rotation.z = -0.15;
+    this.armR.rotation.z = 0.15;
+    this.footL.position.y = this.footR.position.y = 0.04;
+
+    // 坐下：腳伸向前、手放腿上，身體稍微往後靠
+    const sk = (this.sitK += ((this.sitting ? 1 : 0) - this.sitK) * Math.min(1, dt * 6));
+    if (sk > 0.001) {
+      const L = this.armL.rotation, R = this.armR.rotation;
+      for (const f of [this.footL, this.footR]) {
+        f.rotation.x += (-1.4 - f.rotation.x) * sk;
+        f.position.z += (0.14 - f.position.z) * sk;
+        f.position.y += 0.07 * sk;
+      }
+      L.x += (-0.5 - L.x) * sk;
+      R.x += (-0.5 - R.x) * sk;
+      this.body.rotation.x += (-0.06 - this.body.rotation.x) * sk;
+    }
+
+    // 拿著點心時右手舉在胸前，咬一口時送到嘴邊
+    this.holdK += ((this.food ? 1 : 0) - this.holdK) * Math.min(1, dt * 8);
+    if (this.holdK > 0.001) {
+      const R = this.armR.rotation;
+      R.x += (-0.95 - R.x) * this.holdK;
+      R.z += (-0.1 - R.z) * this.holdK;
+    }
+    if (this.biteT > 0) {
+      this.biteT = Math.max(0, this.biteT - dt);
+      const b = Math.sin((1 - this.biteT / BITE_TIME) * Math.PI);
+      this.armR.rotation.x += (-2.1 - this.armR.rotation.x) * b;
+      this.armR.rotation.z += (-0.55 - this.armR.rotation.z) * b;
+    }
 
     if (this.airborne) {
       this.jumpV -= GRAVITY * dt;
       this.jumpY = Math.max(0, this.jumpY + this.jumpV * dt);
       if (this.jumpY === 0) this.jumpV = 0;
     }
-    this.group.position.y = this.jumpY;
+    // 呼叫端已經把 group 放在地面高度，這裡再加上跳躍和坐下的位移
+    const up = this.jumpY + (this.lift - 0.1) * sk;
+    this.group.position.y += up;
     // 影子留在地面，越高越小
-    this.shadow.position.y = 0.012 - this.jumpY;
+    this.shadow.position.y = 0.012 - up;
     this.shadow.scale.setScalar(1 - Math.min(0.4, this.jumpY * 0.5));
 
-    if (this.act) this.pose(dt, w);
+    if (this.act) this.pose(dt, Math.max(w, sk));
   }
 
   // 表情動作疊在走路動作上面。走路時只動手，站著時整個身體一起演

@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import * as TX from './textures.js';
 import { PROPS, SETS, Kit, rng, newBucket, mergeBucket, weightedPick, buildWindow } from './props.js';
 import { buildMirror } from './mirror.js';
+import { buildOutdoor, OUTDOOR_ROOM } from './outdoor.js';
 
 export const WALL_H = 3.2;
 export const DOOR_W = 2;
@@ -18,6 +19,7 @@ const ROOM_TYPES = {
   hall:     { w: 8, d: 8 },
   corridor: { w: 5, d: 12 },
   rotunda:  { r: 5, d: 10 },
+  outdoor:  { w: 40, d: 40 },
 };
 
 // 每種房型的預設：牆色、家具主題、地毯配色
@@ -25,7 +27,9 @@ const DEFAULTS = {
   hall:     { color: '#d9b98c', props: 'studio' },
   corridor: { color: '#9fae8a', props: 'library' },
   rotunda:  { color: '#c98a6e', props: 'lab' },
+  outdoor:  { color: '#d9b98c', props: 'studio' },
 };
+const isFlat = (r) => r.type === 'hall' || r.type === 'corridor';
 const RUGS = {
   studio:  ['#8a3b2e', '#e0b062'],
   library: ['#2e4a62', '#d9b98c'],
@@ -305,11 +309,11 @@ function buildRotundaShell(room, mat, entries) {
 // 兩間房之間的牆：兩邊各自的牆面、門框、矮牆放在同一段
 function buildBoundary(prev, cur, entries) {
   const zb = cur.zStart;
-  const widths = [prev, cur].filter((r) => r.type !== 'rotunda').map((r) => r.w);
+  const widths = [prev, cur].filter(isFlat).map((r) => r.w);
   const half = widths.length ? Math.max(...widths) / 2 : DOOR_W / 2 + 0.3;
   const e = makeEntry([prev.index, cur.index], 0, zb, 0, 1, half);
-  if (prev.type !== 'rotunda') flatWall(e.full, prev.wallMat, 0, zb, 0, prev.w, true);
-  if (cur.type !== 'rotunda') flatWall(e.full, cur.wallMat, 0, zb, Math.PI, cur.w, true);
+  if (isFlat(prev)) flatWall(e.full, prev.wallMat, 0, zb, 0, prev.w, true);
+  if (isFlat(cur)) flatWall(e.full, cur.wallMat, 0, zb, Math.PI, cur.w, true);
   for (const [r, sign] of [[prev, 1], [cur, -1]]) {
     if (r.type !== 'rotunda') continue;
     const inset = r.r - Math.cos(r.gap) * r.r;
@@ -318,8 +322,8 @@ function buildBoundary(prev, cur, entries) {
   if (widths.length) stubAndCap(e, 0, zb, 0, half * 2, true);
   doorFrame(e, zb);
   entries.push(e);
-  if (prev.type !== 'rotunda') prev.spans.push(lineSpan(e, -prev.w / 2, zb, 1, 0, 0, 1, prev.w));
-  if (cur.type !== 'rotunda') cur.spans.push(lineSpan(e, -cur.w / 2, zb, 1, 0, 0, -1, cur.w));
+  if (isFlat(prev)) prev.spans.push(lineSpan(e, -prev.w / 2, zb, 1, 0, 0, 1, prev.w));
+  if (isFlat(cur)) cur.spans.push(lineSpan(e, -cur.w / 2, zb, 1, 0, 0, -1, cur.w));
   prev.backEntry = e;
   cur.frontEntry = e;
 }
@@ -661,17 +665,19 @@ function stringLights(room, R, bucket) {
 
 export function buildWorld(scene, gallery) {
   const rooms = [], paintings = [], entries = [], raycastTargets = [];
-  let mirror = null;
+  let mirror = null, outdoor = null;
   let z = 0;
 
-  gallery.rooms.forEach((data, i) => {
+  // gallery.json 的 outdoor 為 true 時，最後一間房後面接陽台和草原
+  const list = gallery.outdoor ? [...gallery.rooms, OUTDOOR_ROOM] : gallery.rooms;
+  list.forEach((data, i) => {
     const type = ROOM_TYPES[data.type] ? data.type : 'hall';
     const dims = ROOM_TYPES[type];
     const room = {
       index: i, id: data.id, data, type, ...dims,
       halfW: type === 'rotunda' ? dims.r : dims.w / 2,
       zStart: z, zEnd: z - dims.d,
-      hasEntry: i > 0, hasExit: i < gallery.rooms.length - 1,
+      hasEntry: i > 0, hasExit: i < list.length - 1,
       paintings: [], obstacles: [], group: new THREE.Group(),
       propSet: SETS[data.props] ? data.props : DEFAULTS[type].props,
     };
@@ -685,20 +691,28 @@ export function buildWorld(scene, gallery) {
     rooms.push(room);
   });
 
+  const helpers = { bucketObjects, glowPoints, tag, uTime, shadowMat: shared().shadowMat };
   for (const room of rooms) {
-    if (room.type === 'rotunda') buildRotundaShell(room, room.wallMat, entries);
+    room.spans = room.spans || [];
+    if (room.type === 'outdoor') outdoor = room.outdoor = buildOutdoor(room, helpers);
+    else if (room.type === 'rotunda') buildRotundaShell(room, room.wallMat, entries);
     else buildBoxShell(room, room.wallMat, entries);
     room.group.add(room.floor);
   }
   for (let i = 1; i < rooms.length; i++) buildBoundary(rooms[i - 1], rooms[i], entries);
 
   for (const e of entries) {
-    const owner = rooms[Math.max(...e.rooms)];
+    let owner = rooms[Math.max(...e.rooms)];
+    if (owner.type === 'outdoor') owner = rooms[owner.index - 1];   // 後門的門框屬於赤化，戶外藏起來時門框還要在
     for (const m of [...e.full, ...e.stub]) owner.group.add(m);
     for (const m of e.stub) m.visible = false;
   }
 
   for (const room of rooms) {
+    if (room.type === 'outdoor') {
+      scene.add(room.group);
+      continue;
+    }
     // 門口前後不放家具
     for (const sp of room.spans) {
       const p0 = sp.at(0), horizontal = Math.abs(p0.nz) === 1;
@@ -777,13 +791,15 @@ export function buildWorld(scene, gallery) {
   function findWalkable(x, zz, fromX, fromZ) {
     const i = roomIndexAt(zz), r = rooms[i];
     if (!r.inside(x, zz, MARGIN + 0.05)) {
+      // 往房間中心找最近的可走點；戶外分成陽台和草原兩塊，各有各的中心
+      const c = r.anchor ? r.anchor(x, zz) : r.center;
       let lo = 0, hi = 1;
       for (let k = 0; k < 16; k++) {
         const t = (lo + hi) / 2;
-        r.inside(r.center.x + (x - r.center.x) * t, r.center.z + (zz - r.center.z) * t, MARGIN + 0.05) ? (lo = t) : (hi = t);
+        r.inside(c.x + (x - c.x) * t, c.z + (zz - c.z) * t, MARGIN + 0.05) ? (lo = t) : (hi = t);
       }
-      x = r.center.x + (x - r.center.x) * lo;
-      zz = r.center.z + (zz - r.center.z) * lo;
+      x = c.x + (x - c.x) * lo;
+      zz = c.z + (zz - c.z) * lo;
     }
     if (walkable(x, zz)) return { x, z: zz };
     for (let k = 1; k <= 24; k++) {
@@ -928,6 +944,17 @@ export function buildWorld(scene, gallery) {
     currentRoom = i;
     updateTextures(i);
     for (const r of rooms) r.group.visible = Math.abs(r.index - i) <= 2;
+    // 戶外很大，只有在最後一間房或已經走出去時才畫；走出去之後，室內只留赤化
+    if (outdoor) {
+      const last = rooms.length - 1;
+      rooms[last].group.visible = i >= last - 1;
+      if (i === last) for (const r of rooms) if (r.index < last - 1) r.group.visible = false;
+    }
+  }
+
+  // 腳下地面的高度。只有戶外的石階和草原不是 0
+  function groundY(x, zz) {
+    return outdoor && zz < outdoor.door ? outdoor.groundY(x, zz) : 0;
   }
 
   function setFaded(e, faded) {
@@ -957,11 +984,16 @@ export function buildWorld(scene, gallery) {
 
   function update(t, cam, target) {
     uTime.value = t;
+    if (outdoor) {
+      // 房子外殼只在人走出去、鏡頭也在屋外時出現，不然會擋住室內
+      outdoor.shell.visible = currentRoom === rooms.length - 1 && !outdoor.insideShell(cam);
+      outdoor.sky.position.copy(cam);
+    }
     for (const e of entries) {
       const f = shouldFade(e, cam, target);
       if (f !== e.faded) setFaded(e, f);
     }
   }
 
-  return { rooms, paintings, mirror, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, setCurrentRoom, update };
+  return { rooms, paintings, mirror, outdoor, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, setCurrentRoom, update };
 }

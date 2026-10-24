@@ -9,5 +9,6 @@
     "01-vestibule",
     "02-nigredo",
     "03-rubedo"
-  ]
+  ],
+  "outdoor": true
 }

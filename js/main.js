@@ -7,6 +7,8 @@ import { UI } from './ui.js';
 import { bindJoystick } from './joystick.js';
 import { Multiplayer, EMOTES } from './multiplayer.js';
 import * as TX from './textures.js';
+import { Ambience } from './ambience.js';
+import { HORIZON, SUN_DIR, MEADOW_NAME } from './outdoor.js';
 
 async function loadJSON(url) {
   const res = await fetch(url, { cache: 'no-cache' });
@@ -87,12 +89,35 @@ async function start() {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x1c130d);
   scene.fog = new THREE.Fog(0x1c130d, 16, 38);
-  scene.add(new THREE.HemisphereLight(0xfff0dc, 0x6a4a34, 1.9));
+  const hemi = new THREE.HemisphereLight(0xfff0dc, 0x6a4a34, 1.9);
+  scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xffcf98, 1.3);
   sun.position.set(4, 8, 3);
   scene.add(sun);
 
-  const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 80);
+  // 室內和戶外的光線、霧。走出後門時在兩組之間漸變
+  const ENV = [
+    { bg: 0x1c130d, near: 16, far: 38, sky: 0xfff0dc, ground: 0x6a4a34, hi: 1.9, sun: 0xffcf98, si: 1.3, dir: new THREE.Vector3(4, 8, 3) },
+    { bg: HORIZON, near: 28, far: 170, sky: 0xffd2b0, ground: 0x56603a, hi: 1.5, sun: 0xffa868, si: 1.9, dir: SUN_DIR.clone().multiplyScalar(-1).setY(0.45).multiplyScalar(10) },
+  ].map((e) => ({ ...e, bg: new THREE.Color(e.bg), sky: new THREE.Color(e.sky), ground: new THREE.Color(e.ground), sun: new THREE.Color(e.sun) }));
+  let envT = -1;
+  function applyEnv(t) {
+    if (Math.abs(t - envT) < 0.002) return;
+    envT = t;
+    const [a, b] = ENV;
+    scene.background.copy(a.bg).lerp(b.bg, t);
+    scene.fog.color.copy(scene.background);
+    scene.fog.near = a.near + (b.near - a.near) * t;
+    scene.fog.far = a.far + (b.far - a.far) * t;
+    hemi.color.copy(a.sky).lerp(b.sky, t);
+    hemi.groundColor.copy(a.ground).lerp(b.ground, t);
+    hemi.intensity = a.hi + (b.hi - a.hi) * t;
+    sun.color.copy(a.sun).lerp(b.sun, t);
+    sun.intensity = a.si + (b.si - a.si) * t;
+    sun.position.copy(a.dir).lerp(b.dir, t);
+  }
+
+  const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 300);
 
   const world = buildWorld(scene, gallery);
   const shadowTex = TX.shadowTexture();
@@ -104,9 +129,15 @@ async function start() {
   const manatee = new Manatee(shadowTex, spot.x, spot.z);
   scene.add(manatee.group);
   world.rooms[0].obstacles.push({ x: spot.x, z: spot.z, hw: 0.4, hd: 0.4, rot: 0 });
+  // 陽台長桌的主人，也是一隻海牛頭人
+  const host = world.outdoor ? new Manatee(shadowTex, world.outdoor.host.x, world.outdoor.host.z) : null;
+  if (host) scene.add(host.group);
+  const ambience = world.outdoor ? new Ambience() : null;
   let lastInput = performance.now();
   let swipeHinted = false;
   let mp = null;
+  let inMeadow = false;
+  let sitHinted = false;
 
   const player = new Player(camera, renderer.domElement, world, character, {
     onInput(kind) {
@@ -127,6 +158,17 @@ async function start() {
     onJump() {
       mp?.jump();
     },
+    onSit(i) {
+      mp?.sendNow();
+      if (i >= 0 && !sitHinted) {
+        sitHinted = true;
+        ui.hint(coarse ? '推搖桿或點地面就會站起來' : '走動或點地面就會站起來', 4000);
+      }
+    },
+    onFood() {
+      mp?.sendNow();
+      lastInput = performance.now();
+    },
     onArrivePainting(p) {
       ui.showPainting(p, p.url);
       if (coarse && !swipeHinted) {
@@ -138,6 +180,7 @@ async function start() {
       world.setCurrentRoom(i);
       const r = world.rooms[i].data;
       ui.toast(r.name, r.subtitle);
+      inMeadow = false;
     },
   });
   scene.add(player.marker);
@@ -159,16 +202,27 @@ async function start() {
   const actionBtn = document.getElementById('action-btn');
   actionBtn.addEventListener('click', () => player.action());
   const actionLabel = actionBtn.querySelector('.a1');
-  let nearP = null;
+  const LABELS = { painting: '看畫', mirror: '照鏡子', seat: '坐下', table: '拿點心', eat: '吃一口', stand: '起來' };
+  let nearKey = null;
   function updateAction() {
-    const p = player.nearbyTarget();
-    if (p === nearP) return;
-    nearP = p;
-    actionBtn.classList.toggle('show', !!p);
-    if (!p) return;
-    actionLabel.textContent = p === 'mirror' ? '照鏡子' : '看畫';
+    const t = player.actionTarget();
+    const key = t ? (t.kind === 'painting' ? t.p : t.kind) : null;
+    if (key === nearKey) return;
+    nearKey = key;
+    actionBtn.classList.toggle('show', !!t);
+    document.body.classList.toggle('sitting', player.seat >= 0);
+    if (!t) return;
+    actionLabel.textContent = LABELS[t.kind];
     actionBtn.setAttribute('aria-label', actionLabel.textContent);
-    document.getElementById('action-title').textContent = p === 'mirror' ? '' : p.data.title || '';
+    document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : '';
+  }
+
+  // 聲音開關：只在聽得到風聲的地方出現
+  const soundBtn = document.getElementById('sound-btn');
+  if (ambience) {
+    const label = () => { soundBtn.textContent = ambience.muted ? '靜音' : '有聲'; };
+    label();
+    soundBtn.addEventListener('click', () => { ambience.setMuted(!ambience.muted); label(); });
   }
 
   // 作品或換裝面板打開時挪動畫面中心，畫和角色才不會被擋住：電腦往左，手機往上
@@ -225,7 +279,23 @@ async function start() {
     player.update(dt);
     manatee.update(dt, player.pos.x, player.pos.z);
     const othersMoving = mp ? mp.update(dt, performance.now()) : false;
+    if (host) {
+      host.group.visible = world.rooms[world.rooms.length - 1].group.visible;
+      if (host.group.visible) host.update(dt, player.pos.x, player.pos.z);
+    }
     if (frame % 6 === 0) updateAction();
+    if (world.outdoor) {
+      const t = world.outdoor.outdoorness(player.pos.z);
+      applyEnv(t);
+      ambience.setLevel(t);
+      soundBtn.hidden = t === 0;
+      const meadow = player.room === world.rooms.length - 1 && world.outdoor.inMeadow(player.pos.z);
+      if (meadow !== inMeadow) {
+        inMeadow = meadow;
+        const r = meadow ? MEADOW_NAME : world.rooms[player.room].data;
+        ui.toast(r.name, r.subtitle);
+      }
+    }
     world.update(clock.elapsedTime, player.camPos, player.fadeTarget());
     frame++;
     const idle = !player.moving && !othersMoving && performance.now() - lastInput > 2000;

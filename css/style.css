@@ -108,7 +108,7 @@ img, canvas {
   font-size: 13px; letter-spacing: .1em; color: var(--muted);
   background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
 }
-#online[hidden], #emote[hidden] { display: none; }
+#online[hidden], #emote[hidden], #sound-btn[hidden] { display: none; }
 
 /* 表情：左下「跳」上方，點開往上排出一列 */
 #emote {
@@ -186,6 +186,8 @@ body.touch #action-btn { bottom: calc(166px + env(safe-area-inset-bottom)); righ
 #action-btn .a1 { font-size: 18px; letter-spacing: .3em; padding-left: .3em; font-weight: 600; }
 #action-btn .a2 { font-size: 11px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .75; }
 body.panel-open #joy, body.panel-open #action-btn, body.panel-open #emote { opacity: 0; pointer-events: none; }
+/* 坐著看風景時，其他按鈕退到背景，但還是按得到 */
+body.sitting #joy, body.sitting #jump-btn, body.sitting #emote, body.sitting #top-btns { opacity: .3; }
 body.touch #hint { bottom: auto; top: calc(74px + env(safe-area-inset-top)); }
 
 /* 作品資訊和換裝：手機是精簡的底部抽屜，電腦是右側面板 */
