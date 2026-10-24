@@ -147,7 +147,7 @@ export class Player {
     this.exitView();
     const k = (mouse ? 9 : 5.5) / Math.max(this.dom.clientWidth, this.dom.clientHeight);
     this.camYaw -= dx * k;
-    this.camPitch = THREE.MathUtils.clamp(this.camPitch + (mouse ? dy : -dy) * k, PITCH_MIN, PITCH_MAX);
+    this.camPitch = THREE.MathUtils.clamp(this.camPitch + dy * k, PITCH_MIN, PITCH_MAX);
     this.events.onInput('drag');
   }
 
