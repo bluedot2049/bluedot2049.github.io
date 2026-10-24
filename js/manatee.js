@@ -11,7 +11,39 @@ const PROFILE = [
   [0.12, 0.0], [0.15, 0.2], [0.21, 0.3], [0.3, 0.355], [0.4, 0.37], [0.52, 0.35], [0.61, 0.338],
   [0.71, 0.362], [0.83, 0.385], [0.95, 0.378], [1.06, 0.345], [1.16, 0.282], [1.24, 0.19], [1.295, 0.085], [1.31, 0.0],
 ];
-const FACE_Y = 0.91, FACE_R = 0.39;
+const FACE_Y = 0.91, FACE_W = 0.6, FACE_H = 0.62;
+
+function radiusAt(y) {
+  for (let i = 0; i < PROFILE.length - 1; i++) {
+    const [y0, r0] = PROFILE[i], [y1, r1] = PROFILE[i + 1];
+    if (y <= y1) return r0 + ((r1 - r0) * (y - y0)) / (y1 - y0);
+  }
+  return 0;
+}
+
+// 沿著身體輪廓、比身體大一點點的弧形面，臉才會貼著身體不飄也不穿
+function facePatch() {
+  const rows = 12, cols = 16, pos = [], uv = [], idx = [];
+  for (let j = 0; j <= rows; j++) {
+    const v = j / rows, y = FACE_Y - FACE_H / 2 + v * FACE_H, r = radiusAt(y) + 0.012;
+    for (let i = 0; i <= cols; i++) {
+      const u = i / cols, phi = (u - 0.5) * (FACE_W / 0.38);
+      pos.push(Math.sin(phi) * r, y, Math.cos(phi) * r);
+      uv.push(u, v);
+    }
+  }
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      const a = j * (cols + 1) + i, b = a + 1, c = a + cols + 1, d = c + 1;
+      idx.push(a, b, c, b, d, c);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+}
 
 export class Manatee {
   constructor(shadowTex, x, z) {
@@ -22,7 +54,7 @@ export class Manatee {
     const skin = mat(SKIN), black = mat(0x0b0b10, { side: THREE.DoubleSide }), wood = mat(0x2a1a16);
 
     // 頭身一體的豆子，前後略扁
-    const bean = new THREE.Mesh(new THREE.LatheGeometry(PROFILE.map(([y, r]) => new THREE.Vector2(r, y)), 20), skin);
+    const bean = new THREE.Mesh(new THREE.LatheGeometry(PROFILE.map(([y, r]) => new THREE.Vector2(r, y)).reverse(), 20), skin);
     bean.scale.z = 0.76;
     body.add(bean);
 
@@ -30,18 +62,16 @@ export class Manatee {
     const tex = new THREE.TextureLoader().load('assets/manatee_face.png');
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
-    const arc = 0.62 / FACE_R;
     const face = new THREE.Mesh(
-      new THREE.CylinderGeometry(FACE_R, FACE_R, 0.62, 16, 1, true, -arc / 2, arc),
+      facePatch(),
       new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })
     );
     face.scale.z = 0.76;
-    face.position.y = FACE_Y;
     body.add(face);
 
     // 破邊披風 + 尖角立領
-    const cape = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.5, 0.82, 14, 1, true, Math.PI * 0.62, Math.PI * 1.76), black);
-    cape.position.y = 0.62;
+    const cape = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.56, 0.8, 14, 1, true, Math.PI * 0.45, Math.PI * 1.1), black);
+    cape.position.y = 0.66;
     cape.scale.z = 0.8;
     body.add(cape);
     const spike = new THREE.ConeGeometry(0.06, 0.28, 4);
@@ -49,7 +79,7 @@ export class Manatee {
       const th = Math.PI + (i - 3) * 0.38;
       const s = new THREE.Mesh(spike, black);
       const h = 0.5 + (1 - Math.abs(i - 3) / 3) * 0.12;
-      s.position.set(Math.sin(th) * 0.36, 1.0 + h * 0.12, Math.cos(th) * 0.3);
+      s.position.set(Math.sin(th) * 0.4, 1.12, Math.cos(th) * 0.34);
       s.rotation.x = -Math.cos(th) * 0.25;
       s.rotation.z = Math.sin(th) * 0.25;
       s.scale.y = h * 1.4;
