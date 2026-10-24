@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="500" viewBox="0 0 700 500">
+<defs><radialGradient id="g" cx="50%" cy="40%" r="75%"><stop offset="0" stop-color="#efe7d0" stop-opacity="0.35"/><stop offset="1" stop-color="#1e2d2a" stop-opacity="0"/></radialGradient></defs>
+<rect width="700" height="500" fill="#1e2d2a"/><rect width="700" height="500" fill="url(#g)"/>
+<circle cx="43" cy="370" r="160" fill="#efe7d0" opacity="0.57"/>
+<polygon points="788,258 514,321 597,52" fill="none" stroke="#efe7d0" stroke-width="10" opacity="0.32"/>
+<circle cx="544" cy="304" r="141" fill="none" stroke="#7a9a7a" stroke-width="6" opacity="0.34"/>
+<circle cx="331" cy="363" r="108" fill="#c9b37a" opacity="0.63"/>
+<polygon points="507,283 268,337 340,103" fill="none" stroke="#efe7d0" stroke-width="8" opacity="0.28"/>
+<circle cx="317" cy="14" r="159" fill="none" stroke="#7a9a7a" stroke-width="6" opacity="0.49"/>
+<circle cx="429" cy="253" r="102" fill="#efe7d0" opacity="0.40"/>
+<polygon points="452,434 282,472 333,305" fill="none" stroke="#7a9a7a" stroke-width="6" opacity="0.63"/>
+<circle cx="392" cy="472" r="151" fill="none" stroke="#7a9a7a" stroke-width="6" opacity="0.48"/>
+<circle cx="275" cy="158" r="126" fill="#c9b37a" opacity="0.29"/>
+<polygon points="621,439 352,500 433,236" fill="none" stroke="#7a9a7a" stroke-width="10" opacity="0.77"/>
+<circle cx="96" cy="234" r="137" fill="none" stroke="#7a9a7a" stroke-width="5" opacity="0.47"/>
+<circle cx="341" cy="495" r="150" fill="#7a9a7a" opacity="0.64"/>
+<polygon points="780,228 631,262 676,116" fill="none" stroke="#c9b37a" stroke-width="5" opacity="0.43"/>
+<text x="350.0" y="460" font-family="serif" font-size="30" fill="#efe7d0" opacity="0.7" text-anchor="middle">PLACEHOLDER 4</text>
+</svg>

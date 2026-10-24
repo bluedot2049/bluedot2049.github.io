@@ -1,0 +1,32 @@
+{
+  "name": "黑化",
+  "subtitle": "Nigredo",
+  "type": "corridor",
+  "props": "library",
+  "paintings": [
+    {
+      "title": "作品三",
+      "year": 2025,
+      "medium": "油彩、畫布",
+      "width": 50,
+      "height": 70,
+      "price": 30000,
+      "status": "reserved",
+      "image": "paintings/p03.svg",
+      "buyUrl": "",
+      "note": ""
+    },
+    {
+      "title": "作品四",
+      "year": 2025,
+      "medium": "水彩、紙",
+      "width": 70,
+      "height": 50,
+      "price": 26000,
+      "status": "sold",
+      "image": "paintings/p04.svg",
+      "buyUrl": "",
+      "note": ""
+    }
+  ]
+}

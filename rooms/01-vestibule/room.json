@@ -1,0 +1,32 @@
+{
+  "name": "前廳",
+  "subtitle": "Vestibulum",
+  "type": "hall",
+  "props": "studio",
+  "paintings": [
+    {
+      "title": "作品一",
+      "year": 2024,
+      "medium": "油彩、畫布",
+      "width": 60,
+      "height": 80,
+      "price": 38000,
+      "status": "available",
+      "image": "paintings/p01.svg",
+      "buyUrl": "",
+      "note": "這裡寫作品說明。"
+    },
+    {
+      "title": "作品二",
+      "year": 2024,
+      "medium": "壓克力、畫布",
+      "width": 80,
+      "height": 60,
+      "price": 42000,
+      "status": "available",
+      "image": "paintings/p02.svg",
+      "buyUrl": "",
+      "note": ""
+    }
+  ]
+}

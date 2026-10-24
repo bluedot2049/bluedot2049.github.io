@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0910">
+  <title>煉金畫廊</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230b0910'/%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%23e2bf7a' stroke-width='2'/%3E%3Cpath d='M16 5 L26 22 L6 22 Z' fill='none' stroke='%23e2bf7a' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+  <div id="stage"></div>
+
+  <div id="loading"><div class="sigil"></div><div class="msg">載入中</div></div>
+
+  <div id="toast"></div>
+  <div id="hint"></div>
+
+  <button id="list-btn" class="icon-btn" aria-label="作品清單">清單</button>
+
+  <div id="joy" aria-label="移動搖桿"><div id="joy-knob"></div></div>
+  <button id="action-btn" aria-label="看畫"><span class="a1">看畫</span><span class="a2" id="action-title"></span></button>
+
+  <aside id="sheet" aria-live="polite">
+    <button id="sheet-close" class="icon-btn" aria-label="關閉">✕</button>
+    <div class="sheet-head">
+      <button id="sheet-thumb" aria-label="看大圖"><img id="sheet-img" alt=""><span class="zoom">放大</span></button>
+      <div class="sheet-titles">
+        <h1 id="sheet-title"></h1>
+        <p id="sheet-meta" class="meta"></p>
+      </div>
+    </div>
+    <div class="sheet-body">
+      <p id="sheet-note" class="note"></p>
+      <div class="sheet-foot">
+        <span id="sheet-price" class="price"></span>
+        <span id="sheet-action"></span>
+      </div>
+    </div>
+  </aside>
+
+  <div id="viewer">
+    <img id="viewer-img" alt="">
+    <button id="viewer-close" class="icon-btn" aria-label="關閉">✕</button>
+  </div>
+
+  <div id="list">
+    <header>
+      <span>作品清單</span>
+      <button id="list-close" class="icon-btn" aria-label="回到畫廊">✕</button>
+    </header>
+    <div id="list-body"></div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

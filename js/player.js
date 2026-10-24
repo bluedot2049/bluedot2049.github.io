@@ -1,0 +1,369 @@
+// 第三人稱操作：點地面讓角色走過去、拖曳繞著角色轉鏡頭、雙指或滾輪縮放、點畫作走到畫前。
+// 電腦另外支援 WASD / 方向鍵。
+import * as THREE from 'three';
+
+const SPEED = 2.6;
+const DRAG_THRESHOLD = 8;
+const DIST_MIN = 4, DIST_MAX = 14;
+const PITCH_MIN = 0.35, PITCH_MAX = 1.25;
+
+function wrapAngle(a) {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+
+function isShown(o) {
+  for (; o; o = o.parent) if (!o.visible) return false;
+  return true;
+}
+
+export class Player {
+  constructor(camera, dom, world, character, events) {
+    this.camera = camera;
+    this.dom = dom;
+    this.world = world;
+    this.character = character;
+    this.events = events;           // { onArrivePainting, onRoomChange, onInput(kind) }
+    this.pos = new THREE.Vector3(0, 0, -2);
+    this.heading = Math.PI;
+    this.path = [];
+    this.pending = null;            // 正要走去看的畫
+    this.focus = null;              // 正在看的畫
+    this.camYaw = 0;
+    this.camPitch = 0.8;
+    this.camDist = window.innerWidth < window.innerHeight ? 11 : 8.5;
+    this.camPos = new THREE.Vector3();
+    this.camLook = new THREE.Vector3();
+    this.keys = new Set();
+    this.joy = { x: 0, y: 0 };      // 虛擬搖桿，-1 ~ 1
+    this.goal = null;
+    this.room = -1;
+    this.speed = 0;
+    this.raycaster = new THREE.Raycaster();
+    this.marker = this.makeMarker();
+    this.markerT = 1;
+    this.moving = true;
+    this.desiredCamera(this.camPos, this.camLook);
+    this.bind();
+  }
+
+  makeMarker() {
+    const m = new THREE.Mesh(
+      new THREE.RingGeometry(0.2, 0.27, 32),
+      new THREE.MeshBasicMaterial({ color: 0xffe0a0, transparent: true, opacity: 0, depthWrite: false })
+    );
+    m.rotation.x = -Math.PI / 2;
+    m.position.y = 0.03;
+    return m;
+  }
+
+  bind() {
+    const el = this.dom;
+    const pts = new Map();
+    let pinch = null, multi = false;
+
+    el.addEventListener('pointerdown', (e) => {
+      // 右鍵按下就直接當成拖曳轉鏡頭，不會觸發走路
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, drag: e.button === 2, mouse: e.pointerType === 'mouse' });
+      el.setPointerCapture(e.pointerId);
+      if (pts.size === 2) {
+        const [a, b] = [...pts.values()];
+        pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), base: this.camDist };
+        multi = true;
+      }
+    });
+    el.addEventListener('pointermove', (e) => {
+      const p = pts.get(e.pointerId);
+      if (!p) return;
+      const dx = e.clientX - p.x, dy = e.clientY - p.y;
+      p.x = e.clientX;
+      p.y = e.clientY;
+      if (pinch && pts.size >= 2) {
+        const [a, b] = [...pts.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        this.camDist = THREE.MathUtils.clamp(pinch.base * (pinch.d / Math.max(d, 1)), DIST_MIN, DIST_MAX);
+        this.events.onInput('drag');
+        return;
+      }
+      if (!p.drag && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) > DRAG_THRESHOLD) p.drag = true;
+      if (p.drag && !multi) this.orbit(dx, dy, p.mouse);
+    });
+    const up = (e) => {
+      const p = pts.get(e.pointerId);
+      if (!p) return;
+      pts.delete(e.pointerId);
+      if (e.type === 'pointerup' && !p.drag && !multi) this.tap(e.clientX, e.clientY);
+      if (pts.size < 2) pinch = null;
+      if (pts.size === 0) multi = false;
+    };
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    el.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      this.camDist = THREE.MathUtils.clamp(this.camDist * (1 + e.deltaY * 0.001), DIST_MIN, DIST_MAX);
+      this.events.onInput('drag');
+    }, { passive: false });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.action();
+        return;
+      }
+      this.keys.add(e.key.toLowerCase());
+      this.events.onInput('key');
+    });
+    window.addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
+    window.addEventListener('blur', () => this.keys.clear());
+  }
+
+  orbit(dx, dy, mouse = false) {
+    this.exitFocus();
+    const k = (mouse ? 9 : 5.5) / Math.max(this.dom.clientWidth, this.dom.clientHeight);
+    this.camYaw -= dx * k;
+    this.camPitch = THREE.MathUtils.clamp(this.camPitch + dy * k, PITCH_MIN, PITCH_MAX);
+    this.events.onInput('drag');
+  }
+
+  tap(cx, cy) {
+    const rect = this.dom.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((cx - rect.left) / rect.width) * 2 - 1, -((cy - rect.top) / rect.height) * 2 + 1);
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const hit = this.raycaster.intersectObjects(this.world.raycastTargets, false).find((h) => isShown(h.object) && !h.object.userData.ghost);
+    if (!hit) return;
+    this.events.onInput('tap');
+    if (hit.object.userData.painting) return this.goToPainting(hit.object.userData.painting);
+    const t = this.world.findWalkable(hit.point.x, hit.point.z, this.pos.x, this.pos.z);
+    if (!t) return;
+    this.exitFocus();
+    this.pending = null;
+    this.walkTo(t.x, t.z);
+    this.marker.position.x = t.x;
+    this.marker.position.z = t.z;
+    this.markerT = 0;
+  }
+
+  // 依螢幕比例算出看畫的鏡頭距離，以及角色站的位置（盡量站在鏡頭後面，不擋畫）
+  planFocus(p) {
+    const W = window.innerWidth, H = window.innerHeight, desk = W >= 900;
+    const visW = desk ? (W - 400) / W : 1, visH = desk ? 1 : 0.58;
+    const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    const fd = Math.max(1.6, (p.h * 1.6) / 2 / (tanV * visH), (p.w * 1.4) / 2 / (tanV * (W / H) * visW));
+    const n = p.n, t = new THREE.Vector3(-n.z, 0, n.x);
+    let stand = null;
+    for (let depth = fd + 0.6; depth >= 1.0 && !stand; depth -= 0.25) {
+      const lats = depth >= fd + 0.3 ? [0, 0.6, -0.6] : [1.4, -1.4, 1.9, -1.9];
+      for (const lat of lats) {
+        const x = p.wall.x + n.x * depth + t.x * lat, z = p.wall.z + n.z * depth + t.z * lat;
+        if (this.world.walkable(x, z)) { stand = { x, z }; break; }
+      }
+    }
+    if (!stand) stand = this.world.findWalkable(p.wall.x + n.x * 1.5, p.wall.z + n.z * 1.5, this.pos.x, this.pos.z) || { x: this.pos.x, z: this.pos.z };
+    return {
+      p, stand,
+      camPos: new THREE.Vector3(p.wall.x + n.x * fd, p.cy, p.wall.z + n.z * fd),
+      look: p.center.clone(),
+      fadeTarget: p.center.clone().addScaledVector(n, 0.3),
+    };
+  }
+
+  goToPainting(p) {
+    this.exitFocus();
+    const plan = this.planFocus(p);
+    this.pending = plan;
+    if (Math.hypot(this.pos.x - plan.stand.x, this.pos.z - plan.stand.z) < 0.25) {
+      this.path = [];
+      this.arrive();
+    } else {
+      this.walkTo(plan.stand.x, plan.stand.z);
+    }
+  }
+
+  // 用尋路找出繞過家具的路線
+  walkTo(x, z) {
+    this.goal = { x, z };
+    const path = this.world.findPath(this.pos.x, this.pos.z, x, z);
+    this.path = path ? path.map((p) => new THREE.Vector2(p.x, p.z)) : [];
+    if (!path && this.pending) this.pending = null;
+  }
+
+  setJoystick(x, y) {
+    this.joy.x = x;
+    this.joy.y = y;
+    if (x || y) this.events.onInput('joy');
+  }
+
+  // 附近有畫、角色在畫的正面時，回傳那幅畫（給「看畫」按鈕用）
+  nearbyPainting() {
+    if (this.focus || this.pending) return null;
+    let best = null, bd = 3.4;
+    for (const p of this.world.paintings) {
+      if (Math.abs(p.room.index - this.room) > 1) continue;
+      const dx = this.pos.x - p.wall.x, dz = this.pos.z - p.wall.z;
+      const front = dx * p.n.x + dz * p.n.z;
+      const d = Math.hypot(dx, dz);
+      if (front > 0.4 && d < bd) { bd = d; best = p; }
+    }
+    return best;
+  }
+
+  action() {
+    const p = this.nearbyPainting();
+    if (p) {
+      this.events.onInput('tap');
+      this.goToPainting(p);
+    }
+  }
+
+  arrive() {
+    const plan = this.pending;
+    if (!plan) return;
+    this.pending = null;
+    this.focus = plan;
+    this.events.onArrivePainting(plan.p);
+  }
+
+  exitFocus() {
+    if (!this.focus) return;
+    this.focus = null;
+    this.camYaw = Math.atan2(this.camPos.x - this.pos.x, this.camPos.z - this.pos.z);
+  }
+
+  stop() {
+    this.path = [];
+    this.pending = null;
+    this.goal = null;
+  }
+
+  teleport(x, z) {
+    this.pos.set(x, 0, z);
+    this.stop();
+  }
+
+  fadeTarget() {
+    return this.focus ? this.focus.fadeTarget : this.pos;
+  }
+
+  desiredCamera(outPos, outLook) {
+    if (this.focus) {
+      outPos.copy(this.focus.camPos);
+      outLook.copy(this.focus.look);
+      return;
+    }
+    // 注視點放在角色前方一點，直式螢幕上角色才會落在畫面下方，前方留出空間
+    const ahead = window.innerWidth < window.innerHeight ? 1.8 : 0.8;
+    outLook.set(this.pos.x - Math.sin(this.camYaw) * ahead, 0.9, this.pos.z - Math.cos(this.camYaw) * ahead);
+    const c = Math.cos(this.camPitch);
+    outPos.set(
+      outLook.x + Math.sin(this.camYaw) * c * this.camDist,
+      outLook.y + Math.sin(this.camPitch) * this.camDist,
+      outLook.z + Math.cos(this.camYaw) * c * this.camDist
+    );
+  }
+
+  // 移動並處理碰撞：先試原方向，再沿牆滑，手動操作時再試左右偏轉的方向繞過家具角
+  tryMove(vx, vz, deflect) {
+    const w = this.world, ox = this.pos.x, oz = this.pos.z;
+    const stuck = !w.walkable(ox, oz);   // 已經卡在家具裡（例如瞬移進去），允許往任何方向脫困
+    const go = (x, z) => { if (stuck || w.walkable(x, z)) { this.pos.x = x; this.pos.z = z; return true; } return false; };
+    if (go(ox + vx, oz + vz)) return true;
+    if (Math.abs(vx) > 1e-5 && go(ox + vx, oz)) return true;
+    if (Math.abs(vz) > 1e-5 && go(ox, oz + vz)) return true;
+    if (!deflect) return false;
+    for (const a of [0.5, -0.5, 1.0, -1.0, 1.57, -1.57]) {
+      const c = Math.cos(a), s = Math.sin(a), f = 0.85;
+      if (go(ox + (vx * c - vz * s) * f, oz + (vx * s + vz * c) * f)) return true;
+    }
+    return false;
+  }
+
+  update(dt) {
+    let vx = 0, vz = 0;
+    const k = this.keys;
+    const fwd = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
+    const side = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
+    const turn = (k.has('q') ? 1 : 0) - (k.has('e') ? 1 : 0);
+    if (turn) { this.exitFocus(); this.camYaw += turn * 1.8 * dt; }
+
+    // 鍵盤和搖桿都換算成相對鏡頭的方向
+    let mf = fwd, ms = side, mag = fwd || side ? 1 : 0;
+    const jm = Math.hypot(this.joy.x, this.joy.y);
+    if (jm > 0.15) { mf = -this.joy.y; ms = this.joy.x; mag = Math.min(1, (jm - 0.15) / 0.75); }
+    const manual = mag > 0;
+
+    if (manual) {
+      this.stop();
+      this.exitFocus();
+      const sy = Math.sin(this.camYaw), cy = Math.cos(this.camYaw);
+      vx = -sy * mf + cy * ms;
+      vz = -cy * mf - sy * ms;
+      const len = Math.hypot(vx, vz) || 1;
+      vx = (vx / len) * SPEED * mag * dt;
+      vz = (vz / len) * SPEED * mag * dt;
+    } else if (this.path.length) {
+      const t = this.path[0];
+      const dx = t.x - this.pos.x, dz = t.y - this.pos.z;
+      const dist = Math.hypot(dx, dz), step = SPEED * dt;
+      if (dist <= step) {
+        vx = dx; vz = dz;
+        this.path.shift();
+        if (!this.path.length) this.arrive();
+      } else {
+        vx = (dx / dist) * step;
+        vz = (dz / dist) * step;
+      }
+    }
+
+    const w = this.world;
+    const ox = this.pos.x, oz = this.pos.z;
+    if (vx || vz) {
+      if (!this.tryMove(vx, vz, manual) && this.path.length) {
+        // 照路線走卻被擋住：重新算一次路，還是不行就停下
+        const g = this.goal, pend = this.pending;
+        if (g && !this.repathed) {
+          this.repathed = true;
+          this.walkTo(g.x, g.z);
+          this.pending = pend;
+        } else this.stop();
+      } else this.repathed = false;
+    }
+    const mx = this.pos.x - ox, mz = this.pos.z - oz;
+    this.speed = Math.hypot(mx, mz) / Math.max(dt, 1e-4);
+
+    // 角色轉向：走路時面向前進方向，看畫時面向畫
+    let want = null;
+    if (this.speed > 0.05) want = Math.atan2(mx, mz);
+    else if (this.focus) want = Math.atan2(-this.focus.p.n.x, -this.focus.p.n.z);
+    if (want !== null) this.heading += wrapAngle(want - this.heading) * Math.min(1, dt * 10);
+
+    const ch = this.character;
+    ch.group.position.copy(this.pos);
+    ch.group.rotation.y = this.heading;
+    ch.update(dt, this.speed);
+
+    const dPos = new THREE.Vector3(), dLook = new THREE.Vector3();
+    this.desiredCamera(dPos, dLook);
+    const f = 1 - Math.exp(-dt * (this.focus ? 3.2 : 5));
+    this.camPos.lerp(dPos, f);
+    this.camLook.lerp(dLook, f);
+    this.camera.position.copy(this.camPos);
+    this.camera.lookAt(this.camLook);
+    const settling = this.camPos.distanceToSquared(dPos) > 1e-4 || this.camLook.distanceToSquared(dLook) > 1e-4;
+
+    this.moving = this.speed > 0.05 || settling || turn !== 0;
+    if (this.markerT < 1) {
+      this.markerT = Math.min(1, this.markerT + dt * 1.4);
+      this.marker.material.opacity = (1 - this.markerT) * 0.9;
+      const s = 1 + this.markerT * 1.2;
+      this.marker.scale.set(s, s, s);
+      this.moving = true;
+    }
+
+    const room = w.roomIndexAt(this.pos.z);
+    if (room !== this.room) {
+      this.room = room;
+      this.events.onRoomChange(room);
+    }
+  }
+}
