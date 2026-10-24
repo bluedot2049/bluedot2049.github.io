@@ -227,7 +227,12 @@ async function start() {
   // 聲音開關：只在聽得到風聲的地方出現
   const soundBtn = document.getElementById('sound-btn');
   if (ambience) {
-    const label = () => { soundBtn.textContent = ambience.muted ? '靜音' : '有聲'; };
+    const label = () => {
+      const text = ambience.muted ? '開啟聲音' : '靜音';
+      soundBtn.classList.toggle('muted', ambience.muted);
+      soundBtn.setAttribute('aria-label', text);
+      soundBtn.title = text;
+    };
     label();
     soundBtn.addEventListener('click', () => { ambience.setMuted(!ambience.muted); label(); });
   }

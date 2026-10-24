@@ -3,41 +3,66 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#0b0910">
+  <meta name="theme-color" content="#1c130d">
   <title>煉金畫廊</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230b0910'/%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%23e2bf7a' stroke-width='2'/%3E%3Cpath d='M16 5 L26 22 L6 22 Z' fill='none' stroke='%23e2bf7a' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%231c130d'/%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%23e8b86a' stroke-width='2'/%3E%3Cpath d='M16 5 L26 22 L6 22 Z' fill='none' stroke='%23e8b86a' stroke-width='2'/%3E%3C/svg%3E">
+  <!-- 拉丁副標和數字用的字體；連不上就退回系統襯線字 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&display=swap">
   <link rel="stylesheet" href="css/style.css">
   <script type="importmap">
     { "imports": { "three": "./vendor/three.module.min.js" } }
   </script>
 </head>
 <body>
+  <!-- 共用圖示 -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-recenter" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/><path d="M12 8.2l2.2 3.8-2.2 3.8-2.2-3.8z"/></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><path d="M4.5 5.5c2.8-1 5.3-.6 7.5 1v13c-2.2-1.6-4.7-2-7.5-1z"/><path d="M19.5 5.5c-2.8-1-5.3-.6-7.5 1v13c2.2-1.6 4.7-2 7.5-1z"/></symbol>
+      <symbol id="i-sound" viewBox="0 0 24 24"><path d="M4 9.5v5h3.2l4.3 3.5v-12L7.2 9.5z"/><path d="M15 9.2a4 4 0 0 1 0 5.6M17.6 6.6a7.6 7.6 0 0 1 0 10.8"/></symbol>
+      <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.5v5h3.2l4.3 3.5v-12L7.2 9.5z"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5"/></symbol>
+      <symbol id="i-emote" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M8.6 13.6c1.8 2 5 2 6.8 0"/><path d="M9.3 9.6v.6M14.7 9.6v.6"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+    </defs>
+  </svg>
+
   <div id="stage"></div>
 
-  <div id="loading"><div class="sigil"></div><div class="msg">載入中</div></div>
+  <div id="loading">
+    <svg class="sigil" viewBox="0 0 120 120" aria-hidden="true">
+      <g class="ring-a"><circle cx="60" cy="60" r="56"/><circle cx="60" cy="60" r="51" stroke-dasharray="1.5 6"/></g>
+      <g class="ring-b"><rect x="24.5" y="24.5" width="71" height="71"/></g>
+      <g class="ring-c"><path d="M60 14 L100 83 L20 83 Z"/><circle cx="60" cy="60" r="23"/></g>
+      <circle class="core" cx="60" cy="60" r="3"/>
+    </svg>
+    <div class="brand">煉金畫廊</div>
+    <div class="msg">載入中</div>
+  </div>
 
   <div id="toast"></div>
   <div id="hint"></div>
 
   <div id="top-btns">
     <span id="online" hidden></span>
-    <button id="sound-btn" class="icon-btn" aria-label="聲音開關" hidden></button>
-    <button id="recenter-btn" class="icon-btn" aria-label="視角回正" title="視角回正（R）">回正</button>
-    <button id="list-btn" class="icon-btn" aria-label="作品清單">清單</button>
+    <button id="sound-btn" class="icon-btn round" aria-label="靜音" title="靜音" hidden><svg class="on"><use href="#i-sound"/></svg><svg class="off"><use href="#i-mute"/></svg></button>
+    <button id="recenter-btn" class="icon-btn round" aria-label="視角回正" title="視角回正（R）"><svg><use href="#i-recenter"/></svg></button>
+    <button id="list-btn" class="icon-btn" aria-label="作品清單" title="作品清單"><svg><use href="#i-list"/></svg><span>清單</span></button>
   </div>
 
   <div id="joy" aria-label="移動搖桿"><div id="joy-knob"></div></div>
-  <button id="jump-btn" aria-label="跳躍">跳</button>
-  <button id="sit-btn" aria-label="坐下">坐</button>
+  <button id="jump-btn" class="seal" aria-label="跳躍">跳</button>
+  <button id="sit-btn" class="seal" aria-label="坐下">坐</button>
   <button id="action-btn" aria-label="看畫"><span class="a1">看畫</span><span class="a2" id="action-title"></span></button>
 
   <div id="emote" hidden>
-    <button id="emote-btn" class="icon-btn" aria-label="表情">表情</button>
+    <button id="emote-btn" class="icon-btn round" aria-label="表情" title="表情（1–5）"><svg><use href="#i-emote"/></svg></button>
     <div id="emote-bar"></div>
   </div>
 
-  <aside id="sheet" aria-live="polite">
-    <button id="sheet-close" class="icon-btn" aria-label="關閉">✕</button>
+  <aside id="sheet" class="panel" aria-live="polite">
+    <button id="sheet-close" class="icon-btn round close" aria-label="關閉"><svg><use href="#i-close"/></svg></button>
     <div class="sheet-head">
       <button id="sheet-thumb" aria-label="看大圖"><img id="sheet-img" alt=""><span class="zoom">放大</span></button>
       <div class="sheet-titles">
@@ -54,21 +79,21 @@
     </div>
   </aside>
 
-  <aside id="dress" aria-label="換裝">
-    <button id="dress-close" class="icon-btn" aria-label="關閉">✕</button>
-    <h2>鏡子</h2>
+  <aside id="dress" class="panel" aria-label="換裝">
+    <button id="dress-close" class="icon-btn round close" aria-label="關閉"><svg><use href="#i-close"/></svg></button>
+    <h2>鏡子<small>Speculum</small></h2>
     <div id="dress-rows"></div>
   </aside>
 
   <div id="viewer">
     <img id="viewer-img" alt="">
-    <button id="viewer-close" class="icon-btn" aria-label="關閉">✕</button>
+    <button id="viewer-close" class="icon-btn round" aria-label="關閉"><svg><use href="#i-close"/></svg></button>
   </div>
 
   <div id="list">
     <header>
-      <span>作品清單</span>
-      <button id="list-close" class="icon-btn" aria-label="回到畫廊">✕</button>
+      <span class="list-title">作品清單<small>Catalogus</small></span>
+      <button id="list-close" class="icon-btn round" aria-label="回到畫廊"><svg><use href="#i-close"/></svg></button>
     </header>
     <div id="list-body"></div>
   </div>

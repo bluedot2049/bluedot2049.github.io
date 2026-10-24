@@ -2,7 +2,9 @@
 // 房子和陽台蓋在石砌台基上，草原比室內低 DROP 公尺。整個畫廊只有這裡的地面不在高度 0。
 // 座標：rel 是離後門的距離，往草原方向為正，世界座標 z = z0 - rel。
 import * as THREE from 'three';
+import { Water } from '../vendor/Water.js';
 import { Kit, newBucket, mergeBucket, rng, buildWindow } from './props.js';
+import { buildArcane } from './arcane.js';
 
 export const DROP = 1.6;
 const TW = 6, TD = 7;                  // 陽台半寬、深度
@@ -10,6 +12,7 @@ const SW = 1.2, SD = 3, STEPS = 8;     // 石階半寬、水平長度、階數
 const MEADOW = { c: 22.5, rx: 18, rz: 13 };   // 走得到的草原是橢圓，c 是中心離門口多遠
 const BW = 5.6, EAVE = 4.2, RIDGE = 6.0;      // 房子外殼的半寬、屋簷高、屋脊高
 const YB = -DROP - 0.2;                // 台基埋進土裡的底部
+const SEA_LEVEL = -DROP - 0.9, SEA_BED = -DROP - 2.4;   // 草原盡頭的海：水面和海底的高度
 export const SUN_DIR = new THREE.Vector3(-0.35, 0.07, -1).normalize();
 export const HORIZON = 0xe3a47e;
 
@@ -114,15 +117,19 @@ function face(mat, w, y0, y1, cx, cz, rotY, uScale, v0, v1) {
 
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
+const hash = (x, z) => { const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453; return s - Math.floor(s); };
+const vnoise = (x, z) => {
+  const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz;
+  const a = hash(ix, iz), b = hash(ix + 1, iz), c = hash(ix, iz + 1), d = hash(ix + 1, iz + 1);
+  const ux = fx * fx * (3 - 2 * fx), uz = fz * fz * (3 - 2 * fz);
+  return a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz;
+};
+// 山坡上一塊一塊的分區：小於 0.4 是樹林，大於 0.6 是花田。地面上色和種樹都看這個，樹才會長在深色那幾塊
+const patch = (x, z) => vnoise(x * 0.045 + 7.3, z * 0.045 - 3.1);
+const FIELDS = ['#9a8ad0', '#d8c050'];
+
 // 草原的地形：走得到的範圍是平的，往外慢慢隆起成丘陵，房子附近保持平地
 function makeTerrain(z0) {
-  const hash = (x, z) => { const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453; return s - Math.floor(s); };
-  const vnoise = (x, z) => {
-    const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz;
-    const a = hash(ix, iz), b = hash(ix + 1, iz), c = hash(ix, iz + 1), d = hash(ix + 1, iz + 1);
-    const ux = fx * fx * (3 - 2 * fx), uz = fz * fz * (3 - 2 * fz);
-    return a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz;
-  };
   return (x, z) => {
     const rel = z0 - z;
     const e = Math.hypot(x / MEADOW.rx, (rel - MEADOW.c) / MEADOW.rz);
@@ -134,7 +141,10 @@ function makeTerrain(z0) {
     // 房子後方和兩側壓平，不然整棟會埋進山坡
     const dx = Math.max(0, Math.abs(x) - BW - 1), dz = Math.max(0, rel - TD, -rel - 40);
     h = Math.min(h, Math.max(0, Math.hypot(dx, dz) - 3) * 0.6);
-    return -DROP + Math.min(h, 40);
+    // 夕陽那一側盡頭挖成海灣，兩側的丘陵留著
+    const sea = smooth(39, 47, rel) * (1 - smooth(34, 80, Math.abs(x)));
+    const y = -DROP + Math.min(h, 40);
+    return y + (SEA_BED - y) * sea;
   };
 }
 
@@ -355,7 +365,6 @@ export function buildOutdoor(room, h) {
   // 山牆
   const tri = new THREE.Shape([new THREE.Vector2(-BW, 0), new THREE.Vector2(BW, 0), new THREE.Vector2(0, rise)]);
   for (const zz of [z0, zFront - 0.12]) sk.add(new THREE.ExtrudeGeometry(tri, { depth: 0.12, bevelEnabled: false }), '#d2bc98', 0, EAVE, zz);
-  sk.add(new THREE.CircleGeometry(0.35, 12), '#ffcf8a', 0, EAVE + 0.75, z0 - 0.02, { ry: Math.PI, glow: true });
   // 煙囪在赤化的正上方，冒玫瑰色的煙
   const chim = { x: 2.6, z: z0 + 5 };
   sk.box(0.7, 2.2, 0.7, '#8a5a48', chim.x, EAVE + 1.6, chim.z);
@@ -375,6 +384,8 @@ export function buildOutdoor(room, h) {
   sk.emit(shellBucket, 0, 0, 0);
   for (const o of h.bucketObjects(shellBucket)) shell.add(o);
   shell.add(smoke(chim.x, EAVE + 2.85, chim.z));
+  // 塔樓、玫瑰窗、符文、圓陣、漂浮物這些魔法裝飾在 arcane.js
+  const arcane = buildArcane({ shell, group, h, R, z0, Z, d: { BW, EAVE, RIDGE, YB, TW, TD, SW, G: -DROP } });
 
   // ---- 陽台 ----
   const tile = tileTexture();
@@ -398,6 +409,7 @@ export function buildOutdoor(room, h) {
   );
 
   const k = new Kit(R);
+  const vk = new Kit(rng('hills'));   // 山坡上的樹和灌木另用一組亂數，加減樹不會動到陽台和草原的擺設
   // 欄杆：前緣（石階開口兩側）和左右兩邊
   const rail = (x1, z1, x2, z2) => {
     const len = Math.hypot(x2 - x1, z2 - z1), ry = Math.atan2(x2 - x1, z2 - z1);
@@ -545,24 +557,54 @@ export function buildOutdoor(room, h) {
       k.rock(r, R() < 0.5 ? '#8a8078' : '#7a7068', x, y + r * 0.4, Z(rel), { sy: 0.7, ry: R() * 3 });
       if (e < 1) block(x, Z(rel), r, r);
     } else {
-      for (let j = 0; j < 3; j++) k.rock(0.35 + R() * 0.2, j % 2 ? '#4f7034' : '#5f803a', x + (R() - 0.5) * 0.6, y + 0.3, Z(rel) + (R() - 0.5) * 0.6);
+      for (let j = 0; j < 3; j++) R(), R(), R();   // 照舊取亂數，後面的花叢位置才不會跟著變
+      bush(vk, x, y, Z(rel), 1, 9);
       if (e < 1) block(x, Z(rel), 0.5, 0.5);
     }
   }
-  // 台基腳下的灌木
-  for (let x = -TW + 0.4; x < TW; x += 1.1 + R() * 0.6) {
-    if (Math.abs(x) < SW + 0.7) continue;
-    k.rock(0.4 + R() * 0.2, R() < 0.5 ? '#4a6a30' : '#5a7a38', x, G + 0.3, Z(TD + 0.35), { sy: 0.8 });
+  // 房子周圍的花叢：台基前緣、陽台兩側、石階口、房子外牆腳下
+  const walkable = (x, rel) => (x / MEADOW.rx) ** 2 + ((rel - MEADOW.c) / MEADOW.rz) ** 2 < 1;
+  const bed = (x, rel, s) => {
+    flowerBed(k, x, G, Z(rel), s);
+    if (walkable(x, rel)) block(x, Z(rel), 0.55 * s, 0.55 * s);
+  };
+  for (let x = -TW - 0.6; x < TW + 0.6; x += 0.9 + R() * 0.5) {
+    if (Math.abs(x) < SW + 0.8) continue;
+    bed(x, TD + 0.45 + R() * 0.3, 0.9 + R() * 0.4);
+    if (R() < 0.6) bed(x + 0.4, TD + 1.3 + R() * 0.5, 0.6 + R() * 0.3);
   }
-  // 遠處山坡上的樹
-  for (let i = 0; i < 40; i++) {
-    const a = R() * Math.PI * 2, e = 1.7 + R() * 2.2;
-    const x = Math.cos(a) * MEADOW.rx * e, rel = MEADOW.c + Math.sin(a) * MEADOW.rz * e;
-    if (rel < TD + 4 && Math.abs(x) < BW + 6) continue;
-    if (Math.sin(a) > 0.35) continue;   // 夕陽那一側留空，坐著才看得到遠方
-    const y = terrain(x, Z(rel)), s = 0.8 + R() * 0.8;
-    k.cyl(0.1 * s, 0.14 * s, 0.8 * s, '#4a3424', x, y + 0.4 * s, Z(rel), {}, 5);
-    k.cone(0.9 * s, 2.6 * s, R() < 0.5 ? '#3a5a3a' : '#4a6640', x, y + 2.0 * s, Z(rel));
+  for (const sx of [-1, 1]) {
+    for (let rel = 0.6; rel < TD + 0.5; rel += 1 + R() * 0.5) bed(sx * (TW + 0.6 + R() * 0.3), rel, 0.9 + R() * 0.4);
+    for (let rel = sx < 0 ? -2.4 : -1; rel > -9; rel -= 1.3 + R() * 0.7) bed(sx * (BW + 0.6 + R() * 0.3), rel, 0.8 + R() * 0.4);
+    bed(sx * (SW + 1.1), TD + SD + 0.4, 0.8);
+    bed(sx * (SW + 1.9), TD + SD - 0.3, 1);
+  }
+  // 遠處山坡：樹多半種在地面畫成樹林的那幾塊，林子裡夾著開花的樹；林緣和坡腳是開花的灌木
+  // 全部跟草原的家具合併成同一個網格，不多一次繪製
+  {
+    const VR = vk.R, nTree = coarse ? 70 : 110, nBush = coarse ? 60 : 100;
+    const spot = (eMin, eSpan, open) => {
+      const a = VR() * Math.PI * 2, e = eMin + VR() * eSpan;
+      const x = Math.cos(a) * MEADOW.rx * e, rel = MEADOW.c + Math.sin(a) * MEADOW.rz * e;
+      if (rel < TD + 4 && Math.abs(x) < BW + 6) return null;
+      if (Math.sin(a) > open) return null;   // 夕陽那一側留空，坐著才看得到遠方
+      return { x, z: Z(rel), n: patch(x, Z(rel)) };
+    };
+    for (let placed = 0, tries = 0; placed < nTree && tries < 4000; tries++) {
+      const p = spot(1.45, 2.5, 0.35);
+      if (!p || (p.n > 0.46 && VR() < 0.9)) continue;
+      const roll = VR(), s = 0.8 + VR() * 0.7;
+      // 樹林中心多針葉樹，靠近林緣開花的樹變多
+      const kind = p.n < 0.33 ? (roll < 0.5 ? 'pine' : roll < 0.88 ? 'round' : 'bloom') : (roll < 0.2 ? 'pine' : roll < 0.55 ? 'round' : 'bloom');
+      farTree(vk, kind, p.x, terrain(p.x, p.z), p.z, s);
+      placed++;
+    }
+    for (let placed = 0, tries = 0; placed < nBush && tries < 4000; tries++) {
+      const p = spot(1.2, 1.4, 0.5);
+      if (!p || (p.n > 0.3 && p.n < 0.62 && VR() < 0.7)) continue;
+      bush(vk, p.x, terrain(p.x, p.z), p.z, 0.9 + VR() * 0.7, 3, false);
+      placed++;
+    }
   }
 
   // ---- 座位 ----
@@ -584,6 +626,7 @@ export function buildOutdoor(room, h) {
 
   // ---- 合併 ----
   k.emit(bucket, 0, 0, 0);
+  vk.emit(bucket, 0, 0, 0);
   for (const o of h.bucketObjects(bucket)) group.add(o);
   meadowGroup.add(grass(terrain, z0, coarse ? 10000 : 20000, h.uTime));
   meadowGroup.add(seeds(mz, h.uTime));
@@ -594,6 +637,8 @@ export function buildOutdoor(room, h) {
   const sky = buildSky();
   const far = buildFar(mz, R);
   group.add(sky, far);
+  const water = buildSea(mz, coarse);
+  group.add(water);
 
   // 樹的影子
   const sh = new THREE.Mesh(new THREE.CircleGeometry(2.6, 20), h.shadowMat);
@@ -618,7 +663,8 @@ export function buildOutdoor(room, h) {
   };
 
   return {
-    shell, sky, far, seats, host, groundY,
+    shell, sky, far, water, seats, host, groundY,
+    update: arcane.update,
     table: { x: tableX, z: Z(tableRel), hw: 0.5, hd: tableLen / 2 },
     door: z0,
     // 室內 0、走出後門 1，主程式用來切換光線和霧
@@ -628,6 +674,27 @@ export function buildOutdoor(room, h) {
   };
 }
 
+// 海：three.js 範例的 Water（MIT）。反射要多畫一次場景，所以解析度壓低，人不在戶外時由 world 關掉
+function buildSea(mz, coarse) {
+  const normals = new THREE.TextureLoader().load('assets/waternormals.jpg');
+  normals.wrapS = normals.wrapT = THREE.RepeatWrapping;
+  const water = new Water(new THREE.PlaneGeometry(600, 600), {
+    textureWidth: coarse ? 256 : 512,
+    textureHeight: coarse ? 256 : 512,
+    waterNormals: normals,
+    sunDirection: SUN_DIR.clone(),
+    sunColor: 0xffc890,
+    waterColor: 0x2a4a58,
+    distortionScale: 2.2,
+    size: 2,
+    fog: true,
+  });
+  water.rotation.x = -Math.PI / 2;
+  water.position.set(0, SEA_LEVEL, mz);
+  water.visible = false;
+  return water;
+}
+
 // 大地：一整片，中間平、外圍慢慢隆起
 function groundMesh(terrain, mz) {
   const S = 340, N = 85;
@@ -635,13 +702,20 @@ function groundMesh(terrain, mz) {
   geo.rotateX(-Math.PI / 2);
   geo.translate(0, 0, mz);
   const pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
-  const near = new THREE.Color('#5c7a36'), far = new THREE.Color('#9a9450'), c = new THREE.Color();
+  const near = new THREE.Color('#5c7a36'), far = new THREE.Color('#84904a'), sand = new THREE.Color('#c9a878'), c = new THREE.Color();
+  const forest = new THREE.Color('#3a5430'), fields = FIELDS.map((f) => new THREE.Color(f)), fc = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i), y = terrain(x, z);
     pos.setY(i, y);
     const d = Math.hypot(x / MEADOW.rx, (z - mz) / MEADOW.rz);
     c.copy(near).lerp(far, Math.min(1, Math.max(0, (d - 1) / 3)));
     c.offsetHSL(0, 0, (Math.sin(x * 0.7) * Math.cos(z * 0.5)) * 0.03);
+    // 山坡上的樹林和花田。花田的顏色用更大塊的雜訊挑，一整塊大致同色
+    const hill = smooth(1.25, 1.7, d), n = patch(x, z);
+    c.lerp(forest, hill * smooth(0.42, 0.3, n) * 0.85);
+    fc.copy(fields[Math.min(fields.length - 1, Math.floor(vnoise(x * 0.018 - 4, z * 0.018 + 2) * fields.length * 1.3) % fields.length)]);
+    c.lerp(fc, hill * smooth(0.58, 0.7, n) * (0.2 + 0.25 * vnoise(x * 0.2, z * 0.2)));
+    c.lerp(sand, smooth(-DROP - 0.3, -DROP - 1.1, y));
     col.set([c.r, c.g, c.b], i * 3);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -762,9 +836,16 @@ function smoke(x, y, z) {
     uniforms: { uTime: { value: 0 }, uSize: { value: 260 * Math.min(window.devicePixelRatio, 2) } },
     vertexShader: `
       uniform float uTime; uniform float uSize;
-      attribute float aPhase; varying float vA;
+      attribute float aPhase; varying float vA; varying vec3 vC;
+      // 煉金四階段：黑化、白化、黃化、赤化，每段二十五秒，換色時慢慢混過去
+      vec3 stage(float i) {
+        return i < 0.5 ? vec3(0.34, 0.29, 0.40) : i < 1.5 ? vec3(0.93, 0.93, 0.96) : i < 2.5 ? vec3(1.0, 0.82, 0.45) : vec3(0.95, 0.55, 0.6);
+      }
       void main() {
         float t = fract(uTime * 0.07 + aPhase);
+        // 用這顆煙冒出來的時間決定顏色，換階段時整道煙由下往上變色
+        float s = mod((uTime - t / 0.07) / 25.0, 4.0), i = floor(s);
+        vC = mix(stage(i), stage(mod(i + 1.0, 4.0)), smoothstep(0.75, 1.0, s - i));
         vec3 p = position + vec3(t * 2.5 + sin(aPhase * 40.0) * 0.2, t * 6.0, -t * 0.8);
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_PointSize = uSize * (0.3 + t) / -mv.z;
@@ -772,10 +853,10 @@ function smoke(x, y, z) {
         vA = (1.0 - t) * smoothstep(0.0, 0.1, t) * 0.4;
       }`,
     fragmentShader: `
-      varying float vA;
+      varying float vA; varying vec3 vC;
       void main() {
         float a = smoothstep(0.5, 0.0, length(gl_PointCoord - 0.5)) * vA;
-        gl_FragColor = vec4(0.93, 0.78, 0.78, a);
+        gl_FragColor = vec4(vC, a);
       }`,
     transparent: true, depthWrite: false,
   });
@@ -825,18 +906,58 @@ function buildSky() {
   return sky;
 }
 
+// 遠山：三圈山脊，越遠越淡越接近天邊的顏色。面向夕陽的山背光偏紫，背對夕陽的山頂映著晚霞
+// 每圈是一條圍成環的帶子，上緣照雜訊起伏，底部沒入海平面以下
+function ridges(mz) {
+  const N = 320, pos = [], col = [];
+  const sun = new THREE.Vector2(SUN_DIR.x, SUN_DIR.z).normalize();
+  const haze = new THREE.Color(HORIZON), glow = new THREE.Color('#e4a0a0'), shade = new THREE.Color('#6a5884');
+  const foot = new THREE.Color('#c08a90'), top = new THREE.Color(), c = new THREE.Color();
+  const LAYERS = [
+    { dist: 150, base: 5, amp: 34, gap: 0.6, mist: 0.12, seed: 3 },
+    { dist: 188, base: 9, amp: 46, gap: 0.72, mist: 0.36, seed: 11 },
+    { dist: 228, base: 14, amp: 60, gap: 0.82, mist: 0.58, seed: 23 },
+  ];
+  const ROWS = [0, 0.55, 1];
+  for (const L of LAYERS) {
+    const hs = [];
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      let h = 0, w = 0.5, f = 1.4;
+      for (let o = 0; o < 5; o++, w *= 0.5, f *= 2.1) h += w * (1 - Math.abs(vnoise(Math.cos(a) * f + L.seed, Math.sin(a) * f - L.seed) * 2 - 1));
+      // 夕陽正前方壓低，海平線上只剩低低的島
+      const facing = Math.cos(a) * sun.x + Math.sin(a) * sun.y;
+      hs.push((L.base + L.amp * Math.pow(h, 1.7)) * (1 - 0.9 * smooth(L.gap, 0.97, facing)));
+    }
+    const vert = (i, t) => {
+      const a = (i / N) * Math.PI * 2, d = L.dist - (1 - t) * 22;
+      const facing = Math.cos(a) * sun.x + Math.sin(a) * sun.y;
+      // 坡往左右哪邊傾，就亮一點或暗一點，山脊才有立體感
+      const slope = (hs[Math.min(N, i + 1)] - hs[Math.max(0, i - 1)]) / (2 * Math.PI * 2 * L.dist / N);
+      top.copy(glow).lerp(shade, smooth(-0.3, 0.8, facing)).multiplyScalar(1 + Math.max(-0.2, Math.min(0.2, slope * 0.5)));
+      c.copy(foot).lerp(top, Math.pow(t, 0.7)).lerp(haze, L.mist + (1 - t) * 0.35 * (1 - L.mist));
+      pos.push(Math.cos(a) * d, SEA_LEVEL - 6 + (hs[i] + 6) * t, mz + Math.sin(a) * d);
+      col.push(c.r, c.g, c.b);
+    };
+    for (let i = 0; i < N; i++) {
+      for (let r = 0; r < ROWS.length - 1; r++) {
+        const t0 = ROWS[r], t1 = ROWS[r + 1];
+        vert(i, t0); vert(i + 1, t0); vert(i + 1, t1);
+        vert(i, t0); vert(i + 1, t1); vert(i, t1);
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(pos.length), 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return geo;
+}
+
 // 遠山和雲：不受霧影響，自己帶空氣感的顏色
 function buildFar(mz, R) {
   const k = new Kit(R);
-  for (let ring = 0; ring < 2; ring++) {
-    const n = ring ? 16 : 20, dist = ring ? 205 : 160;
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2 + R() * 0.2;
-      const r = 30 + R() * 30, hgt = 18 + R() * (ring ? 30 : 22);
-      const c = ring ? '#c8949e' : '#9a7290', c2 = ring ? '#e0aea0' : '#b8869a';
-      k.add(new THREE.ConeGeometry(r, hgt, 6), c, Math.cos(a) * dist, -DROP - 2 + hgt / 2, mz + Math.sin(a) * dist, { color2: c2, ry: R() * 3, sz: 0.6 + R() * 0.5 });
-    }
-  }
+  k.lit.push(ridges(mz));
   for (let i = 0; i < 14; i++) {
     const a = R() * Math.PI * 2, dist = 120 + R() * 60, y = 30 + R() * 30;
     const cx = Math.cos(a) * dist, cz = mz + Math.sin(a) * dist;
@@ -846,10 +967,81 @@ function buildFar(mz, R) {
     }
   }
   const geo = mergeBucket(k.lit, false);
-  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }));
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }));
   m.frustumCulled = false;
   m.renderOrder = -1;
   return m;
+}
+
+// 一叢花：底下幾團綠葉，上面點滿同色系的花，偶爾插幾支高的穗狀花
+const BLOOMS = [
+  ['#e8507a', '#ff9ab8', '#f4f0e6'], ['#f2a03a', '#f6d84a', '#e8603a'], ['#9a5ad8', '#c49aee', '#f4f0e6'],
+  ['#4a6ae0', '#7ad0e8', '#f4f0e6'], ['#e83a4a', '#f6d84a', '#ff9ab8'], ['#f6d84a', '#f4f0e6', '#f2a03a'],
+  ['#d04aa8', '#9a5ad8', '#ff9ab8'],
+];
+function flowerBed(k, x, y, z, s = 1) {
+  const R = k.R, pal = BLOOMS[Math.floor(R() * BLOOMS.length)];
+  const mounds = [];
+  for (let i = 0; i < 3; i++) {
+    const r = (0.26 + R() * 0.16) * s, mx = x + (R() - 0.5) * 0.6 * s, mz = z + (R() - 0.5) * 0.6 * s;
+    k.rock(r, R() < 0.5 ? '#3f6a2c' : '#557a34', mx, y + r * 0.55, mz, { sy: 0.75, ry: R() * 3, color2: '#6a8a3a' });
+    mounds.push({ mx, mz, r });
+  }
+  for (let i = 0; i < 16; i++) {
+    const m = mounds[i % 3], a = R() * Math.PI * 2, e = Math.sqrt(R()) * 0.85;
+    const bx = m.mx + Math.cos(a) * m.r * e, bz = m.mz + Math.sin(a) * m.r * e;
+    const by = y + m.r * 0.55 + Math.sqrt(1 - e * e) * m.r * 0.75;
+    const c = pal[R() < 0.6 ? 0 : R() < 0.6 ? 1 : 2];
+    k.rock((0.055 + R() * 0.035) * s, c, bx, by + 0.02, bz, { sy: 0.7, ry: R() * 3 });
+  }
+  // 穗狀花：一根莖，往上一顆比一顆小
+  for (let i = 0, n = R() < 0.5 ? 2 + Math.floor(R() * 3) : 0; i < n; i++) {
+    const sx = x + (R() - 0.5) * 0.7 * s, sz = z + (R() - 0.5) * 0.7 * s, hgt = (0.55 + R() * 0.35) * s, c = pal[Math.floor(R() * 2)];
+    k.cyl(0.012, 0.016, hgt, '#4a6a2c', sx, y + hgt / 2, sz, {}, 4);
+    for (let j = 0; j < 5; j++) k.rock(0.05 * s * (1 - j * 0.13), c, sx, y + hgt * (0.55 + j * 0.1), sz, { sy: 0.8, ry: R() * 3 });
+  }
+}
+
+// 開花的灌木：兩三團葉子，頂上透一點花色，表面點 dots 朵花。遠處的（ao: false）花朵點大一點才看得到
+const FAR_BLOOMS = [['#e8507a', '#ff9ab8', '#f4f0e6'], ['#f4f0e6', '#ffd8e0', '#f6d84a'], ['#9a5ad8', '#c49aee', '#f4f0e6'], ['#f2a03a', '#f6d84a', '#f4f0e6'], ['#d04aa8', '#ff9ab8', '#f4f0e6']];
+function bush(k, x, y, z, s = 1, dots = 0, ao = true) {
+  const R = k.R, list = ao ? BLOOMS : FAR_BLOOMS, pal = list[Math.floor(R() * list.length)];
+  const leaf = new THREE.Color(R() < 0.5 ? '#3a6028' : '#4a7030'), tip = leaf.clone().lerp(new THREE.Color(pal[0]), 0.35);
+  const mounds = [];
+  for (let i = 0, n = 2 + (R() < 0.5); i < n; i++) {
+    const r = (0.3 + R() * 0.16) * s, mx = x + (R() - 0.5) * 0.7 * s, mz = z + (R() - 0.5) * 0.7 * s;
+    k.rock(r, leaf, mx, y + r * 0.5, mz, { sy: 0.78, ry: R() * 3, color2: tip, ao });
+    mounds.push({ mx, mz, r });
+  }
+  // 遠處的花看不出形狀，用八面體就好，面數不到一半
+  const bloom = (ao ? 0.06 : 0.11) * s;
+  for (let i = 0; i < dots; i++) {
+    const m = mounds[i % mounds.length], a = R() * Math.PI * 2, e = Math.sqrt(R()) * 0.8;
+    const by = y + m.r * 0.5 + Math.sqrt(1 - e * e) * m.r * 0.78, r = bloom * (1 + R() * 0.5);
+    const geo = ao ? new THREE.IcosahedronGeometry(r, 0) : new THREE.OctahedronGeometry(r, 0);
+    k.add(geo, pal[R() < 0.6 ? 0 : 1 + Math.floor(R() * 2)], m.mx + Math.cos(a) * m.r * e, by, m.mz + Math.sin(a) * m.r * e, { sy: 0.7, ry: R() * 3, ao });
+  }
+}
+
+// 遠處的樹：pine 三層錐、round 幾團圓樹冠、bloom 開滿花的樹。顏色由下往上變亮，像頂上照著夕陽
+const ROUND = [['#34502a', '#7a903c'], ['#3e5a2c', '#90a046'], ['#2e4a2c', '#68843e']];
+const BLOSSOM = [['#c86a8c', '#f6c0cc'], ['#d8c8c4', '#fff4ea'], ['#c86a8c', '#f8d0d8'], ['#8a6ab8', '#d0b0ea'], ['#d88a34', '#f4cc68']];
+function farTree(k, kind, x, y, z, s) {
+  const R = k.R, o = { ao: false };
+  if (kind === 'pine') {
+    k.cyl(0.1 * s, 0.15 * s, 0.9 * s, '#3e2c20', x, y + 0.45 * s, z, o, 5);
+    for (let i = 0; i < 3; i++) {
+      const r = (1 - i * 0.24) * s, hy = y + (1.2 + i * 0.85) * s;
+      k.cone(r, 1.7 * r, '#22402e', x, hy, z, { ...o, color2: '#4e6e46', ry: R() * 3 });
+    }
+    return;
+  }
+  const pal = kind === 'bloom' ? BLOSSOM[Math.floor(R() * BLOSSOM.length)] : ROUND[Math.floor(R() * ROUND.length)];
+  k.cyl(0.09 * s, 0.15 * s, 1.5 * s, '#4a3424', x, y + 0.75 * s, z, o, 5);
+  for (let i = 0, n = 3 + (R() < 0.5); i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + R(), d = i ? 0.55 * s : 0, r = (0.75 + R() * 0.3) * s;
+    k.rock(r, pal[0], x + Math.cos(a) * d, y + (1.9 + (i ? 0 : 0.5) + R() * 0.3) * s, z + Math.sin(a) * d, { ...o, sy: 0.85, ry: R() * 3, color2: pal[1] });
+  }
 }
 
 // 大樹：幾段樹幹加一團團樹冠
@@ -859,9 +1051,10 @@ function buildTree(k, x, z, G) {
     const dx = Math.cos(a) * Math.sin(tilt) * len / 2, dz = Math.sin(a) * Math.sin(tilt) * len / 2;
     k.cyl(0.1, 0.18, len, '#5a3a24', x + dx, G + 2.6 + Math.cos(tilt) * len / 2, z + dz, { ry: -a + Math.PI / 2, rz: -tilt }, 6);
   }
-  const R = k.R, greens = ['#4a6a2a', '#5a7a30', '#6a8a3a', '#7a8a34', '#b89a48'];
+  // 每團樹冠底下暗、頂上亮，像頂上照著夕陽
+  const R = k.R, greens = ['#4a6a2a', '#5a7a30', '#6a8a3a', '#7a8a34', '#b89a48'], tops = ['#8aa040', '#9aac46', '#a8b04a', '#b4ac48', '#d8b860'];
   for (let i = 0; i < 16; i++) {
     const a = R() * Math.PI * 2, r = R() * 2.2;
-    k.rock(0.9 + R() * 0.7, greens[i % greens.length], x + Math.cos(a) * r, G + 3.6 + R() * 1.6 - r * 0.25, z + Math.sin(a) * r, { sy: 0.8, ry: R() * 3 });
+    k.rock(0.9 + R() * 0.7, greens[i % greens.length], x + Math.cos(a) * r, G + 3.6 + R() * 1.6 - r * 0.25, z + Math.sin(a) * r, { sy: 0.8, ry: R() * 3, color2: tops[i % tops.length] });
   }
 }

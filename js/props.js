@@ -58,6 +58,7 @@ export class Kit {
     _q.setFromEuler(_e);
     _m.compose(_p.set(x, y, z), _q, _s.set(o.sx || 1, o.sy || 1, o.sz || 1));
     g.applyMatrix4(_m);
+    if (o.ao === false) g.userData.noAO = true;
     (o.glow ? this.glow : this.lit).push(g);
     return this;
   }
@@ -87,11 +88,12 @@ export function newBucket() {
   return { lit: [], glow: [], glows: [] };
 }
 
-// 合併成一個幾何。靠近地面的頂點稍微壓暗，當作簡單的環境光遮蔽。
+// 合併成一個幾何。靠近地面的頂點稍微壓暗，當作簡單的環境光遮蔽。零件帶 ao: false 的不壓（遠處山坡上的樹）
 export function mergeBucket(list, ao = true) {
   if (!list.length) return null;
   if (ao) {
     for (const g of list) {
+      if (g.userData.noAO) continue;
       const pos = g.attributes.position, col = g.attributes.color;
       for (let i = 0; i < pos.count; i++) {
         const f = 0.62 + 0.38 * Math.min(1, Math.max(0, pos.getY(i)) / 1.1);
