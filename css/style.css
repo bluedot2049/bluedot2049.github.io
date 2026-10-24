@@ -154,6 +154,20 @@ img, canvas {
 }
 body.touch #joy { display: block; }
 
+/* 跳躍按鈕：只在觸控裝置顯示，放在搖桿上方 */
+#jump-btn {
+  position: fixed; z-index: 20;
+  right: calc(52px + env(safe-area-inset-right)); bottom: calc(166px + env(safe-area-inset-bottom));
+  width: 56px; height: 56px; padding: 0; border-radius: 50%;
+  font: inherit; font-size: 16px; color: var(--gold);
+  background: rgba(38, 26, 18, 0.55); border: 1.5px solid var(--line);
+  display: none; touch-action: none; cursor: pointer;
+  transition: opacity .3s;
+}
+#jump-btn:active { background: rgba(38, 26, 18, 0.8); }
+body.touch #jump-btn { display: block; }
+body.panel-open #jump-btn { opacity: 0; pointer-events: none; }
+
 /* 靠近畫作時出現的按鈕 */
 #action-btn {
   position: fixed; z-index: 20;

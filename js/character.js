@@ -121,6 +121,7 @@ export class Character {
     shadow.position.y = 0.012;
     g.add(shadow);
 
+    this.shadow = shadow;
     this.group = g;
     this.body = body;
     this.phase = 0;

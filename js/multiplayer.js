@@ -7,6 +7,10 @@ const SEND_MOVING = 200;    // 走動時每 0.2 秒送一次位置
 const SEND_IDLE = 8000;     // 站著不動時偶爾報一次，確認還在
 const STALE = 20000;        // 這麼久沒消息就當作離開
 const MAX_SHOWN = 10;       // 只畫最近的幾位，手機才跑得動
+const MAX_TRACKED = 30;     // 最多同時追蹤幾位，防止有人灌假身分拖垮大家的手機
+const MAX_UNVERIFIED = 5;   // 在線名單還沒認可的新面孔，同時最多放行幾位（名單同步要幾秒）
+const UNVERIFIED_TTL = 10000; // 超過這麼久還沒被認可就丟掉
+const COORD_LIMIT = 200;    // 畫廊遠小於這個範圍，超過的座標一律當作亂送
 const EMOTE_GAP = 800;      // 自己送表情的最短間隔
 const EMOTE_TIME = 2;       // 表情在頭上停留的秒數
 export const EMOTES = ['❤️', '✨', '👏', '😮', '👋'];
@@ -16,6 +20,9 @@ function wrapAngle(a) {
   while (a < -Math.PI) a += Math.PI * 2;
   return a;
 }
+
+const isId = (v) => typeof v === 'string' && /^[a-z0-9]{1,16}$/.test(v);
+const isNum = (v, lim) => typeof v === 'number' && Math.abs(v) <= lim;   // NaN 比較結果為 false，一併擋掉
 
 function loadScript(src) {
   return new Promise((resolve, reject) => {
@@ -67,6 +74,7 @@ export class Multiplayer {
     this.events = events;           // { onCount(n), onReady() }
     this.id = Math.random().toString(36).slice(2, 10);
     this.others = new Map();        // id -> { ch, pos, target, heading, seen, speed }
+    this.present = new Set();       // 目前在線上的訪客 id（來自 presence）
     this.fx = [];                   // 正在飄的表情
     this.active = false;
     this.last = null;
@@ -82,10 +90,13 @@ export class Multiplayer {
     });
     ch.on('broadcast', { event: 'pos' }, ({ payload }) => this.onPos(payload))
       .on('broadcast', { event: 'emote' }, ({ payload }) => this.onEmote(payload))
-      .on('presence', { event: 'sync' }, () => this.events.onCount(Object.keys(ch.presenceState()).length))
+      .on('presence', { event: 'sync' }, () => {
+        this.present = new Set(Object.keys(ch.presenceState()));
+        this.events.onCount(this.present.size);
+      })
       // 有人進來就馬上報一次位置，對方才不用等
-      .on('presence', { event: 'join' }, () => { this.last = null; })
-      .on('presence', { event: 'leave' }, ({ key }) => this.remove(key))
+      .on('presence', { event: 'join' }, ({ key }) => { this.present.add(key); this.last = null; })
+      .on('presence', { event: 'leave' }, ({ key }) => { this.present.delete(key); this.remove(key); })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           this.active = true;
@@ -111,12 +122,17 @@ export class Multiplayer {
   }
 
   onPos(m) {
-    if (!m || m.id === this.id) return;
+    // 頻道是公開的，任何人都能亂送，所以內容和身分都要先過濾
+    if (!m || !isId(m.id) || m.id === this.id) return;
+    if (!isNum(m.x, COORD_LIMIT) || !isNum(m.z, COORD_LIMIT) || !isNum(m.h, 100) || !isNum(m.r, 100)) return;
     let o = this.others.get(m.id);
     if (!o) {
+      if (this.others.size >= MAX_TRACKED) return;
+      // 在線名單同步比訊息慢，新來的人先暫時放行，但名額很少，認可不了就丟掉
+      if (!this.present.has(m.id) && [...this.others.values()].filter((x) => !x.verified).length >= MAX_UNVERIFIED) return;
       const ch = new Character(this.shadowTex, colorsFor(m.id));
       this.scene.add(ch.group);
-      o = { ch, pos: new THREE.Vector3(m.x, 0, m.z), heading: m.h, speed: 0 };
+      o = { ch, pos: new THREE.Vector3(m.x, 0, m.z), heading: m.h, speed: 0, verified: this.present.has(m.id), born: performance.now() };
       this.others.set(m.id, o);
     }
     o.target = m;
@@ -140,7 +156,7 @@ export class Multiplayer {
   }
 
   onEmote(m) {
-    const o = m && this.others.get(m.id);
+    const o = m && isId(m.id) ? this.others.get(m.id) : null;
     if (o && o.ch.group.visible && EMOTES.includes(m.e)) this.pop(o.ch.group, m.e);
   }
 
@@ -162,6 +178,10 @@ export class Multiplayer {
     const near = [];
     for (const [id, o] of this.others) {
       if (now - o.seen > STALE) { this.remove(id); continue; }
+      if (!o.verified) {
+        if (this.present.has(id)) o.verified = true;
+        else if (now - o.born > UNVERIFIED_TTL) { this.remove(id); continue; }
+      }
       const t = o.target;
       if (Math.abs(t.r - me.room) <= 1) near.push([Math.hypot(t.x - me.pos.x, t.z - me.pos.z), o]);
       else o.ch.group.visible = false;

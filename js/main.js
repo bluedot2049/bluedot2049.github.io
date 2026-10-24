@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { buildWorld } from './world.js';
 import { Player } from './player.js';
 import { Character } from './character.js';
+import { Manatee } from './manatee.js';
 import { UI } from './ui.js';
 import { bindJoystick } from './joystick.js';
 import { Multiplayer, EMOTES } from './multiplayer.js';
@@ -82,6 +83,11 @@ async function start() {
   const shadowTex = TX.shadowTexture();
   const character = new Character(shadowTex);
   scene.add(character.group);
+  // 前廳的海牛頭人：擋住一小塊地面，玩家靠近時會轉過來面對
+  const spot = world.findWalkable(1.9, -3.4, 0, -2) || { x: 1.9, z: -3.4 };
+  const manatee = new Manatee(shadowTex, spot.x, spot.z);
+  scene.add(manatee.group);
+  world.rooms[0].obstacles.push({ x: spot.x, z: spot.z, hw: 0.4, hd: 0.4, rot: 0 });
   let lastInput = performance.now();
   let swipeHinted = false;
 
@@ -119,6 +125,7 @@ async function start() {
   // 手機操作：搖桿走路，靠近畫作時出現「看畫」按鈕
   if (coarse) document.body.classList.add('touch');
   bindJoystick(document.getElementById('joy'), document.getElementById('joy-knob'), (x, y) => player.setJoystick(x, y));
+  document.getElementById('jump-btn').addEventListener('pointerdown', (e) => { e.preventDefault(); player.jump(); });
   const actionBtn = document.getElementById('action-btn');
   actionBtn.addEventListener('click', () => player.action());
   let nearP = null;
@@ -177,7 +184,7 @@ async function start() {
   if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp };
 
   ui.loading(null);
-  ui.hint(coarse ? '右下搖桿或點地面走路　拖曳轉視角' : '點地面或 WASD 走路　拖曳轉視角　Enter 看畫', 6000);
+  ui.hint(coarse ? '右下搖桿或點地面走路　拖曳轉視角' : '點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　Enter 看畫', 6000);
 
   // 沒在動的時候降到約 30fps，省電
   const clock = new THREE.Clock();
@@ -185,6 +192,7 @@ async function start() {
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
     player.update(dt);
+    manatee.update(dt, player.pos.x, player.pos.z);
     const othersMoving = mp ? mp.update(dt, performance.now()) : false;
     if (frame % 6 === 0) updateAction();
     world.update(clock.elapsedTime, player.camPos, player.fadeTarget());

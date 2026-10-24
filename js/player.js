@@ -7,6 +7,7 @@ const DRAG_THRESHOLD = 8;
 const DIST_MIN = 4, DIST_MAX = 14;
 const PITCH_MIN = 0.35, PITCH_MAX = 1.25, PITCH_DEFAULT = 0.8;
 const SWIPE_MIN = 40;
+const JUMP_V = 4.2, GRAVITY = 14;
 
 const defaultDist = () => (window.innerWidth < window.innerHeight ? 11 : 8.5);
 
@@ -43,6 +44,8 @@ export class Player {
     this.goal = null;
     this.room = -1;
     this.speed = 0;
+    this.jumpY = 0;
+    this.jumpV = 0;
     this.raycaster = new THREE.Raycaster();
     this.marker = this.makeMarker();
     this.markerT = 1;
@@ -114,9 +117,14 @@ export class Player {
     }, { passive: false });
 
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
+      if (e.key === 'Enter') {
         e.preventDefault();
         this.action();
+        return;
+      }
+      if (e.key === ' ') {
+        e.preventDefault();
+        this.jump();
         return;
       }
       if (e.key === 'r' || e.key === 'R') {
@@ -252,6 +260,12 @@ export class Player {
     }
   }
 
+  jump() {
+    if (this.jumpY > 0 || this.jumpV > 0) return;
+    this.events.onInput('key');
+    this.jumpV = JUMP_V;
+  }
+
   arrive() {
     const plan = this.pending;
     if (!plan) return;
@@ -375,8 +389,18 @@ export class Player {
     else if (this.focus) want = Math.atan2(-this.focus.p.n.x, -this.focus.p.n.z);
     if (want !== null) this.heading += wrapAngle(want - this.heading) * Math.min(1, dt * 10);
 
+    if (this.jumpY > 0 || this.jumpV > 0) {
+      this.jumpV -= GRAVITY * dt;
+      this.jumpY = Math.max(0, this.jumpY + this.jumpV * dt);
+      if (this.jumpY === 0) this.jumpV = 0;
+    }
+
     const ch = this.character;
     ch.group.position.copy(this.pos);
+    ch.group.position.y = this.jumpY;
+    // 影子留在地面，越高越小
+    ch.shadow.position.y = 0.012 - this.jumpY;
+    ch.shadow.scale.setScalar(1 - Math.min(0.4, this.jumpY * 0.5));
     ch.group.rotation.y = this.heading;
     ch.update(dt, this.speed);
 
@@ -389,7 +413,7 @@ export class Player {
     this.camera.lookAt(this.camLook);
     const settling = this.camPos.distanceToSquared(dPos) > 1e-4 || this.camLook.distanceToSquared(dLook) > 1e-4;
 
-    this.moving = this.speed > 0.05 || settling || turn !== 0;
+    this.moving = this.speed > 0.05 || settling || turn !== 0 || this.jumpY > 0;
     if (this.markerT < 1) {
       this.markerT = Math.min(1, this.markerT + dt * 1.4);
       this.marker.material.opacity = (1 - this.markerT) * 0.9;
