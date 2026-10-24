@@ -136,6 +136,12 @@ js/  css/  vendor/    程式，平常不用動
 - 畫面靜止時降到約每秒 30 張。
 - 牆、地板、地毯、家具、角色都是程式產生的，除了 Three.js 本身之外沒有要下載的模型或材質。
 
-## 上線
+## 上線與更新
 
-整個資料夾是純靜態網站，可以免費放在 GitHub Pages、Cloudflare Pages 或 Netlify。之後要上線時再一起設定。
+網址：https://bluedot2049.github.io
+
+程式放在 GitHub 的 `bluedot2049/bluedot2049.github.io`。每次推送到 `main` 分支，GitHub Actions 會自動發佈（設定在 `.github/workflows/deploy.yml`）。
+
+改完畫作或設定後，雙擊 `更新網站.bat`，它會把變更上傳，網站一兩分鐘後更新。建議先用 `開啟畫廊.bat` 在本機確認沒問題，再上傳。
+
+原始高解析畫檔請放在 `originals/` 資料夾，這個資料夾不會被上傳。
