@@ -11,6 +11,10 @@ export const HATS = [0x4a2f66, 0x2c3e50, 0x6b3a1f, 0x1f5a4a, 0x2b1f3d, 0x7a2a3a,
 export const SCARVES = [0xc0392b, 0xe0b44c, 0xd9d2c0, 0xe58a3a, 0x4fa3a5, 0xe27a9a, 0x9ad0e0, 0x6fbf73];
 export const JUMP_V = 4.2, GRAVITY = 14;
 const ACT_TIME = 1.6;
+// 長袍上窄下寬，手臂要從肩膀往外張開一點，手才會沿著袍子外側垂下，不會插進身體
+const SHOULDER_X = 0.24, ARM_OUT = 0.28;
+const SIT_TIME = 0.8;      // 坐下或站起來花幾秒
+const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
 export const presetOutfit = (i) => [i, i, i];
 export const randomOutfit = () => presetOutfit(Math.floor(Math.random() * ROBES.length));
@@ -73,8 +77,9 @@ export class Character {
     this.scarfTail = scarfTail;
 
     const bag = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.08), dark);
-    bag.position.set(-0.24, 0.42, 0.02);
-    bag.rotation.z = 0.15;
+    // 包包掛在左後腰，避開垂下來的左手
+    bag.position.set(-0.17, 0.42, -0.19);
+    bag.rotation.set(0.15, 0.7, 0.1);
     body.add(bag);
 
     const head = new THREE.Group();
@@ -126,16 +131,18 @@ export class Character {
       return [pivot, mesh];
     };
     const armGeo = new THREE.CapsuleGeometry(0.055, 0.25, 2, 6);
-    [this.armL] = limb(armGeo, robe, -0.22, 0.72);
-    [this.armR] = limb(armGeo, robe, 0.22, 0.72);
+    [this.armL] = limb(armGeo, robe, -SHOULDER_X, 0.72);
+    [this.armR] = limb(armGeo, robe, SHOULDER_X, 0.72);
     for (const a of [this.armL, this.armR]) {
       a.children[0].position.y = -0.16;
       const hand = new THREE.Mesh(new THREE.IcosahedronGeometry(0.055, 0), skin);
       hand.position.y = -0.33;
       a.add(hand);
     }
-    this.armL.rotation.z = -0.15;
-    this.armR.rotation.z = 0.15;
+    this.armL.rotation.z = -ARM_OUT;
+    this.armR.rotation.z = ARM_OUT;
+    // 先往前擺（x）再往內收（y），手才能在胸前水平地合起來
+    this.armL.rotation.order = this.armR.rotation.order = 'YXZ';
 
     const footGeo = new THREE.BoxGeometry(0.1, 0.08, 0.18);
     [this.footL] = limb(footGeo, dark, -0.1, 0.04);
@@ -160,7 +167,7 @@ export class Character {
     this.jumpV = 0;
     this.act = null;               // 正在做的表情動作 { e, t }
     this.sitting = false;
-    this.sitK = 0;
+    this.sitP = 0;                 // 坐下的進度：0 站著、1 坐好，站起來時倒著走
     this.lift = 0;                 // 坐的地方離地多高
     this.food = 0;                 // 手上的點心種類，0 是空手
     this.bites = 0;
@@ -230,7 +237,7 @@ export class Character {
 
   // 還有動畫在播（跳躍、表情），主迴圈不能降幀
   get busy() {
-    return this.airborne || !!this.act || this.biteT > 0 || Math.abs(this.sitK - (this.sitting ? 1 : 0)) > 0.01;
+    return this.airborne || !!this.act || this.biteT > 0 || this.sitP !== (this.sitting ? 1 : 0);
   }
 
   update(dt, speed) {
@@ -258,36 +265,51 @@ export class Character {
     this.scarfTail.rotation.x = 0.2 + w * 0.5 + Math.sin(this.time * 6) * 0.08 * w;
     this.body.rotation.y = 0;
     this.hat.position.y = 0.13;
-    this.armL.rotation.z = -0.15;
-    this.armR.rotation.z = 0.15;
+    this.armL.rotation.z = -ARM_OUT;
+    this.armR.rotation.z = ARM_OUT;
+    this.armL.rotation.y = this.armR.rotation.y = 0;
+    this.armL.position.z = this.armR.position.z = 0;
     this.footL.position.y = this.footR.position.y = 0.04;
 
-    // 坐下：腳伸向前、手放腿上，身體稍微往後靠
-    const sk = (this.sitK += ((this.sitting ? 1 : 0) - this.sitK) * Math.min(1, dt * 6));
-    if (sk > 0.001) {
-      const L = this.armL.rotation, R = this.armR.rotation;
+    // 坐下的過程：身體前傾、雙手往後撐，屁股坐下去，再把腳伸到前面、手放到腿上、往後靠。
+    // 站起來時同一段倒著播
+    this.sitP = clamp01(this.sitP + (this.sitting ? dt : -dt) / SIT_TIME);
+    const p = this.sitP;
+    const lower = smooth(clamp01((p - 0.15) / 0.6));     // 身體往下（或坐上長椅）
+    const tuck = smooth(clamp01((p - 0.45) / 0.55));     // 腳伸到前面、手收到腿上
+    const brace = Math.sin(p * Math.PI);                 // 半路的前傾和撐手
+    if (p > 0) {
+      const L = this.armL.rotation, R = this.armR.rotation, B = this.body.rotation;
+      const k = clamp01(p * 4);
       for (const f of [this.footL, this.footR]) {
-        f.rotation.x += (-1.4 - f.rotation.x) * sk;
-        f.position.z += (0.14 - f.position.z) * sk;
-        f.position.y += 0.07 * sk;
+        f.rotation.x += (-1.4 - f.rotation.x) * tuck;
+        f.position.z += (0.14 - f.position.z) * tuck;
+        f.position.y += 0.07 * tuck;
       }
-      L.x += (-0.5 - L.x) * sk;
-      R.x += (-0.5 - R.x) * sk;
-      this.body.rotation.x += (-0.06 - this.body.rotation.x) * sk;
+      const ax = 0.45 + (-0.5 - 0.45) * tuck, az = ARM_OUT + 0.25 * (1 - tuck);
+      L.x += (ax - L.x) * k; L.z += (-az - L.z) * k;
+      R.x += (ax - R.x) * k; R.z += (az - R.z) * k;
+      B.x += (0.35 * brace - 0.06 * tuck - B.x) * k;
     }
+    const sk = lower;
 
     // 拿著點心時右手舉在胸前，咬一口時送到嘴邊
     this.holdK += ((this.food ? 1 : 0) - this.holdK) * Math.min(1, dt * 8);
     if (this.holdK > 0.001) {
       const R = this.armR.rotation;
       R.x += (-0.95 - R.x) * this.holdK;
-      R.z += (-0.1 - R.z) * this.holdK;
+      R.z += (0.05 - R.z) * this.holdK;
     }
     if (this.biteT > 0) {
       this.biteT = Math.max(0, this.biteT - dt);
       const b = Math.sin((1 - this.biteT / BITE_TIME) * Math.PI);
-      this.armR.rotation.x += (-2.1 - this.armR.rotation.x) * b;
-      this.armR.rotation.z += (-0.55 - this.armR.rotation.z) * b;
+      // 從前方繞到嘴邊：肩膀往前，手抬得越高才越往內收，上下的半路都不會擦到胸口
+      const R = this.armR.rotation;
+      R.x += (-2.12 - R.x) * b;
+      const up = Math.min(1, Math.max(0, (-R.x - 0.95) / 1.17)) ** 3;
+      R.y += (-0.92 - R.y) * up;
+      R.z += (0.05 - R.z) * up;
+      this.armR.position.z = 0.08 * b;
     }
 
     if (this.airborne) {
@@ -296,7 +318,9 @@ export class Character {
       if (this.jumpY === 0) this.jumpV = 0;
     }
     // 呼叫端已經把 group 放在地面高度，這裡再加上跳躍和坐下的位移
-    const up = this.jumpY + (this.lift - 0.1) * sk;
+    // 坐長椅時屁股比站著還高，順勢小跳一下坐上去
+    const hop = this.lift > 0.2 ? Math.sin(lower * Math.PI) * 0.1 : 0;
+    const up = this.jumpY + (this.lift - 0.1) * lower + hop;
     this.group.position.y += up;
     // 影子留在地面，越高越小
     this.shadow.position.y = 0.012 - up;
@@ -318,19 +342,26 @@ export class Character {
       L.x += (lx - L.x) * k; L.z += (lz - L.z) * k;
       R.x += (rx - R.x) * k; R.z += (rz - R.z) * k;
     };
+    // 雙手要在身體前面合起來的動作：肩膀往前收，手臂往前抬 x、往內收 y，張開角 z。左右對稱
+    const front = (x, y, z) => {
+      arms(x, -z, x, z);
+      L.y += (y - L.y) * k;
+      R.y += (-y - R.y) * k;
+      this.armL.position.z = this.armR.position.z = 0.08 * k;
+    };
     switch (a.e) {
       case '👋':
         arms(L.x, L.z, -0.25, 2.5 + Math.sin(t * 12) * 0.35);
         B.z += -0.06 * kb;
         break;
       case '👏': {
-        const open = Math.abs(Math.sin(t * Math.PI * 3)) * 0.45;
-        arms(-1.3, 0.6 - open, -1.3, -0.6 + open);
+        const open = Math.abs(Math.sin(t * Math.PI * 3)) * 0.3;
+        front(-1.82, 0.675 - open, 0.1);
         B.x += 0.06 * kb;
         break;
       }
       case '❤️':
-        arms(-1.0, 0.75, -1.0, -0.75);
+        front(-1.26, 0.675, 0.2);
         B.x += 0.12 * kb;
         B.z += Math.sin(t * 4) * 0.08 * kb;
         break;
@@ -341,7 +372,7 @@ export class Character {
         this.hat.rotation.z -= Math.sin(Math.min(1, t / 0.8) * Math.PI) * 0.3 * kb;
         break;
       case '😮':
-        arms(-2.2, 0.5, -2.2, -0.5);
+        front(-2.38, 0.875, 0.28);
         B.x += -0.25 * kb;
         this.hat.position.y += Math.max(0, Math.sin(Math.min(1, t / 0.35) * Math.PI)) * 0.1 * kb;
         break;

@@ -168,6 +168,21 @@ body.touch #joy { display: block; }
 body.touch #jump-btn { display: block; }
 body.panel-open #jump-btn { opacity: 0; pointer-events: none; }
 
+/* 坐下按鈕：「跳」的右邊，坐著時變成「起」 */
+#sit-btn {
+  position: fixed; z-index: 20;
+  left: calc(108px + env(safe-area-inset-left)); bottom: calc(50px + env(safe-area-inset-bottom));
+  width: 56px; height: 56px; padding: 0; border-radius: 50%;
+  font: inherit; font-size: 16px; color: var(--gold);
+  background: rgba(38, 26, 18, 0.55); border: 1.5px solid var(--line);
+  display: none; touch-action: manipulation; cursor: pointer;
+  transition: opacity .3s;
+}
+#sit-btn:active { background: rgba(38, 26, 18, 0.8); }
+body.touch #sit-btn { display: block; }
+body.panel-open #sit-btn { opacity: 0; pointer-events: none; }
+body.sitting #sit-btn { background: rgba(38, 26, 18, 0.85); border-color: var(--gold); }
+
 /* 靠近畫作或鏡子時出現的按鈕：手機在搖桿正上方，電腦在右下 */
 #action-btn {
   position: fixed; z-index: 20;

@@ -568,17 +568,18 @@ export function buildOutdoor(room, h) {
   // ---- 座位 ----
   const seats = [];
   // heading：坐下時面向的方向（同角色的 heading，atan2(dx, dz)）
-  // table：坐在長桌邊，伸手就拿得到點心
-  const seat = (x, z, lift, heading, table = false) => {
+  // table：坐在長桌邊，伸手就拿得到點心。(ax, az) 是入座前站的位置，預設在座位後面（跨過長凳）
+  const seat = (x, z, lift, heading, table = false, ax, az) => {
     const fx = Math.sin(heading), fz = Math.cos(heading);
-    seats.push({ x, z, lift, h: heading, ax: x - fx * 0.75, az: z - fz * 0.75, table });
+    seats.push({ x, z, lift, h: heading, ax: ax ?? x - fx * 0.75, az: az ?? z - fz * 0.75, table });
   };
   for (const dz of [-1.2, 0, 1.2]) {
     seat(tableX - 0.92, Z(tableRel) + dz, 0.45, Math.PI / 2, true);
     seat(tableX + 0.92, Z(tableRel) + dz, 0.45, -Math.PI / 2, true);
   }
-  for (const cx of [bx - 0.85, bx + 0.85]) seat(cx, Z(bRel), 0.45, Math.PI);
-  for (const dx of [-0.4, 0.4]) seat(benchAt.x + dx, benchAt.z, 0.45, Math.PI);
+  // 椅子從外側入座，有椅背的長椅從前面走過來再轉身坐下
+  for (const sx of [-1, 1]) seat(bx + sx * 0.85, Z(bRel), 0.45, Math.PI, false, bx + sx * 1.45, Z(bRel));
+  for (const dx of [-0.4, 0.4]) seat(benchAt.x + dx, benchAt.z, 0.45, Math.PI, false, benchAt.x + dx, benchAt.z - 0.75);
   for (const dx of [-0.45, 0.45]) seat(pic.x + dx, pic.z, 0.02, Math.PI);
 
   // ---- 合併 ----

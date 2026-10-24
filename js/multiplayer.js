@@ -145,8 +145,8 @@ export class Multiplayer {
 
   send(now) {
     const p = this.player;
-    // s：坐在第幾個座位（+1，0 是沒坐）；f：手上的點心
-    const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room, s: p.seat + 1, f: p.character.foodCode };
+    // s：0 沒坐、-1 坐在地上、i + 1 坐在第 i 個座位；f：手上的點心
+    const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room, s: p.sitCode, f: p.character.foodCode };
     const l = this.last;
     const changed = !l || Math.abs(st.x - l.x) > 0.02 || Math.abs(st.z - l.z) > 0.02 || Math.abs(wrapAngle(st.h - l.h)) > 0.05 || st.r !== l.r || st.s !== l.s || st.f !== l.f;
     if (now - this.lastSent < (changed ? SEND_MOVING : SEND_IDLE)) return;
@@ -161,7 +161,7 @@ export class Multiplayer {
     if (!isNum(m.x, COORD_LIMIT) || !isNum(m.z, COORD_LIMIT) || !isNum(m.h, 100) || !isNum(m.r, 100)) return;
     // 舊版網頁不會送這兩項，當作沒坐、空手
     const seats = this.player.world.outdoor?.seats || [];
-    m.s = Number.isInteger(m.s) && m.s > 0 && m.s <= seats.length ? m.s : 0;
+    m.s = Number.isInteger(m.s) && m.s >= -1 && m.s <= seats.length ? m.s : 0;
     m.f = isFood(m.f) ? m.f : 0;
     let o = this.others.get(m.id);
     if (!o) {
@@ -261,14 +261,14 @@ export class Multiplayer {
       o.pos.z += (t.z - o.pos.z) * k;
       o.speed = Math.hypot(o.pos.x - ox, o.pos.z - oz) / Math.max(dt, 1e-4);
       o.heading += wrapAngle(t.h - o.heading) * Math.min(1, dt * 8);
-      const world = this.player.world, seat = t.s ? world.outdoor.seats[t.s - 1] : null;
+      const world = this.player.world, seat = t.s > 0 ? world.outdoor.seats[t.s - 1] : null;
       o.pos.y = world.groundY(o.pos.x, o.pos.z);
-      o.ch.sitting = !!seat;
-      if (seat) o.ch.lift = seat.lift;
+      o.ch.sitting = t.s !== 0;
+      if (t.s) o.ch.lift = seat ? seat.lift : 0.02;
       if (t.f !== o.ch.foodCode) o.ch.setFoodCode(t.f);
       g.position.copy(o.pos);
       g.rotation.y = o.heading;
-      o.ch.update(dt, seat ? 0 : o.speed);
+      o.ch.update(dt, t.s ? 0 : o.speed);
       if (o.speed > 0.05 || o.ch.busy) moving = true;
     });
 

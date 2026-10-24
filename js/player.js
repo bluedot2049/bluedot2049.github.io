@@ -5,7 +5,9 @@ import * as THREE from 'three';
 const SPEED = 2.6;
 const DRAG_THRESHOLD = 8;
 const DIST_MIN = 4, DIST_MAX = 14;
-const PITCH_MIN = 0.35, PITCH_MAX = 1.25, PITCH_DEFAULT = 0.8;
+// 俯角往下拉到 PITCH_LOW 時鏡頭已經貼近地面，再往下拉就改成抬頭往上看，一路看到天頂
+const PITCH_MIN = -1.55, PITCH_LOW = -0.08, PITCH_MAX = 1.25, PITCH_DEFAULT = 0.8;
+const ZENITH = 1.52;
 const SWIPE_MIN = 40;
 
 const defaultDist = () => (window.innerWidth < window.innerHeight ? 11 : 8.5);
@@ -128,6 +130,10 @@ export class Player {
         this.recenter();
         return;
       }
+      if (e.key === 'c' || e.key === 'C') {
+        this.toggleSit();
+        return;
+      }
       this.keys.add(e.key.toLowerCase());
       this.events.onInput('key');
     });
@@ -136,7 +142,7 @@ export class Player {
   }
 
   orbit(dx, dy, mouse = false) {
-    this.exitFocus();
+    this.exitView();
     const k = (mouse ? 9 : 5.5) / Math.max(this.dom.clientWidth, this.dom.clientHeight);
     this.camYaw -= dx * k;
     this.camPitch = THREE.MathUtils.clamp(this.camPitch + dy * k, PITCH_MIN, PITCH_MAX);
@@ -238,7 +244,7 @@ export class Player {
   // 鏡頭轉回角色背後，俯角和距離恢復預設
   recenter() {
     this.events.onInput('tap');
-    this.exitFocus();
+    this.exitView();
     this.camYaw = this.heading + Math.PI;
     this.camPitch = PITCH_DEFAULT;
     this.camDist = defaultDist();
@@ -272,29 +278,43 @@ export class Player {
     return best;
   }
 
-  // 坐下：先走到座位後面，到了再滑進座位。鏡頭退到側後方，望向前面的風景
+  // 坐下：先走到座位旁邊，再挪進座位、轉向，最後才坐下去。鏡頭不動，維持使用者原本的視角
   planSeat(i) {
-    const st = this.world.outdoor.seats[i], fx = Math.sin(st.h), fz = Math.cos(st.h);
-    const gy = this.world.groundY(st.x, st.z);
-    return {
-      kind: 'seat', seat: i, n: { x: -fx, z: -fz },
-      stand: { x: st.ax, z: st.az },
-      camPos: new THREE.Vector3(st.x - fx * 3.8 - fz * 0.7, gy + 1.8, st.z - fz * 3.8 + fx * 0.7),
-      look: new THREE.Vector3(st.x + fx * 14, gy + 2.2, st.z + fz * 14),
-      fadeTarget: new THREE.Vector3(st.x, gy, st.z),
-    };
+    const st = this.world.outdoor.seats[i];
+    return { kind: 'seat', seat: i, n: { x: -Math.sin(st.h), z: -Math.cos(st.h) }, stand: { x: st.ax, z: st.az } };
   }
 
-  get seat() {
-    return this.focus?.kind === 'seat' ? this.focus.seat : -1;
+  get sitting() {
+    return this.focus?.kind === 'seat' || this.focus?.kind === 'ground';
+  }
+
+  // 傳給別人的坐姿：0 沒坐、-1 坐在地上、i + 1 坐在第 i 個座位
+  get sitCode() {
+    if (this.focus?.kind === 'seat') return this.focus.seat + 1;
+    return this.focus?.kind === 'ground' ? -1 : 0;
+  }
+
+  // 「坐」按鈕和 C 鍵：坐著就站起來；旁邊有座位就坐座位，沒有就原地坐在地上
+  toggleSit() {
+    this.events.onInput('tap');
+    if (this.sitting) return this.exitFocus();
+    if (this.character.airborne) return;
+    const t = this.actionTarget();
+    if (t?.kind === 'seat') return this.goTo(this.planSeat(t.p));
+    this.exitFocus();
+    this.stop();
+    this.focus = { kind: 'ground', n: { x: -Math.sin(this.heading), z: -Math.cos(this.heading) } };
+    this.character.lift = 0.02;
+    this.character.sitting = true;
+    this.events.onSit?.(true);
   }
 
   // 動作按鈕現在該做什麼：看畫、照鏡子、坐下、拿點心、吃一口、起來。回傳 { kind, p? } 或 null
   actionTarget() {
     const ch = this.character;
-    if (this.focus?.kind === 'seat') {
+    if (this.sitting) {
       if (ch.food) return { kind: 'eat' };
-      return { kind: this.world.outdoor.seats[this.focus.seat].table ? 'table' : 'stand' };
+      return { kind: this.focus.kind === 'seat' && this.world.outdoor.seats[this.focus.seat].table ? 'table' : 'stand' };
     }
     if (this.focus || this.pending) return null;
     const x = this.pos.x, z = this.pos.z, list = [];
@@ -340,7 +360,8 @@ export class Player {
   }
 
   jump() {
-    if (this.focus?.kind === 'seat') this.exitFocus();
+    if (this.sitting) this.exitFocus();
+    if (this.character.sitP > 0) return;   // 還在站起來的途中
     if (!this.character.jump()) return;
     this.events.onInput('key');
     this.events.onJump?.();
@@ -352,24 +373,25 @@ export class Player {
     this.pending = null;
     this.focus = plan;
     if (plan.kind === 'mirror') this.events.onArriveMirror?.();
-    else if (plan.kind === 'seat') {
-      const st = this.world.outdoor.seats[plan.seat];
-      this.character.sitting = true;
-      this.character.lift = st.lift;
-      this.events.onSit?.(plan.seat);
-    } else this.events.onArrivePainting(plan.p);
+    else if (plan.kind === 'seat') this.events.onSit?.(true);   // 真正坐下去要等挪進座位，見 update
+    else this.events.onArrivePainting(plan.p);
   }
 
   exitFocus() {
     if (!this.focus) return;
-    // 鏡頭退到角色背後、面向剛才的畫或鏡子。看畫時鏡頭在角色和畫之間，照原方位拉遠會跑到牆後
-    const n = this.focus.n, wasSeat = this.focus.kind === 'seat';
+    const wasSitting = this.sitting, n = this.focus.n, hadView = !!this.focus.camPos;
     this.focus = null;
-    this.camYaw = Math.atan2(n.x, n.z);
-    if (wasSeat) {
+    // 鏡頭退到角色背後、面向剛才的畫或鏡子。看畫時鏡頭在角色和畫之間，照原方位拉遠會跑到牆後
+    if (hadView) this.camYaw = Math.atan2(n.x, n.z);
+    if (wasSitting) {
       this.character.sitting = false;
-      this.events.onSit?.(-1);
+      this.events.onSit?.(false);
     }
+  }
+
+  // 只離開看畫、照鏡子這種會接管鏡頭的狀態；坐著時轉鏡頭不會站起來
+  exitView() {
+    if (this.focus?.camPos) this.exitFocus();
   }
 
   stop() {
@@ -385,11 +407,11 @@ export class Player {
   }
 
   fadeTarget() {
-    return this.focus ? this.focus.fadeTarget : this.pos;
+    return this.focus?.fadeTarget || this.pos;
   }
 
   desiredCamera(outPos, outLook) {
-    if (this.focus) {
+    if (this.focus?.camPos) {
       outPos.copy(this.focus.camPos);
       outLook.copy(this.focus.look);
       return;
@@ -397,12 +419,22 @@ export class Player {
     // 注視點放在角色前方一點，直式螢幕上角色才會落在畫面下方，前方留出空間
     const ahead = window.innerWidth < window.innerHeight ? 1.8 : 0.8;
     outLook.set(this.pos.x - Math.sin(this.camYaw) * ahead, this.pos.y + 0.9, this.pos.z - Math.cos(this.camYaw) * ahead);
-    const c = Math.cos(this.camPitch);
+    const pitch = Math.max(this.camPitch, PITCH_LOW), c = Math.cos(pitch);
     outPos.set(
       outLook.x + Math.sin(this.camYaw) * c * this.camDist,
-      outLook.y + Math.sin(this.camPitch) * this.camDist,
+      outLook.y + Math.sin(pitch) * this.camDist,
       outLook.z + Math.cos(this.camYaw) * c * this.camDist
     );
+    // 鏡頭不鑽進地面
+    outPos.y = Math.max(outPos.y, this.world.groundY(outPos.x, outPos.z) + 0.3);
+    // 再往下拉的部分換成抬頭：鏡頭位置不動，視線往上轉，最多接近正上方
+    const extra = PITCH_LOW - this.camPitch;
+    if (extra > 0) {
+      const dx = outLook.x - outPos.x, dy = outLook.y - outPos.y, dz = outLook.z - outPos.z;
+      const h = Math.hypot(dx, dz) || 1e-4, len = Math.hypot(h, dy);
+      const e = Math.min(ZENITH, Math.atan2(dy, h) + extra);
+      outLook.set(outPos.x + (dx / h) * Math.cos(e) * len, outPos.y + Math.sin(e) * len, outPos.z + (dz / h) * Math.cos(e) * len);
+    }
   }
 
   // 移動並處理碰撞：先試原方向，再沿牆滑，手動操作時再試左右偏轉的方向繞過家具角
@@ -427,7 +459,7 @@ export class Player {
     const fwd = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
     const side = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
     const turn = (k.has('q') ? 1 : 0) - (k.has('e') ? 1 : 0);
-    if (turn) { this.exitFocus(); this.camYaw += turn * 1.8 * dt; }
+    if (turn) { this.exitView(); this.camYaw += turn * 1.8 * dt; }
 
     // 鍵盤和搖桿都換算成相對鏡頭的方向
     let mf = fwd, ms = side, mag = fwd || side ? 1 : 0;
@@ -438,13 +470,16 @@ export class Player {
     if (manual) {
       this.stop();
       this.exitFocus();
+    }
+    const rising = !this.character.sitting && this.character.sitP > 0.25;   // 站起來的途中先別走
+    if (manual && !rising) {
       const sy = Math.sin(this.camYaw), cy = Math.cos(this.camYaw);
       vx = -sy * mf + cy * ms;
       vz = -cy * mf - sy * ms;
       const len = Math.hypot(vx, vz) || 1;
       vx = (vx / len) * SPEED * mag * dt;
       vz = (vz / len) * SPEED * mag * dt;
-    } else if (this.path.length) {
+    } else if (this.path.length && !rising) {
       const t = this.path[0];
       const dx = t.x - this.pos.x, dz = t.y - this.pos.z;
       const dist = Math.hypot(dx, dz), step = SPEED * dt;
@@ -473,11 +508,16 @@ export class Player {
     }
     const mx = this.pos.x - ox, mz = this.pos.z - oz;
     this.speed = Math.hypot(mx, mz) / Math.max(dt, 1e-4);
-    // 坐下時從座位後面慢慢滑進座位，不算走路
+    // 到了座位旁邊：挪進座位、轉向，對準了才坐下去（挪動不算走路）
     if (this.focus?.kind === 'seat') {
-      const st = w.outdoor.seats[this.focus.seat], k = Math.min(1, dt * 5);
+      const st = w.outdoor.seats[this.focus.seat], k = Math.min(1, dt * 4);
       this.pos.x += (st.x - this.pos.x) * k;
       this.pos.z += (st.z - this.pos.z) * k;
+      const ch = this.character;
+      if (!ch.sitting && Math.hypot(st.x - this.pos.x, st.z - this.pos.z) < 0.08 && Math.abs(wrapAngle(st.h - this.heading)) < 0.2) {
+        ch.lift = st.lift;
+        ch.sitting = true;
+      }
     }
     this.pos.y = w.groundY(this.pos.x, this.pos.z);
 
@@ -494,8 +534,7 @@ export class Player {
 
     const dPos = new THREE.Vector3(), dLook = new THREE.Vector3();
     this.desiredCamera(dPos, dLook);
-    // 坐下時鏡頭退得特別慢
-    const f = 1 - Math.exp(-dt * (this.focus ? (this.focus.kind === 'seat' ? 1.2 : 3.2) : 5));
+    const f = 1 - Math.exp(-dt * (this.focus?.camPos ? 3.2 : 5));
     this.camPos.lerp(dPos, f);
     this.camLook.lerp(dLook, f);
     this.camera.position.copy(this.camPos);

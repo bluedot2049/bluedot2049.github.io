@@ -158,9 +158,9 @@ async function start() {
     onJump() {
       mp?.jump();
     },
-    onSit(i) {
+    onSit(on) {
       mp?.sendNow();
-      if (i >= 0 && !sitHinted) {
+      if (on && !sitHinted) {
         sitHinted = true;
         ui.hint(coarse ? '推搖桿或點地面就會站起來' : '走動或點地面就會站起來', 4000);
       }
@@ -199,6 +199,8 @@ async function start() {
   if (coarse) document.body.classList.add('touch');
   bindJoystick(document.getElementById('joy'), document.getElementById('joy-knob'), (x, y) => player.setJoystick(x, y));
   document.getElementById('jump-btn').addEventListener('pointerdown', (e) => { e.preventDefault(); player.jump(); });
+  const sitBtn = document.getElementById('sit-btn');
+  sitBtn.addEventListener('click', () => player.toggleSit());
   const actionBtn = document.getElementById('action-btn');
   actionBtn.addEventListener('click', () => player.action());
   const actionLabel = actionBtn.querySelector('.a1');
@@ -207,10 +209,15 @@ async function start() {
   function updateAction() {
     const t = player.actionTarget();
     const key = t ? (t.kind === 'painting' ? t.p : t.kind) : null;
+    const sitting = player.sitCode !== 0;
+    if (sitting !== document.body.classList.contains('sitting')) {
+      document.body.classList.toggle('sitting', sitting);
+      sitBtn.textContent = sitting ? '起' : '坐';
+      sitBtn.setAttribute('aria-label', sitting ? '站起來' : '坐下');
+    }
     if (key === nearKey) return;
     nearKey = key;
     actionBtn.classList.toggle('show', !!t);
-    document.body.classList.toggle('sitting', player.seat >= 0);
     if (!t) return;
     actionLabel.textContent = LABELS[t.kind];
     actionBtn.setAttribute('aria-label', actionLabel.textContent);
@@ -269,7 +276,7 @@ async function start() {
   if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp };
 
   ui.loading(null);
-  ui.hint(coarse ? '右下搖桿或點地面走路　拖曳轉視角' : '點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　Enter 看畫', 6000);
+  ui.hint(coarse ? '右下搖桿或點地面走路　拖曳轉視角' : '點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下　Enter 看畫', 6000);
 
   // 沒在動的時候降到約 30fps，省電
   const clock = new THREE.Clock();
