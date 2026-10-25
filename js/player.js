@@ -42,6 +42,7 @@ export class Player {
     this.camLook = new THREE.Vector3();
     this.keys = new Set();
     this.joy = { x: 0, y: 0 };      // 虛擬搖桿，-1 ~ 1
+    this.mouseRun = false;          // 滑鼠左右鍵同時按著：往鏡頭前方走
     this.goal = null;
     this.room = -1;
     this.speed = 0;
@@ -69,11 +70,14 @@ export class Player {
     const el = this.dom;
     const pts = new Map();
     let pinch = null, multi = false;
+    // 第二顆鍵按下或放開時不會再觸發 pointerdown/up，只會來一次 pointermove，所以每個事件都看 buttons
+    const chord = (e) => { if (e.pointerType === 'mouse') this.mouseRun = (e.buttons & 3) === 3; };
 
     el.addEventListener('pointerdown', (e) => {
       // 右鍵按下就直接當成拖曳轉鏡頭，不會觸發走路
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, drag: e.button === 2, mouse: e.pointerType === 'mouse' });
       el.setPointerCapture(e.pointerId);
+      chord(e);
       if (pts.size === 2) {
         const [a, b] = [...pts.values()];
         pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), base: this.camDist };
@@ -81,8 +85,10 @@ export class Player {
       }
     });
     el.addEventListener('pointermove', (e) => {
+      chord(e);
       const p = pts.get(e.pointerId);
       if (!p) return;
+      if (this.mouseRun) p.drag = true;   // 同按兩鍵時照樣可以拖曳轉向，放開也不算點地面
       const dx = e.clientX - p.x, dy = e.clientY - p.y;
       p.x = e.clientX;
       p.y = e.clientY;
@@ -104,6 +110,8 @@ export class Player {
       const p = pts.get(e.pointerId);
       if (!p) return;
       pts.delete(e.pointerId);
+      chord(e);
+      if (e.type === 'pointercancel') this.mouseRun = false;
       if (e.type === 'pointerup' && !p.drag && !multi) this.tap(e.clientX, e.clientY);
       if (e.type === 'pointerup' && p.swipe && !multi && Math.abs(e.clientX - p.sx) > SWIPE_MIN) this.switchPainting(e.clientX < p.sx ? 1 : -1);
       if (pts.size < 2) pinch = null;
@@ -140,7 +148,7 @@ export class Player {
       this.events.onInput('key');
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => { this.keys.clear(); this.mouseRun = false; });
   }
 
   orbit(dx, dy, mouse = false) {
@@ -477,7 +485,7 @@ export class Player {
   update(dt) {
     let vx = 0, vz = 0;
     const k = this.keys;
-    const fwd = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
+    const fwd = (k.has('w') || k.has('arrowup') || this.mouseRun ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
     const side = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
     const turn = (k.has('q') ? 1 : 0) - (k.has('e') ? 1 : 0);
     if (turn) { this.exitView(); this.camYaw += turn * 1.8 * dt; }

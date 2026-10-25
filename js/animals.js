@@ -748,9 +748,9 @@ export class Animals {
 
     const out = world.outdoor;
     if (out) {
-      // 草原：離後門 12 公尺以外，避開石階口的花叢。家的位置用離後門的距離 rel 表示
+      // 草原：離後門 12 公尺以外，避開石階口的花叢，也不上山坡的小徑。家的位置用離後門的距離 rel 表示
       const room = world.rooms[world.rooms.length - 1];
-      const field = (x, z) => out.door - z > 12;
+      const field = (x, z) => out.door - z > 12 && out.inField(x, z);
       const home = (x, rel, r) => ({ x, z: out.door - rel, r });
       const base = { room, area: field };
       add({ ...base, species: 'cow', model: model('cow-h', () => cowModel(COWS.holstein)), home: home(-8, 26, 4.5), scale: 0.9 });
@@ -786,7 +786,7 @@ export class Animals {
     const env = {
       player: P,
       clock: performance.now() / 1000,
-      inMeadow: !!out && P.room === this.world.rooms.length - 1 && out.door - P.pos.z > 11,
+      inMeadow: !!out && P.room === this.world.rooms.length - 1 && out.door - P.pos.z > 11 && out.inField(P.pos.x, P.pos.z),
     };
     const now = Date.now() / 1000;
     for (const a of this.list) a.update(dt, now, env);

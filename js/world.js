@@ -793,7 +793,11 @@ export function buildWorld(scene, gallery) {
   // 點到牆邊或家具上時，找一個走得到的點
   function findWalkable(x, zz, fromX, fromZ) {
     const i = roomIndexAt(zz), r = rooms[i];
-    if (!r.inside(x, zz, MARGIN + 0.05)) {
+    const snap = r.inside(x, zz, MARGIN + 0.05) ? null : r.snap?.(x, zz);
+    if (snap) {
+      x = snap.x;
+      zz = snap.z;
+    } else if (!r.inside(x, zz, MARGIN + 0.05)) {
       // 往房間中心找最近的可走點；戶外分成陽台和草原兩塊，各有各的中心
       const c = r.anchor ? r.anchor(x, zz) : r.center;
       let lo = 0, hi = 1;
@@ -844,7 +848,19 @@ export function buildWorld(scene, gallery) {
     return true;
   }
 
+  // 戶外山坡的小徑不在格子裡：起點或終點在小徑上時，草原那段照格子走到步道口，小徑那段沿著折線走
   function findPath(sx, sz, tx, tz) {
+    if (walkable(tx, tz) && lineClear(sx, sz, tx, tz)) return [{ x: tx, z: tz }];
+    const tr = outdoor?.trail, a = tr ? tr.at(sx, sz) : null, b = tr ? tr.at(tx, tz) : null;
+    if (a === null && b === null) return gridPath(sx, sz, tx, tz);
+    const head = tr.pts[0];
+    const pre = a === null ? gridPath(sx, sz, head.x, head.z) : [];
+    const post = b === null ? gridPath(head.x, head.z, tx, tz) : [{ x: tx, z: tz }];
+    if (!pre || !post) return null;
+    return [...pre, ...tr.between(a ?? 0, b ?? 0), ...post];
+  }
+
+  function gridPath(sx, sz, tx, tz) {
     if (walkable(tx, tz) && lineClear(sx, sz, tx, tz)) return [{ x: tx, z: tz }];
     const s = nearestOpen(sx, sz), t = nearestOpen(tx, tz);
     if (!s || !t) return null;

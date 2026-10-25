@@ -36,6 +36,11 @@ export class UI {
     this.onGoTo = null;
     this.onSheet = null;
     this.onClose = null;
+    // 電腦版：表情和其他按鈕排成一列放在畫面下方中間，不再分散在左右兩邊
+    if (!matchMedia('(pointer: coarse)').matches) {
+      document.body.classList.add('desk');
+      $('#top-btns').prepend($('#emote'));
+    }
     $('#sheet-close').addEventListener('click', () => { this.hidePainting(); this.onClose?.(); });
     $('#dress-close').addEventListener('click', () => { this.hideDress(); this.onClose?.(); });
     $('#sheet-thumb').addEventListener('click', () => this.openViewer($('#sheet-img').src));

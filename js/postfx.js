@@ -1,0 +1,30 @@
+// 後製：只有 high 畫質才載入（vendor/postfx.js 約 300KB，手機不會下載）
+// 環境光遮蔽讓牆角、畫框和腳底有柔和的陰影；泛光只抓最亮的地方（夕陽、海面反光）；SMAA 取代瀏覽器的抗鋸齒
+import * as THREE from 'three';
+
+export async function createPostFX(renderer, scene, camera) {
+  const { EffectComposer, RenderPass, EffectPass, BloomEffect, SMAAEffect, SMAAPreset, N8AOPostPass } = await import('../vendor/postfx.js');
+  const size = renderer.getSize(new THREE.Vector2());
+  const composer = new EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType });
+  composer.addPass(new RenderPass(scene, camera));
+
+  const ao = new N8AOPostPass(scene, camera, size.x, size.y);
+  ao.setQualityMode('Performance');
+  Object.assign(ao.configuration, {
+    aoRadius: 0.9,
+    distanceFalloff: 0.6,
+    intensity: 2.2,
+    halfRes: true,
+    color: new THREE.Color(0x1a0e06),   // 偏暖的暗褐，不用純黑，跟木頭和燭光的色調比較搭
+  });
+  composer.addPass(ao);
+
+  const bloom = new BloomEffect({ mipmapBlur: true, luminanceThreshold: 0.9, luminanceSmoothing: 0.08, intensity: 0.45, radius: 0.7 });
+  composer.addPass(new EffectPass(camera, bloom, new SMAAEffect({ preset: SMAAPreset.MEDIUM })));
+
+  return {
+    render: (dt) => composer.render(dt),
+    setSize: (w, h) => composer.setSize(w, h),
+    dispose: () => composer.dispose(),
+  };
+}

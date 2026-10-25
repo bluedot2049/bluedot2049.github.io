@@ -57,6 +57,15 @@ button:focus-visible, a:focus-visible { outline: 1.5px solid var(--gold-hi); out
   touch-action: none;
   display: block;
 }
+/* 四周微微壓暗，像老照片的暗角。用 CSS 疊一層，不佔 3D 繪圖的時間 */
+#stage::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 75% 70% at 50% 50%, transparent 55%, rgba(20, 10, 4, .32) 100%);
+}
+body.flat #stage::after { display: none; }
 
 /* ───────── 載入畫面：圓、方、三角三層法陣各自慢轉 ───────── */
 #loading {
@@ -120,7 +129,7 @@ button:focus-visible, a:focus-visible { outline: 1.5px solid var(--gold-hi); out
   transform-origin: 50% 100%;
   padding: 8px 16px;
   background: #fffaf0; color: #1a120c;
-  border: 2px solid #1a120c; border-radius: 18px;
+  border: 1px solid #1a120c; border-radius: 18px;
   font-size: 15px; font-weight: 700; letter-spacing: .06em; white-space: nowrap;
   opacity: 0; transition: opacity .5s, transform .18s ease-out;
 }
@@ -130,7 +139,7 @@ button:focus-visible, a:focus-visible { outline: 1.5px solid var(--gold-hi); out
   border: solid transparent; transform: translateX(-50%);
 }
 .speech::before { border-width: 11px 8px 0; border-top-color: #1a120c; margin-top: 0; }
-.speech::after { border-width: 8px 6px 0; border-top-color: #fffaf0; margin-top: -2px; }
+.speech::after { border-width: 10px 7px 0; border-top-color: #fffaf0; margin-top: -1px; }
 
 #hint {
   position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom));
@@ -317,6 +326,25 @@ body.panel-open #joy, body.panel-open #action-btn, body.panel-open #emote { opac
 /* 坐著看風景時，其他按鈕退到背景，但還是按得到 */
 body.sitting #joy, body.sitting #jump-btn, body.sitting #emote, body.sitting #top-btns { opacity: .3; }
 body.touch #hint { bottom: auto; top: calc(70px + env(safe-area-inset-top)); }
+
+/* ───────── 電腦版：按鈕集中在畫面下方中間一列，動作按鈕浮在那一列正上方，提示移到頂端 ───────── */
+body.desk #top-btns {
+  top: auto; right: auto; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+}
+body.desk #online { order: 1; }
+body.desk #emote { position: relative; left: auto; bottom: auto; }
+body.desk #emote-bar { position: absolute; left: 0; bottom: calc(100% + 2px); }
+body.desk #action-btn {
+  right: auto; left: 50%; bottom: calc(82px + env(safe-area-inset-bottom));
+  transform: translateX(-50%) scale(.7); transform-origin: 50% 100%;
+}
+body.desk #action-btn.show { transform: translateX(-50%); }
+body.desk #hint { bottom: auto; top: calc(18px + env(safe-area-inset-top)); }
+/* 右側面板打開時，按鈕列移到剩下畫面的中間，不被面板蓋住 */
+@media (min-width: 900px) {
+  body.desk.panel-open #top-btns, body.desk.panel-open #action-btn { left: calc((100vw - 400px) / 2); }
+}
 
 /* ───────── 作品資訊和換裝：手機是底部抽屜，電腦是右側面板 ───────── */
 .panel {

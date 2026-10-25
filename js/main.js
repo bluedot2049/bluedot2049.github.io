@@ -10,6 +10,8 @@ import { Multiplayer, EMOTES } from './multiplayer.js';
 import * as TX from './textures.js';
 import { Ambience } from './ambience.js';
 import { HORIZON, SUN_DIR, MEADOW_NAME, REFLECT_LAYER } from './outdoor.js';
+import { Quality } from './quality.js';
+import { createPostFX } from './postfx.js';
 
 async function loadJSON(url) {
   const res = await fetch(url, { cache: 'no-cache' });
@@ -100,8 +102,10 @@ async function start() {
   }
 
   const coarse = matchMedia('(pointer: coarse)').matches;
-  const renderer = new THREE.WebGLRenderer({ antialias: window.devicePixelRatio < 2, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, coarse ? 1.5 : 2));
+  const quality = new Quality(coarse, params);
+  // 有後製時由 SMAA 處理鋸齒，瀏覽器的多重取樣用不到
+  const renderer = new THREE.WebGLRenderer({ antialias: !quality.post && window.devicePixelRatio < 2, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(quality.dpr);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   document.getElementById('stage').appendChild(renderer.domElement);
@@ -206,6 +210,7 @@ async function start() {
     },
     onRoomChange(i) {
       world.setCurrentRoom(i);
+      quality.pause();
       const r = world.rooms[i].data;
       ui.toast(r.name, r.subtitle);
       inMeadow = false;
@@ -283,7 +288,9 @@ async function start() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    fx?.setSize(window.innerWidth, window.innerHeight);
     applyViewOffset();
+    quality.pause();
     lastInput = performance.now();
   });
 
@@ -323,12 +330,28 @@ async function start() {
     });
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals, quality };
+
+  // 後製和著色器預先編譯同時進行；載不到就照原本的畫法
+  let fx = null;
+  const fxJob = quality.post ? createPostFX(renderer, scene, camera).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
+  // 跑不動自動降級：先關後製，再降解析度
+  quality.onChange = (q) => {
+    if (!q.post && fx) { fx.dispose(); fx = null; }
+    renderer.setPixelRatio(q.dpr);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  };
+  document.addEventListener('visibilitychange', () => quality.pause());
 
   // 趁載入畫面先把所有著色器編好。不然第一次走出後門要一口氣編幾十個，
   // Windows 的瀏覽器編得特別慢，畫面會凍住一兩秒。
   // 藏起來的房間、戶外、海面先全部打開；海面倒影畫進貼圖時用的是另一組著色器，也一起編
   await precompile(renderer, scene, camera);
+  if (fxJob) {
+    fx = await fxJob;
+    fx?.render(0);   // 後製的著色器也趁載入畫面先編好
+  }
+  const stats = params.has('debug') ? debugStats(renderer, quality) : null;
 
   ui.loading(null);
   ui.hint(coarse ? '右下搖桿或點地面走路　拖曳轉視角' : '點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下　Enter 看畫', 6000);
@@ -363,8 +386,31 @@ async function start() {
     frame++;
     const idle = !player.moving && !othersMoving && performance.now() - lastInput > 2000;
     if (idle && frame % 2) return;
-    renderer.render(scene, camera);
+    if (!idle) quality.sample(dt);
+    if (stats) renderer.info.reset();
+    if (fx) fx.render(dt);
+    else renderer.render(scene, camera);
+    stats?.(dt);
   });
+}
+
+// ?debug 時左上角顯示幀率、draw call、三角形數和目前的畫質
+function debugStats(renderer, quality) {
+  renderer.info.autoReset = false;
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99;padding:4px 8px;font:11px/1.5 monospace;color:#cfe;background:#000a;white-space:pre;pointer-events:none';
+  document.body.appendChild(el);
+  let n = 0, sum = 0;
+  return (dt) => {
+    n++;
+    sum += dt;
+    if (sum < 0.5) return;
+    const r = renderer.info.render;
+    el.textContent = `${Math.round(n / sum)} fps  ${quality.level} ${quality.dpr}x
+${r.calls} calls  ${(r.triangles / 1000).toFixed(1)}k tris
+${quality.gpu}`;
+    n = sum = 0;
+  };
 }
 
 start();

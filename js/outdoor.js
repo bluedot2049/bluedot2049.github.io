@@ -10,6 +10,10 @@ export const DROP = 1.6;
 const TW = 6, TD = 7;                  // 陽台半寬、深度
 const SW = 1.2, SD = 3, STEPS = 8;     // 石階半寬、水平長度、階數
 const MEADOW = { c: 22.5, rx: 18, rz: 13 };   // 走得到的草原是橢圓，c 是中心離門口多遠
+// 左邊山坡的小徑：(x, rel)，從草原裡的步道口先往房子那頭斜上，再折回來爬到坡頂，從上坡那側走進涼亭
+const TRAIL = [[-13, 17], [-18, 13.2], [-22.5, 10], [-27, 8], [-31, 8.2], [-34.5, 11], [-38, 14.8], [-41.5, 19], [-44, 23], [-44, 27.2]];
+const TRAIL_W = 1.0;                       // 小徑半寬
+const PAV = { x: -40, rel: 30, r: 2.8 };   // 涼亭石台的中心和半徑
 const BW = 5.6, EAVE = 4.2, RIDGE = 6.0;      // 房子外殼的半寬、屋簷高、屋脊高
 const YB = -DROP - 0.2;                // 台基埋進土裡的底部
 const SEA_LEVEL = -DROP - 0.9, SEA_BED = -DROP - 2.4;   // 草原盡頭的海：水面和海底的高度
@@ -300,6 +304,53 @@ function parkBench(k, Y) {
   }
 }
 
+// 涼亭：圓形石台上八根石柱，八角石板屋頂，頂上一顆金球套著斜斜的金環，跟塔樓同一套顏色
+// ent 是入口的方向（世界座標 xz 平面上的角度）。入口兩根柱子拉開到左右各 30 度，其餘六根平均排在另一邊；base 是石台埋進土裡的底
+function pavilion(k, cx, cz, F, base, ent) {
+  const R = PAV.r, o = { ao: false };
+  k.cyl(R, R + 0.12, F - base, '#a8988a', cx, (F + base) / 2, cz, { ...o, color2: '#c4b4a2' }, 16);
+  k.cyl(R - 0.1, R - 0.1, 0.04, '#cdbd9f', cx, F - 0.01, cz, o, 16);
+  k.torus(1.5, 0.025, Math.PI * 2, GOLD, cx, F + 0.02, cz, { ...o, rx: Math.PI / 2 });
+  const cols = [];
+  for (let i = 0; i < 8; i++) {
+    const a = ent + Math.PI / 6 + (i * Math.PI * 5) / 21, x = cx + Math.cos(a) * 2.45, z = cz + Math.sin(a) * 2.45;
+    k.box(0.34, 0.14, 0.34, STONE, x, F + 0.07, z, o);
+    k.cyl(0.11, 0.13, 2.4, STONE, x, F + 1.34, z, o, 8);
+    k.box(0.32, 0.12, 0.32, STONE, x, F + 2.6, z, o);
+    cols.push({ x, z });
+  }
+  k.cyl(2.74, 2.74, 0.06, COPPER, cx, F + 2.69, cz, o, 16);
+  k.cyl(2.7, 2.7, 0.24, '#bba88c', cx, F + 2.84, cz, o, 16);
+  k.add(new THREE.ConeGeometry(3.15, 1.6, 8), '#4e3e4c', cx, F + 3.76, cz, { ...o, color2: '#7a6478', ry: Math.PI / 8 });
+  k.cyl(0.04, 0.06, 0.5, GOLD, cx, F + 4.7, cz, o, 6);
+  k.ball(0.14, GOLD, cx, F + 5.0, cz, o);
+  k.torus(0.3, 0.02, Math.PI * 2, GOLD, cx, F + 5.0, cz, { ...o, rx: 0.5 });
+  // 屋頂下吊一盞小燈
+  k.cyl(0.01, 0.01, 0.2, '#2a1a10', cx, F + 2.62, cz, o, 4);
+  k.cyl(0.07, 0.07, 0.18, '#ffd890', cx, F + 2.43, cz, { glow: true });
+  k.light(cx, F + 2.43, cz, '#ffcf80', 0.3);
+  // 入口的三階石階，往下接小徑
+  const dx = Math.cos(ent), dz = Math.sin(ent), ry = Math.atan2(dx, dz);
+  for (let i = 0; i < 3; i++) {
+    const d = R + 0.15 + i * 0.3, top = F - 0.15 * (i + 1);
+    k.box(2.2, 0.6, 0.3, '#a8988a', cx + dx * d, top - 0.3, cz + dz * d, { ...o, ry });
+  }
+  return cols;
+}
+
+// 點到折線的最近距離。s 是最近點沿著折線走了多遠，(x, z) 是最近點。結果寫進同一個物件，不另外配置
+const _near = { d: 0, s: 0, x: 0, z: 0 };
+function nearestOnLine(pts, cum, x, z) {
+  _near.d = Infinity;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i], dx = b.x - a.x, dz = b.z - a.z, L = cum[i] - cum[i - 1];
+    const t = Math.min(1, Math.max(0, ((x - a.x) * dx + (z - a.z) * dz) / (L * L)));
+    const px = a.x + dx * t, pz = a.z + dz * t, d = Math.hypot(x - px, z - pz);
+    if (d < _near.d) { _near.d = d; _near.s = cum[i - 1] + L * t; _near.x = px; _near.z = pz; }
+  }
+  return _near;
+}
+
 function pot(k, x, z, Y, big = false) {
   const s = big ? 1.4 : 1;
   k.cyl(0.2 * s, 0.15 * s, 0.32 * s, '#b5643c', x, Y + 0.16 * s, z, {}, 9);
@@ -508,9 +559,54 @@ export function buildOutdoor(room, h) {
 
   // ---- 草原 ----
   const G = -DROP, mz = Z(MEADOW.c);
-  const ground = groundMesh(terrain, mz);
+  const { mesh: ground, heightAt } = groundMesh(terrain, mz);
   ground.layers.enable(REFLECT_LAYER);
   meadowGroup.add(h.tag(ground, 'floor'));
+  const inField = (x, z) => (x / MEADOW.rx) ** 2 + ((z0 - z - MEADOW.c) / MEADOW.rz) ** 2 < 1;
+
+  // ---- 左邊山坡的小徑和涼亭 ----
+  // 小徑最後一段接到石台邊上的入口。石台頂面比坡上最高的地面再高一點，下坡那側就整個露出來
+  const pc = { x: PAV.x, z: Z(PAV.rel) };
+  const trailPts = TRAIL.map(([x, rel]) => ({ x, z: Z(rel) }));
+  const tail = trailPts[trailPts.length - 1], ent = Math.atan2(tail.z - pc.z, tail.x - pc.x);
+  trailPts.push({ x: pc.x + Math.cos(ent) * PAV.r, z: pc.z + Math.sin(ent) * PAV.r });
+  const trailCum = [0];
+  for (let i = 1; i < trailPts.length; i++) trailCum.push(trailCum[i - 1] + Math.hypot(trailPts[i].x - trailPts[i - 1].x, trailPts[i].z - trailPts[i - 1].z));
+  const trailEnd = trailCum[trailCum.length - 1];
+  const entPts = trailPts.slice(-2), entCum = trailCum.slice(-2);   // 入口前最後一段
+  let padTop = -Infinity, padLow = Infinity;
+  for (let i = 0; i < 48; i++) for (const r of [0, 1, 2, PAV.r]) {
+    const y = heightAt(pc.x + Math.cos(i / 48 * Math.PI * 2) * r, pc.z + Math.sin(i / 48 * Math.PI * 2) * r);
+    padTop = Math.max(padTop, y);
+    padLow = Math.min(padLow, y);
+  }
+  const F = padTop + 0.15;
+  const nearTrail = (x, z, r) => nearestOnLine(trailPts, trailCum, x, z).d < r || Math.hypot(x - pc.x, z - pc.z) < PAV.r + r;
+  for (const c of pavilion(k, pc.x, pc.z, F, padLow - 0.4, ent)) block(c.x, c.z, 0.13, 0.13);
+  // 面向海的石凳，從涼亭中間那側跨過去坐
+  const pavBench = { x: pc.x, z: pc.z - 1.3 };
+  k.box(1.8, 0.09, 0.42, '#cdbd9f', pavBench.x, F + 0.405, pavBench.z, { ao: false });
+  for (const dx of [-0.6, 0.6]) k.box(0.3, 0.36, 0.34, '#b4a48e', pavBench.x + dx, F + 0.18, pavBench.z, { ao: false });
+  block(pavBench.x, pavBench.z, 0.9, 0.21);
+  // 踏石：一塊塊鋪到石階下。坡上的石塊頂面對齊腳下，底部往下延伸到最低的那一角，不會懸空
+  {
+    const TR = rng('trail');   // 小徑另用一組亂數，草原上其他擺設的位置才不會跟著變
+    let s = 0.4, i = 1;
+    while (s < trailEnd) {
+      while (trailCum[i] < s) i++;
+      const a = trailPts[i - 1], b = trailPts[i], t = (s - trailCum[i - 1]) / (trailCum[i] - trailCum[i - 1]);
+      const ux = (b.x - a.x) / (trailCum[i] - trailCum[i - 1]), uz = (b.z - a.z) / (trailCum[i] - trailCum[i - 1]);
+      const x = a.x + (b.x - a.x) * t + (TR() - 0.5) * 0.12, z = a.z + (b.z - a.z) * t + (TR() - 0.5) * 0.12;
+      if (Math.hypot(x - pc.x, z - pc.z) > PAV.r + 1.0) {
+        const top = heightAt(x, z) + 0.04;
+        let low = top;
+        for (const [p, q] of [[0.4, 0.28], [-0.4, 0.28], [0.4, -0.28], [-0.4, -0.28]]) low = Math.min(low, heightAt(x - uz * p + ux * q, z + ux * p + uz * q));
+        const hgt = top - low + 0.06, w = 0.75 + TR() * 0.15;
+        k.box(w, hgt, 0.5 + TR() * 0.08, TR() < 0.5 ? '#7a6e60' : '#6e6356', x, top - hgt / 2, z, { ry: Math.atan2(ux, uz) + (TR() - 0.5) * 0.25, ao: false });
+      }
+      s += 0.68;
+    }
+  }
 
   // 大樹和樹下的長椅，長椅面向夕陽
   const tree = { x: 5.3, z: Z(22.4) };   // 在長椅旁邊，樹冠遮著長椅，不擋坐著往前看的視線
@@ -549,20 +645,21 @@ export function buildOutdoor(room, h) {
   path(0, TD + SD, 0.5, 15, 7.3, 22.2);
   path(0, TD + SD, -1, 14, -5.6, 18.6);
 
-  // 草原邊上的石頭和灌木
+  // 草原邊上的石頭和灌木。擋到小徑的不擺，但亂數照取，其他的位置才不會跟著變
+  const skipK = new Kit(R), skipV = new Kit(vk.R);
   for (let i = 0; i < 16; i++) {
     const a = R() * Math.PI * 2, e = 0.92 + R() * 0.35;
     const x = Math.cos(a) * MEADOW.rx * e, rel = MEADOW.c + Math.sin(a) * MEADOW.rz * e;
     if (rel < TD + 2) continue;
-    const y = terrain(x, Z(rel));
+    const y = heightAt(x, Z(rel)), skip = nearTrail(x, Z(rel), 1.4);
     if (R() < 0.5) {
       const r = 0.25 + R() * 0.35;
-      k.rock(r, R() < 0.5 ? '#8a8078' : '#7a7068', x, y + r * 0.4, Z(rel), { sy: 0.7, ry: R() * 3 });
-      if (e < 1) block(x, Z(rel), r, r);
+      (skip ? skipK : k).rock(r, R() < 0.5 ? '#8a8078' : '#7a7068', x, y + r * 0.4, Z(rel), { sy: 0.7, ry: R() * 3 });
+      if (e < 1 && !skip) block(x, Z(rel), r, r);
     } else {
       for (let j = 0; j < 3; j++) R(), R(), R();   // 照舊取亂數，後面的花叢位置才不會跟著變
-      bush(vk, x, y, Z(rel), 1, 9);
-      if (e < 1) block(x, Z(rel), 0.5, 0.5);
+      bush(skip ? skipV : vk, x, y, Z(rel), 1, 9);
+      if (e < 1 && !skip) block(x, Z(rel), 0.5, 0.5);
     }
   }
   // 房子周圍的花叢：台基前緣、陽台兩側、石階口、房子外牆腳下
@@ -599,13 +696,14 @@ export function buildOutdoor(room, h) {
       const roll = VR(), s = 0.8 + VR() * 0.7;
       // 樹林中心多針葉樹，靠近林緣開花的樹變多
       const kind = p.n < 0.33 ? (roll < 0.5 ? 'pine' : roll < 0.88 ? 'round' : 'bloom') : (roll < 0.2 ? 'pine' : roll < 0.55 ? 'round' : 'bloom');
-      farTree(vk, kind, p.x, terrain(p.x, p.z), p.z, s);
+      // 小徑兩旁和涼亭四周空出來。被跳過的樹照樣取亂數，其他樹的位置才不會跟著變
+      farTree(nearTrail(p.x, p.z, 2.2) ? skipV : vk, kind, p.x, heightAt(p.x, p.z), p.z, s);
       placed++;
     }
     for (let placed = 0, tries = 0; placed < nBush && tries < 4000; tries++) {
       const p = spot(1.2, 1.4, 0.5);
       if (!p || (p.n > 0.3 && p.n < 0.62 && VR() < 0.7)) continue;
-      bush(vk, p.x, terrain(p.x, p.z), p.z, 0.9 + VR() * 0.7, 3, false);
+      bush(nearTrail(p.x, p.z, 1.4) ? skipV : vk, p.x, heightAt(p.x, p.z), p.z, 0.9 + VR() * 0.7, 3, false);
       placed++;
     }
   }
@@ -626,6 +724,8 @@ export function buildOutdoor(room, h) {
   for (const sx of [-1, 1]) seat(bx + sx * 0.85, Z(bRel), 0.45, Math.PI, false, bx + sx * 1.45, Z(bRel));
   for (const dx of [-0.4, 0.4]) seat(benchAt.x + dx, benchAt.z, 0.45, Math.PI, false, benchAt.x + dx, benchAt.z - 0.75);
   for (const dx of [-0.45, 0.45]) seat(pic.x + dx, pic.z, 0.02, Math.PI);
+  // 涼亭的石凳面向海。新座位一律加在最後，舊的座位編號不變，多人同步才對得上
+  for (const dx of [-0.45, 0.45]) seat(pavBench.x + dx, pavBench.z, 0.45, Math.PI);
 
   // ---- 合併 ----
   k.emit(bucket, 0, 0, 0);
@@ -633,7 +733,7 @@ export function buildOutdoor(room, h) {
   const hillBucket = newBucket();
   vk.emit(hillBucket, 0, 0, 0);
   for (const o of h.bucketObjects(hillBucket)) { o.layers.enable(REFLECT_LAYER); group.add(o); }
-  meadowGroup.add(grass(terrain, z0, coarse ? 10000 : 20000, h.uTime));
+  meadowGroup.add(grass(terrain, z0, coarse ? 10000 : 20000, h.uTime, (x, z) => nearTrail(x, z, 0.6)));
   meadowGroup.add(seeds(mz, h.uTime));
   meadowGroup.add(h.glowPoints(Array.from({ length: 28 }, () => {
     const a = R() * Math.PI * 2, e = Math.sqrt(R()) * 1.1;
@@ -659,14 +759,32 @@ export function buildOutdoor(room, h) {
     if (rel > m && rel < TD - m && Math.abs(x) < TW - m) return true;
     if (rel > TD - 1 && rel < TD + SD + 0.6 && Math.abs(x) < SW - m) return true;
     const ex = x / (MEADOW.rx - m), ez = (rel - MEADOW.c) / (MEADOW.rz - m);
-    return ex * ex + ez * ez < 1;
+    if (ex * ex + ez * ez < 1) return true;
+    if (Math.hypot(x - pc.x, z - pc.z) < PAV.r - m) return true;
+    // 入口前最後一段放寬，跟石階和兩根柱子之間一樣寬，用搖桿或鍵盤也好對準
+    if (nearestOnLine(entPts, entCum, x, z).d < 1.3 - m) return true;
+    return nearestOnLine(trailPts, trailCum, x, z).d < TRAIL_W - m;
+  };
+  // 點在小徑或涼亭旁邊時，拉回小徑上（不然會被拉回草原中心那條線上）
+  room.snap = (x, z) => {
+    const dp = Math.hypot(x - pc.x, z - pc.z);
+    if (dp < PAV.r + 1.5) {
+      const k = Math.min(1, (PAV.r - 0.6) / Math.max(dp, 1e-4));
+      return { x: pc.x + (x - pc.x) * k, z: pc.z + (z - pc.z) * k };
+    }
+    const n = nearestOnLine(trailPts, trailCum, x, z);
+    return n.d < 3 ? { x: n.x, z: n.z } : null;
   };
   room.anchor = (x, z) => (z0 - z < TD ? { x: 0, z: Z(TD / 2) } : { x: 0, z: mz });
   const groundY = (x, z) => {
     const rel = z0 - z;
     if (rel <= TD) return 0;
     if (Math.abs(x) < SW + 0.35 && rel < TD + SD) return -DROP * (rel - TD) / SD;
-    return -DROP;
+    // 涼亭石台上是平的；石台外圍一圈接一道斜坡，從入口的石階走上去不會突然跳一格
+    const dp = Math.hypot(x - pc.x, z - pc.z);
+    if (dp < PAV.r) return F;
+    const y = heightAt(x, z);
+    return dp < PAV.r + 3 ? Math.max(y, F - (dp - PAV.r) * 0.5) : y;
   };
 
   return {
@@ -680,6 +798,26 @@ export function buildOutdoor(room, h) {
     outdoorness: (z) => smooth(z0 + 3, z0 - 2, z),
     inMeadow: (z) => z0 - z > TD + SD * 0.6,
     insideShell: (p) => Math.abs(p.x) < BW + 0.3 && p.z > z0 - 0.2 && p.z < zFront + 0.3,
+    inField,
+    // 小徑：草原外的部分不在尋路格子裡，沿著折線走
+    trail: {
+      pts: trailPts,
+      // 人在草原外的小徑或涼亭上：回傳沿小徑走了多遠，不然是 null
+      // 涼亭裡算成比入口再遠一點，進出涼亭的路線才一定會經過入口
+      at(x, z) {
+        if (inField(x, z)) return null;
+        if (Math.hypot(x - pc.x, z - pc.z) < PAV.r + 0.5) return trailEnd + 1;
+        const n = nearestOnLine(trailPts, trailCum, x, z);
+        return n.d < TRAIL_W + 0.3 ? n.s : null;
+      },
+      // 從 a 走到 b 會經過的轉折點，包含 b 那一端的點
+      between(a, b) {
+        const out = [];
+        if (a < b) { for (let i = 0; i < trailPts.length; i++) if (trailCum[i] > a && trailCum[i] <= b) out.push(trailPts[i]); }
+        else for (let i = trailPts.length - 1; i >= 0; i--) if (trailCum[i] < a && trailCum[i] >= b) out.push(trailPts[i]);
+        return out;
+      },
+    },
   };
 }
 
@@ -730,11 +868,22 @@ function groundMesh(terrain, mz) {
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.computeVertexNormals();
-  return new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  // 畫出來的地面每格 S / N 公尺，山坡上跟 terrain() 會差到半公尺。腳下的高度照網格的三角形內插，才會踩在看得到的地面上
+  // PlaneGeometry 每格沿著 (ix, iz + 1)–(ix + 1, iz) 那條對角線切成兩個三角形
+  const step = S / N, row = N + 1;
+  const heightAt = (x, z) => {
+    const fx = (x + S / 2) / step, fz = (z - mz + S / 2) / step;
+    const ix = Math.min(N - 1, Math.max(0, Math.floor(fx))), iz = Math.min(N - 1, Math.max(0, Math.floor(fz)));
+    const u = fx - ix, v = fz - iz, y = (i, j) => pos.getY((iz + j) * row + ix + i);
+    return u + v <= 1
+      ? y(0, 0) + (y(1, 0) - y(0, 0)) * u + (y(0, 1) - y(0, 0)) * v
+      : y(1, 1) + (y(0, 1) - y(1, 1)) * (1 - u) + (y(1, 0) - y(1, 1)) * (1 - v);
+  };
+  return { mesh: new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })), heightAt };
 }
 
 // 草葉：每片一個三角形，整片草合成一個網格。風在頂點著色器裡算，越靠近葉尖擺越大
-function grass(terrain, z0, count, uTime) {
+function grass(terrain, z0, count, uTime, skip) {
   const pos = [], col = [], bend = [];
   const base = new THREE.Color('#46652c'), c = new THREE.Color();
   const tips = ['#a8b850', '#c4bc62', '#8eaa44', '#d0b060', '#b0c058'];
@@ -749,6 +898,7 @@ function grass(terrain, z0, count, uTime) {
     if (rel < TD + 0.3 && Math.abs(x) < TW + 0.3) continue;
     if (rel < TD + SD + 0.3 && Math.abs(x) < SW + 0.5) continue;
     if (rel < 0 && Math.abs(x) < BW + 0.3) continue;
+    if (skip(x, z)) continue;
     const y = terrain(x, z) - 0.02;
     const ry = Math.random() * Math.PI, w = 0.035 + Math.random() * 0.03;
     const hgt = (e > 1 ? 0.3 : 0.12) + Math.random() * (e > 1 ? 0.35 : 0.2);
