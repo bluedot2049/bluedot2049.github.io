@@ -1,4 +1,4 @@
-// 戶外的風聲、草葉沙沙聲、遠處的海浪和鳥叫，還有動物的叫聲，全部用 Web Audio 現場合成，不下載音檔。
+// 戶外的風聲、草葉沙沙聲和鳥叫，還有動物的叫聲，全部用 Web Audio 現場合成，不下載音檔。
 // 瀏覽器規定要等使用者點過畫面才能出聲，所以第一次點擊或按鍵時才建立。
 // 低頻壓掉、音量放輕、起伏放慢，聽起來是貼耳的空氣聲而不是轟轟的風
 const GUST_EVERY = 4;   // 每隔幾秒換一次風勢
@@ -232,17 +232,12 @@ export class Ambience {
     const gain = (v) => { const g = ctx.createGain(); g.gain.value = v; return g; };
 
     // 風：兩級高通把 450Hz 以下整個切乾淨（單級切不乾淨，會留下轟聲），只留柔和的氣流，低通跟著風勢開合
-    this.windFilter = filter('lowpass', 2000, 0.5);
-    this.windGain = gain(0.18);
+    this.windFilter = filter('lowpass', 1200, 0.5);
+    this.windGain = gain(0.08);
     noise(0, filter('highpass', 450), filter('highpass', 450), this.windFilter, this.windGain);
     // 草葉：很輕的高頻沙沙聲，風大一點時跟著冒出來
-    this.leafGain = gain(0.02);
+    this.leafGain = gain(0.01);
     noise(2.7, filter('bandpass', 4200, 0.9), this.leafGain);
-    // 海浪：慢慢湧上來再退下去，濾波器跟著打開、關上
-    // 一樣切掉低頻，浪聲是「唰——」的水聲，不是低沉的轟隆
-    this.waveFilter = filter('lowpass', 700, 0.4);
-    this.waveGain = gain(0);
-    noise(5.3, filter('highpass', 380), filter('highpass', 380), this.waveFilter, this.waveGain);
 
     // 鳥叫走一段短短的回聲，像在空曠的地方
     this.birdBus = gain(1);
@@ -253,7 +248,6 @@ export class Ambience {
     wet.connect(gain(0.6)).connect(this.master);
 
     this.gustTimer = setInterval(() => this.gust(), GUST_EVERY * 1000);
-    this.scheduleWave();
     this.scheduleBird();
     this.apply();
   }
@@ -261,30 +255,9 @@ export class Ambience {
   gust() {
     if (!this.ctx || this.ctx.state !== 'running') return;
     const t = this.ctx.currentTime, g = Math.random(), tc = GUST_EVERY * 0.7;
-    this.windGain.gain.setTargetAtTime(0.1 + g * 0.16, t, tc);
-    this.windFilter.frequency.setTargetAtTime(1500 + g * 1500, t, tc);
-    this.leafGain.gain.setTargetAtTime(0.01 + g * g * 0.035, t, tc);
-  }
-
-  // 一道浪：三秒湧上、四五秒退下，間隔七到十一秒
-  scheduleWave() {
-    this.waveTimer = setTimeout(() => {
-      if (this.ctx?.state === 'running' && this.level > 0.5) this.wave();
-      this.scheduleWave();
-    }, 7000 + Math.random() * 4000);
-  }
-
-  wave() {
-    const t = this.ctx.currentTime, peak = 0.045 + Math.random() * 0.03, up = 2.5 + Math.random();
-    const g = this.waveGain.gain, f = this.waveFilter.frequency;
-    g.cancelScheduledValues(t);
-    g.setValueAtTime(g.value, t);
-    g.linearRampToValueAtTime(peak, t + up);
-    g.setTargetAtTime(0.006, t + up, 1.6);
-    f.cancelScheduledValues(t);
-    f.setValueAtTime(f.value, t);
-    f.linearRampToValueAtTime(1500 + Math.random() * 500, t + up);
-    f.setTargetAtTime(700, t + up, 1.8);
+    this.windGain.gain.setTargetAtTime(0.04 + g * 0.08, t, tc);
+    this.windFilter.frequency.setTargetAtTime(1000 + g * 1000, t, tc);
+    this.leafGain.gain.setTargetAtTime(0.01 + g * g * 0.015, t, tc);
   }
 
   // 每隔幾秒，隨機一個方向傳來一串鳥叫

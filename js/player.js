@@ -154,8 +154,9 @@ export class Player {
   orbit(dx, dy, mouse = false) {
     this.exitView();
     const k = (mouse ? 9 : 5.5) / Math.max(this.dom.clientWidth, this.dom.clientHeight);
-    this.camYaw -= dx * k;
-    this.camPitch = THREE.MathUtils.clamp(this.camPitch + dy * k, PITCH_MIN, PITCH_MAX);
+    const s = mouse ? 1 : -1;   // 觸控是手指拖著畫面走，方向跟滑鼠相反
+    this.camYaw -= dx * k * s;
+    this.camPitch = THREE.MathUtils.clamp(this.camPitch + dy * k * s, PITCH_MIN, PITCH_MAX);
     this.events.onInput('drag');
   }
 
