@@ -671,6 +671,8 @@ export function buildOutdoor(room, h) {
 
   return {
     shell, sky, far, water, seats, host, groundY,
+    // 看得到海面的範圍：海灣起點往外一直到海的盡頭，左右放寬到整片海。鏡頭沒看到這塊就不用算倒影
+    seaBox: new THREE.Box3(new THREE.Vector3(-300, SEA_LEVEL, mz - 300), new THREE.Vector3(300, SEA_LEVEL, Z(39))),
     update: arcane.update,
     table: { x: tableX, z: Z(tableRel), hw: 0.5, hd: tableLen / 2 },
     door: z0,
@@ -790,9 +792,10 @@ function grass(terrain, z0, count, uTime) {
     sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>',
       THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0'));
   };
-  const m = new THREE.Mesh(geo, mat);
-  m.frustumCulled = false;
-  return m;
+  // 風最多把葉尖吹開 0.16，包圍球放大一點就不會被誤裁，背對草原時整片草不用畫
+  geo.computeBoundingSphere();
+  geo.boundingSphere.radius += 0.3;
+  return new THREE.Mesh(geo, mat);
 }
 
 // 隨風飄的蒲公英種子

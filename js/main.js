@@ -359,7 +359,7 @@ async function start() {
         ui.toast(r.name, r.subtitle);
       }
     }
-    world.update(clock.elapsedTime, player.camPos, player.fadeTarget());
+    world.update(clock.elapsedTime, player.camPos, player.fadeTarget(), camera);
     frame++;
     const idle = !player.moving && !othersMoving && performance.now() - lastInput > 2000;
     if (idle && frame % 2) return;
