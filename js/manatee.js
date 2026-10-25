@@ -6,6 +6,11 @@ function mat(color, extra = {}) {
 }
 
 const SKIN = 0x91abb0;
+const SAY_TIME = 3500, GREET_DIST = 3.5, NEAR = 6;
+const GREETINGS = ['歡迎光臨哈哈', '歡迎光臨', '歡迎到處看看', '你好哈哈', '你好', '讚'];
+export const TABLE_LINES = ['要吃自己拿', '都可以吃', '桌上可以拿去吃', '你要吃東西嗎 這裡有', '要吃一點嗎'];
+const SURPRISED = ['天啊不是吧!', '蛤!'];
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
 // 身體輪廓 [高度, 半寬]，取自遊戲專案 character_model.gd 的 PROFILE
 const PROFILE = [
   [0.12, 0.0], [0.15, 0.2], [0.21, 0.3], [0.3, 0.355], [0.4, 0.37], [0.52, 0.35], [0.61, 0.338],
@@ -46,7 +51,8 @@ function facePatch() {
 }
 
 export class Manatee {
-  constructor(shadowTex, x, z) {
+  constructor(shadowTex, x, z, extraLines = []) {
+    this.lines = GREETINGS.concat(extraLines);
     const g = new THREE.Group();
     const body = new THREE.Group();
     g.add(body);
@@ -137,13 +143,56 @@ export class Manatee {
     this.body = body;
     this.heading = 0;
     this.time = 0;
+    this.greeted = false;
+    this.bubble = document.createElement('div');
+    this.bubble.className = 'speech';
+    document.body.appendChild(this.bubble);
+    this.hideTimer = 0;
   }
 
-  update(dt, px, pz) {
+  // 漫畫對話框：彈出後停 SAY_TIME 毫秒，再淡出
+  say(text) {
+    clearTimeout(this.hideTimer);
+    this.bubble.textContent = text;
+    this.bubble.classList.add('show');
+    this.hideTimer = setTimeout(() => this.bubble.classList.remove('show'), SAY_TIME);
+  }
+
+  hush() {
+    clearTimeout(this.hideTimer);
+    this.bubble.classList.remove('show');
+  }
+
+  // 玩家對海牛用驚訝表情
+  startled(px, pz) {
+    const g = this.group.position;
+    if (Math.hypot(px - g.x, pz - g.z) < NEAR) this.say(pick(SURPRISED));
+  }
+
+  placeBubble(camera) {
+    const v = this.group.position.clone();
+    v.y += 1.7;
+    v.project(camera);
+    const b = this.bubble.style;
+    if (v.z > 1) { b.visibility = 'hidden'; return; }
+    b.visibility = '';
+    b.left = ((v.x + 1) / 2) * window.innerWidth + 'px';
+    b.top = ((1 - v.y) / 2) * window.innerHeight + 'px';
+  }
+
+  update(dt, px, pz, camera) {
     this.time += dt;
     const g = this.group;
     const dx = px - g.position.x, dz = pz - g.position.z;
-    const near = Math.hypot(dx, dz) < 6;
+    const dist = Math.hypot(dx, dz);
+    if (dist < GREET_DIST && !this.greeted) {
+      this.greeted = true;
+      this.say(pick(this.lines));
+    } else if (dist > GREET_DIST + 3) {
+      this.greeted = false;
+    }
+    if (this.bubble.classList.contains('show')) this.placeBubble(camera);
+    const near = dist < 6;
     if (near) {
       const want = Math.atan2(dx, dz);
       let d = want - this.heading;

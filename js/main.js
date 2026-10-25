@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { buildWorld } from './world.js';
 import { Player } from './player.js';
 import { Character, isOutfit, randomOutfit } from './character.js';
-import { Manatee } from './manatee.js';
+import { Manatee, TABLE_LINES } from './manatee.js';
 import { Animals, ANIMAL_LAYER } from './animals.js';
 import { UI } from './ui.js';
 import { bindJoystick } from './joystick.js';
@@ -132,7 +132,7 @@ async function start() {
   scene.add(manatee.group);
   world.rooms[0].obstacles.push({ x: spot.x, z: spot.z, hw: 0.4, hd: 0.4, rot: 0 });
   // 陽台長桌的主人，也是一隻海牛頭人
-  const host = world.outdoor ? new Manatee(shadowTex, world.outdoor.host.x, world.outdoor.host.z) : null;
+  const host = world.outdoor ? new Manatee(shadowTex, world.outdoor.host.x, world.outdoor.host.z, TABLE_LINES) : null;
   if (host) scene.add(host.group);
   const ambience = new Ambience();
   let lastInput = performance.now();
@@ -265,6 +265,14 @@ async function start() {
     lastInput = performance.now();
   });
 
+  // 對海牛用驚訝表情，附近的海牛會回話
+  function sendEmote(e) {
+    mp.emote(e);
+    if (e !== '😮') return;
+    manatee.startled(player.pos.x, player.pos.z);
+    if (host?.group.visible) host.startled(player.pos.x, player.pos.z);
+  }
+
   // 多人同遊：gallery.json 有填 realtime 才連線，連不上就當單人
   const rt = gallery.realtime;
   if (rt?.url && rt?.key) {
@@ -274,7 +282,7 @@ async function start() {
       onReady() {
         if (ready) return;
         ready = true;
-        ui.bindEmotes(EMOTES, (e) => mp.emote(e));
+        ui.bindEmotes(EMOTES, sendEmote);
       },
       // 別人摸了動物：那位訪客的學徒也做出摸的動作
       onPet(o, i) {
@@ -289,7 +297,7 @@ async function start() {
     // 電腦：數字鍵 1–5 送表情
     window.addEventListener('keydown', (e) => {
       const i = e.key.length === 1 ? '12345'.indexOf(e.key) : -1;
-      if (i >= 0) mp.emote(EMOTES[i]);
+      if (i >= 0) sendEmote(EMOTES[i]);
     });
   }
 
@@ -305,11 +313,12 @@ async function start() {
     const dt = Math.min(clock.getDelta(), 0.05);
     player.update(dt);
     animals.update(dt);
-    manatee.update(dt, player.pos.x, player.pos.z);
+    manatee.update(dt, player.pos.x, player.pos.z, camera);
     const othersMoving = mp ? mp.update(dt, performance.now()) : false;
     if (host) {
       host.group.visible = world.rooms[world.rooms.length - 1].group.visible;
-      if (host.group.visible) host.update(dt, player.pos.x, player.pos.z);
+      if (host.group.visible) host.update(dt, player.pos.x, player.pos.z, camera);
+      else host.hush();
     }
     if (frame % 6 === 0) updateAction();
     if (world.outdoor) {

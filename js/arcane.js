@@ -1,7 +1,6 @@
 // 房子外觀的魔法裝飾：屋脊上的觀星塔和渾天儀、角樓、山牆的煉金玫瑰窗、牆上的發光符文、
 // 陽台地上的圓陣、牆上的銅管、漂浮的水晶和燒瓶、窗口飄出的光點。會動的東西在 update(t) 裡轉。
 import * as THREE from 'three';
-import { mergeGeometries } from '../vendor/BufferGeometryUtils.js';
 import { Kit, newBucket } from './props.js';
 
 const GOLD = '#d4a54a', COPPER = '#b8733a', BRASS = '#a8844a';
@@ -72,28 +71,6 @@ function canvasTexture(w, h, draw) {
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
   return t;
-}
-
-// 七個符號排成一列，每格外面圍一圈
-function runeAtlas() {
-  return canvasTexture(7 * 128, 128, (g) => {
-    goldPen(g, 6, 12);
-    for (let i = 0; i < 7; i++) {
-      const cx = i * 128 + 64;
-      glyph(g, i, cx, 64, 34);
-      g.lineWidth = 3;
-      g.beginPath();
-      g.arc(cx, 64, 54, 0, Math.PI * 2);
-      g.stroke();
-      for (let j = 0; j < 4; j++) {
-        const a = j * Math.PI / 2 + Math.PI / 4;
-        g.beginPath();
-        g.arc(cx + Math.cos(a) * 54, 64 + Math.sin(a) * 54, 3, 0, Math.PI * 2);
-        g.fill();
-      }
-      g.lineWidth = 6;
-    }
-  });
 }
 
 // 陽台地上的大圓陣：外環刻七個符號，裡面是圓、三角、圓、方、圓一層套一層
@@ -214,22 +191,6 @@ function glowMaterial(map, uTime) {
       }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   });
-}
-
-// 一組符文牌：list 每項 { i 第幾個符號, x, y, z, ry, s 邊長 }
-function runePlates(list, map, uTime) {
-  const geos = list.map(({ i, x, y, z, ry, s = 0.5 }, n) => {
-    const g = new THREE.PlaneGeometry(s, s);
-    const uv = g.attributes.uv;
-    for (let j = 0; j < uv.count; j++) uv.setX(j, (i + uv.getX(j)) / 7);
-    g.rotateY(ry);
-    g.translate(x, y, z);
-    g.setAttribute('aPhase', new THREE.BufferAttribute(new Float32Array(uv.count).fill(n * 1.7), 1));
-    return g;
-  });
-  const m = new THREE.Mesh(mergeGeometries(geos), glowMaterial(map, uTime));
-  m.renderOrder = 2;
-  return m;
 }
 
 // ---------- 建築 ----------
@@ -430,7 +391,6 @@ function motes(sources, uTime) {
 export function buildArcane({ shell, group, h, R, z0, Z, d }) {
   const { BW, EAVE, RIDGE, YB, TW, TD, SW, G } = d;
   const k = new Kit(R), bucket = newBucket();
-  const atlas = runeAtlas();
 
   const tw = { x: 0, z: z0 + 2.6, top: RIDGE + 2.6 };
   tower(k, tw.x, tw.z, EAVE + 0.6, tw.top);
@@ -452,13 +412,6 @@ export function buildArcane({ shell, group, h, R, z0, Z, d }) {
 
   k.emit(bucket, 0, 0, 0);
   for (const o of h.bucketObjects(bucket)) shell.add(o);
-
-  // 後牆一排符文，陽台石牆外側一圈符文
-  shell.add(runePlates([-3.6, -2.4, -1.2, 0, 1.2, 2.4, 3.6].map((x, i) => ({ i, x, y: 3.3, z: z0 - 0.02, ry: Math.PI, s: 0.42 })), atlas, h.uTime));
-  const wall = [];
-  [-5.1, -3.75, -2.4, 2.4, 3.75, 5.1].forEach((x, i) => wall.push({ i: i % 7, x, y: -0.75, z: Z(TD) - 0.02, ry: Math.PI }));
-  for (const sx of [-1, 1]) for (const [j, rel] of [[2, 2.2], [4, 4.8]]) wall.push({ i: (j + (sx > 0 ? 1 : 0)) % 7, x: sx * (TW + 0.02), y: -0.75, z: Z(rel), ry: sx * Math.PI / 2 });
-  group.add(runePlates(wall, atlas, h.uTime));
 
   // 陽台中央的圓陣，慢慢轉
   const circle = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 4.2), glowMaterial(circleTexture(), h.uTime));

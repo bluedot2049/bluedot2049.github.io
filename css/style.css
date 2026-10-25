@@ -113,6 +113,25 @@ button:focus-visible, a:focus-visible { outline: 1.5px solid var(--gold-hi); out
   100% { opacity: 0; }
 }
 
+/* ───────── 海牛的對話框：漫畫式，尾巴指向頭頂 ───────── */
+.speech {
+  position: fixed; z-index: 9; pointer-events: none;
+  transform: translate(-50%, calc(-100% - 14px)) scale(.6);
+  transform-origin: 50% 100%;
+  padding: 8px 16px;
+  background: #fffaf0; color: #1a120c;
+  border: 2px solid #1a120c; border-radius: 18px;
+  font-size: 15px; font-weight: 700; letter-spacing: .06em; white-space: nowrap;
+  opacity: 0; transition: opacity .5s, transform .18s ease-out;
+}
+.speech.show { opacity: 1; transform: translate(-50%, calc(-100% - 14px)); }
+.speech::before, .speech::after {
+  content: ""; position: absolute; left: 50%; top: 100%;
+  border: solid transparent; transform: translateX(-50%);
+}
+.speech::before { border-width: 11px 8px 0; border-top-color: #1a120c; margin-top: 0; }
+.speech::after { border-width: 8px 6px 0; border-top-color: #fffaf0; margin-top: -2px; }
+
 #hint {
   position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
