@@ -140,13 +140,35 @@ export class Ambience {
     this.level = 0;          // 0 室內、1 戶外
     this.voiceUntil = 0;     // 動物叫聲播到什麼時候（performance.now），播完才能暫停音訊
     try { this.muted = localStorage.getItem('muted') === '1'; } catch { this.muted = false; }
+    // 手機要在 touchend / click 這類「放開」的手勢裡才算使用者操作（iOS 的 pointerdown 不算），
+    // 所以全部都聽，等到 AudioContext 真的在跑才拿掉
+    const events = ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'click', 'keydown'];
     const unlock = () => {
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
       this.start();
+      const ctx = this.ctx;
+      if (!ctx) return;
+      if (ctx.state !== 'running') ctx.resume().catch(() => {});
+      // 靜音鍵開著時 iOS 會擋 Web Audio，播一段無聲的 <audio> 把音訊切到媒體通道
+      if (!this.keepAlive) {
+        try {
+          const a = document.createElement('audio');
+          a.setAttribute('playsinline', '');
+          a.loop = true;
+          a.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAABErAAABAAgAZGF0YQAAAAA=';
+          a.play().catch(() => {});
+          this.keepAlive = a;
+        } catch {}
+      }
+      // 播一個無聲的 buffer，部分舊版 iOS 要這樣才會解鎖
+      try {
+        const s = ctx.createBufferSource();
+        s.buffer = ctx.createBuffer(1, 1, 22050);
+        s.connect(ctx.destination);
+        s.start(0);
+      } catch {}
+      if (ctx.state === 'running') for (const e of events) window.removeEventListener(e, unlock, true);
     };
-    window.addEventListener('pointerdown', unlock);
-    window.addEventListener('keydown', unlock);
+    for (const e of events) window.addEventListener(e, unlock, true);
     document.addEventListener('visibilitychange', () => this.apply());
   }
 
