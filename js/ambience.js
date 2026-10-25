@@ -134,31 +134,47 @@ const VOICES = {
   },
 };
 
+// 0.1 秒的無聲 WAV（8kHz、8 位元、單聲道）。長度不能是零，Safari 會當成壞檔不播
+function silentWav() {
+  const n = 800, v = new DataView(new ArrayBuffer(44 + n));
+  const tag = (o, s) => { for (let i = 0; i < 4; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  tag(0, 'RIFF'); v.setUint32(4, 36 + n, true); tag(8, 'WAVE');
+  tag(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+  tag(36, 'data'); v.setUint32(40, n, true);
+  for (let i = 0; i < n; i++) v.setUint8(44 + i, 128);
+  return URL.createObjectURL(new Blob([v], { type: 'audio/wav' }));
+}
+
 export class Ambience {
   constructor() {
     this.ctx = null;
     this.level = 0;          // 0 室內、1 戶外
     this.voiceUntil = 0;     // 動物叫聲播到什麼時候（performance.now），播完才能暫停音訊
     try { this.muted = localStorage.getItem('muted') === '1'; } catch { this.muted = false; }
-    // 手機要在 touchend / click 這類「放開」的手勢裡才算使用者操作（iOS 的 pointerdown 不算），
-    // 所以全部都聽，等到 AudioContext 真的在跑才拿掉
+    // 手機要在 touchend / click 這類「放開」的手勢裡才算使用者操作（iOS 的 pointerdown 不算），所以全部都聽。
+    // 一直留著不拿掉：iOS 切到別的 App 回來會變成 interrupted，Safari 也不一定讓手勢以外的 resume() 生效，
+    // 都要等下一次點畫面才救得回來
     const events = ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'click', 'keydown'];
     const unlock = () => {
       this.start();
       const ctx = this.ctx;
       if (!ctx) return;
-      if (ctx.state !== 'running') ctx.resume().catch(() => {});
       // 靜音鍵開著時 iOS 會擋 Web Audio，播一段無聲的 <audio> 把音訊切到媒體通道
-      if (!this.keepAlive) {
-        try {
+      try {
+        if (!this.keepAlive) {
           const a = document.createElement('audio');
           a.setAttribute('playsinline', '');
           a.loop = true;
-          a.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAABErAAABAAgAZGF0YQAAAAA=';
-          a.play().catch(() => {});
+          a.src = silentWav();
           this.keepAlive = a;
-        } catch {}
-      }
+        }
+        if (this.keepAlive.paused) this.keepAlive.play().catch(() => {});
+      } catch {}
+      if (ctx.state === 'running') return;
+      // 室內安靜時是故意暫停的，不用叫醒
+      if (this.quiet && performance.now() > this.voiceUntil) return;
+      ctx.resume().catch(() => {});
       // 播一個無聲的 buffer，部分舊版 iOS 要這樣才會解鎖
       try {
         const s = ctx.createBufferSource();
@@ -166,7 +182,6 @@ export class Ambience {
         s.connect(ctx.destination);
         s.start(0);
       } catch {}
-      if (ctx.state === 'running') for (const e of events) window.removeEventListener(e, unlock, true);
     };
     for (const e of events) window.addEventListener(e, unlock, true);
     document.addEventListener('visibilitychange', () => this.apply());
@@ -306,7 +321,7 @@ export class Ambience {
   voice(kind, vol, pan = 0, pitch = 1) {
     const ctx = this.ctx;
     if (!ctx || this.muted || document.hidden || !VOICES[kind] || vol < 0.002) return;
-    if (ctx.state === 'suspended') ctx.resume();
+    if (ctx.state !== 'running') ctx.resume().catch(() => {});
     const out = ctx.createGain();
     out.gain.value = vol;
     if (ctx.createStereoPanner) {
@@ -337,7 +352,7 @@ export class Ambience {
     const ctx = this.ctx;
     if (!ctx) return;
     const off = this.muted || document.hidden, v = off ? 0 : this.level * 0.7;
-    if (v > 0 && ctx.state === 'suspended') ctx.resume();
+    if (v > 0 && ctx.state !== 'running') ctx.resume().catch(() => {});
     this.master.gain.setTargetAtTime(v, ctx.currentTime, 0.4);
     this.sfx.gain.setTargetAtTime(off ? 0 : 1, ctx.currentTime, 0.05);
     this.quiet = v === 0;

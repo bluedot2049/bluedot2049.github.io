@@ -60,6 +60,25 @@ function saveOutfit(o) {
   try { localStorage.setItem('outfit', JSON.stringify(o)); } catch {}
 }
 
+async function precompile(renderer, scene, camera) {
+  const hidden = [];
+  scene.traverse((o) => { if (!o.visible) { hidden.push(o); o.visible = true; } });
+  const rt = new THREE.WebGLRenderTarget(1, 1);
+  const jobs = [];
+  try {
+    jobs.push(renderer.compileAsync(scene, camera));
+    renderer.setRenderTarget(rt);
+    jobs.push(renderer.compileAsync(scene, camera));
+  } catch (e) {
+    console.warn('預先編譯著色器失敗：', e);
+  } finally {
+    renderer.setRenderTarget(null);
+    for (const o of hidden) o.visible = false;
+  }
+  await Promise.all(jobs).catch(() => {});
+  rt.dispose();
+}
+
 async function start() {
   let gallery;
   try {
@@ -302,6 +321,11 @@ async function start() {
   }
 
   if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals };
+
+  // 趁載入畫面先把所有著色器編好。不然第一次走出後門要一口氣編幾十個，
+  // Windows 的瀏覽器編得特別慢，畫面會凍住一兩秒。
+  // 藏起來的房間、戶外、海面先全部打開；海面倒影畫進貼圖時用的是另一組著色器，也一起編
+  await precompile(renderer, scene, camera);
 
   ui.loading(null);
   ui.hint(coarse ? '右下搖桿或點地面走路　拖曳轉視角' : '點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下　Enter 看畫', 6000);
