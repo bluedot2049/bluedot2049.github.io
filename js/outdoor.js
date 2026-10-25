@@ -12,7 +12,7 @@ const SW = 1.2, SD = 3, STEPS = 8;     // 石階半寬、水平長度、階數
 const MEADOW = { c: 22.5, rx: 18, rz: 13 };   // 走得到的草原是橢圓，c 是中心離門口多遠
 // 左邊山坡的小徑：(x, rel)，從草原裡的步道口先往房子那頭斜上，再折回來爬到坡頂，從上坡那側走進涼亭
 const TRAIL = [[-13, 17], [-18, 13.2], [-22.5, 10], [-27, 8], [-31, 8.2], [-34.5, 11], [-38, 14.8], [-41.5, 19], [-44, 23], [-44, 27.2]];
-const TRAIL_W = 1.0;                       // 小徑半寬
+const TRAIL_W = 1.4;                       // 小徑半寬，比踏石寬得多，用搖桿或鍵盤走不必對得很準
 const PAV = { x: -40, rel: 30, r: 2.8 };   // 涼亭石台的中心和半徑
 const BW = 5.6, EAVE = 4.2, RIDGE = 6.0;      // 房子外殼的半寬、屋簷高、屋脊高
 const YB = -DROP - 0.2;                // 台基埋進土裡的底部
@@ -351,6 +351,58 @@ function nearestOnLine(pts, cum, x, z) {
   return _near;
 }
 
+// 樹冠殼：在樹林範圍上方鋪一層 3 公尺一格的網格，高出地面三到六公尺，一團一團起伏，邊緣往下收進土裡
+// 每個三角形一個顏色、法線各自朝外，看起來跟山坡上的樹冠一樣是一塊塊的切面。整片林子只有這一個幾何
+// 顏色跟著夕陽走：綠色的陰面偏冷、受光面偏暖的橄欖色；開花林是晚霞同一家的玫瑰粉和杏桃色，
+// 紫色壓低飽和，貼近遠山的煙紫；金色是琥珀。遠近的真樹也用同一套（見 ROUND、BLOSSOM）
+const CANOPY = {
+  green: ['#2c4632', '#7f9446'], sage: ['#3a4e38', '#a0a466'], pine: ['#1f3a34', '#47664c'],
+  rose: ['#a85a6e', '#e8aab0'], peach: ['#b86a50', '#f0b88a'], mauve: ['#6e557e', '#b898bc'], amber: ['#b07028', '#e8b45c'],
+};
+// coarse：手機格子放粗、範圍縮小，三角形大約少一半
+function canopy(forest, heightAt, mz, coarse) {
+  const STEP = coarse ? 4 : 3, HALF = coarse ? 115 : 135, N = Math.round((HALF * 2) / STEP), row = N + 1;
+  const px = new Float32Array(row * row), py = new Float32Array(row * row), pz = new Float32Array(row * row), fm = new Float32Array(row * row);
+  for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
+    const k = j * row + i;
+    // 頂點在水平方向抖一點，切面才不會排得整整齊齊
+    const x = i * STEP - HALF + (hash(i, j) - 0.5) * 1.4, z = mz + j * STEP - HALF + (hash(j + 7, i - 3) - 0.5) * 1.4;
+    const f = forest(x, z);
+    // 一團約五公尺寬，每個頂點再各自高低一點，切面才碎
+    const lump = vnoise(x * 0.2 + 11, z * 0.2 - 5) * 0.65 + hash(i + 31, j - 17) * 0.35;
+    px[k] = x; pz[k] = z; fm[k] = f;
+    py[k] = heightAt(x, z) + (f > 0 ? f * (3 + lump * 3.6) - (1 - f) * 1.5 : -2);
+  }
+  const pos = [], col = [], c = new THREE.Color(), lo = new THREE.Color(), hi = new THREE.Color();
+  const tri = (a, b, d) => {
+    if (fm[a] <= 0 && fm[b] <= 0 && fm[d] <= 0) return;   // 整個埋在土裡的不要
+    const cx = (px[a] + px[b] + px[d]) / 3, cz = (pz[a] + pz[b] + pz[d]) / 3;
+    // 開花林一塊約十幾公尺，琥珀色更小更少；綠色裡再分深淺兩種，大片的林子才不會一個顏色
+    const kind = vnoise(cx * 0.07 + 3, cz * 0.07 + 9), gold = vnoise(cx * 0.14 - 7, cz * 0.14 + 4);
+    const pal = gold > 0.87 ? CANOPY.amber
+      : kind > 0.8 ? (vnoise(cx * 0.05 - 2, cz * 0.05 + 6) > 0.5 ? CANOPY.rose : CANOPY.peach)
+      : kind < 0.1 ? CANOPY.mauve
+      : patch(cx, cz) < 0.3 ? CANOPY.pine
+      : vnoise(cx * 0.045 + 8, cz * 0.045 - 1) > 0.55 ? CANOPY.sage : CANOPY.green;
+    // 越高的那一團越亮，像頂上照著夕陽；再加一點雜訊，相鄰的切面才分得出來
+    const t = Math.min(1, Math.max(0, vnoise(cx * 0.2 + 11, cz * 0.2 - 5) * 0.8 + hash(cx, cz) * 0.35 - 0.1));
+    c.copy(lo.set(pal[0])).lerp(hi.set(pal[1]), t);
+    // 從上往下看是逆時針，正面朝上
+    for (const k of [a, b, d]) { pos.push(px[k], py[k], pz[k]); col.push(c.r, c.g, c.b); }
+  };
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const a = j * row + i, b = a + 1, d = a + row, e = d + 1;
+    // 對角線交錯著切，切面的方向才不會一致
+    if ((i + j) % 2) { tri(a, d, b); tri(b, d, e); } else { tri(a, d, e); tri(a, e, b); }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  geo.userData.noAO = true;
+  return geo;
+}
+
 function pot(k, x, z, Y, big = false) {
   const s = big ? 1.4 : 1;
   k.cyl(0.2 * s, 0.15 * s, 0.32 * s, '#b5643c', x, Y + 0.16 * s, z, {}, 9);
@@ -569,11 +621,14 @@ export function buildOutdoor(room, h) {
   const pc = { x: PAV.x, z: Z(PAV.rel) };
   const trailPts = TRAIL.map(([x, rel]) => ({ x, z: Z(rel) }));
   const tail = trailPts[trailPts.length - 1], ent = Math.atan2(tail.z - pc.z, tail.x - pc.x);
+  // 入口正前方多一個轉折點，從入口前的空地走進涼亭時一定先對準入口，不會斜切去撞台基的邊
+  trailPts.push({ x: pc.x + Math.cos(ent) * (PAV.r + 1.4), z: pc.z + Math.sin(ent) * (PAV.r + 1.4) });
   trailPts.push({ x: pc.x + Math.cos(ent) * PAV.r, z: pc.z + Math.sin(ent) * PAV.r });
   const trailCum = [0];
   for (let i = 1; i < trailPts.length; i++) trailCum.push(trailCum[i - 1] + Math.hypot(trailPts[i].x - trailPts[i - 1].x, trailPts[i].z - trailPts[i - 1].z));
   const trailEnd = trailCum[trailCum.length - 1];
   const entPts = trailPts.slice(-2), entCum = trailCum.slice(-2);   // 入口前最後一段
+  const porchS = trailCum[trailCum.length - 2];
   let padTop = -Infinity, padLow = Infinity;
   for (let i = 0; i < 48; i++) for (const r of [0, 1, 2, PAV.r]) {
     const y = heightAt(pc.x + Math.cos(i / 48 * Math.PI * 2) * r, pc.z + Math.sin(i / 48 * Math.PI * 2) * r);
@@ -581,6 +636,14 @@ export function buildOutdoor(room, h) {
     padLow = Math.min(padLow, y);
   }
   const F = padTop + 0.15;
+  // 坡頂：涼亭四周 PLAZA 公尺內都走得到。台基比外面地面高不到 0.45 的那幾面（上坡那側）直接跨得上去
+  const PLAZA = PAV.r + 6.5;
+  const lowRim = [];
+  for (let i = 0; i < 72; i++) {
+    const a = (i / 72) * Math.PI * 2;
+    lowRim.push(F - heightAt(pc.x + Math.cos(a) * (PAV.r + 0.4), pc.z + Math.sin(a) * (PAV.r + 0.4)) < 0.45);
+  }
+  const rimLow = (dx, dz) => lowRim[Math.round(((Math.atan2(dz, dx) / (Math.PI * 2)) * 72 + 72)) % 72];
   const nearTrail = (x, z, r) => nearestOnLine(trailPts, trailCum, x, z).d < r || Math.hypot(x - pc.x, z - pc.z) < PAV.r + r;
   for (const c of pavilion(k, pc.x, pc.z, F, padLow - 0.4, ent)) block(c.x, c.z, 0.13, 0.13);
   // 面向海的石凳，從涼亭中間那側跨過去坐
@@ -679,10 +742,34 @@ export function buildOutdoor(room, h) {
     bed(sx * (SW + 1.1), TD + SD + 0.4, 0.8);
     bed(sx * (SW + 1.9), TD + SD - 0.3, 1);
   }
-  // 遠處山坡：樹多半種在地面畫成樹林的那幾塊，林子裡夾著開花的樹；林緣和坡腳是開花的灌木
-  // 另外合併成一個網格，海面反射只畫這一個，不用連草原的家具一起畫
+  // 遠處山坡的樹林：林子裡面是一整片起伏的樹冠殼，真樹只種在林緣、小徑兩旁和空地上，坡腳是開花的灌木
+  // 全部另外合併成一個網格，海面反射只畫這一個，不用連草原的家具一起畫
+  // forest(x, z)：0 是空地，1 是林子深處。樹冠殼的高度和真樹種在哪裡都看這個
+  const toMeadow = [pc, { x: -18, z: Z(24) }], toMeadowCum = [0, Math.hypot(toMeadow[1].x - pc.x, toMeadow[1].z - pc.z)];
+  const forest = (x, z) => {
+    const rel = z0 - z, e = Math.hypot(x / MEADOW.rx, (rel - MEADOW.c) / MEADOW.rz);
+    let m = smooth(1.4, 1.75, e);
+    if (m <= 0) return 0;
+    m *= 1 - smooth(0.22, 0.4, (rel - MEADOW.c) / (MEADOW.rz * e));   // 夕陽那一側留空，坐著才看得到遠方
+    m *= 1 - smooth(0.5, 0.6, patch(x, z));                           // 花田
+    m *= 1 - smooth(118, 135, Math.hypot(x, z - mz));                 // 再遠就是遠山
+    m *= 1 - smooth(0.05, 0.3, smooth(39, 47, rel) * (1 - smooth(34, 80, Math.abs(x))));   // 海灣的岸邊
+    if (m <= 0) return 0;
+    // 房子、陽台四周和小徑兩旁空出來；涼亭往草原那一面也空著，坐在亭子裡看得到草原和房子
+    m *= smooth(6, 11, Math.hypot(Math.max(0, Math.abs(x) - TW), Math.max(0, rel - TD, -depth - rel)));
+    m *= smooth(5, 10, nearestOnLine(trailPts, trailCum, x, z).d);   // 近看會穿幫，殼退開一段，中間交給真樹
+    m *= smooth(PLAZA + 1.5, PLAZA + 6, Math.hypot(x - pc.x, z - pc.z));   // 坡頂走得到的範圍外再退一點
+    m *= smooth(6, 10, nearestOnLine(toMeadow, toMeadowCum, x, z).d);
+    return m;
+  };
+  vk.lit.push(canopy(forest, heightAt, mz, coarse));
+  // 鏡頭最低只到樹冠殼頂上，不會退進林子裡。高度取樹冠殼起伏的上限，再留一點空
+  const camFloor = (x, z) => {
+    const y = groundY(x, z), f = z0 - z > TD ? forest(x, z) : 0;
+    return f > 0 ? Math.max(y, heightAt(x, z) + f * (3.8 + vnoise(x * 0.2 + 11, z * 0.2 - 5) * 2.4) + 0.8) : y;
+  };
   {
-    const VR = vk.R, nTree = coarse ? 70 : 110, nBush = coarse ? 60 : 100;
+    const VR = vk.R, nTree = coarse ? 70 : 120, nBush = coarse ? 60 : 100;
     const spot = (eMin, eSpan, open) => {
       const a = VR() * Math.PI * 2, e = eMin + VR() * eSpan;
       const x = Math.cos(a) * MEADOW.rx * e, rel = MEADOW.c + Math.sin(a) * MEADOW.rz * e;
@@ -690,23 +777,30 @@ export function buildOutdoor(room, h) {
       if (Math.sin(a) > open) return null;   // 夕陽那一側留空，坐著才看得到遠方
       return { x, z: Z(rel), n: patch(x, Z(rel)) };
     };
-    for (let placed = 0, tries = 0; placed < nTree && tries < 4000; tries++) {
-      const p = spot(1.45, 2.5, 0.35);
-      if (!p || (p.n > 0.46 && VR() < 0.9)) continue;
+    for (let placed = 0, tries = 0; placed < nTree && tries < 6000; tries++) {
+      const p = spot(1.45, 4, 0.35);
+      if (!p) continue;
+      // 林子深處被樹冠殼蓋住，不用種；空地上只零星種幾棵
+      const f = forest(p.x, p.z);
+      if (f > 0.7 || (f < 0.05 && VR() < 0.8)) continue;
       const roll = VR(), s = 0.8 + VR() * 0.7;
       // 樹林中心多針葉樹，靠近林緣開花的樹變多
       const kind = p.n < 0.33 ? (roll < 0.5 ? 'pine' : roll < 0.88 ? 'round' : 'bloom') : (roll < 0.2 ? 'pine' : roll < 0.55 ? 'round' : 'bloom');
       // 小徑兩旁和涼亭四周空出來。被跳過的樹照樣取亂數，其他樹的位置才不會跟著變
-      farTree(nearTrail(p.x, p.z, 2.2) ? skipV : vk, kind, p.x, heightAt(p.x, p.z), p.z, s);
+      // 坡頂外圍多清幾公尺，站在涼亭邊上時鏡頭退到後面也不會卡進樹冠
+      const clear = nearTrail(p.x, p.z, 2.2) || Math.hypot(p.x - pc.x, p.z - pc.z) < PLAZA + 4;
+      farTree(clear ? skipV : vk, kind, p.x, heightAt(p.x, p.z), p.z, s);
       placed++;
     }
     for (let placed = 0, tries = 0; placed < nBush && tries < 4000; tries++) {
       const p = spot(1.2, 1.4, 0.5);
       if (!p || (p.n > 0.3 && p.n < 0.62 && VR() < 0.7)) continue;
-      bush(nearTrail(p.x, p.z, 1.4) ? skipV : vk, p.x, heightAt(p.x, p.z), p.z, 0.9 + VR() * 0.7, 3, false);
+      const hidden = nearTrail(p.x, p.z, 1.8) || Math.hypot(p.x - pc.x, p.z - pc.z) < PLAZA || forest(p.x, p.z) > 0.6;
+      bush(hidden ? skipV : vk, p.x, heightAt(p.x, p.z), p.z, 0.9 + VR() * 0.7, 3, false);
       placed++;
     }
   }
+
 
   // ---- 座位 ----
   const seats = [];
@@ -761,8 +855,10 @@ export function buildOutdoor(room, h) {
     const ex = x / (MEADOW.rx - m), ez = (rel - MEADOW.c) / (MEADOW.rz - m);
     if (ex * ex + ez * ez < 1) return true;
     if (Math.hypot(x - pc.x, z - pc.z) < PAV.r - m) return true;
-    // 入口前最後一段放寬，跟石階和兩根柱子之間一樣寬，用搖桿或鍵盤也好對準
+    // 跨進台基的那一段跟石階和兩根柱子之間一樣寬
     if (nearestOnLine(entPts, entCum, x, z).d < 1.3 - m) return true;
+    const dp = Math.hypot(x - pc.x, z - pc.z);
+    if (dp < PLAZA - m && (dp > PAV.r + m || rimLow(x - pc.x, z - pc.z))) return true;
     return nearestOnLine(trailPts, trailCum, x, z).d < TRAIL_W - m;
   };
   // 點在小徑或涼亭旁邊時，拉回小徑上（不然會被拉回草原中心那條線上）
@@ -780,15 +876,17 @@ export function buildOutdoor(room, h) {
     const rel = z0 - z;
     if (rel <= TD) return 0;
     if (Math.abs(x) < SW + 0.35 && rel < TD + SD) return -DROP * (rel - TD) / SD;
-    // 涼亭石台上是平的；石台外圍一圈接一道斜坡，從入口的石階走上去不會突然跳一格
-    const dp = Math.hypot(x - pc.x, z - pc.z);
+    // 涼亭石台上是平的；入口石階那一條接一道斜坡，走上去不會突然跳一格。台基其他幾面就是地面
+    const dx = x - pc.x, dz = z - pc.z, dp = Math.hypot(dx, dz);
     if (dp < PAV.r) return F;
     const y = heightAt(x, z);
-    return dp < PAV.r + 3 ? Math.max(y, F - (dp - PAV.r) * 0.5) : y;
+    const side = Math.abs(dx * Math.sin(ent) - dz * Math.cos(ent)), front = dx * Math.cos(ent) + dz * Math.sin(ent);
+    const ramp = (front > 0 && side < 1.3) || rimLow(dx, dz);
+    return dp < PAV.r + 3 && ramp ? Math.max(y, F - (dp - PAV.r) * 0.5) : y;
   };
 
   return {
-    shell, sky, far, water, seats, host, groundY,
+    shell, sky, far, water, seats, host, groundY, camFloor,
     // 看得到海面的範圍：海灣起點往外一直到海的盡頭，左右放寬到整片海。鏡頭沒看到這塊就不用算倒影
     seaBox: new THREE.Box3(new THREE.Vector3(-300, SEA_LEVEL, mz - 300), new THREE.Vector3(300, SEA_LEVEL, Z(39))),
     update: arcane.update,
@@ -806,9 +904,32 @@ export function buildOutdoor(room, h) {
       // 涼亭裡算成比入口再遠一點，進出涼亭的路線才一定會經過入口
       at(x, z) {
         if (inField(x, z)) return null;
-        if (Math.hypot(x - pc.x, z - pc.z) < PAV.r + 0.5) return trailEnd + 1;
+        if (Math.hypot(x - pc.x, z - pc.z) < PAV.r + 0.3) return trailEnd + 1;
         const n = nearestOnLine(trailPts, trailCum, x, z);
+        // 坡頂算在入口轉折點之前，進出涼亭都會經過那一點
+        if (Math.hypot(x - pc.x, z - pc.z) < PLAZA) return Math.min(n.s, porchS - 0.01);
         return n.d < TRAIL_W + 0.3 ? n.s : null;
+      },
+      // 路線上有一段直線穿過台基時，沿著台基外圍繞過去
+      around(sx, sz, path) {
+        const out = [], Rr = PAV.r + 0.75;
+        let ax = sx, az = sz;
+        for (const q of path) {
+          const da = Math.hypot(ax - pc.x, az - pc.z), db = Math.hypot(q.x - pc.x, q.z - pc.z);
+          const vx = q.x - ax, vz = q.z - az, L2 = vx * vx + vz * vz || 1e-6;
+          const t = Math.min(1, Math.max(0, ((pc.x - ax) * vx + (pc.z - az) * vz) / L2));
+          const close = Math.hypot(ax + vx * t - pc.x, az + vz * t - pc.z);
+          if (da > PAV.r + 0.3 && db > PAV.r + 0.3 && close < PAV.r + 0.5) {
+            const ta = Math.atan2(az - pc.z, ax - pc.x);
+            let dt = Math.atan2(q.z - pc.z, q.x - pc.x) - ta;
+            dt = Math.atan2(Math.sin(dt), Math.cos(dt));
+            const n = Math.ceil(Math.abs(dt) / 0.4);
+            for (let i = 0; i <= n; i++) out.push({ x: pc.x + Math.cos(ta + (dt * i) / n) * Rr, z: pc.z + Math.sin(ta + (dt * i) / n) * Rr });
+          }
+          out.push(q);
+          ax = q.x; az = q.z;
+        }
+        return out;
       },
       // 從 a 走到 b 會經過的轉折點，包含 b 那一端的點
       between(a, b) {
@@ -1185,15 +1306,15 @@ function bush(k, x, y, z, s = 1, dots = 0, ao = true) {
 }
 
 // 遠處的樹：pine 三層錐、round 幾團圓樹冠、bloom 開滿花的樹。顏色由下往上變亮，像頂上照著夕陽
-const ROUND = [['#34502a', '#7a903c'], ['#3e5a2c', '#90a046'], ['#2e4a2c', '#68843e']];
-const BLOSSOM = [['#c86a8c', '#f6c0cc'], ['#d8c8c4', '#fff4ea'], ['#c86a8c', '#f8d0d8'], ['#8a6ab8', '#d0b0ea'], ['#d88a34', '#f4cc68']];
+const ROUND = [CANOPY.green, CANOPY.sage, ['#2e4a30', '#6e8a44']];
+const BLOSSOM = [CANOPY.rose, ['#d0bcb4', '#fff0e4'], CANOPY.peach, CANOPY.mauve, CANOPY.amber];
 function farTree(k, kind, x, y, z, s) {
   const R = k.R, o = { ao: false };
   if (kind === 'pine') {
     k.cyl(0.1 * s, 0.15 * s, 0.9 * s, '#3e2c20', x, y + 0.45 * s, z, o, 5);
     for (let i = 0; i < 3; i++) {
       const r = (1 - i * 0.24) * s, hy = y + (1.2 + i * 0.85) * s;
-      k.cone(r, 1.7 * r, '#22402e', x, hy, z, { ...o, color2: '#4e6e46', ry: R() * 3 });
+      k.cone(r, 1.7 * r, CANOPY.pine[0], x, hy, z, { ...o, color2: CANOPY.pine[1], ry: R() * 3 });
     }
     return;
   }

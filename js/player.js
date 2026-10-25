@@ -451,8 +451,8 @@ export class Player {
       outLook.y + Math.sin(pitch) * this.camDist,
       outLook.z + Math.cos(this.camYaw) * c * this.camDist
     );
-    // 鏡頭不鑽進地面
-    outPos.y = Math.max(outPos.y, this.world.groundY(outPos.x, outPos.z) + 0.3);
+    // 鏡頭不鑽進地面，也不退進樹林裡
+    outPos.y = Math.max(outPos.y, this.world.camFloor(outPos.x, outPos.z) + 0.3);
     // 再往下拉的部分換成抬頭：鏡頭位置不動，視線往上轉，最多接近正上方
     const extra = PITCH_LOW - this.camPitch;
     if (extra > 0) {

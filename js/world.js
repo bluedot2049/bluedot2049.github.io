@@ -857,7 +857,7 @@ export function buildWorld(scene, gallery) {
     const pre = a === null ? gridPath(sx, sz, head.x, head.z) : [];
     const post = b === null ? gridPath(head.x, head.z, tx, tz) : [{ x: tx, z: tz }];
     if (!pre || !post) return null;
-    return [...pre, ...tr.between(a ?? 0, b ?? 0), ...post];
+    return tr.around(sx, sz, [...pre, ...tr.between(a ?? 0, b ?? 0), ...post]);
   }
 
   function gridPath(sx, sz, tx, tz) {
@@ -976,6 +976,11 @@ export function buildWorld(scene, gallery) {
     return outdoor && zz < outdoor.door ? outdoor.groundY(x, zz) : 0;
   }
 
+  // 鏡頭不能低於這個高度：地面，戶外再加上樹冠殼
+  function camFloor(x, zz) {
+    return outdoor && zz < outdoor.door ? outdoor.camFloor(x, zz) : 0;
+  }
+
   function setFaded(e, faded) {
     e.faded = faded;
     for (const m of e.full) m.visible = !faded;
@@ -1026,5 +1031,5 @@ export function buildWorld(scene, gallery) {
     }
   }
 
-  return { rooms, paintings, mirror, outdoor, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, setCurrentRoom, update };
+  return { rooms, paintings, mirror, outdoor, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, setCurrentRoom, update };
 }
