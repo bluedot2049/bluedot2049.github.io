@@ -62,6 +62,7 @@ class Water extends Mesh {
 		const textureMatrix = new Matrix4();
 
 		const mirrorCamera = new PerspectiveCamera();
+		if ( options.layer !== undefined ) mirrorCamera.layers.set( options.layer ); // 煉金畫廊：反射只畫這個圖層
 
 		const renderTarget = new WebGLRenderTarget( textureWidth, textureHeight );
 

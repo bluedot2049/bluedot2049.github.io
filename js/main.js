@@ -9,7 +9,7 @@ import { bindJoystick } from './joystick.js';
 import { Multiplayer, EMOTES } from './multiplayer.js';
 import * as TX from './textures.js';
 import { Ambience } from './ambience.js';
-import { HORIZON, SUN_DIR, MEADOW_NAME } from './outdoor.js';
+import { HORIZON, SUN_DIR, MEADOW_NAME, REFLECT_LAYER } from './outdoor.js';
 
 async function loadJSON(url) {
   const res = await fetch(url, { cache: 'no-cache' });
@@ -114,6 +114,9 @@ async function start() {
   const sun = new THREE.DirectionalLight(0xffcf98, 1.3);
   sun.position.set(4, 8, 3);
   scene.add(sun);
+  // 燈也要在反射的圖層上，不然反射裡的山坡是黑的
+  hemi.layers.enable(REFLECT_LAYER);
+  sun.layers.enable(REFLECT_LAYER);
 
   // 室內和戶外的光線、霧。走出後門時在兩組之間漸變
   const ENV = [
@@ -138,7 +141,7 @@ async function start() {
   }
 
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 300);
-  camera.layers.enable(ANIMAL_LAYER);   // 海面反射的鏡頭只看圖層 0，動物不會被多畫一次
+  camera.layers.enable(ANIMAL_LAYER);   // 動物只在圖層 1；海面反射的鏡頭只看 REFLECT_LAYER
 
   const world = buildWorld(scene, gallery);
   const shadowTex = TX.shadowTexture();

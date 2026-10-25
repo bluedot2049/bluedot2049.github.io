@@ -13,6 +13,8 @@ const MEADOW = { c: 22.5, rx: 18, rz: 13 };   // 走得到的草原是橢圓，c
 const BW = 5.6, EAVE = 4.2, RIDGE = 6.0;      // 房子外殼的半寬、屋簷高、屋脊高
 const YB = -DROP - 0.2;                // 台基埋進土裡的底部
 const SEA_LEVEL = -DROP - 0.9, SEA_BED = -DROP - 2.4;   // 草原盡頭的海：水面和海底的高度
+// 海面反射的鏡頭只看這個圖層。從草原看海只映得到天空、遠山、山坡和坡上的樹，草地、家具、房子、人都不用多畫一次
+export const REFLECT_LAYER = 2;
 export const SUN_DIR = new THREE.Vector3(-0.35, 0.07, -1).normalize();
 export const HORIZON = 0xe3a47e;
 
@@ -507,6 +509,7 @@ export function buildOutdoor(room, h) {
   // ---- 草原 ----
   const G = -DROP, mz = Z(MEADOW.c);
   const ground = groundMesh(terrain, mz);
+  ground.layers.enable(REFLECT_LAYER);
   meadowGroup.add(h.tag(ground, 'floor'));
 
   // 大樹和樹下的長椅，長椅面向夕陽
@@ -580,7 +583,7 @@ export function buildOutdoor(room, h) {
     bed(sx * (SW + 1.9), TD + SD - 0.3, 1);
   }
   // 遠處山坡：樹多半種在地面畫成樹林的那幾塊，林子裡夾著開花的樹；林緣和坡腳是開花的灌木
-  // 全部跟草原的家具合併成同一個網格，不多一次繪製
+  // 另外合併成一個網格，海面反射只畫這一個，不用連草原的家具一起畫
   {
     const VR = vk.R, nTree = coarse ? 70 : 110, nBush = coarse ? 60 : 100;
     const spot = (eMin, eSpan, open) => {
@@ -626,8 +629,10 @@ export function buildOutdoor(room, h) {
 
   // ---- 合併 ----
   k.emit(bucket, 0, 0, 0);
-  vk.emit(bucket, 0, 0, 0);
   for (const o of h.bucketObjects(bucket)) group.add(o);
+  const hillBucket = newBucket();
+  vk.emit(hillBucket, 0, 0, 0);
+  for (const o of h.bucketObjects(hillBucket)) { o.layers.enable(REFLECT_LAYER); group.add(o); }
   meadowGroup.add(grass(terrain, z0, coarse ? 10000 : 20000, h.uTime));
   meadowGroup.add(seeds(mz, h.uTime));
   meadowGroup.add(h.glowPoints(Array.from({ length: 28 }, () => {
@@ -636,6 +641,8 @@ export function buildOutdoor(room, h) {
   })));
   const sky = buildSky();
   const far = buildFar(mz, R);
+  sky.layers.enable(REFLECT_LAYER);
+  far.layers.enable(REFLECT_LAYER);
   group.add(sky, far);
   const water = buildSea(mz, coarse);
   group.add(water);
@@ -688,6 +695,7 @@ function buildSea(mz, coarse) {
     distortionScale: 2.2,
     size: 2,
     fog: true,
+    layer: REFLECT_LAYER,
   });
   water.rotation.x = -Math.PI / 2;
   water.position.set(0, SEA_LEVEL, mz);
