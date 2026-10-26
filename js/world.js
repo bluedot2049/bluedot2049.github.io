@@ -826,8 +826,31 @@ export function buildWorld(scene, gallery) {
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) grid[r * cols + c] = walkable(gx0 + (c + 0.5) * CELL, gz0 + (r + 0.5) * CELL) ? 1 : 0;
   }
+  // 比一格還窄的縫（桌尾和陽台前緣之間只有 0.23 公尺）取樣點剛好落不進去，整條走道就被當成封死。
+  // 格子中心走不到、但偏 0.1 公尺的四個點有一個走得到，而且旁邊有開著的格子，也算開著（記成 2）。
+  // 路線上的轉折點再換成那個走得到的點
+  // 平常只走中心走得到的格子；這樣找不到路時才放寬再找一次，原本走得通的路線不會被推到邊緣
+  let loose = false;
+  const EDGE = 0.1, OFFS = [[EDGE, EDGE], [-EDGE, EDGE], [EDGE, -EDGE], [-EDGE, -EDGE]];
+  const cellPoint = (c, r) => {
+    const x = gx0 + (c + 0.5) * CELL, z = gz0 + (r + 0.5) * CELL;
+    if (grid[r * cols + c] === 1) return { x, z };
+    for (const [dx, dz] of OFFS) if (walkable(x + dx, z + dz)) return { x: x + dx, z: z + dz };
+    return { x, z };
+  };
+  {
+    const edge = [];
+    for (let r = 1; r < rows - 1; r++) for (let c = 1; c < cols - 1; c++) {
+      const k = r * cols + c;
+      if (grid[k] === 0 && (grid[k - 1] === 1 || grid[k + 1] === 1 || grid[k - cols] === 1 || grid[k + cols] === 1)) edge.push(k);
+    }
+    for (const k of edge) {
+      const c = k % cols, r = (k / cols) | 0, x = gx0 + (c + 0.5) * CELL, z = gz0 + (r + 0.5) * CELL;
+      if (OFFS.some(([dx, dz]) => walkable(x + dx, z + dz))) grid[k] = 2;
+    }
+  }
   const cellOf = (x, zz) => [Math.floor((x - gx0) / CELL), Math.floor((zz - gz0) / CELL)];
-  const open = (c, r) => c >= 0 && r >= 0 && c < cols && r < rows && grid[r * cols + c] === 1;
+  const open = (c, r) => c >= 0 && r >= 0 && c < cols && r < rows && (grid[r * cols + c] === 1 || (loose && grid[r * cols + c] === 2));
 
   function nearestOpen(x, zz) {
     const [c0, r0] = cellOf(x, zz);
@@ -855,6 +878,17 @@ export function buildWorld(scene, gallery) {
 
   function findPath(sx, sz, tx, tz) {
     if (walkable(tx, tz) && lineClear(sx, sz, tx, tz)) return [{ x: tx, z: tz }];
+    loose = false;
+    let path = gridPath(sx, sz, tx, tz);
+    if (!path) {
+      loose = true;
+      path = gridPath(sx, sz, tx, tz);
+      loose = false;
+    }
+    return path;
+  }
+
+  function gridPath(sx, sz, tx, tz) {
     const s = nearestOpen(sx, sz), t = nearestOpen(tx, tz);
     if (!s || !t) return null;
     const key = (c, r) => r * cols + c, cur = ++stamp;
@@ -909,7 +943,7 @@ export function buildWorld(scene, gallery) {
     }
     if (!found) return null;
     const cells = [];
-    for (let k = tk; k !== -1; k = from[k]) cells.push({ x: gx0 + ((k % cols) + 0.5) * CELL, z: gz0 + (((k / cols) | 0) + 0.5) * CELL });
+    for (let k = tk; k !== -1; k = from[k]) cells.push(cellPoint(k % cols, (k / cols) | 0));
     cells.reverse();
     if (walkable(tx, tz)) cells.push({ x: tx, z: tz });
     // 拉直：只在格子路線轉彎的地方試，看從上一個轉折能不能直線走過去，走不過去就把前一個彎留下來
