@@ -327,7 +327,7 @@ export class Player {
     this.events.onSit?.(true);
   }
 
-  // 動作按鈕現在該做什麼：看畫、照鏡子、坐下、拿點心、摸動物、吃一口、起來。回傳 { kind, p? } 或 null
+  // 動作按鈕現在該做什麼：看畫、照鏡子、坐下、拿點心、摸動物、跟訪客聊天、吃一口、起來。回傳 { kind, p? } 或 null
   actionTarget() {
     const ch = this.character;
     if (this.sitting) {
@@ -346,6 +346,7 @@ export class Player {
     const out = this.world.outdoor;
     if (out && this.room === this.world.rooms.length - 1) {
       out.seats.forEach((st, i) => {
+        if (this.visitors?.seatBusy(i)) return;
         const d = Math.min(Math.hypot(x - st.x, z - st.z), Math.hypot(x - st.ax, z - st.az));
         if (d < 1.3) list.push({ kind: 'seat', p: i, d });
       });
@@ -354,6 +355,8 @@ export class Player {
     }
     const an = this.animals?.nearest(x, z);
     if (an) list.push({ kind: 'pet', p: an.a, d: an.d });
+    const vi = this.visitors?.nearest(x, z);
+    if (vi) list.push({ kind: 'talk', p: vi.v, d: vi.d });
     if (list.length) return list.reduce((a, b) => (b.d < a.d ? b : a));
     return ch.food ? { kind: 'eat' } : null;
   }
@@ -368,6 +371,7 @@ export class Player {
       case 'mirror': this.goToMirror(); break;
       case 'seat': this.goTo(this.planSeat(t.p)); break;
       case 'pet': this.goToAnimal(t.p); break;
+      case 'talk': t.p.talkTo(); break;
       case 'stand': this.exitFocus(); break;
       case 'table':
         ch.hold(1 + Math.floor(Math.random() * 5));
@@ -469,7 +473,7 @@ export class Player {
     const w = this.world, ox = this.pos.x, oz = this.pos.z;
     const stuck = !w.walkable(ox, oz);   // 已經卡在家具裡（例如瞬移進去），允許往任何方向脫困
     const go = (x, z) => {
-      if (stuck || (w.walkable(x, z) && !this.animals?.blocks(x, z, ox, oz))) { this.pos.x = x; this.pos.z = z; return true; }
+      if (stuck || (w.walkable(x, z) && !this.animals?.blocks(x, z, ox, oz) && !this.visitors?.blocks(x, z, ox, oz))) { this.pos.x = x; this.pos.z = z; return true; }
       return false;
     };
     if (go(ox + vx, oz + vz)) return true;

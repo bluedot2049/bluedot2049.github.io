@@ -25,8 +25,8 @@ function tris(list) {
 const quad = (out, a, b, c, d) => out.push([a, b, c], [a, c, d]);
 
 // 船身：船頭朝 +z，橫切面是 V 字，兩頭收尖、往上翹，船頭翹得多。gunwale 在 y = 0，龍骨在 -depth
-// deck 為 true 時蓋上甲板；小划船不蓋，從上面看得到船艙
-function hull(len, beam, depth, deck) {
+// deck 是船艙地板 { y: 離 gunwale 幾成船深, w: 佔那一圈船寬幾成 }；不給就不鋪。地板要高過水面，水面才不會從船艙裡透出來
+export function hull(len, beam, depth, deck) {
   const N = 12, rings = [];
   for (let i = 0; i <= N; i++) {
     const u = (i / N) * 2 - 1, z = (u * len) / 2;
@@ -37,9 +37,9 @@ function hull(len, beam, depth, deck) {
   const f = [];
   for (let i = 0; i < N; i++) for (let j = 0; j < 4; j++) quad(f, rings[i][j], rings[i][j + 1], rings[i + 1][j + 1], rings[i + 1][j]);
   if (deck) {
-    const y = -depth * 0.12;
+    const y = -depth * deck.y;
     for (let i = 0; i < N; i++) {
-      const w0 = rings[i][4][0] * 0.9, w1 = rings[i + 1][4][0] * 0.9, z0 = rings[i][0][2], z1 = rings[i + 1][0][2];
+      const w0 = rings[i][4][0] * deck.w, w1 = rings[i + 1][4][0] * deck.w, z0 = rings[i][0][2], z1 = rings[i + 1][0][2];
       quad(f, [-w0, y, z0], [w0, y, z0], [w1, y, z1], [-w1, y, z1]);
     }
   }
@@ -77,7 +77,7 @@ function pine(k, x, y, z, s) {
 const BOAT = { len: 8, beam: 2.2, depth: 1.2 };
 function boat(k) {
   const { len: L, beam: B, depth: D } = BOAT, deck = -D * 0.12, o = { ao: false };
-  k.add(hull(L, B, D, true), '#2a2230', 0, 0, 0, { ...o, color2: '#54445a' });
+  k.add(hull(L, B, D, { y: 0.12, w: 0.9 }), '#2a2230', 0, 0, 0, { ...o, color2: '#54445a' });
   for (const sx of [-1, 1]) k.box(0.05, 0.07, L * 0.75, GOLD, sx * (B / 2 - 0.03), -0.03, 0, o);
   // 船頭的頸子從船尖往上長、往後彎，頭朝前，金色的喙往前下方
   const by = D * 0.45, r = 1, end = Math.PI * 0.55;
@@ -110,6 +110,11 @@ const ROUTE = [[3.5, 132.6], [11, 133.5], [18, 146], [22, 190], [12, 300], [-22,
 const FAR = 4;
 const SPEED = 1.8, EASE = 12, MOOR = 50, EVERY = 420;   // 公尺／秒；靠岸加減速的距離；停幾秒；幾秒來一趟
 const KEEP = 140;   // 燈放在石階上，船開走後還亮多久（從靠岸算起）
+
+// 冒險者的船（visitors.js）：第一個點是泊位，貼著棧橋方台西側、船頭朝海。從右邊的霧裡進來，
+// 在方台前面的水上掉頭靠岸，走的時候直接往前開回霧裡。整條航線都在小島和黑袍船的右側
+const VISIT_ROUTE = [[5.6, 57.3], [7, 70], [18, 96], [42, 160], [55, 260], [30, 245], [25, 150], [12, 88], [3, 64], [0.6, 53], [2.6, 48.6], [5, 51.5]];
+const VISIT_FAR = 4;
 
 // 白塔的脈動：每 PULSE 秒一輪，towerPhase 是這一輪走到哪裡，石頭在 0.5 亮起。西方的星（lore.js）跟著一起閃
 export const PULSE = 14;
@@ -201,12 +206,13 @@ export function buildHarbor({ group, h, Z, G, SEA_LEVEL, SEA_BED, REFLECT_LAYER 
     return g;
   };
   const row = make((kk) => {
-    kk.add(hull(3.2, 1.3, 0.55, false), '#6e4a30', 0, 0, 0, { color2: '#a0704a', ao: false });
-    kk.box(0.5, 0.03, 2.2, '#5a3a24', 0, -0.42, 0);
+    // 船吃水 0.19 公尺，艙底鋪木板在水面上方，搖晃時水面也碰不到
+    kk.add(hull(3.2, 1.3, 0.55, { y: 0.45, w: 0.82 }), '#6e4a30', 0, 0, 0, { color2: '#a0704a', ao: false });
+    for (const x of [-0.18, 0, 0.18]) kk.box(0.15, 0.025, 2.1, '#5a3a24', x, -0.235, 0);
     for (const z of [-0.5, 0.5]) kk.box(1.05, 0.05, 0.24, '#8a6440', 0, -0.12, z);
     for (const sx of [-1, 1]) kk.cyl(0.03, 0.03, 2.6, '#a07a50', sx * 0.22, -0.06, 0.1, { rx: Math.PI / 2, ry: sx * 0.08 }, 5);
   });
-  row.position.set(J.x + J.hw + 0.95, SEA_LEVEL + 0.22, Z(50));
+  row.position.set(J.x + J.hw + 0.95, SEA_LEVEL + 0.36, Z(50));
 
   const pts = ROUTE.map(([x, rel]) => new THREE.Vector3(x, 0, Z(rel)));
   const curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal');
@@ -271,8 +277,15 @@ export function buildHarbor({ group, h, Z, G, SEA_LEVEL, SEA_BED, REFLECT_LAYER 
 
   return {
     blocks,
+    // 冒險者的船：航線、霧裡最遠那一點、水面高度，上岸站的三個點在方台西側
+    dock: {
+      sea: SEA_LEVEL,
+      route: VISIT_ROUTE.map(([x, rel]) => new THREE.Vector3(x, 0, Z(rel))),
+      far: VISIT_FAR,
+      land: [55.9, 57, 58.1].map((rel) => ({ x: J.x - J.ehw + 0.55, z: Z(rel) })),
+    },
     update(t) {
-      row.position.y = SEA_LEVEL + 0.22 + Math.sin(t * 1.3) * 0.05;
+      row.position.y = SEA_LEVEL + 0.36 + Math.sin(t * 1.3) * 0.05;
       row.rotation.set(Math.sin(t * 0.9) * 0.03, 0.12 + Math.sin(t * 0.3) * 0.05, Math.sin(t * 1.1 + 1) * 0.05);
       // 用真實時間算，每位訪客看到的船都在同一個位置
       const now = Date.now() / 1000, c = ((now % EVERY) + EVERY) % EVERY;

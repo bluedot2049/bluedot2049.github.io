@@ -4,6 +4,7 @@ import { Player } from './player.js';
 import { Character, isOutfit, randomOutfit } from './character.js';
 import { Manatee, TABLE_LINES } from './manatee.js';
 import { Animals, ANIMAL_LAYER } from './animals.js';
+import { Visitors } from './visitors.js';
 import { UI } from './ui.js';
 import { bindJoystick } from './joystick.js';
 import { Multiplayer, EMOTES } from './multiplayer.js';
@@ -219,6 +220,10 @@ async function start() {
   scene.add(player.marker);
   const animals = new Animals({ world, shadowTex, player, camera, ambience });
   player.animals = animals;
+  // 不定期搭船來看畫的冒險者
+  const visitors = new Visitors({ scene, world, shadowTex, player, camera, host, force: params.has('visit') });
+  player.visitors = visitors;
+  animals.visitors = visitors;
 
   ui.buildList(true);
   ui.onGoTo = (ri, pi) => {
@@ -239,11 +244,11 @@ async function start() {
   const actionBtn = document.getElementById('action-btn');
   actionBtn.addEventListener('click', () => player.action());
   const actionLabel = actionBtn.querySelector('.a1');
-  const LABELS = { painting: '看畫', mirror: '照鏡子', seat: '坐下', table: '拿點心', pet: '摸摸', eat: '吃一口', stand: '起來' };
+  const LABELS = { painting: '看畫', mirror: '照鏡子', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', eat: '吃一口', stand: '起來' };
   let nearKey = null;
   function updateAction() {
     const t = player.actionTarget();
-    const key = t ? (t.kind === 'painting' || t.kind === 'pet' ? t.p : t.kind) : null;
+    const key = t ? (t.kind === 'painting' || t.kind === 'pet' || t.kind === 'talk' ? t.p : t.kind) : null;
     const sitting = player.sitCode !== 0;
     if (sitting !== document.body.classList.contains('sitting')) {
       document.body.classList.toggle('sitting', sitting);
@@ -256,7 +261,7 @@ async function start() {
     if (!t) return;
     actionLabel.textContent = LABELS[t.kind];
     actionBtn.setAttribute('aria-label', actionLabel.textContent);
-    document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : t.kind === 'pet' ? t.p.name : '';
+    document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : t.kind === 'pet' || t.kind === 'talk' ? t.p.name : '';
   }
 
   // 聲音開關：戶外的風聲和動物叫聲共用，室內也有貓，所以一直都在
@@ -323,6 +328,7 @@ async function start() {
       },
     }, outfit.slice());
     mp.connect().catch((e) => console.warn('多人連線失敗：', e));
+    visitors.mp = mp;
     // 電腦：數字鍵 1–5 送表情
     window.addEventListener('keydown', (e) => {
       const i = e.key.length === 1 ? '12345'.indexOf(e.key) : -1;
@@ -330,7 +336,7 @@ async function start() {
     });
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals, quality };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals, visitors, quality };
 
   // 後製和著色器預先編譯同時進行；載不到就照原本的畫法
   let fx = null;
@@ -363,11 +369,12 @@ async function start() {
     const dt = Math.min(clock.getDelta(), 0.05);
     player.update(dt);
     animals.update(dt);
+    visitors.update(dt);
     manatee.update(dt, player.pos.x, player.pos.z, camera);
     const othersMoving = mp ? mp.update(dt, performance.now()) : false;
     if (host) {
       host.group.visible = world.rooms[world.rooms.length - 1].group.visible;
-      if (host.group.visible) host.update(dt, player.pos.x, player.pos.z, camera);
+      if (host.group.visible) host.update(dt, player.pos.x, player.pos.z, camera, visitors.hostFocus());
       else host.hush();
     }
     if (frame % 6 === 0) updateAction();

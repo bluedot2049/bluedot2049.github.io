@@ -2,12 +2,13 @@
 // 每隻動物的日常行程（走去哪、停下來做什麼）由「動物編號 + 現在是第幾段時間」算出來，
 // 每位訪客的畫面算出同一個結果，不用傳任何資料。對玩家的反應（狗跑過來、雞被嚇跑）只演在自己的畫面上，
 // 演完再走回行程。摸摸用廣播同步，跟跳躍一樣只傳「誰摸了哪一隻」。
+// 搭船來的訪客（visitors.js）走過草原時，小狗會跑去迎接，雞和鴨會讓開，同樣只演在自己的畫面上。
 // 每種動物的零件合併成幾個網格，同種共用；一隻大約五到八次繪製。全部放在圖層 1，海面反射不畫牠們。
 import * as THREE from 'three';
 import { Kit, mergeBucket, rng } from './props.js';
 
-const LIT = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-const GLOW = new THREE.MeshBasicMaterial({ vertexColors: true });   // 貓眼睛在暗處也看得到
+export const LIT = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+export const GLOW = new THREE.MeshBasicMaterial({ vertexColors: true });   // 貓眼睛在暗處也看得到
 const SHADOW_GEO = new THREE.PlaneGeometry(1, 1);
 export const ANIMAL_LAYER = 1;
 
@@ -15,14 +16,14 @@ const QUAD = [0, Math.PI, Math.PI, 0];   // 左前、右前、左後、右後：
 const BIPED = [0, Math.PI];
 const smooth = (t) => t * t * (3 - 2 * t);
 
-function wrapAngle(a) {
+export function wrapAngle(a) {
   while (a > Math.PI) a -= Math.PI * 2;
   while (a < -Math.PI) a += Math.PI * 2;
   return a;
 }
 
 // 三個整數雜湊成 [0, 1)。行程全靠它，各台裝置算出來一樣
-function hash(a, b, c = 0) {
+export function hash(a, b, c = 0) {
   let h = Math.imul(a | 0, 0x27d4eb2d) ^ Math.imul(b | 0, 0x165667b1) ^ Math.imul(c | 0, 0x9e3779b1);
   h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
   h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
@@ -39,7 +40,7 @@ function pickAct(acts, u) {
 // ---------- 造型 ----------
 // 每個零件用 Kit 拼好再合併成一個幾何，原點在關節上。身體的原點在身體中心（離地 cy），動物面向 +z
 
-function geo(build) {
+export function geo(build) {
   const k = new Kit(null);
   build(k);
   return mergeBucket(k.lit, false);
@@ -395,6 +396,7 @@ class Animal {
     this.routeT = 0;
     this.nextVoice = performance.now() / 1000 + this.spec.every[0] * Math.random();
     this.nextGreet = 0;
+    this.nextGreetV = 0;     // 迎接訪客另外算
   }
 
   get name() { return this.spec.name; }
@@ -614,16 +616,16 @@ class Animal {
         r.act = 'hop';
         return r.t < 1.2;
       case 'greet': {
-        // 狗看到人就跑過來，坐在旁邊；人走開就跟上去，過一陣子才回去玩
-        const d = Math.hypot(P.pos.x - this.pos.x, P.pos.z - this.pos.z);
-        if (r.t > 18 || d > 14 || !env.inMeadow) return false;
-        r.face = P.pos;
+        // 狗看到人就跑過來，坐在旁邊；人走開就跟上去，過一陣子才回去玩。迎接訪客的時間短一點
+        const who = r.who || P, d = Math.hypot(who.pos.x - this.pos.x, who.pos.z - this.pos.z);
+        if (r.t > (r.who ? 10 : 18) || d > 14 || !(r.who ? who.meadow : env.inMeadow)) return false;
+        r.face = who.pos;
         if (d > (r.near ? 2.4 : 1.3)) {
           r.near = false;
-          this.goVia(P.pos.x, P.pos.z, d > 4 ? sp.runV : sp.walkV * 1.5, dt, 1.1);
+          this.goVia(who.pos.x, who.pos.z, d > 4 ? sp.runV : sp.walkV * 1.5, dt, 1.1);
         } else {
           r.near = true;
-          r.act = P.speed > 0.1 ? null : 'sit';
+          r.act = who.speed > 0.1 ? null : 'sit';
         }
         return true;
       }
@@ -658,6 +660,18 @@ class Animal {
         this.say('bark');
       } else if (sp.bump && pd < sp.bump * this.scale && P.speed > 0.4 && P.pending?.a !== this) {
         this.flee(P.pos.x, P.pos.z, sp.aloof ? 1.6 : 1.8, sp.fleeV * 0.7);
+      } else if (sp.greets && clock > this.nextGreetV) {
+        const v = env.walkers.find((w) => Math.hypot(w.pos.x - ox, w.pos.z - oz) < 8);
+        if (v) {
+          this.react = { kind: 'greet', t: 0, who: v };
+          this.route = null;
+          this.nextGreetV = clock + 45 + Math.random() * 30;
+          this.say('bark');
+          v.greetedBy();
+        }
+      } else if (sp.bump) {
+        const v = env.walkers.find((w) => w.speed > 0.4 && Math.hypot(w.pos.x - ox, w.pos.z - oz) < sp.bump * this.scale);
+        if (v) this.flee(v.pos.x, v.pos.z, sp.aloof ? 1.6 : 1.8, sp.fleeV * 0.7);
       }
     }
 
@@ -722,7 +736,7 @@ export function catRoomOf(rooms) {
   return r && r.type !== 'outdoor' ? r : null;
 }
 
-function along(P, s) {
+export function along(P, s) {
   const { pts, cum } = P;
   let i = 1;
   while (i < pts.length - 1 && cum[i] < s) i++;
@@ -787,6 +801,7 @@ export class Animals {
       player: P,
       clock: performance.now() / 1000,
       inMeadow: !!out && P.room === this.world.rooms.length - 1 && out.door - P.pos.z > 11 && out.inField(P.pos.x, P.pos.z),
+      walkers: this.visitors ? this.visitors.list.filter((v) => v.meadow) : [],
     };
     const now = Date.now() / 1000;
     for (const a of this.list) a.update(dt, now, env);

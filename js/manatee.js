@@ -180,7 +180,8 @@ export class Manatee {
     b.top = ((1 - v.y) / 2) * window.innerHeight + 'px';
   }
 
-  update(dt, px, pz, camera) {
+  // look：玩家不在附近時要看的地方（跟他聊天的訪客）
+  update(dt, px, pz, camera, look = null) {
     this.time += dt;
     const g = this.group;
     const dx = px - g.position.x, dz = pz - g.position.z;
@@ -193,8 +194,8 @@ export class Manatee {
     }
     if (this.bubble.classList.contains('show')) this.placeBubble(camera);
     const near = dist < 6;
-    if (near) {
-      const want = Math.atan2(dx, dz);
+    if (near || look) {
+      const want = near ? Math.atan2(dx, dz) : Math.atan2(look.x - g.position.x, look.z - g.position.z);
       let d = want - this.heading;
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;

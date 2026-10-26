@@ -912,6 +912,7 @@ export function buildOutdoor(room, h) {
       lore.update(t, target);
     },
     table: { x: tableX, z: Z(tableRel), hw: 0.5, hd: tableLen / 2 },
+    dock: harbor.dock,
     door: z0,
     // 室內 0、走出後門 1，主程式用來切換光線和霧
     outdoorness: (z) => smooth(z0 + 3, z0 - 2, z),
