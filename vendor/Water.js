@@ -91,9 +91,12 @@ class Water extends Mesh {
 			vertexShader: /* glsl */`
 				uniform mat4 textureMatrix;
 				uniform float time;
+				uniform float size;
 
 				varying vec4 mirrorCoord;
 				varying vec4 worldPosition;
+				varying vec4 noiseUV0;
+				varying vec4 noiseUV1;
 
 				#include <common>
 				#include <fog_pars_vertex>
@@ -104,6 +107,13 @@ class Water extends Mesh {
 					mirrorCoord = modelMatrix * vec4( position, 1.0 );
 					worldPosition = mirrorCoord.xyzw;
 					mirrorCoord = textureMatrix * mirrorCoord;
+					// 煉金畫廊：四層波紋的貼圖座標跟世界座標成正比，在頂點算好內插下去，結果跟每個像素算一樣。
+					// 時間的偏移先取小數（貼圖會重複），開很久數字也不會變大失去精度
+					vec2 uv = worldPosition.xz * size;
+					noiseUV0.xy = uv / 103.0 + fract( vec2( time / 17.0, time / 29.0 ) );
+					noiseUV0.zw = uv / 107.0 - fract( vec2( time / -19.0, time / 31.0 ) );
+					noiseUV1.xy = uv / vec2( 8907.0, 9803.0 ) + fract( vec2( time / 101.0, time / 97.0 ) );
+					noiseUV1.zw = uv / vec2( 1091.0, 1027.0 ) - fract( vec2( time / 109.0, time / -113.0 ) );
 					vec4 mvPosition =  modelViewMatrix * vec4( position, 1.0 );
 					gl_Position = projectionMatrix * mvPosition;
 
@@ -128,16 +138,14 @@ class Water extends Mesh {
 
 				varying vec4 mirrorCoord;
 				varying vec4 worldPosition;
+				varying vec4 noiseUV0;
+				varying vec4 noiseUV1;
 
-				vec4 getNoise( vec2 uv ) {
-					vec2 uv0 = ( uv / 103.0 ) + vec2(time / 17.0, time / 29.0);
-					vec2 uv1 = uv / 107.0-vec2( time / -19.0, time / 31.0 );
-					vec2 uv2 = uv / vec2( 8907.0, 9803.0 ) + vec2( time / 101.0, time / 97.0 );
-					vec2 uv3 = uv / vec2( 1091.0, 1027.0 ) - vec2( time / 109.0, time / -113.0 );
-					vec4 noise = texture2D( normalSampler, uv0 ) +
-						texture2D( normalSampler, uv1 ) +
-						texture2D( normalSampler, uv2 ) +
-						texture2D( normalSampler, uv3 );
+				vec4 getNoise() {
+					vec4 noise = texture2D( normalSampler, noiseUV0.xy ) +
+						texture2D( normalSampler, noiseUV0.zw ) +
+						texture2D( normalSampler, noiseUV1.xy ) +
+						texture2D( normalSampler, noiseUV1.zw );
 					return noise * 0.5 - 1.0;
 				}
 
@@ -160,7 +168,7 @@ class Water extends Mesh {
 				void main() {
 
 					#include <logdepthbuf_fragment>
-					vec4 noise = getNoise( worldPosition.xz * size );
+					vec4 noise = getNoise();
 					vec3 surfaceNormal = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) );
 
 					vec3 diffuseLight = vec3(0.0);

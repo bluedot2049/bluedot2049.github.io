@@ -21,6 +21,10 @@ const YB = -DROP - 0.2;                // 台基埋進土裡的底部
 const SEA_LEVEL = -DROP - 0.9, SEA_BED = -DROP - 2.4;   // 草原盡頭的海：水面和海底的高度
 // 海面反射的鏡頭只看這個圖層。從草原看海只映得到天空、遠山、山坡和坡上的樹，草地、家具、房子、人都不用多畫一次
 export const REFLECT_LAYER = 2;
+// 不透明物件的繪製順序：大片的背景排在近處的東西後面畫，被擋住的像素在著色之前就被深度測試丟掉。
+// 都是不透明的，先畫後畫結果一樣，只是少算很多被蓋掉的像素（手機上主要的負擔）
+// 海面是一整張 600 公尺的平面，連草原底下都有，著色又最貴，排在地形之後才畫，被地面、山坡蓋住的部分就不用算
+const ORDER = { ground: 3, hills: 4, far: 5, sea: 6, sky: 10 };
 export const SUN_DIR = new THREE.Vector3(-0.35, 0.07, -1).normalize();
 export const HORIZON = 0xe3a47e;
 
@@ -616,6 +620,7 @@ export function buildOutdoor(room, h) {
   const G = -DROP, mz = Z(MEADOW.c);
   const { mesh: ground, heightAt } = groundMesh(terrain, mz);
   ground.layers.enable(REFLECT_LAYER);
+  ground.renderOrder = ORDER.ground;
   meadowGroup.add(h.tag(ground, 'floor'));
   const inField = (x, z) => (x / MEADOW.rx) ** 2 + ((z0 - z - MEADOW.c) / MEADOW.rz) ** 2 < 1;
 
@@ -782,10 +787,31 @@ export function buildOutdoor(room, h) {
   };
   vk.lit.push(canopy(forest, heightAt, mz, coarse));
   // 鏡頭最低只到樹冠殼頂上，不會退進林子裡。高度取樹冠殼起伏的上限，再留一點空
+  // 樹冠頂每公尺記一格，用到才算、算過就留著；鏡頭每幀只內插四個角，不用每幀重算樹林的範圍
+  const tops = new Map();
+  const topAt = (i, j) => {
+    const key = i * 65536 + j;
+    let v = tops.get(key);
+    if (v === undefined) {
+      const f = forest(i, j);
+      v = f > 0 ? heightAt(i, j) + f * (3.8 + vnoise(i * 0.2 + 11, j * 0.2 - 5) * 2.4) + 0.8 : -Infinity;
+      tops.set(key, v);
+    }
+    return v;
+  };
   const camFloor = (x, z) => {
-    const y = groundY(x, z), f = z0 - z > TD ? forest(x, z) : 0;
+    const y = groundY(x, z);
     // 棧橋上往下看時，鏡頭不會鑽進海裡
-    return Math.max(SEA_LEVEL + 0.4, f > 0 ? Math.max(y, heightAt(x, z) + f * (3.8 + vnoise(x * 0.2 + 11, z * 0.2 - 5) * 2.4) + 0.8) : y);
+    if (z0 - z <= TD) return Math.max(SEA_LEVEL + 0.4, y);
+    const i = Math.floor(x), j = Math.floor(z), u = x - i, v = z - j;
+    const a = topAt(i, j), b = topAt(i + 1, j), c = topAt(i, j + 1), d = topAt(i + 1, j + 1);
+    // 四角都在林子外就是地面；有的在林子裡，林子外的那幾角當成地面高度來內插
+    let top = y;
+    if (a > -Infinity || b > -Infinity || c > -Infinity || d > -Infinity) {
+      const k = (t) => (t > -Infinity ? t : y);
+      top = Math.max(y, (k(a) * (1 - u) + k(b) * u) * (1 - v) + (k(c) * (1 - u) + k(d) * u) * v);
+    }
+    return Math.max(SEA_LEVEL + 0.4, top);
   };
   const stops = [];   // 山坡上種下去的樹和灌木：草原外面走得到的地方要繞開
   {
@@ -890,7 +916,7 @@ export function buildOutdoor(room, h) {
   for (const o of h.bucketObjects(bucket)) group.add(o);
   const hillBucket = newBucket();
   vk.emit(hillBucket, 0, 0, 0);
-  for (const o of h.bucketObjects(hillBucket)) { o.layers.enable(REFLECT_LAYER); group.add(o); }
+  for (const o of h.bucketObjects(hillBucket)) { o.layers.enable(REFLECT_LAYER); o.renderOrder = ORDER.hills; group.add(o); }
   meadowGroup.add(grass(terrain, z0, coarse ? 10000 : 20000, h.uTime, (x, z) => nearTrail(x, z, 0.6) || onJetty(x, z0 - z, -0.15)));
   meadowGroup.add(seeds(mz, h.uTime));
   meadowGroup.add(h.glowPoints(Array.from({ length: 28 }, () => {
@@ -903,7 +929,7 @@ export function buildOutdoor(room, h) {
   far.layers.enable(REFLECT_LAYER);
   group.add(sky, far);
   const lore = buildLore({ group, sky, h, Z, heightAt, SUN_DIR, REFLECT_LAYER });
-  const water = buildSea(mz, coarse);
+  const water = buildSea(mz, coarse, heightAt, z0);
   group.add(water);
 
   // 樹的影子
@@ -986,10 +1012,46 @@ export function buildOutdoor(room, h) {
 }
 
 // 海：three.js 範例的 Water（MIT）。反射要多畫一次場景，所以解析度壓低，人不在戶外時由 world 關掉
-function buildSea(mz, coarse) {
+// 海面的著色是整個場景最貴的。鋪在地底下雖然看不到，被擋住的像素還是可能被算到，所以只鋪真的會有海的地方：
+// 從離後門 30 公尺往外（海灣從 39 公尺左右才開始），切成 10 公尺一格，地形整格都高出海面的那幾格不鋪。
+// 地形是 4 公尺一格的網格，最低點一定在頂點上：連旁邊一格一起看，每個頂點都量到，地形整格高出海面才不鋪，岸邊不會開洞。
+// 地形網格以外的地方（遠山腳下）都鋪
+const SEA_FROM = 30, SEA_LEN = 300, SEA_W = 600, SEA_CELL = 10;
+function seaGeometry(heightAt, z0, mz) {
+  const pos = [], cz = z0 - SEA_FROM - SEA_LEN / 2;
+  const wet = (x0, r0) => {
+    for (let x = x0 - SEA_CELL; x <= x0 + SEA_CELL * 2; x += 1) for (let r = r0 - SEA_CELL; r <= r0 + SEA_CELL * 2; r += 0.5) {
+      if (Math.abs(x) > 165 || Math.abs(z0 - r - mz) > 165) return true;   // 地形網格以外
+      if (heightAt(x, z0 - r) < SEA_LEVEL + 0.2) return true;
+    }
+    return false;
+  };
+  for (let r = SEA_FROM; r < SEA_FROM + SEA_LEN; r += SEA_CELL) {
+    // 同一列連續要鋪的格子併成一條
+    let start = null;
+    for (let x = -SEA_W / 2; x <= SEA_W / 2; x += SEA_CELL) {
+      const on = x < SEA_W / 2 && wet(x, r);
+      if (on && start === null) start = x;
+      if (!on && start !== null) {
+        // 平面的區域座標：x 同世界，y 朝海（世界 -z），水面轉 -90 度躺平
+        const y0 = r - SEA_FROM - SEA_LEN / 2, y1 = y0 + SEA_CELL;
+        pos.push(start, y0, 0, x, y0, 0, x, y1, 0, start, y0, 0, x, y1, 0, start, y1, 0);
+        start = null;
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  const nrm = new Float32Array(pos.length);
+  for (let i = 2; i < nrm.length; i += 3) nrm[i] = 1;
+  geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  geo.computeBoundingSphere();
+  return geo;
+}
+function buildSea(mz, coarse, heightAt, z0) {
   const normals = new THREE.TextureLoader().load('assets/waternormals.jpg');
   normals.wrapS = normals.wrapT = THREE.RepeatWrapping;
-  const water = new Water(new THREE.PlaneGeometry(600, 600), {
+  const water = new Water(seaGeometry(heightAt, z0, mz), {
     textureWidth: coarse ? 256 : 512,
     textureHeight: coarse ? 256 : 512,
     waterNormals: normals,
@@ -1002,9 +1064,63 @@ function buildSea(mz, coarse) {
     layer: REFLECT_LAYER,
   });
   water.rotation.x = -Math.PI / 2;
-  water.position.set(0, SEA_LEVEL, mz);
+  water.renderOrder = ORDER.sea;
+  water.position.set(0, SEA_LEVEL, z0 - SEA_FROM - SEA_LEN / 2);
   water.visible = false;
   return water;
+}
+
+// 頂點打光的材質：光照在頂點上算、像素之間內插，公式照 three.js 的 MeshLambertMaterial（半球光加平行光，只有漫射）。
+// 大地起伏很緩，看起來跟每個像素都算一樣；草原佔了大半個畫面，每個像素省下整段光照計算，手機上差很多
+// head、move：另外要宣告的東西和頂點位移（草葉隨風擺）。side：雙面的草
+function vertexLit({ head = '', move = '', uniforms = {}, side = THREE.FrontSide } = {}) {
+  return new THREE.ShaderMaterial({
+    lights: true, fog: true, vertexColors: true, side,
+    uniforms: { ...THREE.UniformsUtils.merge([THREE.UniformsLib.lights, THREE.UniformsLib.fog]), ...uniforms },
+    vertexShader: `
+      #include <common>
+      #include <color_pars_vertex>
+      #include <fog_pars_vertex>
+      #include <lights_pars_begin>
+      ${head}
+      varying vec3 vLit;
+      void main() {
+        #include <color_vertex>
+        #include <beginnormal_vertex>
+        #include <defaultnormal_vertex>
+        #include <begin_vertex>
+        ${move}
+        #include <project_vertex>
+        #include <fog_vertex>
+        vec3 n = normalize(transformedNormal), irr = vec3(0.0);
+        #if NUM_HEMI_LIGHTS > 0
+        #pragma unroll_loop_start
+        for ( int i = 0; i < NUM_HEMI_LIGHTS; i ++ ) {
+          irr += getHemisphereLightIrradiance( hemisphereLights[ i ], n );
+        }
+        #pragma unroll_loop_end
+        #endif
+        #if NUM_DIR_LIGHTS > 0
+        #pragma unroll_loop_start
+        for ( int i = 0; i < NUM_DIR_LIGHTS; i ++ ) {
+          irr += saturate( dot( n, directionalLights[ i ].direction ) ) * directionalLights[ i ].color;
+        }
+        #pragma unroll_loop_end
+        #endif
+        vLit = irr * RECIPROCAL_PI;
+      }`,
+    fragmentShader: `
+      #include <common>
+      #include <color_pars_fragment>
+      #include <fog_pars_fragment>
+      varying vec3 vLit;
+      void main() {
+        gl_FragColor = vec4( vColor * vLit, 1.0 );
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+        #include <fog_fragment>
+      }`,
+  });
 }
 
 // 大地：一整片，中間平、外圍慢慢隆起
@@ -1043,7 +1159,7 @@ function groundMesh(terrain, mz) {
       ? y(0, 0) + (y(1, 0) - y(0, 0)) * u + (y(0, 1) - y(0, 0)) * v
       : y(1, 1) + (y(0, 1) - y(1, 1)) * (1 - u) + (y(1, 0) - y(1, 1)) * (1 - v);
   };
-  return { mesh: new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })), heightAt };
+  return { mesh: new THREE.Mesh(geo, vertexLit()), heightAt };
 }
 
 // 草葉：每片一個三角形，整片草合成一個網格。風在頂點著色器裡算，越靠近葉尖擺越大
@@ -1090,22 +1206,20 @@ function grass(terrain, z0, count, uTime, skip) {
   const nrm = new Float32Array(pos.length);
   for (let i = 1; i < nrm.length; i += 3) nrm[i] = 1;
   geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
-  mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uTime = uTime;
-    sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;\nattribute float bend;')
-      .replace('#include <begin_vertex>', `#include <begin_vertex>
+  // 草葉的法線一律朝上，每片的光照都一樣，在頂點上算就夠了（跟每個像素算結果相同）。雙面也不翻法線，草才不會一半亮一半黑
+  const mat = vertexLit({
+    side: THREE.DoubleSide,
+    uniforms: { uTime },
+    head: `uniform float uTime;
+      attribute float bend;`,
+    move: `
         float gust = sin(uTime * 0.6 + position.x * 0.08 - position.z * 0.12) * 0.6 + 0.4;
         float sway = sin(uTime * 1.9 + position.x * 0.45 + position.z * 0.3) * 0.5 + gust;
         float b = bend * bend;
         transformed.x += sway * 0.16 * b;
         transformed.z += sway * 0.06 * b;
-        transformed.y -= abs(sway) * 0.04 * b;`);
-    // 雙面材質的背面會把法線翻成朝下，草就一半亮一半黑。這裡不翻
-    sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>',
-      THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0'));
-  };
+        transformed.y -= abs(sway) * 0.04 * b;`,
+  });
   // 風最多把葉尖吹開 0.16，包圍球放大一點就不會被誤裁，背對草原時整片草不用畫
   geo.computeBoundingSphere();
   geo.boundingSphere.radius += 0.3;
@@ -1200,6 +1314,7 @@ function buildSky() {
       void main() {
         vD = position;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        gl_Position.z = gl_Position.w;   // 貼在最遠處：最後才畫，只填其他東西都沒蓋到的像素
       }`,
     fragmentShader: `
       uniform vec3 uSun; varying vec3 vD;
@@ -1226,7 +1341,7 @@ function buildSky() {
     side: THREE.BackSide, depthWrite: false, fog: false,
   });
   const sky = new THREE.Mesh(new THREE.SphereGeometry(240, 32, 16), mat);
-  sky.renderOrder = -1;
+  sky.renderOrder = ORDER.sky;
   sky.frustumCulled = false;
   return sky;
 }
@@ -1359,7 +1474,7 @@ function buildFar(mz, R) {
   const geo = mergeBucket(k.lit, false);
   const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }));
   m.frustumCulled = false;
-  m.renderOrder = -1;
+  m.renderOrder = ORDER.far;
   return m;
 }
 

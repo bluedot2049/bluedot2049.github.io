@@ -134,7 +134,8 @@ body.flat #stage::after { display: none; }
   width: max-content; max-width: min(78vw, 20em);
   opacity: 0; transition: opacity .5s, transform .18s ease-out;
 }
-.speech.show { opacity: 1; transform: translate(-50%, calc(-100% - 14px)); }
+/* --lift：跟別的對話框重疊時往上推多少；--dx：超出螢幕邊時往內收多少（js/bubbles.js） */
+.speech.show { opacity: 1; transform: translate(calc(-50% + var(--dx, 0px)), calc(-100% - 14px - var(--lift, 0px))); }
 .speech::before, .speech::after {
   content: ""; position: absolute; left: 50%; top: 100%;
   border: solid transparent; transform: translateX(-50%);

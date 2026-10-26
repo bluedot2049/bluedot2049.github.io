@@ -1,10 +1,16 @@
-// 畫質分級：先看裝置猜一個等級，開始走動後再量實際的幀時間，太慢就一步步降。
-// low：解析度 1x、不加後製　mid：解析度最多 1.5x、不加後製（手機預設）　high：最多 2x，加環境光遮蔽、泛光、抗鋸齒
+// 畫質分級：先看裝置猜一個等級，開始走動後量實際的幀時間，隨時調整解析度。
+// low：解析度 1x、不加後製　mid：解析度 1x 到 2x 之間自動調、不加後製（手機預設）　high：最多 2x，加環境光遮蔽、泛光、抗鋸齒
+// 解析度會降也會升：看海的時候比較重，降下來；回到室內或轉開視線，穩定一陣子後再試著升回去。
 // 網址加 ?q=low / ?q=mid / ?q=high 可以強制指定，方便測試
 
 const LEVELS = ['low', 'mid', 'high'];
 const KEY = 'quality';
-const KEEP_DAYS = 7;   // 上次降過級就沿用，一週後再重新判斷，換了瀏覽器或驅動更新還有機會升回來
+const KEEP_DAYS = 3;     // 記住上次穩定的解析度當起點，幾天後重新從預設開始
+const STEP = 0.25;       // 每次調整的解析度倍率
+const WINDOW = 45;       // 每看這麼多幀判斷一次
+const SLOW = 1 / 50;     // 超過這麼久算這一幀沒趕上
+const UP_AFTER = 12000;  // 穩定這麼久（毫秒）才試著升一格
+const RETRY = 60000;    // 升上去又掉下來的那一格，隔這麼久才再試（說不定已經走回室內了）
 
 function gpuName() {
   try {
@@ -34,13 +40,13 @@ function guess(coarse) {
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
-    if (s && LEVELS.includes(s.level) && Date.now() - s.at < KEEP_DAYS * 864e5) return s.level;
+    if (s && LEVELS.includes(s.level) && Date.now() - s.at < KEEP_DAYS * 864e5) return s;
   } catch {}
   return null;
 }
 
-function save(level) {
-  try { localStorage.setItem(KEY, JSON.stringify({ level, at: Date.now() })); } catch {}
+function save(level, dpr) {
+  try { localStorage.setItem(KEY, JSON.stringify({ level, dpr, at: Date.now() })); } catch {}
 }
 
 export class Quality {
@@ -49,15 +55,22 @@ export class Quality {
     const g = guess(coarse);
     this.gpu = g.gpu;
     this.forced = LEVELS.includes(forced);
-    const saved = load();
-    // 存下來的等級只會比猜的低（是降級留下的），不會讓手機一開始就跑 high
+    const saved = this.forced ? null : load();
+    // 後製只會被關掉不會再打開，存下來的等級只採用比猜的低的
     let level = this.forced ? forced : g.level;
-    if (!this.forced && saved && LEVELS.indexOf(saved) < LEVELS.indexOf(level)) level = saved;
+    if (saved && LEVELS.indexOf(saved.level) < LEVELS.indexOf(level)) level = saved.level;
     this.level = level;
-    this.maxDpr = Math.min(window.devicePixelRatio, { low: 1, mid: 1.5, high: 2 }[level]);
-    this.dpr = this.maxDpr;
+    this.maxDpr = Math.min(window.devicePixelRatio, { low: 1, mid: 2, high: 2 }[level]);
+    this.minDpr = Math.min(1, this.maxDpr);
+    // 起點：上次穩定的解析度；第一次來的手機從 1.5x 開始，有餘力再往上試
+    const start = saved?.dpr ?? (level === 'mid' ? 1.5 : this.maxDpr);
+    this.dpr = Math.max(this.minDpr, Math.min(this.maxDpr, start));
+    this.ceiling = this.maxDpr;   // 試過升上去又掉下來的那一格，一陣子內不再試
+    this.ceilingUntil = 0;
     this.samples = [];
     this.skipUntil = 0;
+    this.goodSince = performance.now();
+    this.trial = null;            // 剛升一格，觀察中：升之前的解析度
     this.onChange = null;
   }
 
@@ -67,16 +80,41 @@ export class Quality {
   pause(ms = 1500) {
     this.skipUntil = performance.now() + ms;
     this.samples.length = 0;
+    this.goodSince = performance.now();
   }
 
-  // 每畫一幀呼叫一次（閒置降到 30fps 時不呼叫）。取中位數，偶爾一兩幀卡頓不會誤判
+  // 每畫一幀呼叫一次（閒置降到 30fps 時不呼叫）。看沒趕上的幀佔多少，偶爾一兩幀卡頓不會誤判
   sample(dt) {
     if (this.forced || performance.now() < this.skipUntil) return;
     this.samples.push(dt);
-    if (this.samples.length < 90) return;
-    const s = this.samples.sort((a, b) => a - b), mid = s[s.length >> 1];
+    if (this.samples.length < WINDOW) return;
+    const slow = this.samples.filter((t) => t > SLOW).length / this.samples.length;
     this.samples.length = 0;
-    if (mid > 1 / 40) this.stepDown();
+    const now = performance.now();
+    if (slow > 0.25) {
+      // 剛升上去就變慢：退回去，這次不再往上試
+      if (this.trial !== null) {
+        this.ceiling = this.dpr - STEP;
+        this.ceilingUntil = now + RETRY;
+        this.set(this.trial);
+        this.trial = null;
+      } else this.stepDown();
+      this.goodSince = now;
+    } else {
+      if (slow < 0.05 && this.trial !== null && now - this.goodSince > 3000) {
+        this.trial = null;
+        save(this.level, this.dpr);
+      }
+      if (slow > 0.05) this.goodSince = now;
+      else if (now - this.goodSince > UP_AFTER) this.stepUp();
+    }
+  }
+
+  set(dpr) {
+    if (dpr === this.dpr) return;
+    this.dpr = dpr;
+    this.pause(1500);
+    this.onChange?.(this);
   }
 
   // 先關後製，再降解析度，最低到 1x
@@ -84,14 +122,23 @@ export class Quality {
     if (this.level === 'high') {
       this.level = 'mid';
       this.dpr = Math.min(this.dpr, 1.5);
-    } else if (this.dpr > 1) {
-      this.dpr = Math.max(1, this.dpr - 0.25);
-      if (this.dpr === 1) this.level = 'low';
-    } else {
+      this.maxDpr = Math.min(this.maxDpr, 1.5);
+      this.ceiling = Math.min(this.ceiling, this.maxDpr);
+      save(this.level, this.dpr);
+      this.pause(2000);
+      this.onChange?.(this);
       return;
     }
-    save(this.level);
-    this.pause(2000);
-    this.onChange?.(this);
+    if (this.dpr <= this.minDpr) return;
+    this.set(Math.max(this.minDpr, this.dpr - STEP));
+    save(this.level, this.dpr);
+  }
+
+  stepUp() {
+    if (performance.now() > this.ceilingUntil) this.ceiling = this.maxDpr;
+    const next = Math.min(this.ceiling, this.dpr + STEP);
+    if (next <= this.dpr) return;
+    this.trial = this.dpr;
+    this.set(next);
   }
 }

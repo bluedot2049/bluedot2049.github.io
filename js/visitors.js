@@ -979,7 +979,7 @@ class Visitor {
 
   placeBubble(camera) {
     const v = this.rig.root.position.clone();
-    v.y += (this.L.kind === 'rabbit' ? 1.8 : 1.55) * this.L.scale + this.j * 0.22;   // 同一船的人對話框高低錯開
+    v.y += (this.L.kind === 'rabbit' ? 1.8 : 1.55) * this.L.scale;
     v.project(camera);
     const b = this.bubble.style;
     if (v.z > 1) { b.visibility = 'hidden'; return; }

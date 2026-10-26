@@ -5,6 +5,7 @@ import { Character, isOutfit, randomOutfit } from './character.js';
 import { Manatee, TABLE_LINES } from './manatee.js';
 import { Animals, ANIMAL_LAYER } from './animals.js';
 import { Visitors } from './visitors.js';
+import { layoutBubbles } from './bubbles.js';
 import { UI } from './ui.js';
 import { bindJoystick } from './joystick.js';
 import { Multiplayer, EMOTES } from './multiplayer.js';
@@ -104,8 +105,8 @@ async function start() {
 
   const coarse = matchMedia('(pointer: coarse)').matches;
   const quality = new Quality(coarse, params);
-  // 有後製時由 SMAA 處理鋸齒，瀏覽器的多重取樣用不到
-  const renderer = new THREE.WebGLRenderer({ antialias: !quality.post && window.devicePixelRatio < 2, powerPreference: 'high-performance' });
+  // 有後製時由 SMAA 處理鋸齒，瀏覽器的多重取樣用不到。手機實際只畫 1 到 2 倍解析度，邊緣一樣會鋸齒，也要開
+  const renderer = new THREE.WebGLRenderer({ antialias: !quality.post, powerPreference: 'high-performance' });
   renderer.setPixelRatio(quality.dpr);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -336,7 +337,7 @@ async function start() {
     });
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals, visitors, quality };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals, visitors, quality, host };
 
   // 後製和著色器預先編譯同時進行；載不到就照原本的畫法
   let fx = null;
@@ -377,6 +378,7 @@ async function start() {
       if (host.group.visible) host.update(dt, player.pos.x, player.pos.z, camera, visitors.hostFocus());
       else host.hush();
     }
+    layoutBubbles();
     if (frame % 6 === 0) updateAction();
     if (world.outdoor) {
       const t = world.outdoor.outdoorness(player.pos.z);
