@@ -20,7 +20,7 @@ const ROOM_TYPES = {
   hall:     { w: 8, d: 8 },
   corridor: { w: 5, d: 12 },
   rotunda:  { r: 5, d: 10 },
-  outdoor:  { w: 40, d: 40 },
+  outdoor:  { w: 40, d: 62 },   // 深度要蓋到棧橋盡頭，尋路的格子才鋪得到
 };
 
 // 每種房型的預設：牆色、家具主題、地毯配色
@@ -1019,7 +1019,7 @@ export function buildWorld(scene, gallery) {
       // 房子外殼只在人走出去、鏡頭也在屋外時出現，不然會擋住室內
       outdoor.shell.visible = currentRoom === rooms.length - 1 && !outdoor.insideShell(cam);
       outdoor.sky.position.copy(cam);
-      if (rooms[rooms.length - 1].group.visible) outdoor.update(t);
+      if (rooms[rooms.length - 1].group.visible) outdoor.update(t, target);
       // 海的反射要多畫一次場景，只在人已經走到戶外、鏡頭也看得到海時才開
       const seaOn = currentRoom === rooms.length - 1 && cam.z < outdoor.door && seaInView(view);
       outdoor.water.visible = seaOn;

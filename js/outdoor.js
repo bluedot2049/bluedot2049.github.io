@@ -5,6 +5,8 @@ import * as THREE from 'three';
 import { Water } from '../vendor/Water.js';
 import { Kit, newBucket, mergeBucket, rng, buildWindow } from './props.js';
 import { buildArcane } from './arcane.js';
+import { buildHarbor, onJetty, JETTY } from './harbor.js';
+import { buildLore } from './lore.js';
 
 export const DROP = 1.6;
 const TW = 6, TD = 7;                  // 陽台半寬、深度
@@ -24,6 +26,7 @@ export const HORIZON = 0xe3a47e;
 
 export const OUTDOOR_ROOM = { id: 'outdoor', name: '宴', subtitle: 'Convivium', type: 'outdoor', paintings: [] };
 export const MEADOW_NAME = { name: '原野', subtitle: 'Prima Materia' };
+export const JETTY_NAME = { name: '渡口', subtitle: 'Ad Occidentem' };
 
 // ---------- 貼圖 ----------
 
@@ -681,6 +684,15 @@ export function buildOutdoor(room, h) {
   bk.emit(bucket, benchAt.x, benchAt.z, Math.PI);
   block(benchAt.x, benchAt.z, 0.85, 0.3);
 
+  // 海灣：棧橋、小島的白塔和黑袍訪客的船。棧橋盡頭的方台上一張長椅，面向夕陽
+  const harbor = buildHarbor({ group, h, Z, G, SEA_LEVEL, SEA_BED, REFLECT_LAYER });
+  for (const b of harbor.blocks) block(b.x, b.z, b.hw, b.hd);
+  const jettyBench = { x: JETTY.x, z: Z(JETTY.end - 2.4) };
+  const jk = new Kit(R);
+  parkBench(jk, G + 0.1);
+  jk.emit(bucket, jettyBench.x, jettyBench.z, Math.PI);
+  block(jettyBench.x, jettyBench.z, 0.85, 0.3);
+
   // 野餐墊和籃子
   const pic = { x: -6.5, z: Z(19.4) };
   const stripes = ['#b8423a', '#efe2c8'];
@@ -714,7 +726,7 @@ export function buildOutdoor(room, h) {
     const a = R() * Math.PI * 2, e = 0.92 + R() * 0.35;
     const x = Math.cos(a) * MEADOW.rx * e, rel = MEADOW.c + Math.sin(a) * MEADOW.rz * e;
     if (rel < TD + 2) continue;
-    const y = heightAt(x, Z(rel)), skip = nearTrail(x, Z(rel), 1.4);
+    const y = heightAt(x, Z(rel)), skip = nearTrail(x, Z(rel), 1.4) || onJetty(x, rel, -1.2);
     if (R() < 0.5) {
       const r = 0.25 + R() * 0.35;
       (skip ? skipK : k).rock(r, R() < 0.5 ? '#8a8078' : '#7a7068', x, y + r * 0.4, Z(rel), { sy: 0.7, ry: R() * 3 });
@@ -766,7 +778,8 @@ export function buildOutdoor(room, h) {
   // 鏡頭最低只到樹冠殼頂上，不會退進林子裡。高度取樹冠殼起伏的上限，再留一點空
   const camFloor = (x, z) => {
     const y = groundY(x, z), f = z0 - z > TD ? forest(x, z) : 0;
-    return f > 0 ? Math.max(y, heightAt(x, z) + f * (3.8 + vnoise(x * 0.2 + 11, z * 0.2 - 5) * 2.4) + 0.8) : y;
+    // 棧橋上往下看時，鏡頭不會鑽進海裡
+    return Math.max(SEA_LEVEL + 0.4, f > 0 ? Math.max(y, heightAt(x, z) + f * (3.8 + vnoise(x * 0.2 + 11, z * 0.2 - 5) * 2.4) + 0.8) : y);
   };
   {
     const VR = vk.R, nTree = coarse ? 70 : 120, nBush = coarse ? 60 : 100;
@@ -820,6 +833,7 @@ export function buildOutdoor(room, h) {
   for (const dx of [-0.45, 0.45]) seat(pic.x + dx, pic.z, 0.02, Math.PI);
   // 涼亭的石凳面向海。新座位一律加在最後，舊的座位編號不變，多人同步才對得上
   for (const dx of [-0.45, 0.45]) seat(pavBench.x + dx, pavBench.z, 0.45, Math.PI);
+  for (const dx of [-0.4, 0.4]) seat(jettyBench.x + dx, jettyBench.z, 0.45, Math.PI, false, jettyBench.x + dx, jettyBench.z - 0.75);
 
   // ---- 合併 ----
   k.emit(bucket, 0, 0, 0);
@@ -827,7 +841,7 @@ export function buildOutdoor(room, h) {
   const hillBucket = newBucket();
   vk.emit(hillBucket, 0, 0, 0);
   for (const o of h.bucketObjects(hillBucket)) { o.layers.enable(REFLECT_LAYER); group.add(o); }
-  meadowGroup.add(grass(terrain, z0, coarse ? 10000 : 20000, h.uTime, (x, z) => nearTrail(x, z, 0.6)));
+  meadowGroup.add(grass(terrain, z0, coarse ? 10000 : 20000, h.uTime, (x, z) => nearTrail(x, z, 0.6) || onJetty(x, z0 - z, -0.15)));
   meadowGroup.add(seeds(mz, h.uTime));
   meadowGroup.add(h.glowPoints(Array.from({ length: 28 }, () => {
     const a = R() * Math.PI * 2, e = Math.sqrt(R()) * 1.1;
@@ -838,6 +852,7 @@ export function buildOutdoor(room, h) {
   sky.layers.enable(REFLECT_LAYER);
   far.layers.enable(REFLECT_LAYER);
   group.add(sky, far);
+  const lore = buildLore({ group, sky, h, Z, heightAt, SUN_DIR, REFLECT_LAYER });
   const water = buildSea(mz, coarse);
   group.add(water);
 
@@ -859,6 +874,7 @@ export function buildOutdoor(room, h) {
     if (nearestOnLine(entPts, entCum, x, z).d < 1.3 - m) return true;
     const dp = Math.hypot(x - pc.x, z - pc.z);
     if (dp < PLAZA - m && (dp > PAV.r + m || rimLow(x - pc.x, z - pc.z))) return true;
+    if (onJetty(x, rel, m)) return true;
     return nearestOnLine(trailPts, trailCum, x, z).d < TRAIL_W - m;
   };
   // 點在小徑或涼亭旁邊時，拉回小徑上（不然會被拉回草原中心那條線上）
@@ -879,6 +895,7 @@ export function buildOutdoor(room, h) {
     // 涼亭石台上是平的；入口石階那一條接一道斜坡，走上去不會突然跳一格。台基其他幾面就是地面
     const dx = x - pc.x, dz = z - pc.z, dp = Math.hypot(dx, dz);
     if (dp < PAV.r) return F;
+    if (onJetty(x, rel)) return G + 0.1;
     const y = heightAt(x, z);
     const side = Math.abs(dx * Math.sin(ent) - dz * Math.cos(ent)), front = dx * Math.cos(ent) + dz * Math.sin(ent);
     const ramp = (front > 0 && side < 1.3) || rimLow(dx, dz);
@@ -889,12 +906,18 @@ export function buildOutdoor(room, h) {
     shell, sky, far, water, seats, host, groundY, camFloor,
     // 看得到海面的範圍：海灣起點往外一直到海的盡頭，左右放寬到整片海。鏡頭沒看到這塊就不用算倒影
     seaBox: new THREE.Box3(new THREE.Vector3(-300, SEA_LEVEL, mz - 300), new THREE.Vector3(300, SEA_LEVEL, Z(39))),
-    update: arcane.update,
+    update(t, target) {
+      arcane.update(t);
+      harbor.update(t);
+      lore.update(t, target);
+    },
     table: { x: tableX, z: Z(tableRel), hw: 0.5, hd: tableLen / 2 },
     door: z0,
     // 室內 0、走出後門 1，主程式用來切換光線和霧
     outdoorness: (z) => smooth(z0 + 3, z0 - 2, z),
     inMeadow: (z) => z0 - z > TD + SD * 0.6,
+    // 草原上這一點的地名：走到棧橋盡頭的方台是「渡口」，其他地方都是「原野」
+    placeAt: (x, z) => (onJetty(x, z0 - z) && z0 - z > JETTY.r1 ? JETTY_NAME : MEADOW_NAME),
     insideShell: (p) => Math.abs(p.x) < BW + 0.3 && p.z > z0 - 0.2 && p.z < zFront + 0.3,
     inField,
     // 小徑：草原外的部分不在尋路格子裡，沿著折線走
@@ -1190,6 +1213,7 @@ function buildSky() {
 
 // 遠山：三圈山脊，越遠越淡越接近天邊的顏色。面向夕陽的山背光偏紫，背對夕陽的山頂映著晚霞
 // 每圈是一條圍成環的帶子，上緣照雜訊起伏，底部沒入海平面以下
+// 另外回傳 crest：最遠那圈在夕陽右手邊的一個山頂，比前面兩圈都高、背後只有天空，古石圈就立在那裡
 function ridges(mz) {
   const N = 320, pos = [], col = [];
   const sun = new THREE.Vector2(SUN_DIR.x, SUN_DIR.z).normalize();
@@ -1201,16 +1225,19 @@ function ridges(mz) {
     { dist: 228, base: 14, amp: 60, gap: 0.82, mist: 0.58, seed: 23 },
   ];
   const ROWS = [0, 0.55, 1];
+  let crest = null;
   for (const L of LAYERS) {
     const hs = [];
     for (let i = 0; i <= N; i++) {
       const a = (i / N) * Math.PI * 2;
       let h = 0, w = 0.5, f = 1.4;
       for (let o = 0; o < 5; o++, w *= 0.5, f *= 2.1) h += w * (1 - Math.abs(vnoise(Math.cos(a) * f + L.seed, Math.sin(a) * f - L.seed) * 2 - 1));
-      // 夕陽正前方壓低，海平線上只剩低低的島
-      const facing = Math.cos(a) * sun.x + Math.sin(a) * sun.y;
-      hs.push((L.base + L.amp * Math.pow(h, 1.7)) * (1 - 0.9 * smooth(L.gap, 0.97, facing)));
+      // 夕陽正前方山脊沉進海裡，像岬角一路斜進水中，太陽底下留一段乾淨的海平線。近的那層先入海，遠的層一層層往太陽那頭多伸一點
+      // 只壓扁不沉下去的話，會剩一片平頂的薄板貼在海平線上，兩頭還收成尖角
+      const facing = Math.cos(a) * sun.x + Math.sin(a) * sun.y, sink = smooth(L.gap, 0.97, facing);
+      hs.push(Math.max(-5, (L.base + L.amp * Math.pow(h, 1.7)) * (1 - sink) - 12 * sink));
     }
+    L.hs = hs;
     const vert = (i, t) => {
       const a = (i / N) * Math.PI * 2, d = L.dist - (1 - t) * 22;
       const facing = Math.cos(a) * sun.x + Math.sin(a) * sun.y;
@@ -1229,6 +1256,52 @@ function ridges(mz) {
       }
     }
   }
+  // 石圈的位置：夕陽右手邊，最遠那圈的山頂從草原看過去要比前面兩圈高出一截，石頭才襯在天空上
+  const [L0, L1, L2] = LAYERS;
+  for (let i = 0; i <= N; i++) {
+    const a = (i / N) * Math.PI * 2, facing = Math.cos(a) * sun.x + Math.sin(a) * sun.y, side = Math.cos(a) * -sun.y + Math.sin(a) * sun.x;
+    if (side <= 0 || facing < 0.45 || facing > 0.9) continue;
+    const front = Math.max(L0.hs[i] / L0.dist, L1.hs[i] / L1.dist);
+    if (L2.hs[i] / L2.dist > front + 0.03 && (!crest || L2.hs[i] > crest.h)) crest = { i, h: L2.hs[i], d: L2.dist, hs: L2.hs, step: (Math.PI * 2) / N };
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(pos.length), 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return { geo, crest };
+}
+
+// 遠方雪峰：從草原望向海灣，在右手邊遠山的後面，比遠山高出一大截。房子後面的丘陵太高，放那裡看不到尖頂一圈圈往上收，每一圈的頂點各自抖一點，切面才不整齊
+// 面向夕陽的那幾面映著晚霞的粉，背光的偏紫；雪線以上是雪，以下是岩石，越往山腳越淡進天邊的顏色
+function snowPeak(mz) {
+  const N = 9, H = 80, RAD = 44, HF = [0, 0.3, 0.58, 0.82], RF = [1, 0.72, 0.45, 0.2];
+  const ang = 2.48, dist = 260, cx = Math.sin(ang) * dist, cz = mz + Math.cos(ang) * dist, y0 = SEA_LEVEL - 6;
+  const ring = HF.map((hf, k) => Array.from({ length: N }, (_, i) => {
+    const a = ((i + (hash(i, k) - 0.5) * 0.3) / N) * Math.PI * 2, r = RAD * RF[k] * (0.82 + hash(k + 5, i) * 0.36);
+    return new THREE.Vector3(cx + Math.cos(a) * r, y0 + (H + 6) * hf, cz + Math.sin(a) * r);
+  }));
+  const apex = new THREE.Vector3(cx + 3, y0 + H + 6, cz - 2);
+  const sun = SUN_DIR.clone().normalize(), haze = new THREE.Color(HORIZON);
+  const SNOW = [new THREE.Color('#a89cc4'), new THREE.Color('#ffd8d0')], ROCK = [new THREE.Color('#54466c'), new THREE.Color('#b07a80')];
+  const pos = [], col = [], c = new THREE.Color(), n = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), mid = new THREE.Vector3();
+  const tri = (a, b, d) => {
+    e1.subVectors(b, a);
+    e2.subVectors(d, a);
+    n.crossVectors(e1, e2).normalize();
+    mid.copy(a).add(b).add(d).divideScalar(3);
+    if (n.x * (mid.x - cx) + n.z * (mid.z - cz) < 0) n.negate();
+    // 正對我們的這面背著夕陽，但晚霞從整片天空照下來，側面的切面也映著粉色
+    const hf = (mid.y - y0) / (H + 6), lit = smooth(-0.7, 0.5, n.dot(sun));
+    const pal = hf > 0.5 + (hash(mid.x, mid.z) - 0.5) * 0.14 ? SNOW : ROCK;
+    c.copy(pal[0]).lerp(pal[1], lit).lerp(haze, 0.3 + (1 - hf) * 0.3);
+    for (const v of [a, b, d]) { pos.push(v.x, v.y, v.z); col.push(c.r, c.g, c.b); }
+  };
+  for (let k = 0; k < HF.length; k++) for (let i = 0; i < N; i++) {
+    const j = (i + 1) % N;
+    if (k === HF.length - 1) { tri(ring[k][i], ring[k][j], apex); continue; }
+    tri(ring[k][i], ring[k][j], ring[k + 1][j]);
+    tri(ring[k][i], ring[k + 1][j], ring[k + 1][i]);
+  }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(pos.length), 3));
@@ -1236,10 +1309,25 @@ function ridges(mz) {
   return geo;
 }
 
+// 古石圈：山頂上一圈高高的立石，有的歪了，有一塊倒在地上。遠遠看只是山脊上一排細細的齒
+// 遠山只是一圈直立的帶子，石頭得沿著帶子的上緣排，才會站在山頂上；石圈前後的深度壓扁到一公尺內
+function stoneRing(k, crest, mz) {
+  const R = rng('stones'), { hs, step, d } = crest, haze = new THREE.Color(HORIZON);
+  const top = (u) => { const j = Math.floor(u), f = u - j, n = hs.length - 1; return hs[Math.max(0, Math.min(n, j))] * (1 - f) + hs[Math.max(0, Math.min(n, j + 1))] * f; };
+  for (let s = 0; s < 9; s++) {
+    const th = (s / 9) * Math.PI * 2 + R() * 0.2, off = Math.sin(th) * 7, dd = d + Math.cos(th) * 0.8;
+    const u = crest.i + off / d / step, a = u * step, y = SEA_LEVEL + top(u), hgt = 3 + R() * 1.6;
+    const x = Math.cos(a) * dd, z = mz + Math.sin(a) * dd, c = new THREE.Color(R() < 0.5 ? '#4a3e58' : '#564866').lerp(haze, 0.4);
+    if (s === 5) k.box(1.4, 0.8, hgt, c, x, y + 0.1, z, { ry: -a + 0.6, ao: false });
+    else k.box(1.4, hgt + 1.5, 0.8, c, x, y + hgt / 2 - 0.75, z, { ry: -a + Math.PI / 2, rz: (R() - 0.5) * 0.3, ao: false });
+  }
+}
+
 // 遠山和雲：不受霧影響，自己帶空氣感的顏色
 function buildFar(mz, R) {
-  const k = new Kit(R);
-  k.lit.push(ridges(mz));
+  const k = new Kit(R), { geo: ridgeGeo, crest } = ridges(mz);
+  k.lit.push(ridgeGeo, snowPeak(mz));
+  if (crest) stoneRing(k, crest, mz);
   for (let i = 0; i < 14; i++) {
     const a = R() * Math.PI * 2, dist = 120 + R() * 60, y = 30 + R() * 30;
     const cx = Math.cos(a) * dist, cz = mz + Math.sin(a) * dist;

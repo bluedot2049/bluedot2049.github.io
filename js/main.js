@@ -144,7 +144,7 @@ async function start() {
     sun.position.copy(a.dir).lerp(b.dir, t);
   }
 
-  const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 300);
+  const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 400);
   camera.layers.enable(ANIMAL_LAYER);   // 動物只在圖層 1；海面反射的鏡頭只看 REFLECT_LAYER
 
   const world = buildWorld(scene, gallery);
@@ -164,7 +164,7 @@ async function start() {
   let lastInput = performance.now();
   let swipeHinted = false;
   let mp = null;
-  let inMeadow = false;
+  let place = null;   // 戶外現在在哪裡：null 是陽台，否則是草原或棧橋盡頭的地名
   let sitHinted = false;
 
   const player = new Player(camera, renderer.domElement, world, character, {
@@ -213,7 +213,7 @@ async function start() {
       quality.pause();
       const r = world.rooms[i].data;
       ui.toast(r.name, r.subtitle);
-      inMeadow = false;
+      place = null;
     },
   });
   scene.add(player.marker);
@@ -376,10 +376,13 @@ async function start() {
       applyEnv(t);
       ambience.setLevel(t);
       const meadow = player.room === world.rooms.length - 1 && world.outdoor.inMeadow(player.pos.z);
-      if (meadow !== inMeadow) {
-        inMeadow = meadow;
-        const r = meadow ? MEADOW_NAME : world.rooms[player.room].data;
-        ui.toast(r.name, r.subtitle);
+      const spot = meadow ? world.outdoor.placeAt(player.pos.x, player.pos.z) : null;
+      if (spot !== place) {
+        // 從棧橋盡頭走回草原時不再報一次「原野」
+        const back = place && spot === MEADOW_NAME;
+        place = spot;
+        const r = spot || world.rooms[player.room].data;
+        if (!back) ui.toast(r.name, r.subtitle);
       }
     }
     world.update(clock.elapsedTime, player.camPos, player.fadeTarget(), camera);
