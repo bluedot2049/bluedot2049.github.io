@@ -117,6 +117,39 @@ const VOICES = {
     o.connect(bp).connect(envelope(ctx, t, 0.06, d, 1.6)).connect(out);
     return d;
   },
+  // 呼、呼——：貓頭鷹低低的兩聲，第二聲長一點、尾巴往下掉
+  hoot(ctx, out, t, p) {
+    let tt = t;
+    for (const d of [0.22, 0.6]) {
+      const o = osc(ctx, 'sine', tt, d, [[0, 360 * p], [d * 0.3, 390 * p], [d, 330 * p]]);
+      lfo(ctx, tt, d, 7, 6 * p, o.frequency);
+      o.connect(biquad(ctx, 'lowpass', 900)).connect(envelope(ctx, tt, 0.05, d, 1.4)).connect(out);
+      tt += d + 0.16;
+    }
+    return tt - t;
+  },
+  // 土撥鼠平常細細地吱一兩聲
+  chirp(ctx, out, t, p) {
+    const n = 1 + (Math.random() < 0.5);
+    let tt = t;
+    for (let i = 0; i < n; i++) {
+      const d = 0.06;
+      osc(ctx, 'sine', tt, d, [[0, 1900 * p], [d, 2500 * p]]).connect(envelope(ctx, tt, 0.008, d)).connect(out);
+      tt += d + 0.1;
+    }
+    return tt - t;
+  },
+  // 土撥鼠示警：又尖又短的哨音，一口氣兩三聲
+  whistle(ctx, out, t, p) {
+    const n = 2 + (Math.random() < 0.5);
+    let tt = t;
+    for (let i = 0; i < n; i++) {
+      const d = 0.13;
+      osc(ctx, 'sine', tt, d, [[0, 3000 * p], [0.03, 3200 * p], [d, 2300 * p]]).connect(envelope(ctx, tt, 0.006, d, 1.2)).connect(out);
+      tt += d + 0.14;
+    }
+    return tt - t;
+  },
   // 呼嚕：低頻雜訊一秒抖二十幾下
   purr(ctx, out, t, p, noise) {
     const d = 2.6, am = ctx.createGain();

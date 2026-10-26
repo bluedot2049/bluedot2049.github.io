@@ -221,7 +221,7 @@ async function start() {
   const animals = new Animals({ world, shadowTex, player, camera, ambience });
   player.animals = animals;
   // 不定期搭船來看畫的冒險者
-  const visitors = new Visitors({ scene, world, shadowTex, player, camera, host, force: params.has('visit') });
+  const visitors = new Visitors({ scene, world, shadowTex, player, camera, host, animals, force: params.get('visit') });
   player.visitors = visitors;
   animals.visitors = visitors;
 

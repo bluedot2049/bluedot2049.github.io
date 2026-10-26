@@ -1,4 +1,4 @@
-// 動物：草原上的乳牛、母雞、鴨子和小狗，黑化走廊裡的黑貓。
+// 動物：草原上的乳牛、母雞、鴨子和小狗，山腳的土撥鼠，停在高處的貓頭鷹，黑化走廊裡的黑貓。
 // 每隻動物的日常行程（走去哪、停下來做什麼）由「動物編號 + 現在是第幾段時間」算出來，
 // 每位訪客的畫面算出同一個結果，不用傳任何資料。對玩家的反應（狗跑過來、雞被嚇跑）只演在自己的畫面上，
 // 演完再走回行程。摸摸用廣播同步，跟跳躍一樣只傳「誰摸了哪一隻」。
@@ -208,6 +208,67 @@ function catModel() {
   };
 }
 
+// 胖土撥鼠：圓滾滾的身體、短腿、兩顆門牙
+function marmotModel() {
+  const fur = '#8a6644', belly = '#c9a77c', dark = '#4e3826';
+  return {
+    cy: 0.16, shadow: [0.5, 0.65],
+    body: geo((k) => {
+      k.ball(0.17, fur, 0, 0, 0, { sx: 1.08, sy: 0.92, sz: 1.3, color2: '#a07a52' });
+      k.ball(0.13, belly, 0, -0.045, 0.07, { sx: 0.95, sy: 0.8, sz: 1.2 });
+    }),
+    head: { at: [0, 0.07, 0.19], geo: geo((k) => {
+      k.ball(0.11, fur, 0, 0.03, 0.03, { sx: 1.12, sy: 0.95 });
+      k.ball(0.06, belly, 0, -0.01, 0.1, { sx: 1.25, sy: 0.8 });
+      k.box(0.035, 0.022, 0.02, '#2a1a12', 0, 0.018, 0.16);
+      k.box(0.024, 0.032, 0.01, '#f4efe2', 0, -0.045, 0.142);
+      for (const s of [-1, 1]) {
+        k.ball(0.017, '#14100c', s * 0.055, 0.06, 0.1);
+        k.ball(0.03, dark, s * 0.078, 0.11, 0.0, { sz: 0.5 });
+      }
+    }) },
+    legs: { at: [[-0.1, -0.09, 0.12], [0.1, -0.09, 0.12], [-0.1, -0.09, -0.12], [0.1, -0.09, -0.12]], geo: geo((k) => {
+      k.box(0.06, 0.08, 0.065, dark, 0, -0.035, 0);
+      k.ball(0.035, dark, 0, -0.07, 0.015, { sy: 0.6 });
+    }) },
+    tail: { at: [0, -0.01, -0.21], geo: geo((k) => k.ball(0.045, dark, 0, 0, -0.04, { sz: 1.6 })) },
+  };
+}
+
+// 貓頭鷹：蛋形的身體、圓臉盤、一對大眼睛和耳羽，兩片翅膀各自能拍
+function owlModel() {
+  const B = '#7a5a3e', B2 = '#5a4230', face = '#e4d4b4';
+  return {
+    cy: 0.22, shadow: [0.4, 0.4],
+    body: geo((k) => {
+      k.ball(0.16, B, 0, 0, 0, { sy: 1.32, sz: 0.95, color2: '#9a7a56' });
+      k.ball(0.12, '#d8c49e', 0, -0.03, 0.075, { sy: 1.25, sz: 0.55 });
+      for (const [x, y] of [[-0.04, 0.02], [0.04, -0.03], [-0.02, -0.09], [0.05, -0.13], [0.0, 0.07]]) k.box(0.022, 0.012, 0.01, B2, x, y, 0.135);
+      k.box(0.13, 0.03, 0.12, B2, 0, -0.18, -0.12, { rx: -0.5 });
+    }),
+    head: { at: [0, 0.2, 0.0], geo: geo((k) => {
+      k.ball(0.135, B, 0, 0.04, 0, { sx: 1.18, sy: 0.92 });
+      for (const s of [-1, 1]) {
+        k.ball(0.065, face, s * 0.056, 0.035, 0.085, { sz: 0.42 });
+        k.cone(0.035, 0.1, B2, s * 0.09, 0.15, 0.0, { rz: -s * 0.35 });
+      }
+      k.cone(0.018, 0.05, '#c8a040', 0, 0.01, 0.13, { rx: Math.PI * 0.75 });
+    }) },
+    eyes: geo((k) => {
+      for (const s of [-1, 1]) {
+        k.ball(0.03, '#f0b830', s * 0.056, 0.045, 0.11, { sz: 0.45 });
+        k.ball(0.016, '#0a0806', s * 0.056, 0.045, 0.122, { sz: 0.5 });
+      }
+    }),
+    wings: { at: [[-0.15, 0.1, -0.01], [0.15, 0.1, -0.01]], geos: [-1, 1].map((s) => geo((k) => {
+      k.ball(0.15, B2, s * 0.01, -0.12, -0.01, { sx: 0.22, sy: 1.0, sz: 0.72, color2: B });
+    })) },
+    legs: { at: [[-0.05, -0.2, 0.03], [0.05, -0.2, 0.03]], geo: geo((k) => {
+      k.box(0.05, 0.02, 0.06, '#c8a040', 0, -0.01, 0.01);
+    }) },
+  };
+}
+
 // 把造型組成可以動的骨架：root 放在地上、轉向；body 在身體中心，趴下、坐下、翻肚都轉它
 function buildRig(m, shadowMat, scale) {
   const root = new THREE.Group(), body = new THREE.Group();
@@ -228,6 +289,7 @@ function buildRig(m, shadowMat, scale) {
   const legs = m.legs.at.map((at) => { const p = pivot(at); mesh(m.legs.geo, p); return p; });
   const tail = m.tail ? pivot(m.tail.at) : null;
   if (tail) mesh(m.tail.geo, tail);
+  const wings = m.wings ? m.wings.at.map((at, i) => { const p = pivot(at); mesh(m.wings.geos[i], p); return p; }) : null;
   const shadow = new THREE.Mesh(SHADOW_GEO, shadowMat);
   shadow.rotation.x = -Math.PI / 2;
   shadow.position.y = 0.015;
@@ -235,7 +297,7 @@ function buildRig(m, shadowMat, scale) {
   root.add(shadow);
   root.scale.setScalar(scale);
   root.traverse((o) => o.layers.set(ANIMAL_LAYER));
-  return { root, body, head, legs, tail, eyes, main, hits: [main, headMesh], cy: m.cy, headAt: head.position.clone() };
+  return { root, body, head, legs, tail, wings, eyes, main, shadow, hits: [main, headMesh], cy: m.cy, headAt: head.position.clone() };
 }
 
 // ---------- 動作 ----------
@@ -312,6 +374,49 @@ const POSES = {
     r.tail.rotation.set(-0.2, 0, Math.sin(t * (9 + 9 * a.happy)) * (0.3 + 0.5 * a.happy));
   },
 
+  // 站起來：身體立直、頭擺正、前腳收在肚子前面。吃東西是坐著用前腳捧著啃
+  marmot(r, a, W) {
+    const t = a.time + a.seed, s = Math.sin(a.phase), B = r.body, H = r.head;
+    const stand = W('stand'), eat = W('eat'), dig = W('dig'), groom = W('groom'), pet = W('petted');
+    const up = Math.min(1, stand + eat * 0.8 + groom * 0.8);
+    swing(r, a, 0.75, QUAD);
+    B.position.set(0, r.cy + Math.abs(s) * 0.02 * a.walk + up * 0.13 + pet * 0.02, -0.1 * up);
+    // 翻肚：側滾成仰躺，四隻腳在空中划
+    B.rotation.set(-1.3 * up + 0.4 * dig, 0, Math.sin(a.phase) * 0.14 * a.walk + 2.7 * pet);
+    r.legs.forEach((L, i) => {
+      const front = i < 2;
+      L.rotation.x += (front ? 0.85 : 1.3) * up;
+      if (front) {
+        L.rotation.x += -0.9 * eat + Math.sin(t * 6) * 0.15 * eat + Math.sin(t * 9 + i) * 0.4 * groom;
+        L.rotation.x += Math.sin(t * 17 + i * Math.PI) * 0.9 * dig;
+      }
+      L.rotation.x += Math.sin(t * 10 + i * 1.9) * 0.6 * pet;
+    });
+    H.rotation.x = 1.15 * up - 0.25 * stand + 0.5 * dig + Math.max(0, Math.sin(t * 7)) * 0.12 * eat + 0.35 * groom;
+    H.rotation.y = a.look + Math.round(Math.sin(t * 0.9) * 1.5) * 0.3 * stand;   // 站崗時一頓一頓地東張西望
+    H.rotation.z = Math.sin(t * 2) * 0.2 * pet;
+    r.tail.rotation.set(0.2 * up, Math.sin(t * 3) * 0.3 * (a.walk + pet), 0);
+  },
+
+  // 停著：半睡半醒、頭跟著人轉。飛：身體往前倒平，翅膀張開上下拍，起飛和降落時拍得快
+  owl(r, a, W) {
+    const t = a.time + a.seed, B = r.body, H = r.head, f = a.flyW, doze = W('doze'), preen = W('preen');
+    const flap = Math.sin(t * 15) * (0.35 + 0.5 * a.flap);
+    B.position.y = r.cy + Math.sin(t * 1.3) * 0.004;
+    B.rotation.set(1.1 * f, 0, 0);
+    B.scale.set(1 + 0.06 * doze, 1 - 0.04 * doze, 1);
+    r.wings.forEach((w, i) => {
+      const sgn = i ? 1 : -1;
+      w.rotation.set(0, 0, sgn * (f * (1.35 + flap) + 0.25 * preen * i));
+    });
+    for (const L of r.legs) L.rotation.x = 1.0 * f;
+    H.rotation.x = -1.0 * f + 0.25 * doze + 0.55 * preen;
+    H.rotation.y = a.look * (1 - f) + 2.2 * preen;
+    H.rotation.z = Math.sin(t * 0.6) * 0.3 * a.tilt;   // 歪頭
+    const blink = (t % 5.1) < 0.14;
+    r.eyes.scale.y = blink ? 0.1 : 1 - 0.82 * doze;
+  },
+
   cat(r, a, W) {
     const t = a.time + a.seed, B = r.body, H = r.head;
     const sleep = W('sleep'), groom = W('groom'), pet = W('petted');
@@ -351,10 +456,14 @@ const SPECIES = {
     stand: 0.95, petTime: 2.2, hear: 8, vol: 0.09, voice: 'peep', every: [3, 9], lookR: 2, lookMax: 0.9, bump: 1.2, fleeV: 1.8, skittish: true },
   dog: { name: '小狗', pose: 'dog', L: 11, walkV: 1.1, runV: 3.2, runChance: 0.3, gait: 14, turn: 7, acts: [['sniff', 3], ['sit', 3], ['zoom', 2], ['lie', 1]],
     stand: 0.8, petTime: 3, hear: 18, vol: 0.28, voice: 'bark', every: [30, 70], lookR: 6, lookMax: 0.9, greets: true },
+  marmot: { name: '土撥鼠', pose: 'marmot', L: 13, walkV: 0.5, gait: 26, turn: 6, acts: [['stand', 4], ['eat', 3], ['dig', 2], ['groom', 1]],
+    stand: 0.6, petTime: 3.2, hear: 14, vol: 0.2, voice: 'chirp', every: [20, 50], lookR: 4, lookMax: 0.9, bump: 1.3, fleeV: 2.6, skittish: true, burrow: true },
+  owl: { name: '貓頭鷹', pose: 'owl', L: 170, turn: 4, acts: [['doze', 4], ['look', 3], ['preen', 1]],
+    hear: 26, vol: 0.32, voice: 'hoot', every: [35, 80], lookR: 11, lookMax: 2.6, noPet: true },
   cat: { name: '黑貓', pose: 'cat', L: 45, walkV: 0.55, gait: 16, turn: 5, acts: [['sleep', 5], ['sit', 2], ['groom', 2]],
     stand: 0.68, petTime: 3.4, hear: 9, vol: 0.2, voice: 'meow', every: [40, 90], lookR: 3, lookMax: 0.8, bump: 0.85, fleeV: 2.2, aloof: true },
 };
-const NO_LOOK = new Set(['graze', 'peck', 'preen', 'sleep', 'groom', 'sniff', 'scratch', 'petted']);
+const NO_LOOK = new Set(['graze', 'peck', 'preen', 'sleep', 'groom', 'sniff', 'scratch', 'petted', 'dig']);
 
 class Animal {
   constructor(set, o) {
@@ -373,7 +482,7 @@ class Animal {
     this.scale = o.scale || 1;
     this.phase0 = hash(o.seed, 0, 99);
     this.rig = buildRig(o.model, set.shadowMat, this.scale);
-    for (const m of this.rig.hits) {
+    if (!this.spec.noPet) for (const m of this.rig.hits) {
       m.userData.animal = this;
       this.world.raycastTargets.push(m);
     }
@@ -397,6 +506,7 @@ class Animal {
     this.nextVoice = performance.now() / 1000 + this.spec.every[0] * Math.random();
     this.nextGreet = 0;
     this.nextGreetV = 0;     // 迎接訪客另外算
+    this.sink = 0;           // 土撥鼠鑽進洞裡：0 在地面上，1 整隻在洞裡
   }
 
   get name() { return this.spec.name; }
@@ -537,6 +647,7 @@ class Animal {
   // 往遠離 (fx, fz) 的方向跑開，正後方走不了就往兩側偏
   flee(fx, fz, dist, v) {
     if (!this.calm) return false;
+    if (this.spec.burrow) return this.hide();
     const base = Math.atan2(this.pos.x - fx, this.pos.z - fz);
     for (const off of [0, 0.5, -0.5, 1, -1, 1.6, -1.6]) {
       const a = base + off + (Math.random() - 0.5) * 0.4, d = dist * (0.8 + Math.random() * 0.4);
@@ -550,11 +661,21 @@ class Animal {
     return false;
   }
 
+  // 土撥鼠被嚇到：吹一聲哨，跑回洞口鑽進去，躲一陣子探頭看看，沒事才出來
+  hide() {
+    if (this.react?.kind === 'hide') return false;
+    this.react = { kind: 'hide', t: 0, stage: 'run', stay: 5 + Math.random() * 5 };
+    this.route = null;
+    this.say('whistle', 1.3);
+    return true;
+  }
+
   // 有人跳起來嚇到牠
   startle(x, z) {
     const sp = this.spec;
     if (!this.calm) return;
-    if (sp.skittish || sp.aloof) {
+    if (sp.burrow) this.hide();
+    else if (sp.skittish || sp.aloof) {
       if (this.flee(x, z, sp.aloof ? 3 : 2.6, sp.fleeV)) this.say(sp.voice);
     } else if (sp.greets) {
       if (this.react?.kind !== 'greet') this.react = { kind: 'hop', t: 0, from: { x, z } };
@@ -611,6 +732,20 @@ class Animal {
         return r.t < sp.petTime;
       case 'flee':
         return !this.goVia(r.x, r.z, r.v, dt, 0.1) && r.t < 5;
+      case 'hide': {
+        const b = this.home.burrow;
+        if (r.stage === 'run') {
+          if (this.goVia(b.x, b.z, sp.fleeV, dt, 0.05) || r.t > 6) { r.stage = 'in'; r.t0 = r.t; }
+          return true;
+        }
+        const u = r.t - r.t0;
+        this.pos.x = b.x;
+        this.pos.z = b.z;
+        if (u < r.stay) r.sink = 1;
+        else if (u < r.stay + 3) { r.sink = 0.55; r.act = 'stand'; r.face = P.pos; }   // 探頭出來看看
+        else r.sink = 0;
+        return u < r.stay + 3.6;
+      }
       case 'hop':
         r.face = r.from;
         r.act = 'hop';
@@ -717,8 +852,9 @@ class Animal {
     }
     this.look += (look - this.look) * Math.min(1, dt * 3);
 
+    this.sink += ((this.react?.sink ?? 0) - this.sink) * Math.min(1, dt * 7);
     const root = this.rig.root;
-    root.position.set(this.pos.x, this.world.groundY(this.pos.x, this.pos.z), this.pos.z);
+    root.position.set(this.pos.x, this.world.groundY(this.pos.x, this.pos.z) - this.sink * 0.5 * this.scale, this.pos.z);
     root.rotation.y = this.heading;
     POSES[sp.pose](this.rig, this, (n) => (this.act === n ? this.actW : 0));
 
@@ -726,6 +862,119 @@ class Animal {
     if (clock > this.nextVoice) {
       this.nextVoice = clock + sp.every[0] + Math.random() * (sp.every[1] - sp.every[0]);
       if (this.act !== 'sleep' && !this.react) this.say(sp.voice, 0.7);
+    }
+  }
+}
+
+// ---------- 貓頭鷹 ----------
+// 不在地上走：停在幾個高處，每一段時間由雜湊決定停哪裡，換地方就飛過去。大部分時間停在大樹上半睡半醒。
+// 人走近時頭跟著人轉，可以轉到背後；有人在附近跳起來就飛到別處，下一段時間再照行程回來
+class Owl extends Animal {
+  constructor(set, o) {
+    super(set, o);
+    this.perches = o.perches;
+    this.at = -1;
+    this.fly = null;
+    this.away = null;
+    this.y = 0;
+    this.flyW = 0;
+    this.flap = 0;
+    this.tilt = 0;
+    this.lookGoal = 0;
+    this.rig.shadow.visible = false;   // 停在高處，地上不畫影子
+  }
+
+  get perched() { return !this.fly && this.at >= 0; }
+
+  perchFor(now) {
+    const k = Math.floor(now / this.spec.L + this.phase0);
+    let sum = 0;
+    for (const p of this.perches) sum += p.w;
+    let u = hash(this.seed, k, 1) * sum;
+    for (let i = 0; i < this.perches.length; i++) if ((u -= this.perches[i].w) < 0) return { i, k };
+    return { i: 0, k };
+  }
+
+  takeOff(to) {
+    const a = this.at >= 0 ? this.perches[this.at] : { x: this.pos.x, y: this.y, z: this.pos.z }, b = this.perches[to];
+    const d = Math.hypot(b.x - a.x, b.z - a.z);
+    this.fly = { a, b, to, t: 0, T: 2.2 + d / 5.5, arc: 1.5 + d * 0.06 };
+    this.at = -1;
+  }
+
+  startle(x, z) {
+    if (this.fly || Math.hypot(this.pos.x - x, this.pos.z - z) > 6) return;
+    const n = this.perches.length, to = (this.at + 1 + Math.floor(Math.random() * (n - 1))) % n;
+    this.away = this.perchFor(Date.now() / 1000).k;
+    this.takeOff(to);
+    this.say('hoot', 0.6);
+  }
+
+  update(dt, now, env) {
+    if (!this.shown) {
+      this.placed = false;
+      this.fly = null;
+      return;
+    }
+    const sp = this.spec, P = env.player, clock = env.clock, plan = this.perchFor(now);
+    this.time += dt;
+    if (!this.placed) {
+      this.placed = true;
+      this.at = plan.i;
+      this.away = null;
+    }
+    if (this.away !== null && this.away !== plan.k) this.away = null;
+    if (!this.fly && this.away === null && this.at !== plan.i) this.takeOff(plan.i);
+
+    let x, y, z, h;
+    if (this.fly) {
+      const F = this.fly, u = Math.min(1, (F.t += dt) / F.T), e = smooth(u);
+      x = F.a.x + (F.b.x - F.a.x) * e;
+      z = F.a.z + (F.b.z - F.a.z) * e;
+      y = F.a.y + (F.b.y - F.a.y) * e + Math.sin(u * Math.PI) * F.arc;
+      h = Math.atan2(F.b.x - F.a.x, F.b.z - F.a.z);
+      this.flap = Math.max(1 - u / 0.25, (u - 0.8) / 0.2, 0.15);
+      if (u >= 1) {
+        this.at = F.to;
+        this.fly = null;
+      }
+    } else {
+      const p = this.perches[this.at];
+      x = p.x; y = p.y; z = p.z; h = p.h;
+    }
+    this.pos.set(x, 0, z);
+    this.y = y;
+    const flying = this.fly && this.fly.t > 0.15 && this.fly.t < this.fly.T - 0.25;
+    this.flyW += ((flying ? 1 : 0) - this.flyW) * Math.min(1, dt * 6);
+    this.heading += wrapAngle(h - this.heading) * Math.min(1, dt * (this.fly ? 6 : sp.turn));
+
+    // 停著的時候做什麼：每十二秒換一次；有人在附近就醒著
+    const pd = Math.hypot(P.pos.x - x, P.pos.z - z);
+    let want = this.fly ? null : pickAct(sp.acts, hash(this.seed, Math.floor(now / 12), 3));
+    if (want === 'doze' && pd < 7) want = 'look';
+    if (want !== this.act) {
+      this.actW -= dt * 2;
+      if (this.actW <= 0) { this.actW = 0; this.act = want; }
+    } else this.actW = Math.min(1, this.actW + dt * 1.2);
+
+    // 頭一頓一頓地轉向人，轉到背後也可以
+    if (!this.fly && pd < sp.lookR && this.act !== 'doze' && this.act !== 'preen') {
+      const g = Math.max(-sp.lookMax, Math.min(sp.lookMax, wrapAngle(Math.atan2(P.pos.x - x, P.pos.z - z) - this.heading)));
+      if (Math.abs(g - this.lookGoal) > 0.3) this.lookGoal = g;
+    } else if (this.act === 'look' && !this.fly) {
+      this.lookGoal = Math.round(Math.sin(now * 0.37 + this.seed) * 2) * 0.6;
+    } else this.lookGoal = 0;
+    this.look += (this.lookGoal - this.look) * Math.min(1, dt * 9);
+    this.tilt += ((this.act === 'look' || pd < 4 ? 1 : 0) - this.tilt) * Math.min(1, dt * 2);
+
+    const root = this.rig.root;
+    root.position.set(x, y, z);
+    root.rotation.y = this.heading;
+    POSES.owl(this.rig, this, (n) => (this.act === n ? this.actW : 0));
+
+    if (clock > this.nextVoice) {
+      this.nextVoice = clock + sp.every[0] + Math.random() * (sp.every[1] - sp.every[0]);
+      if (this.act !== 'doze' && !this.fly) this.say(sp.voice, 0.8);
     }
   }
 }
@@ -780,6 +1029,30 @@ export class Animals {
       const drake = add({ ...base, species: 'duck', model: model('duck-drake', () => duckModel(DUCKS.drake)), home: home(10, 28, 3.5), pitch: 0.85 });
       add({ ...base, species: 'duck', model: model('duck-hen', () => duckModel(DUCKS.hen)), home: drake.home, leader: drake, back: 0.8, side: 0.1, pitch: 1.05 });
       add({ ...base, species: 'dog', model: model('dog', dogModel), home: home(0, 22, 9) });
+
+      // 土撥鼠住在左邊山腳，各有一個洞，在洞口附近幾公尺內活動
+      const burrows = [[-21.5, 13.5], [-25, 21], [-23, 30.5]].map(([x, rel]) => world.findWalkable(x, out.door - rel, -10, out.door - 20)).filter(Boolean);
+      burrows.forEach((b, i) => {
+        const area = (x, z) => Math.hypot(x - b.x, z - b.z) < 4.2;
+        add({ room, area, species: 'marmot', model: model('marmot', marmotModel), home: { x: b.x, z: b.z, r: 3.5, burrow: b }, scale: 1 + i * 0.08, pitch: 1.1 - i * 0.08 });
+      });
+      if (burrows.length) {
+        const m = new THREE.Mesh(geo((k) => {
+          for (const b of burrows) {
+            const y = world.groundY(b.x, b.z);
+            k.cyl(0.3, 0.46, 0.14, '#6e5034', b.x, y + 0.03, b.z, { color2: '#8a6a48' }, 10);
+            k.cyl(0.19, 0.19, 0.02, '#1a120c', b.x, y + 0.1, b.z, {}, 10);
+          }
+        }), LIT);
+        m.layers.set(ANIMAL_LAYER);
+        room.group.add(m);
+      }
+
+      // 貓頭鷹最後加，前面動物的編號不變，多人同步摸摸才對得上
+      if (out.perches?.length) {
+        this.owl = new Owl(this, { room, area: () => false, species: 'owl', model: model('owl', owlModel), perches: out.perches, index: this.list.length, seed: seed++ });
+        this.list.push(this.owl);
+      }
     }
 
     // 黑貓住在黑化：在房間裡挑幾個走得到的角落，輪流去睡
@@ -809,7 +1082,7 @@ export class Animals {
     for (const d of this.list) {
       if (!d.spec.greets || !d.shown || d.speed < 2) continue;
       for (const a of this.list) {
-        if (a.spec.skittish && !a.react && Math.hypot(a.pos.x - d.pos.x, a.pos.z - d.pos.z) < 1.4) {
+        if (a.spec.skittish && !a.react && Math.hypot(a.pos.x - d.pos.x, a.pos.z - d.pos.z) < (a.spec.burrow ? 3 : 1.4)) {
           if (a.flee(d.pos.x, d.pos.z, 2.2, a.spec.fleeV) && Math.random() < 0.5) a.say(a.spec.voice);
         }
       }
@@ -820,7 +1093,7 @@ export class Animals {
   nearest(x, z) {
     let best = null, bd = Infinity;
     for (const a of this.list) {
-      if (!a.shown || a.react?.kind === 'flee') continue;
+      if (!a.shown || a.spec.noPet || a.react?.kind === 'flee' || a.react?.kind === 'hide') continue;
       const d = Math.hypot(a.pos.x - x, a.pos.z - z);
       if (d < a.spec.stand * a.scale + 1 && d < bd) { bd = d; best = a; }
     }
@@ -842,7 +1115,7 @@ export class Animals {
 
   startle(x, z) {
     for (const a of this.list) {
-      if (a.shown && Math.hypot(a.pos.x - x, a.pos.z - z) < (a.spec.solid ? 4 : 3.2)) a.startle(x, z);
+      if (a.shown && Math.hypot(a.pos.x - x, a.pos.z - z) < (a.spec.solid || a.spec.noPet ? 4.5 : a.spec.burrow ? 5 : 3.2)) a.startle(x, z);
     }
   }
 

@@ -5,10 +5,13 @@ import * as THREE from 'three';
 import { Kit, newBucket, rng } from './props.js';
 
 // 木棧橋：從草原右前方的邊上筆直伸出去，海灣正中間留給夕陽和白塔。盡頭是一塊方台。hw 是橋面半寬，ehw 是方台半寬
-export const JETTY = { x: 9, r0: 32, r1: 55, end: 59, hw: 0.9, ehw: 2.2 };
-export const onJetty = (x, rel, m = 0) =>
-  (Math.abs(x - JETTY.x) < JETTY.hw - m && rel > JETTY.r0 && rel < JETTY.r1 + 0.5) ||
-  (Math.abs(x - JETTY.x) < JETTY.ehw - m && rel > JETTY.r1 && rel < JETTY.end - m);
+// 橋面寬到兩個人錯身也走得過；邊上只留六成的角色半徑，走到橋邊不會先被擋住
+export const JETTY = { x: 9, r0: 32, r1: 55, end: 59, hw: 1.3, ehw: 2.2 };
+export const onJetty = (x, rel, m = 0) => {
+  const e = m > 0 ? m * 0.6 : m;
+  return (Math.abs(x - JETTY.x) < JETTY.hw - e && rel > JETTY.r0 && rel < JETTY.r1 + 0.5) ||
+    (Math.abs(x - JETTY.x) < JETTY.ehw - e && rel > JETTY.r1 && rel < JETTY.end - e);
+};
 
 const GOLD = '#d4a54a', POST = '#3e2c20';
 const ROBE = '#1c1822', ROBE_HI = '#3a3046';

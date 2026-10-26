@@ -130,7 +130,8 @@ body.flat #stage::after { display: none; }
   padding: 8px 16px;
   background: #fffaf0; color: #1a120c;
   border: 1px solid #1a120c; border-radius: 18px;
-  font-size: 15px; font-weight: 700; letter-spacing: .06em; white-space: nowrap;
+  font-size: 15px; font-weight: 700; letter-spacing: .06em; text-align: center;
+  width: max-content; max-width: min(78vw, 20em);
   opacity: 0; transition: opacity .5s, transform .18s ease-out;
 }
 .speech.show { opacity: 1; transform: translate(-50%, calc(-100% - 14px)); }

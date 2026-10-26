@@ -817,8 +817,9 @@ export function buildWorld(scene, gallery) {
   }
 
   // ---------- 尋路：地面切成格子跑 A*，再把折線拉直 ----------
+  // 戶外的格子鋪到山坡和涼亭（reachW），室內那幾列只有房間範圍是空的
   const CELL = 0.25;
-  const maxHalf = Math.max(...rooms.map((r) => r.halfW)) + 0.5;
+  const maxHalf = Math.max(...rooms.map((r) => r.reachW ?? r.halfW)) + 0.5;
   const gx0 = -maxHalf, gz0 = rooms[rooms.length - 1].zEnd - 0.5;
   const cols = Math.ceil((maxHalf * 2) / CELL), rows = Math.ceil((0.5 - gz0) / CELL);
   const grid = new Uint8Array(cols * rows);
@@ -848,24 +849,16 @@ export function buildWorld(scene, gallery) {
     return true;
   }
 
-  // 戶外山坡的小徑不在格子裡：起點或終點在小徑上時，草原那段照格子走到步道口，小徑那段沿著折線走
-  function findPath(sx, sz, tx, tz) {
-    if (walkable(tx, tz) && lineClear(sx, sz, tx, tz)) return [{ x: tx, z: tz }];
-    const tr = outdoor?.trail, a = tr ? tr.at(sx, sz) : null, b = tr ? tr.at(tx, tz) : null;
-    if (a === null && b === null) return gridPath(sx, sz, tx, tz);
-    const head = tr.pts[0];
-    const pre = a === null ? gridPath(sx, sz, head.x, head.z) : [];
-    const post = b === null ? gridPath(head.x, head.z, tx, tz) : [{ x: tx, z: tz }];
-    if (!pre || !post) return null;
-    return tr.around(sx, sz, [...pre, ...tr.between(a ?? 0, b ?? 0), ...post]);
-  }
+  // A* 用的陣列只配一次，每次尋路換一個戳記，不用每次清空
+  const N = cols * rows, gScore = new Float32Array(N), from = new Int32Array(N), seen = new Uint32Array(N), done = new Uint32Array(N);
+  let stamp = 0;
 
-  function gridPath(sx, sz, tx, tz) {
+  function findPath(sx, sz, tx, tz) {
     if (walkable(tx, tz) && lineClear(sx, sz, tx, tz)) return [{ x: tx, z: tz }];
     const s = nearestOpen(sx, sz), t = nearestOpen(tx, tz);
     if (!s || !t) return null;
-    const N = cols * rows, key = (c, r) => r * cols + c;
-    const g = new Float32Array(N).fill(Infinity), from = new Int32Array(N).fill(-1), closed = new Uint8Array(N);
+    const key = (c, r) => r * cols + c, cur = ++stamp;
+    const g = (k) => (seen[k] === cur ? gScore[k] : Infinity);
     const heap = [];
     const push = (k, f) => {
       heap.push([f, k]);
@@ -894,38 +887,47 @@ export function buildWorld(scene, gallery) {
     };
     const h = (c, r) => Math.hypot(c - t[0], r - t[1]);
     const sk = key(s[0], s[1]), tk = key(t[0], t[1]);
-    g[sk] = 0;
+    seen[sk] = cur;
+    gScore[sk] = 0;
+    from[sk] = -1;
     push(sk, h(s[0], s[1]));
+    let found = sk === tk;
     while (heap.length) {
       const k = pop();
-      if (k === tk) break;
-      if (closed[k]) continue;
-      closed[k] = 1;
-      const c = k % cols, r = (k / cols) | 0;
+      if (k === tk) { found = true; break; }
+      if (done[k] === cur) continue;
+      done[k] = cur;
+      const c = k % cols, r = (k / cols) | 0, gk = gScore[k];
       for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
         if (!dr && !dc) continue;
         const nc = c + dc, nr = r + dr;
         if (!open(nc, nr)) continue;
         if (dr && dc && (!open(c + dc, r) || !open(c, r + dr))) continue;   // 不切角
-        const nk = key(nc, nr), ng = g[k] + (dr && dc ? 1.414 : 1);
-        if (ng < g[nk]) { g[nk] = ng; from[nk] = k; push(nk, ng + h(nc, nr)); }
+        const nk = key(nc, nr), ng = gk + (dr && dc ? 1.414 : 1);
+        if (ng < g(nk)) { seen[nk] = cur; gScore[nk] = ng; from[nk] = k; push(nk, ng + h(nc, nr)); }
       }
     }
-    if (from[tk] === -1 && tk !== sk) return null;
+    if (!found) return null;
     const cells = [];
     for (let k = tk; k !== -1; k = from[k]) cells.push({ x: gx0 + ((k % cols) + 0.5) * CELL, z: gz0 + (((k / cols) | 0) + 0.5) * CELL });
     cells.reverse();
     if (walkable(tx, tz)) cells.push({ x: tx, z: tz });
-    // 拉直：從目前的點一路往後找，能直線走到的最遠點就是下一個轉折
+    // 拉直：只在格子路線轉彎的地方試，看從上一個轉折能不能直線走過去，走不過去就把前一個彎留下來
+    const turns = cells.filter((p, i) => {
+      if (i === 0 || i === cells.length - 1) return true;
+      const a = cells[i - 1], b = cells[i + 1];
+      return Math.abs((p.x - a.x) * (b.z - p.z) - (p.z - a.z) * (b.x - p.x)) > 1e-6;
+    });
     const out = [];
-    let ax = sx, az = sz, i = 0;
-    while (i < cells.length) {
-      let j = cells.length - 1;
-      while (j > i && !lineClear(ax, az, cells[j].x, cells[j].z)) j--;
-      out.push(cells[j]);
-      ax = cells[j].x; az = cells[j].z;
-      i = j + 1;
+    let ax = sx, az = sz, prev = null;
+    for (const p of turns) {
+      if (prev && !lineClear(ax, az, p.x, p.z)) {
+        out.push(prev);
+        ax = prev.x; az = prev.z;
+      }
+      prev = p;
     }
+    out.push(prev);
     return out;
   }
 
