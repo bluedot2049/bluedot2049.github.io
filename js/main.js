@@ -397,6 +397,73 @@ async function start() {
   if (params.has('photo')) photo.enter();
   else ui.hint(coarse ? '右下搖桿或點地面走路　拖曳轉視角' : '點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下　Enter 看畫', 6000);
 
+  // 照鏡子時：太靠近玩家或擋在鏡頭與玩家之間的訪客與其他玩家淡成半透明
+  let mirrorFading = false;
+  function updateMirrorFade(dt) {
+    const isMirror = player.focus?.kind === 'mirror';
+    if (!isMirror && !mirrorFading) return false;
+
+    const cam = player.focus?.camPos;
+    const px = player.pos.x, pz = player.pos.z;
+    const cx = cam?.x ?? 0, cz = cam?.z ?? 0;
+    const dx = isMirror && cam ? px - cx : 0, dz = isMirror && cam ? pz - cz : 0;
+    const l2 = dx * dx + dz * dz;
+
+    let busy = false;
+    let anyFaded = false;
+
+    const check = (obj, x, z) => {
+      let target = 1.0;
+      if (isMirror && cam) {
+        // 先做粗篩：超出 4m 方框就跳過計算
+        if (Math.abs(x - px) < 4 && Math.abs(z - pz) < 4) {
+          const dP = Math.hypot(x - px, z - pz);
+          const dC = Math.hypot(x - cx, z - cz);
+          let dL = 999;
+          if (l2 > 0) {
+            const t = Math.max(0, Math.min(1, ((x - cx) * dx + (z - cz) * dz) / l2));
+            dL = Math.hypot(x - (cx + t * dx), z - (cz + t * dz));
+          }
+          if (dL < 0.95 || dP < 1.8 || dC < 1.1) {
+            target = 0.18;
+            anyFaded = true;
+          }
+        }
+      }
+
+      const cur = obj._ghostAlpha ?? 1.0;
+      if (Math.abs(cur - target) > 0.005) {
+        const next = cur + (target - cur) * Math.min(1, dt * 10);
+        obj._ghostAlpha = next;
+        obj.setGhost(next);
+        busy = true;
+        if (next < 0.99) anyFaded = true;
+      } else if (cur !== target) {
+        obj._ghostAlpha = target;
+        obj.setGhost(target);
+        if (target < 0.99) anyFaded = true;
+      } else if (cur < 0.99) {
+        anyFaded = true;
+      }
+    };
+
+    if (visitors?.list) {
+      for (const v of visitors.list) {
+        if (v.shown && !v.aboard) check(v, v.pos.x, v.pos.z);
+        else if (v._ghostAlpha && v._ghostAlpha < 1.0) check(v, v.pos.x, v.pos.z);
+      }
+    }
+    if (mp?.others) {
+      for (const [, o] of mp.others) {
+        if (o.ch.group.visible) check(o.ch, o.pos.x, o.pos.z);
+        else if (o.ch._ghostAlpha && o.ch._ghostAlpha < 1.0) check(o.ch, o.pos.x, o.pos.z);
+      }
+    }
+
+    mirrorFading = anyFaded || busy;
+    return busy;
+  }
+
   // 沒在動的時候降到約 30fps，省電
   const clock = new THREE.Clock();
   let frame = 0;
@@ -408,6 +475,7 @@ async function start() {
     visitors.update(dt);
     manatee.update(dt, player.pos.x, player.pos.z, camera);
     const othersMoving = mp ? mp.update(dt, performance.now()) : false;
+    const fading = updateMirrorFade(dt);
     if (host) {
       host.group.visible = world.rooms[world.rooms.length - 1].group.visible;
       if (host.group.visible) host.update(dt, player.pos.x, player.pos.z, camera, visitors.hostFocus());
@@ -434,7 +502,7 @@ async function start() {
     if (photo.active) world.update(clock.elapsedTime, photo.pos, photo.fadeTarget(), camera);
     else world.update(clock.elapsedTime, player.camPos, player.fadeTarget(), camera);
     frame++;
-    const idle = !photo.active && !player.moving && !othersMoving && performance.now() - lastInput > 2000;
+    const idle = !photo.active && !player.moving && !othersMoving && !fading && performance.now() - lastInput > 2000;
     if (idle && frame % 2) return;
     if (!idle) quality.sample(dt);
     if (stats) renderer.info.reset();

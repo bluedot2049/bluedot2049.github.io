@@ -596,6 +596,32 @@ export class Character {
     this.shadow.material.dispose();   // 影子的貼圖是共用的，不丟
   }
 
+  // 照鏡子時太靠近淡出成半透明
+  setGhost(alpha) {
+    if (this._ghost === alpha) return;
+    this._ghost = alpha;
+    const faded = alpha < 0.99;
+    if (this.mat.transparent !== faded) {
+      this.mat.transparent = faded;
+      this.mat.depthWrite = !faded;
+      this.faceMat.transparent = faded;
+      this.faceMat.depthWrite = !faded;
+      this.faceMat.alphaTest = faded ? 0.05 : 0.5;
+      this.shadow.visible = !faded;
+    }
+    this.mat.opacity = alpha;
+    this.faceMat.opacity = alpha;
+    if (this.foodMesh) {
+      this.foodMesh.traverse((m) => {
+        if (m.isMesh) {
+          m.material.transparent = faded;
+          m.material.depthWrite = !faded;
+          m.material.opacity = alpha;
+        }
+      });
+    }
+  }
+
   // 拿起點心。kind 為 0 就是空手
   hold(kind, bites = 0) {
     if (this.foodMesh) {

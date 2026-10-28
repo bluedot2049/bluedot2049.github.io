@@ -355,7 +355,8 @@ const letterGeo = () => once('letter', (k) => {
 function buildRig(L, shadowMat) {
   const W = L.W, root = new THREE.Group(), body = new THREE.Group(), geos = [];
   root.add(body);
-  const mesh = (g, parent, own = true) => { if (own) geos.push(g); const m = new THREE.Mesh(g, LIT); parent.add(m); return m; };
+  const mat = LIT.clone();
+  const mesh = (g, parent, own = true) => { if (own) geos.push(g); const m = new THREE.Mesh(g, mat); parent.add(m); return m; };
   const pivot = (x, y) => { const p = new THREE.Group(); p.position.set(x, y, 0); p.rotation.order = 'YXZ'; body.add(p); return p; };
   mesh(bodyGeo(L), body);
   const head = pivot(0, NECK);
@@ -365,11 +366,11 @@ function buildRig(L, shadowMat) {
   mesh(armGeo(L, true), armR);
   const leg = legGeo(L);
   geos.push(leg);
-  const legs = [-1, 1].map((s) => { const p = pivot(s * 0.11 * W, HIP); p.add(new THREE.Mesh(leg, LIT)); return p; });
+  const legs = [-1, 1].map((s) => { const p = pivot(s * 0.11 * W, HIP); p.add(new THREE.Mesh(leg, mat)); return p; });
   const food = mesh(foodGeo(0), armR, false);
   food.position.set(0, -0.42, 0.07);
   food.visible = false;
-  const rig = { root, body, head, armL, armR, legs, food, geos, staff: L.weapon === 'staff' };
+  const rig = { root, body, head, armL, armR, legs, food, geos, mat, staff: L.weapon === 'staff' };
   if (L.gear === 'lute') {
     rig.lute = mesh(luteGeo(), body, false);
     rig.luteBack = { x: 0.06, y: 0.6, z: -0.27 * W - 0.06 };
@@ -822,11 +823,31 @@ class Visitor {
     b.top = ((1 - v.y) / 2) * window.innerHeight + 'px';
   }
 
+  // 照鏡子時太靠近淡出成半透明
+  setGhost(alpha) {
+    if (this._ghost === alpha) return;
+    this._ghost = alpha;
+    const faded = alpha < 0.99;
+    const mat = this.rig.mat;
+    if (mat) {
+      if (mat.transparent !== faded) {
+        mat.transparent = faded;
+        mat.depthWrite = !faded;
+        this.rig.shadow.visible = !faded;
+      }
+      mat.opacity = alpha;
+    }
+    if (this.bubble) {
+      this.bubble.style.opacity = faded ? '0' : '';
+    }
+  }
+
   dispose() {
     this.hush();
     this.bubble?.remove();
     this.rig.root.removeFromParent();
     for (const g of this.rig.geos) g.dispose();
+    this.rig.mat?.dispose();
     if (this.rig.line) {
       for (const o of [this.rig.line, this.rig.bob]) { o.removeFromParent(); o.geometry.dispose(); }
     }
