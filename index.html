@@ -25,6 +25,9 @@
       <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.5v5h3.2l4.3 3.5v-12L7.2 9.5z"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5"/></symbol>
       <symbol id="i-emote" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M8.6 13.6c1.8 2 5 2 6.8 0"/><path d="M9.3 9.6v.6M14.7 9.6v.6"/></symbol>
       <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+      <symbol id="i-camera" viewBox="0 0 24 24"><path d="M3.5 8.5h3.6l1.7-2.5h6.4l1.7 2.5h3.6v10h-17z"/><circle cx="12" cy="13.2" r="3.3"/></symbol>
+      <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V4.5M8 8.2l4-3.7 4 3.7"/><path d="M8.5 11H6v8.5h12V11h-2.5"/></symbol>
+      <symbol id="i-save" viewBox="0 0 24 24"><path d="M12 4.5V15M8 11.3l4 3.7 4-3.7"/><path d="M5.5 19.5h13"/></symbol>
     </defs>
   </svg>
 
@@ -47,6 +50,7 @@
   <div id="top-btns">
     <span id="online" hidden></span>
     <button id="sound-btn" class="icon-btn round" aria-label="靜音" title="靜音" hidden><svg class="on"><use href="#i-sound"/></svg><svg class="off"><use href="#i-mute"/></svg></button>
+    <button id="photo-btn" class="icon-btn round" aria-label="攝影模式" title="攝影模式（P）"><svg><use href="#i-camera"/></svg></button>
     <button id="recenter-btn" class="icon-btn round" aria-label="視角回正" title="視角回正（R）"><svg><use href="#i-recenter"/></svg></button>
     <button id="list-btn" class="icon-btn" aria-label="作品清單" title="作品清單"><svg><use href="#i-list"/></svg><span>清單</span></button>
   </div>
@@ -84,6 +88,30 @@
     <h2>鏡子<small>Speculum</small></h2>
     <div id="dress-rows"></div>
   </aside>
+
+  <!-- 攝影模式：取景框裡看到的就是拍下來的樣子 -->
+  <div id="photo" hidden>
+    <div id="ph-frame"><div class="grain"></div><div class="vig"></div><div class="grid"></div><div class="sig"></div></div>
+    <div id="ph-rec" hidden><i></i><span>00:00</span></div>
+    <div id="ph-zoom"></div>
+    <div id="ph-bar"><div id="ph-chips"></div></div>
+    <button id="ph-exit" class="icon-btn round" aria-label="離開攝影模式" title="離開（Esc）"><svg><use href="#i-close"/></svg></button>
+    <div id="ph-shoot">
+      <button id="ph-shutter" aria-label="拍照" title="拍照（空白鍵）"></button>
+      <button id="ph-record" aria-label="錄影" title="錄影，最長一分鐘"><i></i></button>
+    </div>
+    <button id="ph-up" class="seal ph-seal" aria-label="升高">升</button>
+    <button id="ph-down" class="seal ph-seal" aria-label="降低">降</button>
+    <div id="ph-result" hidden>
+      <div id="ph-media"></div>
+      <p id="ph-tip"></p>
+      <div class="ph-actions">
+        <button id="ph-share" class="btn primary"><svg><use href="#i-share"/></svg>分享</button>
+        <button id="ph-save" class="btn"><svg><use href="#i-save"/></svg>下載</button>
+        <button id="ph-again" class="btn">繼續拍</button>
+      </div>
+    </div>
+  </div>
 
   <div id="viewer">
     <img id="viewer-img" alt="">

@@ -52,6 +52,7 @@ export class Player {
     this.marker = this.makeMarker();
     this.markerT = 1;
     this.moving = true;
+    this.paused = false;            // 攝影模式：不接輸入，鏡頭交給 photo.js
     this.desiredCamera(this.camPos, this.camLook);
     this.bind();
   }
@@ -74,6 +75,7 @@ export class Player {
     const chord = (e) => { if (e.pointerType === 'mouse') this.mouseRun = (e.buttons & 3) === 3; };
 
     el.addEventListener('pointerdown', (e) => {
+      if (this.paused) return;
       // 右鍵按下就直接當成拖曳轉鏡頭，不會觸發走路
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, drag: e.button === 2, mouse: e.pointerType === 'mouse' });
       el.setPointerCapture(e.pointerId);
@@ -87,7 +89,7 @@ export class Player {
     el.addEventListener('pointermove', (e) => {
       chord(e);
       const p = pts.get(e.pointerId);
-      if (!p) return;
+      if (!p || this.paused) return;
       if (this.mouseRun) p.drag = true;   // 同按兩鍵時照樣可以拖曳轉向，放開也不算點地面
       const dx = e.clientX - p.x, dy = e.clientY - p.y;
       p.x = e.clientX;
@@ -112,6 +114,7 @@ export class Player {
       pts.delete(e.pointerId);
       chord(e);
       if (e.type === 'pointercancel') this.mouseRun = false;
+      if (this.paused) { pts.clear(); pinch = null; multi = false; return; }
       if (e.type === 'pointerup' && !p.drag && !multi) this.tap(e.clientX, e.clientY);
       if (e.type === 'pointerup' && p.swipe && !multi && Math.abs(e.clientX - p.sx) > SWIPE_MIN) this.switchPainting(e.clientX < p.sx ? 1 : -1);
       if (pts.size < 2) pinch = null;
@@ -120,12 +123,14 @@ export class Player {
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
     el.addEventListener('wheel', (e) => {
+      if (this.paused) return;
       e.preventDefault();
       this.camDist = THREE.MathUtils.clamp(this.camDist * (1 + e.deltaY * 0.001), DIST_MIN, DIST_MAX);
       this.events.onInput('drag');
     }, { passive: false });
 
     window.addEventListener('keydown', (e) => {
+      if (this.paused) return;
       if (e.key === 'Enter') {
         e.preventDefault();
         this.action();
@@ -567,14 +572,17 @@ export class Player {
     ch.group.rotation.y = this.heading;
     ch.update(dt, this.speed);
 
-    const dPos = new THREE.Vector3(), dLook = new THREE.Vector3();
-    this.desiredCamera(dPos, dLook);
-    const f = 1 - Math.exp(-dt * (this.focus?.camPos ? 3.2 : 5));
-    this.camPos.lerp(dPos, f);
-    this.camLook.lerp(dLook, f);
-    this.camera.position.copy(this.camPos);
-    this.camera.lookAt(this.camLook);
-    const settling = this.camPos.distanceToSquared(dPos) > 1e-4 || this.camLook.distanceToSquared(dLook) > 1e-4;
+    let settling = false;
+    if (!this.paused) {
+      const dPos = new THREE.Vector3(), dLook = new THREE.Vector3();
+      this.desiredCamera(dPos, dLook);
+      const f = 1 - Math.exp(-dt * (this.focus?.camPos ? 3.2 : 5));
+      this.camPos.lerp(dPos, f);
+      this.camLook.lerp(dLook, f);
+      this.camera.position.copy(this.camPos);
+      this.camera.lookAt(this.camLook);
+      settling = this.camPos.distanceToSquared(dPos) > 1e-4 || this.camLook.distanceToSquared(dLook) > 1e-4;
+    }
 
     this.moving = this.speed > 0.05 || settling || turn !== 0 || ch.busy;
     if (this.markerT < 1) {

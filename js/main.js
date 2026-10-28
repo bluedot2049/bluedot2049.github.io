@@ -14,6 +14,7 @@ import { Ambience } from './ambience.js';
 import { HORIZON, SUN_DIR, MEADOW_NAME, REFLECT_LAYER } from './outdoor.js';
 import { Quality } from './quality.js';
 import { createPostFX } from './postfx.js';
+import { PhotoMode } from './photo.js';
 
 async function loadJSON(url) {
   const res = await fetch(url, { cache: 'no-cache' });
@@ -38,16 +39,17 @@ function hasWebGL() {
 }
 
 // 關掉右鍵選單和圖片拖曳，避免操作時跳出「另存圖片」
-document.addEventListener('contextmenu', (e) => e.preventDefault());
-// iOS 不一定遵守 touch-action，拖搖桿時會把整頁往下拉；只留抽屜和清單可以捲動
+// 拍好的照片要能長按存起來，那裡不擋
+document.addEventListener('contextmenu', (e) => { if (!e.target.closest('#ph-media')) e.preventDefault(); });
+// iOS 不一定遵守 touch-action，拖搖桿時會把整頁往下拉；只留抽屜、清單和攝影模式的選項列可以捲動
 // 萬一頁面已經被放大，就不擋，讓人能用雙指縮回來
 document.addEventListener('touchmove', (e) => {
   if (window.visualViewport && window.visualViewport.scale > 1.01) return;
-  if (!e.target.closest('#sheet, #list')) e.preventDefault();
+  if (!e.target.closest('#sheet, #list, #ph-bar')) e.preventDefault();
 }, { passive: false });
 // iOS 的雙指縮放整頁
 document.addEventListener('gesturestart', (e) => e.preventDefault());
-document.addEventListener('dragstart', (e) => { if (e.target.tagName === 'IMG') e.preventDefault(); });
+document.addEventListener('dragstart', (e) => { if (e.target.tagName === 'IMG' && !e.target.closest('#ph-media')) e.preventDefault(); });
 
 // 自己的配色存在這台裝置上，下次來還是同一套。第一次來隨機配一套
 function loadOutfit() {
@@ -238,7 +240,7 @@ async function start() {
 
   // 手機操作：搖桿走路，靠近畫作或鏡子時出現按鈕
   if (coarse) document.body.classList.add('touch');
-  bindJoystick(document.getElementById('joy'), document.getElementById('joy-knob'), (x, y) => player.setJoystick(x, y));
+  bindJoystick(document.getElementById('joy'), document.getElementById('joy-knob'), (x, y) => (photo.active ? photo.setJoystick(x, y) : player.setJoystick(x, y)));
   document.getElementById('jump-btn').addEventListener('pointerdown', (e) => { e.preventDefault(); player.jump(); });
   const sitBtn = document.getElementById('sit-btn');
   sitBtn.addEventListener('click', () => player.toggleSit());
@@ -337,10 +339,19 @@ async function start() {
     });
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals, visitors, quality, host };
-
   // 後製和著色器預先編譯同時進行；載不到就照原本的畫法
   let fx = null;
+
+  // 攝影模式：右上角相機按鈕或 P 鍵進出
+  const photo = new PhotoMode({
+    renderer, camera, player, world, character, ambience, ui, coarse,
+    title: gallery.title || '煉金畫廊',
+    render: (dt) => (fx ? fx.render(dt) : renderer.render(scene, camera)),
+    resizeFX: (w, h) => fx?.setSize(w, h),
+  });
+  document.getElementById('photo-btn').addEventListener('click', () => photo.enter());
+
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals, visitors, quality, host, photo };
   const fxJob = quality.post ? createPostFX(renderer, scene, camera).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
@@ -361,7 +372,8 @@ async function start() {
   const stats = params.has('debug') ? debugStats(renderer, quality) : null;
 
   ui.loading(null);
-  ui.hint(coarse ? '右下搖桿或點地面走路　拖曳轉視角' : '點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下　Enter 看畫', 6000);
+  if (params.has('photo')) photo.enter();
+  else ui.hint(coarse ? '右下搖桿或點地面走路　拖曳轉視角' : '點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下　Enter 看畫', 6000);
 
   // 沒在動的時候降到約 30fps，省電
   const clock = new THREE.Clock();
@@ -369,6 +381,7 @@ async function start() {
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
     player.update(dt);
+    photo.update(dt);
     animals.update(dt);
     visitors.update(dt);
     manatee.update(dt, player.pos.x, player.pos.z, camera);
@@ -380,13 +393,15 @@ async function start() {
     }
     layoutBubbles();
     if (frame % 6 === 0) updateAction();
+    // 攝影模式時，光線、聲音、牆跟著鏡頭走
+    const view = photo.active ? photo.pos : player.pos;
     if (world.outdoor) {
-      const t = world.outdoor.outdoorness(player.pos.z);
+      const t = world.outdoor.outdoorness(view.z);
       applyEnv(t);
       ambience.setLevel(t);
       const meadow = player.room === world.rooms.length - 1 && world.outdoor.inMeadow(player.pos.z);
       const spot = meadow ? world.outdoor.placeAt(player.pos.x, player.pos.z) : null;
-      if (spot !== place) {
+      if (spot !== place && !photo.active) {
         // 從棧橋盡頭走回草原時不再報一次「原野」
         const back = place && spot === MEADOW_NAME;
         place = spot;
@@ -394,14 +409,16 @@ async function start() {
         if (!back) ui.toast(r.name, r.subtitle);
       }
     }
-    world.update(clock.elapsedTime, player.camPos, player.fadeTarget(), camera);
+    if (photo.active) world.update(clock.elapsedTime, photo.pos, photo.fadeTarget(), camera);
+    else world.update(clock.elapsedTime, player.camPos, player.fadeTarget(), camera);
     frame++;
-    const idle = !player.moving && !othersMoving && performance.now() - lastInput > 2000;
+    const idle = !photo.active && !player.moving && !othersMoving && performance.now() - lastInput > 2000;
     if (idle && frame % 2) return;
     if (!idle) quality.sample(dt);
     if (stats) renderer.info.reset();
     if (fx) fx.render(dt);
     else renderer.render(scene, camera);
+    photo.afterRender();
     stats?.(dt);
   });
 }

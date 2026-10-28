@@ -184,6 +184,7 @@ export class Ambience {
     this.ctx = null;
     this.level = 0;          // 0 室內、1 戶外
     this.voiceUntil = 0;     // 動物叫聲播到什麼時候（performance.now），播完才能暫停音訊
+    this.hold = false;       // 錄影中不暫停音訊
     try { this.muted = localStorage.getItem('muted') === '1'; } catch { this.muted = false; }
     // 手機要在 touchend / click 這類「放開」的手勢裡才算使用者操作（iOS 的 pointerdown 不算），所以全部都聽。
     // 一直留著不拿掉：iOS 切到別的 App 回來會變成 interrupted，Safari 也不一定讓手勢以外的 resume() 生效，
@@ -371,7 +372,7 @@ export class Ambience {
     clearTimeout(this.sleepTimer);
     const ctx = this.ctx;
     this.sleepTimer = setTimeout(() => {
-      if (!this.quiet || ctx.state !== 'running') return;
+      if (!this.quiet || this.hold || ctx.state !== 'running') return;   // hold：錄影中，聲音要一直接著
       if (performance.now() < this.voiceUntil) this.sleepSoon();
       else ctx.suspend();
     }, Math.max(1500, this.voiceUntil - performance.now()));
