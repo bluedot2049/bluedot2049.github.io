@@ -1,7 +1,8 @@
 // 多人同遊：透過 Supabase Realtime 互傳位置和表情。gallery.json 沒填 realtime 就不啟用。
-// 其他訪客的學徒用對方自己選的配色，不取名、不聊天。
+// 其他訪客的角色照對方自己捏的樣子畫，不取名、不聊天。
 import * as THREE from 'three';
-import { Character, isOutfit, isFood, presetOutfit, ROBES } from './character.js';
+import { Character, isFood } from './character.js';
+import { sanitizeLook, lookKey, presetLook, lookFromOutfit, toOutfit, ROBES } from './looks.js';
 
 const SEND_MOVING = 200;    // 走動時每 0.2 秒送一次位置
 const SEND_IDLE = 8000;     // 站著不動時偶爾報一次，確認還在
@@ -14,7 +15,7 @@ const COORD_LIMIT = 200;    // 畫廊遠小於這個範圍，超過的座標一�
 const EMOTE_GAP = 800;      // 自己送表情的最短間隔
 const JUMP_GAP = 400;       // 自己送跳躍的最短間隔
 const PET_GAP = 1500;       // 自己送摸動物的最短間隔
-const OUTFIT_DELAY = 1000;  // 換裝停手這麼久才送出，連點色塊不會一直送
+const LOOK_DELAY = 1000;    // 捏角色停手這麼久才送出，連點選項、拖滑桿不會一直送
 const EMOTE_TIME = 2;       // 表情在頭上停留的秒數
 export const EMOTES = ['❤️', '✨', '👏', '😮', '👋'];
 
@@ -37,17 +38,18 @@ function loadScript(src) {
   });
 }
 
-// 還沒收到對方的配色前，先用代號算一套，收到後再換
-function fallbackOutfit(id) {
+// 還沒收到對方的樣子前，先用代號算一套顏色，收到後再換
+function fallbackLook(id) {
   let h = 0;
   for (const c of id) h = (h * 31 + c.charCodeAt(0)) | 0;
-  return presetOutfit(Math.abs(h) % ROBES.length);
+  return presetLook(Math.abs(h) % ROBES.length);
 }
 
-// 在線名單裡對方最新的配色
-function outfitIn(metas) {
-  const o = Array.isArray(metas) ? metas[metas.length - 1]?.o : null;
-  return isOutfit(o) ? o : null;
+// 在線名單裡對方最新的樣子。l 是捏好的外觀；還沒更新的舊網頁只送 o，三個色號
+function lookIn(metas) {
+  const m = Array.isArray(metas) ? metas[metas.length - 1] : null;
+  if (!m) return null;
+  return m.l ? sanitizeLook(m.l) : lookFromOutfit(m.o);
 }
 
 const emojiTextures = new Map();
@@ -67,15 +69,8 @@ function emojiTexture(e) {
   return emojiTextures.get(e);
 }
 
-function dispose(obj) {
-  obj.traverse((o) => {
-    if (o.geometry) o.geometry.dispose();
-    if (o.material) o.material.dispose();   // 貼圖（影子、表情）是共用的，不跟著丟
-  });
-}
-
 export class Multiplayer {
-  constructor(scene, shadowTex, player, cfg, events, outfit) {
+  constructor(scene, shadowTex, player, cfg, events, look) {
     this.scene = scene;
     this.shadowTex = shadowTex;
     this.player = player;
@@ -84,8 +79,8 @@ export class Multiplayer {
     this.id = Math.random().toString(36).slice(2, 10);
     this.others = new Map();        // id -> { ch, pos, target, heading, seen, speed }
     this.present = new Set();       // 目前在線上的訪客 id（來自 presence）
-    this.outfits = new Map();       // id -> 配色（來自 presence）
-    this.outfit = outfit;
+    this.looks = new Map();         // id -> 外觀（來自 presence）
+    this.look = look;
     this.fx = [];                   // 正在飄的表情
     this.active = false;
     this.last = null;
@@ -108,20 +103,20 @@ export class Multiplayer {
       .on('presence', { event: 'sync' }, () => {
         const state = ch.presenceState();
         this.present = new Set(Object.keys(state));
-        this.outfits.clear();
+        this.looks.clear();
         for (const [id, metas] of Object.entries(state)) {
-          const o = outfitIn(metas);
-          if (o) this.outfits.set(id, o);
+          const L = lookIn(metas);
+          if (L) this.looks.set(id, L);
         }
         for (const [id, o] of this.others) {
-          const want = this.outfits.get(id);
-          if (want && want.join() !== o.ch.outfit.join()) o.ch.setOutfit(want);
+          const want = this.looks.get(id);
+          if (want && lookKey(want) !== o.ch.key) o.ch.setLook(want);
         }
         this.events.onCount(this.present.size);
       })
       // 有人進來就馬上報一次位置，對方才不用等
       .on('presence', { event: 'join' }, ({ key }) => { this.present.add(key); this.last = null; })
-      // 換裝重新登記時也會先收到一次離開，那個人還有其他登記就不算走了
+      // 換樣子重新登記時也會先收到一次離開，那個人還有其他登記就不算走了
       .on('presence', { event: 'leave' }, ({ key, currentPresences }) => {
         if (currentPresences?.length) return;
         this.present.delete(key);
@@ -131,7 +126,7 @@ export class Multiplayer {
         if (status === 'SUBSCRIBED') {
           this.active = true;
           this.last = null;
-          ch.track({ o: this.outfit });
+          this.track();
           this.events.onReady();
         } else {
           this.active = false;
@@ -171,7 +166,7 @@ export class Multiplayer {
       if (this.others.size >= MAX_TRACKED) return;
       // 在線名單同步比訊息慢，新來的人先暫時放行，但名額很少，認可不了就丟掉
       if (!this.present.has(m.id) && [...this.others.values()].filter((x) => !x.verified).length >= MAX_UNVERIFIED) return;
-      const ch = new Character(this.shadowTex, this.outfits.get(m.id) || fallbackOutfit(m.id));
+      const ch = new Character(this.shadowTex, this.looks.get(m.id) || fallbackLook(m.id));
       this.scene.add(ch.group);
       o = { ch, pos: new THREE.Vector3(m.x, 0, m.z), heading: m.h, speed: 0, verified: this.present.has(m.id), born: performance.now() };
       this.others.set(m.id, o);
@@ -184,7 +179,7 @@ export class Multiplayer {
     const o = this.others.get(id);
     if (!o) return;
     this.scene.remove(o.ch.group);
-    dispose(o.ch.group);
+    o.ch.dispose();
     this.others.delete(id);
   }
 
@@ -193,14 +188,14 @@ export class Multiplayer {
     if (!this.active || now - this.lastEmote < EMOTE_GAP) return;
     this.lastEmote = now;
     this.channel.send({ type: 'broadcast', event: 'emote', payload: { id: this.id, e } });
-    this.pop(this.player.character.group, e);
+    this.pop(this.player.character, e);
     this.player.character.emote(e);
   }
 
   onEmote(m) {
     const o = m && isId(m.id) ? this.others.get(m.id) : null;
     if (o && o.ch.group.visible && EMOTES.includes(m.e)) {
-      this.pop(o.ch.group, m.e);
+      this.pop(o.ch, m.e);
       o.ch.emote(m.e);
     }
   }
@@ -234,19 +229,26 @@ export class Multiplayer {
     if (o && o.ch.group.visible && Number.isInteger(m.a)) this.events.onPet?.(o, m.a);
   }
 
-  setOutfit(o) {
-    this.outfit = o.slice();
-    clearTimeout(this.outfitTimer);
-    this.outfitTimer = setTimeout(() => { if (this.active) this.channel.track({ o: this.outfit }); }, OUTFIT_DELAY);
+  // 在線名單上登記自己的樣子：新版看 l，舊版看 o
+  track() {
+    this.channel.track({ o: toOutfit(this.look), l: this.look });
   }
 
-  // 頭上冒出表情，往上飄再淡出
-  pop(group, e) {
+  setLook(L) {
+    this.look = L;
+    clearTimeout(this.lookTimer);
+    this.lookTimer = setTimeout(() => { if (this.active) this.track(); }, LOOK_DELAY);
+  }
+
+  // 頭上冒出表情，往上飄再淡出。高度跟著角色的身高和頭的大小
+  pop(ch, e) {
+    const group = ch.group;
     if (this.fx.filter((f) => f.group === group).length >= 3) return;
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTexture(e), transparent: true, depthWrite: false }));
-    s.position.y = 1.85;
+    const y = ch.dims.topY + 0.42;
+    s.position.y = y;
     group.add(s);
-    this.fx.push({ s, group, t: 0 });
+    this.fx.push({ s, group, y, t: 0 });
   }
 
   // 回傳畫面上是否還有東西在動，主迴圈用來決定要不要降幀
@@ -294,7 +296,7 @@ export class Multiplayer {
     for (const f of this.fx) {
       f.t += dt;
       const t = f.t;
-      f.s.position.y = 1.85 + t * 0.3;
+      f.s.position.y = f.y + t * 0.3;
       const sc = 0.45 * Math.min(1, t * 6);
       f.s.scale.set(sc, sc, sc);
       f.s.material.opacity = t < EMOTE_TIME - 0.5 ? 1 : Math.max(0, (EMOTE_TIME - t) / 0.5);

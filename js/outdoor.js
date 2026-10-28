@@ -7,6 +7,7 @@ import { Kit, newBucket, mergeBucket, rng, buildWindow } from './props.js';
 import { buildArcane } from './arcane.js';
 import { buildHarbor, onJetty, JETTY } from './harbor.js';
 import { buildLore } from './lore.js';
+import { buildTree } from './tree.js';
 
 export const DROP = 1.6;
 const TW = 6, TD = 7;                  // 陽台半寬、深度
@@ -678,19 +679,12 @@ export function buildOutdoor(room, h) {
     }
   }
 
-  // 大樹和樹下的長椅，長椅面向夕陽
-  const tree = { x: 5.3, z: Z(22.4) };   // 在長椅旁邊，樹冠遮著長椅，不擋坐著往前看的視線
-  buildTree(k, tree.x, tree.z, G);
-  block(tree.x, tree.z, 0.4, 0.4);
-  // 往石階那邊伸出一根低低的橫枝，在樹冠底下，從房子走下來就看得到枝頭。貓頭鷹最常停在這裡
-  const twig = { x: -0.39, z: 0.92 }, twigEnd = { x: tree.x + twig.x * 1.9, y: G + 2.15, z: tree.z + twig.z * 1.9 };
-  {
-    const a = [tree.x + twig.x * 0.2, G + 1.85, tree.z + twig.z * 0.2], b = [twigEnd.x, twigEnd.y, twigEnd.z];
-    const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], L = Math.hypot(dx, dy, dz);
-    k.cyl(0.045, 0.1, L, '#5a3a24', (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2, { rx: Math.acos(dy / L), ry: Math.atan2(dx, dz) }, 6);
-    k.ball(0.16, '#6a8a3a', a[0] + dx * 0.6 + twig.z * 0.12, a[1] + dy * 0.6 - 0.04, a[2] + dz * 0.6 - twig.x * 0.12, { sy: 0.6, color2: '#8aa040' });
-  }
+  // 大樹和樹下的長椅，長椅面向夕陽。樹冠撐得很開，長椅和石階下來的這一段都在樹蔭底下
   const benchAt = { x: 7.5, z: Z(23.0) };
+  for (let i = 0; i < 80; i++) R();   // 舊的大樹用掉的亂數照取，草原上其他擺設的位置才不會跟著變
+  const treeAt = { x: 4.4, z: Z(23.4) };   // 往後退一點，板根才不會伸到踏腳石和長椅底下
+  const tree = buildTree({ k, group, h, ...treeAt, G, heightAt, face: { x: 0, z: Z(TD + SD) }, clear: [benchAt] });
+  for (const b of tree.blocks) block(b.x, b.z, b.hw, b.hd);
   const bk = new Kit(R);
   parkBench(bk, G);
   bk.emit(bucket, benchAt.x, benchAt.z, Math.PI);
@@ -932,10 +926,10 @@ export function buildOutdoor(room, h) {
   const water = buildSea(mz, coarse, heightAt, z0);
   group.add(water);
 
-  // 樹的影子
-  const sh = new THREE.Mesh(new THREE.CircleGeometry(2.6, 20), h.shadowMat);
+  // 樹蔭：夕陽從海那邊斜斜照過來，影子往房子那邊偏一點
+  const sh = new THREE.Mesh(new THREE.CircleGeometry(6.6, 28), h.shadowMat);
   sh.rotation.x = -Math.PI / 2;
-  sh.position.set(tree.x - 0.4, G + 0.015, tree.z - 0.3);
+  sh.position.set(treeAt.x + 0.2, G + 0.015, treeAt.z + 0.6);
   meadowGroup.add(sh);
 
   // ---- 地面規則 ----
@@ -983,8 +977,9 @@ export function buildOutdoor(room, h) {
     shell, sky, far, water, seats, host, groundY, camFloor,
     // 看得到海面的範圍：海灣起點往外一直到海的盡頭，左右放寬到整片海。鏡頭沒看到這塊就不用算倒影
     seaBox: new THREE.Box3(new THREE.Vector3(-300, SEA_LEVEL, mz - 300), new THREE.Vector3(300, SEA_LEVEL, Z(39))),
-    update(t, target) {
+    update(t, target, cam) {
       arcane.update(t);
+      tree.update(t, cam, target);
       harbor.update(t);
       lore.update(t, target);
     },
@@ -992,7 +987,7 @@ export function buildOutdoor(room, h) {
     pavilion: { x: pc.x, z: pc.z, r: PAV.r },
     // 貓頭鷹停的地方：大樹的枝幹、石階口兩根燈串柱、棧橋的燈柱、涼亭頂上的金球。y 是站的高度，h 是面向，w 是停在那裡的機會
     perches: [
-      { x: twigEnd.x - twig.x * 0.12, y: twigEnd.y + 0.03, z: twigEnd.z - twig.z * 0.12, h: Math.atan2(twig.x, twig.z), w: 6 },
+      { ...tree.perch, w: 6 },
       { x: -TW + 0.3, y: 2.9, z: Z(TD - 0.35), h: Math.PI, w: 1.5 },
       { x: TW - 0.3, y: 2.9, z: Z(TD - 0.35), h: Math.PI, w: 1.5 },
       { x: JETTY.x - JETTY.hw + 0.1, y: G + 2.4, z: Z(42), h: Math.PI * 1.3, w: 1.5 },
@@ -1546,20 +1541,5 @@ function farTree(k, kind, x, y, z, s) {
   for (let i = 0, n = 3 + (R() < 0.5); i < n; i++) {
     const a = (i / n) * Math.PI * 2 + R(), d = i ? 0.55 * s : 0, r = (0.75 + R() * 0.3) * s;
     k.rock(r, pal[0], x + Math.cos(a) * d, y + (1.9 + (i ? 0 : 0.5) + R() * 0.3) * s, z + Math.sin(a) * d, { ...o, sy: 0.85, ry: R() * 3, color2: pal[1] });
-  }
-}
-
-// 大樹：幾段樹幹加一團團樹冠
-function buildTree(k, x, z, G) {
-  k.cyl(0.28, 0.42, 2.6, '#5a3a24', x, G + 1.3, z, {}, 7);
-  for (const [a, tilt, len] of [[0.3, 0.7, 1.8], [2.4, 0.6, 1.6], [4.2, 0.75, 1.7]]) {
-    const dx = Math.cos(a) * Math.sin(tilt) * len / 2, dz = Math.sin(a) * Math.sin(tilt) * len / 2;
-    k.cyl(0.1, 0.18, len, '#5a3a24', x + dx, G + 2.6 + Math.cos(tilt) * len / 2, z + dz, { ry: -a + Math.PI / 2, rz: -tilt }, 6);
-  }
-  // 每團樹冠底下暗、頂上亮，像頂上照著夕陽
-  const R = k.R, greens = ['#4a6a2a', '#5a7a30', '#6a8a3a', '#7a8a34', '#b89a48'], tops = ['#8aa040', '#9aac46', '#a8b04a', '#b4ac48', '#d8b860'];
-  for (let i = 0; i < 16; i++) {
-    const a = R() * Math.PI * 2, r = R() * 2.2;
-    k.rock(0.9 + R() * 0.7, greens[i % greens.length], x + Math.cos(a) * r, G + 3.6 + R() * 1.6 - r * 0.25, z + Math.sin(a) * r, { sy: 0.8, ry: R() * 3, color2: tops[i % tops.length] });
   }
 }

@@ -1,5 +1,4 @@
-// 畫面上的 HTML 介面：作品資訊、換裝、房間名稱、平面清單。
-import { ROBES, HATS, SCARVES } from './character.js';
+// 畫面上的 HTML 介面：作品資訊、捏角色的抽屜、房間名稱、平面清單。捏角色面板的內容在 creator.js。
 
 const $ = (s) => document.querySelector(s);
 
@@ -79,21 +78,7 @@ export class UI {
     return [this.sheet, this.dress].find((el) => el.classList.contains('open')) || null;
   }
 
-  // 換裝：三排色塊，點了馬上換。onPick(部位, 色號)
-  showDress(outfit, onPick) {
-    const parts = [['長袍', ROBES], ['帽子', HATS], ['圍巾', SCARVES]];
-    const hex = (c) => '#' + c.toString(16).padStart(6, '0');
-    const rows = $('#dress-rows');
-    rows.innerHTML = parts.map(([name, list], i) => `
-      <div class="dress-row">
-        <span>${name}</span>
-        <div class="swatches">${list.map((c, k) => `<button data-part="${i}" data-k="${k}" class="${outfit[i] === k ? 'on' : ''}" style="background:${hex(c)}" aria-label="${name}第 ${k + 1} 色"></button>`).join('')}</div>
-      </div>`).join('');
-    rows.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
-      const part = +b.dataset.part;
-      rows.querySelectorAll(`button[data-part="${part}"]`).forEach((x) => x.classList.toggle('on', x === b));
-      onPick(part, +b.dataset.k);
-    }));
+  showDress() {
     this.dress.classList.add('open');
     this.onSheet?.(true);
   }

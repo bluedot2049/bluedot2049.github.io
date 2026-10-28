@@ -1055,7 +1055,7 @@ export function buildWorld(scene, gallery) {
       // 房子外殼只在人走出去、鏡頭也在屋外時出現，不然會擋住室內
       outdoor.shell.visible = currentRoom === rooms.length - 1 && !outdoor.insideShell(cam);
       outdoor.sky.position.copy(cam);
-      if (rooms[rooms.length - 1].group.visible) outdoor.update(t, target);
+      if (rooms[rooms.length - 1].group.visible) outdoor.update(t, target, cam);
       // 海的反射要多畫一次場景，只在人已經走到戶外、鏡頭也看得到海時才開
       const seaOn = currentRoom === rooms.length - 1 && cam.z < outdoor.door && seaInView(view);
       outdoor.water.visible = seaOn;

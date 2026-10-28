@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { buildWorld } from './world.js';
 import { Player } from './player.js';
-import { Character, isOutfit, randomOutfit } from './character.js';
+import { Character } from './character.js';
+import { sanitizeLook, lookFromOutfit, randomPreset } from './looks.js';
+import { Creator, FACE_TABS } from './creator.js';
 import { Manatee, TABLE_LINES } from './manatee.js';
 import { Animals, ANIMAL_LAYER } from './animals.js';
 import { Visitors } from './visitors.js';
@@ -45,25 +47,27 @@ document.addEventListener('contextmenu', (e) => { if (!e.target.closest('#ph-med
 // 萬一頁面已經被放大，就不擋，讓人能用雙指縮回來
 document.addEventListener('touchmove', (e) => {
   if (window.visualViewport && window.visualViewport.scale > 1.01) return;
-  if (!e.target.closest('#sheet, #list, #ph-bar')) e.preventDefault();
+  if (!e.target.closest('#sheet, #dress, #list, #ph-bar')) e.preventDefault();
 }, { passive: false });
 // iOS 的雙指縮放整頁
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('dragstart', (e) => { if (e.target.tagName === 'IMG' && !e.target.closest('#ph-media')) e.preventDefault(); });
 
-// 自己的配色存在這台裝置上，下次來還是同一套。第一次來隨機配一套
-function loadOutfit() {
+// 自己捏的樣子存在這台裝置上，下次來還是同一個。舊版只存了三個色號，照著換過來。第一次來隨機配一套顏色
+function loadLook() {
   try {
-    const o = JSON.parse(localStorage.getItem('outfit'));
-    if (isOutfit(o)) return o;
+    const raw = localStorage.getItem('look');
+    if (raw) return sanitizeLook(JSON.parse(raw));
+    const old = lookFromOutfit(JSON.parse(localStorage.getItem('outfit')));
+    if (old) return old;
   } catch {}
-  const o = randomOutfit();
-  saveOutfit(o);
-  return o;
+  const L = randomPreset();
+  saveLook(L);
+  return L;
 }
 
-function saveOutfit(o) {
-  try { localStorage.setItem('outfit', JSON.stringify(o)); } catch {}
+function saveLook(L) {
+  try { localStorage.setItem('look', JSON.stringify(L)); } catch {}
 }
 
 async function precompile(renderer, scene, camera) {
@@ -153,8 +157,8 @@ async function start() {
 
   const world = buildWorld(scene, gallery);
   const shadowTex = TX.shadowTexture();
-  const outfit = loadOutfit();
-  const character = new Character(shadowTex, outfit);
+  let look = loadLook();
+  const character = new Character(shadowTex, look);
   scene.add(character.group);
   // 前廳的海牛頭人：擋住一小塊地面，玩家靠近時會轉過來面對
   const spot = world.findWalkable(1.9, -3.4, 0, -2) || { x: 1.9, z: -3.4 };
@@ -171,6 +175,29 @@ async function start() {
   let place = null;   // 戶外現在在哪裡：null 是陽台，否則是草原或棧橋盡頭的地名
   let sitHinted = false;
 
+  // 捏角色：每改一下就套到角色身上、存起來、告訴別人，鏡頭照目前那一頁取景
+  let dressTab = 'race';
+  const visH = () => (window.innerWidth >= 900 || !ui.panel ? 1 : 1 - ui.panel.offsetHeight / window.innerHeight);
+  const frameMirror = () => player.frameMirror(FACE_TABS.includes(dressTab) ? 'face' : 'body', visH());
+  const creator = new Creator({
+    onChange(L) {
+      look = L;
+      character.setLook(L);
+      saveLook(L);
+      mp?.setLook(L);
+      frameMirror();
+      lastInput = performance.now();
+    },
+    onTab(t) {
+      dressTab = t;
+      frameMirror();
+    },
+    onPaint(cells) {
+      character.paintFace(cells);
+      lastInput = performance.now();
+    },
+  });
+
   const player = new Player(camera, renderer.domElement, world, character, {
     onInput(kind) {
       lastInput = performance.now();
@@ -179,13 +206,8 @@ async function start() {
       ui.hideHint();
     },
     onArriveMirror() {
-      ui.showDress(outfit, (part, k) => {
-        outfit[part] = k;
-        character.setOutfit(outfit);
-        saveOutfit(outfit);
-        mp?.setOutfit(outfit);
-        lastInput = performance.now();
-      });
+      ui.showDress();
+      creator.open(look);
     },
     onJump() {
       mp?.jump();
@@ -329,7 +351,7 @@ async function start() {
       onJump(o) {
         animals.startle(o.pos.x, o.pos.z);
       },
-    }, outfit.slice());
+    }, look);
     mp.connect().catch((e) => console.warn('多人連線失敗：', e));
     visitors.mp = mp;
     // 電腦：數字鍵 1–5 送表情

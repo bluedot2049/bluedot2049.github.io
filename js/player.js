@@ -89,6 +89,7 @@ export class Player {
     el.addEventListener('pointermove', (e) => {
       chord(e);
       const p = pts.get(e.pointerId);
+      if (!p && e.pointerType === 'mouse' && !this.paused) this.hover(e.clientX, e.clientY);
       if (!p || this.paused) return;
       if (this.mouseRun) p.drag = true;   // 同按兩鍵時照樣可以拖曳轉向，放開也不算點地面
       const dx = e.clientX - p.x, dy = e.clientY - p.y;
@@ -107,12 +108,14 @@ export class Player {
         p.swipe = this.focus?.kind === 'painting' && !p.mouse && Math.abs(e.clientX - p.sx) > Math.abs(e.clientY - p.sy);
       }
       if (p.drag && !multi && !p.swipe) this.orbit(dx, dy, p.mouse);
+      el.classList.toggle('dragging', p.drag && p.mouse);
     });
     const up = (e) => {
       const p = pts.get(e.pointerId);
       if (!p) return;
       pts.delete(e.pointerId);
       chord(e);
+      el.classList.remove('dragging');
       if (e.type === 'pointercancel') this.mouseRun = false;
       if (this.paused) { pts.clear(); pinch = null; multi = false; return; }
       if (e.type === 'pointerup' && !p.drag && !multi) this.tap(e.clientX, e.clientY);
@@ -130,7 +133,8 @@ export class Player {
     }, { passive: false });
 
     window.addEventListener('keydown', (e) => {
-      if (this.paused) return;
+      // 捏角色面板裡的按鈕和滑桿自己吃鍵盤，不拿來走路
+      if (this.paused || e.target.closest?.('#dress')) return;
       if (e.key === 'Enter') {
         e.preventDefault();
         this.action();
@@ -165,11 +169,24 @@ export class Player {
     this.events.onInput('drag');
   }
 
-  tap(cx, cy) {
+  pick(cx, cy) {
     const rect = this.dom.getBoundingClientRect();
     const ndc = new THREE.Vector2(((cx - rect.left) / rect.width) * 2 - 1, -((cy - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
-    const hit = this.raycaster.intersectObjects(this.world.raycastTargets, false).find((h) => isShown(h.object) && !h.object.userData.ghost);
+    return this.raycaster.intersectObjects(this.world.raycastTargets, false).find((h) => isShown(h.object) && !h.object.userData.ghost);
+  }
+
+  // 滑鼠停在畫、鏡子、動物上時，游標換成可點的樣子。射線不用每次移動都打，隔 0.1 秒看一次就夠
+  hover(cx, cy) {
+    const now = performance.now();
+    if (now - (this.hoverT || 0) < 100) return;
+    this.hoverT = now;
+    const u = this.pick(cx, cy)?.object.userData;
+    this.dom.classList.toggle('hot', !!(u && (u.painting || u.mirror || u.animal)));
+  }
+
+  tap(cx, cy) {
+    const hit = this.pick(cx, cy);
     if (!hit) return;
     this.events.onInput('tap');
     if (hit.object.userData.painting) return this.goToPainting(hit.object.userData.painting);
@@ -214,7 +231,7 @@ export class Player {
     const m = this.world.mirror, n = m.n;
     const visH = window.innerWidth >= 900 ? 1 : 0.6;
     const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
-    const d = 0.35 + Math.max(1.8, 2.0 / 2 / (tanV * visH));
+    const d = 0.35 + Math.max(1.8, Math.max(2.0, this.character.dims.topY * 1.3) / 2 / (tanV * visH));
     const stand = this.world.findWalkable(m.x + n.x * d, m.z + n.z * d, this.pos.x, this.pos.z) || { x: this.pos.x, z: this.pos.z };
     return {
       kind: 'mirror', n, stand,
@@ -222,6 +239,27 @@ export class Player {
       look: new THREE.Vector3(stand.x, 0.85, stand.z),
       fadeTarget: new THREE.Vector3(stand.x, 0, stand.z),
     };
+  }
+
+  // 捏角色時的取景：body 從鏡子看全身，face 湊到臉前面。visH 是畫面沒被面板蓋住的比例
+  // 角色變高、頭變大時重算一次，頭頂不會跑出畫面
+  frameMirror(mode, visH) {
+    const f = this.focus, m = this.world.mirror;
+    if (f?.kind !== 'mirror') return;
+    const dims = this.character.dims, n = f.n, p = this.pos;
+    const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * visH;
+    const gap = Math.max(0.9, (p.x - m.x) * n.x + (p.z - m.z) * n.z);
+    if (mode === 'face') {
+      const d = THREE.MathUtils.clamp((dims.headH * 1.7) / 2 / tanV, 0.7, gap - 0.3);
+      const y = p.y + dims.faceY + dims.headH * 0.18;
+      f.camPos = new THREE.Vector3(p.x - n.x * d, y, p.z - n.z * d);
+      f.look = new THREE.Vector3(p.x, y, p.z);
+    } else {
+      // 鏡頭稍微往下看，鏡子前面地上的書堆、箱子比較不會擋住
+      const half = (gap - 0.35) * tanV, y = p.y + Math.max(dims.topY * 0.5, dims.topY + 0.15 - half);
+      f.camPos = new THREE.Vector3(m.x + n.x * 0.35, y + 0.45, m.z + n.z * 0.35);
+      f.look = new THREE.Vector3(p.x, y, p.z);
+    }
   }
 
   goToPainting(p) {

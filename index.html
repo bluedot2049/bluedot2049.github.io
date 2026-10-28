@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#1c130d">
   <title>煉金畫廊</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%231c130d'/%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%23e8b86a' stroke-width='2'/%3E%3Cpath d='M16 5 L26 22 L6 22 Z' fill='none' stroke='%23e8b86a' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
   <!-- 拉丁副標和數字用的字體；連不上就退回系統襯線字 -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -40,7 +42,7 @@
       <g class="ring-c"><path d="M60 14 L100 83 L20 83 Z"/><circle cx="60" cy="60" r="23"/></g>
       <circle class="core" cx="60" cy="60" r="3"/>
     </svg>
-    <div class="brand">煉金畫廊</div>
+    <img class="brand" src="assets/wordmark-flat-gold.svg" alt="煉金畫廊">
     <div class="msg">載入中</div>
   </div>
 
@@ -83,15 +85,20 @@
     </div>
   </aside>
 
-  <aside id="dress" class="panel" aria-label="換裝">
+  <aside id="dress" class="panel" aria-label="捏角色">
     <button id="dress-close" class="icon-btn round close" aria-label="關閉"><svg><use href="#i-close"/></svg></button>
-    <h2>鏡子<small>Speculum</small></h2>
-    <div id="dress-rows"></div>
+    <div class="dress-head">
+      <h2>鏡子<small>Speculum</small></h2>
+      <button id="dress-dice" class="mini">骰子</button>
+      <button id="dress-reset" class="mini">重來</button>
+    </div>
+    <nav id="dress-tabs"></nav>
+    <div id="dress-body"></div>
   </aside>
 
   <!-- 攝影模式：取景框裡看到的就是拍下來的樣子 -->
   <div id="photo" hidden>
-    <div id="ph-frame"><div class="grain"></div><div class="vig"></div><div class="grid"></div><div class="sig"></div></div>
+    <div id="ph-frame"><div class="grain"></div><div class="vig"></div><div class="grid"></div><img class="sig" src="assets/wordmark-flat-light.svg" alt=""></div>
     <div id="ph-rec" hidden><i></i><span>00:00</span></div>
     <div id="ph-zoom"></div>
     <div id="ph-bar"><div id="ph-chips"></div></div>

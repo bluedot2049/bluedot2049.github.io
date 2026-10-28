@@ -230,9 +230,8 @@ export class PhotoMode {
     Object.assign(el.style, { left: f.x + 'px', top: f.y + 'px', width: w + 'px', height: h + 'px' });
     const sig = el.querySelector('.sig');
     this.sigSize = Math.max(11, Math.round(Math.min(w, h) * 0.028));
-    sig.textContent = this.title;
     sig.hidden = !this.sig;
-    Object.assign(sig.style, { fontSize: this.sigSize + 'px', right: this.sigSize * 1.3 + 'px', bottom: this.sigSize * 1.1 + 'px', letterSpacing: this.sigSize * 0.3 + 'px' });
+    Object.assign(sig.style, { height: this.sigSize * 1.1 + 'px', right: this.sigSize * 1.3 + 'px', bottom: this.sigSize * 1.1 + 'px' });
   }
 
   showControls(on) {
@@ -445,18 +444,14 @@ export class PhotoMode {
     if (this.sig) this.drawSig(ctx, W, H, k);
   }
 
-  // 落款：一個字一個字排，字距在每個瀏覽器都一樣
+  // 落款：畫廊的毛筆字，位置大小和取景框裡的一樣
   drawSig(ctx, W, H, k) {
-    const size = this.sigSize * k, gap = size * 0.3;
+    const img = this.$('#ph-frame .sig');
+    if (!img.naturalWidth) return;
+    const h = this.sigSize * 1.1 * k, w = h * img.naturalWidth / img.naturalHeight;
     ctx.save();
-    ctx.font = `600 ${size}px ${getComputedStyle(this.$('#ph-frame .sig')).fontFamily}`;
-    ctx.fillStyle = 'rgba(255,240,215,0.82)';
-    ctx.textBaseline = 'bottom';
-    const chars = [...this.title], ws = chars.map((c) => ctx.measureText(c).width);
-    // CSS 的 letter-spacing 每個字後面都加，最後一個字也有
-    let x = W - this.sigSize * 1.3 * k - ws.reduce((a, b) => a + b + gap, 0);
-    const y = H - this.sigSize * 1.1 * k;
-    chars.forEach((c, i) => { ctx.fillText(c, x, y); x += ws[i] + gap; });
+    ctx.globalAlpha = 0.82;
+    ctx.drawImage(img, W - this.sigSize * 1.3 * k - w, H - this.sigSize * 1.1 * k - h, w, h);
     ctx.restore();
   }
 
