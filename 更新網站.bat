@@ -8,6 +8,9 @@ if %errorlevel%==0 (
   pause
   exit /b
 )
+rem Stamp a version on the js/css links so browsers never mix old and new files
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\stamp.ps1
+git add index.html
 git commit -m "Update gallery %date% %time:~0,5%"
 git push
 echo.
