@@ -74,6 +74,37 @@ export const VENDORS = {
     greet: ['要去哪裡', '看地圖嗎'],
     lines: ['這張是星圖', '西邊那顆星你看過嗎', '有人把地圖拿反過', '白塔在這裡', '船長都來我這裡買', '咕咕 地圖不要摺'],
   },
+  // 小吃推車，id 對應 haishi.js 的 CARTS
+  squid: {
+    name: '烤魷魚', race: 'hammer', look: { hat: 'none', clothes: 'tank', robe: 1 },
+    greet: ['烤魷魚喔', '好香吧'],
+    lines: ['一串 剛烤好的', '要辣的嗎', '醬要多刷一點嗎', '煙很大 站旁邊一點', '魚販那邊早上拿的', '烤焦的我自己吃'],
+  },
+  oden: {
+    name: '關東煮', race: 'onigiri', look: { hat: 'none', robe: 2 },
+    greet: ['來碗熱的', '自己夾喔'],
+    lines: ['蘿蔔最入味', '湯可以續', '這鍋從下午煮到現在', '晚上風大 吃這個剛好', '竹籤放杯子裡就好', '不要問我是不是飯糰'],
+  },
+  takoyaki: {
+    name: '章魚燒', race: 'egg', look: { hat: 'chef', robe: 4 },
+    greet: ['章魚燒 一盒六顆', '等一下 在翻'],
+    lines: ['裡面很燙 小心', '柴魚會跳喔', '翻這個要練很久', '章魚是一大塊的', '美乃滋要多嗎', '我不會被翻啦'],
+  },
+  tanghulu: {
+    name: '糖葫蘆', race: 'boba', look: { hat: 'party', robe: 6 },
+    greet: ['要不要糖葫蘆', '一支就好'],
+    lines: ['紅的是山楂 很酸', '番茄的也有', '糖剛熬好 很脆', '黏到手很正常', '小朋友都挑草莓的', '咬下去會碎 用手接著'],
+  },
+  baozi: {
+    name: '包子', race: 'snowman', look: { hat: 'none', robe: 0 },
+    greet: ['包子 剛蒸好', '肉包還有'],
+    lines: ['好熱 我快化了', '蒸籠我來掀', '菜包賣完了', '一顆很大 兩顆會飽', '燙嘴喔 吹一下', '每天站在蒸籠旁邊 很拚的'],
+  },
+  potato: {
+    name: '烤番薯', race: 'potato', look: { hat: 'straw', robe: 3 },
+    greet: ['番薯 熱的', '來一條'],
+    lines: ['不要看我 看番薯', '這個很甜 會流蜜', '石頭甕慢慢烤的', '我們不是親戚', '剝皮小心燙', '冷的時候最好賣'],
+  },
 };
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];

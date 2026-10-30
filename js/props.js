@@ -27,9 +27,11 @@ const FABRIC = ['#9a4a3a', '#4a6a5a', '#c08a4a', '#5a5a8a', '#7a5a3a'];
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
 
+// color 給 null：幾何自己已經塗好顏色（像一片一片瓦的屋頂），照原樣用
 function paint(geo, color, color2) {
   const g = geo.index ? geo.toNonIndexed() : geo;
   g.deleteAttribute('uv');
+  if (color == null && g.attributes.color) return g;
   const pos = g.attributes.position;
   const col = new Float32Array(pos.count * 3);
   const c1 = new THREE.Color(color), c2 = color2 ? new THREE.Color(color2) : null;
@@ -51,6 +53,8 @@ export class Kit {
     this.lit = [];
     this.glow = [];
     this.glows = [];   // 光暈位置
+    this.puffs = [];   // 冒煙、冒蒸氣的地方
+    this.pools = [];   // 燈照在地上的一圈光
   }
   add(geo, color, x, y, z, o = {}) {
     const g = paint(geo, color, o.color2);
@@ -70,6 +74,8 @@ export class Kit {
   torus(r, t, arc, c, x, y, z, o) { return this.add(new THREE.TorusGeometry(r, t, 5, 12, arc), c, x, y, z, o); }
   plane(w, h, c, x, y, z, o) { return this.add(new THREE.PlaneGeometry(w, h), c, x, y, z, o); }
   light(x, y, z, color, size) { this.glows.push({ x, y, z, color, size }); return this; }
+  puff(x, y, z, kind = 'steam', s = 1) { this.puffs.push({ x, y, z, kind, s }); return this; }
+  pool(x, y, z, r, color = '#ff9a50', a = 0.3) { this.pools.push({ x, y, z, r, color, a }); return this; }
 
   // 套用擺放位置，把零件倒進桶子
   emit(bucket, x, z, rotY) {
@@ -77,15 +83,17 @@ export class Kit {
     for (const g of this.lit) bucket.lit.push(g.applyMatrix4(_m));
     for (const g of this.glow) bucket.glow.push(g.applyMatrix4(_m));
     const v = new THREE.Vector3();
-    for (const l of this.glows) {
-      v.set(l.x, l.y, l.z).applyMatrix4(_m);
-      bucket.glows.push({ ...l, x: v.x, y: v.y, z: v.z });
+    for (const [src, dst] of [[this.glows, bucket.glows], [this.puffs, bucket.puffs], [this.pools, bucket.pools]]) {
+      for (const l of src) {
+        v.set(l.x, l.y, l.z).applyMatrix4(_m);
+        dst.push({ ...l, x: v.x, y: v.y, z: v.z });
+      }
     }
   }
 }
 
 export function newBucket() {
-  return { lit: [], glow: [], glows: [] };
+  return { lit: [], glow: [], glows: [], puffs: [], pools: [] };
 }
 
 // 合併成一個幾何。靠近地面的頂點稍微壓暗，當作簡單的環境光遮蔽。零件帶 ao: false 的不壓（遠處山坡上的樹）
