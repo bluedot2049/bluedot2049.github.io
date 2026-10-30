@@ -2,7 +2,10 @@
 // 取景框、色調、暗角、顆粒、落款在畫面上看到的樣子，就是存下來的樣子：
 // 照片另外用 setViewOffset 把取景框那一塊重畫成大圖；錄影每一幀把畫面裁進一張 2D 畫布再交給 MediaRecorder。
 // 角色留在原地照常動，表情、坐下都會出現在畫面裡；對話框是 HTML，拍的時候照著位置畫進去。
+// 變焦從望遠一路拉到廣角，再往上就慢慢彎成魚眼；怎麼彎、怎麼畫在 lens.js。
 import * as THREE from 'three';
+import { lens, fitSource } from './lens.js';
+import { makePostcard } from './postcard.js';
 
 const ASPECTS = [
   { label: '螢幕', r: 0 },
@@ -21,8 +24,12 @@ const LOOKS = [
   { label: '黑白', filter: 'grayscale(1) contrast(1.15) brightness(1.03)', vig: 0.4, grain: 0.06 },
   { label: '舊照', filter: 'sepia(.7) contrast(1.06) brightness(.98)', vig: 0.5, grain: 0.08 },
 ];
+// 運鏡只在錄影時動，選好了等按下錄影才開始
 const MOVES = ['手動', '推近', '環繞', '升起', '橫移', '搖鏡'];
-const FOV_MIN = 12, FOV_MAX = 80;
+// 視角（度）：100 以下是一般鏡頭，再往上拉就慢慢彎成魚眼，拉到 FOV_MAX 是完全的魚眼
+const FOV_MIN = 12, FISH = 100, FOV_MAX = 140;
+const CORNER = THREE.MathUtils.degToRad(78);   // 魚眼開到底時取景框角落的角度，對角 156°
+const LENSES = [['魚眼', FOV_MAX], ['廣角', 96], ['標準', 50], ['望遠', 16]];
 const SPEED = 3;
 const MAX_REC = 60;   // 錄影最長秒數
 const KEY = 'photo';
@@ -75,7 +82,9 @@ export class PhotoMode {
     this.vel = new THREE.Vector3();
     this.yaw = 0; this.pitch = 0;          // 實際的方向，平滑追著 aim
     this.aimYaw = 0; this.aimPitch = 0;
-    this.fov = 50;
+    this.fov = 50;                          // 要變到的視角；cur 是目前的，平滑追著 fov
+    this.cur = 50;
+    this.menu = null;                       // 打開中的選單
     this.keys = new Set();
     this.joy = { x: 0, y: 0 };
     this.lift = 0;                          // 手機的升、降按鈕
@@ -114,8 +123,10 @@ export class PhotoMode {
 
   // ───────── 進出 ─────────
 
-  enter() {
+  // postcard：從海市的信差站進來，拍好的照片做成明信片
+  enter({ postcard = false } = {}) {
     if (this.active) return;
+    this.postcard = postcard;
     const p = this.player, cam = this.camera;
     this.ui.hidePainting();
     this.ui.hideDress();
@@ -130,22 +141,25 @@ export class PhotoMode {
     const dir = cam.getWorldDirection(new THREE.Vector3());
     this.yaw = this.aimYaw = Math.atan2(-dir.x, -dir.z);
     this.pitch = this.aimPitch = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1));
-    this.fov = cam.fov;
-    this.move = 0;
+    this.fov = this.cur = cam.fov;
     this.room = -1;
     this.active = true;
     document.body.classList.add('photo');
     this.$('#photo').hidden = false;
     this.showControls(true);
     this.refresh();
-    this.ui.hint(this.coarse ? '拖曳轉頭　雙指變焦　點畫面收起按鈕' : 'WASD 移動　E / Q 升降　Shift 加速　拖曳轉頭　滾輪變焦　空白鍵拍照　H 收起按鈕', 6000);
+    if (postcard) this.ui.hint('拍一張做成明信片，拍好就能寄出去', 6000);
+    else this.ui.hint(this.coarse ? '拖曳轉頭　雙指變焦　點畫面收起按鈕' : 'WASD 移動　E / Q 升降　Shift 加速　拖曳轉頭　滾輪變焦　空白鍵拍照　H 收起按鈕', 6000);
   }
 
   exit() {
     if (!this.active) return;
     if (this.rec) this.stopRecording();
     this.closeResult();
+    this.closeMenu();
     this.active = false;
+    this.postcard = false;
+    lens.on = false;
     this.keys.clear();
     this.joy.x = this.joy.y = 0;
     this.lift = 0;
@@ -166,21 +180,49 @@ export class PhotoMode {
   // ───────── 介面 ─────────
 
   bindUI() {
+    // 每個鈕點開是一排選項；「顯示」是幾個開關，可以連著點，點選單外面才收
+    // lock：錄影中不能換（比例會改掉影片大小，運鏡錄到一半換會跳）
     const chips = this.$('#ph-chips');
-    const defs = [
-      ['aspect', '比例', () => ASPECTS[this.aspect].label, () => { if (!this.rec) this.aspect = (this.aspect + 1) % ASPECTS.length; }],
-      ['look', '色調', () => LOOKS[this.look].label, () => { this.look = (this.look + 1) % LOOKS.length; }],
-      ['move', '運鏡', () => MOVES[this.move], () => this.setMove((this.move + 1) % MOVES.length)],
-      ['self', '自己', () => (this.self ? '入鏡' : '不入鏡'), () => { this.self = !this.self; }],
-      ['talk', '對話', () => (this.talk ? '顯示' : '隱藏'), () => { this.talk = !this.talk; }],
-      ['sig', '落款', () => (this.sig ? '有' : '無'), () => { this.sig = !this.sig; }],
-      ['grid', '格線', () => (this.grid ? '開' : '關'), () => { this.grid = !this.grid; }],
+    this.chips = [
+      { k: 'aspect', label: '比例', lock: true, opts: ASPECTS.map((a) => a.label), get: () => this.aspect, set: (i) => { this.aspect = i; } },
+      { k: 'look', label: '色調', opts: LOOKS.map((l) => l.label), get: () => this.look, set: (i) => { this.look = i; } },
+      { k: 'move', label: '運鏡', lock: true, opts: MOVES, get: () => this.move, set: (i) => { this.move = i; }, note: '按下錄影才開始動' },
+      { k: 'show', label: '顯示', toggles: [['self', '自己入鏡'], ['talk', '對話框'], ['sig', '落款'], ['grid', '格線']] },
     ];
-    chips.innerHTML = defs.map(([k, label]) => `<button class="ph-chip" data-k="${k}"><span>${label}</span><b></b></button>`).join('');
-    this.chips = defs.map(([k, , value, act]) => {
-      const el = chips.querySelector(`[data-k="${k}"]`);
-      el.addEventListener('click', () => { act(); this.save(); this.refresh(); });
-      return { el, b: el.querySelector('b'), value };
+    chips.innerHTML = this.chips.map((c) => `<button class="ph-chip" data-k="${c.k}"><span>${c.label}</span><b></b></button>`).join('');
+    for (const c of this.chips) {
+      c.el = chips.querySelector(`[data-k="${c.k}"]`);
+      c.b = c.el.querySelector('b');
+      c.el.addEventListener('click', () => (this.menu === c ? this.closeMenu() : this.openMenu(c)));
+    }
+    const menu = this.$('#ph-menu');
+    menu.addEventListener('click', (e) => {
+      const btn = e.target.closest('button'), c = this.menu;
+      if (!btn || !c) return;
+      if (btn.dataset.t) {
+        const k = btn.dataset.t;
+        this[k] = !this[k];
+        btn.classList.toggle('on', this[k]);
+      } else {
+        c.set(+btn.dataset.i);
+        this.closeMenu();
+      }
+      this.save();
+      this.refresh();
+    });
+    // 點選單以外的地方就收起來；點在畫面上的那一下不算收按鈕
+    document.addEventListener('pointerdown', (e) => {
+      this.swallowTap = false;
+      if (!this.menu || menu.contains(e.target) || this.menu.el.contains(e.target)) return;
+      this.closeMenu();
+      this.swallowTap = true;
+    }, true);
+
+    const lensBar = this.$('#ph-lens');
+    lensBar.innerHTML = LENSES.map(([label], i) => `<button data-i="${i}">${label}</button>`).join('');
+    lensBar.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (btn) this.zoom(LENSES[+btn.dataset.i][1]);
     });
     this.$('#ph-exit').addEventListener('click', () => this.exit());
     this.$('#ph-shutter').addEventListener('click', () => this.shoot());
@@ -202,8 +244,11 @@ export class PhotoMode {
   }
 
   refresh() {
-    for (const c of this.chips) c.b.textContent = c.value();
-    this.chips[0].el.classList.toggle('off', !!this.rec);
+    for (const c of this.chips) {
+      c.b.textContent = c.opts ? c.opts[c.get()] : '';
+      c.el.classList.toggle('off', !!(c.lock && this.rec));
+    }
+    this.markLens();
     const look = LOOKS[this.look];
     this.renderer.domElement.style.filter = look.filter;
     this.character.group.visible = this.self;
@@ -235,14 +280,38 @@ export class PhotoMode {
   }
 
   showControls(on) {
+    if (!on) this.closeMenu();
     document.body.classList.toggle('photo-bare', !on);
   }
 
-  setMove(i) {
-    this.move = i;
+  // 選單開在按鈕旁邊：按鈕在畫面下半就往上開，不然往下開
+  openMenu(c) {
+    if (c.lock && this.rec) return;
+    const m = this.$('#ph-menu');
+    this.menu = c;
+    m.classList.toggle('toggles', !!c.toggles);
+    m.innerHTML = c.toggles
+      ? c.toggles.map(([k, label]) => `<button data-t="${k}" class="${this[k] ? 'on' : ''}">${label}</button>`).join('')
+      : c.opts.map((label, i) => `<button data-i="${i}" class="${i === c.get() ? 'on' : ''}">${label}</button>`).join('') + (c.note ? `<p>${c.note}</p>` : '');
+    m.hidden = false;
+    const r = c.el.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight;
+    const left = Math.max(12, Math.min(r.left, W - m.offsetWidth - 12));
+    const below = r.top < H / 2;
+    Object.assign(m.style, { left: left + 'px', top: below ? r.bottom + 8 + 'px' : '', bottom: below ? '' : H - r.top + 8 + 'px' });
+    for (const x of this.chips) x.el.classList.toggle('open', x === c);
+  }
+
+  closeMenu() {
+    if (!this.menu) return;
+    this.menu = null;
+    this.$('#ph-menu').hidden = true;
+    for (const x of this.chips) x.el.classList.remove('open');
+  }
+
+  // 錄影開始時決定環繞的中心：角色在前方不遠就繞著角色，不然繞著畫面中央前方六公尺的點
+  aimPivot() {
     this.pivot = null;
-    if (MOVES[i] !== '環繞') return;
-    // 環繞：角色在前方不遠就繞著角色，不然繞著畫面中央前方六公尺的點
+    if (MOVES[this.move] !== '環繞') return;
     const ch = this.player.pos, fw = this.forward(new THREE.Vector3());
     const to = new THREE.Vector3(ch.x - this.pos.x, ch.y + 0.9 - this.pos.y, ch.z - this.pos.z);
     const d = to.length();
@@ -260,7 +329,7 @@ export class PhotoMode {
     el.addEventListener('pointerdown', (e) => {
       if (!this.active) return;
       el.setPointerCapture(e.pointerId);
-      pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, drag: false, mouse: e.pointerType === 'mouse' });
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, drag: false, mouse: e.pointerType === 'mouse', quiet: this.swallowTap });
       if (pts.size === 2) {
         const [a, b] = [...pts.values()];
         pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), fov: this.fov };
@@ -291,7 +360,7 @@ export class PhotoMode {
       if (!p) return;
       pts.delete(e.pointerId);
       // 點一下畫面：收起或叫回按鈕
-      if (this.active && e.type === 'pointerup' && !p.drag && !multi && !this.result) this.showControls(document.body.classList.contains('photo-bare'));
+      if (this.active && e.type === 'pointerup' && !p.drag && !p.quiet && !multi && !this.result) this.showControls(document.body.classList.contains('photo-bare'));
       if (pts.size < 2) pinch = null;
       if (pts.size === 0) multi = false;
     };
@@ -313,7 +382,7 @@ export class PhotoMode {
         if (e.key === 'Escape') this.closeResult();
         return;
       }
-      if (e.key === 'Escape') return this.exit();
+      if (e.key === 'Escape') return this.menu ? this.closeMenu() : this.exit();
       if (e.key === ' ') {
         e.preventDefault();
         if (!e.repeat) this.shoot();
@@ -334,10 +403,49 @@ export class PhotoMode {
   zoom(fov) {
     this.fov = THREE.MathUtils.clamp(fov, FOV_MIN, FOV_MAX);
     const el = this.$('#ph-zoom');
-    el.textContent = focal(this.fov) + 'mm';
+    el.textContent = this.fov > FISH ? `魚眼 ${Math.round(THREE.MathUtils.radToDeg(this.fish(this.fov).c * 2))}°` : focal(this.fov) + 'mm';
     el.classList.add('show');
     clearTimeout(this.zoomTimer);
     this.zoomTimer = setTimeout(() => el.classList.remove('show'), 900);
+    this.markLens();
+  }
+
+  // 鏡頭鈕亮哪一顆：彎了就是魚眼，不然看離哪一顆最近
+  markLens() {
+    let at = 0;
+    if (this.fov <= FISH) {
+      let best = Infinity;
+      for (let i = 1; i < LENSES.length; i++) {
+        const d = Math.abs(Math.log(this.fov / LENSES[i][1]));
+        if (d < best) { best = d; at = i; }
+      }
+    }
+    this.$('#ph-lens').querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === at));
+  }
+
+  // 魚眼的形狀（v 超過 FISH 時）：k 彎的程度，c 取景框角落的角度，fo 成像的焦距（CSS 像素）
+  // 剛超過 FISH 時跟一般鏡頭開到 FISH 一模一樣，越往上越彎、角落越斜，中間不會跳
+  fish(v) {
+    const t = (v - FISH) / (FOV_MAX - FISH), k = Math.max(1 - t, 1e-3);
+    const fr = this.frame, rc = Math.hypot(fr.w, fr.h) / 2;
+    const c0 = Math.atan(Math.tan(THREE.MathUtils.degToRad(FISH / 2)) * rc / (window.innerHeight / 2));
+    const c = c0 + Math.max(0, CORNER - c0) * t;
+    return { k, c, fo: rc * k / Math.tan(k * c) };
+  }
+
+  // 照目前的視角擺好鏡頭：一般鏡頭直接設 fov；魚眼的話鏡頭負責畫原圖，視角要廣到整個螢幕彎回去的地方
+  applyLens() {
+    const cam = this.camera, W = window.innerWidth, H = window.innerHeight;
+    if (this.cur <= FISH) {
+      lens.on = false;
+      cam.fov = this.cur;
+    } else {
+      const { k, fo } = this.fish(this.cur);
+      Object.assign(lens, { on: true, k, fo, w: W, h: H });
+      lens.fs = fitSource(W, H);
+      cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(H / 2 / lens.fs));
+    }
+    cam.updateProjectionMatrix();
   }
 
   forward(out) {
@@ -364,7 +472,7 @@ export class PhotoMode {
     this.vel.lerp(want, 1 - Math.exp(-dt * 3.5));
     this.pos.addScaledVector(this.vel, dt);
 
-    const mv = MOVES[this.move];
+    const mv = this.rec ? MOVES[this.move] : '手動';
     if (mv === '推近') this.pos.addScaledVector(this.forward(new THREE.Vector3()), 0.55 * dt);
     else if (mv === '升起') this.pos.y += 0.35 * dt;
     else if (mv === '橫移') { this.pos.x += cy * 0.6 * dt; this.pos.z -= sy * 0.6 * dt; }
@@ -391,10 +499,8 @@ export class PhotoMode {
     const cam = this.camera;
     cam.position.copy(this.pos);
     cam.lookAt(this.pos.clone().add(this.forward(new THREE.Vector3())));
-    if (Math.abs(cam.fov - this.fov) > 0.01) {
-      cam.fov += (this.fov - cam.fov) * t;
-      cam.updateProjectionMatrix();
-    }
+    this.cur = Math.abs(this.fov - this.cur) > 0.01 ? this.cur + (this.fov - this.cur) * t : this.fov;
+    this.applyLens();
 
     // 鏡頭飛進哪一間，就畫哪一間附近的房間
     const room = this.world.roomIndexAt(this.pos.z);
@@ -531,20 +637,29 @@ export class PhotoMode {
       r.setPixelRatio(1);
       r.setSize(outW, outH, false);
       this.resizeFX(outW, outH);
-      cam.setViewOffset(W, H, fr.x, fr.y, fr.w, fr.h);
+      if (lens.on) {
+        // 魚眼要以取景框的中心彎，不能裁：原圖只畫取景框彎回去需要的範圍（取景框本來就在正中間）
+        Object.assign(lens, { w: fr.w, h: fr.h, fs: fitSource(fr.w, fr.h) });
+        cam.aspect = fr.w / fr.h;
+        cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(fr.h / 2 / lens.fs));
+        cam.updateProjectionMatrix();
+      } else cam.setViewOffset(W, H, fr.x, fr.y, fr.w, fr.h);
       this.render(0);
       // 畫完馬上拷走，不然下一幀之前 WebGL 會把畫面清掉
       this.compose(ctx, r.domElement, 0, 0, outW, outH, outW, outH, k, Math.random());
     } finally {
       cam.clearViewOffset();
+      cam.aspect = W / H;
+      this.applyLens();
       r.setPixelRatio(dpr);
       r.setSize(W, H, false);
       this.resizeFX(W, H);
       this.render(0);
     }
     this.flash();
-    out.toBlob((blob) => {
-      if (blob) this.showResult(blob, `煉金畫廊-${stamp()}.jpg`, false);
+    const card = this.postcard ? makePostcard(out) : out;
+    card.toBlob((blob) => {
+      if (blob) this.showResult(blob, `${this.postcard ? '海市明信片' : '煉金畫廊'}-${stamp()}.jpg`, false);
     }, 'image/jpeg', 0.92);
   }
 
@@ -597,7 +712,9 @@ export class PhotoMode {
       if (blob.size && this.active) this.showResult(blob, `煉金畫廊-${stamp()}.${type === 'video/mp4' ? 'mp4' : 'webm'}`, true);
     };
     mr.start(1000);
-    this.rec = { mr, canvas: c, ctx: c.getContext('2d'), k, start: performance.now(), shift: 0 };
+    this.closeMenu();
+    this.aimPivot();
+    this.rec ={ mr, canvas: c, ctx: c.getContext('2d'), k, start: performance.now(), shift: 0 };
     document.body.classList.add('photo-rec');
     this.$('#ph-rec').hidden = false;
     this.refresh();
@@ -644,7 +761,7 @@ export class PhotoMode {
     box.appendChild(m);
     const file = new File([blob], name, { type: blob.type });
     this.$('#ph-share').hidden = !navigator.canShare?.({ files: [file] });
-    this.$('#ph-tip').textContent = video ? '' : this.coarse ? '也可以長按照片存起來' : '';
+    this.$('#ph-tip').textContent = this.postcard ? '按分享，選要寄給誰' : video ? '' : this.coarse ? '也可以長按照片存起來' : '';
     this.$('#ph-result').hidden = false;
   }
 
@@ -660,7 +777,7 @@ export class PhotoMode {
     const r = this.result;
     if (!r) return;
     try {
-      await navigator.share({ files: [new File([r.blob], r.name, { type: r.blob.type })], title: this.title });
+      await navigator.share({ files: [new File([r.blob], r.name, { type: r.blob.type })], title: this.postcard ? '從海市寄來的明信片' : this.title });
     } catch (e) {
       if (e.name !== 'AbortError') this.download();
     }

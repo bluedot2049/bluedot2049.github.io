@@ -280,6 +280,8 @@ export function buildHarbor({ group, h, Z, G, SEA_LEVEL, SEA_BED, REFLECT_LAYER 
 
   return {
     blocks,
+    // 渡船：站在棧橋右緣、小划船旁邊就能上船；從海市回來也站在這裡
+    ferry: { x: J.x + J.hw - 0.45, z: Z(50), r: 1.6 },
     // 冒險者的船：航線、霧裡最遠那一點、水面高度，上岸站的三個點在方台西側
     dock: {
       sea: SEA_LEVEL,

@@ -29,7 +29,7 @@ export class Player {
     this.dom = dom;
     this.world = world;
     this.character = character;
-    this.events = events;           // { onArrivePainting, onArriveMirror, onJump, onSit(seat), onFood, onPet(animal), onRoomChange, onInput(kind) }
+    this.events = events;           // { onArrivePainting, onArriveMirror, onJump, onSit(seat), onFood, onPet(animal), onExit(exit), onRoomChange, onInput(kind) }
     this.pos = new THREE.Vector3(0, 0, -2);
     this.heading = Math.PI;
     this.path = [];
@@ -38,8 +38,11 @@ export class Player {
     this.camYaw = 0;
     this.camPitch = PITCH_DEFAULT;
     this.camDist = defaultDist();
+    this.distMax = world.camDistMax ?? DIST_MAX;   // 海市可以拉得比較遠，看得到整座山城
+    this.zoomGoal = null;           // 慢慢推到這個距離和俯角，見 zoomTo
     this.camPos = new THREE.Vector3();
     this.camLook = new THREE.Vector3();
+    this.headPos = new THREE.Vector3();
     this.keys = new Set();
     this.joy = { x: 0, y: 0 };      // 虛擬搖桿，-1 ~ 1
     this.mouseRun = false;          // 滑鼠左右鍵同時按著：往鏡頭前方走
@@ -98,7 +101,8 @@ export class Player {
       if (pinch && pts.size >= 2) {
         const [a, b] = [...pts.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
-        this.camDist = THREE.MathUtils.clamp(pinch.base * (pinch.d / Math.max(d, 1)), DIST_MIN, DIST_MAX);
+        this.camDist = THREE.MathUtils.clamp(pinch.base * (pinch.d / Math.max(d, 1)), DIST_MIN, this.distMax);
+        this.zoomGoal = null;
         this.events.onInput('drag');
         return;
       }
@@ -128,7 +132,8 @@ export class Player {
     el.addEventListener('wheel', (e) => {
       if (this.paused) return;
       e.preventDefault();
-      this.camDist = THREE.MathUtils.clamp(this.camDist * (1 + e.deltaY * 0.001), DIST_MIN, DIST_MAX);
+      this.camDist = THREE.MathUtils.clamp(this.camDist * (1 + e.deltaY * 0.001), DIST_MIN, this.distMax);
+      this.zoomGoal = null;
       this.events.onInput('drag');
     }, { passive: false });
 
@@ -302,6 +307,11 @@ export class Player {
     if (i >= 0 && i < list.length) this.showPainting(list[i]);
   }
 
+  // 鏡頭慢慢推到 dist、pitch，不給就是預設的距離和俯角。手動縮放會打斷
+  zoomTo(dist = defaultDist(), pitch = PITCH_DEFAULT) {
+    this.zoomGoal = { dist, pitch };
+  }
+
   // 鏡頭轉回角色背後，俯角和距離恢復預設
   recenter() {
     this.events.onInput('tap');
@@ -370,7 +380,7 @@ export class Player {
     this.events.onSit?.(true);
   }
 
-  // 動作按鈕現在該做什麼：看畫、照鏡子、坐下、拿點心、摸動物、跟訪客聊天、吃一口、起來。回傳 { kind, p? } 或 null
+  // 動作按鈕現在該做什麼：看畫、照鏡子、坐下、拿點心、摸動物、跟訪客聊天、搭船、吃一口、起來。回傳 { kind, p? } 或 null
   actionTarget() {
     const ch = this.character;
     if (this.sitting) {
@@ -400,6 +410,10 @@ export class Player {
     if (an) list.push({ kind: 'pet', p: an.a, d: an.d });
     const vi = this.visitors?.nearest(x, z);
     if (vi) list.push({ kind: 'talk', p: vi.v, d: vi.d });
+    for (const ex of this.world.exits || []) {
+      const d = Math.hypot(x - ex.x, z - ex.z);
+      if (d < ex.r) list.push({ kind: 'exit', p: ex, d });
+    }
     if (list.length) return list.reduce((a, b) => (b.d < a.d ? b : a));
     return ch.food ? { kind: 'eat' } : null;
   }
@@ -415,6 +429,7 @@ export class Player {
       case 'seat': this.goTo(this.planSeat(t.p)); break;
       case 'pet': this.goToAnimal(t.p); break;
       case 'talk': t.p.talkTo(); break;
+      case 'exit': this.events.onExit?.(t.p); break;
       case 'stand': this.exitFocus(); break;
       case 'table':
         ch.hold(1 + Math.floor(Math.random() * 5));
@@ -480,6 +495,15 @@ export class Player {
     this.stop();
   }
 
+  // 換區域抵達時站到指定位置、面向 heading，鏡頭直接到位，不從別處滑過來
+  place(x, z, heading) {
+    this.teleport(x, z);
+    this.pos.y = this.world.groundY(x, z);
+    this.heading = heading;
+    this.camYaw = heading + Math.PI;
+    this.desiredCamera(this.camPos, this.camLook);
+  }
+
   fadeTarget() {
     return this.focus?.fadeTarget || this.pos;
   }
@@ -499,6 +523,11 @@ export class Player {
       outLook.y + Math.sin(pitch) * this.camDist,
       outLook.z + Math.cos(this.camYaw) * c * this.camDist
     );
+    // 角色和鏡頭之間被房子擋住時，鏡頭往前移到房子前面（海市的窄巷）
+    if (this.world.camClip) {
+      const head = this.headPos.set(this.pos.x, this.pos.y + 1.2, this.pos.z), clip = this.world.camClip(head, outPos);
+      if (clip < 1) outPos.lerpVectors(head, outPos, Math.max(clip, 0.15));
+    }
     // 鏡頭不鑽進地面，也不退進樹林裡
     outPos.y = Math.max(outPos.y, this.world.camFloor(outPos.x, outPos.z) + 0.3);
     // 再往下拉的部分換成抬頭：鏡頭位置不動，視線往上轉，最多接近正上方
@@ -611,6 +640,14 @@ export class Player {
     ch.update(dt, this.speed);
 
     let settling = false;
+    const zg = this.zoomGoal;
+    if (zg) {
+      const f = Math.min(1, dt * 1.3);
+      this.camDist += (zg.dist - this.camDist) * f;
+      this.camPitch += (zg.pitch - this.camPitch) * f;
+      if (Math.abs(zg.dist - this.camDist) < 0.02 && Math.abs(zg.pitch - this.camPitch) < 0.002) this.zoomGoal = null;
+      settling = true;
+    }
     if (!this.paused) {
       const dPos = new THREE.Vector3(), dLook = new THREE.Vector3();
       this.desiredCamera(dPos, dLook);
@@ -619,7 +656,7 @@ export class Player {
       this.camLook.lerp(dLook, f);
       this.camera.position.copy(this.camPos);
       this.camera.lookAt(this.camLook);
-      settling = this.camPos.distanceToSquared(dPos) > 1e-4 || this.camLook.distanceToSquared(dLook) > 1e-4;
+      settling = settling || this.camPos.distanceToSquared(dPos) > 1e-4 || this.camLook.distanceToSquared(dLook) > 1e-4;
     }
 
     this.moving = this.speed > 0.05 || settling || turn !== 0 || ch.busy;

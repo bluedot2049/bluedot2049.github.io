@@ -17,6 +17,8 @@ import { HORIZON, SUN_DIR, MEADOW_NAME, REFLECT_LAYER } from './outdoor.js';
 import { Quality } from './quality.js';
 import { createPostFX } from './postfx.js';
 import { PhotoMode } from './photo.js';
+import { Vendors } from './vendors.js';
+import { lens, LensPass } from './lens.js';
 
 async function loadJSON(url) {
   const res = await fetch(url, { cache: 'no-cache' });
@@ -109,6 +111,11 @@ async function start() {
     return;
   }
 
+  // 世界分成幾個區域，一次只建一個。?z=haishi 是海市，沒有寫就是畫廊。
+  // 換區域時整頁重新載入：瀏覽器一定會把上一個區域的記憶體收回去，手機才撐得住
+  const zone = params.get('z') === 'haishi' ? 'haishi' : 'gallery';
+  const town = zone === 'haishi';
+
   const coarse = matchMedia('(pointer: coarse)').matches;
   const quality = new Quality(coarse, params);
   // 有後製時由 SMAA 處理鋸齒，瀏覽器的多重取樣用不到。手機實際只畫 1 到 2 倍解析度，邊緣一樣會鋸齒，也要開
@@ -130,11 +137,13 @@ async function start() {
   hemi.layers.enable(REFLECT_LAYER);
   sun.layers.enable(REFLECT_LAYER);
 
-  // 室內和戶外的光線、霧。走出後門時在兩組之間漸變
-  const ENV = [
+  const world = town ? (await import('./haishi.js')).buildHaishi(scene, { coarse }) : buildWorld(scene, gallery);
+
+  // 室內和戶外的光線、霧。走出後門時在兩組之間漸變。海市只有一組
+  const ENV = (town ? [world.env, world.env] : [
     { bg: 0x1c130d, near: 16, far: 38, sky: 0xfff0dc, ground: 0x6a4a34, hi: 1.9, sun: 0xffcf98, si: 1.3, dir: new THREE.Vector3(4, 8, 3) },
     { bg: HORIZON, near: 28, far: 170, sky: 0xffd2b0, ground: 0x56603a, hi: 1.5, sun: 0xffa868, si: 1.9, dir: SUN_DIR.clone().multiplyScalar(-1).setY(0.45).multiplyScalar(10) },
-  ].map((e) => ({ ...e, bg: new THREE.Color(e.bg), sky: new THREE.Color(e.sky), ground: new THREE.Color(e.ground), sun: new THREE.Color(e.sun) }));
+  ]).map((e) => ({ ...e, bg: new THREE.Color(e.bg), sky: new THREE.Color(e.sky), ground: new THREE.Color(e.ground), sun: new THREE.Color(e.sun) }));
   let envT = -1;
   function applyEnv(t) {
     if (Math.abs(t - envT) < 0.002) return;
@@ -155,16 +164,19 @@ async function start() {
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 400);
   camera.layers.enable(ANIMAL_LAYER);   // 動物只在圖層 1；海面反射的鏡頭只看 REFLECT_LAYER
 
-  const world = buildWorld(scene, gallery);
+  if (town) applyEnv(0);
   const shadowTex = TX.shadowTexture();
   let look = loadLook();
   const character = new Character(shadowTex, look);
   scene.add(character.group);
   // 前廳的海牛頭人：擋住一小塊地面，玩家靠近時會轉過來面對
-  const spot = world.findWalkable(1.9, -3.4, 0, -2) || { x: 1.9, z: -3.4 };
-  const manatee = new Manatee(shadowTex, spot.x, spot.z);
-  scene.add(manatee.group);
-  world.rooms[0].obstacles.push({ x: spot.x, z: spot.z, hw: 0.4, hd: 0.4, rot: 0 });
+  let manatee = null;
+  if (!town) {
+    const spot = world.findWalkable(1.9, -3.4, 0, -2) || { x: 1.9, z: -3.4 };
+    manatee = new Manatee(shadowTex, spot.x, spot.z);
+    scene.add(manatee.group);
+    world.rooms[0].obstacles.push({ x: spot.x, z: spot.z, hw: 0.4, hd: 0.4, rot: 0 });
+  }
   // 陽台長桌的主人，也是一隻海牛頭人
   const host = world.outdoor ? new Manatee(shadowTex, world.outdoor.host.x, world.outdoor.host.z, TABLE_LINES) : null;
   if (host) scene.add(host.group);
@@ -173,6 +185,7 @@ async function start() {
   let swipeHinted = false;
   let mp = null;
   let place = null;   // 戶外現在在哪裡：null 是陽台，否則是草原或棧橋盡頭的地名
+  let overview = town;   // 剛到海市：鏡頭拉得很遠看全貌，開始走動才推近
   let sitHinted = false;
 
   // 捏角色：每改一下就套到角色身上、存起來、告訴別人，鏡頭照目前那一頁取景
@@ -201,6 +214,10 @@ async function start() {
   const player = new Player(camera, renderer.domElement, world, character, {
     onInput(kind) {
       lastInput = performance.now();
+      if (overview && kind !== 'drag') {
+        overview = false;
+        if (player.camDist > 20) player.zoomTo();
+      }
       ui.hidePainting();
       ui.hideDress();
       ui.hideHint();
@@ -227,6 +244,9 @@ async function start() {
       mp?.pet(a.index);
       lastInput = performance.now();
     },
+    onExit(ex) {
+      travel(ex.to);
+    },
     onArrivePainting(p) {
       ui.showPainting(p, p.url);
       if (coarse && !swipeHinted) {
@@ -243,15 +263,42 @@ async function start() {
     },
   });
   scene.add(player.marker);
-  const animals = new Animals({ world, shadowTex, player, camera, ambience });
+  // 動物和不定期搭船來看畫的冒險者在畫廊那一區，海市有攤販
+  let animals = null, visitors = null, vendors = null;
+  if (!town) {
+    animals = new Animals({ world, shadowTex, player, camera, ambience });
+    visitors = new Visitors({ scene, world, shadowTex, player, camera, host, animals, force: params.get('visit') });
+    animals.visitors = visitors;
+  } else {
+    // 信差站的攤販：聊完直接進攝影模式拍明信片
+    vendors = new Vendors({ scene, shadowTex, spots: world.shops, onPostcard: () => photo.enter({ postcard: true }) });
+  }
+  const crowd = visitors || vendors;
   player.animals = animals;
-  // 不定期搭船來看畫的冒險者
-  const visitors = new Visitors({ scene, world, shadowTex, player, camera, host, animals, force: params.get('visit') });
-  player.visitors = visitors;
-  animals.visitors = visitors;
+  player.visitors = crowd;
+
+  // 渡海：載入畫面換成小船，蓋住畫面後整頁換到另一個區域。from 記住從哪裡來，到了站在對應的碼頭
+  let traveling = false;
+  function travel(to, extra = {}) {
+    if (traveling) return;
+    traveling = true;
+    const q = new URLSearchParams(location.search);
+    for (const k of ['z', 'from', 'go']) q.delete(k);
+    if (to !== 'gallery') q.set('z', to);
+    q.set('from', zone);
+    for (const [k, v] of Object.entries(extra)) q.set(k, v);
+    const el = document.getElementById('loading');
+    el.querySelector('.msg').textContent = to === 'gallery' ? '渡海　回畫廊' : '渡海　往海市';
+    el.classList.add('crossing');
+    el.classList.remove('done');
+    mp?.sendNow();
+    setTimeout(() => location.replace(`${location.pathname}?${q}`), 850);
+  }
 
   ui.buildList(true);
   ui.onGoTo = (ri, pi) => {
+    // 在海市點清單裡的畫：搭船回畫廊，到了直接站到那幅畫前面
+    if (town) return travel('gallery', { go: `${ri}.${pi}` });
     const p = world.rooms[ri]?.paintings[pi];
     if (!p) return;
     player.showPainting(p);
@@ -269,11 +316,11 @@ async function start() {
   const actionBtn = document.getElementById('action-btn');
   actionBtn.addEventListener('click', () => player.action());
   const actionLabel = actionBtn.querySelector('.a1');
-  const LABELS = { painting: '看畫', mirror: '照鏡子', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', eat: '吃一口', stand: '起來' };
+  const LABELS = { painting: '看畫', mirror: '照鏡子', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來' };
   let nearKey = null;
   function updateAction() {
     const t = player.actionTarget();
-    const key = t ? (t.kind === 'painting' || t.kind === 'pet' || t.kind === 'talk' ? t.p : t.kind) : null;
+    const key = t ? (t.kind === 'painting' || t.kind === 'pet' || t.kind === 'talk' || t.kind === 'exit' ? t.p : t.kind) : null;
     const sitting = player.sitCode !== 0;
     if (sitting !== document.body.classList.contains('sitting')) {
       document.body.classList.toggle('sitting', sitting);
@@ -284,9 +331,9 @@ async function start() {
     nearKey = key;
     actionBtn.classList.toggle('show', !!t);
     if (!t) return;
-    actionLabel.textContent = LABELS[t.kind];
+    actionLabel.textContent = (t.kind === 'talk' && t.p.actionLabel) || LABELS[t.kind];
     actionBtn.setAttribute('aria-label', actionLabel.textContent);
-    document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : t.kind === 'pet' || t.kind === 'talk' ? t.p.name : '';
+    document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : t.kind === 'pet' || t.kind === 'talk' ? t.p.name : t.kind === 'exit' ? t.p.title : '';
   }
 
   // 聲音開關：戶外的風聲和動物叫聲共用，室內也有貓，所以一直都在
@@ -328,15 +375,15 @@ async function start() {
   function sendEmote(e) {
     mp.emote(e);
     if (e !== '😮') return;
-    manatee.startled(player.pos.x, player.pos.z);
+    manatee?.startled(player.pos.x, player.pos.z);
     if (host?.group.visible) host.startled(player.pos.x, player.pos.z);
   }
 
-  // 多人同遊：gallery.json 有填 realtime 才連線，連不上就當單人
+  // 多人同遊：gallery.json 有填 realtime 才連線，連不上就當單人。每個區域各用一個頻道，只看得到同一區的人
   const rt = gallery.realtime;
   if (rt?.url && rt?.key) {
     let ready = false;
-    mp = new Multiplayer(scene, shadowTex, player, rt, {
+    mp = new Multiplayer(scene, shadowTex, player, town ? { ...rt, channel: `${rt.channel || 'gallery'}-${zone}` } : rt, {
       onCount: (n) => ui.online(n),
       onReady() {
         if (ready) return;
@@ -345,15 +392,15 @@ async function start() {
       },
       // 別人摸了動物：那位訪客的學徒也做出摸的動作
       onPet(o, i) {
-        const a = animals.remotePet(i, o);
+        const a = animals?.remotePet(i, o);
         if (a) o.ch.pet(a.spec.high);
       },
       onJump(o) {
-        animals.startle(o.pos.x, o.pos.z);
+        animals?.startle(o.pos.x, o.pos.z);
       },
     }, look);
     mp.connect().catch((e) => console.warn('多人連線失敗：', e));
-    visitors.mp = mp;
+    if (visitors) visitors.mp = mp;
     // 電腦：數字鍵 1–5 送表情
     window.addEventListener('keydown', (e) => {
       const i = e.key.length === 1 ? '12345'.indexOf(e.key) : -1;
@@ -363,18 +410,25 @@ async function start() {
 
   // 後製和著色器預先編譯同時進行；載不到就照原本的畫法
   let fx = null;
+  // 攝影模式的魚眼：有後製就接在後製最後面，沒有就自己先畫進一張圖再彎
+  const lensPass = new LensPass();
+  const draw = (dt) => {
+    if (fx) fx.render(dt);
+    else if (lens.on) lensPass.renderScene(renderer, scene, camera);
+    else renderer.render(scene, camera);
+  };
 
   // 攝影模式：右上角相機按鈕或 P 鍵進出
   const photo = new PhotoMode({
     renderer, camera, player, world, character, ambience, ui, coarse,
     title: gallery.title || '煉金畫廊',
-    render: (dt) => (fx ? fx.render(dt) : renderer.render(scene, camera)),
+    render: draw,
     resizeFX: (w, h) => fx?.setSize(w, h),
   });
   document.getElementById('photo-btn').addEventListener('click', () => photo.enter());
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals, visitors, quality, host, photo };
-  const fxJob = quality.post ? createPostFX(renderer, scene, camera).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals, visitors, vendors, quality, host, photo };
+  const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
     if (!q.post && fx) { fx.dispose(); fx = null; }
@@ -393,9 +447,29 @@ async function start() {
   }
   const stats = params.has('debug') ? debugStats(renderer, quality) : null;
 
+  // 抵達：海市從碼頭開始；從海市搭船回畫廊，站在小划船往草原走幾步的地方，面向草原
+  const ferry = world.exits[0];
+  if (town) {
+    // 鏡頭從海上遠遠看著整座山城，直式螢幕比較窄，再退遠一點
+    player.camDist = window.innerWidth < window.innerHeight ? 44 : 34;
+    player.camPitch = 0.2;
+    player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
+  }
+  else if (params.get('from') === 'haishi' && ferry) player.place(ferry.x, ferry.z + 1.8, 0);
+  const go = params.get('go')?.split('.').map(Number);
+  if (go && !town) ui.onGoTo(go[0], go[1]);
+  // 抵達用的參數用過就拿掉，重新整理時不會又跑去同一個地方
+  if (params.has('from') || params.has('go')) {
+    const q = new URLSearchParams(location.search);
+    q.delete('from');
+    q.delete('go');
+    const s = q.toString();
+    history.replaceState(null, '', s ? `${location.pathname}?${s}` : location.pathname);
+  }
+
   ui.loading(null);
   if (params.has('photo')) photo.enter();
-  else ui.hint(coarse ? '右下搖桿或點地面走路　拖曳轉視角' : '點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下　Enter 看畫', 6000);
+  else ui.hint(coarse ? '右下搖桿或點地面走路　拖曳轉視角' : `點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下${town ? '' : '　Enter 看畫'}`, 6000);
 
   // 照鏡子時：太靠近玩家或擋在鏡頭與玩家之間的訪客與其他玩家淡成半透明
   let mirrorFading = false;
@@ -447,8 +521,8 @@ async function start() {
       }
     };
 
-    if (visitors?.list) {
-      for (const v of visitors.list) {
+    if (crowd?.list) {
+      for (const v of crowd.list) {
         if (v.shown && !v.aboard) check(v, v.pos.x, v.pos.z);
         else if (v._ghostAlpha && v._ghostAlpha < 1.0) check(v, v.pos.x, v.pos.z);
       }
@@ -481,9 +555,10 @@ async function start() {
     const dt = Math.min(clock.getDelta(), 0.05);
     player.update(dt);
     photo.update(dt);
-    animals.update(dt);
-    visitors.update(dt);
-    manatee.update(dt, player.pos.x, player.pos.z, camera);
+    animals?.update(dt);
+    visitors?.update(dt);
+    vendors?.update(dt, player, camera);
+    manatee?.update(dt, player.pos.x, player.pos.z, camera);
     const othersMoving = mp ? mp.update(dt, performance.now()) : false;
     const fading = updateMirrorFade(dt);
     if (host) {
@@ -508,6 +583,13 @@ async function start() {
         const r = spot || world.rooms[player.room].data;
         if (!back) ui.toast(r.name, r.subtitle);
       }
+    } else if (world.placeAt && !photo.active) {
+      // 海市的石階和各層街道各有名字，走進去時報一次
+      const spot = world.placeAt(player.pos.x, player.pos.z);
+      if (spot && spot !== place) {
+        place = spot;
+        ui.toast(spot.name, spot.subtitle);
+      }
     }
     if (photo.active) world.update(clock.elapsedTime, photo.pos, photo.fadeTarget(), camera);
     else world.update(clock.elapsedTime, player.camPos, player.fadeTarget(), camera);
@@ -516,8 +598,7 @@ async function start() {
     if (idle && frame % 2) return;
     if (!idle) quality.sample(dt);
     if (stats) renderer.info.reset();
-    if (fx) fx.render(dt);
-    else renderer.render(scene, camera);
+    draw(dt);
     photo.afterRender();
     stats?.(dt);
   }

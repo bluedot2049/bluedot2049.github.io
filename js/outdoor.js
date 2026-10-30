@@ -995,6 +995,7 @@ export function buildOutdoor(room, h) {
       { x: pc.x, y: F + 5.13, z: pc.z, h: Math.PI * 0.75, w: 1.5 },
     ],
     dock: harbor.dock,
+    ferry: harbor.ferry,
     door: z0,
     // 室內 0、走出後門 1，主程式用來切換光線和霧
     outdoorness: (z) => smooth(z0 + 3, z0 - 2, z),

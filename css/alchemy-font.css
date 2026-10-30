@@ -1,0 +1,38 @@
+/* 煉金體（Alchemy Gallery Font）- 系統化幾何造字 */
+@font-face {
+    font-family: 'AlchemyGallery';
+    src: url('../assets/AlchemyGallery.woff2') format('woff2'),
+         url('../assets/AlchemyGallery.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* 小字用：筆畫較細、橫更細，24px 以下比較不會糊 */
+@font-face {
+    font-family: 'AlchemyGalleryText';
+    src: url('../assets/AlchemyGalleryText.woff2') format('woff2'),
+         url('../assets/AlchemyGalleryText.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+.alchemy-text {
+    font-family: 'AlchemyGallery', serif;
+    letter-spacing: 0.18em;
+}
+
+.alchemy-small {
+    font-family: 'AlchemyGalleryText', serif;
+    letter-spacing: 0.24em;
+}
+
+.alchemy-gold {
+    font-family: 'AlchemyGallery', serif;
+    letter-spacing: 0.18em;
+    background: linear-gradient(180deg, #f6dba6 0%, #e8b86a 50%, #a9763a 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    display: inline-block;
+}

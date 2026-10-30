@@ -12,37 +12,42 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&display=swap">
-  <link rel="stylesheet" href="css/style.css?v=202610302148">
+  <link rel="stylesheet" href="css/style.css?v=202610302304">
   <script type="importmap">
     { "imports": {
-      "three": "./vendor/three.module.min.js?v=202610302148",
-      "./js/ambience.js": "./js/ambience.js?v=202610302148",
-      "./js/animals.js": "./js/animals.js?v=202610302148",
-      "./js/arcane.js": "./js/arcane.js?v=202610302148",
-      "./js/bubbles.js": "./js/bubbles.js?v=202610302148",
-      "./js/character.js": "./js/character.js?v=202610302148",
-      "./js/creator.js": "./js/creator.js?v=202610302148",
-      "./js/harbor.js": "./js/harbor.js?v=202610302148",
-      "./js/heads.js": "./js/heads.js?v=202610302148",
-      "./js/joystick.js": "./js/joystick.js?v=202610302148",
-      "./js/looks.js": "./js/looks.js?v=202610302148",
-      "./js/lore.js": "./js/lore.js?v=202610302148",
-      "./js/main.js": "./js/main.js?v=202610302148",
-      "./js/manatee.js": "./js/manatee.js?v=202610302148",
-      "./js/mirror.js": "./js/mirror.js?v=202610302148",
-      "./js/multiplayer.js": "./js/multiplayer.js?v=202610302148",
-      "./js/outdoor.js": "./js/outdoor.js?v=202610302148",
-      "./js/photo.js": "./js/photo.js?v=202610302148",
-      "./js/player.js": "./js/player.js?v=202610302148",
-      "./js/postfx.js": "./js/postfx.js?v=202610302148",
-      "./js/props.js": "./js/props.js?v=202610302148",
-      "./js/quality.js": "./js/quality.js?v=202610302148",
-      "./js/textures.js": "./js/textures.js?v=202610302148",
-      "./js/tree.js": "./js/tree.js?v=202610302148",
-      "./js/ui.js": "./js/ui.js?v=202610302148",
-      "./js/visitor-lines.js": "./js/visitor-lines.js?v=202610302148",
-      "./js/visitors.js": "./js/visitors.js?v=202610302148",
-      "./js/world.js": "./js/world.js?v=202610302148"
+      "three": "./vendor/three.module.min.js?v=202610302304",
+      "./js/ambience.js": "./js/ambience.js?v=202610302304",
+      "./js/animals.js": "./js/animals.js?v=202610302304",
+      "./js/arcane.js": "./js/arcane.js?v=202610302304",
+      "./js/bubbles.js": "./js/bubbles.js?v=202610302304",
+      "./js/character.js": "./js/character.js?v=202610302304",
+      "./js/creator.js": "./js/creator.js?v=202610302304",
+      "./js/haishi.js": "./js/haishi.js?v=202610302304",
+      "./js/harbor.js": "./js/harbor.js?v=202610302304",
+      "./js/heads.js": "./js/heads.js?v=202610302304",
+      "./js/joystick.js": "./js/joystick.js?v=202610302304",
+      "./js/lens.js": "./js/lens.js?v=202610302304",
+      "./js/looks.js": "./js/looks.js?v=202610302304",
+      "./js/lore.js": "./js/lore.js?v=202610302304",
+      "./js/main.js": "./js/main.js?v=202610302304",
+      "./js/manatee.js": "./js/manatee.js?v=202610302304",
+      "./js/mirror.js": "./js/mirror.js?v=202610302304",
+      "./js/multiplayer.js": "./js/multiplayer.js?v=202610302304",
+      "./js/outdoor.js": "./js/outdoor.js?v=202610302304",
+      "./js/pathgrid.js": "./js/pathgrid.js?v=202610302304",
+      "./js/photo.js": "./js/photo.js?v=202610302304",
+      "./js/player.js": "./js/player.js?v=202610302304",
+      "./js/postcard.js": "./js/postcard.js?v=202610302304",
+      "./js/postfx.js": "./js/postfx.js?v=202610302304",
+      "./js/props.js": "./js/props.js?v=202610302304",
+      "./js/quality.js": "./js/quality.js?v=202610302304",
+      "./js/textures.js": "./js/textures.js?v=202610302304",
+      "./js/tree.js": "./js/tree.js?v=202610302304",
+      "./js/ui.js": "./js/ui.js?v=202610302304",
+      "./js/vendors.js": "./js/vendors.js?v=202610302304",
+      "./js/visitor-lines.js": "./js/visitor-lines.js?v=202610302304",
+      "./js/visitors.js": "./js/visitors.js?v=202610302304",
+      "./js/world.js": "./js/world.js?v=202610302304"
     } }
   </script>
 </head>
@@ -71,9 +76,25 @@
       <g class="ring-c"><path d="M60 14 L100 83 L20 83 Z"/><circle cx="60" cy="60" r="23"/></g>
       <circle class="core" cx="60" cy="60" r="3"/>
     </svg>
+    <!-- 渡海時換成這艘在浪上起伏的小船 -->
+    <svg class="crossing-boat" viewBox="0 0 160 70" aria-hidden="true">
+      <g class="boat"><path d="M52 40 Q80 52 108 40 L102 48 Q80 56 58 48 Z"/><path d="M80 40 V14 M80 16 L98 36 H80"/></g>
+      <path class="wave w1" d="M0 52 q10 -5 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0"/>
+      <path class="wave w2" d="M0 60 q10 -4 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0"/>
+    </svg>
     <img class="brand" src="assets/wordmark-flat-gold.svg" alt="煉金畫廊">
     <div class="msg">載入中</div>
   </div>
+  <script>
+    // 從別的區域搭船過來：一開頁就是渡海的畫面，不先閃一下轉圈的符號
+    (function () {
+      var q = new URLSearchParams(location.search);
+      if (!q.has('from')) return;
+      var el = document.getElementById('loading');
+      el.classList.add('crossing');
+      el.querySelector('.msg').textContent = q.get('z') === 'haishi' ? '渡海　往海市' : '渡海　回畫廊';
+    })();
+  </script>
 
   <div id="toast"></div>
   <div id="hint"></div>
@@ -131,10 +152,14 @@
     <div id="ph-rec" hidden><i></i><span>00:00</span></div>
     <div id="ph-zoom"></div>
     <div id="ph-bar"><div id="ph-chips"></div></div>
+    <div id="ph-menu" hidden></div>
     <button id="ph-exit" class="icon-btn round" aria-label="離開攝影模式" title="離開（Esc）"><svg><use href="#i-close"/></svg></button>
     <div id="ph-shoot">
-      <button id="ph-shutter" aria-label="拍照" title="拍照（空白鍵）"></button>
-      <button id="ph-record" aria-label="錄影" title="錄影，最長一分鐘"><i></i></button>
+      <div id="ph-lens" role="group" aria-label="鏡頭"></div>
+      <div class="ph-keys">
+        <button id="ph-shutter" aria-label="拍照" title="拍照（空白鍵）"></button>
+        <button id="ph-record" aria-label="錄影" title="錄影，最長一分鐘"><i></i></button>
+      </div>
     </div>
     <button id="ph-up" class="seal ph-seal" aria-label="升高">升</button>
     <button id="ph-down" class="seal ph-seal" aria-label="降低">降</button>
@@ -162,6 +187,6 @@
     <div id="list-body"></div>
   </div>
 
-  <script type="module" src="js/main.js?v=202610302148"></script>
+  <script type="module" src="js/main.js?v=202610302304"></script>
 </body>
 </html>

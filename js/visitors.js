@@ -14,6 +14,7 @@ import { hull, JETTY } from './harbor.js';
 import { REFLECT_LAYER } from './outdoor.js';
 import { ANIMAL_LAYER, LIT, GLOW, geo, hash, wrapAngle, along } from './animals.js';
 import { HEADS, rod } from './heads.js';
+import { bend } from './lens.js';
 import { LINES, HOST, VOICES, ROLE_LINES, BOAT, REGULARS, ORIGINS, EVENTS, NEXTS } from './visitor-lines.js';
 
 const SLOT = 600;          // 每段幾秒，一段最多來一船
@@ -22,6 +23,7 @@ const REGULAR_EVERY = 9;   // 熟客每隔幾段排一次班（那一段剛好�
 const BOAT_V = 3, EASE = 10;   // 船速（公尺／秒）；靠岸減速、離岸加速的距離
 const HOP = 1;             // 上下船跳一下幾秒
 const HEAR = 16, GREET_R = 3.2;
+const SAY_GAP = 3.5, SAY_MAX = 2;   // 自己冒出來的話：一句之後隔幾秒才換下一個人講、畫面上最多幾個人同時在講
 const DODGE = 0.7;        // 側身讓開時跟玩家留的距離
 const smooth = (t) => t * t * (3 - 2 * t);
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
@@ -718,12 +720,13 @@ class Visitor {
       if (!r || !a.shown || this.saw.has(kind) || (kind === 'owl' && !a.perched) || a.react?.kind === 'hide') continue;
       if (Math.hypot(a.pos.x - S.x, a.pos.z - S.z) > r) continue;
       this.saw.add(kind);
-      if (Math.random() < 0.7) this.say(this.pickLine(kind));
+      if (Math.random() < 0.7 && this.set.canSay()) this.say(this.pickLine(kind));
       return;
     }
   }
 
-  // 照行程到了該說的時間就說。剛進來的人只看得到最近兩秒內的那一句，不會一口氣冒一串
+  // 照行程到了該說的時間就說。剛進來的人只看得到最近兩秒內的那一句，不會一口氣冒一串。
+  // 別人剛講完或已經有兩個人在講，這一句就略過（熟客跟海牛講故事不略過）；訪客那句沒講出來，海牛也不回
   lines(S, pd, env) {
     const list = S.sg.lines;
     if (!list) return;
@@ -737,8 +740,11 @@ class Visitor {
     if (S.tau - ln.t > 2 || pd > HEAR) return;
     if (ln.host) {
       const h = this.set.host;
-      if (h?.group.visible && !h.bubble.classList.contains('show')) h.say(ln.text);
-    } else if (!this.talk) this.say(ln.text);
+      if (this.saidLine === key - 1 && h?.group.visible && !h.bubble.classList.contains('show')) h.say(ln.text);
+    } else if (!this.talk && (this.set.canSay() || (this.L.reg && S.sg.kind === 'chat'))) {
+      this.say(ln.text);
+      this.saidLine = key;
+    }
   }
 
   // 從台詞庫抽一句：熟客、職業、種族自己的先出，共用的混在後面。同一趟抽過的不再抽，整船的人也不會說同一句。
@@ -815,7 +821,7 @@ class Visitor {
   placeBubble(camera) {
     const v = this.rig.root.position.clone();
     v.y += (this.L.kind === 'rabbit' ? 1.8 : 1.55) * this.L.scale;
-    v.project(camera);
+    bend(v.project(camera));
     const b = this.bubble.style;
     if (v.z > 1) { b.visibility = 'hidden'; return; }
     b.visibility = '';
@@ -944,7 +950,7 @@ export class Visitors {
     // 跟海牛聊天：站在海牛背對長桌的那一側，三個人分開站
     const hp = pl.host, ax = hp.x - pl.table.x, az = hp.z - pl.table.z, base = Math.atan2(ax, az) + (j - 1) * 0.75;
     const cs = w.findWalkable(hp.x + Math.sin(base) * 1.3, hp.z + Math.cos(base) * 1.3, hp.x, hp.z);
-    if (cs) items.push({ kind: 'chat', act: 'chat', to: cs, h: Math.atan2(hp.x - cs.x, hp.z - cs.z), face: hp, T: L.reg ? 30 : ro.chatT ?? 22 });
+    if (cs) items.push({ kind: 'chat', act: 'chat', to: cs, h: Math.atan2(hp.x - cs.x, hp.z - cs.z), face: hp, T: L.reg ? 42 : ro.chatT ?? 22 });
 
     const rest = [];
     if (pl.eatSeats.length && u(26) < 0.85) {
@@ -1052,7 +1058,7 @@ export class Visitors {
   script(vis, sg, i) {
     const h = (s) => hash(vis.seed, i, s), out = [];
     const outside = (p) => this.world.outdoor.inMeadow(p.z);
-    if (sg.W > 15 && h(1) < 0.35) out.push({ t: 1, text: vis.pickLine(outside(sg.from) && outside(sg.to) ? 'walkOut' : 'walk') });
+    if (sg.W > 15 && h(1) < 0.25) out.push({ t: 1, text: vis.pickLine(outside(sg.from) && outside(sg.to) ? 'walkOut' : 'walk') });
     const t0 = sg.W;
     const ctx = sg.p ? paintCtx(sg.p.data || {}) : sg.food != null ? { f: FOODS[sg.food].name } : null;
     if (sg.kind === 'chat') {
@@ -1061,14 +1067,14 @@ export class Visitors {
         const tp = topics[n], text = tp.story ?? vis.pickLine(tp);
         if (!text) continue;
         out.push({ t: t0 + t, text });
-        out.push({ t: t0 + t + 3, text: this.hostLine(tp.story ? 'story' : tp), host: true });
-        t += 6.5;
+        out.push({ t: t0 + t + 4, text: this.hostLine(tp.story ? 'story' : tp), host: true });
+        t += 10;
       }
     } else {
       // 畫前速寫的人，畫畫的話和看畫的話輪著說
       const cats = sg.kind === 'sketch' && sg.p ? ['sketch', 'view'] : [sg.kind];
-      for (let t = 2 + h(3) * 2, n = 0; t < sg.T - 2; t += 9 + h(20 + n) * 8, n++) {
-        if (h(40 + n) < 0.75) out.push({ t: t0 + t, text: vis.pickLine(cats[n % cats.length], ctx) });
+      for (let t = 2 + h(3) * 2, n = 0; t < sg.T - 2; t += 14 + h(20 + n) * 10, n++) {
+        if (h(40 + n) < 0.6) out.push({ t: t0 + t, text: vis.pickLine(cats[n % cats.length], ctx) });
       }
     }
     return out.filter((l) => l.text);
@@ -1096,7 +1102,7 @@ export class Visitors {
         return;
       }
       const d = pool[Math.floor(hash(k, salt, 1) * pool.length)], s0 = Math.floor(hash(k, salt, 2) * n);
-      d.forEach((line, i) => out.push({ t: t0 + i * 3.4, v: vs[(s0 + i) % n], text: fill(line, this.ctx) }));
+      d.forEach((line, i) => out.push({ t: t0 + i * 4.5, v: vs[(s0 + i) % n], text: fill(line, this.ctx) }));
     };
     add(B.tIn - 13, BOAT.arrive, BOAT.arriveSolo, 61);
     const aboard = Math.max(...vs.map((v) => v.segs[v.segs.length - 1].t0)) + HOP;
@@ -1161,6 +1167,16 @@ export class Visitors {
     if (c - this.lastC > 3) this.lastC = c;
     for (const l of this.talkLines) if (l.t > this.lastC && l.t <= c) l.v.boatSay(l.text);
     this.lastC = c;
+  }
+
+  // 訪客自己冒出來的話能不能講：上一句剛出來不久、或畫面上已經有兩個人在講，就先不講。
+  // 只管自己的畫面，玩家搭話和打招呼不受影響
+  canSay() {
+    const now = performance.now() / 1000;
+    if (now < (this.quietUntil ?? 0)) return false;
+    if (this.list.filter((v) => v.bubble?.classList.contains('show')).length >= SAY_MAX) return false;
+    this.quietUntil = now + SAY_GAP;
+    return true;
   }
 
   // 自己或別的玩家坐在第 i 個座位上

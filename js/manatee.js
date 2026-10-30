@@ -1,5 +1,6 @@
 // 海牛頭人：站在前廳的黑暗法師 NPC，造型取自遊戲專案的「豆子」身形。面向本地 +z。
 import * as THREE from 'three';
+import { bend } from './lens.js';
 
 function mat(color, extra = {}) {
   return new THREE.MeshLambertMaterial({ color, flatShading: true, ...extra });
@@ -172,7 +173,7 @@ export class Manatee {
   placeBubble(camera) {
     const v = this.group.position.clone();
     v.y += 1.7;
-    v.project(camera);
+    bend(v.project(camera));
     const b = this.bubble.style;
     if (v.z > 1) { b.visibility = 'hidden'; return; }
     b.visibility = '';

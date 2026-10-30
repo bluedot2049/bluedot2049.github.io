@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>煉金體字型標本 — 模組化漢字造字系統</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Noto+Serif+TC:wght@400;600&display=swap">
+  <link rel="stylesheet" href="css/alchemy-font.css">
+  <style>
+    :root {
+      --bg: #140d09;
+      --card-bg: rgba(28, 19, 13, 0.75);
+      --card-border: rgba(232, 184, 106, 0.22);
+      --gold: #e8b86a;
+      --gold-hi: #f6dba6;
+      --gold-lo: #a9763a;
+      --text: #f5e9d4;
+      --muted: #b5a084;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at 50% 15%, #24160e 0%, var(--bg) 70%);
+      color: var(--text);
+      font-family: "Noto Serif TC", serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    header {
+      width: 100%;
+      max-width: 1040px;
+      padding: 40px 24px 20px;
+      text-align: center;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .badge {
+      display: inline-block;
+      font-family: "Cormorant Garamond", serif;
+      font-size: 13px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--gold);
+      border: 1px solid var(--card-border);
+      padding: 4px 14px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+      background: rgba(232, 184, 106, 0.06);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 32px;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      background: linear-gradient(180deg, var(--gold-hi) 0%, var(--gold) 50%, var(--gold-lo) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 15px;
+      letter-spacing: 0.08em;
+      margin: 0;
+    }
+
+    main {
+      width: 100%;
+      max-width: 1040px;
+      padding: 32px 24px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 36px;
+    }
+
+    /* 互動即時打字區 */
+    .interactive-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 28px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      backdrop-filter: blur(12px);
+    }
+
+    .controls-bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(232, 184, 106, 0.12);
+    }
+
+    .theme-selector {
+      display: flex;
+      gap: 8px;
+    }
+
+    .theme-btn {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid rgba(232, 184, 106, 0.2);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .theme-btn.active, .theme-btn:hover {
+      background: rgba(232, 184, 106, 0.15);
+      color: var(--gold-hi);
+      border-color: var(--gold);
+    }
+
+    .slider-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    input[type=range] {
+      accent-color: var(--gold);
+      cursor: pointer;
+    }
+
+    /* 真正用 @font-face 渲染的打字台 */
+    .type-display {
+      font-family: 'AlchemyGallery', serif;
+      min-height: 180px;
+      padding: 24px;
+      border-radius: 8px;
+      background: #0d0805;
+      border: 1px solid rgba(232, 184, 106, 0.15);
+      font-size: 56px;
+      line-height: 1.4;
+      letter-spacing: 0.16em;
+      outline: none;
+      word-break: break-all;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .type-display.gold {
+      background: #0d0805;
+      color: #e8b86a;
+      background-image: linear-gradient(180deg, #f6dba6 0%, #e8b86a 50%, #a9763a 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .type-display.light {
+      background: #0d0805;
+      color: #fff0d7;
+      -webkit-text-fill-color: #fff0d7;
+    }
+
+    .type-display.ink {
+      background: #e9dec9;
+      color: #120c08;
+      -webkit-text-fill-color: #120c08;
+      border-color: rgba(18, 12, 8, 0.3);
+    }
+
+    /* 快速點選字元鍵盤 */
+    .char-picker {
+      margin-top: 18px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .picker-label {
+      font-size: 13px;
+      color: var(--muted);
+      margin-right: 6px;
+    }
+
+    .char-chip {
+      font-family: 'AlchemyGallery', serif;
+      font-size: 18px;
+      background: rgba(232, 184, 106, 0.08);
+      border: 1px solid rgba(232, 184, 106, 0.2);
+      color: var(--gold-hi);
+      padding: 4px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .char-chip:hover {
+      background: var(--gold);
+      color: #120c08;
+      transform: translateY(-2px);
+    }
+
+    /* 模組積木解構清單 */
+    .breakdown-section h2 {
+      font-size: 20px;
+      letter-spacing: 0.1em;
+      color: var(--gold);
+      margin-bottom: 16px;
+    }
+
+    .grid-specimen {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .specimen-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: border-color 0.2s ease;
+    }
+
+    .specimen-card:hover {
+      border-color: var(--gold);
+    }
+
+    .glyph-box {
+      font-family: 'AlchemyGallery', serif;
+      font-size: 64px;
+      line-height: 1;
+      height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(180deg, var(--gold-hi) 0%, var(--gold) 50%, var(--gold-lo) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 12px;
+    }
+
+    .glyph-info {
+      text-align: center;
+      width: 100%;
+    }
+
+    .glyph-char {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--gold-hi);
+      margin-bottom: 4px;
+    }
+
+    .glyph-formula {
+      font-size: 12px;
+      color: var(--muted);
+      font-family: "Noto Serif TC", serif;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 4px 8px;
+      border-radius: 4px;
+      display: inline-block;
+      border: 1px solid rgba(232, 184, 106, 0.1);
+    }
+
+    /* 成果下載與技術驗證 */
+    .download-bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(232, 184, 106, 0.05);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      gap: 16px;
+    }
+
+    .download-btns {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn-download {
+      background: var(--gold);
+      color: #120c08;
+      font-weight: 600;
+      text-decoration: none;
+      padding: 10px 18px;
+      border-radius: 6px;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-download:hover {
+      background: var(--gold-hi);
+      box-shadow: 0 0 15px rgba(246, 219, 166, 0.4);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--gold-hi);
+      border: 1px solid var(--card-border);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(232, 184, 106, 0.1);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="badge">Computational Typography · Parametric Font</div>
+    <h1>煉金體字型標本</h1>
+    <p class="subtitle">從「逐字座標手刻」到「幾何圖元 × 部件結構裝配」的模組化漢字系統</p>
+  </header>
+
+  <main>
+
+    <!-- 即時打字測試區 -->
+    <section class="interactive-card">
+      <div class="controls-bar">
+        <div class="theme-selector">
+          <button class="theme-btn active" onclick="setTheme('gold', this)">✦ 煉金色（Gold）</button>
+          <button class="theme-btn" onclick="setTheme('light', this)">☼ 皓白（Light）</button>
+          <button class="theme-btn" onclick="setTheme('ink', this)">✒ 墨色（Ink）</button>
+        </div>
+        <div class="theme-selector">
+          <button class="theme-btn active" onclick="setWeight('AlchemyGallery', this)">Display 標題</button>
+          <button class="theme-btn" onclick="setWeight('AlchemyGalleryText', this)">Text 小字</button>
+        </div>
+        <div class="slider-group">
+          <label for="sizeSlider">字級大小：</label>
+          <input type="range" id="sizeSlider" min="12" max="110" value="56" oninput="changeSize(this.value)">
+          <span id="sizeVal">56px</span>
+        </div>
+      </div>
+
+      <!-- 可編輯的即時文字區，套用 AlchemyGallery 字型 -->
+      <div id="typeStage" class="type-display gold" contenteditable="true" spellcheck="false">
+煉金畫廊 煉金術 神秘 秘境 展室 門 日月生明 水火木土金 浪 ⊕ ☉ ☽
+      </div>
+
+      <!-- 快速輸入晶片 -->
+      <div class="char-picker">
+        <span class="picker-label">點擊快速加入已造漢字：</span>
+        <span class="char-chip" onclick="insertChar('煉')">煉</span>
+        <span class="char-chip" onclick="insertChar('金')">金</span>
+        <span class="char-chip" onclick="insertChar('画')">画</span>
+        <span class="char-chip" onclick="insertChar('廊')">廊</span>
+        <span class="char-chip" onclick="insertChar('術')">術</span>
+        <span class="char-chip" onclick="insertChar('秘')">秘</span>
+        <span class="char-chip" onclick="insertChar('境')">境</span>
+        <span class="char-chip" onclick="insertChar('室')">室</span>
+        <span class="char-chip" onclick="insertChar('門')">門</span>
+        <span class="char-chip" onclick="insertChar('日')">日</span>
+        <span class="char-chip" onclick="insertChar('月')">月</span>
+        <span class="char-chip" onclick="insertChar('明')">明</span>
+        <span class="char-chip" onclick="insertChar('木')">木</span>
+        <span class="char-chip" onclick="insertChar('土')">土</span>
+        <span class="char-chip" onclick="insertChar('水')">水</span>
+        <span class="char-chip" onclick="insertChar('火')">火</span>
+        <span class="char-chip" onclick="insertChar('光')">光</span>
+        <span class="char-chip" onclick="insertChar('浪')">浪</span>
+        <span class="char-chip" onclick="insertChar('⊕')">⊕</span>
+        <span class="char-chip" onclick="insertChar('☉')">☉</span>
+        <span class="char-chip" onclick="insertChar('☽')">☽</span>
+      </div>
+    </section>
+
+    <!-- 下載與技術規格 -->
+    <div class="download-bar">
+      <div>
+        <div style="font-weight: 600; color: var(--gold-hi); margin-bottom: 4px;">安裝至系統 / 於本機隨意打字</div>
+        <div style="font-size: 13px; color: var(--muted);">由 Python + fontTools + shapely 自動編譯生成，符合 OpenType 1000 UPM 標準</div>
+      </div>
+      <div class="download-btns">
+        <a class="btn-download" href="assets/AlchemyGallery.ttf" download>下載 TrueType (.ttf)</a>
+        <a class="btn-download btn-secondary" href="assets/AlchemyGallery.woff2" download>下載 WebFont (.woff2)</a>
+      </div>
+    </div>
+
+    <!-- 模組化裝配結構展示 -->
+    <section class="breakdown-section">
+      <h2>模組部件裝配圖譜（Component Breakdown）</h2>
+      <div class="grid-specimen">
+
+        <div class="specimen-card">
+          <div class="glyph-box">煉</div>
+          <div class="glyph-info">
+            <div class="glyph-char">煉 (U+7149)</div>
+            <div class="glyph-formula">⿰ 火旁 (偏旁) + 柬 (右部)</div>
+          </div>
+        </div>
+
+        <div class="specimen-card">
+          <div class="glyph-box">金</div>
+          <div class="glyph-info">
+            <div class="glyph-char">金 (U+91D1)</div>
+            <div class="glyph-formula">⿱ 人字蓋 + 王基 (燕尾底)</div>
+          </div>
+        </div>
+
+        <div class="specimen-card">
+          <div class="glyph-box">画</div>
+          <div class="glyph-info">
+            <div class="glyph-char">画 (U+753B)</div>
+            <div class="glyph-formula">⿴ 凵框 + ⊕ 煉金星環</div>
+          </div>
+        </div>
+
+        <div class="specimen-card">
+          <div class="glyph-box">廊</div>
+          <div class="glyph-info">
+            <div class="glyph-char">廊 (U+5ECA)</div>
+            <div class="glyph-formula">⿸ 广 (左上框) + 郎 (良+阝)</div>
+          </div>
+        </div>
+
+        <div class="specimen-card">
+          <div class="glyph-box">術</div>
+          <div class="glyph-info">
+            <div class="glyph-char">術 (U+8853)</div>
+            <div class="glyph-formula">⿲ 彳 (左雙人) + 朮 (中核心) + 亍 (右)</div>
+          </div>
+        </div>
+
+        <div class="specimen-card">
+          <div class="glyph-box">秘</div>
+          <div class="glyph-info">
+            <div class="glyph-char">秘 (U+79D8)</div>
+            <div class="glyph-formula">⿰ 禾 (左偏旁) + 必 (右部)</div>
+          </div>
+        </div>
+
+        <div class="specimen-card">
+          <div class="glyph-box">境</div>
+          <div class="glyph-info">
+            <div class="glyph-char">境 (U+5883)</div>
+            <div class="glyph-formula">⿰ 土 (基石) + 竟 (立+日+儿)</div>
+          </div>
+        </div>
+
+        <div class="specimen-card">
+          <div class="glyph-box">室</div>
+          <div class="glyph-info">
+            <div class="glyph-char">室 (U+5BA4)</div>
+            <div class="glyph-formula">⿱ 宀 (寶蓋頭) + 至 (基底)</div>
+          </div>
+        </div>
+
+        <div class="specimen-card">
+          <div class="glyph-box">明</div>
+          <div class="glyph-info">
+            <div class="glyph-char">明 (U+660E)</div>
+            <div class="glyph-formula">⿰ 日 (Sol) + 月 (Luna)</div>
+          </div>
+        </div>
+
+        <div class="specimen-card">
+          <div class="glyph-box">門</div>
+          <div class="glyph-info">
+            <div class="glyph-char">門 (U+9580)</div>
+            <div class="glyph-formula">左右對稱 · 煉金雙扇扉門</div>
+          </div>
+        </div>
+
+        <div class="specimen-card">
+          <div class="glyph-box">光</div>
+          <div class="glyph-info">
+            <div class="glyph-char">光 (U+5149)</div>
+            <div class="glyph-formula">⿱ 三曜散芒 + 几基</div>
+          </div>
+        </div>
+
+        <div class="specimen-card">
+          <div class="glyph-box">浪</div>
+          <div class="glyph-info">
+            <div class="glyph-char">浪 (U+6D6A)</div>
+            <div class="glyph-formula">⿰ 氵 (三點水) + 良</div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    function setTheme(mode, btn) {
+      btn.parentElement.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const stage = document.getElementById('typeStage');
+      stage.className = 'type-display ' + mode;
+    }
+
+    function setWeight(family, btn) {
+      btn.parentElement.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('typeStage').style.fontFamily = `'${family}', serif`;
+    }
+
+    function changeSize(size) {
+      document.getElementById('sizeVal').innerText = size + 'px';
+      document.getElementById('typeStage').style.fontSize = size + 'px';
+    }
+
+    function insertChar(ch) {
+      const stage = document.getElementById('typeStage');
+      stage.innerText += ch;
+      stage.focus();
+    }
+  </script>
+</body>
+</html>

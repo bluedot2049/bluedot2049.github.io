@@ -93,6 +93,16 @@ body.flat #stage::after { display: none; }
 .sigil .ring-c { animation: spin 14s linear infinite; }
 .sigil .core { fill: var(--gold-hi); stroke: none; transform-origin: 60px 60px; animation: breathe 2.4s ease-in-out infinite; }
 #loading .brand { margin-top: 30px; width: 190px; height: auto; }
+/* 渡海：轉圈的符號換成一艘在浪上起伏的小船 */
+.crossing-boat { display: none; width: 160px; height: 70px; overflow: hidden; }
+.crossing-boat * { fill: none; stroke: var(--gold); stroke-width: 1.2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.crossing-boat .boat { animation: bob 3.2s ease-in-out infinite; transform-origin: 80px 46px; }
+.crossing-boat .wave { animation: drift 4s linear infinite; }
+.crossing-boat .w2 { opacity: .5; animation-duration: 6s; }
+#loading.crossing .sigil { display: none; }
+#loading.crossing .crossing-boat { display: block; margin-top: 21px; margin-bottom: 21px; }
+@keyframes bob { 50% { transform: translateY(3px) rotate(-3deg); } }
+@keyframes drift { to { transform: translateX(-40px); } }
 #loading .msg {
   margin-top: 10px; padding-left: .4em;
   color: var(--muted); letter-spacing: .4em; font-size: 12px;
@@ -620,7 +630,8 @@ body.photo #top-btns, body.photo #action-btn, body.photo #jump-btn, body.photo #
 body.photo #stage::after { display: none; }   /* 暗角改由取景框畫，存檔時才一致 */
 body.photo #joy, body.photo #emote { opacity: 1; }
 body.photo-hush .speech { opacity: 0 !important; }
-body.photo-bare #ph-bar, body.photo-bare #ph-exit, body.photo-bare #ph-shoot, body.photo-bare .ph-seal,
+body.photo:not(.desk) #emote { bottom: calc(184px + env(safe-area-inset-bottom)); }   /* 讓出快門上方的鏡頭鈕 */
+body.photo-bare #ph-bar, body.photo-bare #ph-menu, body.photo-bare #ph-exit, body.photo-bare #ph-shoot, body.photo-bare .ph-seal,
 body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #emote, body.photo-bare #hint { display: none !important; }
 
 #ph-frame { position: fixed; z-index: 12; pointer-events: none; }
@@ -646,21 +657,41 @@ body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #emote, body.phot
   top: calc(14px + env(safe-area-inset-top));
   left: calc(14px + env(safe-area-inset-left)); right: calc(68px + env(safe-area-inset-right));
 }
-#ph-chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; padding: 4px 0; }
+#ph-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; padding: 4px 0; }
 #ph-chips::-webkit-scrollbar { display: none; }
 .ph-chip {
-  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px;
-  height: 36px; padding: 0 14px;
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
+  height: 36px; padding: 0 12px;
   color: var(--text); background: var(--panel);
   border: 1px solid var(--line-soft); border-radius: 999px;
   font-size: 13px; letter-spacing: .08em; cursor: var(--cur-pointer);
   transition: border-color .2s, opacity .2s;
 }
-.ph-chip span { color: var(--muted); }
 .ph-chip b { font-weight: 600; color: var(--gold-hi); }
 .ph-chip:active { background: rgba(60, 40, 26, 0.95); }
 .ph-chip.off { opacity: .4; pointer-events: none; }
+.ph-chip.open { border-color: var(--gold); }
+/* 手機放不下，只寫名稱；選了什麼看畫面或點開選單 */
+.ph-chip b:empty, body:not(.desk) .ph-chip b { display: none; }
+body.desk .ph-chip span { color: var(--muted); }
 @media (hover: hover) { .ph-chip:hover { border-color: var(--gold); } }
+
+/* 點開比例、色調、運鏡、顯示時跳出的一排選項 */
+#ph-menu {
+  position: fixed; z-index: 21;
+  display: flex; flex-wrap: wrap; gap: 4px;
+  max-width: min(420px, calc(100vw - 24px)); padding: 6px;
+  background: var(--panel); border: 1px solid var(--line-soft); border-radius: 18px;
+}
+#ph-menu[hidden] { display: none; }
+#ph-menu button {
+  height: 34px; padding: 0 13px; border-radius: 999px;
+  color: var(--text); background: none; border: 1px solid transparent;
+  font-size: 13px; letter-spacing: .08em; cursor: var(--cur-pointer);
+}
+#ph-menu button.on { color: var(--gold-hi); border-color: var(--gold); }
+#ph-menu.toggles button:not(.on) { color: var(--muted); }
+#ph-menu p { flex-basis: 100%; margin: 2px 8px 4px; font-size: 12px; letter-spacing: .08em; color: var(--muted); }
 
 #ph-exit { position: fixed; z-index: 20; top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right)); }
 
@@ -683,12 +714,24 @@ body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #emote, body.phot
 }
 #ph-zoom.show { opacity: 1; }
 
-/* 快門和錄影：手機在左下，左手按快門、右手推搖桿 */
+/* 快門和錄影：手機在左下，左手按快門、右手推搖桿；鏡頭鈕排在快門上面 */
 #ph-shoot {
   position: fixed; z-index: 20;
   left: calc(22px + env(safe-area-inset-left)); bottom: calc(30px + env(safe-area-inset-bottom));
-  display: flex; align-items: center; gap: 14px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 14px;
 }
+.ph-keys { display: flex; align-items: center; gap: 14px; }
+#ph-lens {
+  display: flex; gap: 2px; padding: 3px;
+  background: var(--panel); border: 1px solid var(--line-soft); border-radius: 999px;
+}
+#ph-lens button {
+  height: 30px; padding: 0 11px; border-radius: 999px;
+  color: var(--muted); background: none; border: 0;
+  font-size: 13px; letter-spacing: .1em; cursor: var(--cur-pointer);
+  transition: color .2s, background-color .2s;
+}
+#ph-lens button.on { color: var(--gold-hi); background: rgba(232, 184, 106, .18); }
 #ph-shutter {
   position: relative; width: 72px; height: 72px; padding: 0; border-radius: 50%;
   background: rgba(30, 20, 14, .5); border: 2px solid var(--gold-hi); cursor: var(--cur-pointer);
@@ -713,9 +756,9 @@ body.photo-rec #ph-record i { width: 18px; height: 18px; border-radius: 4px; }
 #ph-down { bottom: calc(162px + env(safe-area-inset-bottom)); }
 
 /* 電腦：選項排在下方中間，快門在最下面 */
-body.desk #ph-bar { top: auto; left: 50%; right: auto; bottom: calc(104px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: calc(100vw - 32px); }
+body.desk #ph-bar { top: auto; left: 50%; right: auto; bottom: calc(154px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: calc(100vw - 32px); }
 body.desk #ph-chips { flex-wrap: wrap; justify-content: center; overflow: visible; }
-body.desk #ph-shoot { left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom)); }
+body.desk #ph-shoot { left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom)); align-items: center; }
 body.desk #ph-rec { top: calc(18px + env(safe-area-inset-top)); }
 
 /* 拍好之後 */
