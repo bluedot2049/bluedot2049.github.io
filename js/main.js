@@ -171,7 +171,7 @@ async function start() {
   let look = loadLook();
   const character = new Character(shadowTex, look);
   scene.add(character.group);
-  // 前廳的海牛頭人：擋住一小塊地面，玩家靠近時會轉過來面對
+  // 前廳的胖頭頭人：擋住一小塊地面，玩家靠近時會轉過來面對
   let manatee = null;
   if (!town) {
     const spot = world.findWalkable(1.9, -3.4, 0, -2) || { x: 1.9, z: -3.4 };
@@ -179,7 +179,7 @@ async function start() {
     scene.add(manatee.group);
     world.rooms[0].obstacles.push({ x: spot.x, z: spot.z, hw: 0.4, hd: 0.4, rot: 0 });
   }
-  // 陽台長桌的主人，也是一隻海牛頭人
+  // 陽台長桌的主人，也是一隻胖頭頭人
   const host = world.outdoor ? new Manatee(shadowTex, world.outdoor.host.x, world.outdoor.host.z, TABLE_LINES) : null;
   if (host) scene.add(host.group);
   const ambience = new Ambience();
@@ -380,7 +380,7 @@ async function start() {
     lastInput = performance.now();
   });
 
-  // 對海牛用驚訝表情，附近的海牛會回話
+  // 對胖頭用驚訝表情，附近的胖頭會回話
   function sendEmote(e) {
     mp.emote(e);
     if (e !== '😮') return;

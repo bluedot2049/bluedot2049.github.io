@@ -1,9 +1,11 @@
 // 明信片：在海市的信差站拍的照片，外面加一圈紙邊，右上角貼郵票、蓋郵戳，下面寫寄自哪裡和日期。
 // 輸入攝影模式拍好的畫布，回傳一張新的畫布
+import { drawText } from './glyphs.js';
+
 const PAPER = '#f2ead8', INK = 'rgba(52, 36, 28, 0.62)', BROWN = '#4a3022';
 
 function stampArt(g, x, y, s) {
-  // 郵票：齒孔邊、夜色裡一輪月亮和三盞燈籠，底下寫海市
+  // 郵票：齒孔邊、夜色裡一輪月亮和三盞燈籠，底下用海市的符號文字寫「海市」
   g.save();
   g.translate(x, y);
   g.rotate(-0.06);
@@ -41,11 +43,7 @@ function stampArt(g, x, y, s) {
   g.fill();
   g.fillStyle = '#ff7a4a';
   for (const [u, v] of [[0.3, 0.72], [0.45, 0.62], [0.6, 0.76]]) { g.beginPath(); g.arc(ix + iw * u, iy + ih * v, s * 0.035, 0, Math.PI * 2); g.fill(); }
-  g.fillStyle = BROWN;
-  g.font = `600 ${Math.round(s * 0.16)}px serif`;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillText('海市', 0, s * 0.45);
+  drawText(g, '海市', { x: 0, y: s * 0.45, size: s * 0.17, step: s * 0.19, color: BROWN });
   g.restore();
 }
 
@@ -63,8 +61,7 @@ function postmark(g, x, y, r, date) {
   g.stroke();
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  g.font = `600 ${Math.round(r * 0.36)}px serif`;
-  g.fillText('海市', x, y - r * 0.2);
+  drawText(g, '海市', { x, y: y - r * 0.24, size: r * 0.4, step: r * 0.44, color: INK });
   g.font = `${Math.round(r * 0.2)}px "Cormorant Garamond", serif`;
   g.fillText(date, x, y + r * 0.3);
   for (let i = 0; i < 4; i++) {

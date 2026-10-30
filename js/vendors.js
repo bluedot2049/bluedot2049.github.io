@@ -5,6 +5,7 @@
 import { Character } from './character.js';
 import { sanitizeLook, presetLook, RACES, GIFTS, unlock, unlockedSet, isOpen } from './looks.js';
 import { bend } from './lens.js';
+import { HOST_NAME } from './names.js';
 
 const SAY_TIME = 3800, GREET_DIST = 3.2, TALK_DIST = 2.4, SHOW_DIST = 22, SHOW_DY = 3.5;
 
@@ -28,7 +29,7 @@ export const VENDORS = {
   bakery: {
     name: '麵包師傅', race: 'bear', look: { hat: 'chef', robe: 4 },
     greet: ['剛出爐的', '好香對不對'],
-    lines: ['長桌上的麵包是我烤的', '今天烤太多了', '你看起來很餓', '最後一個了 要不要', '早上四點就起來揉麵', '海牛每次都買一大袋'],
+    lines: ['長桌上的麵包是我烤的', '今天烤太多了', '你看起來很餓', '最後一個了 要不要', '早上四點就起來揉麵', HOST_NAME+'每次都買一大袋'],
   },
   candle: {
     name: '蠟燭店', race: 'rabbit', look: { hat: 'none', robe: 6 },

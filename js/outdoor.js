@@ -560,7 +560,7 @@ export function buildOutdoor(room, h) {
     for (const sx of [-1, 1]) k.box(0.3, top + 0.35 - YB, tread + 0.02, '#9a8a7c', sx * (SW + 0.15), (top + 0.35 + YB) / 2, Z(rel));
   }
 
-  // 長桌在左邊，主人（海牛頭人）站在桌頭
+  // 長桌在左邊，主人（胖頭頭人）站在桌頭
   const tableX = -3.6, tableRel = 3.4, tableLen = 3.6;
   banquet(k, tableX, Z(tableRel), tableLen);
   block(tableX, Z(tableRel), 1.05, tableLen / 2 + 0.1);

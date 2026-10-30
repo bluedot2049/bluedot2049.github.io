@@ -51,6 +51,23 @@ function facePatch() {
   return g;
 }
 
+// 神秘角色的臉：跟原本馬賽克一樣大的黑色橢圓，中間一個白色問號
+function mysteryFace() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(256, 248, 232, 192, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 300px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('?', 256, 262);
+  return c;
+}
+
 export class Manatee {
   constructor(shadowTex, x, z, extraLines = []) {
     this.lines = GREETINGS.concat(extraLines);
@@ -65,8 +82,8 @@ export class Manatee {
     bean.scale.z = 0.76;
     body.add(bean);
 
-    // 手繪臉：貼在豆子正面的一片弧形
-    const tex = new THREE.TextureLoader().load('assets/manatee_face.png');
+    // 臉先蓋住：黑底白問號，貼在豆子正面的一片弧形（原本的臉是 assets/manatee_face.png）
+    const tex = new THREE.CanvasTexture(mysteryFace());
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
     const face = new THREE.Mesh(
@@ -164,7 +181,7 @@ export class Manatee {
     this.bubble.classList.remove('show');
   }
 
-  // 玩家對海牛用驚訝表情
+  // 玩家對胖頭用驚訝表情
   startled(px, pz) {
     const g = this.group.position;
     if (Math.hypot(px - g.x, pz - g.z) < NEAR) this.say(pick(SURPRISED));

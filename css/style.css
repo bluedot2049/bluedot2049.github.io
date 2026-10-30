@@ -139,7 +139,7 @@ body.flat #stage::after { display: none; }
   100% { opacity: 0; }
 }
 
-/* ───────── 海牛的對話框：漫畫式，尾巴指向頭頂 ───────── */
+/* ───────── 胖頭的對話框：漫畫式，尾巴指向頭頂 ───────── */
 .speech {
   position: fixed; z-index: 9; pointer-events: none;
   transform: translate(-50%, calc(-100% - 14px)) scale(.6);

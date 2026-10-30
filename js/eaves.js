@@ -3,6 +3,7 @@
 // 招牌：全部畫在同一張貼圖上，合併成一個網格，一次畫完
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/BufferGeometryUtils.js';
+import { drawText } from './glyphs.js';
 
 const C = new THREE.Color();
 const shade = (c, l) => new THREE.Color(c).offsetHSL(0, 0, l).getStyle();
@@ -77,7 +78,6 @@ export function addRoof(k, x, y, z, W, D, H, o = {}) {
 // ---------- 招牌 ----------
 // 貼圖切成 8×8 格，招牌佔 1×2、1×3（直的）或 2×1、3×1（橫的）
 const CELL = 128, GRID = 8;
-const FONT = '"Noto Serif TC", "Songti TC", "PMingLiU", "MingLiU", "Hiragino Mincho ProN", serif';
 
 export class Signs {
   constructor() {
@@ -89,7 +89,7 @@ export class Signs {
     this.geos = [];
   }
 
-  // 找一塊空位，畫上字。同樣的字和顏色只畫一次
+  // 找一塊空位，畫上字（符號文字）。同樣的字和顏色只畫一次
   slot(text, { vertical = true, bg = '#2a1a12', fg = '#f0d8a0', edge = null } = {}) {
     const key = [text, vertical, bg, fg, edge].join('|');
     if (this.cache.has(key)) return this.cache.get(key);
@@ -113,15 +113,9 @@ export class Signs {
     g.lineWidth = 5;
     g.strokeRect(px + 9, py + 9, pw - 18, ph - 18);
     g.globalAlpha = 1;
-    g.fillStyle = fg;
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    const chars = [...text], step = (vertical ? ph : pw) / chars.length, size = Math.min(CELL * 0.66, step * 0.78);
-    g.font = `700 ${size}px ${FONT}`;
-    chars.forEach((t, i) => {
-      if (vertical) g.fillText(t, px + pw / 2, py + step * (i + 0.5) + size * 0.04);
-      else g.fillText(t, px + step * (i + 0.5), py + ph / 2 + size * 0.04);
-    });
+    // 字用 glyphs.js 的符號文字畫，不用字型
+    const step = (vertical ? ph : pw) / [...text].length, size = Math.min(CELL * 0.74, step * 0.86);
+    drawText(g, text, { x: px + pw / 2, y: py + ph / 2, size, step, vertical, color: fg });
     const r = { u0: px / this.canvas.width, u1: (px + pw) / this.canvas.width, v0: 1 - (py + ph) / this.canvas.height, v1: 1 - py / this.canvas.height, aspect: pw / ph };
     this.cache.set(key, r);
     return r;

@@ -1,10 +1,10 @@
-// 訪客：不定期從西邊海上來的旅人。搭小帆船靠在棧橋盡頭，上岸先跟長桌的海牛聊天，
+// 訪客：不定期從西邊海上來的旅人。搭小帆船靠在棧橋盡頭，上岸先跟長桌的胖頭聊天，
 // 吃點心、進屋看畫、坐一坐，有的去看夕陽、看動物、爬上涼亭，最後走回船上，船開回霧裡。
 // 每位訪客是一個種族加一種職業：冒險者、吟遊詩人、學者、商人、信差、漁夫、畫家，職業決定穿什麼、帶什麼、做什麼。
 // 另外有幾位熟客，隔一陣子搭船來一次，每次接著講上次的事。
 // 跟動物一樣，哪一段時間有誰來、走去哪、做什麼、說什麼，都由「現在是第幾段時間」雜湊算出來，
 // 每位玩家看到的一樣，不用傳任何資料。台詞在 visitor-lines.js。
-// 要去的地方（畫、長桌的座位、海牛、鏡子、長椅、牛、土撥鼠的洞、貓頭鷹的樹、涼亭）都是建好世界之後才從世界資料裡找，
+// 要去的地方（畫、長桌的座位、胖頭、鏡子、長椅、牛、土撥鼠的洞、貓頭鷹的樹、涼亭）都是建好世界之後才從世界資料裡找，
 // 房間格局或畫作換了，訪客自己會跟上。行程只用直線距離估時間，尋路等走到那一段才算。
 // 跟玩家的互動（轉頭、打招呼、聊天）只演在自己的畫面上，位置不離開行程。
 // 玩家不能穿過站在地上的訪客；小狗會跑去迎接走在草原上的訪客，雞和鴨會被他們嚇跑（見 animals.js）。
@@ -726,7 +726,7 @@ class Visitor {
   }
 
   // 照行程到了該說的時間就說。剛進來的人只看得到最近兩秒內的那一句，不會一口氣冒一串。
-  // 別人剛講完或已經有兩個人在講，這一句就略過（熟客跟海牛講故事不略過）；訪客那句沒講出來，海牛也不回
+  // 別人剛講完或已經有兩個人在講，這一句就略過（熟客跟胖頭講故事不略過）；訪客那句沒講出來，胖頭也不回
   lines(S, pd, env) {
     const list = S.sg.lines;
     if (!list) return;
@@ -773,7 +773,7 @@ class Visitor {
     return null;
   }
 
-  // 跟海牛聊什麼：先打招呼，信差先交信，熟客接著講他的故事，其他人的話題每人順序不同
+  // 跟胖頭聊什麼：先打招呼，信差先交信，熟客接著講他的故事，其他人的話題每人順序不同
   topics() {
     const L = this.L;
     if (L.reg) return ['hello', ...L.reg.chapters[L.chapter].map((s) => ({ story: s }))];
@@ -931,7 +931,7 @@ export class Visitors {
     return this.world.findWalkable(p.wall.x + n.x * 1.6, p.wall.z + n.z * 1.6, p.wall.x + n.x * 3, p.wall.z + n.z * 3);
   }
 
-  // 一位訪客這一趟的行程：下船 → 找海牛聊天 →（吃點心、看畫、坐一坐、草原上走走，順序每人不同）→ 走回船邊 → 上船
+  // 一位訪客這一趟的行程：下船 → 找胖頭聊天 →（吃點心、看畫、坐一坐、草原上走走，順序每人不同）→ 走回船邊 → 上船
   // 漁夫最後到棧橋盡頭釣魚，信差最後在棧橋的長椅上等船。時間不夠就少做幾件；有多的就每件做久一點
   agenda(vis, n) {
     const { k, j, L } = vis, ro = L.ro, B = this.boatInfo, pl = this.places(), w = this.world;
@@ -947,7 +947,7 @@ export class Visitors {
     };
     const items = [];
 
-    // 跟海牛聊天：站在海牛背對長桌的那一側，三個人分開站
+    // 跟胖頭聊天：站在胖頭背對長桌的那一側，三個人分開站
     const hp = pl.host, ax = hp.x - pl.table.x, az = hp.z - pl.table.z, base = Math.atan2(ax, az) + (j - 1) * 0.75;
     const cs = w.findWalkable(hp.x + Math.sin(base) * 1.3, hp.z + Math.cos(base) * 1.3, hp.x, hp.z);
     if (cs) items.push({ kind: 'chat', act: 'chat', to: cs, h: Math.atan2(hp.x - cs.x, hp.z - cs.z), face: hp, T: L.reg ? 42 : ro.chatT ?? 22 });
@@ -1054,7 +1054,7 @@ export class Visitors {
     return segs;
   }
 
-  // 一段裡要說的話：時間從這一段開始算（含走路）。聊天是一來一回，海牛隔幾秒照話題回話
+  // 一段裡要說的話：時間從這一段開始算（含走路）。聊天是一來一回，胖頭隔幾秒照話題回話
   script(vis, sg, i) {
     const h = (s) => hash(vis.seed, i, s), out = [];
     const outside = (p) => this.world.outdoor.inMeadow(p.z);
@@ -1080,7 +1080,7 @@ export class Visitors {
     return out.filter((l) => l.text);
   }
 
-  // 海牛回話：同一船裡不重複
+  // 胖頭回話：同一船裡不重複
   hostLine(topic) {
     const pool = HOST[topic] || HOST.chat, n = pool.length, salt = tag(topic);
     const at = this.hostAt.get(topic) ?? Math.floor(hash(this.k, salt, 3) * n);
