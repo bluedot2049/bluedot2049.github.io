@@ -601,12 +601,15 @@ export class Character {
     if (this._ghost === alpha) return;
     this._ghost = alpha;
     const faded = alpha < 0.99;
+    // transparent 換了要重編著色器，不然不透明的版本會把 alpha 固定成 1，看不出淡出
     if (this.mat.transparent !== faded) {
       this.mat.transparent = faded;
       this.mat.depthWrite = !faded;
+      this.mat.needsUpdate = true;
       this.faceMat.transparent = faded;
       this.faceMat.depthWrite = !faded;
       this.faceMat.alphaTest = faded ? 0.05 : 0.5;
+      this.faceMat.needsUpdate = true;
       this.shadow.visible = !faded;
     }
     this.mat.opacity = alpha;
@@ -614,6 +617,7 @@ export class Character {
     if (this.foodMesh) {
       this.foodMesh.traverse((m) => {
         if (m.isMesh) {
+          if (m.material.transparent !== faded) m.material.needsUpdate = true;
           m.material.transparent = faded;
           m.material.depthWrite = !faded;
           m.material.opacity = alpha;

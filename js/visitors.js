@@ -833,6 +833,7 @@ class Visitor {
       if (mat.transparent !== faded) {
         mat.transparent = faded;
         mat.depthWrite = !faded;
+        mat.needsUpdate = true;   // 重編著色器，alpha 才不會被固定成 1
         this.rig.shadow.visible = !faded;
       }
       mat.opacity = alpha;

@@ -467,7 +467,17 @@ async function start() {
   // 沒在動的時候降到約 30fps，省電
   const clock = new THREE.Clock();
   let frame = 0;
+  // 某一幀出錯只記一次，迴圈照跑。不然 three.js 不會排下一幀，整個畫面停住、也不再送位置，別人會當你離開了
+  let crashed = false;
   renderer.setAnimationLoop(() => {
+    try {
+      tick();
+    } catch (e) {
+      if (!crashed) console.error(e);
+      crashed = true;
+    }
+  });
+  function tick() {
     const dt = Math.min(clock.getDelta(), 0.05);
     player.update(dt);
     photo.update(dt);
@@ -510,7 +520,7 @@ async function start() {
     else renderer.render(scene, camera);
     photo.afterRender();
     stats?.(dt);
-  });
+  }
 }
 
 // ?debug 時左上角顯示幀率、draw call、三角形數和目前的畫質
