@@ -10,6 +10,12 @@ export const SKINS = [
   0xf1c9a5, 0xe0a87e, 0xb87a52, 0x7a4a30, 0xf0e8d8, 0x8a8a92, 0x3a3036, 0xd8893a,
   0xc8a060, 0x5a9a4a, 0x4a8a7a, 0x4a8ad0, 0x8a7aa0, 0xd07ab0, 0xc83a2a, 0xe8d040,
 ];
+// 衣服、鞋子、配件共用的顏色。前 8 個是舊版的長袍色，接著 8 個是舊版的圍巾色，舊存檔的色號才換得過來
+export const CLOTH = [
+  ...ROBES, ...SCARVES,
+  0xf4f2ec, 0x1e1c1e, 0x3a2414, 0x3a5a8a, 0xf0c830, 0x8a8a90, 0x1f2a4a, 0xb8a070,
+];
+const WHITE = 16, BOOT = 18;
 
 // 種族。head 是 heads.js 的造型；own 表示頭上本來就有五官，選了「原本」就不另外貼
 // ey 眼睛高度、ex 眼睛離中線多遠、fs 五官大小，都從脖子算；top 帽子戴多高、hs 帽子大小；skin 預設膚色
@@ -54,11 +60,67 @@ export const OPTIONS = {
   glasses: [['none', '沒有'], ['round', '圓眼鏡'], ['shades', '墨鏡'], ['mono', '單片'], ['groucho', '搞笑眼鏡'], ['3d', '3D 眼鏡']],
   hair: [['short', '短髮'], ['bald', '光頭'], ['comb', '地中海'], ['afro', '爆炸頭'], ['spiky', '刺蝟'], ['long', '長髮'], ['buns', '包包頭']],
   hat: [['wizard', '尖帽'], ['none', '不戴'], ['crown', '皇冠'], ['propeller', '竹蜻蜓'], ['chef', '廚師帽'], ['straw', '斗笠'], ['cone', '三角錐'], ['party', '派對帽'], ['sprout', '豆芽']],
-  clothes: [['robe', '長袍'], ['suit', '西裝'], ['tank', '吊嘎短褲'], ['tutu', '蓬蓬裙']],
+  // 衣服分層：上衣、下身、外套、鞋子各選各的；連身裝穿上去會蓋掉上衣、下身和外套
+  top: [['robe', '袍子'], ['shirt', '襯衫'], ['tee', 'T 恤'], ['hoodie', '帽 T'], ['sweater', '毛衣'], ['hawaii', '夏威夷衫'], ['tank', '吊嘎'], ['pe', '運動服'], ['armor', '盔甲'], ['smock', '畫家罩衫']],
+  topPat: [['plain', '素面'], ['stripe', '條紋'], ['dot', '點點'], ['band', '一條線']],
+  bottom: [['robe', '長袍下擺'], ['pants', '長褲'], ['track', '運動褲'], ['shorts', '短褲'], ['skirt', '裙子'], ['tutu', '蓬蓬裙'], ['overalls', '吊帶褲'], ['bloomers', '燈籠褲'], ['hakama', '袴']],
+  botPat: [['plain', '素面'], ['stripe', '條紋'], ['dot', '點點'], ['band', '一條線']],
+  outer: [['none', '不穿'], ['cape', '披風'], ['cloak', '斗篷'], ['vest', '背心'], ['blazer', '西裝外套'], ['raincoat', '雨衣'], ['apron', '圍裙'], ['haori', '羽織'], ['mino', '蓑衣']],
+  shoes: [['boots', '靴子'], ['bare', '赤腳'], ['sneakers', '運動鞋'], ['slippers', '藍白拖'], ['rainboots', '雨鞋'], ['heels', '高跟鞋'], ['ballet', '芭蕾舞鞋'], ['clown', '小丑鞋'], ['geta', '木屐'], ['odd', '只有一隻']],
+  one: [['none', '不穿'], ['dino', '恐龍裝'], ['panda', '熊貓裝'], ['banana', '香蕉裝'], ['astronaut', '太空衣'], ['yukata', '浴衣']],
+  neck: [['scarf', '圍巾'], ['none', '沒有'], ['tie', '領帶'], ['bowtie', '領結'], ['necklace', '項鍊'], ['lei', '花環'], ['bell', '鈴鐺'], ['towel', '毛巾']],
+  back: [['pouch', '腰包'], ['none', '沒有'], ['backpack', '背包'], ['schoolbag', '書包'], ['satchel', '郵差包'], ['guitar', '吉他'], ['sword', '大劍'], ['quiver', '箭筒'], ['wingA', '天使翅膀'], ['wingB', '蝙蝠翅膀'], ['wingC', '蝴蝶翅膀'], ['tail', '尾巴'], ['shell', '龜殼']],
+  // 左手拿的東西。右手留著拿點心，之後探索世界撿東西也用右手
+  hand: [['none', '空手'], ['staff', '法杖'], ['umbrella', '雨傘'], ['balloon', '氣球'], ['book', '魔法書'], ['flower', '花'], ['boba', '珍奶'], ['chicken', '雞排'], ['selfie', '自拍棒'], ['spatula', '鍋鏟'],
+    ['lantern', '燈籠'], ['candle', '蠟燭'], ['fish', '魚'], ['brush', '大畫筆'], ['flask', '燒瓶'], ['frame', '畫框'], ['scope', '望遠鏡'], ['baguette', '法國麵包'], ['teacup', '茶杯'], ['squid', '烤魷魚']],
 };
-// 顏色：存的是色號。圍巾多一格「不圍」
-const COUNTS = { skin: SKINS.length, hairC: HAIR_COLORS.length, hatC: HAT_COLORS.length, robe: ROBES.length, scarf: SCARVES.length + 1 };
-export const NO_SCARF = SCARVES.length;
+export const optionName = (k, id) => OPTIONS[k]?.find(([v]) => v === id)?.[1] ?? id;
+// 顏色：存的是色號
+const COUNTS = {
+  skin: SKINS.length, hairC: HAIR_COLORS.length, hatC: HAT_COLORS.length,
+  topC: CLOTH.length, topC2: CLOTH.length, botC: CLOTH.length, botC2: CLOTH.length, outC: CLOTH.length, outC2: CLOTH.length,
+  oneC: CLOTH.length, oneC2: CLOTH.length, shoeC: CLOTH.length, neckC: CLOTH.length, backC: CLOTH.length, handC: CLOTH.length,
+};
+
+// ---------- 海市攤販送的東西 ----------
+// 不在這張表裡的，鏡子裡一開始就有。表裡的要去海市跟那一攤聊天才拿得到，記在這台裝置的瀏覽器裡
+export const GIFTS = {
+  tailor: { who: '裁縫', line: '這幾件你拿去穿穿看', items: [['one', 'yukata'], ['outer', 'haori'], ['bottom', 'hakama'], ['shoes', 'geta']] },
+  junk: { who: '舊貨攤', line: '嘰咕 這兩個送你 不能退喔', items: [['back', 'shell'], ['shoes', 'odd']] },
+  herbs: { who: '藥草攤', line: '呱 這件蓑衣給你 下雨穿', items: [['outer', 'mino']] },
+  pigment: { who: '顏料攤', line: '這件沾到顏料了 送你啦', items: [['top', 'smock'], ['hand', 'brush']] },
+  lanterns: { who: '燈籠師傅', line: '拿一盞走 晚上比較好走', items: [['hand', 'lantern']] },
+  candle: { who: '蠟燭店', line: '這根送你 小心火', items: [['hand', 'candle']] },
+  fish: { who: '魚販', line: '這隻送你 拿好 會滑', items: [['hand', 'fish']] },
+  glass: { who: '玻璃師傅', line: '吹歪的 拿去玩', items: [['hand', 'flask']] },
+  frames: { who: '木工', line: '哞 這個框多做了一個', items: [['hand', 'frame']] },
+  maps: { who: '航海圖店', line: '咕咕 望遠鏡借你 不用還', items: [['hand', 'scope']] },
+  bakery: { who: '麵包師傅', line: '這條烤太長了 拿去', items: [['hand', 'baguette']] },
+  tea: { who: '茶攤', line: '杯子帶走沒關係', items: [['hand', 'teacup']] },
+  squid: { who: '烤魷魚', line: '這串請你', items: [['hand', 'squid']] },
+};
+const LOCKS = new Map();
+for (const [v, g] of Object.entries(GIFTS)) for (const [k, id] of g.items) LOCKS.set(k + ':' + id, v);
+export const lockedBy = (k, id) => LOCKS.get(k + ':' + id);
+
+export function unlockedSet() {
+  try {
+    const a = JSON.parse(localStorage.getItem('unlocked'));
+    return new Set(Array.isArray(a) ? a : []);
+  } catch {
+    return new Set();
+  }
+}
+
+// 收下禮物，回傳這次有沒有拿到新東西
+export function unlock(items) {
+  const set = unlockedSet(), n = set.size;
+  for (const [k, id] of items) set.add(k + ':' + id);
+  try { localStorage.setItem('unlocked', JSON.stringify([...set])); } catch {}
+  return set.size > n;
+}
+
+export const isOpen = (k, id, set) => !LOCKS.has(k + ':' + id) || set.has(k + ':' + id);
 // 帽子顏色只套在這幾種帽子上，其他帽子有自己的顏色
 export const TINTED_HATS = ['wizard', 'propeller', 'party'];
 
@@ -123,8 +185,11 @@ export function decodeFace(s) {
 export function presetLook(i = 0) {
   const L = { race: 'human', skin: 0 };
   for (const k in OPTIONS) L[k] = OPTIONS[k][0][0];
-  L.hairC = 0;
-  L.hatC = L.robe = L.scarf = i % ROBES.length;
+  const c = i % ROBES.length;
+  Object.assign(L, {
+    hairC: 0, hatC: c, topC: c, topC2: WHITE, botC: c, botC2: WHITE, outC: (c + 1) % ROBES.length, outC2: WHITE,
+    oneC: 15, oneC2: WHITE, shoeC: BOOT, neckC: ROBES.length + c, backC: BOOT, handC: 8,
+  });
   for (const [k, , v] of SLIDERS) L[k] = v;
   L.face = '';
   L.keep = 0;
@@ -132,6 +197,19 @@ export function presetLook(i = 0) {
 }
 
 export const randomPreset = () => presetLook(Math.floor(Math.random() * ROBES.length));
+
+// 舊版的衣服是一整套，加上長袍和圍巾兩個色號（圍巾第 8 號是不圍）。換成分層的樣子
+function fromClothes(L, clothes, robe, scarf) {
+  const r = Number.isInteger(robe) && robe >= 0 && robe < ROBES.length ? robe : L.topC;
+  const neckOn = scarf !== SCARVES.length;
+  if (Number.isInteger(scarf) && scarf >= 0 && scarf < SCARVES.length) L.neckC = ROBES.length + scarf;
+  Object.assign(L, { top: 'robe', bottom: 'robe', outer: 'none', shoes: 'boots', one: 'none', neck: neckOn ? 'scarf' : 'none', back: 'pouch', topC: r, botC: r, outC: r });
+  switch (clothes) {
+    case 'suit': Object.assign(L, { top: 'shirt', topC: WHITE, bottom: 'pants', outer: 'blazer', neck: neckOn ? 'tie' : 'none', back: 'none' }); break;
+    case 'tank': Object.assign(L, { top: 'tank', topC: WHITE, bottom: 'shorts', shoes: 'slippers', neck: neckOn ? 'towel' : 'none', back: 'none' }); break;
+    case 'tutu': Object.assign(L, { top: 'tank', bottom: 'tutu', shoes: 'ballet', back: 'none' }); break;
+  }
+}
 
 // 外來的資料：認得的欄位才收，其他用預設。欄位順序固定，lookKey 才能拿來比對
 export function sanitizeLook(o) {
@@ -143,6 +221,8 @@ export function sanitizeLook(o) {
   for (const [k] of SLIDERS) if (Number.isInteger(src[k]) && src[k] >= 0 && src[k] <= SLIDER_MAX) L[k] = src[k];
   if (decodeFace(src.face)) L.face = src.face;
   L.keep = src.keep === 1 ? 1 : 0;
+  // 舊版存檔、舊網頁送來的、攤販的設定還用 clothes、robe、scarf
+  if ('clothes' in src || 'robe' in src) fromClothes(L, src.clothes, src.robe, src.scarf);
   return L;
 }
 
@@ -152,19 +232,26 @@ export const lookKey = (L) => JSON.stringify(L);
 export function lookFromOutfit(o) {
   if (!Array.isArray(o) || o.length !== 3 || !o.every((v) => Number.isInteger(v) && v >= 0 && v < ROBES.length)) return null;
   const L = presetLook(0);
-  [L.robe, L.hatC, L.scarf] = o;
+  L.hatC = o[1];
+  fromClothes(L, 'robe', o[0], o[2]);
   return L;
 }
 
-// 給還沒更新的舊網頁看的三個色號
-export const toOutfit = (L) => [L.robe, L.hatC, Math.min(L.scarf, SCARVES.length - 1)];
+// 給還沒更新的舊網頁看的三個色號：長袍、帽子、圍巾
+const toOld = (c, base) => (c >= base && c < base + ROBES.length ? c - base : 0);
+export const toOutfit = (L) => [toOld(L.topC, 0), L.hatC, toOld(L.neckC, ROBES.length)];
 
-// 骰子：種族、五官、顏色、比例全部亂抽，自己畫的臉留著
-export function randomLook(prev) {
+// 骰子：種族、五官、衣服、顏色、比例全部亂抽，還沒拿到的東西不抽。自己畫的臉留著
+export function randomLook(prev, set = new Set()) {
   const R = (n) => Math.floor(Math.random() * n);
   const race = RACES[R(RACES.length)];
   const L = { ...prev, race: race.id, skin: Math.random() < 0.6 ? race.skin ?? R(SKINS.length) : R(SKINS.length) };
-  for (const k in OPTIONS) L[k] = OPTIONS[k][R(OPTIONS[k].length)][0];
+  for (const k in OPTIONS) {
+    const open = OPTIONS[k].filter(([id]) => isOpen(k, id, set));
+    L[k] = open[R(open.length)][0];
+  }
+  // 連身裝會蓋掉其他衣服，少抽一點
+  if (Math.random() < 0.75) L.one = 'none';
   for (const k in COUNTS) if (k !== 'skin') L[k] = R(COUNTS[k]);
   // 比例大多落在中間附近，偶爾才抽到誇張的
   for (const [k, , v] of SLIDERS) L[k] = Math.random() < 0.35 ? R(SLIDER_MAX + 1) : Math.max(0, Math.min(SLIDER_MAX, v + R(5) - 2));

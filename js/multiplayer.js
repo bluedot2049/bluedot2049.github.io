@@ -245,7 +245,7 @@ export class Multiplayer {
     const group = ch.group;
     if (this.fx.filter((f) => f.group === group).length >= 3) return;
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTexture(e), transparent: true, depthWrite: false }));
-    const y = ch.dims.topY + 0.42;
+    const y = ch.dims.topY + 0.22;
     s.position.y = y;
     group.add(s);
     this.fx.push({ s, group, y, t: 0 });

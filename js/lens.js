@@ -33,6 +33,18 @@ export function bend(v) {
   return v;
 }
 
+// bend 反過來：畫面上的位置換回原圖上的位置，點畫面找東西時用
+export function unbend(v) {
+  if (!lens.on) return v;
+  const x = v.x * window.innerWidth / 2, y = v.y * window.innerHeight / 2, r = Math.hypot(x, y);
+  if (r < 1e-6) return v;
+  const th = Math.min(Math.atan(lens.k * r / lens.fo) / lens.k, 1.55);
+  const s = lens.fs * Math.tan(th) / r;
+  v.x *= s;
+  v.y *= s;
+  return v;
+}
+
 const VERT = /* glsl */ `
 varying vec2 vUv;
 void main() {

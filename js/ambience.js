@@ -3,6 +3,11 @@
 // 低頻壓掉、音量放輕、起伏放慢，聽起來是貼耳的空氣聲而不是轟轟的風
 const GUST_EVERY = 4;   // 每隔幾秒換一次風勢
 
+// 背景音樂是唯一要下載的音檔，每個區域一首
+const BGM_VOL = 0.16;      // 室內的音量，當背景就好
+const BGM_OUTDOOR = 0.5;   // 到戶外剩幾成，讓風聲鳥叫出來
+const BGM_FADE = 6;        // 開始播和切回分頁時淡入幾秒
+
 // ---------- 動物叫聲 ----------
 // 每個叫聲排好振盪器、濾波器、音量包絡後回傳長度（秒）。p 是音高倍率，同種動物各叫各的高低
 
@@ -185,6 +190,8 @@ export class Ambience {
     this.level = 0;          // 0 室內、1 戶外
     this.voiceUntil = 0;     // 動物叫聲播到什麼時候（performance.now），播完才能暫停音訊
     this.hold = false;       // 錄影中不暫停音訊
+    this.bgmSrc = null;      // 背景音樂的網址，還沒點過畫面就先記著
+    this.bgm = null;
     try { this.muted = localStorage.getItem('muted') === '1'; } catch { this.muted = false; }
     // 手機要在 touchend / click 這類「放開」的手勢裡才算使用者操作（iOS 的 pointerdown 不算），所以全部都聽。
     // 一直留著不拿掉：iOS 切到別的 App 回來會變成 interrupted，Safari 也不一定讓手勢以外的 resume() 生效，
@@ -205,6 +212,8 @@ export class Ambience {
         }
         if (this.keepAlive.paused) this.keepAlive.play().catch(() => {});
       } catch {}
+      // iOS 只讓手勢裡的 play() 生效，背景音樂沒播起來就趁這次再試
+      if (this.bgm?.paused && !this.muted && !document.hidden) this.apply();
       if (ctx.state === 'running') return;
       // 室內安靜時是故意暫停的，不用叫醒
       if (this.quiet && performance.now() > this.voiceUntil) return;
@@ -283,7 +292,33 @@ export class Ambience {
 
     this.gustTimer = setInterval(() => this.gust(), GUST_EVERY * 1000);
     this.scheduleBird();
+    if (this.bgmSrc) this.startMusic();
     this.apply();
+  }
+
+  // 背景音樂從這裡開始放，之後一直放到離開這個區域
+  music(src) {
+    if (this.bgmSrc) return;
+    this.bgmSrc = src;
+    if (this.ctx) {
+      this.startMusic();
+      this.apply();
+    }
+  }
+
+  // 用 <audio> 邊下載邊播，再接進 AudioContext 調音量（iOS 不理 audio.volume）。
+  // 不用 decodeAudioData：四分鐘的立體聲整首解開要將近 100 MB 記憶體，手機撐不住。
+  // 走 sfx 那條：靜音和錄影都跟著動物叫聲一起處理
+  startMusic() {
+    if (this.bgm || navigator.connection?.saveData) return;   // 手機開了省流量就不抓
+    const ctx = this.ctx, a = document.createElement('audio');
+    a.loop = true;
+    a.setAttribute('playsinline', '');
+    a.src = this.bgmSrc;
+    this.bgm = a;
+    this.bgmGain = ctx.createGain();
+    this.bgmGain.gain.value = 0;
+    ctx.createMediaElementSource(a).connect(this.bgmGain).connect(this.sfx);
   }
 
   gust() {
@@ -359,10 +394,29 @@ export class Ambience {
     const ctx = this.ctx;
     if (!ctx) return;
     const off = this.muted || document.hidden, v = off ? 0 : this.level * 0.7;
-    if (v > 0 && ctx.state !== 'running') ctx.resume().catch(() => {});
-    this.master.gain.setTargetAtTime(v, ctx.currentTime, 0.4);
-    this.sfx.gain.setTargetAtTime(off ? 0 : 1, ctx.currentTime, 0.05);
-    this.quiet = v === 0;
+    const live = v > 0 || (this.bgm && !off);
+    if (live && ctx.state !== 'running') ctx.resume().catch(() => {});
+    const t = ctx.currentTime;
+    this.master.gain.setTargetAtTime(v, t, 0.4);
+    this.sfx.gain.setTargetAtTime(off ? 0 : 1, t, 0.05);
+    if (this.bgm) {
+      const a = this.bgm, g = this.bgmGain.gain;
+      if (off) {
+        // 靜音或切到別的分頁就停下來，不再下載
+        a.pause();
+        g.cancelScheduledValues(t);
+        g.setValueAtTime(0, t);
+      } else {
+        if (a.paused) {
+          a.play().catch(() => {});
+          this.bgmFadeUntil = t + BGM_FADE;
+        }
+        // 淡入中途走到戶外也照原本的速度淡，不會突然跳大聲
+        const vol = BGM_VOL * (1 - this.level * (1 - BGM_OUTDOOR));
+        g.setTargetAtTime(vol, t, t < this.bgmFadeUntil ? BGM_FADE / 3 : 0.8);
+      }
+    }
+    this.quiet = !live;
     clearTimeout(this.sleepTimer);
     if (this.quiet) this.sleepSoon();
   }

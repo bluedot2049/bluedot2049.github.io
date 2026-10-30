@@ -450,6 +450,24 @@ body.desk #hint { bottom: auto; top: calc(18px + env(safe-area-inset-top)); }
 }
 .chips button.on { background: var(--gold-fill); border-color: transparent; color: #2a1a0c; font-weight: 600; }
 .chips button.off { opacity: .4; }
+/* 還沒拿到的：虛線框，字淡一點 */
+.chips button.locked { border-style: dashed; color: var(--muted); opacity: .7; }
+.dress-hint { margin: 8px 0 0; font-size: 13px; color: var(--gold-hi); }
+/* 衣服、配件底下的小分頁 */
+.chips.subtabs { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line-soft); }
+.chips.subtabs button { height: 30px; padding: 0 12px; font-size: 13px; }
+.closet-slot {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 0; border-bottom: 1px solid var(--line-soft);
+}
+.closet-slot span { flex: 1; min-width: 0; font-size: 14px; letter-spacing: .1em; }
+.closet-slot small { display: block; margin-top: 2px; font-size: 12px; letter-spacing: .05em; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.closet-slot button {
+  flex: 0 0 auto; height: 32px; padding: 0 12px;
+  font: inherit; font-size: 13px; color: var(--text);
+  background: none; border: 1px solid var(--line); border-radius: 999px; cursor: var(--cur-pointer);
+}
+.closet-slot button:disabled { opacity: .35; cursor: default; }
 .dress-row input[type=range] { width: 100%; height: 28px; margin: 0; accent-color: var(--gold-fill); }
 .dress-note {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -631,7 +649,7 @@ body.photo #stage::after { display: none; }   /* 暗角改由取景框畫，存�
 body.photo #joy, body.photo #emote { opacity: 1; }
 body.photo-hush .speech { opacity: 0 !important; }
 body.photo:not(.desk) #emote { bottom: calc(184px + env(safe-area-inset-bottom)); }   /* 讓出快門上方的鏡頭鈕 */
-body.photo-bare #ph-bar, body.photo-bare #ph-menu, body.photo-bare #ph-exit, body.photo-bare #ph-shoot, body.photo-bare .ph-seal,
+body.photo-bare #ph-bar, body.photo-bare #ph-menu, body.photo-bare #ph-exit, body.photo-bare #ph-shoot, body.photo-bare #ph-alt,
 body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #emote, body.photo-bare #hint { display: none !important; }
 
 #ph-frame { position: fixed; z-index: 12; pointer-events: none; }
@@ -750,16 +768,51 @@ body.desk .ph-chip span { color: var(--muted); }
 body.photo-rec #ph-record { border-color: #c4452d; }
 body.photo-rec #ph-record i { width: 18px; height: 18px; border-radius: 4px; }
 
-/* 升、降：疊在搖桿正上方 */
-.ph-seal { width: 52px; height: 52px; font-size: 17px; right: calc(58px + env(safe-area-inset-right)); touch-action: none; }
-#ph-up { bottom: calc(222px + env(safe-area-inset-bottom)); }
-#ph-down { bottom: calc(162px + env(safe-area-inset-bottom)); }
+/* 高度尺：手機疊在搖桿上方，電腦在右邊中間。刻度在左，圓點旁邊寫幾公尺 */
+#ph-alt {
+  position: fixed; z-index: 20;
+  right: calc(60px + env(safe-area-inset-right)); bottom: calc(172px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.ph-alt-step {
+  width: 36px; height: 30px; padding: 0; border-radius: 999px;
+  color: var(--gold-hi); background: var(--panel); border: 1px solid var(--line-soft);
+  font-size: 10px; cursor: var(--cur-pointer);
+}
+.ph-alt-step:active { border-color: var(--gold); }
+.ph-alt-track { position: relative; width: 36px; height: 150px; cursor: var(--cur-pointer); }
+.ph-alt-track::before {
+  content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; margin-left: -1.5px;
+  border-radius: 2px; background: var(--panel-soft); box-shadow: inset 0 0 0 1px var(--line);
+}
+.ph-alt-mark {
+  position: absolute; right: 100%; bottom: calc(var(--s) * 100%); transform: translateY(50%);
+  padding: 3px 8px; white-space: nowrap; border: 0; border-radius: 999px;
+  color: var(--muted); background: var(--panel-soft);
+  font-size: 12px; letter-spacing: .08em; cursor: var(--cur-pointer);
+}
+.ph-alt-mark:active { color: var(--gold-hi); }
+@media (hover: hover) { .ph-alt-mark:hover { color: var(--gold-hi); } }
+.ph-alt-knob {
+  position: absolute; left: 50%; bottom: calc(var(--s, .4) * 100%); width: 18px; height: 18px;
+  margin-left: -9px; transform: translateY(50%); border-radius: 50%;
+  background: var(--gold-fill); border: 2px solid var(--gold-hi); box-shadow: 0 1px 4px rgba(0, 0, 0, .45);
+  pointer-events: none;
+}
+.ph-alt-knob b {
+  position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%);
+  padding: 2px 7px; border-radius: 999px; white-space: nowrap;
+  font: 600 12px var(--latin); color: var(--gold-hi); background: var(--panel-soft);
+}
 
 /* 電腦：選項排在下方中間，快門在最下面 */
 body.desk #ph-bar { top: auto; left: 50%; right: auto; bottom: calc(154px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: calc(100vw - 32px); }
 body.desk #ph-chips { flex-wrap: wrap; justify-content: center; overflow: visible; }
 body.desk #ph-shoot { left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom)); align-items: center; }
 body.desk #ph-rec { top: calc(18px + env(safe-area-inset-top)); }
+body.desk #ph-alt { right: calc(70px + env(safe-area-inset-right)); bottom: auto; top: 50%; transform: translateY(-50%); }
+body.desk .ph-alt-track { height: 240px; }
 
 /* 拍好之後 */
 #ph-result {

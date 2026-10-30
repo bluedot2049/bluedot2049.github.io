@@ -40,6 +40,7 @@ export class Player {
     this.camDist = defaultDist();
     this.distMax = world.camDistMax ?? DIST_MAX;   // 海市可以拉得比較遠，看得到整座山城
     this.zoomGoal = null;           // 慢慢推到這個距離和俯角，見 zoomTo
+    this.aim = null;                // 有給就繞著這一點看，不看角色（剛到海市的遠景）
     this.camPos = new THREE.Vector3();
     this.camLook = new THREE.Vector3();
     this.headPos = new THREE.Vector3();
@@ -516,14 +517,15 @@ export class Player {
     }
     // 注視點放在角色前方一點，直式螢幕上角色才會落在畫面下方，前方留出空間
     const ahead = window.innerWidth < window.innerHeight ? 1.8 : 0.8;
-    outLook.set(this.pos.x - Math.sin(this.camYaw) * ahead, this.pos.y + 0.9, this.pos.z - Math.cos(this.camYaw) * ahead);
+    if (this.aim) outLook.copy(this.aim);
+    else outLook.set(this.pos.x - Math.sin(this.camYaw) * ahead, this.pos.y + 0.9, this.pos.z - Math.cos(this.camYaw) * ahead);
     const pitch = Math.max(this.camPitch, PITCH_LOW), c = Math.cos(pitch);
     outPos.set(
       outLook.x + Math.sin(this.camYaw) * c * this.camDist,
       outLook.y + Math.sin(pitch) * this.camDist,
       outLook.z + Math.cos(this.camYaw) * c * this.camDist
     );
-    // 角色和鏡頭之間被房子擋住時，鏡頭往前移到房子前面（海市的窄巷）
+    // 角色和鏡頭之間隔著山坡或石台時，鏡頭沿原方向往前移（海市）。房子不推鏡頭，是淡掉
     if (this.world.camClip) {
       const head = this.headPos.set(this.pos.x, this.pos.y + 1.2, this.pos.z), clip = this.world.camClip(head, outPos);
       if (clip < 1) outPos.lerpVectors(head, outPos, Math.max(clip, 0.15));

@@ -4,7 +4,7 @@
 // 角色留在原地照常動，表情、坐下都會出現在畫面裡；對話框是 HTML，拍的時候照著位置畫進去。
 // 變焦從望遠一路拉到廣角，再往上就慢慢彎成魚眼；怎麼彎、怎麼畫在 lens.js。
 import * as THREE from 'three';
-import { lens, fitSource } from './lens.js';
+import { lens, fitSource, unbend } from './lens.js';
 import { makePostcard } from './postcard.js';
 
 const ASPECTS = [
@@ -30,13 +30,22 @@ const MOVES = ['手動', '推近', '環繞', '升起', '橫移', '搖鏡'];
 const FOV_MIN = 12, FISH = 100, FOV_MAX = 140;
 const CORNER = THREE.MathUtils.degToRad(78);   // 魚眼開到底時取景框角落的角度，對角 156°
 const LENSES = [['魚眼', FOV_MAX], ['廣角', 96], ['標準', 50], ['望遠', 16]];
+// 廣角和魚眼靠的是站得近，滾輪和雙指改成往畫面中央的東西前進後退（推鏡），最近停在 NEAR_STOP
+const PUSH_AT = Math.sqrt(50 * 96);
+const NEAR_STOP = 0.25;
+const NEAR = 0.04;    // 攝影模式的近裁切面：貼到臉前面也不會切掉一塊
 const SPEED = 3;
+// 高度尺：記的是離地多高，對數刻度，貼地到俯瞰都好拖
+const H_MIN = 0.2, H_MAX = 40;
+const ALT_MARKS = [['俯瞰', 8], ['眼高', 1.6], ['貼地', 0.3]];
+const altAt = (h) => Math.log(h / H_MIN) / Math.log(H_MAX / H_MIN);
 const MAX_REC = 60;   // 錄影最長秒數
 const KEY = 'photo';
 
 // 等效全片幅焦距，給變焦時顯示用
 const focal = (fov) => Math.round(12 / Math.tan(THREE.MathUtils.degToRad(fov / 2)));
 const pad2 = (n) => String(n).padStart(2, '0');
+const dist = (m) => (m < 10 ? m.toFixed(m < 1 ? 2 : 1) : Math.round(m)) + ' m';
 function stamp() {
   const d = new Date();
   return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
@@ -74,9 +83,9 @@ function pickMime() {
 }
 
 export class PhotoMode {
-  // render(dt)：照目前的設定畫一幀（有後製就走後製）；resizeFX(w, h)：後製跟著換尺寸
-  constructor({ renderer, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX }) {
-    Object.assign(this, { renderer, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX });
+  // render(dt)：照目前的設定畫一幀（有後製就走後製）；resizeFX(w, h)：後製跟著換尺寸；lensPass：拍魚眼照片時拿來彎大圖
+  constructor({ renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass }) {
+    Object.assign(this, { renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass });
     this.active = false;
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
@@ -87,7 +96,15 @@ export class PhotoMode {
     this.menu = null;                       // 打開中的選單
     this.keys = new Set();
     this.joy = { x: 0, y: 0 };
-    this.lift = 0;                          // 手機的升、降按鈕
+    this.lift = 0;                          // 按住高度尺兩端的升、降
+    this.height = 1.6;                      // 要離地多高
+    this.ground = 0;                        // 腳下的地面，平滑跟著地形
+    this.dolly = 0;                         // 推鏡還沒走完的距離，往前是正
+    this.dollyDone = 0;                     // 推鏡總共走了多遠，算畫面中央還有多遠用
+    this.aim = null;                        // 上次量到畫面中央的距離 { d, done, t }
+    this.fly = null;                        // 點兩下之後要飛去的位置
+    this.lastTap = null;
+    this.ray = new THREE.Raycaster();
     this.room = -1;
     this.pivot = null;                      // 環繞的中心
     this.rec = null;
@@ -138,6 +155,11 @@ export class PhotoMode {
     cam.clearViewOffset();
     this.pos.copy(cam.position);
     this.vel.set(0, 0, 0);
+    this.dolly = 0;
+    this.fly = null;
+    cam.near = NEAR;
+    this.ground = this.world.camFloor(this.pos.x, this.pos.z);
+    this.setHeight(this.pos.y - this.ground);
     const dir = cam.getWorldDirection(new THREE.Vector3());
     this.yaw = this.aimYaw = Math.atan2(-dir.x, -dir.z);
     this.pitch = this.aimPitch = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1));
@@ -149,7 +171,7 @@ export class PhotoMode {
     this.showControls(true);
     this.refresh();
     if (postcard) this.ui.hint('拍一張做成明信片，拍好就能寄出去', 6000);
-    else this.ui.hint(this.coarse ? '拖曳轉頭　雙指變焦　點畫面收起按鈕' : 'WASD 移動　E / Q 升降　Shift 加速　拖曳轉頭　滾輪變焦　空白鍵拍照　H 收起按鈕', 6000);
+    else this.ui.hint(this.coarse ? '拖曳轉頭　雙指變焦　點兩下靠近　點一下收起按鈕' : 'WASD 移動　E / Q 升降　拖曳轉頭　滾輪變焦　點兩下靠近　空白鍵拍照　H 收起按鈕', 6000);
   }
 
   exit() {
@@ -169,6 +191,7 @@ export class PhotoMode {
     this.character.group.visible = true;
     this.player.marker.visible = true;
     this.camera.fov = 50;
+    this.camera.near = 0.1;
     this.camera.updateProjectionMatrix();
     this.player.paused = false;
     this.world.setCurrentRoom(this.player.room);
@@ -229,13 +252,7 @@ export class PhotoMode {
     const recBtn = this.$('#ph-record');
     if (this.mime) recBtn.addEventListener('click', () => (this.rec ? this.stopRecording() : this.startRecording()));
     else recBtn.hidden = true;
-    for (const [id, v] of [['#ph-up', 1], ['#ph-down', -1]]) {
-      const b = this.$(id);
-      b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); this.lift = v; });
-      const off = () => { if (this.lift === v) this.lift = 0; };
-      b.addEventListener('pointerup', off);
-      b.addEventListener('pointercancel', off);
-    }
+    this.bindAlt();
     this.$('#ph-share').addEventListener('click', () => this.share());
     this.$('#ph-save').addEventListener('click', () => this.download());
     this.$('#ph-again').addEventListener('click', () => this.closeResult());
@@ -308,6 +325,54 @@ export class PhotoMode {
     for (const x of this.chips) x.el.classList.remove('open');
   }
 
+  // 高度尺：拖軌道直接到想要的高度，點刻度跳到常用的高度，按住兩端慢慢升降（電腦也可以按 E / Q）
+  bindAlt() {
+    const alt = this.$('#ph-alt');
+    alt.innerHTML = `<button class="ph-alt-step" data-v="1" aria-label="升高">▲</button>`
+      + `<div class="ph-alt-track">${ALT_MARKS.map(([label, h]) => `<button class="ph-alt-mark" data-h="${h}" style="--s:${altAt(h)}">${label}</button>`).join('')}`
+      + `<i class="ph-alt-knob"><b></b></i></div>`
+      + `<button class="ph-alt-step" data-v="-1" aria-label="降低">▼</button>`;
+    this.altKnob = alt.querySelector('.ph-alt-knob');
+    for (const b of alt.querySelectorAll('.ph-alt-step')) {
+      const v = +b.dataset.v;
+      b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); this.lift = v; });
+      const off = () => { if (this.lift === v) this.lift = 0; };
+      b.addEventListener('pointerup', off);
+      b.addEventListener('pointercancel', off);
+    }
+    const track = alt.querySelector('.ph-alt-track');
+    const pick = (e) => {
+      const r = track.getBoundingClientRect(), s = THREE.MathUtils.clamp((r.bottom - e.clientY) / r.height, 0, 1);
+      this.setHeight(H_MIN * Math.pow(H_MAX / H_MIN, s));
+    };
+    let dragging = null;
+    track.addEventListener('pointerdown', (e) => {
+      const mark = e.target.closest('.ph-alt-mark');
+      if (mark) return this.setHeight(+mark.dataset.h);
+      e.preventDefault();
+      track.setPointerCapture(e.pointerId);
+      dragging = e.pointerId;
+      pick(e);
+    });
+    track.addEventListener('pointermove', (e) => { if (dragging === e.pointerId) pick(e); });
+    const end = (e) => { if (dragging === e.pointerId) dragging = null; };
+    track.addEventListener('pointerup', end);
+    track.addEventListener('pointercancel', end);
+  }
+
+  setHeight(h) {
+    this.height = THREE.MathUtils.clamp(h, H_MIN, H_MAX);
+  }
+
+  // 圓點跟著要去的高度走，旁邊寫幾公尺
+  markHeight() {
+    const h = this.height, label = (h < 10 ? h.toFixed(1) : Math.round(h)) + ' m';
+    this.altKnob.style.setProperty('--s', altAt(h));
+    if (label === this.altLabel) return;
+    this.altLabel = label;
+    this.altKnob.firstChild.textContent = label;
+  }
+
   // 錄影開始時決定環繞的中心：角色在前方不遠就繞著角色，不然繞著畫面中央前方六公尺的點
   aimPivot() {
     this.pivot = null;
@@ -331,8 +396,9 @@ export class PhotoMode {
       el.setPointerCapture(e.pointerId);
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, drag: false, mouse: e.pointerType === 'mouse', quiet: this.swallowTap });
       if (pts.size === 2) {
-        const [a, b] = [...pts.values()];
-        pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), fov: this.fov };
+        const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+        // 推鏡時記下開始時離畫面中央多遠，手指張開多少就靠近多少
+        pinch = this.pushing() ? { d, dist: this.centerDist(), moved: 0 } : { d, fov: this.fov };
         multi = true;
       }
     });
@@ -343,8 +409,14 @@ export class PhotoMode {
       p.x = e.clientX;
       p.y = e.clientY;
       if (pinch && pts.size >= 2) {
-        const [a, b] = [...pts.values()];
-        this.zoom(pinch.fov * (pinch.d / Math.max(1, Math.hypot(a.x - b.x, a.y - b.y))));
+        const [a, b] = [...pts.values()], r = pinch.d / Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
+        if (pinch.fov) this.zoomBy(pinch.fov * r);
+        else {
+          const to = Math.max(NEAR_STOP, pinch.dist * r), go = pinch.dist - to;
+          this.dolly += go - pinch.moved;
+          pinch.moved = go;
+          this.showZoom(`距離 ${dist(to)}`);
+        }
         return;
       }
       if (!p.drag && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) > 8) p.drag = true;
@@ -359,8 +431,7 @@ export class PhotoMode {
       const p = pts.get(e.pointerId);
       if (!p) return;
       pts.delete(e.pointerId);
-      // 點一下畫面：收起或叫回按鈕
-      if (this.active && e.type === 'pointerup' && !p.drag && !p.quiet && !multi && !this.result) this.showControls(document.body.classList.contains('photo-bare'));
+      if (this.active && e.type === 'pointerup' && !p.drag && !p.quiet && !multi && !this.result) this.tap(e.clientX, e.clientY);
       if (pts.size < 2) pinch = null;
       if (pts.size === 0) multi = false;
     };
@@ -369,7 +440,8 @@ export class PhotoMode {
     el.addEventListener('wheel', (e) => {
       if (!this.active) return;
       e.preventDefault();
-      this.zoom(this.fov * (1 + e.deltaY * 0.001));
+      if (this.pushing()) this.push(Math.exp(e.deltaY * 0.0015));
+      else this.zoomBy(this.fov * (1 + e.deltaY * 0.001));
     }, { passive: false });
 
     window.addEventListener('keydown', (e) => {
@@ -401,13 +473,101 @@ export class PhotoMode {
   }
 
   zoom(fov) {
+    const was = this.pushing();
     this.fov = THREE.MathUtils.clamp(fov, FOV_MIN, FOV_MAX);
+    this.showZoom(this.fov > FISH ? `魚眼 ${Math.round(THREE.MathUtils.radToDeg(this.fish(this.fov).c * 2))}°` : focal(this.fov) + 'mm');
+    this.markLens();
+    if (!was && this.pushing() && !this.pushHinted) {
+      this.pushHinted = true;
+      this.ui.hint(this.coarse ? '廣角和魚眼：雙指改成前進後退' : '廣角和魚眼：滾輪改成前進後退', 3500);
+    }
+  }
+
+  // 滾輪、雙指變焦（標準、望遠）：拉過廣角那一頭就直接換成廣角，接著改成推鏡
+  zoomBy(fov) {
+    if (this.pushing()) return;
+    this.zoom(fov > PUSH_AT ? LENSES[1][1] : fov);
+  }
+
+  pushing() {
+    return this.fov > PUSH_AT;
+  }
+
+  showZoom(text) {
     const el = this.$('#ph-zoom');
-    el.textContent = this.fov > FISH ? `魚眼 ${Math.round(THREE.MathUtils.radToDeg(this.fish(this.fov).c * 2))}°` : focal(this.fov) + 'mm';
+    el.textContent = text;
     el.classList.add('show');
     clearTimeout(this.zoomTimer);
     this.zoomTimer = setTimeout(() => el.classList.remove('show'), 900);
-    this.markLens();
+  }
+
+  // ───────── 推鏡、靠近 ─────────
+
+  // 畫面上 (nx, ny)（-1..1）看到的東西。看不見的、淡掉的牆、粒子和線都不算；太遠（天空）當成沒有，推鏡就照 8 公尺算
+  pickAt(nx, ny) {
+    const v = unbend(new THREE.Vector2(nx, ny)), ray = this.ray;
+    ray.layers.mask = this.camera.layers.mask;
+    ray.setFromCamera(v, this.camera);
+    ray.far = 200;
+    for (const h of ray.intersectObject(this.scene, true)) {
+      if (!h.object.isMesh) continue;
+      const m = h.object.material;
+      if (m && !Array.isArray(m) && (!m.visible || (m.transparent && m.opacity < 0.5))) continue;
+      let o = h.object;
+      while (o && o.visible) o = o.parent;
+      if (!o) return h;
+    }
+    return null;
+  }
+
+  // 畫面中央離東西多遠：量一次可以用一小段時間，中間推鏡走掉的扣掉；還沒走完的也先扣掉
+  centerDist() {
+    const now = performance.now();
+    if (!this.aim || now - this.aim.t > 150) {
+      const h = this.pickAt(0, 0);
+      this.aim = { d: h ? h.distance : 8, done: this.dollyDone, t: now };
+    }
+    return this.aim.d - (this.dollyDone - this.aim.done) - this.dolly;
+  }
+
+  // 滾輪推鏡：ratio < 1 靠近。照距離的比例走，越近走得越慢，最近停在 NEAR_STOP
+  push(ratio) {
+    const d = this.centerDist(), go = THREE.MathUtils.clamp(d - Math.max(NEAR_STOP, d * ratio), -10, 10);
+    this.dolly += go;
+    this.fly = null;
+    this.showZoom(`距離 ${dist(d - go)}`);
+  }
+
+  // 點一下收起或叫回按鈕，點兩下飛到點到的東西前面；等一下確定不是點兩下才收按鈕
+  tap(x, y) {
+    const last = this.lastTap, now = performance.now();
+    if (last && now - last.t < 320 && Math.hypot(x - last.x, y - last.y) < 30) {
+      clearTimeout(last.timer);
+      this.lastTap = null;
+      this.approach(x, y);
+      return;
+    }
+    const timer = setTimeout(() => {
+      this.lastTap = null;
+      if (this.active && !this.result) this.showControls(document.body.classList.contains('photo-bare'));
+    }, 320);
+    this.lastTap = { x, y, t: now, timer };
+  }
+
+  // 靠近：沿著視線飛到那個東西前面，距離讓畫面大約框住一公尺高（廣角靠得更近），然後把它擺到畫面正中
+  approach(x, y) {
+    const h = this.pickAt((x / window.innerWidth) * 2 - 1, 1 - (y / window.innerHeight) * 2);
+    if (!h) return;
+    const dir = h.point.clone().sub(this.camera.position).normalize();
+    const v = THREE.MathUtils.degToRad(Math.min(this.fov, FISH) / 2);
+    const d = THREE.MathUtils.clamp(0.5 / Math.tan(v), 0.3, 3);
+    this.fly = h.point.clone().addScaledVector(dir, -d);
+    this.setHeight(this.fly.y - this.world.camFloor(this.fly.x, this.fly.z));
+    this.dolly = 0;
+    const yaw = Math.atan2(-dir.x, -dir.z);
+    this.aimYaw = this.yaw + Math.atan2(Math.sin(yaw - this.yaw), Math.cos(yaw - this.yaw));
+    this.aimPitch = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1));
+    this.showZoom(`距離 ${dist(d)}`);
   }
 
   // 鏡頭鈕亮哪一顆：彎了就是魚眼，不然看離哪一顆最近
@@ -459,13 +619,30 @@ export class PhotoMode {
     const k = this.keys;
     let f = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
     let s = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
-    let u = (k.has('e') ? 1 : 0) - (k.has('q') ? 1 : 0) + this.lift;
+    const u = (k.has('e') ? 1 : 0) - (k.has('q') ? 1 : 0) + this.lift;
     const jm = Math.hypot(this.joy.x, this.joy.y);
     if (jm > 0.12) { f = -this.joy.y; s = this.joy.x; }
     const fast = k.has('shift') ? 3 : 1;
-    // 平平地往前後左右走，不跟著抬頭低頭往天上飛；升降另外按
+    // 平平地往前後左右走，不跟著抬頭低頭往天上飛；升降另外按，改的是離地高度，越高升得越快
     const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
-    const want = new THREE.Vector3(-sy * f + cy * s, u, -cy * f - sy * s);
+    if (u) this.setHeight(this.height + u * (0.6 + this.height * 0.6) * fast * dt);
+    if (f || s || u) this.fly = null;
+    // 推鏡：沿著視線（含上下）走，剩下的距離慢慢走完
+    if (Math.abs(this.dolly) > 1e-4) {
+      const step = this.dolly * (1 - Math.exp(-dt * 8)), fw = this.forward(new THREE.Vector3());
+      this.dolly -= step;
+      this.dollyDone += step;
+      this.pos.addScaledVector(fw, step);
+      this.setHeight(this.height + fw.y * step);
+    }
+    // 點兩下的靠近：水平飛過去，高度交給離地高度
+    if (this.fly) {
+      const a = 1 - Math.exp(-dt * 4);
+      this.pos.x += (this.fly.x - this.pos.x) * a;
+      this.pos.z += (this.fly.z - this.pos.z) * a;
+      if (Math.hypot(this.fly.x - this.pos.x, this.fly.z - this.pos.z) < 0.005) this.fly = null;
+    }
+    const want = new THREE.Vector3(-sy * f + cy * s, 0, -cy * f - sy * s);
     if (want.lengthSq() > 1) want.normalize();
     want.multiplyScalar(SPEED * fast);
     // 起步和停下都慢慢來，錄起來才不會一頓一頓
@@ -474,7 +651,7 @@ export class PhotoMode {
 
     const mv = this.rec ? MOVES[this.move] : '手動';
     if (mv === '推近') this.pos.addScaledVector(this.forward(new THREE.Vector3()), 0.55 * dt);
-    else if (mv === '升起') this.pos.y += 0.35 * dt;
+    else if (mv === '升起') this.setHeight(this.height + 0.35 * dt);
     else if (mv === '橫移') { this.pos.x += cy * 0.6 * dt; this.pos.z -= sy * 0.6 * dt; }
     else if (mv === '搖鏡') this.aimYaw -= 0.1 * dt;
     else if (mv === '環繞' && this.pivot) {
@@ -487,11 +664,16 @@ export class PhotoMode {
       this.yaw += a;
     }
 
-    // 不鑽進地面和樹林，也不飛離角色太遠
+    // 不飛離角色太遠
     const ch = this.player.pos, R = 120;
     const hx = this.pos.x - ch.x, hz = this.pos.z - ch.z, hd = Math.hypot(hx, hz);
     if (hd > R) { this.pos.x = ch.x + (hx / hd) * R; this.pos.z = ch.z + (hz / hd) * R; }
-    this.pos.y = THREE.MathUtils.clamp(this.pos.y, this.world.camFloor(this.pos.x, this.pos.z) + 0.2, 60);
+    // 高度跟著地形：地面慢慢跟，走樓梯、飛過樹林時鏡頭平順地起伏；不鑽進地面和樹林
+    const floor = this.world.camFloor(this.pos.x, this.pos.z);
+    this.ground += (floor - this.ground) * (1 - Math.exp(-dt * 2.5));
+    this.pos.y += (Math.min(this.ground + this.height, 60) - this.pos.y) * (1 - Math.exp(-dt * 5));
+    this.pos.y = THREE.MathUtils.clamp(this.pos.y, floor + 0.2, 60);
+    this.markHeight();
 
     const t = 1 - Math.exp(-dt * 12);
     this.yaw += (this.aimYaw - this.yaw) * t;
@@ -635,16 +817,13 @@ export class PhotoMode {
     const dpr = r.getPixelRatio();
     try {
       r.setPixelRatio(1);
-      r.setSize(outW, outH, false);
-      this.resizeFX(outW, outH);
-      if (lens.on) {
-        // 魚眼要以取景框的中心彎，不能裁：原圖只畫取景框彎回去需要的範圍（取景框本來就在正中間）
-        Object.assign(lens, { w: fr.w, h: fr.h, fs: fitSource(fr.w, fr.h) });
-        cam.aspect = fr.w / fr.h;
-        cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(fr.h / 2 / lens.fs));
-        cam.updateProjectionMatrix();
-      } else cam.setViewOffset(W, H, fr.x, fr.y, fr.w, fr.h);
-      this.render(0);
+      if (lens.on) this.renderFish(outW, outH);
+      else {
+        r.setSize(outW, outH, false);
+        this.resizeFX(outW, outH);
+        cam.setViewOffset(W, H, fr.x, fr.y, fr.w, fr.h);
+        this.render(0);
+      }
       // 畫完馬上拷走，不然下一幀之前 WebGL 會把畫面清掉
       this.compose(ctx, r.domElement, 0, 0, outW, outH, outW, outH, k, Math.random());
     } finally {
@@ -661,6 +840,48 @@ export class PhotoMode {
     card.toBlob((blob) => {
       if (blob) this.showResult(blob, `${this.postcard ? '海市明信片' : '煉金畫廊'}-${stamp()}.jpg`, false);
     }, 'image/jpeg', 0.92);
+  }
+
+  // 魚眼照片：彎的時候中間會放大 fo / fs 倍，原圖先畫成那麼大中間才不會糊。
+  // 一次畫不了那麼大，分成幾塊用 setViewOffset 畫，每塊多畫一圈再裁掉，接縫不會露出陰影和泛光的邊；
+  // 拼好的大圖做多層縮圖，邊緣被壓縮的地方自動取縮小過的那層，不會有鋸齒。最後彎成 outW × outH 留在畫布上
+  renderFish(outW, outH) {
+    const fr = this.frame, r = this.renderer, cam = this.camera;
+    Object.assign(lens, { w: fr.w, h: fr.h, fs: fitSource(fr.w, fr.h) });
+    // 放大倍數不超過顯示卡的貼圖上限，也不超過記憶體撐得住的像素數（iPhone 的畫布最多 1600 多萬像素）
+    const m = Math.max(1, Math.min(lens.fo / lens.fs, r.capabilities.maxTextureSize / Math.max(outW, outH), Math.sqrt((this.coarse ? 16e6 : 24e6) / (outW * outH))));
+    const SW = Math.round(outW * m), SH = Math.round(outH * m);
+    const n = Math.ceil(m - 0.05), tw = Math.ceil(SW / n), th = Math.ceil(SH / n), P = n > 1 ? 64 : 0;
+    const big = document.createElement('canvas');
+    big.width = SW;
+    big.height = SH;
+    const bctx = big.getContext('2d');
+    // 原圖：只看取景框，視角照 fs 換算（取景框本來就在正中間）
+    cam.aspect = fr.w / fr.h;
+    cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(fr.h / 2 / lens.fs));
+    r.setSize(tw + 2 * P, th + 2 * P, false);
+    this.resizeFX(tw + 2 * P, th + 2 * P);
+    lens.on = false;
+    try {
+      for (let j = 0; j < n; j++) {
+        for (let i = 0; i < n; i++) {
+          cam.setViewOffset(SW, SH, i * tw - P, j * th - P, tw + 2 * P, th + 2 * P);
+          this.render(0);
+          bctx.drawImage(r.domElement, P, P, tw, th, i * tw, j * th, tw, th);
+        }
+      }
+    } finally {
+      lens.on = true;
+      cam.clearViewOffset();
+    }
+    const tex = new THREE.CanvasTexture(big);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.anisotropy = r.capabilities.getMaxAnisotropy();
+    r.setSize(outW, outH, false);
+    this.resizeFX(outW, outH);
+    this.lensPass.draw(r, tex);
+    tex.dispose();
   }
 
   // ───────── 錄影 ─────────

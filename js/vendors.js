@@ -1,8 +1,9 @@
 // 海市的攤販：站在櫃台後面，有人走近會打招呼、轉過來看，按「聊天」會講一句，同一句不會連著講。
+// 有幾攤第一次聊天會送東西（looks.js 的 GIFTS），送了之後回畫廊照鏡子就能穿戴。
 // 介面跟 visitors.js 一樣（nearest、blocks、list），玩家的動作按鈕和照鏡子時的半透明直接沿用。
 // 角色只在玩家附近、同一層附近時才畫，攤販多也不會拖慢手機
 import { Character } from './character.js';
-import { sanitizeLook, presetLook, RACES } from './looks.js';
+import { sanitizeLook, presetLook, RACES, GIFTS, unlock, unlockedSet, isOpen } from './looks.js';
 import { bend } from './lens.js';
 
 const SAY_TIME = 3800, GREET_DIST = 3.2, TALK_DIST = 2.4, SHOW_DIST = 22, SHOW_DY = 3.5;
@@ -10,17 +11,17 @@ const SAY_TIME = 3800, GREET_DIST = 3.2, TALK_DIST = 2.4, SHOW_DIST = 22, SHOW_D
 // id 對應 haishi.js 的 SHOPS。look 只寫跟預設不一樣的地方
 export const VENDORS = {
   post: {
-    name: '信差', race: 'dog', look: { hat: 'none', clothes: 'suit', robe: 1 }, postcard: true,
+    name: '信差', race: 'dog', look: { hat: 'none', top: 'shirt', topC: 16, bottom: 'pants', botC: 1, outer: 'blazer', outC: 1, neck: 'tie', back: 'satchel', backC: 2 }, postcard: true,
     greet: ['要寄信嗎', '有東西要寄嗎'],
     lines: ['拍一張照片 我幫你寄', '明信片一張 寄哪裡都可以', '今天信好多 腳好痠', '畫廊那邊的信也是我送的', '寄給朋友吧 他們會很開心'],
   },
   fish: {
-    name: '魚販', race: 'tails', look: { hat: 'straw', clothes: 'tank', robe: 5 },
+    name: '魚販', race: 'tails', look: { hat: 'straw', top: 'tank', topC: 16, bottom: 'shorts', botC: 5, outer: 'apron', outC: 19, shoes: 'rainboots', shoeC: 20, neck: 'towel', neckC: 16, back: 'none' },
     greet: ['今天的魚很新鮮喔', '來看看'],
     lines: ['早上剛撈的', '這隻很大吧', '烏賊要不要', '漁夫都把魚賣給我', '不要摸啦 會滑', '收攤前會便宜一點'],
   },
   pigment: {
-    name: '顏料攤', race: 'mushroom', look: { hat: 'none', robe: 5 },
+    name: '顏料攤', race: 'mushroom', look: { hat: 'none', top: 'smock', topC: 10, botC: 5, hand: 'brush', handC: 11 },
     greet: ['要買顏料嗎', '看一下嘛'],
     lines: ['這個藍是石頭磨的', '朱砂很貴喔 一點點就好', '畫廊那邊也跟我買', '磨一罐要磨很久', '白的最好用 什麼都要加一點', '手不要沾到 洗不掉'],
   },
@@ -40,22 +41,22 @@ export const VENDORS = {
     lines: ['爬上來很喘吧', '這是山上的草泡的', '慢慢喝 不急', '上面還有很多層喔', '喝完再上去', '我每天都看人爬樓梯'],
   },
   tailor: {
-    name: '裁縫', race: 'fox', look: { hat: 'wizard', hatC: 5, clothes: 'suit', robe: 3 },
+    name: '裁縫', race: 'fox', look: { hat: 'wizard', hatC: 5, top: 'shirt', topC: 16, outer: 'haori', outC: 3, outC2: 9, bottom: 'hakama', botC: 22, botC2: 9, shoes: 'geta', shoeC: 8, neck: 'none', back: 'none' },
     greet: ['要做衣服嗎', '進來看看'],
     lines: ['你這件袍子不錯', '帽子歪了啦', '這塊布是霧港來的', '袖子是不是太長', '畫廊那面鏡子 我也常去照', '顏色多選幾個也可以'],
   },
   junk: {
-    name: '舊貨攤', race: 'bigeye', look: { hat: 'cone', clothes: 'tank', robe: 7 },
+    name: '舊貨攤', race: 'bigeye', look: { hat: 'cone', top: 'tank', topC: 16, bottom: 'shorts', botC: 7, shoes: 'odd', neck: 'none', back: 'shell' },
     greet: ['嘰咕 看看', '什麼都有喔'],
     lines: ['這個瓶子裡有信', '靴子 只有一隻', '不知道是什麼 但很便宜', '船上撿到的', '嘰咕 不能退喔', '這個好像會動'],
   },
   herbs: {
-    name: '藥草攤', race: 'frog', look: { hat: 'sprout', robe: 2 },
+    name: '藥草攤', race: 'frog', look: { hat: 'sprout', topC: 2, botC: 2, outer: 'mino', shoes: 'geta', shoeC: 2 },
     greet: ['呱 要什麼草', '聞聞看'],
     lines: ['這個治暈船', '泡澡用的', '不要吃那個 那是要燒的', '山上採的 很新鮮', '呱 這個很苦', '睡不著喝這個'],
   },
   lanterns: {
-    name: '燈籠師傅', race: 'cat', look: { hat: 'wizard', hatC: 7, robe: 6 },
+    name: '燈籠師傅', race: 'cat', look: { hat: 'wizard', hatC: 7, topC: 6, botC: 6, neckC: 14, hand: 'lantern' },
     greet: ['喜歡燈籠嗎', '這條巷子的燈都是我做的'],
     lines: ['紙要糊三層', '紅的最多人買', '掛高一點比較好看', '晚上全部點起來很漂亮', '做壞的都在後面', '貓不怕火啦'],
   },
@@ -111,7 +112,7 @@ const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const wrap = (a) => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
 
 class Vendor {
-  constructor(scene, shadowTex, spot, spec, i, onPostcard) {
+  constructor(scene, shadowTex, spot, spec, i, onPostcard, onGift) {
     const race = RACES.find((r) => r.id === spec.race) || RACES[0];
     const look = sanitizeLook({ ...presetLook(i), race: race.id, skin: race.skin ?? 0, ...spec.look });
     this.ch = new Character(shadowTex, look);
@@ -125,6 +126,8 @@ class Vendor {
     this.aboard = false;
     this.actionLabel = spec.postcard ? '寄明信片' : null;
     this.onPostcard = onPostcard;
+    this.onGift = onGift;
+    this.gift = GIFTS[spot.id] || null;
     this.greeted = false;
     this.bag = [];
     this.bubble = document.createElement('div');
@@ -148,8 +151,15 @@ class Vendor {
     this.bubble.classList.remove('show');
   }
 
-  // 台詞洗一輪才重來，同一句不會連著講
+  // 台詞洗一輪才重來，同一句不會連著講。有東西要送的話，第一次聊天先送
   talkTo() {
+    const g = this.gift;
+    if (g && !g.items.every(([k, id]) => isOpen(k, id, unlockedSet()))) {
+      unlock(g.items);
+      this.say(g.line);
+      this.onGift?.(g);
+      return;
+    }
     if (!this.bag.length) this.bag = [...this.spec.lines].sort(() => Math.random() - 0.5);
     this.say(this.bag.pop());
     if (this.spec.postcard) setTimeout(() => this.onPostcard?.(), 1200);
@@ -189,8 +199,8 @@ class Vendor {
 
 export class Vendors {
   // spots：haishi.js 算好的攤販位置 [{ id, x, y, z, heading }]
-  constructor({ scene, shadowTex, spots, onPostcard }) {
-    this.list = spots.filter((s) => VENDORS[s.id]).map((s, i) => new Vendor(scene, shadowTex, s, VENDORS[s.id], i, onPostcard));
+  constructor({ scene, shadowTex, spots, onPostcard, onGift }) {
+    this.list = spots.filter((s) => VENDORS[s.id]).map((s, i) => new Vendor(scene, shadowTex, s, VENDORS[s.id], i, onPostcard, onGift));
     this.mp = null;
   }
 

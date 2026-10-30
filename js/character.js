@@ -3,7 +3,8 @@
 import * as THREE from 'three';
 import { Kit, mergeBucket } from './props.js';
 import { HEADS, rod } from './heads.js';
-import { ROBES, HAT_COLORS, SCARVES, HAIR_COLORS, SKINS, FACE, FACE_INK, NO_SCARF, raceOf, sizes, sanitizeLook, lookKey, decodeFace } from './looks.js';
+import { HAT_COLORS, HAIR_COLORS, SKINS, CLOTH, FACE, FACE_INK, raceOf, sizes, sanitizeLook, lookKey, decodeFace } from './looks.js';
+import { HIP, HOODED, HAND_POSE, bodyGeo, armGeo, legGeo, capeGeo, capeAt, wingGeo, wingAt, hasWings, tailGeo, tailAt, handGeo, hood } from './clothes.js';
 
 function mat(color) {
   return new THREE.MeshLambertMaterial({ color, flatShading: true });
@@ -17,7 +18,7 @@ const ARM_OUT = 0.28;
 const NECK = 0.8;          // 頭的原點（脖子）離腳底多高，身高另外整個縮放
 const SIT_TIME = 0.8;      // 坐下或站起來花幾秒
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
-const DARK = '#3a2414', WHITE = '#f4f2ec', GOLD = '#d4a54a';
+const WHITE = '#f4f2ec', GOLD = '#d4a54a';
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 const mix = (a, b, t) => '#' + new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString();
 
@@ -275,8 +276,12 @@ function headGeo(L, race, S, skin) {
     if (race.hair) hair(k, L.hair, hex(HAIR_COLORS[L.hairC]));
     if (!L.face || L.keep) features(k, L, race, S, m, skin);
     glasses(k, L, race, S, m);
+    hood(k, L, race);
   });
 }
+
+// 每種帽子從帽緣往上多高，照鏡子取景用
+const HAT_H = { wizard: 0.5, none: 0.08, crown: 0.2, propeller: 0.26, chef: 0.36, straw: 0.18, cone: 0.52, party: 0.4, sprout: 0.24 };
 
 // 帽子：原點在帽緣中心。螺旋槳另外一個網格，才能轉
 function hatGeo(L) {
@@ -341,71 +346,6 @@ function hatGeo(L) {
   return { main, prop };
 }
 
-// 身體：腳底到脖子。W 是胖瘦
-function bodyGeo(L, W, skin) {
-  const robe = hex(ROBES[L.robe]), scarf = L.scarf === NO_SCARF ? null : hex(SCARVES[L.scarf]);
-  return build((k) => {
-    switch (L.clothes) {
-      case 'suit': {
-        // 西裝：外套、白襯衫、領帶用圍巾的顏色，底下兩條褲管
-        const zf = (y) => 0.18 * W + ((0.8 - y) / 0.44) * 0.06 * W;
-        k.cyl(0.18 * W, 0.24 * W, 0.44, robe, 0, 0.58, 0);
-        for (const s of [-1, 1]) k.cyl(0.075 * W, 0.07 * W, 0.34, mix(robe, '#000000', 0.35), s * 0.085 * W, 0.2, 0, {}, 6);
-        k.cyl(0.1, 0.12, 0.05, WHITE, 0, 0.79, 0);
-        k.box(0.08, 0.2, 0.01, WHITE, 0, 0.68, zf(0.68) + 0.002, { rx: -0.136 });
-        if (scarf) {
-          k.box(0.04, 0.2, 0.012, scarf, 0, 0.66, zf(0.66) + 0.008, { rx: -0.136 });
-          k.ball(0.022, scarf, 0, 0.77, zf(0.77) + 0.01);
-        }
-        break;
-      }
-      case 'tank':
-        // 吊嘎配短褲：白背心撐出一點小肚子，光著腿
-        k.cyl(0.2 * W, 0.24 * W, 0.17, robe, 0, 0.35, 0);
-        k.cyl(0.17 * W, 0.21 * W, 0.4, WHITE, 0, 0.62, 0);
-        k.ball(0.17 * W, WHITE, 0, 0.55, 0.06 * W, { sy: 0.9 });
-        for (const s of [-1, 1]) k.cyl(0.045, 0.04, 0.28, skin, s * 0.09 * W, 0.14, 0, {}, 6);
-        break;
-      case 'tutu':
-        k.cyl(0.15 * W, 0.17 * W, 0.32, robe, 0, 0.64, 0);
-        k.cyl(0.18 * W, 0.36 * W, 0.12, mix(robe, '#ffffff', 0.35), 0, 0.44, 0, {}, 12);
-        k.torus(0.36 * W, 0.03, Math.PI * 2, mix(robe, '#ffffff', 0.5), 0, 0.385, 0, { rx: Math.PI / 2 });
-        for (const s of [-1, 1]) k.cyl(0.035, 0.03, 0.4, skin, s * 0.08 * W, 0.2, 0, {}, 6);
-        break;
-      default:
-        k.cyl(0.17 * W, 0.3 * W, 0.7, robe, 0, 0.45, 0);
-        k.cyl(0.215 * W, 0.225 * W, 0.05, DARK, 0, 0.55, 0);
-        // 包包掛在左後腰，避開垂下來的左手
-        k.box(0.16, 0.16, 0.08, DARK, -0.17 * W, 0.42, -0.19 * W, { rx: 0.15, ry: 0.7, rz: 0.1 });
-    }
-    if (scarf && L.clothes !== 'suit') k.torus(0.15 * (0.8 + 0.2 * W), 0.06, Math.PI * 2, scarf, 0, 0.8, 0, { rx: Math.PI / 2 });
-  });
-}
-
-function armGeo(L, W, skin) {
-  const bare = L.clothes === 'tank' || L.clothes === 'tutu';
-  return build((k) => {
-    k.add(new THREE.CapsuleGeometry(0.055 * Math.sqrt(W), 0.25, 2, 6), bare ? skin : hex(ROBES[L.robe]), 0, -0.16, 0);
-    if (L.clothes === 'suit') k.cyl(0.05, 0.05, 0.03, WHITE, 0, -0.285, 0);
-    k.rock(0.055, skin, 0, -0.33, 0);
-  });
-}
-
-function footGeo(L, skin) {
-  return build((k) => {
-    switch (L.clothes) {
-      case 'tank':
-        // 藍白拖
-        k.box(0.1, 0.025, 0.2, WHITE, 0, -0.025, 0.03);
-        k.box(0.09, 0.04, 0.15, skin, 0, 0, 0.02);
-        k.box(0.1, 0.02, 0.04, '#3a6ac8', 0, 0.015, 0.06);
-        break;
-      case 'tutu': k.box(0.08, 0.06, 0.16, '#f0a8b8', 0, 0, 0.03); break;
-      default: k.box(0.1, 0.08, 0.18, DARK, 0, 0, 0.03);
-    }
-  });
-}
-
 const smooth = (t) => t * t * (3 - 2 * t);
 
 // 陽台長桌上拿得起來的點心，編號從 1 開始，0 是空手
@@ -451,6 +391,15 @@ export class Character {
     };
     this.torso = mesh(body);
     this.scarfTail = mesh(body);
+    // 會動的衣服：披風、翅膀、尾巴各掛在一個關節上
+    const joint = (parent) => {
+      const p = new THREE.Group();
+      parent.add(p);
+      return [p, mesh(p)];
+    };
+    [this.cape, this.capeMesh] = joint(body);
+    this.wings = [-1, 1].map(() => joint(body));
+    [this.tail, this.tailMesh] = joint(body);
 
     const head = new THREE.Group();
     head.position.y = NECK;
@@ -466,6 +415,11 @@ export class Character {
     this.decal = new THREE.Mesh(EMPTY, this.faceMat);
     this.decal.visible = false;
     head.add(this.decal);
+    // 太空衣的頭盔：半透明的玻璃球罩住整顆頭
+    this.glassMat = new THREE.MeshLambertMaterial({ color: 0xd8ecff, transparent: true, opacity: 0.28, depthWrite: false });
+    this.glass = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), this.glassMat);
+    this.glass.visible = false;
+    head.add(this.glass);
 
     this.hat = new THREE.Group();
     this.hat.rotation.z = -0.12;
@@ -487,9 +441,17 @@ export class Character {
     this.armR.rotation.z = ARM_OUT;
     // 先往前擺（x）再往內收（y），手才能在胸前水平地合起來
     this.armL.rotation.order = this.armR.rotation.order = 'YXZ';
-    this.footL = pivot(0.04);
-    this.footR = pivot(0.04);
+    // 腿從屁股的關節往下垂，鞋子跟著腿一起擺
+    this.footL = pivot(HIP);
+    this.footR = pivot(HIP);
     this.limbs = [this.armL, this.armR, this.footL, this.footR].map(mesh);
+    // 左手拿的東西：每一幀抵銷手臂的轉動，一直保持直立。右手留給點心
+    this.handG = new THREE.Group();
+    this.handG.position.y = -0.33;
+    this.handG.rotation.order = 'ZXY';
+    this.armL.add(this.handG);
+    this.handMesh = mesh(this.handG);
+    this.handK = 0;
 
     const shadow = new THREE.Mesh(
       new THREE.PlaneGeometry(0.9, 0.9),
@@ -527,13 +489,18 @@ export class Character {
     this.look = L;
     const race = raceOf(L), S = sizes(L), skin = hex(SKINS[L.skin]), W = S.W;
     this.S = S;
-    swap(this.torso, bodyGeo(L, W, skin));
+    swap(this.torso, bodyGeo(L, W));
     swap(this.headMesh, headGeo(L, race, S, skin));
     this.head.scale.setScalar(S.hs);
 
-    const hat = hatGeo(L);
+    // 戴了頭套或頭盔就不戴帽子
+    const hooded = HOODED.includes(L.one);
+    const hat = hooded ? { main: null, prop: null } : hatGeo(L);
     swap(this.hatMesh, hat.main);
     swap(this.prop, hat.prop);
+    this.glass.visible = L.one === 'astronaut';
+    this.glass.position.set(0, race.top - 0.12, 0.02);
+    this.glass.scale.setScalar(0.31 * race.hs);
     this.hatY = race.top;
     this.hat.position.y = race.top;
     this.hat.scale.setScalar(race.hs);
@@ -543,15 +510,26 @@ export class Character {
     this.armR.position.x = sh;
     swap(aL, armGeo(L, W, skin));
     swap(aR, armGeo(L, W, skin));
-    const fx = L.clothes === 'tank' || L.clothes === 'tutu' ? 0.085 * W : 0.1 * Math.max(0.7, W);
+    const fx = 0.09 * Math.max(0.75, W);
     this.footL.position.x = -fx;
     this.footR.position.x = fx;
-    swap(fL, footGeo(L, skin));
-    swap(fR, footGeo(L, skin));
+    swap(fL, legGeo(L, W, skin, -1));
+    swap(fR, legGeo(L, W, skin, 1));
 
-    const tail = L.scarf !== NO_SCARF && L.clothes !== 'suit';
-    swap(this.scarfTail, tail ? build((k) => k.box(0.08, 0.28, 0.04, hex(SCARVES[L.scarf]), 0, 0, 0)) : null);
+    swap(this.scarfTail, L.neck === 'scarf' ? build((k) => k.box(0.08, 0.28, 0.04, hex(CLOTH[L.neckC]), 0, 0, 0)) : null);
     this.scarfTail.position.set(0.08, 0.68, -0.17 * W);
+    swap(this.capeMesh, capeGeo(L, W));
+    this.cape.position.set(...capeAt(W));
+    this.wings.forEach(([p, m], i) => {
+      const side = i ? 1 : -1;
+      swap(m, wingGeo(L, side));
+      p.position.set(...wingAt(W, side));
+    });
+    this.flaps = hasWings(L);
+    swap(this.tailMesh, tailGeo(L, skin));
+    this.tail.position.set(...tailAt(W));
+    swap(this.handMesh, handGeo(L));
+    this.handPose = HAND_POSE[L.hand] || null;
 
     if (race.id !== this.faceRace) {
       this.faceRace = race.id;
@@ -560,11 +538,12 @@ export class Character {
     this.paintFace(decodeFace(L.face));
 
     // 照鏡子時鏡頭要知道臉和頭頂在哪
-    const H = S.H, hs = S.hs;
+    // 頭頂算到帽尖。舉高的雨傘、氣球不算，手機上要全身入鏡，傘頂切掉一點沒關係
+    const H = S.H, hs = S.hs, head = race.top + (hooded ? 0.15 : HAT_H[L.hat] ?? 0.1) * race.hs;
     this.dims = {
       faceY: H * (NECK + hs * (race.ey + S.fy)),
-      topY: H * (NECK + hs * (race.top + 0.3 * race.hs)),
-      headH: H * hs * (race.top + 0.3 * race.hs),
+      topY: H * (NECK + hs * head),
+      headH: H * hs * head,
     };
     this.shadowS = Math.max(0.85, W) * H;
   }
@@ -593,6 +572,7 @@ export class Character {
     this.mat.dispose();
     this.faceMat.dispose();
     this.faceTex.dispose();
+    this.glassMat.dispose();
     this.shadow.material.dispose();   // 影子的貼圖是共用的，不丟
   }
 
@@ -614,6 +594,7 @@ export class Character {
     }
     this.mat.opacity = alpha;
     this.faceMat.opacity = alpha;
+    this.glassMat.opacity = 0.28 * alpha;
     if (this.foodMesh) {
       this.foodMesh.traverse((m) => {
         if (m.isMesh) {
@@ -701,10 +682,9 @@ export class Character {
     this.body.rotation.z = s * 0.04 * w;
     this.armL.rotation.x = s * 0.7 * w;
     this.armR.rotation.x = -s * 0.7 * w;
-    this.footL.rotation.x = -s * 0.6 * w;
-    this.footR.rotation.x = s * 0.6 * w;
-    this.footL.position.z = -s * 0.08 * w;
-    this.footR.position.z = s * 0.08 * w;
+    this.footL.rotation.x = -s * 0.45 * w;
+    this.footR.rotation.x = s * 0.45 * w;
+    this.footL.position.z = this.footR.position.z = 0;
 
     // 站著時輕輕呼吸，帽子跟著晃
     const breath = Math.sin(this.time * 2.2) * (1 - w);
@@ -714,13 +694,21 @@ export class Character {
     this.scarfTail.rotation.x = 0.2 + w * 0.5 + Math.sin(this.time * 6) * 0.08 * w;
     // 竹蜻蜓一直轉，走路時轉更快
     if (this.prop.visible) this.prop.rotation.y += dt * (5 + w * 12);
+    // 披風走路時往後飄，往下掉的時候整片掀起來；翅膀慢慢搧，走路搧快一點；尾巴左右甩
+    if (this.capeMesh.visible) this.cape.rotation.x = 0.22 + w * 0.4 + Math.sin(this.time * 5) * 0.04 * w + Math.min(0.6, Math.max(0, -this.jumpV) * 0.1);
+    if (this.flaps) {
+      const f = 0.35 + Math.sin(this.time * (2 + 5 * w)) * 0.25;
+      this.wings[0][0].rotation.y = -f;
+      this.wings[1][0].rotation.y = f;
+    }
+    if (this.tailMesh.visible) this.tail.rotation.z = Math.sin(this.time * 3) * 0.25 + s * 0.2 * w;
     this.body.rotation.y = 0;
     this.hat.position.y = this.hatY;
     this.armL.rotation.z = -ARM_OUT;
     this.armR.rotation.z = ARM_OUT;
     this.armL.rotation.y = this.armR.rotation.y = 0;
     this.armL.position.z = this.armR.position.z = 0;
-    this.footL.position.y = this.footR.position.y = 0.04;
+    this.footL.position.y = this.footR.position.y = HIP;
 
     // 坐下的過程：身體前傾、雙手往後撐，屁股坐下去，再把腳伸到前面、手放到腿上、往後靠。
     // 站起來時同一段倒著播
@@ -732,17 +720,24 @@ export class Character {
     if (p > 0) {
       const L = this.armL.rotation, R = this.armR.rotation, B = this.body.rotation;
       const k = clamp01(p * 4);
-      for (const f of [this.footL, this.footR]) {
-        f.rotation.x += (-1.4 - f.rotation.x) * tuck;
-        f.position.z += (0.14 - f.position.z) * tuck;
-        f.position.y += 0.07 * tuck;
-      }
+      // 坐地上兩腿伸直平放，坐長椅腿往前斜斜垂著
+      const legX = this.lift > 0.2 ? -1.0 : -1.5;
+      for (const f of [this.footL, this.footR]) f.rotation.x += (legX - f.rotation.x) * tuck;
       const ax = 0.45 + (-0.5 - 0.45) * tuck, az = ARM_OUT + 0.25 * (1 - tuck);
       L.x += (ax - L.x) * k; L.z += (-az - L.z) * k;
       R.x += (ax - R.x) * k; R.z += (az - R.z) * k;
       B.x += (0.35 * brace - 0.06 * tuck - B.x) * k;
     }
     const sk = lower;
+
+    // 左手拿著東西：垂著的照樣小幅擺動，拿在胸前的手往前抬，雨傘這種舉過頭
+    this.handK += ((this.handPose ? 1 : 0) - this.handK) * Math.min(1, dt * 8);
+    if (this.handPose && this.handK > 0.001) {
+      const A = this.armL.rotation, hk = this.handK;
+      const tx = this.handPose === 'up' ? -2.6 : this.handPose === 'hold' ? -0.75 : A.x * 0.4;
+      A.x += (tx - A.x) * hk;
+      if (this.handPose !== 'hang') A.z += (-0.1 - A.z) * hk;
+    }
 
     // 拿著點心時右手舉在胸前，咬一口時送到嘴邊
     this.holdK += ((this.food ? 1 : 0) - this.holdK) * Math.min(1, dt * 8);
@@ -770,14 +765,18 @@ export class Character {
     }
     // 呼叫端已經把 group 放在地面高度，這裡再加上跳躍和坐下的位移
     // 坐長椅時屁股比站著還高，順勢小跳一下坐上去
+    // 坐地上時整個人再往下沉，腿從屁股伸出去才會貼著地
     const hop = this.lift > 0.2 ? Math.sin(lower * Math.PI) * 0.1 : 0;
-    const up = this.jumpY + (this.lift - 0.1) * lower + hop;
+    const up = this.jumpY + (this.lift > 0.2 ? this.lift - 0.1 : -0.24) * lower + hop;
     this.group.position.y += up;
     // 影子留在地面，越高越小
     this.shadow.position.y = 0.012 - up;
     this.shadow.scale.setScalar((1 - Math.min(0.4, this.jumpY * 0.5)) * this.shadowS);
 
     if (this.act) this.pose(dt, Math.max(w, sk));
+    // 手上的東西抵銷手臂的轉動，不管手怎麼擺都直立
+    const A = this.armL.rotation;
+    this.handG.rotation.set(-A.x, -A.y, -A.z);
   }
 
   // 表情動作疊在走路動作上面。走路時只動手，站著時整個身體一起演

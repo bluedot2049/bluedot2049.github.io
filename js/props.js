@@ -77,9 +77,10 @@ export class Kit {
   puff(x, y, z, kind = 'steam', s = 1) { this.puffs.push({ x, y, z, kind, s }); return this; }
   pool(x, y, z, r, color = '#ff9a50', a = 0.3) { this.pools.push({ x, y, z, r, color, a }); return this; }
 
-  // 套用擺放位置，把零件倒進桶子
+  // 套用擺放位置，把零件倒進桶子。有 fid 的零件記下編號（海市擋住鏡頭時整組淡掉）
   emit(bucket, x, z, rotY) {
     _m.makeRotationY(rotY).setPosition(x, 0, z);
+    if (this.fid) for (const g of [...this.lit, ...this.glow]) g.userData.fid = this.fid;
     for (const g of this.lit) bucket.lit.push(g.applyMatrix4(_m));
     for (const g of this.glow) bucket.glow.push(g.applyMatrix4(_m));
     const v = new THREE.Vector3();

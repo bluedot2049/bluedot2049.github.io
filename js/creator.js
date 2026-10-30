@@ -1,9 +1,23 @@
-// 捏角色的面板：在鏡子前打開。分成種族、臉、頭、身體、畫臉五頁，點了馬上套到角色身上。
+// 捏角色的面板：在鏡子前打開。分成種族、臉、頭、衣服、配件、畫臉六頁，點了馬上套到角色身上。
+// 衣服和配件底下再分小頁。海市攤販送的東西還沒拿到前是鎖著的，點了會說去哪一攤拿。
 // 畫臉是 64 × 64 的格子，畫的途中直接更新角色臉上的貼圖，放開手才存起來、傳給別人。
-import { RACES, OPTIONS, SLIDERS, SKINS, ROBES, HAT_COLORS, SCARVES, HAIR_COLORS, NO_SCARF, TINTED_HATS, FACE, FACE_INK, raceOf, randomLook, presetLook, encodeFace, decodeFace } from './looks.js';
+import { RACES, OPTIONS, SLIDERS, SKINS, HAT_COLORS, HAIR_COLORS, CLOTH, GIFTS, TINTED_HATS, FACE, FACE_INK, raceOf, randomLook, presetLook, sanitizeLook, encodeFace, decodeFace, unlockedSet, isOpen, lockedBy, optionName } from './looks.js';
 import { faceMap } from './character.js';
 
-const TABS = [['race', '種族'], ['face', '臉'], ['head', '頭'], ['body', '身體'], ['draw', '畫臉']];
+const TABS = [['race', '種族'], ['face', '臉'], ['head', '頭'], ['clothes', '衣服'], ['acc', '配件'], ['draw', '畫臉']];
+const SUBS = {
+  clothes: [['top', '上衣'], ['bottom', '下身'], ['outer', '外套'], ['shoes', '鞋子'], ['one', '連身'], ['closet', '衣櫃']],
+  acc: [['neck', '脖子'], ['back', '背上'], ['hand', '左手']],
+};
+const CLOSET = 3;
+function loadCloset() {
+  try {
+    const a = JSON.parse(localStorage.getItem('closet'));
+    return Array.isArray(a) ? a.slice(0, CLOSET) : [];
+  } catch {
+    return [];
+  }
+}
 // 這幾頁鏡頭湊近看臉，其他頁看全身
 export const FACE_TABS = ['face', 'head', 'draw'];
 const PAD = 256;           // 畫布像素，一格 4 像素
@@ -17,6 +31,9 @@ export class Creator {
     this.body = document.getElementById('dress-body');
     this.tabs = document.getElementById('dress-tabs');
     this.tab = 'race';
+    this.sub = { clothes: 'top', acc: 'neck' };
+    this.hint = null;
+    this.unlocked = unlockedSet();
     this.ink = 1;
     this.brush = 1;
     this.sym = true;
@@ -26,10 +43,10 @@ export class Creator {
       const b = e.target.closest('button');
       if (b) this.show(b.dataset.tab);
     });
-    document.getElementById('dress-dice').addEventListener('click', () => this.set(randomLook(this.look), true));
+    document.getElementById('dress-dice').addEventListener('click', () => this.set(randomLook(this.look, this.unlocked), true));
     // 重來：回到一般的小學徒，衣服顏色和畫好的臉留著
     document.getElementById('dress-reset').addEventListener('click', () => {
-      const L = presetLook(this.look.robe);
+      const L = presetLook(this.look.topC < 8 ? this.look.topC : 0);
       L.face = this.look.face;
       this.set(L, true);
     });
@@ -41,6 +58,8 @@ export class Creator {
   }
 
   open(look) {
+    this.unlocked = unlockedSet();   // 可能剛從海市回來
+    this.hint = null;
     this.look = { ...look };
     this.cells = decodeFace(look.face) || new Uint8Array(FACE * FACE);
     this.undo = [];
@@ -58,6 +77,7 @@ export class Creator {
 
   show(tab) {
     this.tab = tab;
+    this.hint = null;
     this.tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
     this.render();
     this.body.scrollTop = 0;
@@ -66,8 +86,12 @@ export class Creator {
 
   render() {
     const L = this.look, race = raceOf(L);
-    const chips = (k, title, list = OPTIONS[k]) => row(title, `<div class="chips">${list.map(([id, name]) =>
-      `<button data-k="${k}" data-v="${id}" class="${L[k] === id ? 'on' : ''}">${name}</button>`).join('')}</div>`);
+    // 還沒拿到的選項畫成虛線框，點了只說要去哪裡拿
+    const chips = (k, title, list = OPTIONS[k]) => row(title, `<div class="chips">${list.map(([id, name]) => isOpen(k, id, this.unlocked)
+      ? `<button data-k="${k}" data-v="${id}" class="${L[k] === id ? 'on' : ''}">${name}</button>`
+      : `<button class="locked" data-lock="${lockedBy(k, id)}" data-hk="${k}">${name}</button>`).join('')}</div>`
+      + (this.hint?.k === k ? `<p class="dress-hint">${this.hint.text}</p>` : ''));
+    const cloth = (k, title) => swatches(k, title, CLOTH);
     const swatches = (k, title, list, extra = '') => row(title, `<div class="swatches">${list.map((c, i) =>
       `<button data-k="${k}" data-n="${i}" class="${L[k] === i ? 'on' : ''}" style="background:${hex(c)}" aria-label="${title}第 ${i + 1} 色"></button>`).join('')}${extra}</div>`);
     const slider = (k) => {
@@ -78,7 +102,8 @@ export class Creator {
     let html = '';
     switch (this.tab) {
       case 'race':
-        html = chips('race', '人和動物', races(false)) + chips('race', '其他', races(true)) + swatches('skin', '膚色', SKINS);
+        html = chips('race', '人和動物', races(false)) + chips('race', '其他', races(true)) + swatches('skin', '膚色', SKINS)
+          + slider('tall') + slider('fat');
         break;
       case 'face':
         if (L.face && !L.keep) html += `<p class="dress-note">畫了臉，原本的五官先收起來了<button data-act="keep">叫回來</button></p>`;
@@ -91,11 +116,24 @@ export class Creator {
         html += chips('hat', '帽子');
         if (TINTED_HATS.includes(L.hat)) html += swatches('hatC', '帽子顏色', HAT_COLORS);
         break;
-      case 'body':
-        html = slider('tall') + slider('fat') + chips('clothes', '衣服') + swatches('robe', '衣服顏色', ROBES)
-          + swatches('scarf', L.clothes === 'suit' ? '領帶' : '圍巾', SCARVES,
-            `<button data-k="scarf" data-n="${NO_SCARF}" class="none ${L.scarf === NO_SCARF ? 'on' : ''}" aria-label="不要"></button>`);
+      case 'clothes': case 'acc': {
+        const sub = this.sub[this.tab];
+        html = `<div class="chips subtabs">${SUBS[this.tab].map(([id, name]) => `<button data-sub="${id}" class="${sub === id ? 'on' : ''}">${name}</button>`).join('')}</div>`;
+        const covered = L.one !== 'none' && ['top', 'bottom', 'outer'].includes(sub);
+        if (covered) html += `<p class="dress-note">穿著${optionName('one', L.one)}，這一層先收起來了<button data-act="unone">脫掉</button></p>`;
+        switch (sub) {
+          case 'top': html += chips('top', '上衣') + cloth('topC', '顏色') + cloth('topC2', '第二個顏色') + chips('topPat', '花紋'); break;
+          case 'bottom': html += chips('bottom', '下身') + cloth('botC', '顏色') + cloth('botC2', '第二個顏色') + chips('botPat', '花紋'); break;
+          case 'outer': html += chips('outer', '外套') + (L.outer !== 'none' ? cloth('outC', '顏色') + cloth('outC2', '第二個顏色') : ''); break;
+          case 'shoes': html += chips('shoes', '鞋子') + (L.shoes !== 'bare' ? cloth('shoeC', '顏色') : ''); break;
+          case 'one': html += chips('one', '連身裝') + (L.one !== 'none' ? cloth('oneC', '顏色') + cloth('oneC2', '第二個顏色') : ''); break;
+          case 'closet': html += this.closetHTML(); break;
+          case 'neck': html += chips('neck', '脖子') + (L.neck !== 'none' ? cloth('neckC', '顏色') : ''); break;
+          case 'back': html += chips('back', '背上') + (L.back !== 'none' ? cloth('backC', '顏色') : ''); break;
+          case 'hand': html += chips('hand', '左手') + (L.hand !== 'none' ? cloth('handC', '顏色') : ''); break;
+        }
         break;
+      }
       case 'draw':
         html = `<div class="pad">
           <canvas id="pad" width="${PAD}" height="${PAD}" aria-label="畫臉"></canvas>
@@ -120,11 +158,35 @@ export class Creator {
     if (this.tab === 'draw') this.bindPad(race);
   }
 
+  // 衣櫃：三格，存整個人的樣子，一鍵換回來
+  closetHTML() {
+    const slots = loadCloset();
+    return '<p class="dress-note">把現在的樣子存起來，之後一鍵換回來</p>' + Array.from({ length: CLOSET }, (_, i) => {
+      const s = slots[i] ? sanitizeLook(slots[i]) : null;
+      const what = s ? `${raceOf(s).name}・${s.one !== 'none' ? optionName('one', s.one) : optionName('top', s.top) + '配' + optionName('bottom', s.bottom)}` : '空的';
+      return `<div class="closet-slot"><span>第 ${i + 1} 套<small>${what}</small></span>
+        <button data-act="wear" data-i="${i}" ${s ? '' : 'disabled'}>穿上</button><button data-act="store" data-i="${i}">存進來</button></div>`;
+    }).join('');
+  }
+
   onClick(e) {
     const b = e.target.closest('button');
     if (!b) return;
     const L = this.look, k = b.dataset.k;
+    if (b.dataset.sub) {
+      this.sub[this.tab] = b.dataset.sub;
+      this.hint = null;
+      this.render();
+      return;
+    }
+    if (b.dataset.lock) {
+      const g = GIFTS[b.dataset.lock];
+      this.hint = { k: b.dataset.hk, text: `這個要去海市找${g.who}拿` };
+      this.render();
+      return;
+    }
     if (k) {
+      this.hint = null;
       const next = { ...L, [k]: b.dataset.v ?? +b.dataset.n };
       // 換種族時膚色跟著換成那個種族常見的顏色
       if (k === 'race') next.skin = raceOf(next).skin ?? L.skin;
@@ -135,6 +197,19 @@ export class Creator {
     else if (b.dataset.brush) this.brush = +b.dataset.brush;
     else switch (b.dataset.act) {
       case 'keep': this.set({ ...L, keep: L.keep ? 0 : 1 }, true); return;
+      case 'unone': this.set({ ...L, one: 'none' }, true); return;
+      case 'wear': {
+        const s = loadCloset()[+b.dataset.i];
+        if (s) this.set(sanitizeLook(s), true);
+        return;
+      }
+      case 'store': {
+        const slots = loadCloset();
+        slots[+b.dataset.i] = L;
+        try { localStorage.setItem('closet', JSON.stringify(slots)); } catch {}
+        this.render();
+        return;
+      }
       case 'sym': this.sym = !this.sym; break;
       case 'undo':
         if (this.undo.length) {

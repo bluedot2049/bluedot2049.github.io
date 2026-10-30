@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { buildWorld } from './world.js';
 import { Player } from './player.js';
 import { Character } from './character.js';
-import { sanitizeLook, lookFromOutfit, randomPreset } from './looks.js';
+import { sanitizeLook, lookFromOutfit, randomPreset, optionName } from './looks.js';
 import { Creator, FACE_TABS } from './creator.js';
 import { Manatee, TABLE_LINES } from './manatee.js';
 import { Animals, ANIMAL_LAYER } from './animals.js';
@@ -115,6 +115,8 @@ async function start() {
   // 換區域時整頁重新載入：瀏覽器一定會把上一個區域的記憶體收回去，手機才撐得住
   const zone = params.get('z') === 'haishi' ? 'haishi' : 'gallery';
   const town = zone === 'haishi';
+  // 背景音樂：畫廊走進「歡迎光臨煉金畫廊」那間才開始放，往後的房間和戶外一路放著；海市一上岸就放
+  const bgm = town ? { src: 'assets/audio/haishi.m4a', from: 'haishi' } : { src: 'assets/audio/gallery.m4a', from: '02-nigredo' };
 
   const coarse = matchMedia('(pointer: coarse)').matches;
   const quality = new Quality(coarse, params);
@@ -216,6 +218,7 @@ async function start() {
       lastInput = performance.now();
       if (overview && kind !== 'drag') {
         overview = false;
+        player.aim = null;
         if (player.camDist > 20) player.zoomTo();
       }
       ui.hidePainting();
@@ -260,6 +263,7 @@ async function start() {
       const r = world.rooms[i].data;
       ui.toast(r.name, r.subtitle);
       place = null;
+      if (i >= world.rooms.findIndex((room) => room.id === bgm.from)) ambience.music(bgm.src);
     },
   });
   scene.add(player.marker);
@@ -271,7 +275,12 @@ async function start() {
     animals.visitors = visitors;
   } else {
     // 信差站的攤販：聊完直接進攝影模式拍明信片
-    vendors = new Vendors({ scene, shadowTex, spots: world.shops, onPostcard: () => photo.enter({ postcard: true }) });
+    vendors = new Vendors({
+      scene, shadowTex, spots: world.shops,
+      onPostcard: () => photo.enter({ postcard: true }),
+      // 攤販送東西：記在這台裝置上，回畫廊照鏡子就能穿戴
+      onGift: (g) => ui.toast('收到' + g.items.map(([k, id]) => optionName(k, id)).join('、'), '回畫廊照鏡子就能穿上'),
+    });
   }
   const crowd = visitors || vendors;
   player.animals = animals;
@@ -412,6 +421,16 @@ async function start() {
   let fx = null;
   // 攝影模式的魚眼：有後製就接在後製最後面，沒有就自己先畫進一張圖再彎
   const lensPass = new LensPass();
+  // 魚眼的中間是放大過的：有後製的電腦預覽時多畫 1.4 倍（最多 2 倍），中間比較不糊
+  let boost = 1;
+  const lensBoost = () => {
+    const b = lens.on && fx ? Math.max(1, Math.min(1.4, 2 / quality.dpr)) : 1;
+    if (b === boost) return;
+    boost = b;
+    renderer.setPixelRatio(quality.dpr * b);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    fx?.setSize(window.innerWidth, window.innerHeight);
+  };
   const draw = (dt) => {
     if (fx) fx.render(dt);
     else if (lens.on) lensPass.renderScene(renderer, scene, camera);
@@ -420,9 +439,10 @@ async function start() {
 
   // 攝影模式：右上角相機按鈕或 P 鍵進出
   const photo = new PhotoMode({
-    renderer, camera, player, world, character, ambience, ui, coarse,
+    renderer, scene, camera, player, world, character, ambience, ui, coarse,
     title: gallery.title || '煉金畫廊',
     render: draw,
+    lensPass,
     resizeFX: (w, h) => fx?.setSize(w, h),
   });
   document.getElementById('photo-btn').addEventListener('click', () => photo.enter());
@@ -432,7 +452,7 @@ async function start() {
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
     if (!q.post && fx) { fx.dispose(); fx = null; }
-    renderer.setPixelRatio(q.dpr);
+    renderer.setPixelRatio(q.dpr * boost);
     renderer.setSize(window.innerWidth, window.innerHeight);
   };
   document.addEventListener('visibilitychange', () => quality.pause());
@@ -450,9 +470,10 @@ async function start() {
   // 抵達：海市從碼頭開始；從海市搭船回畫廊，站在小划船往草原走幾步的地方，面向草原
   const ferry = world.exits[0];
   if (town) {
-    // 鏡頭從海上遠遠看著整座山城，直式螢幕比較窄，再退遠一點
-    player.camDist = window.innerWidth < window.innerHeight ? 44 : 34;
-    player.camPitch = 0.2;
+    // 鏡頭從海上低低地看著整座山城：注視點放在鎮子中段，棧橋和海只佔畫面底下一小條。直式螢幕比較窄，再退遠一點
+    player.aim = new THREE.Vector3(0, 9, -20);
+    player.camDist = window.innerWidth < window.innerHeight ? 80 : 64;
+    player.camPitch = -0.04;
     player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
   }
   else if (params.get('from') === 'haishi' && ferry) player.place(ferry.x, ferry.z + 1.8, 0);
@@ -591,13 +612,14 @@ async function start() {
         ui.toast(spot.name, spot.subtitle);
       }
     }
-    if (photo.active) world.update(clock.elapsedTime, photo.pos, photo.fadeTarget(), camera);
+    if (photo.active) world.update(clock.elapsedTime, photo.pos, photo.fadeTarget(), camera, true);
     else world.update(clock.elapsedTime, player.camPos, player.fadeTarget(), camera);
     frame++;
     const idle = !photo.active && !player.moving && !othersMoving && !fading && performance.now() - lastInput > 2000;
     if (idle && frame % 2) return;
     if (!idle) quality.sample(dt);
     if (stats) renderer.info.reset();
+    lensBoost();
     draw(dt);
     photo.afterRender();
     stats?.(dt);
