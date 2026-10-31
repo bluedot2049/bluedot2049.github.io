@@ -121,11 +121,12 @@ export function smoke(list, coarse = false) {
 }
 
 // 燈照在地上的光：平貼在石板上的一圈暖色，疊加上去。遠的淡掉，霧裡不會一點一點亮得太突兀
-export function pools(list) {
+// gain：整體再加濃幾倍（這層不經過 grade.js 的調色，要在這裡自己調）
+export function pools(list, gain = 1) {
   const g = instanced([
     ['aPos', 3, list.flatMap((p) => [p.x, p.y + 0.03, p.z])],
     ['aR', 1, list.map((p) => p.r)],
-    ['aColor', 3, list.flatMap((p) => { const c = new THREE.Color(p.color); return [c.r * p.a, c.g * p.a, c.b * p.a]; })],
+    ['aColor', 3, list.flatMap((p) => { const c = new THREE.Color(p.color); const a = p.a * gain; return [c.r * a, c.g * a, c.b * a]; })],
   ], list.length);
   const mat = new THREE.ShaderMaterial({
     uniforms: { uTime },

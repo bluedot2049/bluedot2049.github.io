@@ -8,10 +8,10 @@ import * as THREE from 'three';
 
 // density：相機高度的霧有多濃；falloff：每往上一公尺變淡多少；base：霧最濃的高度（海面）；start：鏡頭前幾公尺不起霧
 // shadow：最暗的地方抬到這個顏色（sRGB），不會再是黑的；desat：暗部和中間調降多少飽和度；cool：綠色往藍綠推多少
-// contrast：混完霧再拉一條 S 曲線，1 是不拉
+// contrast：混完霧再拉一條 S 曲線，1 是不拉；vivid：越亮的地方飽和度加越多（燈籠、窗光、燈照到的牆），暗部不動
 export const GRADE = {
   on: 1, density: 0.016, falloff: 0.04, base: -0.6, start: 6, maxFog: 1,
-  shadow: new THREE.Vector3(), desat: 0.2, cool: 0.9, contrast: 1.6,
+  shadow: new THREE.Vector3(), desat: 0.2, cool: 0.9, contrast: 1.6, vivid: 0.6,
 };
 setShadow('#16151b');
 function setShadow(hex) {
@@ -41,7 +41,7 @@ const PARS_FRAGMENT = `#ifdef USE_FOG
 		uniform float fogNear;
 		uniform float fogFar;
 	#endif
-	struct Grade { float on; float density; float falloff; float base; float start; float maxFog; vec3 shadow; float desat; float cool; float contrast; };
+	struct Grade { float on; float density; float falloff; float base; float start; float maxFog; vec3 shadow; float desat; float cool; float contrast; float vivid; };
 	uniform Grade uGrade;
 #endif`;
 
@@ -51,7 +51,8 @@ const PARS_FRAGMENT = `#ifdef USE_FOG
 // 降飽和照最亮的那個色版算：燈籠、窗光再橘都留著，夜色裡只剩燈是暖的
 // 高度霧照 Íñigo Quílez 的解析解：沿著視線把隨高度指數變淡的濃度積分起來。
 // 最後的 S 曲線拉在亮度上（不動色相和飽和度），支點是霧色的亮度：比霧暗的壓更暗、比霧亮的推更亮，霧本身不變，
-// 沒經過這裡的天空球和霧色還是接得起來
+// 沒經過這裡的天空球和霧色還是接得起來。
+// 推亮之後超過 1 的，三個色版等比例縮回來，不要各自截斷：不然紅色版先頂到 1，橘紅的燈籠會退成淡粉
 const FRAGMENT = `#ifdef USE_FOG
 	if ( uGrade.on > 0.5 ) {
 		bool srgbOut = linearToOutputTexel( vec4( 0.5 ) ).r > 0.6;
@@ -74,7 +75,10 @@ const FRAGMENT = `#ifdef USE_FOG
 		float pivot = dot( sRGBTransferOETF( vec4( fogLin, 1.0 ) ).rgb, LUMA );
 		float l = dot( o, LUMA );
 		float l2 = l < pivot ? pivot * pow( l / pivot, uGrade.contrast ) : 1.0 - ( 1.0 - pivot ) * pow( max( 1.0 - l, 0.0 ) / ( 1.0 - pivot ), uGrade.contrast );
-		o = min( o * l2 / max( l, 1e-4 ), 1.0 );
+		o *= l2 / max( l, 1e-4 );
+		float ol = dot( o, LUMA );
+		o = max( ol + ( o - ol ) * ( 1.0 + uGrade.vivid * smoothstep( 0.35, 0.8, max( o.r, max( o.g, o.b ) ) ) ), 0.0 );
+		o /= max( 1.0, max( o.r, max( o.g, o.b ) ) );
 		gl_FragColor.rgb = srgbOut ? o : sRGBTransferEOTF( vec4( o, 1.0 ) ).rgb;
 	} else {
 		#ifdef FOG_EXP2
@@ -100,7 +104,7 @@ export function installGrade() {
 // ?debug 時右上角的調整面板：拉了馬上看到，「關」可以跟原本的霧對照，「複製」把數值貼回 grade.js
 const SLIDERS = [
   ['density', 0, 0.06, 0.001], ['falloff', 0, 0.15, 0.002], ['base', -10, 30, 0.5], ['start', 0, 40, 1], ['maxFog', 0, 1, 0.01],
-  ['desat', 0, 1, 0.01], ['cool', 0, 1.5, 0.01], ['contrast', 0.5, 3, 0.05],
+  ['desat', 0, 1, 0.01], ['cool', 0, 1.5, 0.01], ['contrast', 0.5, 3, 0.05], ['vivid', 0, 2, 0.05],
 ];
 export function gradePanel() {
   const el = document.createElement('div');

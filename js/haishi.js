@@ -1596,7 +1596,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   group.add(signs.mesh());
   // 推車、蒸籠、煙囪冒的煙；燈照在地上的光
   group.add(smoke(bucket.puffs, coarse));
-  group.add(pools(bucket.pools));
+  group.add(pools(bucket.pools, 1.8));   // 燈下的地面要明顯暖起來，跟藍灰的夜色對比
 
   // ---------- 霧：夾在層與層之間，鎮子兩側的山谷裡也有；街道上方也飄幾團，在屋頂之間 ----------
   const MR = rng('haishi-mist'), mists = [];
