@@ -19,6 +19,10 @@ const EMOTE_GAP = 800;      // 自己送表情的最短間隔
 const JUMP_GAP = 400;       // 自己送跳躍的最短間隔
 const PET_GAP = 1500;       // 自己送摸動物的最短間隔
 const LOOK_DELAY = 1000;    // 捏角色停手這麼久才送出，連點選項、拖滑桿不會一直送
+// Supabase 每條連線 30 秒內最多登記 5 次在線名單，超過會直接關掉頻道，之後誰都看不到誰。
+// 換樣子再怎麼頻繁，兩次登記至少隔這麼久，連線剛建好那一次也算在內
+const TRACK_GAP = 8000;
+const RETRY = 3000;         // 頻道被關掉或出錯，等這麼久重新加入
 const EMOTE_TIME = 2;       // 表情在頭上停留的秒數
 export const EMOTES = ['❤️', '✨', '👏', '😮', '👋'];
 
@@ -96,11 +100,18 @@ export class Multiplayer {
     this.lastEmote = 0;
     this.lastJump = 0;
     this.lastPet = 0;
+    this.lastTrack = -Infinity;
   }
 
   async connect() {
     await loadScript('vendor/supabase.js');
-    const client = window.supabase.createClient(this.cfg.url, this.cfg.key, { auth: { persistSession: false } });
+    this.client = window.supabase.createClient(this.cfg.url, this.cfg.key, { auth: { persistSession: false } });
+    this.join();
+  }
+
+  // 加入頻道。被伺服器關掉（例如登記太頻繁）或出錯時，丟掉舊頻道重新加入，不然會一直斷著
+  join() {
+    const client = this.client;
     const ch = client.channel(this.cfg.channel || 'gallery', {
       config: { broadcast: { self: false }, presence: { key: this.id } },
     });
@@ -141,16 +152,31 @@ export class Multiplayer {
         this.remove(key);
       })
       .subscribe((status) => {
+        if (ch !== this.channel) return;
         if (status === 'SUBSCRIBED') {
           this.active = true;
           this.last = null;
-          this.track();
+          if (performance.now() - this.lastTrack >= TRACK_GAP) this.track();
+          else this.setLook(this.look);
           this.events.onReady();
         } else {
           this.active = false;
+          if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') this.rejoin();
         }
       });
     this.channel = ch;
+  }
+
+  rejoin() {
+    if (this.rejoinTimer) return;
+    this.rejoinTimer = setTimeout(() => {
+      this.rejoinTimer = null;
+      if (this.active) return;
+      const old = this.channel;
+      this.channel = null;
+      this.client.removeChannel(old).catch(() => {});
+      this.join();
+    }, RETRY);
   }
 
   // 坐下、拿點心這類狀態改變時，下一幀就送，不等節流
@@ -249,13 +275,17 @@ export class Multiplayer {
 
   // 在線名單上登記自己的樣子：新版看 l，舊版看 o
   track() {
+    clearTimeout(this.lookTimer);
+    this.lastTrack = performance.now();
     this.channel.track({ o: toOutfit(this.look), l: this.look, ...(this.claude ? { c: 1 } : {}) });
   }
 
+  // 停手 LOOK_DELAY 才送；離上次登記不到 TRACK_GAP 就等到時間到，期間再改只送最後的樣子
   setLook(L) {
     this.look = L;
     clearTimeout(this.lookTimer);
-    this.lookTimer = setTimeout(() => { if (this.active) this.track(); }, LOOK_DELAY);
+    const wait = Math.max(LOOK_DELAY, this.lastTrack + TRACK_GAP - performance.now());
+    this.lookTimer = setTimeout(() => { if (this.active) this.track(); }, wait);
   }
 
   // 頭上冒出表情，往上飄再淡出。高度跟著角色的身高和頭的大小

@@ -100,14 +100,16 @@ export function newBucket() {
 }
 
 // 合併成一個幾何。靠近地面的頂點稍微壓暗，當作簡單的環境光遮蔽。零件帶 ao: false 的不壓（遠處山坡上的樹）
-export function mergeBucket(list, ao = true) {
+// floor(x, y, z)：那一點腳下的地面多高。不給就是 0，房間的地板；海市一層一層的街各有各的高度
+export function mergeBucket(list, ao = true, floor = null) {
   if (!list.length) return null;
   if (ao) {
     for (const g of list) {
       if (g.userData.noAO) continue;
       const pos = g.attributes.position, col = g.attributes.color;
       for (let i = 0; i < pos.count; i++) {
-        const f = 0.62 + 0.38 * Math.min(1, Math.max(0, pos.getY(i)) / 1.1);
+        const y = floor ? pos.getY(i) - floor(pos.getX(i), pos.getY(i), pos.getZ(i)) : pos.getY(i);
+        const f = 0.62 + 0.38 * Math.min(1, Math.max(0, y) / 1.1);
         col.setXYZ(i, col.getX(i) * f, col.getY(i) * f, col.getZ(i) * f);
       }
     }

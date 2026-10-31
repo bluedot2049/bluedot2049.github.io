@@ -133,10 +133,10 @@ function doorFrame(e, z) {
 
 // 把桶子裡的零件合併成網格
 // ghost：靠牆的高家具，牆降下時要能變半透明，所以材質各自一份
-export function bucketObjects(b, ghost = false) {
+export function bucketObjects(b, ghost = false, floor = null) {
   const s = shared(), out = [];
   const mat = (m) => (ghost ? Object.assign(m.clone(), { transparent: true }) : m);
-  const lit = mergeBucket(b.lit, true);
+  const lit = mergeBucket(b.lit, true, floor);
   if (lit) out.push(tag(new THREE.Mesh(lit, mat(s.lit)), 'prop'));
   const glow = mergeBucket(b.glow, false);
   if (glow) out.push(tag(new THREE.Mesh(glow, mat(s.glowMat)), 'prop'));

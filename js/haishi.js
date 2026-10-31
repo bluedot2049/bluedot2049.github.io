@@ -15,6 +15,7 @@ import { yatai } from './yatai.js';
 import { mist, smoke, pools, ripples } from './haze.js';
 import { Fader } from './fade.js';
 import { drawText } from './glyphs.js';
+import { paving, PAVES, BED } from './pave.js';
 
 const SEA = -0.6;
 const RISE = 0.2;          // 石階每階高度
@@ -190,6 +191,21 @@ function heightIn(a, x, z) {
   return i >= a.n ? a.hi : a.lo + RISE * (i + smooth(0, 0.35, u - i));
 }
 const areaAt = (x, z) => AREAS.find((a) => x >= a.x0 && x <= a.x1 && z >= a.z0 && z <= a.z1);
+// 環境光遮蔽量的是離腳下那層地面多高：附近一圈路面裡，不高過這一點的最高那塊；都不在附近就是山坡。
+// 門面往後退一點的房子、石階兩邊的矮牆也算站在路邊，牆腳才會暗下來
+function floorBelow(x, y, z) {
+  let g = Math.max(SEA, terrain(x, z));
+  for (const a of AREAS) {
+    if (x < a.x0 - 0.7 || x > a.x1 + 0.7 || z < a.z0 - 0.7 || z > a.z1 + 0.7) continue;
+    const h = heightIn(a, Math.min(a.x1, Math.max(a.x0, x)), Math.min(a.z1, Math.max(a.z0, z)));
+    if (h <= y + 0.25 && h > g) g = h;
+  }
+  return g;
+}
+// 每塊平的路面怎麼鋪（pave.js）。跟欄杆一樣越往上越老：港邊大塊花崗岩，下街和轉角亂石，燈巷條石，
+// 工坊街補過的地，星台以上大方石
+const paveOf = (a) => a.id === 'summit' ? 'summit'
+  : { lower: 'cobble', lantern: 'strip', upper: 'patch', specula: 'great' }[a.street] ?? (a.y === 0 ? 'granite' : a.id === 'bend2' ? 'great' : 'cobble');
 
 function terrainGeometry() {
   const pos = [], S = 2;
@@ -701,13 +717,50 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     tk.emit(bucket, x, z, 0);
   };
 
+  // ---------- 石板路上的痕跡 ----------
+  // 每塊石板鋪好後再調一次顏色：整片低低地起伏的斑駁；牆腳、路邊暗一點帶點苔；
+  // 店門口常有人站，磨得淺一點；推車底下一攤油漬水漬；港邊濕，暗一點偏藍
+  const PR = rng('haishi-pave');   // 鋪路自己用一串亂數，房子不會因為前面多抽了幾次整排換樣子
+  const MOSS = new THREE.Color('#3e5442'), WET = new THREE.Color('#38445a');
+  const fronts = SHOPS.map((s) => ({ x: s.x, z: flatAt(s.at, s.x)?.z0 })).filter((s) => s.z != null);
+  const edgeAt = (x, z) => {
+    for (const d of [0.12, 0.25, 0.4]) if (!areaAt(x + d, z) || !areaAt(x - d, z) || !areaAt(x, z + d) || !areaAt(x, z - d)) return 1 - d / 0.5;
+    return 0;
+  };
+  const paveTint = (x, z, c) => {
+    c.multiplyScalar(1 + 0.03 * (Math.sin(x * 0.9 + z * 0.4) + Math.sin(x * 0.31 - z * 0.77 + 1.7)));
+    const e = edgeAt(x, z);
+    if (e) c.lerp(MOSS, e * 0.3).multiplyScalar(1 - e * 0.15);
+    for (const s of fronts) {
+      const w = smooth(1.6, 0.6, Math.abs(x - s.x)) * smooth(2.4, 0.4, z - s.z);
+      if (w) c.multiplyScalar(1 + 0.1 * w);
+    }
+    for (const t of CARTS) {
+      const d = Math.hypot(x - t.x, z - t.z) + 0.3 * Math.sin(x * 5 + z * 3);
+      if (d < 1.3) c.multiplyScalar(1 - 0.2 * smooth(1.3, 0.5, d));
+    }
+    if (z > 4) {
+      const wet = smooth(0.1, 0.6, Math.sin(x * 0.6 + 1.3) * Math.sin(z * 0.9 - x * 0.2) + (z - 9) * 0.15);
+      if (wet) c.lerp(WET, wet * 0.35).multiplyScalar(1 - wet * 0.15);
+    }
+  };
+
   // ---------- 地面：碼頭、各層石台，側面就是擋土牆 ----------
+  // 這些都是地面本身，不壓環境光遮蔽（ao: false），壓暗的是站在上面的東西的腳
   for (const a of AREAS) {
     if (a.id === 'pier' || a.deck) continue;   // 木頭的棧橋另外鋪
     const yb = groundUnder(a.x0, a.x1, a.z0, a.z1);
     if (a.y != null) {
-      const top = a.id === 'summit' ? '#4a4852' : PAVE;
-      k.box(a.x1 - a.x0, a.y - yb, a.z1 - a.z0, a.id === 'summit' ? '#3a3840' : STONE, (a.x0 + a.x1) / 2, (a.y + yb) / 2, (a.z0 + a.z1) / 2, { color2: top });
+      // 石台頂面往下收，上面鋪石板，石板之間露出深色的縫。側面照舊由下往上漸亮，頂面那一片塗縫的顏色
+      const st = paveOf(a), yt = a.y - BED;
+      const g = new THREE.BoxGeometry(a.x1 - a.x0, yt - yb, a.z1 - a.z0).toNonIndexed();
+      const pos = g.attributes.position, col = new Float32Array(pos.count * 3), c = new THREE.Color();
+      const lo = new THREE.Color(a.id === 'summit' ? '#3a3840' : STONE), hi = new THREE.Color(a.id === 'summit' ? '#4a4852' : PAVE), seam = new THREE.Color(PAVES[st].grout);
+      for (let i = 0; i < pos.count; i++) (i >= 12 && i < 18 ? seam : c.copy(lo).lerp(hi, pos.getY(i) / (yt - yb) + 0.5)).toArray(col, i * 3);
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      k.add(g, null, (a.x0 + a.x1) / 2, (yt + yb) / 2, (a.z0 + a.z1) / 2, { ao: false });
+      // 燈巷靠房子那一邊留一道排水溝
+      k.add(paving(a, st, PR, paveTint, a.street === 'lantern' ? { gutter: 'z0' } : {}), null, 0, 0, 0, { ao: false });
       solid(a.x0, a.x1, a.z0, a.z1, a.y, true);
       continue;
     }
@@ -723,17 +776,24 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       }
       g.setAttribute('color', new THREE.BufferAttribute(col, 3));
       g.computeVertexNormals();
-      k.add(g, null, 0, 0, 0);
+      k.add(g, null, 0, 0, 0, { ao: false });
       solid(a.x0 - 0.3, a.x1 + 0.3, a.z0 - 0.3, a.z1 + 0.3, a.hi + 0.5);
       continue;
     }
     // 石階：一階一階疊上去，兩側是矮牆，牆上立著燈籠
     const ns = a.dir === 'n', len = ns ? a.z1 - a.z0 : a.x1 - a.x0, tread = len / a.n;
     const along = (s) => (ns ? a.z1 - s : a.dir === 'w' ? a.x1 - s : a.x0 + s);
+    // 每一階是兩三塊長石拼的，顏色、高低各差一點
+    const span = ns ? a.x1 - a.x0 : a.z1 - a.z0, s0 = ns ? a.x0 : a.z0;
     for (let i = 0; i < a.n; i++) {
       const top = a.lo + RISE * (i + 1), c = i % 2 ? '#88888c' : '#7c7c82', p = along((i + 0.5) * tread);
-      if (ns) k.box(a.x1 - a.x0, top - yb, tread + 0.01, c, (a.x0 + a.x1) / 2, (top + yb) / 2, p);
-      else k.box(tread + 0.01, top - yb, a.z1 - a.z0, c, p, (top + yb) / 2, (a.z0 + a.z1) / 2);
+      const m = Math.max(1, Math.round(span / (0.8 + PR() * 0.6)));
+      for (let j = 0, q = 0; j < m; j++) {
+        const w = j === m - 1 ? span - q : (span / m) * (0.75 + PR() * 0.5), mid = s0 + q + w / 2, t = top - PR() * 0.015, cc = shade(c, (PR() - 0.5) * 0.06);
+        if (ns) k.box(w, t - yb, tread + 0.01, cc, mid, (t + yb) / 2, p, { ao: false });
+        else k.box(tread + 0.01, t - yb, w, cc, p, (t + yb) / 2, mid, { ao: false });
+        q += w;
+      }
     }
     for (let i = 0; i < a.n; i += 2) {
       const top = a.lo + RISE * (i + 1) + 0.5, p = along((i + 1) * tread);
@@ -1002,6 +1062,16 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     k.cyl(0.12, 0.07, 1.1, GOLD, x, y + 1.45, z + 0.1, { rx: 1.1 }, 8);
     k.cyl(0.035, 0.035, 0.16, DARK, x, y + 1.17, z - 0.44, { rx: 1.1 }, 6);
     obstacles.push({ x, z, hw: 0.35, hd: 0.35 });
+  }
+  // 星台地上嵌著一面星盤：兩圈淺色的石環，八道射線，正中一顆四角星。比石板高一點點，還是低過腳下的影子
+  {
+    const x = -9.5, z = -45.2, y = 14 + 0.008, c = '#a29a84', flat = { rx: -Math.PI / 2, ao: false };
+    for (const [r0, r1] of [[1.5, 1.64], [1.02, 1.08]]) k.add(new THREE.RingGeometry(r0, r1, 40), c, x, y, z, flat);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2, l = i % 2 ? 0.3 : 0.48, r = 1.08 + l / 2;
+      k.plane(0.05, l, c, x + Math.sin(a) * r, y, z + Math.cos(a) * r, { ...flat, ry: a });
+    }
+    for (const ry of [0, Math.PI / 2]) k.add(new THREE.CircleGeometry(0.42, 4), c, x, y + 0.001, z, { ...flat, ry, sx: 0.28 });
   }
 
   // ---------- 遠眺台：山頂一圈矮石牆和幾塊立石，只有一盞冷冷的小燈，看得到整座鎮和海 ----------
@@ -1588,7 +1658,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   fader.tag(bucket.lit);
   fader.tag(bucket.glow);
   fader.build();
-  const meshes = bucketObjects(bucket);
+  const meshes = bucketObjects(bucket, false, floorBelow);
   for (const o of meshes) {
     if (o.isMesh) o.material = fader.patch(o.material);
     group.add(o);
