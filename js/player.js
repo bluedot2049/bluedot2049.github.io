@@ -1,7 +1,7 @@
 // 第三人稱操作：點地面讓角色走過去、拖曳繞著角色轉鏡頭、雙指或滾輪縮放、點畫作走到畫前。
 // 電腦另外支援 WASD / 方向鍵。
 import * as THREE from 'three';
-import { panelW } from './ui.js';
+import { panelW, WORKS_OPEN } from './ui.js';
 
 const SPEED = 2.6;
 const DRAG_THRESHOLD = 8;
@@ -250,14 +250,14 @@ export class Player {
     if (now - (this.hoverT || 0) < 100) return;
     this.hoverT = now;
     const u = this.pick(cx, cy)?.object.userData;
-    this.dom.classList.toggle('hot', !!(u && (u.painting || u.mirror || u.animal)));
+    this.dom.classList.toggle('hot', !!(u && ((WORKS_OPEN && u.painting) || u.mirror || u.animal)));
   }
 
   tap(cx, cy) {
     const hit = this.pick(cx, cy);
     if (!hit) return;
     this.events.onInput('tap');
-    if (hit.object.userData.painting) return this.goToPainting(hit.object.userData.painting);
+    if (WORKS_OPEN && hit.object.userData.painting) return this.goToPainting(hit.object.userData.painting);
     if (hit.object.userData.mirror) return this.goToMirror();
     if (hit.object.userData.animal) return this.goToAnimal(hit.object.userData.animal);
     const t =this.world.findWalkable(hit.point.x, hit.point.z, this.pos.x, this.pos.z);
@@ -357,6 +357,7 @@ export class Player {
 
   // 瞬移到畫前直接看（清單「前往」、左右滑切換都用這個）
   showPainting(p) {
+    if (!WORKS_OPEN) return;
     const plan = this.planFocus(p);
     this.teleport(plan.stand.x, plan.stand.z);
     this.pending = plan;
@@ -552,7 +553,7 @@ export class Player {
 
   // 附近有畫、角色在畫的正面時，回傳那幅畫（給「看畫」按鈕用）
   nearbyPainting() {
-    if (this.focus || this.pending) return null;
+    if (!WORKS_OPEN || this.focus || this.pending) return null;
     let best = null, bd = 3.4;
     for (const p of this.world.paintings) {
       if (Math.abs(p.room.index - this.room) > 1) continue;

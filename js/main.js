@@ -141,6 +141,12 @@ async function start() {
   sun.layers.enable(REFLECT_LAYER);
 
   const world = town ? (await import('./haishi.js')).buildHaishi(scene, { coarse }) : buildWorld(scene, gallery);
+  // 海市換上高度霧：鎮子和山坡從近處就開始往夜色裡退。?debug 時右上角可以即時調，?grade=0 看原本的霧
+  if (town && params.get('grade') !== '0') {
+    const { installGrade, gradePanel } = await import('./grade.js');
+    installGrade();
+    if (params.has('debug')) gradePanel();
+  }
 
   // 室內和戶外的光線、霧。走出後門時在兩組之間漸變。海市只有一組
   const ENV = (town ? [world.env, world.env] : [

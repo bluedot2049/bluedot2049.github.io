@@ -2,6 +2,9 @@
 
 const $ = (s) => document.querySelector(s);
 
+// 作品還沒上架：清單按鈕藏起來，場中的畫掛著但不能點、不能看。上架後改回 true
+export const WORKS_OPEN = false;
+
 // 面板做成側欄時的寬度（電腦、手機橫拿），底部抽屜回傳 0。寬度寫在 CSS 的 --panel-w
 export const panelW = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panel-w')) || 0;
 
@@ -49,6 +52,7 @@ export class UI {
     $('#viewer-close').addEventListener('click', () => this.closeViewer());
     this.bindViewer();
     $('#list-btn').addEventListener('click', () => this.toggleList(true));
+    if (!WORKS_OPEN) $('#list-btn').hidden = true;
     $('#list-close').addEventListener('click', () => this.toggleList(false));
   }
 

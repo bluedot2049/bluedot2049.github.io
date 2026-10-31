@@ -212,7 +212,7 @@ const BAND = new THREE.Vector3(0.55, 0.45, -0.7).normalize();
 function skyDome(bg) {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
-      uLow: { value: new THREE.Color(bg) }, uTop: { value: new THREE.Color('#1c2858') }, uWarm: { value: new THREE.Color('#b88a96') },
+      uLow: { value: new THREE.Color(bg) }, uTop: { value: new THREE.Color('#2c3758') }, uWarm: { value: new THREE.Color('#b88a96') },
       uBand: { value: BAND }, uMilk: { value: new THREE.Color('#4c5288') }, uStars: { value: 0 },
     },
     vertexShader: `
@@ -1625,7 +1625,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   group.add(sea);
 
   // 夜色深一點，霧近一點，燈才顯得亮；地面反上來的光偏暖，像整條街的燈籠照著
-  const env = { bg: 0x34457a, near: 32, far: 200, sky: 0xa4b4e8, ground: 0x56668a, hi: 1.38, sun: 0xff9a70, si: 0.55, dir: new THREE.Vector3(-6, 5, 8) };
+  const env = { bg: 0x4b5574, near: 32, far: 200, sky: 0xa4b4e8, ground: 0x56668a, hi: 1.38, sun: 0xff9a70, si: 0.55, dir: new THREE.Vector3(-6, 5, 8) };
   const sky = new THREE.Group(), dome = skyDome(env.bg), field = starField(coarse ? 2600 : 5200);
   sky.add(dome, field);
   // 星空跟著角色的高度出來：碼頭和街上燈太亮只看得到一些，爬上遠眺台整片天和銀河才都出來
