@@ -2,6 +2,9 @@
 
 const $ = (s) => document.querySelector(s);
 
+// 面板做成側欄時的寬度（電腦、手機橫拿），底部抽屜回傳 0。寬度寫在 CSS 的 --panel-w
+export const panelW = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panel-w')) || 0;
+
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }

@@ -9,7 +9,7 @@ import { Manatee, TABLE_LINES } from './manatee.js';
 import { Animals, ANIMAL_LAYER } from './animals.js';
 import { Visitors } from './visitors.js';
 import { layoutBubbles } from './bubbles.js';
-import { UI } from './ui.js';
+import { UI, panelW } from './ui.js';
 import { bindJoystick } from './joystick.js';
 import { Multiplayer, EMOTES } from './multiplayer.js';
 import * as TX from './textures.js';
@@ -192,7 +192,7 @@ async function start() {
 
   // 捏角色：每改一下就套到角色身上、存起來、告訴別人，鏡頭照目前那一頁取景
   let dressTab = 'race';
-  const visH = () => (window.innerWidth >= 900 || !ui.panel ? 1 : 1 - ui.panel.offsetHeight / window.innerHeight);
+  const visH = () => (panelW() || !ui.panel ? 1 : 1 - ui.panel.offsetHeight / window.innerHeight);
   const frameMirror = () => player.frameMirror(FACE_TABS.includes(dressTab) ? 'face' : 'body', visH());
   const creator = new Creator({
     onChange(L) {
@@ -337,6 +337,20 @@ async function start() {
 
   // 手機操作：搖桿走路，靠近畫作或鏡子時出現按鈕
   if (coarse) document.body.classList.add('touch');
+  // 搖桿放哪一邊：直拿在右，單手拇指推；橫拿在左，跟一般雙手拿的遊戲一樣。換邊鈕把兩個方向都反過來，記住選擇
+  if (coarse) {
+    const land = matchMedia('(orientation: landscape)');
+    let swap = false;
+    try { swap = localStorage.getItem('joySwap') === '1'; } catch {}
+    const placeJoy = () => document.body.classList.toggle('joy-left', land.matches !== swap);
+    placeJoy();
+    land.addEventListener('change', placeJoy);
+    document.getElementById('swap-btn').addEventListener('click', () => {
+      swap = !swap;
+      try { localStorage.setItem('joySwap', swap ? '1' : '0'); } catch {}
+      placeJoy();
+    });
+  }
   bindJoystick(document.getElementById('joy'), document.getElementById('joy-knob'), (x, y) => (photo.active ? photo.setJoystick(x, y) : player.setJoystick(x, y)));
   document.getElementById('jump-btn').addEventListener('pointerdown', (e) => { e.preventDefault(); player.jump(); });
   const sitBtn = document.getElementById('sit-btn');
@@ -376,11 +390,11 @@ async function start() {
   soundBtn.hidden = false;
   soundBtn.addEventListener('click', () => { ambience.setMuted(!ambience.muted); soundLabel(); });
 
-  // 作品或換裝面板打開時挪動畫面中心，畫和角色才不會被擋住：電腦往左，手機往上
+  // 作品或換裝面板打開時挪動畫面中心，畫和角色才不會被擋住：側欄往左，底部抽屜往上
   function applyViewOffset() {
-    const w = window.innerWidth, h = window.innerHeight, panel = ui.panel;
+    const w = window.innerWidth, h = window.innerHeight, panel = ui.panel, pw = panelW();
     if (!panel) camera.clearViewOffset();
-    else if (w >= 900) camera.setViewOffset(w, h, 200, 0, w, h);
+    else if (pw) camera.setViewOffset(w, h, pw / 2, 0, w, h);
     else camera.setViewOffset(w, h, 0, Math.round(panel.offsetHeight / 2), w, h);
   }
   ui.onSheet = (open) => {
@@ -490,9 +504,9 @@ async function start() {
   // 抵達：海市從碼頭開始；從海市搭船回畫廊，站在小划船往草原走幾步的地方，面向草原
   const ferry = world.exits[0];
   if (town) {
-    // 鏡頭從海上低低地看著整座山城：注視點放在鎮子中段，棧橋和海只佔畫面底下一小條。直式螢幕比較窄，再退遠一點
+    // 鏡頭在角色背後的海上，低低地往上看整座山城，角色在畫面右下。直式螢幕比較窄，再退遠一點
     // 角色沿棧橋往岸上走，鏡頭跟著慢慢換到角色背後（見 player.startIntro）
-    player.startIntro(new THREE.Vector3(0, 9, -20), window.innerWidth < window.innerHeight ? 80 : 64, -0.04);
+    player.startIntro(window.innerWidth < window.innerHeight ? 26 : 20, 0.12);
     player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
     // 測試用：?view=x,z,面向(度),鏡頭距離,俯角(度)，直接站到那裡看，不看開場的遠景
     const view = params.get('view')?.split(',').map(Number);
@@ -504,11 +518,10 @@ async function start() {
     }
   }
   else if (params.get('from') === 'haishi' && ferry) {
-    // 鏡頭退到棧橋尾端的海面上、貼著水面低低地看：棧橋、整片草原、大樹和小屋都在畫面裡
+    // 鏡頭退到棧橋尾端的海面上、貼著水面低低地看：角色在畫面右下，棧橋、整片草原、大樹和小屋都在畫面裡
     // 角色沿棧橋往草原走，鏡頭照走過的距離換到跟拍（跟海市開場同一套，見 player.startIntro）
-    const sx = ferry.x, sz = ferry.z + 1.8, gy = world.groundY(sx, sz);
-    player.place(sx, sz, 0);
-    player.startIntro(new THREE.Vector3(0.5, gy + 4.5, sz + 22), window.innerWidth < window.innerHeight ? 40 : 30, -0.06);
+    player.place(ferry.x, ferry.z + 1.8, 0);
+    player.startIntro(window.innerWidth < window.innerHeight ? 13 : 10, 0.12);
   }
   const go = params.get('go')?.split('.').map(Number);
   if (go && !town) ui.onGoTo(go[0], go[1]);
@@ -523,7 +536,7 @@ async function start() {
 
   ui.loading(null);
   if (params.has('photo')) photo.enter();
-  else ui.hint(coarse ? '右下搖桿或點地面走路　拖曳轉視角' : `點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下${town ? '' : '　Enter 看畫'}`, 6000);
+  else ui.hint(coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿或點地面走路　拖曳轉視角` : `點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下${town ? '' : '　Enter 看畫'}`, 6000);
 
   // 照鏡子時：太靠近玩家或擋在鏡頭與玩家之間的訪客與其他玩家淡成半透明
   let mirrorFading = false;

@@ -14,6 +14,8 @@ export const SKINS = [
 export const CLOTH = [
   ...ROBES, ...SCARVES,
   0xf4f2ec, 0x1e1c1e, 0x3a2414, 0x3a5a8a, 0xf0c830, 0x8a8a90, 0x1f2a4a, 0xb8a070,
+  // 海市的染料：中藍、洗舊的淺藍、薯莨黑褐、薯莨赭、麻本色、灰麻、柿澀、苔綠、茜紅、薑黃
+  0x46628a, 0x8aa4b4, 0x3a2a24, 0x7a4a2e, 0xcfc4a8, 0x9a968a, 0xa0603a, 0x5e6a48, 0xa8443a, 0xc89a3a,
 ];
 const WHITE = 16, BOOT = 18;
 
