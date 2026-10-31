@@ -244,6 +244,12 @@ async function start() {
     onExit(ex) {
       travel(ex.to);
     },
+    onDirector(on) {
+      showDirector(on);
+      try { localStorage.setItem('director', on ? '1' : '0'); } catch {}
+      ui.hint(on ? '導演運鏡　鏡頭跟著你走' : '自由鏡頭　視角自己轉', 2000);
+      lastInput = performance.now();
+    },
     onArrivePainting(p) {
       ui.showPainting(p, p.url);
       if (coarse && !swipeHinted) {
@@ -308,7 +314,16 @@ async function start() {
     lastInput = performance.now();
   };
   ui.onClose = () => player.exitFocus();
-  document.getElementById('recenter-btn').addEventListener('click', () => player.recenter());
+  // 導演運鏡：預設打開，記住上次的選擇。畫廊房間小，轉得慢一點
+  const directorBtn = document.getElementById('director-btn');
+  function showDirector(on) {
+    directorBtn.classList.toggle('on', on);
+    directorBtn.setAttribute('aria-pressed', on);
+  }
+  try { player.director = localStorage.getItem('director') !== '0'; } catch {}
+  player.directorLag = town ? 1 : 1.6;
+  showDirector(player.director);
+  directorBtn.addEventListener('click', () => player.toggleDirector());
 
   // 手機操作：搖桿走路，靠近畫作或鏡子時出現按鈕
   if (coarse) document.body.classList.add('touch');

@@ -12,6 +12,8 @@ const SWIPE_MIN = 40;
 const INTRO_LEN = 18;   // 開場遠景：沿棧橋走這麼遠，鏡頭換到角色背後
 // 鏡頭追目標的時間：跟著角色、看畫照鏡子
 const FOLLOW_T = 0.2, VIEW_T = 0.32;
+// 導演運鏡：使用者自己轉鏡頭後讓幾秒；自動轉向最快多少（弧度／秒）；照路線走時看前面幾公尺
+const DIRECTOR_HOLD = 5, DIRECTOR_YAW_MAX = 0.6, DIRECTOR_AHEAD = 3.5;
 
 const defaultDist = () => (window.innerWidth < window.innerHeight ? 11 : 8.5);
 const smoothstep = THREE.MathUtils.smoothstep;
@@ -53,6 +55,12 @@ export class Player {
     this.camDist = defaultDist();
     this.distMax = world.camDistMax ?? DIST_MAX;   // 海市可以拉得比較遠，看得到整座山城
     this.intro = null;              // 開場遠景，見 startIntro
+    this.director = true;           // 導演運鏡，見 direct
+    this.directorLag = 1;           // 導演轉鏡頭的慢度，畫廊房間小，轉得慢一點
+    this.directorHold = 0;          // 使用者剛轉過鏡頭，還要讓幾秒
+    this.directorEngage = false;    // 剛打開：站著也轉回角色背後
+    this.dirVel = {};
+    this.moveBasis = null;          // 導演運鏡時，搖桿和方向鍵照按下那一刻的鏡頭方向走
     this.camPos = new THREE.Vector3();
     this.camLook = new THREE.Vector3();
     this.posVel = {};               // 鏡頭位置和注視點的彈簧速度
@@ -165,7 +173,7 @@ export class Player {
         return;
       }
       if (e.key === 'r' || e.key === 'R') {
-        this.recenter();
+        this.toggleDirector();
         return;
       }
       if (e.key === 'c' || e.key === 'C') {
@@ -181,6 +189,7 @@ export class Player {
 
   orbit(dx, dy, mouse = false) {
     this.exitView();
+    this.handOver();
     const k = (mouse ? 9 : 5.5) / Math.max(this.dom.clientWidth, this.dom.clientHeight);
     const s = mouse ? 1 : -1;   // 觸控是手指拖著畫面走，方向跟滑鼠相反
     this.camYaw -= dx * k * s;
@@ -362,14 +371,58 @@ export class Player {
     if (it.s >= 1) this.intro = null;
   }
 
-  // 鏡頭轉回角色背後，俯角和距離恢復預設
-  recenter() {
-    this.events.onInput('tap');
+  // 導演運鏡開關。打開時鏡頭慢慢轉回角色背後；關掉時鏡頭停在原地，之後全由使用者轉
+  toggleDirector() {
+    this.director = !this.director;
+    this.directorHold = 0;
+    this.directorEngage = this.director;
+    this.dirVel = {};
     this.exitView();
-    this.intro = null;
-    this.camYaw = this.heading + Math.PI;
-    this.camPitch = PITCH_DEFAULT;
-    this.camDist = defaultDist();
+    this.events.onDirector?.(this.director);
+  }
+
+  // 使用者自己轉了鏡頭：導演先讓位，搖桿的方向也改照新的鏡頭算
+  handOver() {
+    this.directorHold = DIRECTOR_HOLD;
+    this.directorEngage = false;
+    this.dirVel = {};
+    this.moveBasis = null;
+  }
+
+  // 沿著路線往前 d 公尺的那一點，路線不夠長就是終點
+  pathAhead(d) {
+    let x = this.pos.x, z = this.pos.z;
+    for (const q of this.path) {
+      const l = Math.hypot(q.x - x, q.y - z);
+      if (l >= d) return { x: x + ((q.x - x) * d) / l, z: z + ((q.y - z) * d) / l };
+      d -= l;
+      x = q.x;
+      z = q.y;
+    }
+    return { x, z };
+  }
+
+  // 導演運鏡：走路時鏡頭慢慢轉到前進方向的後面，俯角回到預設；照路線走時看前面幾公尺，轉角前就先轉。
+  // 站著不動時不轉。使用者自己轉了鏡頭先讓幾秒；開場遠景、看畫、照鏡子、攝影模式時不插手
+  direct(dt) {
+    this.directorHold = Math.max(0, this.directorHold - dt);
+    if (!this.director || this.intro || this.focus?.camPos || this.paused || this.directorHold > 0) return;
+    const v = this.dirVel, engage = this.directorEngage;
+    let want = null;
+    if (engage) want = this.heading + Math.PI;
+    else if (this.path.length) {
+      const a = this.pathAhead(DIRECTOR_AHEAD), dx = a.x - this.pos.x, dz = a.z - this.pos.z;
+      if (Math.hypot(dx, dz) > 1.2) want = Math.atan2(dx, dz) + Math.PI;
+    } else if (this.speed > 0.05) want = this.heading + Math.PI;
+    let diff = want === null ? 0 : wrapAngle(want - this.camYaw);
+    // 朝著鏡頭走時不繞到背後去，免得整個畫面甩半圈
+    if (!engage) diff *= 1 - smoothstep(Math.abs(diff), 1.6, 2.1);
+    const lag = engage ? 0.6 : this.directorLag;
+    damp(this, 'camYaw', this.camYaw + diff, v, 1.1 * lag, dt);
+    v.camYaw = THREE.MathUtils.clamp(v.camYaw, -DIRECTOR_YAW_MAX, DIRECTOR_YAW_MAX);
+    // 沒有目標時照樣算一次，轉到一半停下來會慢慢減速，不會一下子煞住
+    damp(this, 'camPitch', want === null ? this.camPitch : PITCH_DEFAULT, v, 1.6 * lag, dt);
+    if (engage && Math.abs(diff) < 0.01 && Math.abs(this.camPitch - PITCH_DEFAULT) < 0.01) this.directorEngage = false;
   }
 
   // 用尋路找出繞過家具的路線
@@ -624,7 +677,7 @@ export class Player {
     const fwd = (k.has('w') || k.has('arrowup') || this.mouseRun ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
     const side = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
     const turn = (k.has('q') ? 1 : 0) - (k.has('e') ? 1 : 0);
-    if (turn) { this.exitView(); this.camYaw += turn * 1.8 * dt; }
+    if (turn) { this.exitView(); this.handOver(); this.camYaw += turn * 1.8 * dt; }
 
     // 鍵盤和搖桿都換算成相對鏡頭的方向
     let mf = fwd, ms = side, mag = fwd || side ? 1 : 0;
@@ -637,8 +690,12 @@ export class Player {
       this.exitFocus();
     }
     const rising = !this.character.sitting && this.character.sitP > 0.25;   // 站起來的途中先別走
+    if (!manual) this.moveBasis = null;
+    else if (this.moveBasis === null) this.moveBasis = this.camYaw;
     if (manual && !rising) {
-      const sy = Math.sin(this.camYaw), cy = Math.cos(this.camYaw);
+      // 導演運鏡時鏡頭會自己轉，方向照按下那一刻的鏡頭算，角色才不會越走越偏
+      const basis = this.director ? this.moveBasis : this.camYaw;
+      const sy = Math.sin(basis), cy = Math.cos(basis);
       vx = -sy * mf + cy * ms;
       vz = -cy * mf - sy * ms;
       const len = Math.hypot(vx, vz) || 1;
@@ -698,8 +755,9 @@ export class Player {
     ch.group.rotation.y = this.heading;
     ch.update(dt, this.speed);
 
-    let settling = false;
+    let settling = this.directorEngage;
     if (this.intro) this.updateIntro(dt);
+    this.direct(dt);
     if (!this.paused) {
       const dPos = new THREE.Vector3(), dLook = new THREE.Vector3();
       this.desiredCamera(dPos, dLook);
@@ -710,7 +768,7 @@ export class Player {
       }
       this.camera.position.copy(this.camPos);
       this.camera.lookAt(this.camLook);
-      settling = this.intro?.s > 0 || this.camPos.distanceToSquared(dPos) > 1e-4 || this.camLook.distanceToSquared(dLook) > 1e-4;
+      settling = settling || this.intro?.s > 0 || this.camPos.distanceToSquared(dPos) > 1e-4 || this.camLook.distanceToSquared(dLook) > 1e-4;
     } else {
       // 攝影模式回來時鏡頭從停下的地方重新起步
       this.posVel = {};

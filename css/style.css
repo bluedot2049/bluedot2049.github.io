@@ -205,6 +205,8 @@ body.flat #stage::after { display: none; }
 }
 #top-btns .icon-btn span { font-size: 14px; letter-spacing: .2em; margin-right: -.2em; }
 #sound-btn .off, #sound-btn.muted .on { display: none; }
+#director-btn.on { color: var(--gold-hi); border-color: var(--gold); }
+#director-btn.on svg path:first-child { fill: rgba(232, 184, 106, .18); }
 #sound-btn.muted .off { display: block; }
 #sound-btn.muted { color: var(--muted); }
 
