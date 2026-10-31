@@ -983,15 +983,16 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     lantern(k, x, 14 + 2.0, z, 0.9);
     obstacles.push({ x, z, hw: 0.12, hd: 0.12 });
   }
-  // 星台上的望遠鏡
+  // 星台上的望遠鏡：靠南邊崖沿，不擋從石階走到西邊石階的路；粗的鏡頭朝海上的天空，細的目鏡在後
   {
-    const x = -12, z = -45, y = 14;
+    const x = -12.5, z = -42.75, y = 14;
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2;
       k.cyl(0.03, 0.03, 1.3, '#8a6a3a', x + Math.cos(a) * 0.25, y + 0.62, z + Math.sin(a) * 0.25, { rx: Math.sin(a) * 0.2, rz: -Math.cos(a) * 0.2 }, 5);
     }
-    k.cyl(0.08, 0.12, 1.1, GOLD, x, y + 1.45, z + 0.1, { rx: 1.1 }, 8);
-    obstacles.push({ x, z, hw: 0.4, hd: 0.4 });
+    k.cyl(0.12, 0.07, 1.1, GOLD, x, y + 1.45, z + 0.1, { rx: 1.1 }, 8);
+    k.cyl(0.035, 0.035, 0.16, DARK, x, y + 1.17, z - 0.44, { rx: 1.1 }, 6);
+    obstacles.push({ x, z, hw: 0.35, hd: 0.35 });
   }
 
   // ---------- 遠眺台：山頂一圈矮石牆和幾塊立石，只有一盞冷冷的小燈，看得到整座鎮和海 ----------
