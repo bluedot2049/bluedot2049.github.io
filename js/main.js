@@ -504,10 +504,15 @@ async function start() {
   // 抵達：海市從碼頭開始；從海市搭船回畫廊，站在小划船往草原走幾步的地方，面向草原
   const ferry = world.exits[0];
   if (town) {
-    // 鏡頭在角色背後的海上，低低地往上看整座山城，角色在畫面右下。直式螢幕比較窄，再退遠一點
-    // 角色沿棧橋往岸上走，鏡頭跟著慢慢換到角色背後（見 player.startIntro）
-    player.startIntro(window.innerWidth < window.innerHeight ? 26 : 20, 0.12);
+    // 鏡頭在角色背後的海上，低低地往上看整座山城：角色在右下，城中在畫面中間偏左上。
+    // 直式螢幕窄，角色放在中間偏下，城中在上面。角色沿棧橋往岸上走，鏡頭跟著慢慢換到角色背後（見 player.startIntro）
     player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
+    const mid = [0, 9, -20];   // 城中
+    player.startIntro({
+      wide: { dist: 18, at: { x: 0.42, y: -0.5 }, mark: mid, markAt: { x: -0.18, y: 0.2 } },
+      tall: { dist: 24, at: { x: 0.12, y: -0.45 }, mark: mid, markAt: { x: -0.08, y: 0.25 } },
+      low: { dist: 11, at: { x: 0.38, y: -0.3 }, mark: mid, markAt: { x: -0.25, y: 0.3 } },   // 手機橫拿太矮，角色拉近一點才不會淹在燈籠裡
+    });
     // 測試用：?view=x,z,面向(度),鏡頭距離,俯角(度)，直接站到那裡看，不看開場的遠景
     const view = params.get('view')?.split(',').map(Number);
     if (view?.length >= 2 && view.every(Number.isFinite)) {
@@ -518,10 +523,14 @@ async function start() {
     }
   }
   else if (params.get('from') === 'haishi' && ferry) {
-    // 鏡頭退到棧橋尾端的海面上、貼著水面低低地看：角色在畫面右下，棧橋、整片草原、大樹和小屋都在畫面裡
+    // 鏡頭退到棧橋尾端的海面上、貼著水面低低地看：角色在左下，大樹在右上，小屋在大樹後面遠遠的
     // 角色沿棧橋往草原走，鏡頭照走過的距離換到跟拍（跟海市開場同一套，見 player.startIntro）
     player.place(ferry.x, ferry.z + 1.8, 0);
-    player.startIntro(window.innerWidth < window.innerHeight ? 13 : 10, 0.12);
+    const tree = world.outdoor.landmark;
+    player.startIntro({
+      wide: { dist: 10, at: { x: -0.42, y: -0.5 }, mark: tree, markAt: { x: 0.3, y: 0.15 } },
+      tall: { dist: 13, at: { x: -0.1, y: -0.45 }, mark: tree, markAt: { x: 0.12, y: 0.2 } },
+    });
   }
   const go = params.get('go')?.split('.').map(Number);
   if (go && !town) ui.onGoTo(go[0], go[1]);

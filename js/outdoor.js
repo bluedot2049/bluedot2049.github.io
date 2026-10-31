@@ -985,6 +985,7 @@ export function buildOutdoor(room, h) {
     },
     table: { x: tableX, z: Z(tableRel), hw: 0.5, hd: tableLen / 2 },
     pavilion: { x: pc.x, z: pc.z, r: PAV.r },
+    landmark: [treeAt.x, G + 5, treeAt.z],   // 從海市搭船回來時，開場遠景對著大樹的樹冠
     // 貓頭鷹停的地方：大樹的枝幹、石階口兩根燈串柱、棧橋的燈柱、涼亭頂上的金球。y 是站的高度，h 是面向，w 是停在那裡的機會
     perches: [
       { ...tree.perch, w: 6 },

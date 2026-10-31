@@ -11,7 +11,6 @@ const PITCH_MIN = -1.55, PITCH_LOW = -0.08, PITCH_MAX = 1.25, PITCH_DEFAULT = 0.
 const ZENITH = 1.52;
 const SWIPE_MIN = 40;
 const INTRO_LEN = 18;   // 開場遠景：沿棧橋走這麼遠，鏡頭換到角色背後
-const INTRO_AT = { x: 0.33, y: -0.33 };   // 開場遠景裡角色在畫面的位置（-1 ~ 1），右下三分之一
 // 鏡頭追目標的時間：跟著角色、看畫照鏡子
 const FOLLOW_T = 0.2, VIEW_T = 0.32;
 // 導演運鏡：使用者自己轉鏡頭後讓幾秒；照路線走時看前面幾公尺
@@ -23,6 +22,20 @@ const DIRECTOR_RATE = 0.3, DIRECTOR_ACCEL = 0.45;
 
 const defaultDist = () => (window.innerWidth < window.innerHeight ? 12 : 9.5);
 const smoothstep = THREE.MathUtils.smoothstep;
+const UP = new THREE.Vector3(0, 1, 0);
+
+// 畫面上沒被按鈕蓋住的上下範圍（-1 ~ 1）：上面扣掉右上角那排按鈕，下面扣掉搖桿、跳、坐、表情這些
+function safeBand() {
+  const H = window.innerHeight;
+  let top = 0, bottom = H;
+  for (const id of ['top-btns', 'joy', 'jump-btn', 'sit-btn', 'emote', 'swap-btn']) {
+    const r = document.getElementById(id)?.getBoundingClientRect();
+    if (!r?.height) continue;
+    if (r.bottom < H * 0.4) top = Math.max(top, r.bottom);
+    else if (r.top > H * 0.5) bottom = Math.min(bottom, r.top);
+  }
+  return { hi: 1 - (2 * top) / H, lo: 1 - (2 * bottom) / H };
+}
 
 // 臨界阻尼彈簧：o[k] 帶著速度 vel[k] 追 goal，起步會加速，到了不回彈。smoothTime 大約是追上要花的秒數
 function damp(o, k, goal, vel, smoothTime, dt) {
@@ -79,7 +92,6 @@ export class Player {
     this.lookVel = {};
     this.headPos = new THREE.Vector3();
     this.introPos = new THREE.Vector3();
-    this.introLook = new THREE.Vector3();
     this.keys = new Set();
     this.joy = { x: 0, y: 0 };      // 虛擬搖桿，-1 ~ 1
     this.mouseRun = false;          // 滑鼠左右鍵同時按著：往鏡頭前方走
@@ -358,34 +370,78 @@ export class Player {
     if (i >= 0 && i < list.length) this.showPainting(list[i]);
   }
 
-  // 開場遠景：鏡頭繞著角色，距離 dist、俯角 pitch，角色放在畫面右下，左上留給鎮子或草原。
+  // 開場遠景：鏡頭繞著角色轉，角色和一個地標（大樹、山城中段）各放在畫面上設計好的位置。
+  // shots = { wide, tall, low }，橫式、直式螢幕各一組 { dist, at, mark, markAt }，low 給手機橫拿這種矮的橫式螢幕，沒有就用 wide：at 是角色在畫面的位置，mark 是地標，
+  // markAt 是地標在畫面的位置，畫面座標左下 -1、右上 1。
   // 角色開始走以後，照走過的距離慢慢拉近、角色移回畫面中間，換成跟拍的鏡頭，途中角色一直在畫面裡。
   // 只看走過的距離，停下來鏡頭就停在當下的構圖，往回走也不退回遠景
-  startIntro(dist, pitch) {
-    this.intro = { dist, pitch, max: dist, s: 0 };
+  startIntro(shots) {
+    this.intro = { shots, s: 0, aspect: 0, moved: false };
+    this.frameIntro();
+    this.desiredCamera(this.camPos, this.camLook);
+    this.posVel = {};
+    this.lookVel = {};
+  }
+
+  // 依螢幕直橫挑構圖，角色擠進沒被按鈕蓋住的範圍，再轉鏡頭讓地標落在它的位置。
+  // 轉過螢幕重算一次；使用者自己轉過鏡頭，就只顧角色的位置，不再改鏡頭方向
+  frameIntro() {
+    const it = this.intro, cam = this.camera, { wide, tall, low } = it.shots;
+    const shot = cam.aspect < 1 ? tall : (window.innerHeight < 500 && low) || wide;
+    const tanV = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)), band = safeBand();
+    it.aspect = cam.aspect;
+    it.dist = it.max = shot.dist;
+    // 注視點在胸口，往下 0.9 是腳、往上 1 是頭頂，再留一點邊
+    const down = 0.9 / shot.dist / tanV + 0.06, up = 1 / shot.dist / tanV + 0.06;
+    it.at = { x: THREE.MathUtils.clamp(shot.at.x, -0.8, 0.8), y: THREE.MathUtils.clamp(shot.at.y, band.lo + down, band.hi - up) };
+    if (it.moved) return;
+    // 地標落到 markAt：解鏡頭的方位和俯角，牛頓法，偏微分用差分算
+    const center = new THREE.Vector3(this.pos.x, this.pos.y + 0.9, this.pos.z), mark = new THREE.Vector3(...shot.mark);
+    const P = new THREE.Vector3(), L = new THREE.Vector3(), q = new THREE.Vector2();
+    const err = (yaw, pitch) => {
+      this.aim(P, L, center, yaw, pitch, it.dist, it.at);
+      this.ndc(P, L, mark, q);
+      return [q.x - shot.markAt.x, q.y - shot.markAt.y];
+    };
+    let yaw = this.heading + Math.PI, pitch = 0.15;
+    for (let i = 0, h = 0.01; i < 8; i++) {
+      const [ex, ey] = err(yaw, pitch), [ax, ay] = err(yaw + h, pitch), [bx, by] = err(yaw, pitch + h);
+      const j00 = (ax - ex) / h, j10 = (ay - ey) / h, j01 = (bx - ex) / h, j11 = (by - ey) / h, det = j00 * j11 - j01 * j10;
+      if (Math.abs(det) < 1e-6) break;
+      yaw -= THREE.MathUtils.clamp((j11 * ex - j01 * ey) / det, -0.3, 0.3);
+      pitch = THREE.MathUtils.clamp(pitch - THREE.MathUtils.clamp((j00 * ey - j10 * ex) / det, -0.2, 0.2), 0, 0.6);
+    }
+    this.camYaw = yaw;
+    it.pitch = pitch;
+  }
+
+  // 鏡頭在 center 四周 dist 遠、方位 yaw、俯角 pitch 的地方，視線轉到 center 落在畫面的 at
+  aim(outPos, outLook, center, yaw, pitch, dist, at) {
+    const c = Math.cos(pitch), tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)), tanH = tanV * this.camera.aspect;
+    outPos.set(center.x + Math.sin(yaw) * c * dist, center.y + Math.sin(pitch) * dist, center.z + Math.cos(yaw) * c * dist);
+    let h = yaw + Math.PI + Math.atan(at.x * tanH), e = -pitch - Math.atan(at.y * tanV);
+    const q = new THREE.Vector2();
+    for (let i = 0; ; i++) {
+      const ce = Math.cos(e);
+      outLook.set(outPos.x + Math.sin(h) * ce * dist, outPos.y + Math.sin(e) * dist, outPos.z + Math.cos(h) * ce * dist);
+      if (i === 2) return outLook;
+      // 方位和仰角分開算只是近似，照實際投影的位置再修兩次
+      this.ndc(outPos, outLook, center, q);
+      h += Math.atan(at.x * tanH) - Math.atan(q.x * tanH);
+      e += Math.atan(q.y * tanV) - Math.atan(at.y * tanV);
+    }
+  }
+
+  // 鏡頭在 pos、看著 look 時，point 落在畫面的哪裡（-1 ~ 1）
+  ndc(pos, look, point, out) {
+    const f = look.clone().sub(pos).normalize(), r = new THREE.Vector3().crossVectors(f, UP).normalize(), u = new THREE.Vector3().crossVectors(r, f);
+    const d = point.clone().sub(pos), z = d.dot(f), tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    return out.set(d.dot(r) / z / (tanV * this.camera.aspect), d.dot(u) / z / tanV);
   }
 
   // 還沒開始走時，拖曳和縮放是在看遠景；開始走以後遠景的鏡頭位置就固定了，操作只管跟拍的鏡頭
   get introIdle() {
     return this.intro?.s === 0;
-  }
-
-  introCamera(outPos, outLook) {
-    const it = this.intro, yaw = this.camYaw, c = Math.cos(it.pitch);
-    outPos.set(
-      this.pos.x + Math.sin(yaw) * c * it.dist,
-      this.pos.y + 0.9 + Math.sin(it.pitch) * it.dist,
-      this.pos.z + Math.cos(yaw) * c * it.dist
-    );
-    // 角色在畫面的 INTRO_AT：視線從角色那裡往左、往上偏開
-    const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
-    const h = yaw + Math.PI + Math.atan(INTRO_AT.x * tanV * this.camera.aspect);
-    const e = -it.pitch - Math.atan(INTRO_AT.y * tanV), ce = Math.cos(e);
-    return outLook.set(
-      outPos.x + Math.sin(h) * ce * it.dist,
-      outPos.y + Math.sin(e) * it.dist,
-      outPos.z + Math.cos(h) * ce * it.dist
-    );
   }
 
   updateIntro(dt) {
@@ -418,6 +474,7 @@ export class Player {
 
   // 使用者自己轉了鏡頭：導演先讓位，搖桿的方向也改照新的鏡頭算
   handOver() {
+    if (this.intro) this.intro.moved = true;   // 開場遠景轉過螢幕時，不再把鏡頭轉回原本的構圖
     this.directorHold = DIRECTOR_HOLD;
     this.directorEngage = false;
     this.dirVel = {};
@@ -683,13 +740,14 @@ export class Player {
       outLook.y + Math.sin(pitch) * dist,
       outLook.z + Math.cos(this.camYaw) * c * dist
     );
-    // 開場：從遠景換到跟拍。兩個鏡頭都拍得到角色，位置和注視點一起換，角色才不會跑出畫面
+    // 開場：從遠景換到跟拍。繞的中心、距離、俯角慢慢換成跟拍的，角色在畫面的位置也慢慢移回中間，
+    // 每一刻都是繞著角色、對準角色的鏡頭，角色不會跑出畫面。走完時剛好就是跟拍的鏡頭
     const it = this.intro;
     if (it) {
-      const e = smoothstep(it.s, 0, 1);
-      this.introCamera(this.introPos, this.introLook);
-      outPos.lerpVectors(this.introPos, outPos, e);
-      outLook.lerpVectors(this.introLook, outLook, e);
+      if (this.camera.aspect !== it.aspect) this.frameIntro();
+      const e = smoothstep(it.s, 0, 1), lerp = THREE.MathUtils.lerp;
+      const center = this.introPos.set(this.pos.x, this.pos.y + 0.9, this.pos.z).lerp(outLook, e);
+      this.aim(outPos, outLook, center, this.camYaw, lerp(it.pitch, pitch, e), lerp(it.dist, dist, e), { x: it.at.x * (1 - e), y: it.at.y * (1 - e) });
     }
     // 角色和鏡頭之間隔著山坡或石台時，鏡頭沿原方向往前移（海市）。房子不推鏡頭，是淡掉
     if (this.world.camClip) {
