@@ -212,7 +212,7 @@ const BAND = new THREE.Vector3(0.55, 0.45, -0.7).normalize();
 function skyDome(bg) {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
-      uLow: { value: new THREE.Color(bg) }, uTop: { value: new THREE.Color('#2c3758') }, uWarm: { value: new THREE.Color('#b88a96') },
+      uLow: { value: new THREE.Color(bg) }, uTop: { value: new THREE.Color('#34405e') }, uWarm: { value: new THREE.Color('#b88a96') },
       uBand: { value: BAND }, uMilk: { value: new THREE.Color('#4c5288') }, uStars: { value: 0 },
     },
     vertexShader: `
@@ -227,7 +227,7 @@ function skyDome(bg) {
       void main() {
         vec3 d = normalize(vDir);
         float h = d.y;
-        vec3 c = mix(uLow, uTop * (1.0 - 0.35 * uStars), smoothstep(0.0, 0.55, h));
+        vec3 c = mix(uLow, uTop * (1.0 - 0.2 * uStars), smoothstep(0.0, 0.55, h));
         // 銀河：沿著大圓的一條光帶，幾道正弦交疊出明暗的雲團，中間一道暗縫
         float b = dot(d, uBand);
         float lump = 0.55 + 0.45 * sin(d.x * 7.0 + sin(d.z * 5.0) * 2.0) * sin(d.z * 9.0 - d.y * 6.0 + 1.3);
@@ -1603,7 +1603,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     if (over && MR() < 0.6) continue;
     mists.push({ x, y: tz(z) + (over ? 5 + MR() * 3 : 1.5 + MR() * 3.5), z, s: 9 + MR() * 9, p: MR() * 10 });
   }
-  group.add(mist(mists));
+  group.add(mist(mists, { color: '#8e98b0' }));   // 藍灰白的霧，不要偏紫
   // 每條街上方一層被燈籠照暖的霧，從海上遠遠看，一層一層的街都在發光
   const glow = [];
   const glowRows = [[-6, 6, 8.5, 0], [-25, -10, 7, 0], [9, 14, 7, 0], [-3, 3, -2.8, 2.4], ...AREAS.filter((a) => a.street && a.y != null && a.y > 5 && a.y < 13).map((a) => [a.x0 + 1, a.x1 - 1, (a.z0 + a.z1) / 2, a.y])];
@@ -1618,14 +1618,14 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   group.add(ripples(shimmer.concat(shimmerMore), SEA));
 
   // ---------- 海和天 ----------
-  // 海是深藍，不是黑的：夜色映在水上，燈影才有東西可以浮在上面
-  const sea = new THREE.Mesh(new THREE.PlaneGeometry(1400, 900), new THREE.MeshLambertMaterial({ color: '#2c3c6c' }));
+  // 海是暗的藍灰，不是黑的，也不是飽和的深藍：夜色映在水上，燈影才有東西可以浮在上面
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(1400, 900), new THREE.MeshLambertMaterial({ color: '#2b3a52' }));
   sea.rotation.x = -Math.PI / 2;
   sea.position.set(0, SEA, 420);
   group.add(sea);
 
-  // 夜色深一點，霧近一點，燈才顯得亮；地面反上來的光偏暖，像整條街的燈籠照著
-  const env = { bg: 0x4b5574, near: 32, far: 200, sky: 0xa4b4e8, ground: 0x56668a, hi: 1.38, sun: 0xff9a70, si: 0.55, dir: new THREE.Vector3(-6, 5, 8) };
+  // 月光幾乎是中性的灰，藍色留給空氣（霧和天空）：牆、瓦、石階才是灰的，燈照到的地方才是暖的，不會疊成紫紅
+  const env = { bg: 0x4b5574, near: 32, far: 200, sky: 0xb4b8c8, ground: 0x5e6270, hi: 1.55, sun: 0xff9a70, si: 0.55, dir: new THREE.Vector3(-6, 5, 8) };
   const sky = new THREE.Group(), dome = skyDome(env.bg), field = starField(coarse ? 2600 : 5200);
   sky.add(dome, field);
   // 星空跟著角色的高度出來：碼頭和街上燈太亮只看得到一些，爬上遠眺台整片天和銀河才都出來

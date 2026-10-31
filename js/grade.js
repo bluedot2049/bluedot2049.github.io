@@ -7,10 +7,10 @@ import * as THREE from 'three';
 // density：相機高度的霧有多濃；falloff：每往上一公尺變淡多少；base：霧最濃的高度（海面）；start：鏡頭前幾公尺不起霧
 // shadow：最暗的地方抬到這個顏色（sRGB），不會再是黑的；desat：暗部和中間調降多少飽和度；cool：綠色往藍綠推多少
 export const GRADE = {
-  on: 1, density: 0.019, falloff: 0.04, base: -0.6, start: 6, maxFog: 1,
-  shadow: new THREE.Vector3(), desat: 0.3, cool: 0.5,
+  on: 1, density: 0.016, falloff: 0.04, base: -0.6, start: 6, maxFog: 1,
+  shadow: new THREE.Vector3(), desat: 0.2, cool: 0.9,
 };
-setShadow('#1a1820');
+setShadow('#16151b');
 function setShadow(hex) {
   const n = parseInt(hex.slice(1), 16);
   GRADE.shadow.set((n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
@@ -52,7 +52,7 @@ const FRAGMENT = `#ifdef USE_FOG
 		bool srgbOut = linearToOutputTexel( vec4( 0.5 ) ).r > 0.6;
 		vec3 s = srgbOut ? gl_FragColor.rgb : sRGBTransferOETF( vec4( gl_FragColor.rgb, 1.0 ) ).rgb;
 		float green = max( s.g - max( s.r, s.b ), 0.0 );
-		s += vec3( - 0.2, - 0.45, 0.55 ) * green * uGrade.cool;
+		s += vec3( - 0.1, - 0.7, 0.6 ) * green * uGrade.cool;
 		float bright = max( s.r, max( s.g, s.b ) );
 		s = mix( s, vec3( dot( s, vec3( 0.2126, 0.7152, 0.0722 ) ) ), uGrade.desat * ( 1.0 - smoothstep( 0.55, 0.95, bright ) ) );
 		s = uGrade.shadow + s * ( 1.0 - uGrade.shadow );
