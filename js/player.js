@@ -357,7 +357,7 @@ export class Player {
 
   // 開場遠景：鏡頭繞著 look 看，距離 dist、俯角 pitch。角色開始走以後，照走過的距離換到跟拍的鏡頭：
   // 鏡頭先動，注視點晚一點才從 look 滑到角色身上，鎮子在畫面裡多留一會兒。
-  // 開始走之後就算停下來，也會自己慢慢換完
+  // 只看走過的距離，停下來鏡頭就停在當下的構圖，往回走也不退回遠景
   startIntro(look, dist, pitch) {
     this.intro = { look: look.clone(), dist, pitch, max: dist, s: 0, pos: null };
   }
@@ -381,7 +381,7 @@ export class Player {
   updateIntro(dt) {
     const it = this.intro;
     if (it.s === 0 && this.speed > 0.05) it.pos = this.introCamera(new THREE.Vector3());
-    if (it.pos) it.s = Math.min(1, it.s + (this.speed * dt) / INTRO_LEN + dt / 14);
+    if (it.pos) it.s = Math.min(1, it.s + (this.speed * dt) / INTRO_LEN);
     if (it.s >= 1) this.intro = null;
   }
 
