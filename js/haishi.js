@@ -202,10 +202,10 @@ function floorBelow(x, y, z) {
   }
   return g;
 }
-// 每塊平的路面怎麼鋪（pave.js）。跟欄杆一樣越往上越老：港邊大塊花崗岩，下街和轉角亂石，燈巷條石，
-// 工坊街補過的地，星台以上大方石
+// 每塊平的路面怎麼鋪（pave.js）。跟欄杆一樣越往上越老：港邊大塊花崗岩，下街亂石，燈巷條石，
+// 工坊街補過的地，星台以上大方石；牌樓、小祠、轉角平台這些停下來喘口氣的地方鋪成波浪的碎石
 const paveOf = (a) => a.id === 'summit' ? 'summit'
-  : { lower: 'cobble', lantern: 'strip', upper: 'patch', specula: 'great' }[a.street] ?? (a.y === 0 ? 'granite' : a.id === 'bend2' ? 'great' : 'cobble');
+  : { lower: 'cobble', lantern: 'strip', upper: 'patch', specula: 'great' }[a.street] ?? (a.y === 0 ? 'granite' : 'pebble');
 
 function terrainGeometry() {
   const pos = [], S = 2;
@@ -786,10 +786,12 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     // 每一階是兩三塊長石拼的，顏色、高低各差一點
     const span = ns ? a.x1 - a.x0 : a.z1 - a.z0, s0 = ns ? a.x0 : a.z0;
     for (let i = 0; i < a.n; i++) {
-      const top = a.lo + RISE * (i + 1), c = i % 2 ? '#88888c' : '#7c7c82', p = along((i + 0.5) * tread);
+      const top = a.lo + RISE * (i + 1), p = along((i + 0.5) * tread);
       const m = Math.max(1, Math.round(span / (0.8 + PR() * 0.6)));
       for (let j = 0, q = 0; j < m; j++) {
-        const w = j === m - 1 ? span - q : (span / m) * (0.75 + PR() * 0.5), mid = s0 + q + w / 2, t = top - PR() * 0.015, cc = shade(c, (PR() - 0.5) * 0.06);
+        // 顏色跟路面同一個色庫，一階亮一階暗
+        const w = j === m - 1 ? span - q : (span / m) * (0.75 + PR() * 0.5), mid = s0 + q + w / 2, t = top - PR() * 0.015;
+        const cc = '#' + PAVES.stair.pick(PR).multiplyScalar(i % 2 ? 1.03 : 0.95).getHexString();
         if (ns) k.box(w, t - yb, tread + 0.01, cc, mid, (t + yb) / 2, p, { ao: false });
         else k.box(tread + 0.01, t - yb, w, cc, p, (t + yb) / 2, mid, { ao: false });
         q += w;
