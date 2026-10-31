@@ -1,30 +1,26 @@
-// 海市的字：一套看起來像東洋文字、其實是用打擊譜零件拼出來的符號。
-// 做法照「譜最新」的黑盒子 sbox：先有一池零件（符頭、符桿、連桿、符尾、重音、休止符），
-// 再由規則把它們排進一個方格，輸出成 SVG 路徑（m/l/c/h 線段 → d 字串）。
-// 每個漢字用它的字碼當種子，所以同一個字永遠長一樣：「茶」和「茶屋」的第一個字是同一個符號。
-//
-// 主要入口：
-//   glyph(ch)                       一個字 → 物件清單（每個物件 { segs, paint, lw, rule, name }）
-//   drawGlyph(g, ch, cx, cy, size)  畫到 canvas（Path2D 吃 SVG 的 d 字串）
-//   drawText(g, text, opts)         一串字，直排或橫排
-//   textSVG(text, opts)             一串字 → 完整的 <svg> 字串（看樣張、輸出用）
+// 海市的字（毛筆版）。招牌、牌樓、明信片郵戳都用這套：筆法取自「譜最新」的毛筆火柴人與東皇太一字標。
+// 這一版每字只有 2–5 筆。
+// 一筆 = 幾個控制點連成的中心線（Catmull-Rom）+ 沿弧長變化的筆寬 → 外框多邊形（兩端圓頭）。
+// 筆只有幾種：楔（圓頭重按收尖：豎撇點提）、肢（兩端細中段粗：橫）、捺（由細漸粗）、折（橫折，轉角厚）。
+// 結構沿用部首規則：同部首的字共用同一組筆畫，其餘部分由字碼當種子生成。
+// 畫到 canvas 時先把交接處磨圓，再在筆尾刷出飛白（刷痕）。
 
-// 方格 0–100，y 往下。比例取自 sbox engrave.STYLE（總譜譜線距 3.9 pt），換成一個譜線距 U
-const U = 14;
-const STYLE = {
-  stemW: 0.52 * U,                // 符桿（毛筆的豎，比樂譜粗）
-  stemLen: 3.5 * U,               // stem_len 13.64 / 3.9
-  headRx: 0.7 * U, headRy: 0.48 * U, headTilt: -0.36,
-  stemDx: 0.64 * U,               // 符桿貼在符頭邊上（stem_dx_up 5.24 / 3.9 的一半）
-  beamTh: 0.64 * U,               // beam_th 1.95 / 3.9 = 0.5，加粗一點
-  beamGap: 0.82 * U,              // beam_gap 2.92 / 3.9 = 0.75
-  dotR: 0.27 * U, dotDx: 1.6 * U,
-  markLw: 0.24 * U,
+const BASE_W = 11;         // 最粗筆寬（每字 100 單位；東皇太一字標是 7.8；筆畫少，再加粗）
+const MIN_W = 1.7;         // 筆尖最細（縮到招牌大小仍有 1–2 px）
+
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const WIDTH = {
+  w: (s) => 0.1 + 0.9 * (1 - s) ** 0.85 * (1 - 0.12 * Math.exp(-((s / 0.06) ** 2))),     // 楔
+  l: (s) => 0.26 + 0.74 * Math.sin(Math.PI * s) ** 1.15,                                // 肢
+  s: (s) => 0.14 + 0.86 * (1 - s) ** 0.9,                                               // 點
+  n: (s) => (0.18 + 0.82 * s ** 0.8) * (1 - 0.8 * smooth(0.82, 1, s)),                   // 捺
+  e: (s) => 0.3 + 0.7 * Math.sin(Math.PI * s) ** 0.7,                                  // 圓相：起收細、中段飽
+  f: (s) => (0.62 + 0.38 * Math.sin(Math.PI * s) ** 0.6) * (1 - 0.7 * smooth(0.88, 1, s)), // 折
 };
 
-function seeded(s) {
+function seeded(str) {
   let h = 2166136261;
-  for (const c of s) h = Math.imul(h ^ c.codePointAt(0), 16777619);
+  for (const c of str) h = Math.imul(h ^ c.codePointAt(0), 16777619);
   let a = h >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) | 0;
@@ -34,301 +30,234 @@ function seeded(s) {
   };
 }
 
-// ---------- 零件 ----------
-const obj = (name, segs, paint = 'f', extra = {}) => ({ name, segs, paint, rule: 'nonzero', lw: 0, ...extra });
-
-// 符桿：頂端斜切（下筆），往下略收
-function stem(x, y0, y1) {
-  const w = STYLE.stemW;
-  return obj('stem', [['m', x - w / 2, y0 + w * 0.45], ['l', x + w / 2, y0 - w * 0.1], ['l', x + w * 0.4, y1], ['l', x - w * 0.4, y1], ['h']]);
-}
-
-// 連桿：兩端直切的平行四邊形（樂譜的 beam，也是毛筆的橫）
-function beam(x0, y0, x1, y1, th = STYLE.beamTh) {
-  return obj('beam', [['m', x0, y0 - th / 2], ['l', x1, y1 - th / 2], ['l', x1, y1 + th / 2], ['l', x0, y0 + th / 2], ['h']]);
-}
-
-function ellipse(cx, cy, rx, ry, rot, rev = false) {
-  const K = 0.5523, c = Math.cos(rot), s = Math.sin(rot);
-  const P = (u, v) => [cx + u * c - v * s, cy + u * s + v * c];
-  let pts = [[rx, 0], [rx, ry * K], [rx * K, ry], [0, ry], [-rx * K, ry], [-rx, ry * K], [-rx, 0], [-rx, -ry * K], [-rx * K, -ry], [0, -ry], [rx * K, -ry], [rx, -ry * K], [rx, 0]];
-  if (rev) pts = pts.reverse();
-  pts = pts.map(([u, v]) => P(u, v));
-  const segs = [['m', ...pts[0]]];
-  for (let i = 1; i < pts.length; i += 3) segs.push(['c', ...pts[i], ...pts[i + 1], ...pts[i + 2]]);
-  segs.push(['h']);
-  return segs;
-}
-
-// 符頭四種：實心、空心（二分音符）、三角（敲鼓框）、叉（悶擊）
-function head(cx, cy, kind) {
-  const { headRx: rx, headRy: ry, headTilt: t } = STYLE;
-  if (kind === 'hollow') return obj('head_hollow', [...ellipse(cx, cy, rx, ry, t), ...ellipse(cx, cy, rx * 0.72, ry * 0.42, t - 0.3, true)], 'f', { rule: 'evenodd' });
-  if (kind === 'tri') {
-    // sbox.engrave.make_tri：外三角減內三角
-    const w = rx * 2, h = w * 0.9, k = 1 - 2.2 * 0.2, tri = (w_, h_, oy) => [[cx - w_ / 2, cy + oy + h_ / 2], [cx + w_ / 2, cy + oy + h_ / 2], [cx, cy + oy - h_ / 2]];
-    const o = tri(w, h, 0), i = tri(w * k, h * k, h * 0.07).reverse();
-    return obj('head_tri', [['m', ...o[0]], ['l', ...o[1]], ['l', ...o[2]], ['h'], ['m', ...i[0]], ['l', ...i[1]], ['l', ...i[2]], ['h']], 'f', { rule: 'evenodd' });
+// ---------- 筆 ----------
+function catmull(pts, n = 16) {
+  const P = [[2 * pts[0][0] - pts[1][0], 2 * pts[0][1] - pts[1][1]], ...pts, [2 * pts.at(-1)[0] - pts.at(-2)[0], 2 * pts.at(-1)[1] - pts.at(-2)[1]]];
+  const out = [];
+  for (let i = 1; i < P.length - 2; i++) {
+    const [p0, p1, p2, p3] = [P[i - 1], P[i], P[i + 1], P[i + 2]];
+    for (let j = 0; j < n; j++) {
+      const t = j / n, t2 = t * t, t3 = t2 * t;
+      out.push([0, 1].map((k) => 0.5 * (2 * p1[k] + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2 + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3)));
+    }
   }
-  if (kind === 'x') {
-    const d = rx * 0.8;
-    return obj('head_x', [['m', cx - d, cy - d], ['l', cx + d, cy + d], ['m', cx + d, cy - d], ['l', cx - d, cy + d]], 'S', { lw: STYLE.markLw * 1.3 });
+  out.push(P.at(-2));
+  return out;
+}
+
+// brush_figure.outline：法線平滑後往兩側展開，兩端接半圓
+function build(kind, pts, r) {
+  if (kind === 'o') {
+    const [x, y] = pts[0], poly = Array.from({ length: 32 }, (_, i) => [x + r * Math.cos((i / 32) * Math.PI * 2), y + r * Math.sin((i / 32) * Math.PI * 2)]);
+    return { kind, poly, c: [], w: [], nrm: [], len: 0 };
   }
-  return obj('head', ellipse(cx, cy, rx, ry, t));
+  const c = catmull(pts.length === 2 ? [pts[0], [(pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2], pts[1]] : pts);
+  const L = [0];
+  for (let i = 1; i < c.length; i++) L.push(L[i - 1] + Math.hypot(c[i][0] - c[i - 1][0], c[i][1] - c[i - 1][1]));
+  const len = L.at(-1) || 1;
+  const w = L.map((l) => Math.max(MIN_W, BASE_W * WIDTH[kind](l / len)));
+  const d = c.map((_, i) => { const a = c[Math.max(0, i - 1)], b = c[Math.min(c.length - 1, i + 1)]; const dx = b[0] - a[0], dy = b[1] - a[1], m = Math.hypot(dx, dy) || 1; return [dx / m, dy / m]; });
+  const K = 3, nrm = d.map((_, i) => {
+    let x = 0, y = 0;
+    for (let j = -K; j <= K; j++) { const q = d[Math.min(d.length - 1, Math.max(0, i + j))]; x += q[0]; y += q[1]; }
+    const m = Math.hypot(x, y) || 1;
+    return [-y / m, x / m];
+  });
+  const left = c.map((p, i) => [p[0] + nrm[i][0] * w[i] / 2, p[1] + nrm[i][1] * w[i] / 2]);
+  const right = c.map((p, i) => [p[0] - nrm[i][0] * w[i] / 2, p[1] - nrm[i][1] * w[i] / 2]);
+  const cap = (p, r, ang) => Array.from({ length: 13 }, (_, k) => [p[0] + r * Math.cos(ang - (Math.PI * k) / 12), p[1] + r * Math.sin(ang - (Math.PI * k) / 12)]);
+  const n0 = nrm[0], n1 = nrm.at(-1);
+  const poly = [...left, ...cap(c.at(-1), w.at(-1) / 2, Math.atan2(n1[1], n1[0])), ...right.reverse(), ...cap(c[0], w[0] / 2, Math.atan2(-n0[1], -n0[0]))];
+  return { kind, poly, c, w, nrm, len };
 }
 
-// 符尾：從符桿頂端往右下彎（dir=1 符桿朝上；-1 朝下時上下翻）
-function flag(x, y, dir = 1) {
-  const p = (dx, dy) => [x + dx, y + dir * dy];
-  return obj('flag', [['m', ...p(0, 0)], ['c', ...p(3, 10), ...p(17, 12), ...p(14, 30)], ['c', ...p(13, 19), ...p(5, 15), ...p(0, 13)], ['h']]);
-}
+// ---------- 字的寫法（座標 0–100，y 往下） ----------
+// 每個字 2–5 筆。語彙取自毛筆火柴人與陣型圖：墨點（頭）、一道大弧（雙臂）、成對的楔（雙腿）、
+// 一豎（軀幹）、圓相（大鼓）。多數字左右對稱，像陣型圖那樣。
+const ARC = (y, span, depth, tilt = 0, cx = 50) => ['l', [-1, -0.5, 0, 0.5, 1].map((t) => [cx + t * span, y + depth * t * t + tilt * t])]; // depth>0 ⌒，<0 ︶
+const V = (x, y0, y1, b = 0.9) => ['w', [[x, y0], [x + b, (y0 + y1) / 2], [x - b * 0.3, y1]]];
+const D = (x, y, dx = 4, dy = 9) => ['s', [[x, y], [x + dx * 0.45, y + dy * 0.55], [x + dx, y + dy]]];
+const DOT = (x, y, r) => ['o', [[x, y]], r];
+// 圓相：一筆繞一圈多一點，筆寬呼吸，略不正
+const RING = (x, y, r, a0 = -2.2, k = 1.04) => ['e', Array.from({ length: 11 }, (_, i) => { const a = a0 + (i / 10) * Math.PI * 2.12; return [x + Math.cos(a) * r * k, y + Math.sin(a) * r]; })];
+const M = ([k, pts, r]) => [k, pts.map(([x, y]) => [100 - x, y]), r];
+// 一對腿：從 (50±g, y0) 往外下方張開，腿根粗、腳端尖
+const LEGS = (y0, spread, y1, g = 3) => { const L = ['w', [[50 - g, y0], [50 - g - spread * 0.3, y0 + (y1 - y0) * 0.55], [50 - spread, y1]]]; return [L, M(L)]; };
 
-const dot = (cx, cy, r = STYLE.dotR) => obj('dot', ellipse(cx, cy, r, r, 0));
-
-// 記號：重音 >、強重音 ^、斷音點、+（悶音）
-function mark(kind, x, y) {
-  const lw = STYLE.markLw;
-  if (kind === 'accent') return obj('accent', [['m', x - 9, y - 6], ['l', x + 9, y], ['l', x - 9, y + 6]], 'S', { lw });
-  if (kind === 'marcato') return obj('marcato', [['m', x - 8, y + 7], ['l', x, y - 8], ['l', x + 8, y + 7], ['l', x + 4.4, y + 7], ['l', x, y - 1], ['l', x - 4.4, y + 7], ['h']]);
-  if (kind === 'plus') return obj('plus', [['m', x - 8, y], ['l', x + 8, y], ['m', x, y - 8], ['l', x, y + 8]], 'S', { lw: lw * 1.2 });
-  return dot(x, y, STYLE.dotR * 0.9);
-}
-
-// 八分休止符：一個點拖一筆斜下來，像假名
-function rest8(x, y) {
-  return [dot(x - 6, y, STYLE.dotR * 1.5), obj('rest', [['m', x - 7, y + 4], ['c', x - 1, y + 7, x + 6, y + 4, x + 10, y - 2], ['l', x + 12, y - 1], ['l', x - 2, y + 40], ['l', x - 6, y + 39], ['l', x + 5, y + 7], ['c', x + 1, y + 9, x - 4, y + 9, x - 7, y + 4], ['h']])];
-}
-
-// 一個音：符頭 + 符桿（up=符桿朝上），回傳 [物件, 符桿頂/底端]
-function note(hx, hy, kind, up, len = STYLE.stemLen) {
-  const sx = up ? hx + STYLE.stemDx : hx - STYLE.stemDx, tip = up ? hy - len : hy + len;
-  return [[head(hx, hy, kind), up ? stem(sx, tip, hy - 1) : stem(sx, hy + 1, tip)], sx, tip];
-}
-
-// ---------- 規則：一個字 → 一組零件 ----------
-const pickW = (R, w) => {
-  let t = R() * w.reduce((a, b) => a + b[1], 0);
-  for (const [v, p] of w) if ((t -= p) <= 0) return v;
-  return w[0][0];
-};
-const HEADS = [['fill', 5], ['hollow', 2], ['tri', 1.5], ['x', 1.5]];
-const MARKS = ['accent', 'marcato', 'stacc', 'plus'];
-
-const LAYOUTS = {
-  // 單音：一根符桿，可帶符尾、附點、記號
-  single(R, out) {
-    const up = R() < 0.6, k = pickW(R, HEADS), hx = 44, hy = up ? 76 : 26;
-    const [o, sx, tip] = note(hx, hy, k, up, 3.7 * U);
-    out.push(...o);
-    if (R() < 0.6) out.push(flag(sx + STYLE.stemW * 0.3, tip, up ? 1 : -1));
-    if (R() < 0.45) out.push(dot(hx + STYLE.dotDx, hy - 4));
-    if (R() < 0.6) out.push(mark(MARKS[(R() * 4) | 0], up ? 24 : 66, up ? 22 : 82));
+const BODIES = {
+  figure(R) { // 頭、雙臂、雙腿
+    const o = [];
+    if (R() < 0.7) o.push(DOT(50, 14, 7 + R() * 2));
+    o.push(ARC(36 + R() * 6, 34 + R() * 8, 8 + R() * 8, (R() - 0.5) * 6), ...LEGS(46, 26 + R() * 10, 94));
+    return o;
   },
-  // 兩音連桿：像 ♫，兩根豎一兩道橫
-  pair(R, out) {
-    const up = R() < 0.65, n = R() < 0.55 ? 1 : 2, slope = (R() - 0.5) * 12;
-    const ka = pickW(R, HEADS), kb = R() < 0.6 ? ka : pickW(R, HEADS);
-    const xa = 28, xb = 66, base = up ? 78 : 22;
-    const [oa, sa] = note(xa, base + slope / 2, ka, up, 0), [ob, sb] = note(xb, base - slope / 2, kb, up, 0);
-    out.push(oa[0], ob[0]);
-    const top = up ? 20 : 80, ya = top + slope / 2 * 0.4, yb = top - slope / 2 * 0.4, d = up ? 1 : -1;
-    out.push(up ? stem(sa, ya, base + slope / 2 - 1) : stem(sa, base + slope / 2 + 1, ya));
-    out.push(up ? stem(sb, yb, base - slope / 2 - 1) : stem(sb, base - slope / 2 + 1, yb));
-    for (let i = 0; i < n; i++) out.push(beam(sa - STYLE.stemW / 2, ya + d * (STYLE.beamTh / 2 + i * STYLE.beamGap), sb + STYLE.stemW / 2, yb + d * (STYLE.beamTh / 2 + i * STYLE.beamGap)));
-    if (R() < 0.35) out.push(mark(MARKS[(R() * 4) | 0], xa, up ? 92 : 8));
+  gate(R) { // 一道拱、兩柱
+    const sp = 22 + R() * 6, o = [ARC(22, 42, 9 + R() * 5), V(50 - sp, 26, 94, -1), V(50 + sp, 26, 94, 1)];
+    if (R() < 0.5) o.push(DOT(50, 60, 6));
+    return o;
   },
-  // 冖：上面一道連桿兩端垂下，底下放一個小結構
-  roof(R, out) {
-    const y = 20 + R() * 4, s = (R() - 0.5) * 6;
-    out.push(beam(16, y + s, 84, y - s), stem(19, y + s - 2, y + s + 15), stem(81, y - s - 2, y - s + 15));
-    const sub = (R() * 4) | 0;
-    if (sub === 0) {
-      // 三顆符頭排成品字
-      const k = pickW(R, HEADS);
-      out.push(head(50, 46, k), head(33, 74, R() < 0.5 ? k : 'fill'), head(67, 74, R() < 0.5 ? k : 'fill'));
-    } else if (sub === 1) {
-      const [o] = note(46, 48, pickW(R, HEADS), false, 2.9 * U);
-      out.push(...o);
-      if (R() < 0.6) out.push(dot(46 + STYLE.dotDx, 46));
-    } else if (sub === 2) {
-      out.push(...rest8(50, 44));
-    } else {
-      out.push(beam(30, 52, 70, 52, STYLE.beamTh * 0.8), head(36, 76, pickW(R, HEADS)), head(64, 76, pickW(R, HEADS)));
-    }
+  bowl(R) { // 碗：一道下弧，上面一點或一圈
+    const o = [ARC(70, 40, -(12 + R() * 6))];
+    o.push(R() < 0.5 ? DOT(50, 36, 10) : RING(50, 34, 17));
+    if (R() < 0.3) o.push(D(18, 20, 3, 10), M(D(18, 20, 3, 10)));
+    return o;
   },
-  // 口：一個框，裡面一顆符頭或休止；可以有一豎穿出頭（像「中」）
-  frame(R, out) {
-    const x0 = 22, x1 = 78, y0 = 30 + R() * 6, y1 = 82, through = R() < 0.4;
-    out.push(stem(x0, y0, y1), stem(x1, y0 - 1, y1), beam(x0, y0, x1, y0 - 1), beam(x0 - 1, y1 - 2, x1 + 1, y1 - 2, STYLE.beamTh * 0.8));
-    if (through) out.push(stem(50, 12, y1 - 3), head(36, (y0 + y1) / 2, pickW(R, HEADS)), R() < 0.5 ? dot(64, (y0 + y1) / 2) : mark('accent', 65, (y0 + y1) / 2));
-    else {
-      out.push(head(50, (y0 + y1) / 2, pickW(R, HEADS)));
-      if (R() < 0.7) out.push(mark(MARKS[(R() * 4) | 0], 50, 16));
-    }
+  spine(R) { // 一豎貫穿，一道弧橫過
+    const y = 30 + R() * 16, o = [V(50, 4, 96), ARC(y, 38, R() < 0.6 ? 10 : -10)];
+    if (R() < 0.6) o.push(DOT(25, y + 32, 5), DOT(75, y + 32, 5));
+    return o;
   },
-  // 和弦：一根長豎，符頭左右交錯掛上去（像「彡」穿過「丨」）
-  chord(R, out) {
-    const n = 2 + ((R() * 2) | 0), sx = 52, k = pickW(R, HEADS), up = R() < 0.5;
-    out.push(stem(sx, 14, 88));
-    for (let i = 0; i < n; i++) {
-      const y = 34 + i * (44 / (n - 1 || 1)), left = (i % 2 === 0) !== up;
-      out.push(head(left ? sx - STYLE.stemDx : sx + STYLE.stemDx, y, i === n - 1 ? k : 'fill'));
-    }
-    if (R() < 0.5) out.push(flag(sx + STYLE.stemW * 0.3, 14));
+  ring(R) { // 圓相，下面一豎或一弧
+    return [RING(50, 40, 24), R() < 0.5 ? V(50, 66, 98) : ARC(88, 34, -6)];
   },
-  // 震音：一根豎被兩三道斜槓劃過（像「手」「丰」）
-  tremolo(R, out) {
-    const n = 2 + ((R() * 2) | 0), up = R() < 0.7, k = pickW(R, HEADS);
-    const [o, sx] = note(42, up ? 80 : 22, k, up, 4.1 * U);
-    out.push(...o);
-    const yc = up ? 44 : 58;
-    for (let i = 0; i < n; i++) {
-      const y = yc + (i - (n - 1) / 2) * STYLE.beamGap * 1.25;
-      out.push(beam(sx - 15, y + 4, sx + 15, y - 4, STYLE.beamTh * 0.85));
-    }
-    if (R() < 0.4) out.push(mark(MARKS[(R() * 4) | 0], 76, up ? 80 : 22));
+  stack(R) { // 兩道弧，中間一點
+    const o = [ARC(30, 30 + R() * 8, 8), ARC(70, 40 + R() * 4, R() < 0.5 ? -10 : 9)];
+    if (R() < 0.6) o.push(DOT(50, 50, 5.5));
+    return o;
   },
-  // 上下兩層：上面記號，中間一橫，下面兩顆符頭
-  stack(R, out) {
-    out.push(mark(R() < 0.5 ? 'marcato' : 'plus', 50, 17));
-    out.push(beam(16, 36, 84, 34));
-    if (R() < 0.5) {
-      out.push(head(32, 64, pickW(R, HEADS)), head(68, 64, pickW(R, HEADS)));
-      out.push(obj('staff', [['m', 14, 64], ['l', 86, 64]], 'S', { lw: STYLE.markLw * 0.6 }));
-    } else {
-      const [o, sx, tip] = note(40, 80, pickW(R, HEADS), true, 2.6 * U);
-      out.push(...o);
-      if (R() < 0.6) out.push(flag(sx + STYLE.stemW * 0.3, tip));
-      out.push(dot(74, 76));
-    }
-  },
-  // 單獨的八分休止，旁邊一個附點或記號（像假名）
-  rest(R, out) {
-    out.push(...rest8(46, 30));
-    if (R() < 0.6) out.push(mark(R() < 0.5 ? 'stacc' : 'accent', 76, 26));
-    out.push(beam(22, 86, 78, 84, STYLE.beamTh * 0.7));
+  fork(R) { // 上半一豎，下半分腿
+    const o = [V(50, R() < 0.4 ? 24 : 6, 48), ...LEGS(46, 30 + R() * 6, 94, 1)];
+    if (o[0][1][0][1] > 20) o.push(DOT(50, 10, 6.5));
+    return o;
   },
 };
-const LAYOUT_W = [['single', 3], ['pair', 4], ['roof', 2.5], ['frame', 2], ['chord', 2], ['tremolo', 2], ['stack', 1.5], ['rest', 1]];
+const BODY_W = [['figure', 2], ['gate', 2.5], ['bowl', 2.5], ['spine', 2.5], ['ring', 2], ['stack', 2], ['fork', 1.3]];
+const pickW = (R, w) => { let t = R() * w.reduce((a, b) => a + b[1], 0); for (const [v, p] of w) if ((t -= p) <= 0) return v; return w[0][0]; };
 
-// ---------- 部首 ----------
-// 同部首的字共用同一個零件（燈燭燒烤都帶「火」、茶藥草都帶「艸」），看起來才像一套文字。
-// 部首直接畫在整字的座標上；其餘部分（聲旁）交給 LAYOUTS，縮進剩下的格子。
-const small = (cx, cy, k = 0.62) => {
-  const o = head(cx, cy, 'fill');
-  o.segs = o.segs.map(([op, ...v]) => [op, ...v.map((n, i) => (i % 2 ? cy + (n - cy) * k : cx + (n - cx) * k))]);
-  return o;
-};
-const frameBox = (x0, y0, x1, y1, th = STYLE.beamTh * 0.75) => [stem(x0, y0, y1), stem(x1, y0, y1), beam(x0, y0, x1, y0, th), beam(x0, y1 - th / 2, x1, y1 - th / 2, th)];
-
-const RADICALS = {
-  水: { at: 'left', draw: (o) => o.push(small(14, 20), small(11, 44), beam(5, 88, 29, 62, STYLE.beamTh * 0.8)) },
-  冰: { at: 'left', draw: (o) => o.push(small(14, 32), beam(5, 82, 29, 58, STYLE.beamTh * 0.8)) },
-  火: { at: 'left', draw: (o) => o.push(dot(7, 38), dot(29, 32), stem(18, 18, 66), beam(18, 62, 4, 90, STYLE.beamTh * 0.85)) },
-  魚: { at: 'left', draw: (o) => o.push(mark('marcato', 18, 10), ...frameBox(7, 24, 29, 62), mark('plus', 18, 43), ...[6, 14, 22, 30].map((x) => dot(x, 84))) },
-  米: { at: 'left', draw: (o) => o.push(dot(8, 26), dot(28, 26), beam(4, 46, 32, 46), stem(18, 12, 92), dot(7, 70), dot(29, 70)) },
-  糸: { at: 'left', draw: (o) => o.push(mark('accent', 17, 20), mark('accent', 17, 40), stem(17, 50, 92), dot(6, 78), dot(29, 78)) },
-  玉: { at: 'left', draw: (o) => o.push(beam(5, 22, 31, 22), beam(6, 52, 30, 52), beam(4, 86, 32, 78), stem(18, 22, 82)) },
-  食: { at: 'left', draw: (o) => o.push(mark('marcato', 18, 10), ...frameBox(8, 26, 29, 56), head(18, 41, 'hollow'), stem(9, 56, 92), mark('accent', 25, 78)) },
-  口: { at: 'left', draw: (o) => o.push(...frameBox(7, 36, 29, 70)) },
-  人: { at: 'left', draw: (o) => o.push(beam(27, 10, 6, 46, STYLE.beamTh * 0.85), stem(18, 30, 92)) },
-  手: { at: 'left', draw: (o) => o.push(beam(5, 34, 31, 32), stem(18, 12, 90), beam(4, 74, 31, 58, STYLE.beamTh * 0.8)) },
-  虫: { at: 'left', draw: (o) => o.push(...frameBox(7, 20, 29, 54), stem(18, 10, 76), beam(4, 88, 31, 74, STYLE.beamTh * 0.8), dot(29, 84)) },
-  艸: { at: 'top', draw: (o) => o.push(beam(8, 18, 92, 18, STYLE.beamTh * 0.85), stem(31, 5, 31), stem(69, 5, 31)) },
-  竹: { at: 'top', draw: (o) => { for (const x of [0, 48]) o.push(beam(x + 30, 4, x + 10, 24, STYLE.beamTh * 0.8), beam(x + 22, 13, x + 44, 13, STYLE.beamTh * 0.75), dot(x + 37, 25)); } },
-  宀: { at: 'top', draw: (o) => o.push(mark('marcato', 50, 8), beam(12, 21, 88, 21), stem(14, 19, 32), stem(86, 19, 32)) },
-  灬: { at: 'bottom', draw: (o) => o.push(small(16, 88), small(38, 88), small(62, 88), small(84, 88)) },
-  囗: { at: 'enclose', draw: (o) => o.push(...frameBox(8, 8, 92, 92)) },
-  門: { at: 'enclose', draw: (o) => o.push(...frameBox(8, 8, 36, 32), ...frameBox(64, 8, 92, 32), stem(8, 30, 94), stem(92, 30, 94), flag(92, 94, -1)) },
-};
-// 海市用得到的字。查不到的字由種子決定要不要配一個部首
-const RADICAL_OF = {};
-for (const [r, s] of Object.entries({
-  水: '海湯酒洋港池', 冰: '冰冷', 火: '燭燈烤燒炸炒', 魚: '鮮魷鯛鰻', 米: '料糖粥粉', 糸: '縫線紙', 玉: '玻璃珠', 食: '飯餅館',
-  口: '味喫', 人: '信住', 手: '物', 虫: '蠟', 艸: '茶藥草葫蘆薯花菓', 竹: '籠箱', 宀: '宿', 灬: '煮', 囗: '圖團', 門: '關',
-})) for (const c of s) RADICAL_OF[c] = r;
-const BOX = { left: [26, 0, 104, 100], top: [0, 24, 100, 102], bottom: [0, -6, 100, 76], enclose: [14, 16, 86, 86] };
-
-// 把 0–100 方格裡的零件縮進 [x0, y0, x1, y1]
 function place(list, [x0, y0, x1, y1]) {
   const sx = (x1 - x0) / 100, sy = (y1 - y0) / 100;
-  return list.map((o) => ({ ...o, lw: o.lw * Math.sqrt(sx * sy), segs: o.segs.map(([op, ...v]) => [op, ...v.map((n, i) => (i % 2 ? y0 + n * sy : x0 + n * sx))]) }));
+  return list.map(([k, pts, r]) => [k, pts.map(([x, y]) => [x0 + x * sx, y0 + y * sy]), r && r * Math.sqrt(sx * sy)]);
 }
-const flipX = (list) => list.map((o) => ({ ...o, segs: o.segs.map(([op, ...v]) => [op, ...v.map((n, i) => (i % 2 ? n : 100 - n))]) }));
-// 整字只有一個結構時，單音和休止太空，不用
-const WHOLE_W = LAYOUT_W.filter(([k]) => k !== 'single' && k !== 'rest');
-function part(R, w = LAYOUT_W) {
-  const out = [];
-  LAYOUTS[pickW(R, w)](R, out);
-  return R() < 0.35 ? flipX(out) : out;
+function body(R) {
+  let o = BODIES[pickW(R, BODY_W)](R);
+  if (R() < 0.2) o = o.map(([k, pts, r]) => [k, pts.map(([x, y]) => [x + (y - 50) * 0.12, y]), r]);   // 少數字略斜
+  return o;
 }
 
+// 部首縮成一個記號（一筆或一對點），佔字的一邊；字身縮進其餘的格子
+const MARKS = {
+  水: ['left', () => [['w', [[13, 12], [7, 32], [14, 52], [7, 72], [12, 90]]]]],
+  冰: ['left', () => [D(10, 26, 3, 10), ['w', [[5, 82], [17, 62]]]]],
+  火: ['bottom', () => [DOT(30, 91, 4.8), DOT(70, 91, 4.8)]],
+  魚: ['top', () => [RING(50, 9, 7.5)]],
+  米: ['top', () => [D(36, 1, 3, 11), M(D(36, 1, 3, 11))]],
+  糸: ['left', () => [['f', [[15, 10], [6, 32], [17, 44], [7, 70]]]]],
+  玉: ['left', () => [ARC(38, 9, 2, 0, 12), ARC(62, 9, 2, 0, 12)]],
+  食: ['top', () => [['w', [[50, 0], [36, 15]]], ['w', [[50, 0], [64, 15]]]]],
+  口: ['left', () => [RING(12, 50, 8)]],
+  人: ['left', () => [['w', [[20, 8], [14, 30], [4, 52]]]]],
+  手: ['left', () => [ARC(40, 10, 1, 0, 12), V(12, 18, 84, 0.4)]],
+  虫: ['left', () => [DOT(12, 28, 5), V(12, 42, 88, 0.4)]],
+  艸: ['top', () => [V(34, 0, 15, 0.3), V(66, 0, 15, -0.3)]],
+  竹: ['top', () => [['w', [[42, 0], [30, 15]]], ['w', [[58, 0], [70, 15]]]]],
+  宀: ['top', () => [DOT(50, 7, 5.5)]],
+  囗: ['enclose', () => [RING(50, 50, 45, -2.6, 1.02)]],
+  門: ['enclose', () => [V(9, 4, 96, -0.6), V(91, 4, 96, 0.6)]],
+};
+const RADICAL_OF = {};
+for (const [r, s] of Object.entries({
+  水: '海湯酒洋港池', 冰: '冰冷', 火: '燭燈烤燒炸炒煮', 魚: '鮮魷鯛鰻', 米: '料糖粥粉', 糸: '縫線紙', 玉: '玻璃珠', 食: '飯餅館',
+  口: '味喫', 人: '信住', 手: '物', 虫: '蠟', 艸: '茶藥草葫蘆薯花菓', 竹: '籠箱', 宀: '宿', 囗: '圖團', 門: '關',
+})) for (const c of s) RADICAL_OF[c] = r;
+const AREA = { left: [20, 0, 104, 100], top: [2, 18, 98, 100], bottom: [2, -2, 98, 80], enclose: [22, 24, 78, 80] };
+
 const CACHE = new Map();
-export function glyph(ch) {
-  if (CACHE.has(ch)) return CACHE.get(ch);
-  const R = seeded('海市' + ch), keys = Object.keys(RADICALS);
-  let rad = RADICAL_OF[ch];
-  if (!rad && R() < 0.3) rad = keys[(R() * 12) | 0];          // 只從左邊的部首挑
-  let out;
-  if (rad) {
-    const r = RADICALS[rad];
-    out = [];
-    r.draw(out);
-    out.push(...place(part(R), BOX[r.at]));
-  } else if (R() < 0.65) {
-    // 沒有部首的字：多半拆成左右或上下兩塊，其餘整字一個結構
-    const lr = R() < 0.6;
-    out = [...place(part(R), lr ? [-4, 0, 56, 100] : [0, -6, 100, 54]), ...place(part(R), lr ? [40, 0, 104, 100] : [0, 42, 100, 106])];
-  } else out = part(R, WHOLE_W);
-  CACHE.set(ch, out);
+export function strokes(ch) {
+  const key = ch;
+  if (CACHE.has(key)) return CACHE.get(key);
+  let list;
+  {
+    const R = seeded('海市墨二' + ch), keys = Object.keys(MARKS);
+    let rad = RADICAL_OF[ch];
+    if (!rad && R() < 0.4) rad = keys[(R() * keys.length) | 0];
+    if (rad) {
+      const [at, draw] = MARKS[rad];
+      list = [...draw(), ...place(body(R), AREA[at])];
+    } else list = body(R);
+  }
+  const out = list.map(([k, pts, r]) => build(k, pts, r));
+  CACHE.set(key, out);
   return out;
 }
 
 // ---------- 輸出 ----------
-const f = (n) => +n.toFixed(2);
-export function segsD(segs) {
-  return segs.map(([op, ...v]) => (op === 'h' ? 'Z' : op.toUpperCase() + v.map(f).join(' '))).join('');
+const fx = (n) => +n.toFixed(2);
+const polyD = (poly) => 'M' + poly.map(([x, y]) => `${fx(x)} ${fx(y)}`).join('L') + 'Z';
+
+export function glyphSVG(ch, size = 100, color = '#000') {
+  const d = strokes(ch).map((s) => polyD(s.poly)).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 100 100"><path d="${d}" fill="${color}"/></svg>`;
 }
 
-const PATHS = new Map();
-function paths(ch) {
-  if (!PATHS.has(ch)) PATHS.set(ch, glyph(ch).map((o) => ({ o, p: new Path2D(segsD(o.segs)) })));
-  return PATHS.get(ch);
-}
-
-// size = 方格邊長（px）；(cx, cy) = 方格中心
-export function drawGlyph(g, ch, cx, cy, size, color = '#000') {
-  g.save();
-  g.translate(cx - size / 2, cy - size / 2);
-  g.scale(size / 100, size / 100);
-  g.fillStyle = g.strokeStyle = color;
-  g.lineCap = 'round';
-  g.lineJoin = 'round';
-  for (const { o, p } of paths(ch)) {
-    if (o.paint === 'S') {
-      g.lineWidth = o.lw;
-      g.stroke(p);
-    } else g.fill(p, o.rule);
+// 交接處磨圓：alpha 模糊後再收邊（等於 buffer 開閉運算）
+function roundJoins(c, r) {
+  const g = c.getContext('2d'), W = c.width, Hh = c.height, img = g.getImageData(0, 0, W, Hh), A = new Float32Array(W * Hh);
+  for (let i = 0; i < A.length; i++) A[i] = img.data[i * 4 + 3] / 255;
+  const tmp = new Float32Array(A.length);
+  for (let pass = 0; pass < 2; pass++) {
+    for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) { let s = 0, n = 0; for (let k = -r; k <= r; k++) { const xx = x + k; if (xx >= 0 && xx < W) { s += A[y * W + xx]; n++; } } tmp[y * W + x] = s / n; }
+    for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) { let s = 0, n = 0; for (let k = -r; k <= r; k++) { const yy = y + k; if (yy >= 0 && yy < Hh) { s += tmp[yy * W + x]; n++; } } A[y * W + x] = s / n; }
   }
-  g.restore();
+  for (let i = 0; i < A.length; i++) { img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = 0; img.data[i * 4 + 3] = 255 * smooth(0.3, 0.56, A[i]); }
+  g.putImageData(img, 0, 0);
 }
 
-// 一串字。直排由上往下，橫排由左往右；step 是字距（預設 = size）
-export function drawText(g, text, { x, y, size, vertical = false, step = size, color = '#000' }) {
-  const chars = [...text].filter((c) => c.trim());
-  const n = chars.length, s0 = -((n - 1) * step) / 2;
-  chars.forEach((c, i) => drawGlyph(g, c, vertical ? x : x + s0 + i * step, vertical ? y + s0 + i * step : y, size, color));
+// 刷痕：筆走到後段墨不夠，順著筆勢留下幾道白絲（飛白）。只在楔、肢、捺、折的長筆上
+function dryBrush(g, list, k, R, amount) {
+  g.globalCompositeOperation = 'destination-out';
+  g.lineCap = 'round';
+  for (const s of list) {
+    if (s.kind === 's' || s.len < 20 || R() > 0.6 + amount * 0.4) continue;
+    const N = s.c.length, s0 = 0.3 + R() * 0.3, n = 2 + ((R() * (1 + amount * 4)) | 0);
+    for (let j = 0; j < n; j++) {
+      // 越靠筆尾越寬；靠邊的絲讓筆緣破開
+      const u = (R() * 2 - 1) * 0.42, a = s0 + R() * 0.15, lw0 = (0.06 + R() * 0.08) * BASE_W * k;
+      let pen = false;
+      for (let i = Math.floor(a * N); i < N - 1; i++) {
+        if (R() < 0.05) pen = false;
+        const t = (i / N - a) / (1 - a), p = s.c[i], q = s.nrm[i], off = u * s.w[i];
+        const x = (p[0] + q[0] * off) * k, y = (p[1] + q[1] * off) * k;
+        if (!pen) { g.beginPath(); g.moveTo(x, y); pen = true; continue; }
+        g.lineWidth = lw0 * (0.4 + 1.4 * t * amount);
+        g.lineTo(x, y);
+        g.stroke();
+        g.beginPath();
+        g.moveTo(x, y);
+      }
+    }
+  }
+  g.globalCompositeOperation = 'source-over';
 }
 
-export function textSVG(text, { size = 100, vertical = false, color = '#000' } = {}) {
-  const chars = [...text].filter((c) => c.trim()), n = chars.length;
-  const w = vertical ? size : size * n, h = vertical ? size * n : size, k = size / 100;
-  const body = chars.map((c, i) => {
-    const tx = vertical ? 0 : i * size, ty = vertical ? i * size : 0;
-    const ps = glyph(c).map((o) => (o.paint === 'S'
-      ? `<path d="${segsD(o.segs)}" fill="none" stroke="${color}" stroke-width="${f(o.lw)}" stroke-linecap="round" stroke-linejoin="round"/>`
-      : `<path d="${segsD(o.segs)}" fill="${color}" fill-rule="${o.rule}"/>`));
-    return `<g transform="translate(${tx} ${ty}) scale(${k})">${ps.join('')}</g>`;
-  });
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${body.join('')}</svg>`;
+const MASKS = new Map();
+function mask(ch, px, brush) {
+  const key = [ch, px, brush].join('|');
+  if (MASKS.has(key)) return MASKS.get(key);
+  const c = document.createElement('canvas');
+  c.width = c.height = px;
+  const g = c.getContext('2d'), k = px / 100, list = strokes(ch);
+  g.fillStyle = '#000';
+  for (const s of list) g.fill(new Path2D(polyD(s.poly.map(([x, y]) => [x * k, y * k]))));
+  roundJoins(c, Math.max(1, Math.round(px * 0.009)));
+  if (brush > 0) dryBrush(g, list, k, seeded('刷' + ch), brush);
+  MASKS.set(key, c);
+  return c;
+}
+
+// size = 方格邊長；brush = 刷痕多寡 0–1
+export function drawGlyph(g, ch, cx, cy, size, color = '#000', { brush = 0.6 } = {}) {
+  const px = Math.min(320, Math.max(96, Math.ceil(size * 1.5)));
+  const m = mask(ch, px, brush), t = document.createElement('canvas');
+  t.width = t.height = px;
+  const tg = t.getContext('2d');
+  tg.drawImage(m, 0, 0);
+  tg.globalCompositeOperation = 'source-in';
+  tg.fillStyle = color;
+  tg.fillRect(0, 0, px, px);
+  g.drawImage(t, cx - size / 2, cy - size / 2, size, size);
+}
+
+export function drawText(g, text, { x, y, size, vertical = false, step = size, color = '#000', brush = 0.6 }) {
+  const chars = [...text].filter((c) => c.trim()), s0 = -((chars.length - 1) * step) / 2;
+  chars.forEach((c, i) => drawGlyph(g, c, vertical ? x : x + s0 + i * step, vertical ? y + s0 + i * step : y, size, color, { brush }));
 }
