@@ -15,97 +15,116 @@ export const VENDORS = {
     name: '信差', race: 'dog', look: { hat: 'none', top: 'shirt', topC: 16, bottom: 'pants', botC: 1, outer: 'blazer', outC: 1, neck: 'tie', back: 'satchel', backC: 2 }, postcard: true,
     greet: ['要寄信嗎', '有東西要寄嗎'],
     lines: ['拍一張照片 我幫你寄', '明信片一張 寄哪裡都可以', '今天信好多 腳好痠', '畫廊那邊的信也是我送的', '寄給朋友吧 他們會很開心'],
+    quiet: ['這個時間 信比人多', '人少的時候 我就整理信'],
   },
   fish: {
     name: '魚販', race: 'tails', look: { hat: 'straw', top: 'tank', topC: 16, bottom: 'shorts', botC: 5, outer: 'apron', outC: 19, shoes: 'rainboots', shoeC: 20, neck: 'towel', neckC: 16, back: 'none' },
     greet: ['今天的魚很新鮮喔', '來看看'],
     lines: ['早上剛撈的', '這隻很大吧', '烏賊要不要', '漁夫都把魚賣給我', '不要摸啦 會滑', '收攤前會便宜一點'],
+    quiet: ['早上才會熱鬧啦', '這時候魚也在睡'],
   },
   pigment: {
     name: '顏料攤', race: 'mushroom', look: { hat: 'none', top: 'smock', topC: 10, botC: 5, hand: 'brush', handC: 11 },
     greet: ['要買顏料嗎', '看一下嘛'],
     lines: ['這個藍是石頭磨的', '朱砂很貴喔 一點點就好', '畫廊那邊也跟我買', '磨一罐要磨很久', '白的最好用 什麼都要加一點', '手不要沾到 洗不掉'],
+    quiet: ['人都還沒來', '慢慢挑 沒人跟你搶'],
   },
   bakery: {
     name: '麵包師傅', race: 'bear', look: { hat: 'chef', robe: 4 },
     greet: ['剛出爐的', '好香對不對'],
     lines: ['長桌上的麵包是我烤的', '今天烤太多了', '你看起來很餓', '最後一個了 要不要', '早上四點就起來揉麵', HOST_NAME+'每次都買一大袋'],
+    quiet: ['先烤起來放 等一下人就多了', '現在買最好 還有得挑'],
   },
   candle: {
     name: '蠟燭店', race: 'rabbit', look: { hat: 'none', robe: 6 },
     greet: ['小心火喔', '慢慢看'],
     lines: ['這根可以燒一整晚', '有香味的在這邊', '燈籠裡的蠟燭也是我做的', '風大的時候生意很好', '不要吹 這個不能吹', '顏色是我自己調的'],
+    quiet: ['沒人的時候 火燒得比較直', '安安靜靜的 很好'],
   },
   tea: {
     name: '茶攤', race: 'goat', look: { hat: 'straw', robe: 2 },
     greet: ['喝杯茶再走', '累了吧'],
     lines: ['爬上來很喘吧', '這是山上的草泡的', '慢慢喝 不急', '上面還有很多層喔', '喝完再上去', '我每天都看人爬樓梯'],
+    quiet: ['現在沒什麼人 坐久一點沒關係', '天亮以後就擠不進來了'],
   },
   tailor: {
     name: '裁縫', race: 'fox', look: { hat: 'wizard', hatC: 5, top: 'shirt', topC: 16, outer: 'haori', outC: 3, outC2: 9, bottom: 'hakama', botC: 22, botC2: 9, shoes: 'geta', shoeC: 8, neck: 'none', back: 'none' },
     greet: ['要做衣服嗎', '進來看看'],
     lines: ['你這件袍子不錯', '帽子歪了啦', '這塊布是霧港來的', '袖子是不是太長', '畫廊那面鏡子 我也常去照', '顏色多選幾個也可以'],
+    quiet: ['晚上沒人 剛好趕衣服', '人少 量尺寸比較準'],
   },
   junk: {
     name: '舊貨攤', race: 'bigeye', look: { hat: 'cone', top: 'tank', topC: 16, bottom: 'shorts', botC: 7, shoes: 'odd', neck: 'none', back: 'shell' },
     greet: ['嘰咕 看看', '什麼都有喔'],
     lines: ['這個瓶子裡有信', '靴子 只有一隻', '不知道是什麼 但很便宜', '船上撿到的', '嘰咕 不能退喔', '這個好像會動'],
+    quiet: ['嘰咕 這時候最好挑', '嘰咕 好東西都還在'],
   },
   herbs: {
     name: '藥草攤', race: 'frog', look: { hat: 'sprout', topC: 2, botC: 2, outer: 'mino', shoes: 'geta', shoeC: 2 },
     greet: ['呱 要什麼草', '聞聞看'],
     lines: ['這個治暈船', '泡澡用的', '不要吃那個 那是要燒的', '山上採的 很新鮮', '呱 這個很苦', '睡不著喝這個'],
+    quiet: ['呱 大家都在睡', '呱 晚上採的草比較香'],
   },
   lanterns: {
     name: '燈籠師傅', race: 'cat', look: { hat: 'wizard', hatC: 7, topC: 6, botC: 6, neckC: 14, hand: 'lantern' },
     greet: ['喜歡燈籠嗎', '這條巷子的燈都是我做的'],
     lines: ['紙要糊三層', '紅的最多人買', '掛高一點比較好看', '晚上全部點起來很漂亮', '做壞的都在後面', '貓不怕火啦'],
+    quiet: ['燈都點了 人還沒來', '天快亮的時候最多人'],
   },
   glass: {
     name: '玻璃師傅', race: 'lizard', look: { hat: 'none', clothes: 'suit', robe: 0 },
     greet: ['裡面很熱喔', '小心燙'],
     lines: ['燒瓶要吹很薄', '畫廊裡那些瓶瓶罐罐是我吹的', '我不怕熱', '這顆是失敗的 給你看', '火不能停', '顏色是加礦石'],
+    quiet: ['爐子不能熄 沒人也要顧', '安靜的時候 吹得比較圓'],
   },
   frames: {
     name: '木工', race: 'bull', look: { hat: 'none', clothes: 'tank', robe: 1 },
     greet: ['哞 要框嗎', '木頭很香吧'],
     lines: ['畫廊的框都是我做的', '這塊木頭放了十年', '角要對準 不然會歪', '哞 木屑不要踩', '金色的要另外上', '大幅的框很重'],
+    quiet: ['哞 沒人 可以慢慢刨', '哞 早上才會有人來'],
   },
   maps: {
     name: '航海圖店', race: 'pigeon', look: { hat: 'propeller', robe: 5 },
     greet: ['要去哪裡', '看地圖嗎'],
     lines: ['這張是星圖', '西邊那顆星你看過嗎', '有人把地圖拿反過', '白塔在這裡', '船長都來我這裡買', '咕咕 地圖不要摺'],
+    quiet: ['咕咕 這時候星星最清楚', '咕咕 船都還沒進來'],
   },
   // 小吃推車，id 對應 haishi.js 的 CARTS
   squid: {
     name: '烤魷魚', race: 'hammer', look: { hat: 'none', clothes: 'tank', robe: 1 },
     greet: ['烤魷魚喔', '好香吧'],
     lines: ['一串 剛烤好的', '要辣的嗎', '醬要多刷一點嗎', '煙很大 站旁邊一點', '魚販那邊早上拿的', '烤焦的我自己吃'],
+    quiet: ['烤好了 沒人吃', '等早上的船進來'],
   },
   oden: {
     name: '關東煮', race: 'onigiri', look: { hat: 'none', robe: 2 },
     greet: ['來碗熱的', '自己夾喔'],
     lines: ['蘿蔔最入味', '湯可以續', '這鍋從下午煮到現在', '晚上風大 吃這個剛好', '竹籤放杯子裡就好', '不要問我是不是飯糰'],
+    quiet: ['湯一直滾著 等人', '這時候喝最暖'],
   },
   takoyaki: {
     name: '章魚燒', race: 'egg', look: { hat: 'chef', robe: 4 },
     greet: ['章魚燒 一盒六顆', '等一下 在翻'],
     lines: ['裡面很燙 小心', '柴魚會跳喔', '翻這個要練很久', '章魚是一大塊的', '美乃滋要多嗎', '我不會被翻啦'],
+    quiet: ['先翻著 等等就有人了', '現在不用排隊喔'],
   },
   tanghulu: {
     name: '糖葫蘆', race: 'boba', look: { hat: 'party', robe: 6 },
     greet: ['要不要糖葫蘆', '一支就好'],
     lines: ['紅的是山楂 很酸', '番茄的也有', '糖剛熬好 很脆', '黏到手很正常', '小朋友都挑草莓的', '咬下去會碎 用手接著'],
+    quiet: ['糖還熱著 沒人來', '天亮小朋友就來了'],
   },
   baozi: {
     name: '包子', race: 'snowman', look: { hat: 'none', robe: 0 },
     greet: ['包子 剛蒸好', '肉包還有'],
     lines: ['好熱 我快化了', '蒸籠我來掀', '菜包賣完了', '一顆很大 兩顆會飽', '燙嘴喔 吹一下', '每天站在蒸籠旁邊 很拚的'],
+    quiet: ['蒸籠開著 人還沒到', '這時候比較涼 我很喜歡'],
   },
   potato: {
     name: '烤番薯', race: 'potato', look: { hat: 'straw', robe: 3 },
     greet: ['番薯 熱的', '來一條'],
     lines: ['不要看我 看番薯', '這個很甜 會流蜜', '石頭甕慢慢烤的', '我們不是親戚', '剝皮小心燙', '冷的時候最好賣'],
+    quiet: ['番薯慢慢烤 不急', '人少的時候番薯比較甜 真的'],
   },
 };
 
@@ -161,6 +180,11 @@ class Vendor {
       this.onGift?.(g);
       return;
     }
+    // 街上冷清的時候（海市的人潮跟一般夜市反過來，晚上最冷清），有一半的機會講冷清時的話
+    if (this.spec.quiet && this.quiet?.() && Math.random() < 0.5) {
+      this.say(pick(this.spec.quiet));
+      return;
+    }
     if (!this.bag.length) this.bag = [...this.spec.lines].sort(() => Math.random() - 0.5);
     this.say(this.bag.pop());
     if (this.spec.postcard) setTimeout(() => this.onPostcard?.(), 1200);
@@ -203,6 +227,11 @@ export class Vendors {
   constructor({ scene, shadowTex, spots, onPostcard, onGift }) {
     this.list = spots.filter((s) => VENDORS[s.id]).map((s, i) => new Vendor(scene, shadowTex, s, VENDORS[s.id], i, onPostcard, onGift));
     this.mp = null;
+  }
+
+  // 街上冷不冷清由路人那邊決定（passersby.js）
+  setQuiet(fn) {
+    for (const v of this.list) v.quiet = fn;
   }
 
   nearest(x, z) {

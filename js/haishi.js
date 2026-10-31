@@ -307,6 +307,7 @@ function signTexture(text) {
 export function buildHaishi(scene, { coarse = false } = {}) {
   const R = rng('haishi'), k = new Kit(R), bucket = newBucket();
   const group = new THREE.Group(), obstacles = [], solids = [], rails = [];
+  const doors = [];   // 住家的門口（世界座標），路人從這裡進出
   const solid = (x0, x1, z0, z1, top, ground = false) => solids.push({ x0, x1, z0, z1, top, ground });
   const pick = (arr) => arr[Math.floor(R() * arr.length)];
   // 擋住視線時會淡掉的東西，一組一組登記（見 fade.js）
@@ -487,6 +488,8 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       const dk = w > 2.4 && R() < 0.12 ? 'moon' : R() < 0.6 ? 'lit' : 'plank';
       const dx = -w / 2 + sw * (ds + 0.5) + (R() - 0.5) * sw * 0.25;
       const dw = doorway(hk, dk, dx, y0, fz, hand, h1 - 0.3);
+      const [ex, ez] = world(dx, fz + 0.6);
+      doors.push({ x: ex, z: ez, y: y0 });
       const kind = pick(['grid', 'grid', 'grid', 'slit', 'round']);
       for (let i = 0; i < slots; i++) {
         if (i === ds || R() < 0.25) continue;
@@ -1758,6 +1761,16 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       return (a && PLACES[a.street ?? a.id]) || null;
     },
     walkable, findWalkable, findPath, groundY, camFloor, camClip,
+    // 路人用的地點（passersby.js）：門口、港口上下船的地方、看風景的地方、攤位和推車前面客人站的位置。
+    // heading 是站在那裡時面向哪裡（0 朝南）
+    crowdSpots: {
+      // 門口往後退的房子，門前那一點可能貼著路邊站不住，往外找最近站得住的地方
+      doors: doors.map((d) => ({ ...d, ...findWalkable(d.x, d.z, d.x, d.z) })).filter((d) => d.x != null && walkable(d.x, d.z)),
+      harbor: [{ id: 'ferry', x: 11.5, z: 19.5 }, { id: 'pier', x: 0, z: 25.5 }, { id: 'fp1', x: -23.5, z: 15.5 }, { id: 'fp2', x: -18.5, z: 14.5 }],
+      views: [{ x: -25, z: -56.5, heading: 0 }, { x: -28, z: 24.5, heading: 0 }, { x: -9, z: -43, heading: 0 }, { x: -3, z: 11, heading: 0 }, { x: 11.5, z: -2, heading: 0 }, { x: -21.8, z: -3.6, heading: Math.PI }],
+      shops: SHOPS.map((s) => ({ id: s.id, ...shops.find((v) => v.id === s.id) })).map((v) => ({ id: v.id, x: v.x, z: v.z + 1.9, heading: Math.PI })),
+      carts: CARTS.map((c) => ({ id: c.id, food: c.food, x: c.x + Math.sin(c.ry) * 1.4, z: c.z + Math.cos(c.ry) * 1.4, heading: c.ry + Math.PI })),
+    },
     setCurrentRoom() {},
     // 測試用：地形高度、房子和石台的範圍、欄杆、擋路的東西（tools/check-haishi.mjs）
     debug: { terrain, solids, areas: AREAS, rails, obstacles },

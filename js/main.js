@@ -247,6 +247,9 @@ async function start() {
     },
     onDirector(on) {
       showDirector(on);
+      directorBtn.classList.remove('clap');
+      void directorBtn.offsetWidth;
+      if (on) directorBtn.classList.add('clap');
       try { localStorage.setItem('director', on ? '1' : '0'); } catch {}
       ui.hint(on ? '導演運鏡　鏡頭跟著你走' : '自由鏡頭　視角自己轉', 2000);
       lastInput = performance.now();
@@ -269,7 +272,7 @@ async function start() {
   });
   scene.add(player.marker);
   // 動物和不定期搭船來看畫的冒險者在畫廊那一區，海市有攤販
-  let animals = null, visitors = null, vendors = null;
+  let animals = null, visitors = null, vendors = null, passers = null;
   if (!town) {
     animals = new Animals({ world, shadowTex, player, camera, ambience });
     visitors = new Visitors({ scene, world, shadowTex, player, camera, host, animals, force: params.get('visit') });
@@ -282,6 +285,10 @@ async function start() {
       // 攤販送東西：記在這台裝置上，回畫廊照鏡子就能穿戴
       onGift: (g) => ui.toast('收到' + g.items.map(([k, id]) => optionName(k, id)).join('、'), '回畫廊照鏡子就能穿上'),
     });
+    // 不說話的路人：人多人少跟著台灣時間走，跟一般夜市反過來。?crowd=0.8 可以指定人潮
+    const { Passersby } = await import('./passersby.js');
+    passers = new Passersby({ scene, world, shadowTex, coarse, force: params.get('crowd') });
+    vendors.setQuiet(() => passers.busy < 0.2);
   }
   const crowd = visitors || vendors;
   player.animals = animals;
@@ -459,7 +466,7 @@ async function start() {
   });
   document.getElementById('photo-btn').addEventListener('click', () => photo.enter());
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals, visitors, vendors, quality, host, photo };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals, visitors, vendors, passers, quality, host, photo };
   const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
@@ -598,6 +605,7 @@ async function start() {
     animals?.update(dt);
     visitors?.update(dt);
     vendors?.update(dt, player, camera);
+    passers?.update(dt, player);
     manatee?.update(dt, player.pos.x, player.pos.z, camera);
     const othersMoving = mp ? mp.update(dt, performance.now()) : false;
     const fading = updateMirrorFade(dt);
