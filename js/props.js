@@ -13,12 +13,16 @@ export function rng(seed) {
     h = (h << 13) | (h >>> 19);
   }
   let a = h >>> 0;
-  return () => {
+  const a0 = a;
+  const R = () => {
     a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+  // 跳到抽完第 n 次的位置：前面多抽、少抽幾次都沒關係，接下來抽到的數字照舊
+  R.at = (n) => { a = (a0 + Math.imul(n, 0x6d2b79f5)) | 0; };
+  return R;
 }
 
 const pick = (R, arr) => arr[Math.floor(R() * arr.length)];

@@ -13,6 +13,7 @@ import { hull, towerPhase, bump } from './harbor.js';
 import { addRoof, roofGeo, Signs } from './eaves.js';
 import { yatai } from './yatai.js';
 import { mist, smoke, pools, ripples } from './haze.js';
+import { skyLanterns, seaGlints, meteor } from './distant.js';
 import { Fader } from './fade.js';
 import { drawText } from './glyphs.js';
 import { paving, PAVES, BED } from './pave.js';
@@ -80,15 +81,26 @@ const AREAS = [
   { id: 'sEa', x0: 4.5, x1: 10, z0: -4.2, z1: -1.8, lo: 2.4, hi: 4.8, dir: 'e' },
   { id: 'bend3', x0: 10, x1: 13, z0: -6, z1: -1, y: 4.8 },
   { id: 'sEb', x0: 10.4, x1: 12.6, z0: -10, z1: -6, lo: 4.8, hi: 7.2, dir: 'n' },
+  // 後來改地圖加的（added）一律排在最後：前面每一塊鋪石板、圍欄杆抽到的亂數都不變；霧和天燈也只看原本的街
+  // 下街中段南邊的眺台：原本崖邊一排房子拆掉，空出來接到下街的小廣場，越過牌樓的屋頂看得到整片港。
+  // view：不排房子、不拉燈籠串。東頭一小段坡，跟北邊的坡道一起接上東段
+  { id: 'lowerV', street: 'lower', x0: -6, x1: 4, z0: -11.5, z1: -9.4, y: 6.8, view: true, added: true },
+  { id: 'lowerVR', street: 'lower', x0: 4, x1: 5.5, z0: -11.5, z1: -9.4, lo: 6.8, hi: 7.2, dir: 'e', slope: true, view: true, added: true },
+  // 漁港的岸壁往海裡補到跟碼頭前緣齊，沿著水邊從碼頭走得到第三道小棧橋
+  { id: 'apron', x0: -12.8, x1: -8, z0: 9, z1: 12, y: 0, added: true },
 ];
 for (const a of AREAS) if (a.y == null) a.n = Math.round((a.hi - a.lo) / RISE);
 const AREA = Object.fromEntries(AREAS.map((a) => [a.id, a]));
+// 改地圖之前就有的路面：灌木、霧、街上的暖霧、天燈只照這些放，位置才跟原本一樣
+const ORIGINAL = AREAS.filter((a) => !a.added);
 
 // 走進去時報的地名。碼頭不報，剛下船時畫面上已經是「海市」。
 // 同一個地名跨兩塊地的要共用同一個物件，在兩塊之間走來走去才不會一直報
 const TRAIECTUS = { name: '渡船口', subtitle: 'Traiectus' };
+const PORTUS = { name: '漁港', subtitle: 'Portus' };
 const PLACES = {
-  wharfW: { name: '漁港', subtitle: 'Portus' },
+  wharfW: PORTUS,
+  apron: PORTUS,
   mole: { name: '防波堤', subtitle: 'Moles' },
   wharfE: TRAIECTUS,
   ferry: TRAIECTUS,
@@ -331,6 +343,9 @@ function signTexture(text) {
 
 export function buildHaishi(scene, { coarse = false } = {}) {
   const R = rng('haishi'), k = new Kit(R), bucket = newBucket();
+  // 亂數一路接著抽，前面多抽少抽一次，後面的房子就整排換樣子。拆改過的地方之後用 R.at 跳回改之前抽到的位置，
+  // 其他地方才跟原本一模一樣。數字是改之前量的：下街崖邊那排房子蓋完、欄杆圍完
+  const SEEK = { cliff: 2945, rails: 4434 };
   const group = new THREE.Group(), obstacles = [], solids = [], rails = [];
   const doors = [];   // 住家的門口（世界座標），路人從這裡進出
   const solid = (x0, x1, z0, z1, top, ground = false) => solids.push({ x0, x1, z0, z1, top, ground });
@@ -680,16 +695,6 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       house({ x: (l.x0 + l.x1) / 2, z: zf - d / 2, w: l.x1 - l.x0 - 0.08, d, y0: a.y, h, ground: groundUnder(l.x0, l.x1, back, zf), shop: l.shop, back: by });
     }
   };
-  // 街道南邊的崖邊也長出房子：前門朝街，後面一路砌到坡底
-  const perch = (a, x0, x1, y = a.y) => {
-    for (let x = x0; x1 - x > 0.9;) {
-      let w = 2 + R() * 1.8;
-      if (x1 - x - w < 1.4) w = x1 - x;
-      const d = 2.2 + R() * 0.4, zf = a.z1 + 0.05;
-      house({ x: x + w / 2, z: zf + d / 2, w: w - 0.08, d, y0: y, h: 2.6 + R() * 1.6, rot: Math.PI, ground: groundUnder(x, x + w, zf, zf + d), shop: false });
-      x += w;
-    }
-  };
   // 塔：方形的樓閣，一層一層往上收，每層翹角的屋簷四角掛燈籠，頂上一根金色的塔剎
   const tower = (x, z, r, y0, h) => {
     const tk = new Kit(R), tile = pick(TILES), ground = groundUnder(x - r, x + r, z - r, z + r);
@@ -834,15 +839,16 @@ export function buildHaishi(scene, { coarse = false } = {}) {
 
     k.rock(r, '#4e4a4a', x, y, z, { sy: 0.6, ry, color2: '#6a625c', ao: false });
   }
-  for (const [x, z, s] of [[-7.1, 10.6, 0.7], [-6.4, 10.9, 0.55], [-7.0, 9.9, 0.5], [6.9, 10.4, 0.65]]) {
+  // 西邊三個堆在漁港補出來那塊岸壁的角落，碼頭往西的路空出來
+  for (const [x, z, s] of [[-12.25, 9.55, 0.7], [-11.55, 9.45, 0.55], [-12.2, 10.3, 0.5], [6.9, 10.4, 0.65]]) {
     k.box(s, s, s, '#7a5a3a', x, s / 2, z, { ry: R() * 0.6, color2: '#9a7a52' });
     obstacles.push({ x, z, hw: s * 0.6, hd: s * 0.6 });
   }
 
   // ---------- 欄杆 ----------
-  // 碼頭靠海的三邊不圍欄杆，只壓一道深色的邊石，跟兩邊的岸壁一樣
-  for (const [x0, x1] of [[-8, -1.2], [1.2, 8]]) k.box(x1 - x0, 0.1, 0.22, '#4a4a50', (x0 + x1) / 2, 0.05, 11.89);
-  for (const sx of [-1, 1]) k.box(0.22, 0.1, 3, '#4a4a50', sx * 7.89, 0.05, 10.5);
+  // 碼頭靠海的三邊不圍欄杆，只壓一道深色的邊石，跟兩邊的岸壁一樣。西邊接著漁港補出來的岸壁，前緣一路壓過去
+  for (const [x0, x1] of [[-12.8, -1.2], [1.2, 8]]) k.box(x1 - x0, 0.1, 0.22, '#4a4a50', (x0 + x1) / 2, 0.05, 11.89);
+  k.box(0.22, 0.1, 3, '#4a4a50', 7.89, 0.05, 10.5);
   rail(-2.1, 5.05, -1.45, 5.05, 0); rail(1.45, 5.05, 2.1, 5.05, 0);
 
   // ---------- 牌樓：碼頭石階的頂端，掛著「海市」 ----------
@@ -885,10 +891,10 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   }
   // 下街、燈巷、工坊街、星台：每一段靠山那一側一排，背面接上一層的街
   for (const [street, up] of [['lower', 'lantern'], ['lantern', 'upper'], ['upper', 'specula'], ['specula', null]]) {
-    for (const a of AREAS.filter((b) => streetOf(b) === street && b.y != null)) frontage(a, up);
+    for (const a of AREAS.filter((b) => streetOf(b) === street && b.y != null && !b.view)) frontage(a, up);
   }
-  // 下街中段的南邊是崖，崖邊也長了一排房子，前門朝廣場，後牆一路砌到牌樓後面
-  perch(AREA.lowerB, -5.6, 5.5);
+  // 下街中段的南邊原本是一排崖邊的房子，拆掉改成眺台（AREAS 的 lowerV），欄杆在後面自動圍
+  R.at(SEEK.cliff);
   // 街的兩頭：塔、側著開門的房子
   tower(-18, -12.4, 1.7, 6.8, 6.8);
   tower(16.2, -12.6, 1.6, 7.2, 5.6);
@@ -1042,10 +1048,18 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   string(-7.75, 9.1, 7.75, 9.1, 3.7, 1.6);
   // 鎮上：每一段街的上空斜斜地來回拉，寬的地方再橫拉一條
   for (const a of AREAS) {
-    if (a.y == null || !a.street) continue;
+    if (a.y == null || !a.street || a.view) continue;
     const y = a.y + 2.9;
     for (let x = a.x0 + 0.4; x < a.x1 - 1.2; x += 3 + R() * 1.2) string(x, a.z1 - 0.4, Math.min(a.x1 - 0.3, x + 3.2), a.z0 + 0.7, y + R() * 0.3, 1.25);
     if (a.z1 - a.z0 > 5.5) string(a.x0 + 0.3, (a.z0 + a.z1) / 2, a.x1 - 0.3, (a.z0 + a.z1) / 2 + (R() - 0.5), y + 0.45, 1.6);
+  }
+  // 眺台：靠崖那一邊兩頭各一根燈柱，跟星台的一樣。中間不放燈，往港口看出去是暗的
+  for (const x of [AREA.lowerV.x0 + 0.5, AREA.lowerV.x1 - 0.5]) {
+    const z = AREA.lowerV.z1 - 0.55, y = AREA.lowerV.y;
+    k.box(0.12, 2.2, 0.12, DARK, x, y + 1.1, z);
+    lantern(k, x, y + 2.0, z, 0.9);
+    k.pool(x, y, z - 0.6, 2.0, '#ffa060', 0.26);
+    obstacles.push({ x, z, hw: 0.12, hd: 0.12 });
   }
   // 星台四角的燈柱
   const SP = AREA.specula;
@@ -1137,7 +1151,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     const vk = new Kit(R), vb = newBucket(), g = new THREE.Group();
     build(vk);
     vk.emit(vb, 0, 0, 0);
-    for (const o of bucketObjects(vb)) g.add(o);
+    for (const o of bucketObjects(vb, false, null, true)) g.add(o);
     g.rotation.order = 'YXZ';
     group.add(g);
     return g;
@@ -1160,14 +1174,15 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     shimmerMore.push({ x: a.x1 - 0.1, z: a.z1 + 0.3, w: 0.3, l: 3 + R() * 1.5, color: '#ff7a40', a: 0.5 });
   }
 
-  // 岸壁：靠海的邊上一道深色的壓邊石，一排繫船柱和燈柱，燈柱之間拉燈籠串
-  for (const [x0, x1] of [[-27, -24.2], [-22.8, -19.2], [-17.8, -14.2], [-12.8, -8], [8, 10], [13, 15]]) {
+  // 岸壁：靠海的邊上一道深色的壓邊石，一排繫船柱和燈柱，燈柱之間拉燈籠串。
+  // 第三道小棧橋東邊那段岸壁往前補到碼頭前緣（z = 12），那裡的繫船柱和燈柱跟著站到前緣，燈籠串斜斜拉過去
+  for (const [x0, x1] of [[-27, -24.2], [-22.8, -19.2], [-17.8, -14.2], [8, 10], [13, 15]]) {
     k.box(x1 - x0, 0.1, 0.22, '#4a4a50', (x0 + x1) / 2, 0.05, 8.89);
   }
-  for (const x of [-25.6, -21.2, -16.0, -11.6, 9.3, 14.2]) bollard(x, 8.78);
-  const lampsW = [-26.4, -20.6, -15.2, -9.6], lampsE = [8.6, 14.6];
-  for (const x of [...lampsW, ...lampsE]) quayLamp(x, 8.84);
-  for (let i = 0; i < lampsW.length - 1; i++) string(lampsW[i], 8.84, lampsW[i + 1], 8.84, 2.5, 1.4);
+  for (const [x, z] of [[-25.6, 8.78], [-21.2, 8.78], [-16.0, 8.78], [-11.6, 11.78], [9.3, 8.78], [14.2, 8.78]]) bollard(x, z);
+  const lampsW = [[-26.4, 8.84], [-20.6, 8.84], [-15.2, 8.84], [-10.4, 11.84]], lampsE = [[8.6, 8.84], [14.6, 8.84]];
+  for (const [x, z] of [...lampsW, ...lampsE]) quayLamp(x, z);
+  for (let i = 0; i < lampsW.length - 1; i++) string(...lampsW[i], ...lampsW[i + 1], 2.5, 1.4);
 
   // 倉庫：石砌牆腳，下半截黑色雨淋板，上半截白灰牆，大門上一道小披簷，正面掛屋號。
   // zf 是正面的 z，房子往北長 d。open 的大門開著，裡面亮燈、堆著貨
@@ -1358,7 +1373,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
 
   // ---------- 欄杆：自動圍 ----------
   // 每塊路面的四邊掃一遍：外面接著別的路就不圍，有房子、石階的矮牆擋著也不圍，外面往下掉才圍。
-  // 港邊（高度 0）一律不圍。石階兩側本來就有矮牆，坡道照平均高度圍
+  // 港邊（高度 0）一律不圍。石階兩側本來就有矮牆；坡道切成一小截一小截，每截照那裡的坡面高度，不會一頭浮起來一頭埋進去
   for (const a of AREAS) {
     if (a.lo != null && !a.slope) continue;
     const y = a.y ?? (a.lo + a.hi) / 2;
@@ -1373,12 +1388,17 @@ export function buildHaishi(scene, { coarse = false } = {}) {
         const need = i < n && !open && !walled && groundY(ox, oz) < y - 0.8;
         if (need && start < 0) start = t;
         if (!need && start >= 0) {
-          rail(...pt(start), ...pt(t), y);
+          const m = a.slope ? Math.ceil(((t - start) * Math.hypot(bx - ax, bz - az)) / 0.5) : 1;
+          for (let j = 0; j < m; j++) {
+            const t0 = start + ((t - start) * j) / m, t1 = start + ((t - start) * (j + 1)) / m, [mx, mz] = pt((t0 + t1) / 2);
+            rail(...pt(t0), ...pt(t1), a.slope ? heightIn(a, mx, mz) : y);
+          }
           start = -1;
         }
       }
     }
   }
+  R.at(SEEK.rails);
 
   // ---------- 船 ----------
   // 漁船：船身中段一頂竹蓆篷，船尾一盞紙燈籠；船頭伸出一根竿子，吊著燒柴的鐵火籠，夜裡用火光引魚
@@ -1396,7 +1416,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     vk.rock(0.15, '#ff4a12', 0, fy + 0.08, fz, { glow: true, sy: 1.3, color2: '#ffa030' });
     vk.light(0, fy + 0.1, fz, '#ff8a3a', 1.3);
   };
-  for (const [x, z, len, beam, color, ph] of [[-25.6, 13, 5, 1.5, '#2a4a6a', 0], [-21.95, 13.5, 4.6, 1.45, '#8a2a22', 1.7], [-20.05, 12.4, 4.2, 1.4, '#2a5a4a', 3.1], [-11.9, 12.6, 4.8, 1.5, '#e0d8c8', 4.4]]) {
+  for (const [x, z, len, beam, color, ph] of [[-25.6, 13, 5, 1.5, '#2a4a6a', 0], [-21.95, 13.5, 4.6, 1.45, '#8a2a22', 1.7], [-20.05, 12.4, 4.2, 1.4, '#2a5a4a', 3.1], [-11.9, 14.6, 4.8, 1.5, '#e0d8c8', 4.4]]) {
     const g = vessel((vk) => fishingBoat(vk, len, beam, color));
     g.position.set(x, SEA + 0.45, z);
     g.rotation.y = R() < 0.5 ? 0 : Math.PI;
@@ -1560,11 +1580,11 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   }
 
   // ---------- 山坡上的灌木和小花；兩側和後面的山上有樹和人家 ----------
-  const inArea = (x, z, pad) => AREAS.some((a) => x > a.x0 - pad && x < a.x1 + pad && z > a.z0 - pad && z < a.z1 + pad);
+  const inArea = (x, z, pad, list = AREAS) => list.some((a) => x > a.x0 - pad && x < a.x1 + pad && z > a.z0 - pad && z < a.z1 + pad);
   const inSolid = (x, z) => solids.some((b) => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1);
   for (let i = 0; i < (coarse ? 260 : 420); i++) {
     const x = TOWN_X0 + R() * (TOWN_X1 - TOWN_X0), z = 4 - R() * 68, y = terrain(x, z);
-    if (y < SEA + 0.2 || inArea(x, z, 0.7) || inSolid(x, z)) continue;
+    if (y < SEA + 0.2 || inArea(x, z, 0.7, ORIGINAL) || inSolid(x, z)) continue;
     const r = 0.35 + R() * 0.6;
     k.rock(r, pick(['#2e4a3a', '#3a5a3e', '#2a4440', '#44583a']), x, y + r * 0.4, z, { sy: 0.75, ao: false });
     if (R() < 0.35) for (let f = 0; f < 4; f++) k.rock(0.06, pick(['#f0a0b8', '#f8f0d8', '#f0d060', '#b8a0f0']), x + (R() - 0.5) * r * 1.4, y + r * 0.75, z + (R() - 0.5) * r * 1.4, { ao: false });
@@ -1660,7 +1680,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   fader.tag(bucket.lit);
   fader.tag(bucket.glow);
   fader.build();
-  const meshes = bucketObjects(bucket, false, floorBelow);
+  const meshes = bucketObjects(bucket, false, floorBelow, true);
   for (const o of meshes) {
     if (o.isMesh) o.material = fader.patch(o.material);
     group.add(o);
@@ -1673,14 +1693,14 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   // ---------- 霧：夾在層與層之間，鎮子兩側的山谷裡也有；街道上方也飄幾團，在屋頂之間 ----------
   const MR = rng('haishi-mist'), mists = [];
   for (let i = 0; mists.length < (coarse ? 20 : 36) && i < 600; i++) {
-    const x = TOWN_X0 - 4 + MR() * (TOWN_X1 - TOWN_X0 + 8), z = 6 - MR() * 70, over = inArea(x, z, 1.5);
+    const x = TOWN_X0 - 4 + MR() * (TOWN_X1 - TOWN_X0 + 8), z = 6 - MR() * 70, over = inArea(x, z, 1.5, ORIGINAL);
     if (over && MR() < 0.6) continue;
     mists.push({ x, y: tz(z) + (over ? 5 + MR() * 3 : 1.5 + MR() * 3.5), z, s: 9 + MR() * 9, p: MR() * 10 });
   }
   group.add(mist(mists, { color: '#8e98b0' }));   // 藍灰白的霧，不要偏紫
   // 每條街上方一層被燈籠照暖的霧，從海上遠遠看，一層一層的街都在發光
   const glow = [];
-  const glowRows = [[-6, 6, 8.5, 0], [-25, -10, 7, 0], [9, 14, 7, 0], [-3, 3, -2.8, 2.4], ...AREAS.filter((a) => a.street && a.y != null && a.y > 5 && a.y < 13).map((a) => [a.x0 + 1, a.x1 - 1, (a.z0 + a.z1) / 2, a.y])];
+  const glowRows = [[-6, 6, 8.5, 0], [-25, -10, 7, 0], [9, 14, 7, 0], [-3, 3, -2.8, 2.4], ...ORIGINAL.filter((a) => a.street && a.y != null && a.y > 5 && a.y < 13).map((a) => [a.x0 + 1, a.x1 - 1, (a.z0 + a.z1) / 2, a.y])];
   for (const [x0, x1, z, y] of glowRows) {
     for (let x = x0; x <= x1; x += 5) glow.push({ x: x + (MR() - 0.5) * 2, y: y + 3.4 + MR(), z: z + (MR() - 0.5) * 2, s: 8 + MR() * 4, p: MR() * 10 });
   }
@@ -1690,6 +1710,21 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   for (let x = -7.5; x <= 7.5; x += 1.5) if (Math.abs(x) > 1.5) shimmer.push({ x: x + (MR() - 0.5) * 0.4, z: 12.2, w: 0.35, l: 4 + MR() * 3, color: '#ff7a40', a: 0.5 });
   for (const z of [16, 22, 29.6]) for (const sx of [-1, 1]) shimmer.push({ x: sx * 1.5, z: z + 0.1, w: 0.3, l: 3 + MR() * 1.5, color: '#ff7a40', a: 0.55 });
   group.add(ripples(shimmer.concat(shimmerMore), SEA));
+  // 天燈：從幾條街的正中間升起，屋頂擋不到
+  const LR = rng('haishi-sky-lanterns'), streets = ORIGINAL.filter((a) => a.street && a.y != null), launch = [];
+  for (let i = 0; i < (coarse ? 8 : 14); i++) {
+    const a = streets[Math.floor(LR() * streets.length)];
+    launch.push({ x: a.x0 + (0.3 + LR() * 0.4) * (a.x1 - a.x0), y: a.y + 2.5, z: (a.z0 + a.z1) / 2 });
+  }
+  group.add(skyLanterns(launch, LR));
+  // 海面的碎光：越靠岸越密，地形高過海面的地方不放
+  const GR = rng('haishi-glints'), glints = [];
+  for (let i = 0; glints.length < (coarse ? 360 : 600) && i < 3000; i++) {
+    const x = (GR() - 0.5) * 140, z = 12.5 + Math.pow(GR(), 1.6) * 130;
+    if (terrain(x, z) > SEA - 0.05) continue;
+    glints.push({ x, y: SEA + 0.06, z, color: Math.abs(x) < 14 && z < 45 && GR() < 0.5 ? '#ffb070' : '#b8ccff' });
+  }
+  group.add(seaGlints(glints, GR));
 
   // ---------- 海和天 ----------
   // 海是暗的藍灰，不是黑的，也不是飽和的深藍：夜色映在水上，燈影才有東西可以浮在上面
@@ -1701,7 +1736,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   // 月光幾乎是中性的灰，藍色留給空氣（霧和天空）：牆、瓦、石階才是灰的，燈照到的地方才是暖的，不會疊成紫紅
   const env = { bg: 0x4b5574, near: 32, far: 200, sky: 0xb4b8c8, ground: 0x5e6270, hi: 1.85, sun: 0xff9a70, si: 0.55, dir: new THREE.Vector3(-6, 5, 8) };
   const sky = new THREE.Group(), dome = skyDome(env.bg), field = starField(coarse ? 2600 : 5200);
-  sky.add(dome, field);
+  sky.add(dome, field, meteor(field.material.uniforms.uFade));
   // 星空跟著角色的高度出來：碼頭和街上燈太亮只看得到一些，爬上遠眺台整片天和銀河才都出來
   let starFade = 0.25;
   // 星星和月亮掛在天空球上，跟著鏡頭走。月亮在山的右上方，一下船就看得到
@@ -1849,7 +1884,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       // 門口往後退的房子，門前那一點可能貼著路邊站不住，往外找最近站得住的地方
       doors: doors.map((d) => ({ ...d, ...findWalkable(d.x, d.z, d.x, d.z) })).filter((d) => d.x != null && walkable(d.x, d.z)),
       harbor: [{ id: 'ferry', x: 11.5, z: 19.5 }, { id: 'pier', x: 0, z: 25.5 }, { id: 'fp1', x: -23.5, z: 15.5 }, { id: 'fp2', x: -18.5, z: 14.5 }],
-      views: [{ x: -25, z: -56.5, heading: 0 }, { x: -28, z: 24.5, heading: 0 }, { x: -9, z: -43, heading: 0 }, { x: -3, z: 11, heading: 0 }, { x: 11.5, z: -2, heading: 0 }, { x: -21.8, z: -3.6, heading: Math.PI }],
+      views: [{ x: -25, z: -56.5, heading: 0 }, { x: -28, z: 24.5, heading: 0 }, { x: -9, z: -43, heading: 0 }, { x: -3, z: 11, heading: 0 }, { x: 11.5, z: -2, heading: 0 }, { x: -21.8, z: -3.6, heading: Math.PI }, { x: -1, z: -10.3, heading: 0 }],
       shops: SHOPS.map((s) => ({ id: s.id, ...shops.find((v) => v.id === s.id) })).map((v) => ({ id: v.id, x: v.x, z: v.z + 1.9, heading: Math.PI })),
       carts: CARTS.map((c) => ({ id: c.id, food: c.food, x: c.x + Math.sin(c.ry) * 1.4, z: c.z + Math.cos(c.ry) * 1.4, heading: c.ry + Math.PI })),
     },
