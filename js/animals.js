@@ -699,10 +699,8 @@ class Animal {
   pettedBy(from) {
     this.react = { kind: 'petted', t: 0, from: { x: from.x, z: from.z } };
     const sp = this.spec;
-    if (sp.aloof) {
-      this.say('purr');
-      setTimeout(() => this.say('meow'), 900);
-    } else this.say(sp.voice, 1.2);
+    if (sp.aloof) this.say('meow');
+    else this.say(sp.voice, 1.2);
   }
 
   // 要摸這隻時人站的位置：從牠往人的方向退 stand 公尺

@@ -173,26 +173,6 @@ const VOICES = {
     }
     return tt - t;
   },
-  // 呼嚕：中低頻雜訊一秒抖二十幾下（喇叭播不出太低的聲音，切掉 120Hz 以下反而聽得出顆粒）。有時結尾輕輕翹一聲「嚕～」
-  purr(ctx, out, t, p, noise) {
-    const d = 2.2 + Math.random() * 1.3, am = ctx.createGain();
-    am.gain.value = 0.5;
-    lfo(ctx, t, d, 20 + Math.random() * 6, 0.5, am.gain);
-    const src = ctx.createBufferSource();
-    src.buffer = noise;
-    src.loop = true;
-    src.connect(biquad(ctx, 'highpass', 120)).connect(biquad(ctx, 'bandpass', 420, 0.8)).connect(am);
-    osc(ctx, 'sawtooth', t, d, [[0, 92 * p]]).connect(biquad(ctx, 'lowpass', 360)).connect(am);
-    am.connect(envelope(ctx, t, 0.3, d, 1.6)).connect(out);
-    src.start(t, Math.random() * 5);
-    src.stop(t + d + 0.05);
-    if (Math.random() < 0.2) {
-      const tt = t + d + 0.04;
-      osc(ctx, 'triangle', tt, 0.13, [[0, 520 * p], [0.13, 880 * p]]).connect(envelope(ctx, tt, 0.02, 0.13, 0.5)).connect(out);
-      return d + 0.2;
-    }
-    return d;
-  },
 };
 
 // 0.1 秒的無聲 WAV（8kHz、8 位元、單聲道）。長度不能是零，Safari 會當成壞檔不播
