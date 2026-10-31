@@ -126,9 +126,16 @@ export const CARTS = [
 ];
 
 // 白牆、木板牆、瓦。瓦大多是深灰，少數是紅瓦和銅綠
-const PLASTER = ['#ece2cc', '#e2d6bc', '#f0e8d8', '#d8cab0', '#e6d2b8'];
-const TIMBER = ['#5a3826', '#4a2e20', '#6a4430', '#3e2a20', '#563a2c', '#704a32'];
-const TILES = ['#33373f', '#2c3038', '#3a3c46', '#2a2c32', '#2e3a3a', '#6a3428', '#3a4a48'];
+// 屋瓦和牆面往夜色偏：網址 ?tint=0~1 可以現場調，0 是原本的暖色，預設 0.3，越大牆越藍白、瓦越青藍
+// 例：?tint=0.5 ，再配 ?view=... 站到想看的地方比較
+const TINT = (() => {
+  const v = typeof location === 'undefined' ? NaN : parseFloat(new URLSearchParams(location.search).get('tint'));
+  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.3;
+})();
+const tinted = (list, to, amt) => list.map((c) => '#' + new THREE.Color(c).lerp(new THREE.Color(to), amt * TINT).getHexString());
+const PLASTER = tinted(['#ece2cc', '#e2d6bc', '#f0e8d8', '#d8cab0', '#e6d2b8'], '#b4c2e4', 1.1);
+const TIMBER = tinted(['#5a3826', '#4a2e20', '#6a4430', '#3e2a20', '#563a2c', '#704a32'], '#4a4e72', 0.6);
+const TILES = tinted(['#33373f', '#2c3038', '#3a3c46', '#2a2c32', '#2e3a3a', '#6a3428', '#3a4a48'], '#3a7088', 1.4);
 const NOREN = ['#2a3a6a', '#7a2a2a', '#2a4a3a', '#5a3a6a', '#8a5a2a', '#1e2a4a'];
 // 石頭是偏冷的灰：背光處跟著夜色帶一點藍，燈籠照到的地方才暖起來
 const WOOD = '#4a3428', DARK = '#2a201c', BEAM = '#3a2a22', STONE = '#68686e', PAVE = '#8c8c90', CREAM = '#efe4c8';
@@ -205,7 +212,7 @@ const BAND = new THREE.Vector3(0.55, 0.45, -0.7).normalize();
 function skyDome(bg) {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
-      uLow: { value: new THREE.Color(bg) }, uTop: { value: new THREE.Color('#121735') }, uWarm: { value: new THREE.Color('#c27c7c') },
+      uLow: { value: new THREE.Color(bg) }, uTop: { value: new THREE.Color('#1c2858') }, uWarm: { value: new THREE.Color('#b88a96') },
       uBand: { value: BAND }, uMilk: { value: new THREE.Color('#4c5288') }, uStars: { value: 0 },
     },
     vertexShader: `
@@ -346,7 +353,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   // 石望柱頂上蹲著小獸；遠眺台的柱子之間再垂一條紅繩，掛著微微發亮的符紙
   const STONES = ['#6a6870', '#5e5c64', '#74706c', '#62605a'];
   const BAMBOO = ['#8a7a4a', '#7a6c44', '#9a8a5a'];
-  const OCHRE = ['#d8b888', '#c8a878', '#e0c8a0'];
+  const OCHRE = tinted(['#d8b888', '#c8a878', '#e0c8a0'], '#a8b4d0', 0.8);
   const LEAF = ['#2e4a3a', '#3a5a3e', '#44583a'];
   const rail = (ax, az, bx, bz, y) => {
     const len = Math.hypot(bx - ax, bz - az);
@@ -1618,7 +1625,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   group.add(sea);
 
   // 夜色深一點，霧近一點，燈才顯得亮；地面反上來的光偏暖，像整條街的燈籠照著
-  const env = { bg: 0x302e58, near: 32, far: 200, sky: 0x8e98d4, ground: 0x6a3c34, hi: 1.15, sun: 0xff9a70, si: 0.55, dir: new THREE.Vector3(-6, 5, 8) };
+  const env = { bg: 0x34457a, near: 32, far: 200, sky: 0xa4b4e8, ground: 0x56668a, hi: 1.38, sun: 0xff9a70, si: 0.55, dir: new THREE.Vector3(-6, 5, 8) };
   const sky = new THREE.Group(), dome = skyDome(env.bg), field = starField(coarse ? 2600 : 5200);
   sky.add(dome, field);
   // 星空跟著角色的高度出來：碼頭和街上燈太亮只看得到一些，爬上遠眺台整片天和銀河才都出來

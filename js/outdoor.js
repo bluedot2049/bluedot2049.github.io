@@ -27,7 +27,7 @@ export const REFLECT_LAYER = 2;
 // 海面是一整張 600 公尺的平面，連草原底下都有，著色又最貴，排在地形之後才畫，被地面、山坡蓋住的部分就不用算
 const ORDER = { ground: 3, hills: 4, far: 5, sea: 6, sky: 10 };
 export const SUN_DIR = new THREE.Vector3(-0.35, 0.07, -1).normalize();
-export const HORIZON = 0xe3a47e;
+export const HORIZON = 0xf0b084;
 
 export const OUTDOOR_ROOM = { id: 'outdoor', name: '宴', subtitle: 'Convivium', type: 'outdoor', paintings: [] };
 export const MEADOW_NAME = { name: '原野', subtitle: 'Prima Materia' };
@@ -1317,11 +1317,11 @@ function buildSky() {
       void main() {
         vec3 d = normalize(vD);
         float h = d.y;
-        vec3 horizon = vec3(0.89, 0.643, 0.494);
-        vec3 low = vec3(0.96, 0.74, 0.56);
-        vec3 mid = vec3(0.80, 0.56, 0.62);
-        vec3 high = vec3(0.40, 0.40, 0.60);
-        vec3 top = vec3(0.17, 0.20, 0.36);
+        vec3 horizon = vec3(0.94, 0.69, 0.52);
+        vec3 low = vec3(0.98, 0.68, 0.60);
+        vec3 mid = vec3(0.93, 0.58, 0.62);
+        vec3 high = vec3(0.62, 0.50, 0.68);
+        vec3 top = vec3(0.40, 0.34, 0.58);
         vec3 c = horizon;
         if (h > 0.0) {
           c = mix(horizon, low, smoothstep(0.0, 0.08, h));

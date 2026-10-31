@@ -19,8 +19,6 @@
 <body>
   <div class="note">拖曳轉、滾輪縮放。左邊是預設的玩家角色，比大小用</div>
   <div class="bar">
-    <input id="text" value="這張畫的藍色，是先上了一層黃才蓋上去的">
-    <button id="say">說</button>
     <button data-v="0">正面</button>
     <button data-v="1.57">側面</button>
     <button data-v="3.14">背面</button>
@@ -78,11 +76,7 @@
     addEventListener('pointerup', () => { drag = null; });
     renderer.domElement.addEventListener('wheel', (e) => { dist = Math.max(1, Math.min(8, dist * (1 + e.deltaY * 0.001))); }, { passive: true });
 
-    const input = document.getElementById('text');
-    document.getElementById('say').onclick = () => lantern.say(input.value);
-    input.onkeydown = (e) => { if (e.key === 'Enter') lantern.say(input.value); };
     for (const b of document.querySelectorAll('[data-v]')) b.onclick = () => { yaw = +b.dataset.v; pitch = 0.12; };
-    if (params.has('say')) lantern.say(params.get('say'));
 
     addEventListener('resize', () => {
       camera.aspect = innerWidth / innerHeight;

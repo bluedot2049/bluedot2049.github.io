@@ -2,6 +2,7 @@
 // 其他訪客的角色照對方自己捏的樣子畫，不取名、不聊天。
 import * as THREE from 'three';
 import { Character, isFood } from './character.js';
+import { Lantern } from './lantern.js';
 import { sanitizeLook, lookKey, presetLook, lookFromOutfit, toOutfit, ROBES } from './looks.js';
 
 const SEND_MOVING = 200;    // 走動時每 0.2 秒送一次位置
@@ -52,6 +53,9 @@ function lookIn(metas) {
   return m.l ? sanitizeLook(m.l) : lookFromOutfit(m.o);
 }
 
+// 在線名單裡有沒有帶「這是 Claude」的標記（c: 1）。只有開發時我自己進站才會帶
+const claudeIn = (metas) => Array.isArray(metas) && metas.some((m) => m?.c === 1);
+
 const emojiTextures = new Map();
 function emojiTexture(e) {
   if (!emojiTextures.has(e)) {
@@ -80,6 +84,8 @@ export class Multiplayer {
     this.others = new Map();        // id -> { ch, pos, target, heading, seen, speed }
     this.present = new Set();       // 目前在線上的訪客 id（來自 presence）
     this.looks = new Map();         // id -> 外觀（來自 presence）
+    this.claudes = new Set();       // 在線名單上帶 Claude 標記的 id，畫成燈籠
+    this.claude = false;            // 自己是不是 Claude（開發時我進站，網址帶 as=claude，由 main 設定）
     this.look = look;
     this.fx = [];                   // 正在飄的表情
     this.active = false;
@@ -104,13 +110,23 @@ export class Multiplayer {
         const state = ch.presenceState();
         this.present = new Set(Object.keys(state));
         this.looks.clear();
+        this.claudes.clear();
         for (const [id, metas] of Object.entries(state)) {
           const L = lookIn(metas);
           if (L) this.looks.set(id, L);
+          if (claudeIn(metas)) this.claudes.add(id);
         }
         for (const [id, o] of this.others) {
+          // 位置訊息比名單先到時，Claude 會先被當成一般人畫出來，名單來了再換成燈籠
+          if (this.claudes.has(id) && !o.ch.isLantern) {
+            this.scene.remove(o.ch.group);
+            o.ch.dispose();
+            o.ch = new Lantern(this.shadowTex);
+            this.scene.add(o.ch.group);
+            continue;
+          }
           const want = this.looks.get(id);
-          if (want && lookKey(want) !== o.ch.key) o.ch.setLook(want);
+          if (want && !o.ch.isLantern && lookKey(want) !== o.ch.key) o.ch.setLook(want);
         }
         this.events.onCount(this.present.size);
       })
@@ -166,7 +182,7 @@ export class Multiplayer {
       if (this.others.size >= MAX_TRACKED) return;
       // 在線名單同步比訊息慢，新來的人先暫時放行，但名額很少，認可不了就丟掉
       if (!this.present.has(m.id) && [...this.others.values()].filter((x) => !x.verified).length >= MAX_UNVERIFIED) return;
-      const ch = new Character(this.shadowTex, this.looks.get(m.id) || fallbackLook(m.id));
+      const ch = this.claudes.has(m.id) ? new Lantern(this.shadowTex) : new Character(this.shadowTex, this.looks.get(m.id) || fallbackLook(m.id));
       this.scene.add(ch.group);
       o = { ch, pos: new THREE.Vector3(m.x, 0, m.z), heading: m.h, speed: 0, verified: this.present.has(m.id), born: performance.now() };
       this.others.set(m.id, o);
@@ -231,7 +247,7 @@ export class Multiplayer {
 
   // 在線名單上登記自己的樣子：新版看 l，舊版看 o
   track() {
-    this.channel.track({ o: toOutfit(this.look), l: this.look });
+    this.channel.track({ o: toOutfit(this.look), l: this.look, ...(this.claude ? { c: 1 } : {}) });
   }
 
   setLook(L) {

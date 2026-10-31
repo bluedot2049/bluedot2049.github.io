@@ -18,9 +18,12 @@ const NEAR = 24, NEAR_DY = 4.5;      // 多近、高低差多少以內用完整�
 const REBUILD = 1;                   // 每一幀最多換幾個角色的外觀（換外觀要重建網格）
 const FADE = 1.2;                    // 從門口出來、走進門裡淡入淡出幾秒
 const DODGE = 1.2;                   // 玩家在這個距離內，路人往旁邊讓
+const SEP = 0.8, SEP_PAIR = 0.45;      // 不同組的人靠近到這個距離就互相推開；同行的兩個人只要不疊在一起
+const PUSH_TRIES = [[1, 0], [0.5, 0], [1, 1.1], [1, -1.1], [0.6, 2.2], [0.6, -2.2]];   // [縮放, 轉幾弧度]
+const PUSH_MAX = 0.8;                // 為了讓路最多偏離時間表多遠
 const GLANCE = 0.15;                 // 玩家走到面前時，轉頭看一眼的機率
 const OWLS = 2;                      // 夜貓子：不管幾點都在外面晃，每一站停很久，最冷清的時候街上也不會空掉
-const PLANS = 8;                     // 每一幀最多排幾趟行程，剛進來時不會一下子卡住
+const PLAN_MS = 3;                   // 每一幀花在排行程上的時間（毫秒），超過就留到下一幀；至少排一趟。剛進來時不會一下子卡住
 
 // 台灣時間每個整點的人潮（0 到 1），中間直線接起來。跟一般夜市反過來，最冷清的時候也留幾個人
 const BUSY = [0.25, 0.32, 0.4, 0.5, 0.62, 0.75, 0.88, 1, 1, 1, 0.95, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.18, 0.12, 0.09, 0.09, 0.09, 0.13, 0.2];
@@ -131,6 +134,18 @@ class Roads {
       }
     }
     this.cache = new Map();
+    this.bends = new Map();
+  }
+
+  // 基本路線上兩個固定的點之間怎麼繞，算過就記起來
+  detour(a, b) {
+    const key = `${a.x.toFixed(2)},${a.z.toFixed(2)}>${b.x.toFixed(2)},${b.z.toFixed(2)}`;
+    let d = this.bends.get(key);
+    if (!d) {
+      if (this.bends.size > 4000) this.bends.clear();
+      this.bends.set(key, (d = detour(this.world, a, b)));
+    }
+    return d;
   }
 
   areaOf(x, z) {
@@ -177,6 +192,56 @@ class Roads {
   }
 }
 
+// ---------- 站位 ----------
+// 停下來的地方不是一個點，是客人面向的方向上排開的幾個站位：前排四個、後排三個（離櫃台遠一點）。
+// 每組人停站時隨機挑一個，同行的兩個人左右各偏 0.3；站位站不住（被東西擋著、在邊上）就往中間收，最後回到原本那個點
+const STAND_FRONT = [-0.9, -0.3, 0.3, 0.9], STAND_BACK = [-0.6, 0, 0.6];
+function standAt(world, w, slot, p, pair) {
+  const f = w.heading ?? 0;
+  // 先試挑到的站位，站不住就換下一個，七個都不行才往中間收
+  for (const s of [1, 0.5, 0]) for (let o = 0; o < 7; o++) {
+    const sl = (slot + o) % 7, row = sl < 4 ? 0 : 1;
+    const lat = (row ? STAND_BACK[sl - 4] : STAND_FRONT[sl]) + (pair ? (p ? 0.3 : -0.3) : 0), dep = row ? -0.9 : 0;
+    const x = w.x + (Math.cos(f) * lat + Math.sin(f) * dep) * s, z = w.z + (-Math.sin(f) * lat + Math.cos(f) * dep) * s;
+    if (world.walkable(x, z)) return { x, z };
+    if (s === 0) break;
+  }
+  return { x: w.x, z: w.z };
+}
+// 出發點和終點（門口、棧橋、船邊）也散開一點，一群人同時從同一個點冒出來會疊在一起
+function scatter(world, p, R, rad) {
+  const a = R() * Math.PI * 2, rr = Math.sqrt(R()) * rad;
+  for (const s of [1, 0.5]) {
+    const x = p.x + Math.cos(a) * rr * s, z = p.z + Math.sin(a) * rr * s;
+    if (world.walkable(x, z)) return { x, z };
+  }
+  return p;
+}
+
+// 從 a 走到 b 一路都站得住嗎（頭尾不算，攤位前的站位本來就貼著東西）
+function segClear(world, a, b) {
+  const n = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.25);
+  for (let i = 1; i < n; i++) if (!world.walkable(a.x + ((b.x - a.x) * i) / n, a.z + ((b.z - a.z) * i) / n)) return false;
+  return true;
+}
+
+// 從 a 到 b 被擋住時繞過去的點：先在中點往兩側試幾個距離，兩半都走得通就用這一個轉折（大多是擦到攤位、燈柱、轉角）；
+// 都不行才用尋路（full），尋路比較貴
+const BENDS = [0.4, -0.4, 0.8, -0.8, 1.3, -1.3, 2, -2];
+function detour(world, a, b, full = true) {
+  const len = Math.hypot(b.x - a.x, b.z - a.z);
+  if (len > 0.01) {
+    const nx = -(b.z - a.z) / len, nz = (b.x - a.x) / len, mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
+    for (const s of BENDS) {
+      const m = { x: mx + nx * s, z: mz + nz * s };
+      if (world.walkable(m.x, m.z) && segClear(world, a, m) && segClear(world, m, b)) return [m];
+    }
+  }
+  if (!full) return [];
+  const d = world.findPath(a.x, a.z, b.x, b.z);
+  return d && d.length > 1 ? d.slice(0, -1).map((m) => ({ x: m.x, z: m.z })) : [];
+}
+
 // ---------- 一趟出門 ----------
 // 回傳 { dur, people: [{ look, pts, times }], stops, handT, foodKind, foodT }。pts 是這個人的折線（已經各自偏到自己走的那一側），
 // times 是走到每一點的時間；停下來的地方同一點出現兩次
@@ -204,7 +269,11 @@ function makeTrip(roads, spots, i, k, start, up, ferryIn) {
     const stops = [];
     const nStops = attempt > 2 ? 1 : owl ? 3 : R() < 0.3 ? 1 : R() < 0.6 ? 2 : 3;
     if (owl) for (const s of pool) s.dwell *= attempt > 1 ? 1.5 : 2.5;
-    for (let s = 0; s < nStops && pool.length; s++) stops.push(pool.splice(Math.floor(R() * pool.length), 1)[0]);
+    for (let s = 0; s < nStops && pool.length; s++) {
+      const w = pool.splice(Math.floor(R() * pool.length), 1)[0];
+      w.slot = R() < 0.65 ? Math.floor(R() * 4) : 4 + Math.floor(R() * 3);
+      stops.push(w);
+    }
     // 先停離出發點近的那一攤
     stops.sort((a, b) => Math.hypot(a.x - from.x, a.z - from.z) - Math.hypot(b.x - from.x, b.z - from.z));
     const legs = [from, ...stops, to];
@@ -218,44 +287,64 @@ function makeTrip(roads, spots, i, k, start, up, ferryIn) {
       if (l < stops.length) waits[path.length - 1] = stops[l];
     }
     if (!ok) continue;
-    const speed = 0.85 + R() * 0.4, pair = R() < 0.3, lane = (R() - 0.5) * 1.6;
+    // 基本路線（路網的節點、攤位、門口）上被擋住的段，先補上繞過去的點；每個人再從這條線各自偏開
+    const base = [];
+    for (let n = 0; n < path.length; n++) {
+      const q = { x: path[n].x, z: path[n].z, w: waits[n] }, a = base[base.length - 1];
+      if (a && !segClear(world, a, q)) base.push(...roads.detour(a, q));
+      base.push(q);
+    }
+    // 一律往自己行進方向的同一側偏：走相反方向的人自然分在兩邊。走得快的靠內側（偏得少），慢的靠外側，超車才不會穿過去
+    const speed = 0.85 + R() * 0.4, pair = R() < 0.3, lane = 0.3 + ((1.25 - speed) / 0.4) * 0.7;
     // 手上拿什麼：第一個買得到東西的攤位決定左手；沒買東西、又要往燈巷以上走的，有些人自己提一盞燈籠
     let hand = 'none', handT = 0, foodKind = 0, foodT = 0;
     const people = [];
     for (let p = 0; p < (pair ? 2 : 1); p++) {
-      const off = pair ? lane + (p ? 0.45 : -0.45) : lane, delay = p ? 0.6 : 0;
-      const pts = [], times = [];
-      let t = 0;
-      for (let n = 0; n < path.length; n++) {
-        const a = path[n], b = path[n + 1], prv = path[n - 1];
-        // 每個轉折點沿著前後兩段的平均方向往旁邊偏，折線一路連續；頭尾是門口和攤位，不偏
+      const off = lane + (p ? 0.55 : 0), delay = p ? 0.4 + R() * 1.0 : 0, sp = speed * (p ? 0.96 + R() * 0.08 : 1), dwellK = p ? 0.9 + R() * 0.2 : 1;
+      // 第一步：每個折點往自己那一側偏（頭尾是門口和攤位，另外散開、站位），偏過去站不住就少偏一點
+      const raw = [];
+      for (let n = 0; n < base.length; n++) {
+        const a = base[n], b = base[n + 1], prv = base[n - 1], w = a.w;
         let px = a.x, pz = a.z;
-        if (n > 0 && n < path.length - 1 && !waits[n]) {
+        if (w) ({ x: px, z: pz } = standAt(world, w, w.slot, p, pair));
+        else if (n === 0 || n === base.length - 1) ({ x: px, z: pz } = scatter(world, { x: px, z: pz }, R, legs[n ? legs.length - 1 : 0].id ? 1.1 : 0.3));
+        else {
           const d1 = Math.atan2(a.x - prv.x, a.z - prv.z), d2 = Math.atan2(b.x - a.x, b.z - a.z), h = d1 + wrap(d2 - d1) / 2;
-          px += Math.cos(h) * off;
-          pz -= Math.sin(h) * off;
-          const ar = roads.areas[roads.areaOf(a.x, a.z)];
-          if (ar) {
-            const m = ar.lo != null ? 0.45 : 0.5;
-            px = Math.min(ar.x1 - m, Math.max(ar.x0 + m, px));
-            pz = Math.min(ar.z1 - m, Math.max(ar.z0 + m, pz));
+          const ar = roads.areas[roads.areaOf(a.x, a.z)], m = ar && ar.lo != null ? 0.45 : 0.5;
+          for (const s of [1, 0.6, 0.3]) {
+            let x = a.x + Math.cos(h) * off * s, z = a.z - Math.sin(h) * off * s;
+            if (ar) { x = Math.min(ar.x1 - m, Math.max(ar.x0 + m, x)); z = Math.min(ar.z1 - m, Math.max(ar.z0 + m, z)); }
+            if (world.walkable(x, z)) { px = x; pz = z; break; }
           }
         }
+        raw.push({ x: px, z: pz, w });
+      }
+      // 第二步：偏開以後又擦到攤位、燈柱、房角的段，在中間加一個轉折繞過去（不然走到障礙物上會被推到邊邊，黏在那裡滑）
+      const seq = [];
+      for (const r of raw) {
+        const a = seq[seq.length - 1];
+        if (a && !segClear(world, a, r)) seq.push(...detour(world, a, r));
+        seq.push(r);
+      }
+      // 第三步：照走的距離排時間，停站的地方同一點出現兩次
+      const pts = [], times = [];
+      let t = 0;
+      for (let n = 0; n < seq.length; n++) {
+        const { x: px, z: pz, w } = seq[n];
         if (n > 0) {
           const q = pts[pts.length - 1], len = Math.hypot(px - q.x, pz - q.z), dy = Math.abs(world.groundY(px, pz) - world.groundY(q.x, q.z));
-          t += len / (speed * (dy > len * 0.2 ? 0.7 : 1));
+          t += len / (sp * (dy > len * 0.2 ? 0.7 : 1));
         }
         pts.push({ x: px, z: pz });
         times.push(t + delay);
-        const w = waits[n];
         if (w) {
           if (p === 0) {
             if (w.kind === 'shop' && SHOP_HAND[w.id] && hand === 'none') { hand = SHOP_HAND[w.id]; handT = t + w.dwell; }
             if (w.kind === 'cart' && CART_HAND[w.id] && hand === 'none') { hand = CART_HAND[w.id]; handT = t + w.dwell; }
             if (w.kind === 'cart' && CART_FOOD[w.id] && !foodKind) { foodKind = CART_FOOD[w.id]; foodT = t + w.dwell; }
           }
-          t += w.dwell;
-          pts.push({ x: px + (p ? 0.5 : 0), z: pz, heading: w.heading });
+          t += w.dwell * dwellK;
+          pts.push({ x: px, z: pz, heading: w.heading });
           times.push(t + delay);
         }
       }
@@ -298,6 +387,8 @@ export class Passersby {
     this.slots = coarse ? SLOTS_LOW : SLOTS;
     this.force = force != null && force !== '' && Number.isFinite(+force) ? Math.min(1, Math.max(0, +force)) : null;
     this.busy = 0;
+    this.planned = 0;
+    this.deadline = 0;
     this.trips = new Array(this.slots).fill(null);
     this.obstacles = world.debug.obstacles;
     this.state = new Map();   // 每個人在畫面上的小狀態：讓路的偏移、轉頭、淡入
@@ -336,7 +427,7 @@ export class Passersby {
     const ph = hash(i, 7) * TRIP, k = Math.floor((now - ph) / TRIP), start = k * TRIP + ph;
     let tr = this.trips[i];
     if (!tr || tr.k !== k) {
-      if (this.planned++ >= PLANS) return null;
+      if (this.planned++ > 0 && performance.now() > this.deadline) return null;
       const busy = this.force ?? busyAt(start);
       const go = i < OWLS || hash(i, k, 3) < busy;
       const up = (this.force ?? busyAt(start + 1800)) >= busy;
@@ -361,6 +452,7 @@ export class Passersby {
     const now = Date.now() / 1000, world = this.world, P = player.pos;
     this.busy = this.force ?? busyAt(now);
     this.planned = 0;
+    this.deadline = performance.now() + PLAN_MS;
     const people = [];
     for (let i = 0; i < this.slots; i++) {
       const tr = this.trip(i, now), plan = tr?.plan;
@@ -373,9 +465,13 @@ export class Passersby {
         const alpha = Math.min(1, Math.max(0, (tt - t0) / FADE), Math.max(0, (t1 + FADE - tt) / FADE));
         if (alpha <= 0) return;
         const d = Math.hypot(a.x - P.x, a.z - P.z);
-        people.push({ key: `${i}:${tr.k}:${p}`, i, p, person, plan, tt, x: a.x, z: a.z, y, heading: a.heading, walking: a.walking, alpha, d, near: d < NEAR && Math.abs(y - P.y) < NEAR_DY });
+        people.push({ key: `${i}:${tr.k}:${p}`, i, p, person, plan, tt, x: a.x, z: a.z, y, heading: a.heading, walking: a.walking, alpha, d, fx: a.x, fz: a.z, fy: y, jit: (hash(i, p, tr.k, 5) - 0.5) * 0.7, near: d < NEAR && Math.abs(y - P.y) < NEAR_DY });
       });
     }
+    // 所有人（不只近處的）互相推開、算好這一幀站的位置 fx、fz；每個人的偏移跟著編號走，變成近處的角色也不會跳
+    this.separate(people);
+    for (const q of people) this.settle(q, dt, P);
+    this.last = people;   // 量測工具用
     // 近的先分到完整的角色
     const near = people.filter((q) => q.near).sort((a, b) => a.d - b.d).slice(0, this.pool.length);
     const keep = new Set(near.map((q) => q.key));
@@ -394,6 +490,9 @@ export class Passersby {
         e.ch.group.visible = true;
         e.ch.group.position.set(q.x, q.y, q.z);
         e.ch.group.rotation.y = q.heading;
+        // 步伐、呼吸、帽子晃動的相位各自隨機，一群人不會手腳一起擺
+        e.ch.phase = hash(q.i, q.p, 21) * Math.PI * 2;
+        e.ch.time = hash(q.i, q.p, 22) * 60;
         rebuilt++;
       }
       this.drive(e, q, dt, P, now);
@@ -406,13 +505,13 @@ export class Passersby {
       const look = q.person.look;
       if (look.hand === 'lantern' && q.tt >= (q.p ? 0 : q.plan.handT)) {
         const rx = Math.cos(q.heading), rz = -Math.sin(q.heading);
-        pos.setXYZ(g, q.x - rx * 0.3, q.y + 0.7, q.z - rz * 0.3);
+        pos.setXYZ(g, q.fx - rx * 0.3, q.fy + 0.7, q.fz - rz * 0.3);
         size.setX(g++, 1.1 * q.alpha);
       }
       if (shown.has(q.key)) continue;
       const bob = q.walking ? Math.abs(Math.sin(q.tt * 7 + q.i)) * 0.05 : 0, s = q.alpha;
       this.q.setFromAxisAngle(this.v.set(0, 1, 0), q.heading);
-      this.m4.compose(this.v.set(q.x, q.y + bob, q.z), this.q, this.s.set(s, s, s));
+      this.m4.compose(this.v.set(q.fx, q.fy + bob, q.fz), this.q, this.s.set(s, s, s));
       this.bodies.setMatrixAt(n, this.m4);
       this.heads.setMatrixAt(n, this.m4);
       this.bodies.setColorAt(n, this.c.setHex(CLOTH[look.outer !== 'none' ? look.outC : look.topC]));
@@ -427,27 +526,86 @@ export class Passersby {
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     }
     // 不在畫面上的人，小狀態丟掉
-    if (this.state.size > 200) for (const k of this.state.keys()) if (!shown.has(k)) this.state.delete(k);
+    if (this.state.size > 300) {
+      const live = new Set(people.map((q) => q.key));
+      for (const k of this.state.keys()) if (!live.has(k)) this.state.delete(k);
+    }
   }
 
-  // 一個完整的角色這一幀：位置、讓路、轉身、轉頭、手上的東西、淡入淡出
-  drive(e, q, dt, P, now) {
-    const ch = e.ch, world = this.world;
-    let st = this.state.get(q.key);
-    if (!st) this.state.set(q.key, (st = { ox: 0, oz: 0, glanceT: 0, nextGlance: 0, head: 0 }));
-    // 玩家靠近：往旁邊讓一點，讓開的地方要站得住
-    let wx = 0, wz = 0;
+  stateOf(key) {
+    let st = this.state.get(key);
+    if (!st) this.state.set(key, (st = { ox: 0, oz: 0, sx: 0, sz: 0, glanceT: 0, nextGlance: 0, head: 0 }));
+    return st;
+  }
+
+  // 所有的人互相推開：每一對靠得太近就沿著連線各退一點，只算在自己的畫面上，不動時間表。
+  // 一個在走、一個站著，走的人全讓；兩個都在走或都站著，各讓一半。推開的量放在 st.sx、st.sz，drive 再慢慢追上去
+  separate(people) {
+    for (const q of people) { const st = this.stateOf(q.key); st.sx = st.sz = 0; }
+    for (let a = 0; a < people.length; a++) {
+      const A = people[a], sa = this.state.get(A.key);
+      for (let b = a + 1; b < people.length; b++) {
+        const B = people[b], R = A.i === B.i ? SEP_PAIR : SEP;
+        let dx = A.x - B.x, dz = A.z - B.z;
+        if (dx > R || dx < -R || dz > R || dz < -R || Math.abs(A.y - B.y) > 1.5) continue;
+        let d = Math.hypot(dx, dz);
+        if (d >= R) continue;
+        // 剛好站在同一個點：用兩人編號算一個固定的方向，大家看到的都一樣，不會抖
+        if (d < 0.02) {
+          const ang = hash(Math.min(A.i, B.i), Math.max(A.i, B.i), A.i === B.i ? A.p + B.p : 9) * Math.PI * 2, flip = A.i === B.i ? (A.p < B.p ? 1 : -1) : A.i < B.i ? 1 : -1;
+          dx = Math.cos(ang) * flip;
+          dz = Math.sin(ang) * flip;
+          d = 1;
+        }
+        const over = R - Math.min(d, R), ux = dx / d, uz = dz / d, wa = A.walking, wb = B.walking;
+        const ka = wa === wb ? 0.5 : wa ? 1 : 0, kb = wa === wb ? 0.5 : wb ? 1 : 0, sb = this.state.get(B.key);
+        sa.sx += ux * over * ka; sa.sz += uz * over * ka;
+        sb.sx -= ux * over * kb; sb.sz -= uz * over * kb;
+      }
+    }
+  }
+
+  // 這個人這一幀實際站在哪：時間表的位置加上讓開的偏移（玩家靠近、跟別人互推），偏移追著目標慢慢變
+  settle(q, dt, P) {
+    const st = this.stateOf(q.key), world = this.world;
+    // 要讓開多少：玩家靠近往旁邊讓一點，加上跟別人互推的量；總量有上限，讓開的地方要站得住，站不住就少讓一點
+    let tx = st.sx, tz = st.sz;
     if (q.d < DODGE) {
       const rx = Math.cos(q.heading), rz = -Math.sin(q.heading), side = (P.x - q.x) * rx + (P.z - q.z) * rz > 0 ? -1 : 1, amt = (DODGE - q.d) * 0.7;
-      if (world.walkable(q.x + rx * side * amt, q.z + rz * side * amt)) { wx = rx * side * amt; wz = rz * side * amt; }
+      tx += rx * side * amt;
+      tz += rz * side * amt;
     }
-    st.ox += (wx - st.ox) * Math.min(1, dt * 4);
-    st.oz += (wz - st.oz) * Math.min(1, dt * 4);
+    const tl = Math.hypot(tx, tz);
+    if (tl > PUSH_MAX) { tx *= PUSH_MAX / tl; tz *= PUSH_MAX / tl; }
+    if (tl > 0.01) {
+      // 這個方向站不住就少讓一點，再不行就斜著、橫著讓；都不行才不動
+      let ok = false;
+      for (const [k, a] of PUSH_TRIES) {
+        const c = Math.cos(a) * k, s = Math.sin(a) * k, x = tx * c - tz * s, z = tx * s + tz * c;
+        if (world.walkable(q.x + x, q.z + z)) { tx = x; tz = z; ok = true; break; }
+      }
+      if (!ok) tx = tz = 0;
+    }
+    // 讓開的時候動作快一點，回到原位慢一點，不會一下推開一下彈回來
+    const rate = Math.hypot(tx, tz) >= Math.hypot(st.ox, st.oz) ? 7 : 2;
+    st.ox += (tx - st.ox) * Math.min(1, dt * rate);
+    st.oz += (tz - st.oz) * Math.min(1, dt * rate);
     const at = { x: q.x + st.ox, z: q.z + st.oz };
     this.clear(at);
+    q.fx = at.x;
+    q.fz = at.z;
+    q.fy = world.groundY(at.x, at.z);
+  }
+
+  // 一個完整的角色這一幀：位置、轉身、轉頭、手上的東西、淡入淡出
+  drive(e, q, dt, P, now) {
+    const ch = e.ch;
+    const st = this.stateOf(q.key);
+    const at = { x: q.fx, z: q.fz };
     const G = ch.group.position, moved = Math.hypot(at.x - G.x, at.z - G.z);
-    G.set(at.x, world.groundY(at.x, at.z), at.z);
-    ch.group.rotation.y += wrap(q.heading - ch.group.rotation.y) * Math.min(1, dt * 6);
+    G.set(at.x, q.fy, at.z);
+    const face = q.walking ? q.heading : q.heading + q.jit + Math.sin(now * 0.4 + q.i * 1.7) * 0.12;
+    ch.group.rotation.y += wrap(face - ch.group.rotation.y) * Math.min(1, dt * 6);
     ch.update(dt, q.walking ? Math.min(1.5, moved / Math.max(dt, 1e-3)) : 0);
     // 手上的東西：買了才拿出來；點心邊走邊咬，咬三口就沒了
     if (ch.handMesh) ch.handMesh.visible = q.person.look.hand !== 'none' && q.tt >= (q.p ? 0 : q.plan.handT);

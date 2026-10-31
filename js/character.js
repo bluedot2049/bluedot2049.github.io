@@ -46,15 +46,30 @@ export function faceMap(race) {
   if (m) return m;
   const fs = race.fs ?? 1, R = 0.26 * fs, cy = race.ey - 0.05 * fs, N1 = FN + 1;
   const geo = build((k) => HEADS[race.head](k, '#808080', '#a0a0a0'));
-  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
-  const rc = new THREE.Raycaster(), from = new THREE.Vector3(), dir = new THREE.Vector3(0, 0, -1);
-  const z = new Float32Array(N1 * N1);
+  // 每條射線從正前方往後打，打到的第一個面就是最前面（z 最大）的那一面。
+  // 不真的一條一條打：把每個三角形投影到這張格子上，蓋到的格點算出那裡的 z，留最大的（深度緩衝的做法），
+  // 結果一樣，快幾十倍。路人每換一個沒見過的種族都要算一次，打射線會讓畫面頓一下
+  const z = new Float32Array(N1 * N1).fill(-Infinity);
   let known = new Uint8Array(N1 * N1);
-  for (let j = 0; j < N1; j++) for (let i = 0; i < N1; i++) {
-    rc.set(from.set(-R + (2 * R * i) / FN, cy + R - (2 * R * j) / FN, 2), dir);
-    const h = rc.intersectObject(mesh, false)[0];
-    if (h) { z[j * N1 + i] = h.point.z; known[j * N1 + i] = 1; }
+  const P = geo.attributes.position, I = geo.index, n = I ? I.count : P.count, at = (v) => (I ? I.getX(v) : v);
+  const gu = (x) => ((x + R) / (2 * R)) * FN, gv = (y) => ((cy + R - y) / (2 * R)) * FN;
+  for (let t = 0; t < n; t += 3) {
+    const a = at(t), b = at(t + 1), c = at(t + 2);
+    const au = gu(P.getX(a)), av = gv(P.getY(a)), bu = gu(P.getX(b)), bv = gv(P.getY(b)), cu = gu(P.getX(c)), cv = gv(P.getY(c));
+    const area = (bu - au) * (cv - av) - (cu - au) * (bv - av);
+    if (Math.abs(area) < 1e-12) continue;
+    const i0 = Math.max(0, Math.ceil(Math.min(au, bu, cu) - 1e-9)), i1 = Math.min(FN, Math.floor(Math.max(au, bu, cu) + 1e-9));
+    const j0 = Math.max(0, Math.ceil(Math.min(av, bv, cv) - 1e-9)), j1 = Math.min(FN, Math.floor(Math.max(av, bv, cv) + 1e-9));
+    if (i0 > i1 || j0 > j1) continue;
+    const az = P.getZ(a), bz = P.getZ(b), cz = P.getZ(c), eps = -1e-9 * Math.abs(area);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const w0 = ((bu - i) * (cv - j) - (cu - i) * (bv - j)), w1 = ((cu - i) * (av - j) - (au - i) * (cv - j)), w2 = ((au - i) * (bv - j) - (bu - i) * (av - j));
+      if (area > 0 ? w0 < eps || w1 < eps || w2 < eps : w0 > -eps || w1 > -eps || w2 > -eps) continue;
+      const zz = (w0 * az + w1 * bz + w2 * cz) / area, k = j * N1 + i;
+      if (zz < 2 && zz > z[k]) { z[k] = zz; known[k] = 1; }
+    }
   }
+  for (let k = 0; k < z.length; k++) if (!known[k]) z[k] = 0;
   const hit = known.slice();
   // 打空的點往外補成旁邊的平均，畫到頭外面的部分就像一片紙板立在頭的邊上
   let left = known.reduce((n, v) => n + (v ? 0 : 1), 0);
@@ -74,7 +89,6 @@ export function faceMap(race) {
     known = next;
   }
   geo.dispose();
-  mesh.material.dispose();
   m = { R, cy, N1, z, hit };
   faceMaps.set(race.id, m);
   return m;

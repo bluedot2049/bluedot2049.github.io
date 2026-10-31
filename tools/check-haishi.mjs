@@ -6,36 +6,8 @@
 //   3. 路網：哪幾區之間直接相通、整張網有幾個環（環越多，可以選的路越多）
 //   4. 沒有欄杆的邊：走到邊上，外面往下掉一公尺以上，卻沒有欄杆、牆或房子擋著
 // 有斷層，或有一大塊走不到，結束代碼是 1
-import { register } from 'node:module';
-import { pathToFileURL, fileURLToPath } from 'node:url';
-import path from 'node:path';
+import { THREE, w } from './haishi-env.mjs';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const THREE_URL = pathToFileURL(path.join(ROOT, 'vendor/three.module.min.js')).href;
-register(`data:text/javascript,export async function resolve(s, c, n) { return s === 'three' ? { url: ${JSON.stringify(THREE_URL)}, shortCircuit: true } : n(s, c); }`);
-
-// 建海市時會畫招牌、字的貼圖，給它一個什麼都不做的畫布
-const ctx = new Proxy({}, {
-  get: (t, k) => {
-    if (k in t) return t[k];
-    if (k === 'measureText') return () => ({ width: 10 });
-    if (k === 'getImageData' || k === 'createImageData') return (x, y, w = 1, h = 1) => ({ data: new Uint8ClampedArray(Math.max(1, w * h * 4)) });
-    if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => ({ addColorStop() {} });
-    return typeof k === 'string' ? () => {} : undefined;
-  },
-  set: (t, k, v) => { t[k] = v; return true; },
-});
-const el = () => ({ width: 64, height: 64, style: {}, getContext: () => ctx, addEventListener() {}, appendChild() {}, classList: { add() {}, remove() {}, contains: () => false } });
-Object.assign(globalThis, {
-  window: globalThis, devicePixelRatio: 1, innerWidth: 800, innerHeight: 600,
-  document: { createElement: el, body: el(), addEventListener() {} },
-  matchMedia: () => ({ matches: false }),
-  Path2D: class {},
-});
-
-const THREE = await import('three');
-const { buildHaishi } = await import(pathToFileURL(path.join(ROOT, 'js/haishi.js')).href);
-const w = buildHaishi(new THREE.Scene());
 const { areas, rails, solids, obstacles } = w.debug;
 
 const S = 0.25;            // 格子大小

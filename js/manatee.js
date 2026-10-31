@@ -51,20 +51,16 @@ function facePatch() {
   return g;
 }
 
-// 神秘角色的臉：跟原本馬賽克一樣大的黑色橢圓，中間一個白色問號
+// 神秘角色的臉：只有一個黑色問號，直接畫在身體上，沒有底
 function mysteryFace() {
   const c = document.createElement('canvas');
   c.width = c.height = 512;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#000';
-  ctx.beginPath();
-  ctx.ellipse(256, 248, 232, 192, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 300px sans-serif';
+  ctx.fillStyle = '#0b0b10';
+  ctx.font = '700 340px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('?', 256, 262);
+  ctx.fillText('?', 256, 268);
   return c;
 }
 
@@ -82,13 +78,14 @@ export class Manatee {
     bean.scale.z = 0.76;
     body.add(bean);
 
-    // 臉先蓋住：黑底白問號，貼在豆子正面的一片弧形（原本的臉是 assets/manatee_face.png）
+    // 臉先蓋住：深底問號，貼在豆子正面的一片弧形（原本的臉是 assets/manatee_face.png）
+    // 臉吃場景光，跟身體一起被夕陽染暖、被夜色壓藍，不會像貼紙浮在上面
     const tex = new THREE.CanvasTexture(mysteryFace());
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
     const face = new THREE.Mesh(
       facePatch(),
-      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })
+      new THREE.MeshLambertMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })
     );
     face.scale.z = 0.76;
     body.add(face);

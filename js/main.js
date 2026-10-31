@@ -144,8 +144,8 @@ async function start() {
 
   // 室內和戶外的光線、霧。走出後門時在兩組之間漸變。海市只有一組
   const ENV = (town ? [world.env, world.env] : [
-    { bg: 0x1c130d, near: 16, far: 38, sky: 0xfff0dc, ground: 0x6a4a34, hi: 1.9, sun: 0xffcf98, si: 1.3, dir: new THREE.Vector3(4, 8, 3) },
-    { bg: HORIZON, near: 28, far: 170, sky: 0xffd2b0, ground: 0x56603a, hi: 1.5, sun: 0xffa868, si: 1.9, dir: SUN_DIR.clone().multiplyScalar(-1).setY(0.45).multiplyScalar(10) },
+    { bg: 0x241a1c, near: 16, far: 38, sky: 0xfff0dc, ground: 0x70524a, hi: 1.9, sun: 0xffcf98, si: 1.3, dir: new THREE.Vector3(4, 8, 3) },
+    { bg: HORIZON, near: 28, far: 170, sky: 0xffc4b8, ground: 0x8c6e5c, hi: 1.6, sun: 0xffa868, si: 1.9, dir: SUN_DIR.clone().multiplyScalar(-1).setY(0.45).multiplyScalar(10) },
   ]).map((e) => ({ ...e, bg: new THREE.Color(e.bg), sky: new THREE.Color(e.sky), ground: new THREE.Color(e.ground), sun: new THREE.Color(e.sun) }));
   let envT = -1;
   function applyEnv(t) {
@@ -427,6 +427,7 @@ async function start() {
         animals?.startle(o.pos.x, o.pos.z);
       },
     }, look);
+    mp.claude = params.get('as') === 'claude';   // 開發時我進站拍照：在場的人看到的是燈籠
     mp.connect().catch((e) => console.warn('多人連線失敗：', e));
     if (visitors) visitors.mp = mp;
     // 電腦：數字鍵 1–5 送表情
@@ -502,7 +503,13 @@ async function start() {
       player.place(view[0], view[1], ((view[2] ?? 180) * Math.PI) / 180);
     }
   }
-  else if (params.get('from') === 'haishi' && ferry) player.place(ferry.x, ferry.z + 1.8, 0);
+  else if (params.get('from') === 'haishi' && ferry) {
+    // 鏡頭退到棧橋尾端的海面上、貼著水面低低地看：棧橋、整片草原、大樹和小屋都在畫面裡
+    // 角色沿棧橋往草原走，鏡頭照走過的距離換到跟拍（跟海市開場同一套，見 player.startIntro）
+    const sx = ferry.x, sz = ferry.z + 1.8, gy = world.groundY(sx, sz);
+    player.place(sx, sz, 0);
+    player.startIntro(new THREE.Vector3(0.5, gy + 4.5, sz + 22), window.innerWidth < window.innerHeight ? 40 : 30, -0.06);
+  }
   const go = params.get('go')?.split('.').map(Number);
   if (go && !town) ui.onGoTo(go[0], go[1]);
   // 抵達用的參數用過就拿掉，重新整理時不會又跑去同一個地方
