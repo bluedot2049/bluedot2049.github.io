@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { buildWorld } from './world.js';
 import { Player } from './player.js';
+import { buildShots } from './shots.js';
 import { Character } from './character.js';
 import { sanitizeLook, lookFromOutfit, randomPreset, optionName } from './looks.js';
 import { Creator, FACE_TABS } from './creator.js';
@@ -322,6 +323,8 @@ async function start() {
   }
   try { player.director = localStorage.getItem('director') !== '0'; } catch {}
   player.directorLag = town ? 1 : 1.6;
+  if (town) player.shots = buildShots(world.debug.areas);
+  player.debug = params.has('debug');
   showDirector(player.director);
   directorBtn.addEventListener('click', () => player.toggleDirector());
 
