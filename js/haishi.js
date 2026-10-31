@@ -1627,7 +1627,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   group.add(sea);
 
   // 月光幾乎是中性的灰，藍色留給空氣（霧和天空）：牆、瓦、石階才是灰的，燈照到的地方才是暖的，不會疊成紫紅
-  const env = { bg: 0x4b5574, near: 32, far: 200, sky: 0xb4b8c8, ground: 0x5e6270, hi: 1.55, sun: 0xff9a70, si: 0.55, dir: new THREE.Vector3(-6, 5, 8) };
+  const env = { bg: 0x4b5574, near: 32, far: 200, sky: 0xb4b8c8, ground: 0x5e6270, hi: 1.85, sun: 0xff9a70, si: 0.55, dir: new THREE.Vector3(-6, 5, 8) };
   const sky = new THREE.Group(), dome = skyDome(env.bg), field = starField(coarse ? 2600 : 5200);
   sky.add(dome, field);
   // 星空跟著角色的高度出來：碼頭和街上燈太亮只看得到一些，爬上遠眺台整片天和銀河才都出來

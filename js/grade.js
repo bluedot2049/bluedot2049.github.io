@@ -8,9 +8,10 @@ import * as THREE from 'three';
 
 // density：相機高度的霧有多濃；falloff：每往上一公尺變淡多少；base：霧最濃的高度（海面）；start：鏡頭前幾公尺不起霧
 // shadow：最暗的地方抬到這個顏色（sRGB），不會再是黑的；desat：暗部和中間調降多少飽和度；cool：綠色往藍綠推多少
+// contrast：混完霧再拉一條 S 曲線，1 是不拉
 export const GRADE = {
   on: 1, density: 0.016, falloff: 0.04, base: -0.6, start: 6, maxFog: 1,
-  shadow: new THREE.Vector3(), desat: 0.2, cool: 0.9,
+  shadow: new THREE.Vector3(), desat: 0.2, cool: 0.9, contrast: 1.6,
 };
 setShadow('#16151b');
 function setShadow(hex) {
@@ -40,7 +41,7 @@ const PARS_FRAGMENT = `#ifdef USE_FOG
 		uniform float fogNear;
 		uniform float fogFar;
 	#endif
-	struct Grade { float on; float density; float falloff; float base; float start; float maxFog; vec3 shadow; float desat; float cool; };
+	struct Grade { float on; float density; float falloff; float base; float start; float maxFog; vec3 shadow; float desat; float cool; float contrast; };
 	uniform Grade uGrade;
 #endif`;
 
@@ -48,7 +49,9 @@ const PARS_FRAGMENT = `#ifdef USE_FOG
 // 調色在 sRGB 做（抬暗部、降飽和用眼睛看到的明暗來算才準），混霧換回線性做：遠處退得比較亮、比較像空氣，不會灰灰髒髒的。
 // 先調色再混霧，完全進霧的遠山還是等於地平線的顏色，山和天空接的地方不會多一條線。
 // 降飽和照最亮的那個色版算：燈籠、窗光再橘都留著，夜色裡只剩燈是暖的
-// 高度霧照 Íñigo Quílez 的解析解：沿著視線把隨高度指數變淡的濃度積分起來
+// 高度霧照 Íñigo Quílez 的解析解：沿著視線把隨高度指數變淡的濃度積分起來。
+// 最後的 S 曲線拉在亮度上（不動色相和飽和度），支點是霧色的亮度：比霧暗的壓更暗、比霧亮的推更亮，霧本身不變，
+// 沒經過這裡的天空球和霧色還是接得起來
 const FRAGMENT = `#ifdef USE_FOG
 	if ( uGrade.on > 0.5 ) {
 		bool srgbOut = linearToOutputTexel( vec4( 0.5 ) ).r > 0.6;
@@ -66,7 +69,13 @@ const FRAGMENT = `#ifdef USE_FOG
 		float slope = abs( bdy ) > 1e-4 ? ( 1.0 - exp( - bdy ) ) / bdy : 1.0;
 		float amount = uGrade.density * exp( - uGrade.falloff * ( cameraPosition.y - uGrade.base ) ) * max( dist - uGrade.start, 0.0 ) * slope;
 		c = mix( c, fogLin, min( 1.0 - exp( - amount ), uGrade.maxFog ) );
-		gl_FragColor.rgb = srgbOut ? sRGBTransferOETF( vec4( c, 1.0 ) ).rgb : c;
+		vec3 o = sRGBTransferOETF( vec4( c, 1.0 ) ).rgb;
+		vec3 LUMA = vec3( 0.2126, 0.7152, 0.0722 );
+		float pivot = dot( sRGBTransferOETF( vec4( fogLin, 1.0 ) ).rgb, LUMA );
+		float l = dot( o, LUMA );
+		float l2 = l < pivot ? pivot * pow( l / pivot, uGrade.contrast ) : 1.0 - ( 1.0 - pivot ) * pow( max( 1.0 - l, 0.0 ) / ( 1.0 - pivot ), uGrade.contrast );
+		o = min( o * l2 / max( l, 1e-4 ), 1.0 );
+		gl_FragColor.rgb = srgbOut ? o : sRGBTransferEOTF( vec4( o, 1.0 ) ).rgb;
 	} else {
 		#ifdef FOG_EXP2
 			float fogFactor = 1.0 - exp( - fogDensity * fogDensity * vFogDepth * vFogDepth );
@@ -91,7 +100,7 @@ export function installGrade() {
 // ?debug 時右上角的調整面板：拉了馬上看到，「關」可以跟原本的霧對照，「複製」把數值貼回 grade.js
 const SLIDERS = [
   ['density', 0, 0.06, 0.001], ['falloff', 0, 0.15, 0.002], ['base', -10, 30, 0.5], ['start', 0, 40, 1], ['maxFog', 0, 1, 0.01],
-  ['desat', 0, 1, 0.01], ['cool', 0, 1.5, 0.01],
+  ['desat', 0, 1, 0.01], ['cool', 0, 1.5, 0.01], ['contrast', 0.5, 3, 0.05],
 ];
 export function gradePanel() {
   const el = document.createElement('div');
