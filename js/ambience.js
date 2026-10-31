@@ -54,7 +54,10 @@ const VOICES = {
   // 哞——：低沉的鋸齒波，共振峰從閉著嘴的「m」慢慢打開成「o」
   moo(ctx, out, t, p) {
     const d = 1.3 + Math.random() * 0.5;
-    const o = osc(ctx, 'sawtooth', t, d, [[0, 92 * p], [0.3, 128 * p], [d * 0.7, 116 * p], [d, 78 * p]]);
+    // 偶爾哞到一半破音，往上岔一下再掉回來
+    const pts = [[0, 92 * p], [0.3, 128 * p], [d * 0.7, 116 * p], [d, 78 * p]];
+    if (Math.random() < 0.12) pts.splice(2, 0, [d * 0.45, 135 * p], [d * 0.5, 210 * p], [d * 0.58, 120 * p]);
+    const o = osc(ctx, 'sawtooth', t, d, pts);
     lfo(ctx, t, d, 5.5, 3 * p, o.frequency);
     const bp = biquad(ctx, 'bandpass', 320, 2.2);
     bp.frequency.setValueAtTime(320, t);
@@ -81,7 +84,9 @@ const VOICES = {
     let tt = t;
     for (let i = 0; i < n; i++) {
       const d = 0.13 + Math.random() * 0.05;
-      const o = osc(ctx, 'sawtooth', tt, d, [[0, 250 * p], [d * 0.3, 270 * p], [d, 185 * p]]);
+      // 偶爾最後一聲呱得又尖又高
+      const q = i === n - 1 && n > 1 && Math.random() < 0.15 ? p * 1.5 : p;
+      const o = osc(ctx, 'sawtooth', tt, d, [[0, 250 * q], [d * 0.3, 270 * q], [d, 185 * q]]);
       o.connect(biquad(ctx, 'bandpass', 1250, 4)).connect(envelope(ctx, tt, 0.01, d, 2)).connect(out);
       tt += d + 0.09;
     }
@@ -98,25 +103,36 @@ const VOICES = {
     }
     return tt - t;
   },
-  // 汪：短促的鋸齒波加一點氣音
+  // 汪：短促的鋸齒波加一點氣音，一到三聲，後面的越叫越低。偶爾尾巴多一聲細細的嗚咿
   bark(ctx, out, t, p, noise) {
-    const n = Math.random() < 0.6 ? 2 : 1;
+    const r = Math.random(), n = r < 0.25 ? 1 : r < 0.8 ? 2 : 3;
+    let tt = t;
     for (let i = 0; i < n; i++) {
-      const tt = t + i * 0.22, d = 0.14;
-      osc(ctx, 'sawtooth', tt, d, [[0, 380 * p], [0.04, 420 * p], [d, 210 * p]])
-        .connect(biquad(ctx, 'lowpass', 1600)).connect(envelope(ctx, tt, 0.005, d, 1.4)).connect(out);
+      const d = 0.11 + Math.random() * 0.05, q = p * (1 - i * 0.05);
+      osc(ctx, 'sawtooth', tt, d, [[0, 380 * q], [0.04, 420 * q], [d, 210 * q]])
+        .connect(biquad(ctx, 'lowpass', 1100)).connect(envelope(ctx, tt, 0.01, d, 1.1)).connect(out);
       const src = ctx.createBufferSource();
       src.buffer = noise;
-      src.connect(biquad(ctx, 'bandpass', 900)).connect(envelope(ctx, tt, 0.003, 0.08, 1.2)).connect(out);
+      src.connect(biquad(ctx, 'bandpass', 900)).connect(envelope(ctx, tt, 0.005, 0.08, 0.9)).connect(out);
       src.start(tt, Math.random() * 7);
       src.stop(tt + 0.1);
+      tt += d + 0.08 + Math.random() * 0.08;
     }
-    return n * 0.22;
+    if (Math.random() < 0.12) {
+      tt += 0.04;
+      osc(ctx, 'sine', tt, 0.16, [[0, 1100 * p], [0.07, 1900 * p], [0.16, 1500 * p]])
+        .connect(envelope(ctx, tt, 0.02, 0.16, 0.5)).connect(out);
+      tt += 0.16;
+    }
+    return tt - t;
   },
-  // 喵——：音高先揚後抑，共振峰從「咪」張開成「嗷」
+  // 喵——：音高先揚後抑，共振峰從「咪」張開成「嗷」。有時短短一聲，偶爾喵到一半破音
   meow(ctx, out, t, p) {
-    const d = 0.55 + Math.random() * 0.25;
-    const o = osc(ctx, 'sawtooth', t, d, [[0, 480 * p], [d * 0.3, 760 * p], [d, 540 * p]]);
+    const d = Math.random() < 0.2 ? 0.3 + Math.random() * 0.1 : 0.55 + Math.random() * 0.25;
+    const top = (700 + Math.random() * 120) * p;
+    const pts = [[0, 480 * p], [d * 0.3, top], [d, 540 * p]];
+    if (Math.random() < 0.12) pts.splice(2, 0, [d * 0.55, top * 0.95], [d * 0.6, top * 1.5], [d * 0.7, top * 0.8]);
+    const o = osc(ctx, 'sawtooth', t, d, pts);
     const bp = biquad(ctx, 'bandpass', 900, 3);
     bp.frequency.setValueAtTime(900, t);
     bp.frequency.linearRampToValueAtTime(2300, t + d * 0.3);
@@ -157,19 +173,24 @@ const VOICES = {
     }
     return tt - t;
   },
-  // 呼嚕：低頻雜訊一秒抖二十幾下
+  // 呼嚕：中低頻雜訊一秒抖二十幾下（喇叭播不出太低的聲音，切掉 120Hz 以下反而聽得出顆粒）。有時結尾輕輕翹一聲「嚕～」
   purr(ctx, out, t, p, noise) {
-    const d = 2.6, am = ctx.createGain();
+    const d = 2.2 + Math.random() * 1.3, am = ctx.createGain();
     am.gain.value = 0.5;
-    lfo(ctx, t, d, 23, 0.5, am.gain);
+    lfo(ctx, t, d, 20 + Math.random() * 6, 0.5, am.gain);
     const src = ctx.createBufferSource();
     src.buffer = noise;
     src.loop = true;
-    src.connect(biquad(ctx, 'lowpass', 260)).connect(am);
-    osc(ctx, 'sawtooth', t, d, [[0, 46 * p]]).connect(biquad(ctx, 'lowpass', 180)).connect(am);
-    am.connect(envelope(ctx, t, 0.3, d, 2.5)).connect(out);
+    src.connect(biquad(ctx, 'highpass', 120)).connect(biquad(ctx, 'bandpass', 420, 0.8)).connect(am);
+    osc(ctx, 'sawtooth', t, d, [[0, 92 * p]]).connect(biquad(ctx, 'lowpass', 360)).connect(am);
+    am.connect(envelope(ctx, t, 0.3, d, 1.6)).connect(out);
     src.start(t, Math.random() * 5);
     src.stop(t + d + 0.05);
+    if (Math.random() < 0.2) {
+      const tt = t + d + 0.04;
+      osc(ctx, 'triangle', tt, 0.13, [[0, 520 * p], [0.13, 880 * p]]).connect(envelope(ctx, tt, 0.02, 0.13, 0.5)).connect(out);
+      return d + 0.2;
+    }
     return d;
   },
 };
@@ -367,7 +388,8 @@ export class Ambience {
     if (!ctx || this.muted || document.hidden || !VOICES[kind] || vol < 0.002) return;
     if (ctx.state !== 'running') ctx.resume().catch(() => {});
     const out = ctx.createGain();
-    out.gain.value = vol;
+    out.gain.value = vol * (0.8 + Math.random() * 0.2);   // 每次叫的大小聲和高低都差一點，不會像同一段錄音
+    pitch *= 0.94 + Math.random() * 0.12;
     if (ctx.createStereoPanner) {
       const p = ctx.createStereoPanner();
       p.pan.value = pan;

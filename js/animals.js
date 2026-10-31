@@ -457,7 +457,7 @@ const SPECIES = {
   duckling: { name: '小鴨', pose: 'duck', L: 9, walkV: 0.55, gait: 30, turn: 8, acts: [['peck', 3], ['idle', 2]],
     stand: 0.95, petTime: 2.2, hear: 8, vol: 0.09, voice: 'peep', every: [3, 9], lookR: 2, lookMax: 0.9, bump: 1.2, fleeV: 1.8, skittish: true },
   dog: { name: '小狗', pose: 'dog', L: 11, walkV: 1.1, runV: 3.2, runChance: 0.3, gait: 14, turn: 7, acts: [['sniff', 3], ['sit', 3], ['zoom', 2], ['lie', 1]],
-    stand: 0.8, petTime: 3, hear: 18, vol: 0.28, voice: 'bark', every: [30, 70], lookR: 6, lookMax: 0.9, greets: true },
+    stand: 0.8, petTime: 3, hear: 14, vol: 0.16, voice: 'bark', every: [30, 70], lookR: 6, lookMax: 0.9, greets: true },
   marmot: { name: '土撥鼠', pose: 'marmot', L: 13, walkV: 0.5, gait: 26, turn: 6, acts: [['stand', 4], ['eat', 3], ['dig', 2], ['groom', 1]],
     stand: 0.6, petTime: 3.2, hear: 14, vol: 0.2, voice: 'chirp', every: [20, 50], lookR: 4, lookMax: 0.9, bump: 1.3, fleeV: 2.6, skittish: true, burrow: true },
   owl: { name: '貓頭鷹', pose: 'owl', L: 170, turn: 4, acts: [['doze', 4], ['look', 3], ['preen', 1]],
