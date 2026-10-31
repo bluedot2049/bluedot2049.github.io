@@ -12,8 +12,12 @@ const SWIPE_MIN = 40;
 const INTRO_LEN = 18;   // 開場遠景：沿棧橋走這麼遠，鏡頭換到角色背後
 // 鏡頭追目標的時間：跟著角色、看畫照鏡子
 const FOLLOW_T = 0.2, VIEW_T = 0.32;
-// 導演運鏡：使用者自己轉鏡頭後讓幾秒；自動轉向最快多少（弧度／秒）；照路線走時看前面幾公尺
-const DIRECTOR_HOLD = 5, DIRECTOR_YAW_MAX = 0.6, DIRECTOR_AHEAD = 3.5;
+// 導演運鏡：使用者自己轉鏡頭後讓幾秒；照路線走時看前面幾公尺
+const DIRECTOR_HOLD = 5, DIRECTOR_AHEAD = 3.5;
+// 鏡頭自己轉會暈，所以轉得少、轉得慢：跟目標差超過 DEAD 才開始轉，轉到差 SETTLE 以內就停，不追到正後方。
+// 轉速最快 RATE（弧度／秒），起步和停下的角加速度不超過 ACCEL
+const DIRECTOR_DEAD = 0.45, DIRECTOR_SETTLE = 0.2;
+const DIRECTOR_RATE = 0.3, DIRECTOR_ACCEL = 0.45;
 
 const defaultDist = () => (window.innerWidth < window.innerHeight ? 11 : 8.5);
 const smoothstep = THREE.MathUtils.smoothstep;
@@ -60,6 +64,8 @@ export class Player {
     this.directorHold = 0;          // 使用者剛轉過鏡頭，還要讓幾秒
     this.directorEngage = false;    // 剛打開：站著也轉回角色背後
     this.dirVel = {};
+    this.yawRate = 0;               // 導演轉鏡頭的角速度
+    this.chasing = false;           // 差太多了，正在轉回去
     this.moveBasis = null;          // 導演運鏡時，搖桿和方向鍵照按下那一刻的鏡頭方向走
     this.shots = null;              // 海市的鏡位，見 shots.js
     this.shotK = 1;                 // 鏡位的距離倍率，乘在 camDist 上
@@ -388,6 +394,7 @@ export class Player {
     this.directorHold = 0;
     this.directorEngage = this.director;
     this.dirVel = {};
+    this.yawRate = 0;
     this.exitView();
     this.events.onDirector?.(this.director);
   }
@@ -405,6 +412,7 @@ export class Player {
     this.directorHold = DIRECTOR_HOLD;
     this.directorEngage = false;
     this.dirVel = {};
+    this.yawRate = 0;
     this.moveBasis = null;
   }
 
@@ -435,23 +443,31 @@ export class Player {
     if (this.directorHold > 0) return;
     const v = this.dirVel, engage = this.directorEngage;
     let want = null;
+    let still = false;   // 站著，或用搖桿、方向鍵自己控制方向：水平不轉，俯角和距離照樣換
     if (engage) want = this.heading + Math.PI;
     else if (this.path.length) {
       const a = this.pathAhead(DIRECTOR_AHEAD), dx = a.x - this.pos.x, dz = a.z - this.pos.z;
       if (Math.hypot(dx, dz) > 1.2) want = Math.atan2(dx, dz) + Math.PI;
-    } else if (this.speed > 0.05) want = this.heading + Math.PI;
-    let diff = want === null ? 0 : wrapAngle(want - this.camYaw);
+    } else if (this.speed > 0.05) still = true;
+    const diff = want === null ? 0 : wrapAngle(want - this.camYaw), ad = Math.abs(diff);
+    // 差得不多就不轉，角色在畫面裡稍微斜著走沒關係；差太多才轉，轉到幾乎對準就停
+    if (want === null) this.chasing = false;
+    else if (ad > (engage ? 0 : DIRECTOR_DEAD)) this.chasing = true;
+    else if (ad < (engage ? 0.02 : DIRECTOR_SETTLE)) this.chasing = false;
     // 朝著鏡頭走時不繞到背後去，免得整個畫面甩半圈
-    if (!engage) diff *= 1 - smoothstep(Math.abs(diff), 1.6, 2.1);
-    const lag = engage ? 0.6 : this.directorLag;
-    damp(this, 'camYaw', this.camYaw + diff, v, 1.1 * lag, dt);
-    v.camYaw = THREE.MathUtils.clamp(v.camYaw, -DIRECTOR_YAW_MAX, DIRECTOR_YAW_MAX);
-    // 沒有目標時照樣算一次，轉到一半停下來會慢慢減速，不會一下子煞住
+    const away = engage ? 1 : 1 - smoothstep(ad, 1.6, 2.1);
+    const lag = engage ? 0.35 : this.directorLag, rate = DIRECTOR_RATE / lag, accel = DIRECTOR_ACCEL / lag;
+    // 越接近目標越慢，起步和停下都限制角加速度，不會一下子轉起來或煞住
+    const goal = this.chasing ? THREE.MathUtils.clamp(diff * 0.8, -rate, rate) * away : 0;
+    this.yawRate += THREE.MathUtils.clamp(goal - this.yawRate, -accel * dt, accel * dt);
+    this.camYaw += this.yawRate * dt;
+    // 俯角和距離換得更慢；站著不動時照樣算一次，換到一半停下來會慢慢減速
     const sh = shot?.w ? shot : { w: 0, pitch: 0, k: 1 };
     const pitch = THREE.MathUtils.lerp(PITCH_DEFAULT, sh.pitch, sh.w), k = THREE.MathUtils.lerp(1, sh.k, sh.w);
-    damp(this, 'camPitch', want === null ? this.camPitch : pitch, v, 1.6 * lag, dt);
-    damp(this, 'shotK', want === null ? this.shotK : k, v, 2 * lag, dt);
-    if (engage && Math.abs(diff) < 0.01 && Math.abs(this.camPitch - pitch) < 0.01) this.directorEngage = false;
+    const hold = want === null && !still;
+    damp(this, 'camPitch', hold ? this.camPitch : pitch, v, 3 * lag, dt);
+    damp(this, 'shotK', hold ? this.shotK : k, v, 3.5 * lag, dt);
+    if (engage && ad < 0.02 && Math.abs(this.camPitch - pitch) < 0.01) this.directorEngage = false;
   }
 
   // 用尋路找出繞過家具的路線
