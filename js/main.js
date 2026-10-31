@@ -187,7 +187,6 @@ async function start() {
   let swipeHinted = false;
   let mp = null;
   let place = null;   // 戶外現在在哪裡：null 是陽台，否則是草原或棧橋盡頭的地名
-  let overview = town;   // 剛到海市：鏡頭拉得很遠看全貌，開始走動才推近
   let sitHinted = false;
 
   // 捏角色：每改一下就套到角色身上、存起來、告訴別人，鏡頭照目前那一頁取景
@@ -216,11 +215,6 @@ async function start() {
   const player = new Player(camera, renderer.domElement, world, character, {
     onInput(kind) {
       lastInput = performance.now();
-      if (overview && kind !== 'drag') {
-        overview = false;
-        player.aim = null;
-        if (player.camDist > 20) player.zoomTo();
-      }
       ui.hidePainting();
       ui.hideDress();
       ui.hideHint();
@@ -471,10 +465,17 @@ async function start() {
   const ferry = world.exits[0];
   if (town) {
     // 鏡頭從海上低低地看著整座山城：注視點放在鎮子中段，棧橋和海只佔畫面底下一小條。直式螢幕比較窄，再退遠一點
-    player.aim = new THREE.Vector3(0, 9, -20);
-    player.camDist = window.innerWidth < window.innerHeight ? 80 : 64;
-    player.camPitch = -0.04;
+    // 角色沿棧橋往岸上走，鏡頭跟著慢慢換到角色背後（見 player.startIntro）
+    player.startIntro(new THREE.Vector3(0, 9, -20), window.innerWidth < window.innerHeight ? 80 : 64, -0.04);
     player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
+    // 測試用：?view=x,z,面向(度),鏡頭距離,俯角(度)，直接站到那裡看，不看開場的遠景
+    const view = params.get('view')?.split(',').map(Number);
+    if (view?.length >= 2 && view.every(Number.isFinite)) {
+      player.intro = null;
+      player.camDist = view[3] ?? player.camDist;
+      player.camPitch = ((view[4] ?? 20) * Math.PI) / 180;
+      player.place(view[0], view[1], ((view[2] ?? 180) * Math.PI) / 180);
+    }
   }
   else if (params.get('from') === 'haishi' && ferry) player.place(ferry.x, ferry.z + 1.8, 0);
   const go = params.get('go')?.split('.').map(Number);

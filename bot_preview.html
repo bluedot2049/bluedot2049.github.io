@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>煉金工程小機器人 3D 模型預覽 — Steampunk Alchemical Bot</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+  <style>
+    :root {
+      --bg: #15110e;
+      --card-bg: rgba(26, 20, 16, 0.85);
+      --gold: #e5a93b;
+      --gold-glow: rgba(229, 169, 59, 0.35);
+      --cyan: #3df2c6;
+      --border: rgba(229, 169, 59, 0.25);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at 50% 30%, #291e16 0%, var(--bg) 75%);
+      color: #f7ede2;
+      font-family: "Noto Sans TC", sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #canvas-container {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+    #canvas-container:active {
+      cursor: grabbing;
+    }
+    /* 頂部標題 */
+    header {
+      position: absolute;
+      top: 20px;
+      left: 24px;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--gold);
+      background: rgba(229, 169, 59, 0.12);
+      border: 1px solid var(--border);
+      padding: 4px 12px;
+      border-radius: 999px;
+      margin-bottom: 8px;
+    }
+    .badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan);
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    h1 span {
+      font-family: "Cormorant Garamond", serif;
+      font-weight: 600;
+      font-size: 18px;
+      color: var(--gold);
+      opacity: 0.85;
+    }
+    p.sub {
+      font-size: 13px;
+      color: #bfaea2;
+      margin-top: 4px;
+    }
+
+    /* 右上角操作指引 */
+    .hint-box {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      z-index: 10;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 10px 16px;
+      font-size: 12px;
+      color: #c7b8ad;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      pointer-events: none;
+    }
+    .hint-box span {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* 底部控制工具列 */
+    .toolbar {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      padding: 8px 14px;
+      border-radius: 999px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    }
+    .btn {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #ede2d8;
+      font-size: 13px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn:hover {
+      background: var(--gold-glow);
+      border-color: var(--gold);
+      color: #fff;
+    }
+    .btn.active {
+      background: var(--gold);
+      color: #1a120b;
+      font-weight: 700;
+      border-color: var(--gold);
+    }
+
+    /* 特色說明浮動標籤卡片 */
+    .feature-card {
+      position: absolute;
+      bottom: 90px;
+      left: 24px;
+      z-index: 10;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(10px);
+      border-radius: 14px;
+      padding: 14px 18px;
+      max-width: 320px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #d8c9bc;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    }
+    .feature-card h3 {
+      font-size: 14px;
+      color: var(--gold);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .feature-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .feature-list li strong {
+      color: #fcebd9;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three.module.min.js",
+        "./js/bot.js": "./js/bot.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <header>
+    <div class="badge">Model Specimen #01 — Alchemy Engineering</div>
+    <h1>煉金工程小機器人 <span>Steampunk Automaton</span></h1>
+    <p class="sub">蒸氣龐克 × 卡通工程黃 × 煉金術魔導施工偶</p>
+  </header>
+
+  <div class="hint-box">
+    <span>🖱️ 拖曳滑鼠：旋轉視角 360°</span>
+    <span>🔍 滾輪縮放：拉近/推遠細節</span>
+    <span>📱 觸控支援：單指轉動 / 雙指縮放</span>
+  </div>
+
+  <div class="feature-card">
+    <h3>⚙️ 第十一版模型特徵細節</h3>
+    <ul class="feature-list">
+      <li>🌌 <strong>雙層渾天差速神聖工程鍊金法陣（頂級美感）</strong>：360° 天文儀精密遊標度數環、12 方位角度數值（0°~330°）、環形海市秘傳符文銘文圈、天體星座連線、36齒重工咬合齒圈、七大金屬行星神龕壁龕（金銀汞銅鐵錫鉛）、麥達昶神聖幾何全聯線陣列與圓方互化；雙層微視差差速反轉（外層順轉、核心逆轉），地面輔以柔和光暈！</li>
+      <li>🛢️ <strong>純金屬重工長嘴工匠注油壺（徹底消除藥瓶感）</strong>：兩側藥瓶全數移除！左手握持純黃銅錐形機油壺身、防滑衝壓滾邊、六角鎖緊螺母、按壓活塞頂桿與細長前傾紅銅注油嘴，回歸純粹俐落工程工具！</li>
+      <li>🔧 <strong>手臂機械邏輯化 & 巨型工程活動板手</strong>：雙臂配備金屬液壓推桿油缸（油缸套筒＋鍍鉻桿），右手握持超顯眼巨型工程活動板手（配黃銅調節蝸桿），工具輪廓無比醒目！</li>
+      <li>⚡ <strong>手機極致輕量化（極低負擔）</strong>：全模型精簡至 141 個網格、3290 面，手機端順暢 60 FPS 滿格絲滑渲染！</li>
+      <li>🧱 <strong>方形重裝工程身形</strong>：八角倒角重裝方箱柱體（Chamfered Box），正前與兩側均為厚實方板，搭配 4 根黃銅包邊角鐵！</li>
+      <li>🔥 <strong>方型高溫燃燒室爐門</strong>：平整方腹上配置鑄鐵方門框、觀火欄柵、內部動態跳動金紅烈焰與雙指針壓力錶！</li>
+      <li>🏗️ <strong>大外展後背吊臂（100% 零穿模）</strong>：吊臂外拓至 x=±0.60，焊炬躍動電漿藍火，三爪夾鉗旋轉檢測大號黃銅機件齒輪！</li>
+      <li>🏭 <strong>硬派方形防滾架動力背包</strong>：方鋼外骨骼龍骨架、雙聯高壓蓄能釜、紅色手輪平衡總管、後傾雙煙囪！</li>
+      <li>🥽 <strong>純淨發光藍綠護目鏡（零遮擋）</strong>：大號圓框發光藍綠鏡面（#2cf5c8），無任何三角面干涉，視野通透！</li>
+    </ul>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn active" id="btn-anim">⏸️ 暫停懸浮</button>
+    <button class="btn" id="btn-front">正面</button>
+    <button class="btn" id="btn-side">側面 (看工具/腰帶)</button>
+    <button class="btn" id="btn-back">背面 (看鍋爐煙囪)</button>
+    <button class="btn" id="btn-reset">重設角度</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { EngineeringBot } from './js/bot.js';
+
+    // 建立場景
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x191410);
+    scene.fog = new THREE.FogExp2(0x191410, 0.08);
+
+    // 攝影機
+    const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 1.4, 3.8);
+
+    // 渲染器
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    // 暖色工作室燈光 (Studio Lighting)
+    const ambientLight = new THREE.AmbientLight(0xffecd6, 0.9);
+    scene.add(ambientLight);
+
+    // 主暖光 (Key Light)
+    const keyLight = new THREE.DirectionalLight(0xfffae0, 1.4);
+    keyLight.position.set(3, 5, 4);
+    scene.add(keyLight);
+
+    // 冷色側輪廓光 (Rim Light)
+    const rimLight = new THREE.DirectionalLight(0x40e0d0, 1.1);
+    rimLight.position.set(-4, 3, -3);
+    scene.add(rimLight);
+
+    // 下方微弱地光
+    const groundLight = new THREE.PointLight(0x3af5c8, 1.2, 5);
+    groundLight.position.set(0, 0.2, 0);
+    scene.add(groundLight);
+
+    // 地面圓形石板基座 (Pedestal)
+    const floorGeo = new THREE.CylinderGeometry(2.0, 2.1, 0.1, 32);
+    const floorMat = new THREE.MeshLambertMaterial({ color: 0x241d18, flatShading: true });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.position.y = -0.05;
+    scene.add(floor);
+
+    // 實例化工程機器人
+    const bot = new EngineeringBot({ scale: 1.0 });
+    scene.add(bot.group);
+
+    // 簡易軌道相機旋轉控制 (Orbit)
+    let isDragging = false;
+    let prevMouseX = 0, prevMouseY = 0;
+    let theta = 0; // 水平角度
+    let phi = 0.22;  // 垂直仰角
+    let radius = 3.6; // 距離
+    let targetRadius = 3.6;
+    let isPlaying = true;
+
+    function updateCamera() {
+      phi = Math.max(-0.2, Math.min(1.2, phi));
+      radius += (targetRadius - radius) * 0.15;
+      const cy = 0.95;
+      camera.position.x = radius * Math.sin(theta) * Math.cos(phi);
+      camera.position.y = cy + radius * Math.sin(phi);
+      camera.position.z = radius * Math.cos(theta) * Math.cos(phi);
+      camera.lookAt(0, cy, 0);
+    }
+    updateCamera();
+
+    container.addEventListener('pointerdown', (e) => {
+      isDragging = true;
+      prevMouseX = e.clientX;
+      prevMouseY = e.clientY;
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - prevMouseX;
+      const dy = e.clientY - prevMouseY;
+      prevMouseX = e.clientX;
+      prevMouseY = e.clientY;
+
+      theta -= dx * 0.008;
+      phi += dy * 0.008;
+      updateCamera();
+    });
+
+    window.addEventListener('pointerup', () => { isDragging = false; });
+    window.addEventListener('pointercancel', () => { isDragging = false; });
+
+    container.addEventListener('wheel', (e) => {
+      targetRadius = Math.max(1.8, Math.min(6.5, targetRadius + e.deltaY * 0.0025));
+    }, { passive: true });
+
+    // 按鈕控制
+    const btnAnim = document.getElementById('btn-anim');
+    btnAnim.addEventListener('click', () => {
+      isPlaying = !isPlaying;
+      btnAnim.textContent = isPlaying ? '⏸️ 暫停懸浮' : '▶️ 播放懸浮';
+      btnAnim.classList.toggle('active', isPlaying);
+    });
+
+    document.getElementById('btn-front').addEventListener('click', () => {
+      theta = 0; phi = 0.12; targetRadius = 3.2;
+    });
+    document.getElementById('btn-side').addEventListener('click', () => {
+      theta = Math.PI * 0.42; phi = 0.15; targetRadius = 3.2;
+    });
+    document.getElementById('btn-back').addEventListener('click', () => {
+      theta = Math.PI; phi = 0.25; targetRadius = 3.2;
+    });
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      theta = 0.4; phi = 0.22; targetRadius = 3.6;
+    });
+
+    // 視窗縮放
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // 動畫迴圈
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = clock.getDelta();
+      if (isPlaying) {
+        bot.update(dt);
+      }
+      updateCamera();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

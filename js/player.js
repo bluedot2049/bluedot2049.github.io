@@ -9,8 +9,21 @@ const DIST_MIN = 4, DIST_MAX = 14;
 const PITCH_MIN = -1.55, PITCH_LOW = -0.08, PITCH_MAX = 1.25, PITCH_DEFAULT = 0.8;
 const ZENITH = 1.52;
 const SWIPE_MIN = 40;
+const INTRO_LEN = 18;   // 開場遠景：沿棧橋走這麼遠，鏡頭換到角色背後
+// 鏡頭追目標的時間：跟著角色、看畫照鏡子
+const FOLLOW_T = 0.2, VIEW_T = 0.32;
 
 const defaultDist = () => (window.innerWidth < window.innerHeight ? 11 : 8.5);
+const smoothstep = THREE.MathUtils.smoothstep;
+
+// 臨界阻尼彈簧：o[k] 帶著速度 vel[k] 追 goal，起步會加速，到了不回彈。smoothTime 大約是追上要花的秒數
+function damp(o, k, goal, vel, smoothTime, dt) {
+  const w = 2 / smoothTime, x = w * dt;
+  const e = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+  const d = o[k] - goal, t = ((vel[k] || 0) + w * d) * dt;
+  vel[k] = ((vel[k] || 0) - w * t) * e;
+  o[k] = goal + (d + t) * e;
+}
 
 function wrapAngle(a) {
   while (a > Math.PI) a -= Math.PI * 2;
@@ -39,11 +52,13 @@ export class Player {
     this.camPitch = PITCH_DEFAULT;
     this.camDist = defaultDist();
     this.distMax = world.camDistMax ?? DIST_MAX;   // 海市可以拉得比較遠，看得到整座山城
-    this.zoomGoal = null;           // 慢慢推到這個距離和俯角，見 zoomTo
-    this.aim = null;                // 有給就繞著這一點看，不看角色（剛到海市的遠景）
+    this.intro = null;              // 開場遠景，見 startIntro
     this.camPos = new THREE.Vector3();
     this.camLook = new THREE.Vector3();
+    this.posVel = {};               // 鏡頭位置和注視點的彈簧速度
+    this.lookVel = {};
     this.headPos = new THREE.Vector3();
+    this.introPos = new THREE.Vector3();
     this.keys = new Set();
     this.joy = { x: 0, y: 0 };      // 虛擬搖桿，-1 ~ 1
     this.mouseRun = false;          // 滑鼠左右鍵同時按著：往鏡頭前方走
@@ -86,7 +101,7 @@ export class Player {
       chord(e);
       if (pts.size === 2) {
         const [a, b] = [...pts.values()];
-        pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), base: this.camDist };
+        pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), base: this.zoomDist };
         multi = true;
       }
     });
@@ -102,8 +117,7 @@ export class Player {
       if (pinch && pts.size >= 2) {
         const [a, b] = [...pts.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
-        this.camDist = THREE.MathUtils.clamp(pinch.base * (pinch.d / Math.max(d, 1)), DIST_MIN, this.distMax);
-        this.zoomGoal = null;
+        this.zoomDist = pinch.base * (pinch.d / Math.max(d, 1));
         this.events.onInput('drag');
         return;
       }
@@ -133,8 +147,7 @@ export class Player {
     el.addEventListener('wheel', (e) => {
       if (this.paused) return;
       e.preventDefault();
-      this.camDist = THREE.MathUtils.clamp(this.camDist * (1 + e.deltaY * 0.001), DIST_MIN, this.distMax);
-      this.zoomGoal = null;
+      this.zoomDist *= 1 + e.deltaY * 0.001;
       this.events.onInput('drag');
     }, { passive: false });
 
@@ -171,8 +184,19 @@ export class Player {
     const k = (mouse ? 9 : 5.5) / Math.max(this.dom.clientWidth, this.dom.clientHeight);
     const s = mouse ? 1 : -1;   // 觸控是手指拖著畫面走，方向跟滑鼠相反
     this.camYaw -= dx * k * s;
-    this.camPitch = THREE.MathUtils.clamp(this.camPitch + dy * k * s, PITCH_MIN, PITCH_MAX);
+    if (this.introIdle) this.intro.pitch = THREE.MathUtils.clamp(this.intro.pitch + dy * k * s, PITCH_LOW, PITCH_MAX);
+    else this.camPitch = THREE.MathUtils.clamp(this.camPitch + dy * k * s, PITCH_MIN, PITCH_MAX);
     this.events.onInput('drag');
+  }
+
+  // 縮放的距離：還在看開場遠景時縮的是遠景
+  get zoomDist() {
+    return this.introIdle ? this.intro.dist : this.camDist;
+  }
+
+  set zoomDist(d) {
+    if (this.introIdle) this.intro.dist = THREE.MathUtils.clamp(d, DIST_MIN, this.intro.max);
+    else this.camDist = THREE.MathUtils.clamp(d, DIST_MIN, this.distMax);
   }
 
   pick(cx, cy) {
@@ -308,15 +332,41 @@ export class Player {
     if (i >= 0 && i < list.length) this.showPainting(list[i]);
   }
 
-  // 鏡頭慢慢推到 dist、pitch，不給就是預設的距離和俯角。手動縮放會打斷
-  zoomTo(dist = defaultDist(), pitch = PITCH_DEFAULT) {
-    this.zoomGoal = { dist, pitch };
+  // 開場遠景：鏡頭繞著 look 看，距離 dist、俯角 pitch。角色開始走以後，照走過的距離換到跟拍的鏡頭：
+  // 鏡頭先動，注視點晚一點才從 look 滑到角色身上，鎮子在畫面裡多留一會兒。
+  // 開始走之後就算停下來，也會自己慢慢換完
+  startIntro(look, dist, pitch) {
+    this.intro = { look: look.clone(), dist, pitch, max: dist, s: 0, pos: null };
+  }
+
+  // 還沒開始走時，拖曳和縮放是在看遠景；開始走以後遠景的鏡頭位置就固定了，操作只管跟拍的鏡頭
+  get introIdle() {
+    return this.intro?.s === 0;
+  }
+
+  introCamera(outPos) {
+    const it = this.intro;
+    if (it.pos) return outPos.copy(it.pos);
+    const c = Math.cos(it.pitch);
+    return outPos.set(
+      it.look.x + Math.sin(this.camYaw) * c * it.dist,
+      it.look.y + Math.sin(it.pitch) * it.dist,
+      it.look.z + Math.cos(this.camYaw) * c * it.dist
+    );
+  }
+
+  updateIntro(dt) {
+    const it = this.intro;
+    if (it.s === 0 && this.speed > 0.05) it.pos = this.introCamera(new THREE.Vector3());
+    if (it.pos) it.s = Math.min(1, it.s + (this.speed * dt) / INTRO_LEN + dt / 14);
+    if (it.s >= 1) this.intro = null;
   }
 
   // 鏡頭轉回角色背後，俯角和距離恢復預設
   recenter() {
     this.events.onInput('tap');
     this.exitView();
+    this.intro = null;
     this.camYaw = this.heading + Math.PI;
     this.camPitch = PITCH_DEFAULT;
     this.camDist = defaultDist();
@@ -503,6 +553,8 @@ export class Player {
     this.heading = heading;
     this.camYaw = heading + Math.PI;
     this.desiredCamera(this.camPos, this.camLook);
+    this.posVel = {};
+    this.lookVel = {};
   }
 
   fadeTarget() {
@@ -517,8 +569,7 @@ export class Player {
     }
     // 注視點放在角色前方一點，直式螢幕上角色才會落在畫面下方，前方留出空間
     const ahead = window.innerWidth < window.innerHeight ? 1.8 : 0.8;
-    if (this.aim) outLook.copy(this.aim);
-    else outLook.set(this.pos.x - Math.sin(this.camYaw) * ahead, this.pos.y + 0.9, this.pos.z - Math.cos(this.camYaw) * ahead);
+    outLook.set(this.pos.x - Math.sin(this.camYaw) * ahead, this.pos.y + 0.9, this.pos.z - Math.cos(this.camYaw) * ahead);
     const pitch = Math.max(this.camPitch, PITCH_LOW), c = Math.cos(pitch);
     outPos.set(
       outLook.x + Math.sin(this.camYaw) * c * this.camDist,
@@ -539,6 +590,12 @@ export class Player {
       const h = Math.hypot(dx, dz) || 1e-4, len = Math.hypot(h, dy);
       const e = Math.min(ZENITH, Math.atan2(dy, h) + extra);
       outLook.set(outPos.x + (dx / h) * Math.cos(e) * len, outPos.y + Math.sin(e) * len, outPos.z + (dz / h) * Math.cos(e) * len);
+    }
+    // 開場：從遠景的鏡頭換到跟拍的鏡頭。位置先動，注視點晚一點才跟上
+    const it = this.intro;
+    if (it) {
+      outPos.lerpVectors(this.introCamera(this.introPos), outPos, smoothstep(it.s, 0, 0.8));
+      outLook.lerpVectors(it.look, outLook, smoothstep(it.s, 0.2, 1));
     }
   }
 
@@ -642,23 +699,22 @@ export class Player {
     ch.update(dt, this.speed);
 
     let settling = false;
-    const zg = this.zoomGoal;
-    if (zg) {
-      const f = Math.min(1, dt * 1.3);
-      this.camDist += (zg.dist - this.camDist) * f;
-      this.camPitch += (zg.pitch - this.camPitch) * f;
-      if (Math.abs(zg.dist - this.camDist) < 0.02 && Math.abs(zg.pitch - this.camPitch) < 0.002) this.zoomGoal = null;
-      settling = true;
-    }
+    if (this.intro) this.updateIntro(dt);
     if (!this.paused) {
       const dPos = new THREE.Vector3(), dLook = new THREE.Vector3();
       this.desiredCamera(dPos, dLook);
-      const f = 1 - Math.exp(-dt * (this.focus?.camPos ? 3.2 : 5));
-      this.camPos.lerp(dPos, f);
-      this.camLook.lerp(dLook, f);
+      const T = this.focus?.camPos ? VIEW_T : FOLLOW_T;
+      for (const k of 'xyz') {
+        damp(this.camPos, k, dPos[k], this.posVel, T, dt);
+        damp(this.camLook, k, dLook[k], this.lookVel, T, dt);
+      }
       this.camera.position.copy(this.camPos);
       this.camera.lookAt(this.camLook);
-      settling = settling || this.camPos.distanceToSquared(dPos) > 1e-4 || this.camLook.distanceToSquared(dLook) > 1e-4;
+      settling = this.intro?.s > 0 || this.camPos.distanceToSquared(dPos) > 1e-4 || this.camLook.distanceToSquared(dLook) > 1e-4;
+    } else {
+      // 攝影模式回來時鏡頭從停下的地方重新起步
+      this.posVel = {};
+      this.lookVel = {};
     }
 
     this.moving = this.speed > 0.05 || settling || turn !== 0 || ch.busy;

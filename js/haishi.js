@@ -30,18 +30,37 @@ const AREAS = [
   { id: 'sB', x0: -12, x1: -4.5, z0: -4.2, z1: -1.8, lo: 2.4, hi: 4.8, dir: 'w' },
   { id: 'bend1', x0: -15, x1: -12, z0: -6, z1: -1, y: 4.8 },
   { id: 'sC', x0: -14.6, x1: -12.4, z0: -10, z1: -6, lo: 4.8, hi: 6.8, dir: 'n' },
-  { id: 'lower', x0: -15, x1: 13, z0: -15, z1: -10, y: 6.8 },
-  { id: 'sD', x0: 5, x1: 7.4, z0: -20, z1: -15, lo: 6.8, hi: 9.2, dir: 'n' },
-  { id: 'sD2', x0: -11, x1: -8.8, z0: -20, z1: -15, lo: 6.8, hi: 9.2, dir: 'n' },
-  { id: 'lantern', x0: -13, x1: 11, z0: -25, z1: -20, y: 9.2 },
-  { id: 'sE', x0: 8, x1: 10.4, z0: -30, z1: -25, lo: 9.2, hi: 11.6, dir: 'n' },
-  { id: 'upper', x0: -7, x1: 13, z0: -35, z1: -30, y: 11.6 },
-  { id: 'sF', x0: -6, x1: -3.8, z0: -40, z1: -35, lo: 11.6, hi: 14, dir: 'n' },
-  { id: 'specula', x0: -12, x1: 0, z0: -45, z1: -40, y: 14 },
-  { id: 'sG', x0: -19, x1: -12, z0: -43.4, z1: -41.4, lo: 14, hi: 16.4, dir: 'w' },
-  { id: 'bend2', x0: -22.5, x1: -19, z0: -45, z1: -40, y: 16.4 },
-  { id: 'sH', x0: -22, x1: -19.6, z0: -52, z1: -45, lo: 16.4, hi: 19.2, dir: 'n' },
-  { id: 'summit', x0: -27, x1: -15, z0: -59, z1: -52, y: 19.2 },
+  // 下街：三段寬窄不一。中段往北凹進去，是一個小廣場；東段高兩階，中間一小段坡接上去。
+  // street 是同一條街的名字（走進去時報的地名、攤位落在哪一條街）。rowFrom：北邊那排房子從哪裡開始排
+  { id: 'lower', street: 'lower', x0: -16, x1: -6, z0: -16.5, z1: -10, y: 6.8 },
+  { id: 'lowerB', street: 'lower', x0: -6, x1: 4, z0: -19, z1: -11.5, y: 6.8 },
+  { id: 'lowerR', street: 'lower', x0: 4, x1: 5.5, z0: -15, z1: -11.5, lo: 6.8, hi: 7.2, dir: 'e', slope: true },
+  { id: 'lowerC', street: 'lower', x0: 5.5, x1: 14, z0: -15, z1: -10, y: 7.2, rowFrom: 4 },
+  // 下街到燈巷：三條穿過房子之間的窄巷，各是一段石階
+  { id: 'aL1', x0: -12, x1: -10.4, z0: -21.5, z1: -16.5, lo: 6.8, hi: 9.2, dir: 'n' },
+  { id: 'aL2', x0: -1.5, x1: 0.3, z0: -24, z1: -19, lo: 6.8, hi: 9.2, dir: 'n' },
+  { id: 'aL3', x0: 6.3, x1: 8.1, z0: -20, z1: -15, lo: 7.2, hi: 9.2, dir: 'n' },
+  // 燈巷：三段錯開，接口窄窄的
+  { id: 'lantern', street: 'lantern', x0: -15, x1: -5, z0: -27, z1: -21.5, y: 9.2 },
+  { id: 'lanternB', street: 'lantern', x0: -5, x1: 4, z0: -29, z1: -24, y: 9.2 },
+  { id: 'lanternC', street: 'lantern', x0: 4, x1: 12, z0: -26.5, z1: -20, y: 9.2 },
+  { id: 'aU1', x0: -8, x1: -6.4, z0: -32, z1: -27, lo: 9.2, hi: 11.6, dir: 'n' },
+  { id: 'aU2', x0: 1.6, x1: 3.2, z0: -34, z1: -29, lo: 9.2, hi: 11.6, dir: 'n' },
+  { id: 'aU3', x0: 10, x1: 11.8, z0: -31.5, z1: -26.5, lo: 9.2, hi: 12, dir: 'n' },
+  // 工坊街：東段高兩階
+  { id: 'upper', street: 'upper', x0: -11, x1: -2, z0: -37, z1: -32, y: 11.6 },
+  { id: 'upperB', street: 'upper', x0: -2, x1: 7.5, z0: -38, z1: -34, y: 11.6 },
+  { id: 'upperS', street: 'upper', x0: 7.5, x1: 8.5, z0: -35.5, z1: -34, lo: 11.6, hi: 12, dir: 'e' },
+  { id: 'upperC', street: 'upper', x0: 8.5, x1: 14, z0: -35.5, z1: -31.5, y: 12, rowFrom: 7.5 },
+  // 星台，再往西轉兩段石階上遠眺台
+  { id: 'sF', x0: -8, x1: -6, z0: -42, z1: -37, lo: 11.6, hi: 14, dir: 'n' },
+  { id: 'sF2', x0: -0.5, x1: 1.3, z0: -43, z1: -38, lo: 11.6, hi: 14, dir: 'n' },
+  { id: 'specula', street: 'specula', x0: -16, x1: -4, z0: -48, z1: -42, y: 14 },
+  { id: 'speculaB', street: 'specula', x0: -4, x1: 4, z0: -46, z1: -43, y: 14 },
+  { id: 'sG', x0: -23, x1: -16, z0: -46.4, z1: -44.4, lo: 14, hi: 16.4, dir: 'w' },
+  { id: 'bend2', x0: -26.5, x1: -23, z0: -48, z1: -43, y: 16.4 },
+  { id: 'sH', x0: -26, x1: -23.6, z0: -55, z1: -48, lo: 16.4, hi: 19.2, dir: 'n' },
+  { id: 'summit', x0: -31, x1: -19, z0: -62, z1: -55, y: 19.2 },
   // 港口：碼頭往東西兩邊接出濱海的岸壁。西邊是漁港，三道木頭小棧橋，外面一道防波堤；東邊是渡船口，一道石砌的長堤
   { id: 'wharfW', x0: -27, x1: -8, z0: 5, z1: 9, y: 0 },
   { id: 'wharfE', x0: 8, x1: 15, z0: 5, z1: 9, y: 0 },
@@ -57,7 +76,7 @@ const AREAS = [
   // 牌樓往東的另一條路：跟西邊對稱，一段往東爬的石階、一個轉角平台，再往北接到下街的東頭
   { id: 'sEa', x0: 4.5, x1: 10, z0: -4.2, z1: -1.8, lo: 2.4, hi: 4.8, dir: 'e' },
   { id: 'bend3', x0: 10, x1: 13, z0: -6, z1: -1, y: 4.8 },
-  { id: 'sEb', x0: 10.4, x1: 12.6, z0: -10, z1: -6, lo: 4.8, hi: 6.8, dir: 'n' },
+  { id: 'sEb', x0: 10.4, x1: 12.6, z0: -10, z1: -6, lo: 4.8, hi: 7.2, dir: 'n' },
 ];
 for (const a of AREAS) if (a.y == null) a.n = Math.round((a.hi - a.lo) / RISE);
 const AREA = Object.fromEntries(AREAS.map((a) => [a.id, a]));
@@ -79,32 +98,31 @@ const PLACES = {
   summit: { name: '遠眺台', subtitle: 'Prospectus' },
 };
 
-// 店：沿著各層街道靠山的那一側。FRONT 是那一排房子正面的 z，櫃台和攤販都在正面前面
+// 店：沿著各層街道靠山的那一側（北邊）。at 是哪一條街，x 決定落在那條街的哪一段，店面開在那一段的北邊上
 // 攤販的樣子和台詞在 vendors.js，用 id 對起來
-const FRONT = { quay: 5, lower: -15.1, lantern: -25.1, upper: -35.1, specula: -45.1 };
 export const SHOPS = [
   { id: 'post', at: 'quay', x: -4.6, awning: '#a8322a', goods: 'post', sign: '信' },
   { id: 'fish', at: 'quay', x: 4.6, awning: '#2e5a7a', goods: 'fish', sign: '鮮魚' },
-  { id: 'pigment', at: 'lower', x: -13, awning: '#2e4a9a', goods: 'pigment', sign: '顏料' },
-  { id: 'bakery', at: 'lower', x: -6.5, awning: '#c8803a', goods: 'bread', sign: '麵包' },
-  { id: 'candle', at: 'lower', x: -2.4, awning: '#7a2a4a', goods: 'candle', sign: '蠟燭' },
+  { id: 'pigment', at: 'lower', x: -14, awning: '#2e4a9a', goods: 'pigment', sign: '顏料' },
+  { id: 'bakery', at: 'lower', x: -7.6, awning: '#c8803a', goods: 'bread', sign: '麵包' },
+  { id: 'candle', at: 'lower', x: -3.3, awning: '#7a2a4a', goods: 'candle', sign: '蠟燭' },
   { id: 'tea', at: 'lower', x: 2, awning: '#4a7a4a', goods: 'tea', sign: '茶' },
   { id: 'tailor', at: 'lower', x: 10.4, awning: '#8a4a8a', goods: 'tailor', sign: '裁縫' },
   { id: 'junk', at: 'lantern', x: -10, awning: '#6a5a3a', goods: 'junk', sign: '古物' },
-  { id: 'herbs', at: 'lantern', x: -4, awning: '#3a6a4a', goods: 'herbs', sign: '藥草' },
-  { id: 'lanterns', at: 'lantern', x: 3, awning: '#a8322a', goods: 'lanterns', sign: '燈籠' },
+  { id: 'herbs', at: 'lantern', x: -3.2, awning: '#3a6a4a', goods: 'herbs', sign: '藥草' },
+  { id: 'lanterns', at: 'lantern', x: 7.5, awning: '#a8322a', goods: 'lanterns', sign: '燈籠' },
   { id: 'glass', at: 'upper', x: 3, awning: '#3a6a8a', goods: 'glass', sign: '玻璃' },
-  { id: 'frames', at: 'upper', x: 9, awning: '#8a6a2a', goods: 'frames', sign: '木工' },
+  { id: 'frames', at: 'upper', x: 10.5, awning: '#8a6a2a', goods: 'frames', sign: '木工' },
   { id: 'maps', at: 'specula', x: -6, awning: '#2a3a6a', goods: 'maps', sign: '海圖' },
 ];
-// 小吃推車：擺在街上沒有店的那一側，碼頭上是左右兩邊。ry 是客人那一邊朝的方向（0 朝南）
+// 小吃推車：擺在街上沒有店的那一側，碼頭上是左右兩邊。at 是哪一塊路面，ry 是客人那一邊朝的方向（0 朝南）
 export const CARTS = [
   { id: 'squid', at: 'quay', x: -6.5, z: 8.2, ry: Math.PI / 2, food: 'squid', color: '#a8322a', text: '烤魷魚' },
   { id: 'oden', at: 'quay', x: 6.5, z: 8.2, ry: -Math.PI / 2, food: 'oden', color: '#2a3a6a', text: '關東煮' },
   { id: 'takoyaki', at: 'lower', x: -9.4, z: -11.2, ry: Math.PI, food: 'takoyaki', color: '#c8602a', text: '章魚燒' },
-  { id: 'baozi', at: 'lower', x: 6.6, z: -11.2, ry: Math.PI, food: 'baozi', color: '#3a5a3a', text: '包子' },
-  { id: 'tanghulu', at: 'lantern', x: -1, z: -21.2, ry: Math.PI, food: 'tanghulu', color: '#b82a3a', text: '糖葫蘆' },
-  { id: 'potato', at: 'upper', x: -2, z: -31.2, ry: Math.PI, food: 'potato', color: '#6a3a5a', text: '烤番薯' },
+  { id: 'baozi', at: 'lowerC', x: 6.6, z: -11.2, ry: Math.PI, food: 'baozi', color: '#3a5a3a', text: '包子' },
+  { id: 'tanghulu', at: 'lanternB', x: -3.5, z: -25.2, ry: Math.PI, food: 'tanghulu', color: '#b82a3a', text: '糖葫蘆' },
+  { id: 'potato', at: 'upper', x: -4.5, z: -33.2, ry: Math.PI, food: 'potato', color: '#6a3a5a', text: '烤番薯' },
 ];
 
 // 白牆、木板牆、瓦。瓦大多是深灰，少數是紅瓦和銅綠
@@ -122,9 +140,21 @@ const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a
 const shade = (c, l) => new THREE.Color(c).offsetHSL(0, 0, l).getStyle();
 
 // ---------- 地形 ----------
-// 沿著 z 的高度一段一段接起來，每一段都壓在那裡的石台和石階底下，不會從路面冒出來
-const TK = [[40, -3.2], [12, -1.6], [5, -0.9], [-1, 1.3], [-4.5, 1.8], [-6, 3.4], [-10, 5.6], [-15, 6.1], [-20, 8.3], [-25, 8.5],
-  [-30, 10.7], [-35, 10.9], [-40, 13], [-45, 13.3], [-52, 18.3], [-59, 18.5], [-68, 23], [-140, 66]];
+// 沿著 z 的高度。岸邊照幾個固定的點往海裡斜下去；鎮子裡從 AREAS 算：每個 z 取那一排最低的路面再往下 0.6，
+// 山坡永遠壓在石台和石階底下，不會從路面冒出來。最上面那層再往後，山繼續往上爬
+const SHORE = [[40, -3.2], [12, -1.6], [5, -0.9], [-1, 1.3]];
+const TK = (() => {
+  const low = (a, z) => (a.y != null ? a.y : a.dir === 'n' ? heightIn(a, 0, z) : a.lo);
+  const end = Math.min(...AREAS.map((a) => a.z0)), pts = [...SHORE];
+  let cap = 1.3;
+  for (let z = -1.5; z >= end; z -= 0.5) {
+    const here = AREAS.filter((a) => z >= a.z0 && z <= a.z1);
+    if (here.length) cap = Math.min(...here.map((a) => low(a, z))) - 0.6;
+    pts.push([z, cap]);
+  }
+  pts.push([end - 6, cap + 4.5], [end - 78, cap + 47.5]);
+  return pts;
+})();
 function tz(z) {
   if (z >= TK[0][0]) return TK[0][1];
   for (let i = 1; i < TK.length; i++) {
@@ -311,27 +341,68 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       if (i % 2 && a?.y != null) k.pool(px, a.y, pz, 1.5, '#ffa060', 0.2);
     }
   };
-  // 欄杆：從 a 到 b，地面高 y。stone 是遠眺台的矮石牆
-  const rail = (ax, az, bx, bz, y, stone = false) => {
+  // 欄杆：從 a 到 b，地面高 y。越往上越古老：港邊一帶是竹籬，鎮上是亂石砌的矮牆，星台以上是老石欄，
+  // 石望柱頂上蹲著小獸；遠眺台的柱子之間再垂一條紅繩，掛著微微發亮的符紙
+  const STONES = ['#6a6870', '#5e5c64', '#74706c', '#62605a'];
+  const BAMBOO = ['#8a7a4a', '#7a6c44', '#9a8a5a'];
+  const OCHRE = ['#d8b888', '#c8a878', '#e0c8a0'];
+  const LEAF = ['#2e4a3a', '#3a5a3e', '#44583a'];
+  const rail = (ax, az, bx, bz, y) => {
     const len = Math.hypot(bx - ax, bz - az);
     if (len < 0.2) return;
     rails.push({ ax, az, bx, bz, y });
-    const ry = -Math.atan2(bz - az, bx - ax), cx = (ax + bx) / 2, cz = (az + bz) / 2;
-    if (stone) {
-      k.box(len, 0.75, 0.32, '#4a4650', cx, y + 0.37, cz, { ry, color2: '#5a5660' });
+    const ry = -Math.atan2(bz - az, bx - ax), ux = (bx - ax) / len, uz = (bz - az) / len, at = (t) => [ax + ux * t, az + uz * t];
+    if (y < 3.5) {
+      // 竹籬：竹竿一根一根立著，高矮不齊，兩道橫的綁在上面
+      for (let t = 0.1; t < len; t += 0.28 + R() * 0.12) {
+        const [x, z] = at(t), h = 0.85 + R() * 0.25;
+        k.cyl(0.035, 0.04, h, pick(BAMBOO), x, y + h / 2, z, {}, 5);
+      }
+      const [mx, mz] = at(len / 2);
+      for (const hy of [0.35, 0.72]) k.cyl(0.025, 0.025, len, BAMBOO[1], mx, y + hy, mz, { ry, rz: Math.PI / 2 }, 4);
       return;
     }
-    k.box(len, 0.07, 0.08, WOOD, cx, y + 0.92, cz, { ry });
-    k.box(len, 0.04, 0.05, WOOD, cx, y + 0.45, cz, { ry });
-    const n = Math.max(1, Math.round(len / 1.3));
-    for (let i = 0; i <= n; i++) k.box(0.09, 0.95, 0.09, DARK, ax + ((bx - ax) * i) / n, y + 0.47, az + ((bz - az) * i) / n);
+    if (y < 13) {
+      // 亂石矮牆：大小不一的石塊一塊接一塊，偶爾缺一塊，牆頂長草
+      for (let t = 0; t < len - 0.05;) {
+        const l = Math.min(len - t, 0.35 + R() * 0.45), [x, z] = at(t + l / 2), h = 0.5 + R() * 0.28, c = pick(STONES);
+        if (R() > 0.06) k.box(l - 0.03, h, 0.34 + R() * 0.08, c, x, y + h / 2, z, { ry: ry + (R() - 0.5) * 0.06, color2: shade(c, 0.05) });
+        if (R() < 0.12) k.rock(0.13, pick(LEAF), x, y + h + 0.04, z, { sy: 0.6, ao: false });
+        t += l;
+      }
+      return;
+    }
+    // 老石欄：每隔一段一根石望柱，柱頂一隻蹲著的小獸，柱子之間嵌石板
+    const n = Math.max(1, Math.round(len / 1.5)), step = len / n, rope = y > 18;
+    for (let i = 0; i <= n; i++) {
+      const [x, z] = at(i * step);
+      k.box(0.24, 1.0, 0.24, '#6a6870', x, y + 0.5, z, { ry, color2: '#7a7880' });
+      k.rock(0.13, '#5a5862', x, y + 1.1, z, { sy: 1.25, ry: R() * 3 });
+      k.ball(0.06, '#5a5862', x + uz * 0.08, y + 1.24, z - ux * 0.08);
+      if (i === n) continue;
+      const [mx, mz] = at((i + 0.5) * step);
+      k.box(step - 0.26, 0.55, 0.14, '#62606a', mx, y + 0.42, mz, { ry, color2: '#72707a' });
+      k.box(step - 0.2, 0.08, 0.2, '#6e6c74', mx, y + 0.74, mz, { ry });
+      if (!rope) continue;
+      for (let j = 0; j < 6; j++) {
+        const [rx, rz] = at(i * step + (step * (j + 0.5)) / 6);
+        k.box(step / 6 + 0.03, 0.03, 0.03, '#a8221a', rx, y + 0.98 - Math.sin(((j + 0.5) / 6) * Math.PI) * 0.2, rz, { ry });
+      }
+      for (const side of [0, Math.PI]) k.plane(0.1, 0.26, '#e8d070', mx, y + 0.62, mz, { glow: true, ry: ry + Math.PI / 2 + side, color2: '#fff4b0' });
+    }
   };
 
   // ---------- 房子 ----------
-  // 東洋的町屋：一樓深色木板牆，店面整片拉開掛暖簾；二樓白牆配深色柱樑或整片木板，開格子窗，有的伸出木陽台。
-  // 一二樓之間一道披簷，最上面是翹角的瓦頂，屋簷下掛一排紅燈籠。
-  // 每間各用一組零件，蓋在原點、正面朝 +z，再轉到 rot 放到 x、z。ground 是腳下的地形，石砌地基一路埋進坡裡
-  // back：後面那條街比較高時，在那一層的背面也開門開窗（九份的房子常常前後各接一條街）
+  // ---------- 房子 ----------
+  // 海市的房子是一代一代疊上去的：最底下是最老的石砌基座，一樓是木板或石牆，二樓以上是白灰牆或木構，
+  // 最上面是後來才加的竹木小閣樓、吊樓、曬衣竿。哪裡都不太對齊，但亂得有道理：
+  //  1. 每間房子有自己的「手」（0.8–1.25）：門窗照它的比例做，同一間裡大小一致，隔壁那間就不一樣
+  //  2. 每一層挑一種窗。格子窗、細長窗可以一排兩三扇，位置照等分的格子再抖一點，不排成一直線；
+  //     圓窗、八角窗是那一層的重點，只開一扇
+  //  3. 越上面越新、越輕、顏色越淡：石 → 木 → 灰牆 → 竹；上一層可以比下一層寬或窄，往旁邊歪一點，往街上挑出去
+  //  4. 魔法的痕跡只點一兩處：門邊的符紙、簷角的銅鈴、屋脊的小獸，極少數屋頂上浮著一盞淡藍的燈
+  // 每間各用一組零件，蓋在原點、正面朝 +z，再轉到 rot 放到 x、z。ground 是腳下的地形，石砌基座一路埋進坡裡
+  // back：後面那條街的高度，房子在那一層的背面也開門開窗（九份的房子常常前後各接一條街）
   const signs = new Signs();
   // 格子窗：亮著的紙窗，前面幾根細木條。ry 是窗面朝的方向
   const lattice = (kk, x, y, z, w, h, lit = R() < 0.8, ry = 0) => {
@@ -351,114 +422,244 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     for (let i = 0; i < n; i++) kk.box(sw - 0.03, len, 0.02, i % 2 ? color : shade(color, 0.04), x - w / 2 + sw * (i + 0.5), y - len / 2, z, { color2: shade(color, -0.06) });
     kk.add(new THREE.CircleGeometry(Math.min(0.13, sw * 0.4), 10), CREAM, x, y - len * 0.45, z + 0.015, { ao: false });
   };
+  // 一扇窗：grid 格子窗、round 圓窗、octa 八角窗、slit 細長窗。s 是這間房子的手，ry 是窗面朝的方向
+  const opening = (kk, kind, x, y, z, s, lit, ry = 0) => {
+    if (kind === 'grid') return lattice(kk, x, y, z, 0.75 * s, 0.62 * s, lit, ry);
+    if (kind === 'slit') return lattice(kk, x, y, z, 0.3 * s, 0.95 * s, lit, ry);
+    const r = (kind === 'round' ? 0.28 : 0.26) * s, seg = kind === 'round' ? 16 : 8, f = Math.sin(ry) * 0.02, g = Math.cos(ry) * 0.02;
+    kk.add(new THREE.CircleGeometry(r, seg), lit ? PAPER : '#3a3038', x, y, z, { glow: true, ry, rz: Math.PI / seg, color2: lit ? '#ffeccc' : '#4a4048' });
+    kk.add(new THREE.TorusGeometry(r + 0.03, 0.045, 4, seg), BEAM, x + f, y, z + g, { ry, rz: Math.PI / seg });
+    kk.box(2 * r, 0.03, 0.02, BEAM, x + f, y, z + g, { ry });
+    kk.box(0.03, 2 * r, 0.02, BEAM, x + f, y, z + g, { ry });
+  };
+  // 一扇門：lit 亮著的格子門、plank 木板門、moon 月洞門。回傳門的寬
+  const doorway = (kk, kind, x, y0, z, s, maxH, ry = 0) => {
+    const f = Math.sin(ry), g = Math.cos(ry);
+    if (kind === 'moon') {
+      const r = Math.min(0.85 * s, (maxH - 0.1) / 2);
+      kk.add(new THREE.CircleGeometry(r, 20), '#ffb060', x, y0 + r, z, { glow: true, ry, color2: '#ffd8a0' });
+      kk.add(new THREE.TorusGeometry(r + 0.06, 0.09, 4, 20), pick(STONES), x + f * 0.03, y0 + r, z + g * 0.03, { ry });
+      return 2 * r;
+    }
+    const dw = Math.min(1.3, 0.8 * s), dh = Math.min(maxH, 1.8 + (s - 1) * 0.6);
+    if (kind === 'lit') lattice(kk, x, y0 + dh / 2, z, dw, dh, true, ry);
+    else kk.box(dw, dh, 0.05, pick(['#3a2a20', '#4a3226', '#2e2420']), x + f * 0.02, y0 + dh / 2, z + g * 0.02, { ry });
+    kk.box(dw + 0.2, 0.1, 0.08, DARK, x + f * 0.05, y0 + dh + 0.05, z + g * 0.05, { ry });
+    for (const sx of [-1, 1]) kk.box(0.08, dh, 0.08, DARK, x + sx * (dw / 2 + 0.04) * g + f * 0.04, y0 + dh / 2, z - sx * (dw / 2 + 0.04) * f + g * 0.04, { ry });
+    return dw;
+  };
+  // 符紙：門邊貼一張黃紙，微微發亮
+  const talisman = (kk, x, y, z) => {
+    kk.plane(0.11, 0.3, '#e8c850', x, y, z + 0.03, { glow: true, color2: '#fff0a0' });
+    kk.plane(0.05, 0.05, '#a8221a', x, y + 0.06, z + 0.035);
+  };
   const house = (o) => {
-    const hk = new Kit(R), { w, d, y0, h } = o, rot = o.rot || 0;
-    const ground = o.ground ?? y0, tile = pick(TILES), wood = pick(TIMBER);
+    const hk = new Kit(R), { w, d, y0 } = o, rot = o.rot || 0;
+    const ground = o.ground ?? y0, hand = 0.8 + R() * 0.45, tile = R() < 0.07 ? '#4a7a6a' : pick(TILES), fz = d / 2 + 0.02;
     // 招牌在世界座標裡：把這間房子自己的座標轉出去
     const cr = Math.cos(rot), sr = Math.sin(rot), world = (lx, lz) => [o.x + lx * cr + lz * sr, o.z - lx * sr + lz * cr];
-    if (y0 - ground > 0.05) hk.box(w + 0.1, y0 - ground + 0.4, d + 0.1, '#5a5a60', 0, (y0 + ground - 0.4) / 2, 0, { color2: '#74747a' });
-    const h1 = Math.min(h, 2.6), fz = d / 2 + 0.02;
-    hk.box(w, h1, d, wood, 0, y0 + h1 / 2, 0, { color2: shade(wood, 0.05) });
-    for (const sx of [-1, 1]) hk.box(0.16, h1, 0.16, DARK, sx * (w / 2 - 0.05), y0 + h1 / 2, d / 2 - 0.04);
-    hk.box(w + 0.04, 0.14, 0.1, DARK, 0, y0 + h1 - 0.07, fz);
+    // 基座：最老的石頭，從坡底砌上來，比上面的牆寬一點；砌得高的話看得到一道一道石縫
+    const stone = pick(STONES);
+    if (y0 - ground > 0.05) {
+      hk.box(w + 0.16, y0 - ground + 0.4, d + 0.16, stone, 0, (y0 + ground - 0.4) / 2, 0, { color2: shade(stone, 0.06) });
+      for (let yy = ground + 0.5; yy < y0 - 0.25; yy += 0.5 + R() * 0.35) hk.box(w + 0.18, 0.04, d + 0.18, shade(stone, -0.1), 0, yy, 0);
+    }
+    // 一樓：大多是深色木板，有的是石牆，少數是土黃的灰泥
+    const h1 = Math.min(o.h, 2.3 + R() * 0.6), m = R();
+    const wall1 = m < 0.55 ? pick(TIMBER) : m < 0.8 ? pick(STONES) : pick(OCHRE);
+    hk.box(w, h1, d, wall1, 0, y0 + h1 / 2, 0, { color2: shade(wall1, 0.05) });
+    for (const sx of [-1, 1]) hk.box(0.15, h1, 0.15, DARK, sx * (w / 2 - 0.05), y0 + h1 / 2, d / 2 - 0.04);
+    hk.box(w + 0.04, 0.12, 0.1, DARK, 0, y0 + h1 - 0.06, fz);
     if (o.shop) {
-      // 店面整片拉開，裡面亮著，上緣掛暖簾
+      // 店面整片拉開，裡面亮著；門口掛暖簾，或兩邊各垂一條長布幡
       const sw = w - 0.5;
       hk.plane(sw, 1.9, '#ffb060', 0, y0 + 1.0, fz, { glow: true, color2: '#ffd8a0' });
-      noren(hk, 0, y0 + 1.95, fz + 0.03, Math.min(sw, 2.4), pick(NOREN), 0.5);
+      if (R() < 0.5) noren(hk, 0, y0 + 1.95, fz + 0.03, Math.min(sw, 2.4), pick(NOREN), 0.5);
+      else for (const sx of [-1, 1]) {
+        const c = pick(NOREN);
+        hk.box(0.05, 0.05, 0.5, DARK, sx * (sw / 2 - 0.1), y0 + 2.2, fz + 0.25);
+        hk.box(0.36, 1.2, 0.02, c, sx * (sw / 2 - 0.1), y0 + 1.55, fz + 0.48, { color2: shade(c, 0.06) });
+      }
       hk.pool(0, y0, fz + 1.2, Math.min(3, w * 0.7), '#ffa860', 0.3);
     } else {
-      // 住家：一扇格子門、一扇格子窗，有的門口掛短暖簾
-      const lit = R() < 0.75;
-      lattice(hk, -w * 0.22, y0 + 0.95, fz, 0.8, 1.8, lit);
-      if (w > 2.2) lattice(hk, w * 0.22, y0 + 1.3, fz, 0.8, 0.7);
-      if (R() < 0.5) noren(hk, -w * 0.22, y0 + 1.82, fz + 0.03, 0.86, pick(NOREN), 0.45);
-      if (lit) hk.pool(-w * 0.22, y0, fz + 0.9, 1.4, '#ffb070', 0.22);
+      // 門擺在等分的其中一格再抖一點，其他格放這一層的窗
+      const slots = w > 3.4 ? 3 : w > 2.1 ? 2 : 1, sw = w / slots, ds = Math.floor(R() * slots);
+      const dk = w > 2.4 && R() < 0.12 ? 'moon' : R() < 0.6 ? 'lit' : 'plank';
+      const dx = -w / 2 + sw * (ds + 0.5) + (R() - 0.5) * sw * 0.25;
+      const dw = doorway(hk, dk, dx, y0, fz, hand, h1 - 0.3);
+      const kind = pick(['grid', 'grid', 'grid', 'slit', 'round']);
+      for (let i = 0; i < slots; i++) {
+        if (i === ds || R() < 0.25) continue;
+        opening(hk, kind, -w / 2 + sw * (i + 0.5) + (R() - 0.5) * sw * 0.2, y0 + 1.25 + (R() - 0.5) * 0.3, fz, hand * (0.85 + R() * 0.3), R() < 0.75);
+      }
+      if (R() < 0.35) talisman(hk, dx + dw / 2 + 0.14, y0 + 1.45, fz);
+      if (dk !== 'plank') hk.pool(dx, y0, fz + 0.9, 1.4, '#ffb070', 0.22);
+      if (R() < 0.3) {
+        // 門口一盆草
+        const px = dx + (R() < 0.5 ? -1 : 1) * (dw / 2 + 0.35);
+        hk.cyl(0.18, 0.14, 0.3, '#7a4a30', px, y0 + 0.15, fz + 0.25, {}, 7);
+        hk.rock(0.25, pick(LEAF), px, y0 + 0.45, fz + 0.25, { sy: 0.9, ao: false });
+      }
     }
     // 招牌：門口那根柱子外面掛一塊直招牌，兩面都有字
-    if (R() < (o.shop ? 0.7 : 0.4)) {
+    if (R() < (o.shop ? 0.7 : 0.35)) {
       const text = pick(HOUSE_SIGNS), sx = (R() < 0.5 ? -1 : 1) * (w / 2 + 0.22), paper = R() < 0.35;
       const style = paper ? { bg: '#f0e0c0', fg: '#8a1e14' } : { bg: '#2a1a12', fg: '#e8c878' };
       hk.box(0.5, 0.05, 0.05, DARK, sx * 0.94, y0 + 2.35, fz + 0.1);
       const sh = 0.36 * Math.min(3, [...text].length), [gx, gz] = world(sx, fz + 0.1);
       for (const side of [1, -1]) signs.add(text, gx + cr * 0.012 * side, y0 + 2.3 - sh / 2, gz - sr * 0.012 * side, 0.36, rot + (side * Math.PI) / 2, style);
     }
-    let top = y0 + h1, wall2 = wood, lampZ = fz + 0.35;
-    if (h > h1 + 0.4) {
-      const h2 = h - h1, plaster = R() < 0.6, fz2 = d / 2 + 0.025;
-      wall2 = plaster ? pick(PLASTER) : pick(TIMBER);
-      hk.box(w, h2, d, wall2, 0, top + h2 / 2, 0, { color2: shade(wall2, plaster ? -0.04 : 0.04) });
+    // 往上一層一層疊：每層寬一點窄一點、往旁邊歪一點，越上面越新、越輕
+    let top = y0 + h1, pw = w, px = 0, n = 0, wall = wall1, over = 0, lampZ = fz + 0.35;
+    while (o.h - (top - y0) > 1.5 && n < 3) {
+      const fh = Math.min(o.h - (top - y0), 2.1 + R() * 0.6);
+      const ww = Math.max(1.5, Math.min(w + 0.5, pw * (0.86 + R() * 0.24)));
+      const nx = Math.max(-0.3 - (w - ww) / 2, Math.min(0.3 + (w - ww) / 2, px + (R() - 0.5) * 0.5));
+      const jut = n === 0 && R() < 0.35 ? 0.3 : 0;   // 二樓往街上挑出去一點
+      const plaster = R() < (n === 0 ? 0.65 : 0.45);
+      wall = plaster ? pick(PLASTER) : n === 0 ? pick(TIMBER) : pick(BAMBOO);
+      // 層與層之間：一道披簷，或一條木陽台，或什麼都沒有
+      const between = R();
+      if (between < 0.45 && !jut && over === 0) {
+        addRoof(hk, px, top - 0.42, fz, pw + 0.5, 1.8, 0.42, { front: true, tile, lift: 0.14, curl: 0, seg: coarse ? 0.6 : 1 });
+        if (!o.shop && n === 0) for (const sx of [-0.3, 0.3]) lantern(hk, px + sx * pw, top - 0.95, fz + 0.62, 0.7);
+      }
+      over = jut;
+      const fz2 = d / 2 + over + 0.025;
+      hk.box(ww, fh, d + over, wall, nx, top + fh / 2, over / 2, { color2: shade(wall, plaster ? -0.04 : 0.04) });
       if (plaster) {
-        const n = Math.max(2, Math.round(w / 1.3));
-        for (let i = 0; i <= n; i++) hk.box(0.1, h2, 0.05, BEAM, -w / 2 + (w * i) / n, top + h2 / 2, fz2);
-        hk.box(w, 0.1, 0.05, BEAM, 0, top + h2 - 0.05, fz2);
+        for (const sx of [-1, 1]) hk.box(0.1, fh, 0.05, BEAM, nx + sx * (ww / 2 - 0.05), top + fh / 2, fz2);
+        hk.box(ww, 0.1, 0.05, BEAM, nx, top + fh - 0.05, fz2);
       }
-      const n = Math.max(1, Math.floor(w / 1.3)), rows = h2 > 2.8 ? 2 : 1;
-      for (let r = 0; r < rows; r++) for (let i = 0; i < n; i++) {
-        lattice(hk, -w / 2 + (w * (i + 0.5)) / n, top + (h2 * (r + 0.55)) / rows, fz2, Math.min(0.9, w / n - 0.4), Math.min(0.95, h2 / rows - 0.6));
+      const kind = pick(['grid', 'grid', 'grid', 'slit', 'slit', 'round', 'octa']), feature = kind === 'round' || kind === 'octa';
+      const cnt = feature ? 1 : Math.max(1, Math.min(3, Math.round(ww / 1.5 + (R() - 0.5))));
+      for (let i = 0; i < cnt; i++) {
+        opening(hk, kind, nx - ww / 2 + (ww * (i + 0.5)) / cnt + (R() - 0.5) * (feature ? ww * 0.3 : 0.3), top + fh * (0.45 + R() * 0.15), fz2, hand * (feature ? 1.15 : 0.8 + R() * 0.35), R() < 0.75);
       }
-      if (R() < 0.35) {
-        // 木陽台：伸出來一條走廊，欄杆一根一根，柱子撐到屋簷
-        hk.box(w + 0.2, 0.08, 0.7, WOOD, 0, top + 0.04, fz2 + 0.35);
-        hk.box(w + 0.2, 0.06, 0.06, WOOD, 0, top + 0.82, fz2 + 0.68);
-        const m = Math.max(3, Math.round(w / 0.32));
-        for (let i = 0; i <= m; i++) hk.box(0.04, 0.78, 0.04, DARK, -w / 2 - 0.1 + ((w + 0.2) * i) / m, top + 0.43, fz2 + 0.68);
-        for (const sx of [-1, 1]) hk.box(0.08, h2, 0.08, DARK, sx * (w / 2 + 0.06), top + h2 / 2, fz2 + 0.66);
+      if (between >= 0.45 && between < 0.72 && n === 0 && !jut) {
+        // 木陽台：伸出來一條走廊，欄杆一根一根
+        hk.box(ww + 0.2, 0.08, 0.7, WOOD, nx, top + 0.04, fz2 + 0.35);
+        hk.box(ww + 0.2, 0.06, 0.06, WOOD, nx, top + 0.82, fz2 + 0.68);
+        const mm = Math.max(3, Math.round(ww / 0.32));
+        for (let i = 0; i <= mm; i++) hk.box(0.04, 0.78, 0.04, DARK, nx - ww / 2 - 0.1 + ((ww + 0.2) * i) / mm, top + 0.43, fz2 + 0.68);
         lampZ = fz2 + 0.45;
-      } else {
-        // 一二樓之間的披簷，住家的披簷下也掛兩盞
-        addRoof(hk, 0, top - 0.42, fz, w + 0.5, 1.8, 0.42, { front: true, tile, lift: 0.12, curl: 0, seg: coarse ? 0.6 : 1 });
-        if (!o.shop) for (const sx of [-0.3, 0.3]) lantern(hk, sx * w, top - 0.95, fz + 0.62, 0.7);
       }
-      top += h2;
+      top += fh;
+      pw = ww;
+      px = nx;
+      n++;
     }
-    // 瓦頂：大多屋脊沿著街；有的山牆朝街，山牆上開一扇小格子窗；有的四面都是斜的
-    const along = R() < 0.7, hip = R() < 0.3;
-    const RW = (along ? w : d) + 0.8, RD = (along ? d : w) + 0.9, RH = RD * (0.28 + R() * 0.14);
-    addRoof(hk, 0, top, 0, RW, RD, RH, { ry: along ? 0 : Math.PI / 2, tile, end: wall2, lift: 0.28 + R() * 0.14, ridge: hip ? Math.max(0.3, (RW - RD) / 2 + 0.4) : RW / 2, seg: coarse ? 0.6 : 1 });
-    if (!along && !hip) lattice(hk, 0, top + RH * 0.32, d / 2 + 0.42, 0.5, 0.45, true);
-    // 屋簷下一排紅燈籠
-    if (R() < 0.8) {
-      const n = Math.max(1, Math.floor(w / 1.4));
-      for (let i = 0; i < n; i++) lantern(hk, -w / 2 + (w * (i + 0.5)) / n, top - 0.42, lampZ, 0.85);
+    // 瓦頂：屋角翹得高；大多屋脊沿著街，有的山牆朝街，有的四面都是斜的
+    const along = R() < 0.7, hip = R() < 0.3, rz = over / 2, dd = d + over;
+    const RW = (along ? pw : dd) + 0.8, RD = (along ? dd : pw) + 0.9, RH = RD * (0.28 + R() * 0.16), ridge = hip ? Math.max(0.3, (RW - RD) / 2 + 0.4) : RW / 2;
+    addRoof(hk, px, top, rz, RW, RD, RH, { ry: along ? 0 : Math.PI / 2, tile, end: wall, lift: 0.3 + R() * 0.3, curl: 0.14 + R() * 0.22, ridge, seg: coarse ? 0.6 : 1 });
+    if (!along && !hip) lattice(hk, px, top + RH * 0.32, dd / 2 + 0.42, 0.5, 0.45, true);
+    let crown = top + RH;
+    // 屋脊兩頭的小獸
+    if (R() < 0.4) for (const e of [-1, 1]) {
+      const L = Math.max(0.2, ridge - 0.15), bx = px + (along ? e * L : 0), bz = rz + (along ? 0 : e * L);
+      hk.rock(0.12, '#2a2c32', bx, top + RH + 0.08, bz, { sy: 1.4 });
+      hk.ball(0.05, '#3a3c44', bx + (along ? e * 0.08 : 0), top + RH + 0.22, bz + (along ? 0 : e * 0.08));
+    }
+    // 屋簷下一排燈籠；簷角掛銅鈴
+    if (R() < 0.65) {
+      const k2 = Math.max(1, Math.floor(pw / 1.4));
+      for (let i = 0; i < k2; i++) lantern(hk, px - pw / 2 + (pw * (i + 0.5)) / k2, top - 0.42, lampZ + over, 0.85);
+    }
+    if (R() < 0.25) for (const e of [-1, 1]) hk.cone(0.07, 0.13, GOLD, px + e * (RW / 2 - 0.25), top - 0.12, rz + RD / 2 - 0.2);
+    // 後來加蓋的：屋頂上的竹木小閣樓、從二樓挑出去的吊樓、曬衣竿
+    if (R() < 0.3 && pw > 1.8) {
+      const aw = 0.9 + R() * 0.7, ah = 1.0 + R() * 0.5, ax = px + (R() - 0.5) * Math.max(0, pw - aw) * 0.6, ay = top + RH * 0.5, ac = pick(BAMBOO);
+      hk.box(aw, ah, 1.1, ac, ax, ay + ah / 2, rz + 0.1, { color2: shade(ac, 0.06) });
+      addRoof(hk, ax, ay + ah, rz + 0.1, aw + 0.5, 1.6, 0.4, { tile: pick(TILES), lift: 0.2, ridge: (aw + 0.5) / 2 });
+      opening(hk, 'grid', ax, ay + ah * 0.5, rz + 0.67, 0.7, true);
+      crown = Math.max(crown, ay + ah + 0.4);
+    }
+    if (n >= 1 && !o.shop && R() < 0.22) {
+      const cw = 1.0 + R() * 0.5, side = R() < 0.5 ? -1 : 1, cx = side * (w / 2 - cw / 2), cy = y0 + h1 + 0.3, ch = 1.3, cz = fz + 0.45 + over;
+      hk.box(cw, ch, 0.9, pick(BAMBOO), cx, cy + ch / 2, cz);
+      for (const e of [-1, 1]) hk.box(0.06, 0.9, 0.06, DARK, cx + e * (cw / 2 - 0.1), cy - 0.3, cz + 0.05, { rx: 0.6 });
+      opening(hk, 'grid', cx, cy + ch * 0.55, cz + 0.46, 0.75, true);
+      addRoof(hk, cx, cy + ch, cz, cw + 0.3, 1.2, 0.3, { tile, lift: 0.1, ridge: (cw + 0.3) / 2 });
+    }
+    if (R() < 0.15) {
+      const ly = top - 0.75, lz = d / 2 + over + 0.55;
+      hk.cyl(0.025, 0.025, pw + 0.4, BAMBOO[0], px, ly, lz, { rz: Math.PI / 2 }, 4);
+      for (let i = 0; i < 3; i++) hk.box(0.4, 0.55, 0.02, pick(['#e8e0d0', '#2a3a6a', '#8a2a2a', '#d8c070']), px - pw / 3 + (i * pw) / 3, ly - 0.3, lz, { ry: (R() - 0.5) * 0.3 });
+    }
+    // 野草和藤：屋頂上冒幾叢草，牆上垂幾條藤
+    if (R() < 0.35) for (let i = 0; i < 2 + Math.floor(R() * 3); i++) hk.rock(0.12 + R() * 0.1, pick(LEAF), px + (R() - 0.5) * pw, top + RH * (0.5 + R() * 0.3), rz + (R() - 0.5) * 0.6, { sy: 0.7, ao: false });
+    if (R() < 0.2) for (let i = 0; i < 2 + Math.floor(R() * 2); i++) {
+      const vl = 1.2 + R() * 1.8;
+      hk.box(0.12, vl, 0.03, pick(LEAF), (R() - 0.5) * (w - 0.4), top - vl / 2, fz + 0.03);
     }
     // 廚房的煙：有的屋頂上有一根短煙囪在冒煙
-    if (R() < 0.3) {
-      const cx = (R() - 0.5) * w * 0.5, cz = -d * 0.18;
+    if (R() < 0.25) {
+      const cx = px + (R() - 0.5) * pw * 0.5, cz = rz - dd * 0.18;
       hk.box(0.3, RH * 0.7 + 0.4, 0.3, '#5a524c', cx, top + RH * 0.4 + 0.1, cz);
       hk.box(0.42, 0.08, 0.42, '#2a2622', cx, top + RH * 0.75 + 0.32, cz);
       hk.puff(cx, top + RH * 0.75 + 0.4, cz, 'smoke', 1.1);
     }
+    // 魔法：少數屋頂上浮著一盞淡藍的燈，沒有繩子吊著
+    if (R() < 0.06) lantern(hk, px + (R() - 0.5), crown + 0.9 + R() * 0.6, rz, 0.6, '#9ad0ff', '#e8f6ff');
     if (o.back != null && o.back + 1 < top) {
-      const bz = -d / 2 - 0.02, n = Math.max(1, Math.floor(w / 1.5));
-      lattice(hk, -w * 0.25, o.back + 0.9, bz, 0.8, 1.7, true, Math.PI);
-      for (let i = 0; i < n; i++) {
-        const wx = -w / 2 + (w * (i + 0.5)) / n;
-        if (Math.abs(wx + w * 0.25) > 0.7) lattice(hk, wx, o.back + 1.35, bz, 0.6, 0.6, R() < 0.7, Math.PI);
+      const bz = -d / 2 - 0.02, k3 = Math.max(1, Math.floor(w / 1.5));
+      const bdw = doorway(hk, R() < 0.55 ? 'lit' : 'plank', -w * 0.25, o.back, bz, hand, 2.0, Math.PI);
+      const kind = pick(['grid', 'round', 'slit']);
+      for (let i = 0; i < k3; i++) {
+        const wx = -w / 2 + (w * (i + 0.5)) / k3;
+        if (Math.abs(wx + w * 0.25) > bdw / 2 + 0.45) opening(hk, kind, wx, o.back + 1.35, bz, hand * 0.85, R() < 0.7, Math.PI);
       }
       addRoof(hk, 0, o.back + 2.0, bz, w + 0.1, 1.6, 0.3, { front: true, ry: Math.PI, tile, lift: 0.08, curl: 0 });
       lantern(hk, -w * 0.25 + 0.65, o.back + 1.6, bz - 0.55, 0.7);
       hk.pool(-w * 0.25, o.back, bz - 1.0, 1.6, '#ffa860', 0.26);
     }
     const side = Math.abs(Math.sin(rot)) > 0.5, hw = (side ? d : w) / 2 + 0.4, hd = (side ? w : d) / 2 + 0.45;
-    solid(o.x - hw, o.x + hw, o.z - hd, o.z + hd, top + RH);
+    solid(o.x - hw, o.x + hw, o.z - hd, o.z + hd, crown);
     // 淡出的範圍：屋身、往外伸的屋頂、門口上方的披簷和陽台（從頭頂以上才算，站在門口不會被算進去）
     hk.fid = fader.add([
-      wbox(o.x, o.z, rot, -w / 2, w / 2, ground, top, -d / 2, d / 2),
-      wbox(o.x, o.z, rot, -w / 2 - 0.45, w / 2 + 0.45, top - 0.3, top + RH + 0.4, -d / 2 - 0.45, d / 2 + 0.45),
-      wbox(o.x, o.z, rot, -w / 2 - 0.3, w / 2 + 0.3, y0 + 1.9, top, d / 2, d / 2 + 1.0),
+      wbox(o.x, o.z, rot, -w / 2 - 0.3, w / 2 + 0.3, ground, top, -d / 2, d / 2 + over),
+      wbox(o.x, o.z, rot, px - RW / 2 - 0.2, px + RW / 2 + 0.2, top - 0.3, crown + 0.4, rz - RD / 2 - 0.2, rz + RD / 2 + 0.2),
+      wbox(o.x, o.z, rot, -w / 2 - 0.3, w / 2 + 0.3, y0 + 1.9, top, d / 2, d / 2 + 1.0 + over),
     ]);
     hk.emit(bucket, o.x, o.z, rot + (R() - 0.5) * 0.03);
   };
-  // 沿 x 排一整排房子，寬度不一。zf 是正面的 z（正面朝南），房子往北長 d
-  const row = (ranges, zf, d, y0, hMin, hMax, o = {}) => {
-    for (const [a, b] of ranges) {
-      for (let x = a; x < b - 0.8;) {
-        const w = Math.min(b - x, 2.2 + R() * 1.6), cx = x + w / 2, top = o.hAt ? o.hAt(cx) : hMax;
-        const zz = zf - R() * 0.2 - d / 2;
-        house({ x: cx, z: zz, w: w - 0.1, d, y0, h: hMin + R() * (top - hMin), ground: groundUnder(cx - w / 2, cx + w / 2, zz - d / 2, zz + d / 2), shop: o.shop ?? true, back: o.back });
+  const streetOf = (a) => a.street ?? a.id;
+  // 一條街在 x 這裡是哪一塊平的路面
+  const flatAt = (street, x) => AREAS.find((a) => streetOf(a) === street && a.y != null && x >= a.x0 && x <= a.x1);
+  // 一條街靠山那一側（北邊）的一排房子：寬窄、退縮、高矮都不一樣；巷子的石階穿過去的地方留空，攤位的地方一定是店面。
+  // 房子背面一路伸到上一層街 up 的南邊，那一層也開門；上面沒有街的話深 depth
+  const frontage = (a, up = null, depth = 4.2) => {
+    const x0 = a.rowFrom ?? a.x0;
+    const lots = SHOPS.filter((s) => flatAt(s.at, s.x) === a).map((s) => ({ x0: s.x - 1.5, x1: s.x + 1.5, shop: true }));
+    const cuts = AREAS.filter((s) => s.dir === 'n' && Math.abs(s.z1 - a.z0) < 0.01 && s.x0 < a.x1 && s.x1 > x0).map((s) => ({ x0: s.x0 - 0.15, x1: s.x1 + 0.15 }));
+    let free = [[x0, a.x1]];
+    for (const b of [...cuts, ...lots]) free = free.flatMap(([f0, f1]) => (b.x1 <= f0 || b.x0 >= f1 ? [[f0, f1]] : [[f0, b.x0], [b.x1, f1]].filter(([u, v]) => v - u > 0.05)));
+    for (const [f0, f1] of free) {
+      for (let x = f0; f1 - x > 0.9;) {
+        let w = 1.8 + R() * 2.6;
+        if (f1 - x - w < 1.6) w = f1 - x;
+        lots.push({ x0: x, x1: x + w, shop: false });
         x += w;
       }
+    }
+    for (const l of lots) {
+      const ups = up ? AREAS.filter((b) => streetOf(b) === up && b.y != null && b.x0 < l.x1 - 0.2 && b.x1 > l.x0 + 0.2) : [];
+      const back = ups.length ? Math.max(...ups.map((b) => b.z1)) : a.z0 - depth;
+      const zf = a.z0 - 0.1 - (l.shop || R() < 0.5 ? 0 : R() * 0.5), d = zf - back - 0.05;
+      if (d < 1.4) continue;
+      const by = ups.length ? ups[0].y : null, h = (by != null ? by - a.y + 2.4 : 2.6) + R() * 2.3;
+      house({ x: (l.x0 + l.x1) / 2, z: zf - d / 2, w: l.x1 - l.x0 - 0.08, d, y0: a.y, h, ground: groundUnder(l.x0, l.x1, back, zf), shop: l.shop, back: by });
+    }
+  };
+  // 街道南邊的崖邊也長出房子：前門朝街，後面一路砌到坡底
+  const perch = (a, x0, x1, y = a.y) => {
+    for (let x = x0; x1 - x > 0.9;) {
+      let w = 2 + R() * 1.8;
+      if (x1 - x - w < 1.4) w = x1 - x;
+      const d = 2.2 + R() * 0.4, zf = a.z1 + 0.05;
+      house({ x: x + w / 2, z: zf + d / 2, w: w - 0.08, d, y0: y, h: 2.6 + R() * 1.6, rot: Math.PI, ground: groundUnder(x, x + w, zf, zf + d), shop: false });
+      x += w;
     }
   };
   // 塔：方形的樓閣，一層一層往上收，每層翹角的屋簷四角掛燈籠，頂上一根金色的塔剎
@@ -549,15 +750,14 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     lantern(k, sx, 1.85, z, 0.9);
     obstacles.push({ x: sx, z, hw: 0.15, hd: 0.15 });
   }
-  rail(-1.2, 12, -1.2, 29.9, 0);
-  rail(1.2, 12, 1.2, 25.6, 0);
-  rail(-1.2, 29.95, 1.2, 29.95, 0);
   // 碼頭邊的石頭和木箱
   // 亂數照原本的順序抽完再決定放不放，後面的房子才不會因為少抽幾次整排換樣子
   for (let i = 0; i < 46; i++) {
     const sx = R() < 0.5 ? -1 : 1, x = sx * (8.4 + R() * 9), z = 3 + R() * 9;
     const r = 0.5 + R() * 0.9, y = SEA + R() * 0.3, ry = R() * 3;
     if (AREAS.some((a) => x > a.x0 - r && x < a.x1 + r && z > a.z0 - r && z < a.z1 + r)) continue;
+    if (z > 8.5 && x < 16) continue;   // 港內停船的水面
+
     k.rock(r, '#4e4a4a', x, y, z, { sy: 0.6, ry, color2: '#6a625c', ao: false });
   }
   for (const [x, z, s] of [[-7.1, 10.6, 0.7], [-6.4, 10.9, 0.55], [-7.0, 9.9, 0.5], [6.9, 10.4, 0.65]]) {
@@ -566,34 +766,10 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   }
 
   // ---------- 欄杆 ----------
-  rail(-8, 11.95, -1.2, 11.95, 0); rail(1.2, 11.95, 8, 11.95, 0);
-  rail(-7.95, 9, -7.95, 11.95, 0); rail(7.95, 9, 7.95, 11.95, 0);
+  // 碼頭靠海的三邊不圍欄杆，只壓一道深色的邊石，跟兩邊的岸壁一樣
+  for (const [x0, x1] of [[-8, -1.2], [1.2, 8]]) k.box(x1 - x0, 0.1, 0.22, '#4a4a50', (x0 + x1) / 2, 0.05, 11.89);
+  for (const sx of [-1, 1]) k.box(0.22, 0.1, 3, '#4a4a50', sx * 7.89, 0.05, 10.5);
   rail(-2.1, 5.05, -1.45, 5.05, 0); rail(1.45, 5.05, 2.1, 5.05, 0);
-  rail(-4.5, -1.05, -1.4, -1.05, 2.4); rail(1.4, -1.05, 4.5, -1.05, 2.4);
-  rail(-4.45, -1.8, -4.45, -1.05, 2.4); rail(4.45, -1.8, 4.45, -1.05, 2.4);
-  rail(-15, -1.05, -12, -1.05, 4.8); rail(-14.95, -6, -14.95, -4, 4.8); rail(-14.95, -1.5, -14.95, -1.05, 4.8);
-  rail(-11.95, -6, -11.95, -4.2, 4.8); rail(-11.95, -1.8, -11.95, -1.05, 4.8);
-  rail(-15, -5.95, -14.6, -5.95, 4.8); rail(-12.4, -5.95, -12, -5.95, 4.8);
-  rail(-15, -10.05, -14.6, -10.05, 6.8); rail(-12.4, -10.05, 10.4, -10.05, 6.8); rail(12.6, -10.05, 13, -10.05, 6.8);
-  rail(-14.95, -15, -14.95, -10.05, 6.8); rail(12.95, -15, 12.95, -10.05, 6.8);
-  rail(-6.95, -35, -6.95, -30, 11.6);
-  rail(-12, -39.95, -6, -39.95, 14); rail(-3.8, -39.95, 0, -39.95, 14);
-  rail(-11.95, -45, -11.95, -43.4, 14); rail(-11.95, -41.4, -11.95, -40, 14);
-  rail(-0.05, -45, -0.05, -40, 14);
-  rail(-22.5, -40.05, -19, -40.05, 16.4); rail(-22.45, -45, -22.45, -40.05, 16.4);
-  rail(-18.95, -41.4, -18.95, -40.05, 16.4); rail(-18.95, -45, -18.95, -43.4, 16.4);
-  rail(-22.5, -44.95, -22, -44.95, 16.4); rail(-19.6, -44.95, -19, -44.95, 16.4);
-  const S = AREA.summit;
-  rail(S.x0, S.z1 - 0.15, -22, S.z1 - 0.15, S.y, true); rail(-19.6, S.z1 - 0.15, S.x1, S.z1 - 0.15, S.y, true);
-  rail(S.x0 + 0.15, S.z0, S.x0 + 0.15, S.z1, S.y, true); rail(S.x1 - 0.15, S.z0, S.x1 - 0.15, S.z1, S.y, true);
-  rail(S.x0, S.z0 + 0.15, S.x1, S.z0 + 0.15, S.y, true);
-  // 東邊的轉角平台，跟西邊那個一樣四面圍起來，留出上下石階的口
-  rail(10, -1.05, 13, -1.05, 4.8); rail(12.95, -6, 12.95, -1.05, 4.8);
-  rail(10.05, -6, 10.05, -4.2, 4.8); rail(10.05, -1.8, 10.05, -1.05, 4.8);
-  rail(10, -5.95, 10.4, -5.95, 4.8); rail(12.6, -5.95, 13, -5.95, 4.8);
-  // 小祠前的平台：南邊留石階的口，東北角接往上的石階
-  rail(-24, -1.55, -23.5, -1.55, 2.4); rail(-21.5, -1.55, -19.5, -1.55, 2.4);
-  rail(-23.95, -4.5, -23.95, -1.55, 2.4); rail(-19.55, -4.5, -19.55, -4, 2.4);
 
   // ---------- 牌樓：碼頭石階的頂端，掛著「海市」 ----------
   {
@@ -622,9 +798,9 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   // 碼頭上的信差站和魚市
   house({ x: -4.9, z: 3.2, w: 5.2, d: 3.6, y0: 0, h: 3.4, ground: groundUnder(-7.5, -2.3, 1.4, 5), shop: true });
   house({ x: 4.9, z: 3.2, w: 5.2, d: 3.6, y0: 0, h: 3.0, ground: groundUnder(2.3, 7.5, 1.4, 5), shop: true });
-  // 牌樓後面和旁邊
-  row([[-4.4, 4.4]], -4.6, 4.0, 2.4, 2.8, 3.8, { shop: false });
-  // 原本蓋在牌樓東邊，那裡現在是往東的石階，整間搬到東邊轉角平台的外側，面朝平台（亂數照舊）
+  // 牌樓後面一排，後面沒有街
+  frontage(AREA.gate, null, 4);
+  // 東邊轉角平台的外側一間，面朝平台
   house({ x: 15.25, z: -3.5, w: 3.8, d: 3.4, y0: 4.8, h: 3.4, rot: -Math.PI / 2, ground: groundUnder(13.55, 16.95, -5.4, -1.6), shop: false });
   // 往西那段石階旁邊，房子跟著石階一間比一間高
   // 排到轉角平台（x = -12）前面就停，不壓到平台和往上的石階
@@ -633,20 +809,20 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     house({ x: cx, z: -6.3, w: w - 0.1, d: 3.6, y0, h: 2.6 + R() * 1.0, ground: groundUnder(cx - w / 2, cx + w / 2, -8.1, -4.5), shop: false });
     x -= w;
   }
-  // 下街北側：前面是下街的店，背面在燈巷那一層也開門
-  row([[-15, -11.2], [-8.6, 4.8], [7.6, 13]], -15.1, 4.7, 6.8, 4.6, 5.6, { back: 9.2 });
-  tower(-16.9, -12.4, 1.7, 6.8, 6.8);
-  tower(14.9, -12.6, 1.6, 6.8, 5.6);
-  // 燈巷北側，背面接工坊街
-  row([[-13, 7.8], [10.6, 13.5]], -25.1, 4.6, 9.2, 4.4, 5.4, { back: 11.6 });
-  house({ x: -14.3, z: -22.5, w: 4.8, d: 2.2, y0: 9.2, h: 4.2, rot: Math.PI / 2, ground: groundUnder(-15.4, -13.2, -25, -20), shop: false });
-  house({ x: 12.3, z: -22.5, w: 4.8, d: 2.2, y0: 9.2, h: 3.8, rot: -Math.PI / 2, ground: groundUnder(11.2, 13.4, -25, -20), shop: false });
-  // 工坊街北側：星台前面那段壓低
-  row([[-3.6, 13]], -35.1, 4.4, 11.6, 2.4, 4.4, { hAt: (x) => (x < 0.5 ? 2.6 : 4.4) });
-  house({ x: 14.4, z: -32.5, w: 4.8, d: 2.2, y0: 11.6, h: 4.0, rot: -Math.PI / 2, ground: groundUnder(13.3, 15.5, -35, -30), shop: false });
-  // 星台：航海圖店和一座小圓塔
-  row([[-12, -1]], -45.1, 4.0, 14, 2.8, 3.8);
-  tower(2.3, -42.5, 1.5, 14, 4.6);
+  // 下街、燈巷、工坊街、星台：每一段靠山那一側一排，背面接上一層的街
+  for (const [street, up] of [['lower', 'lantern'], ['lantern', 'upper'], ['upper', 'specula'], ['specula', null]]) {
+    for (const a of AREAS.filter((b) => streetOf(b) === street && b.y != null)) frontage(a, up);
+  }
+  // 下街中段的南邊是崖，崖邊也長了一排房子，前門朝廣場，後牆一路砌到牌樓後面
+  perch(AREA.lowerB, -5.6, 5.5);
+  // 街的兩頭：塔、側著開門的房子
+  tower(-18, -12.4, 1.7, 6.8, 6.8);
+  tower(16.2, -12.6, 1.6, 7.2, 5.6);
+  house({ x: -16.3, z: -24.2, w: 4.6, d: 2.2, y0: 9.2, h: 4.2, rot: Math.PI / 2, ground: groundUnder(-17.4, -15.2, -26.5, -21.9), shop: false });
+  house({ x: 13.3, z: -23, w: 4.6, d: 2.2, y0: 9.2, h: 3.8, rot: -Math.PI / 2, ground: groundUnder(12.2, 14.4, -25.3, -20.7), shop: false });
+  house({ x: 15.4, z: -33.5, w: 3.6, d: 2.2, y0: 12, h: 4.0, rot: -Math.PI / 2, ground: groundUnder(14.3, 16.5, -35.3, -31.7), shop: false });
+  // 星台東頭一座小圓塔
+  tower(5.9, -44.5, 1.5, 14, 4.6);
 
   // ---------- 店 ----------
   const GOODS = {
@@ -723,7 +899,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   // 櫃台到角色胸口（0.6），攤販的上半身和手露得出來；貨物大多是矮的，高的掛在上面
   const COUNTER = 0.6;
   const shops = SHOPS.map((s) => {
-    const y = AREA[s.at].y, front = FRONT[s.at], cz = front + 1.1;
+    const a = flatAt(s.at, s.x), y = a.y, front = a.z0 - 0.1, cz = front + 1.1;
     k.box(2.3, COUNTER - 0.04, 0.6, WOOD, s.x, y + (COUNTER - 0.04) / 2, cz, { color2: '#6a4a34' });
     k.box(2.4, 0.04, 0.7, '#a07850', s.x, y + COUNTER - 0.02, cz);
     k.box(2.32, 0.14, 0.02, s.awning, s.x, y + COUNTER - 0.17, cz + 0.31);
@@ -771,12 +947,15 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     k.pool(x, 0, z, 2.2, '#ffa060', 0.3);
     obstacles.push({ x, z, hw: 0.85, hd: 1.0 });
   }
-  // 信差站門口的紅郵筒，玻璃工坊裡的爐火
+  // 信差站門口的紅郵筒，玻璃工坊裡的爐火（店面在 shops 裡，z 是攤販站的地方，正面再往北 0.45）
   k.cyl(0.22, 0.22, 1.0, '#b8322a', -3.0, 0.5, 6.0, {}, 10);
   k.ball(0.23, '#b8322a', -3.0, 1.0, 6.0, { sy: 0.6 });
   obstacles.push({ x: -3.0, z: 6.0, hw: 0.28, hd: 0.28 });
-  k.plane(1.0, 0.8, '#ff8a3a', 3, 11.6 + 0.9, -35.03, { glow: true, color2: '#ffd070' });
-  k.light(3, 12.5, -34.6, '#ff8a3a', 1.4);
+  {
+    const g = shops.find((s) => s.id === 'glass');
+    k.plane(1.0, 0.8, '#ff8a3a', g.x, g.y + 0.9, g.z - 0.38, { glow: true, color2: '#ffd070' });
+    k.light(g.x, g.y + 0.9, g.z + 0.05, '#ff8a3a', 1.4);
+  }
 
   // ---------- 街上的燈籠串 ----------
   // 碼頭：兩角立竹竿，拉三條到信差站和魚市的屋簷
@@ -787,21 +966,23 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     string(sx * 7.75, 6.4, sx * 7.75, 11.75, 3.4, 1.4);
   }
   string(-7.75, 9.1, 7.75, 9.1, 3.7, 1.6);
-  string(-15, -12.1, 13, -12.1, 9.6, 1.6);
-  string(-15, -13.4, 13, -13.4, 9.9, 2.0);
-  for (let x = -12.5; x < 10; x += 3.2) string(x, -20.2, x + 3.2, -24.8, 11.9, 1.2);
-  string(-13, -22.5, 11, -22.5, 12.1, 1.4);
-  string(-7, -32.4, 13, -32.4, 14.4, 1.6);
-  for (let x = -6.5; x < 12; x += 3.6) string(x, -30.2, x + 3.6, -34.8, 14.2, 1.4);
+  // 鎮上：每一段街的上空斜斜地來回拉，寬的地方再橫拉一條
+  for (const a of AREAS) {
+    if (a.y == null || !a.street) continue;
+    const y = a.y + 2.9;
+    for (let x = a.x0 + 0.4; x < a.x1 - 1.2; x += 3 + R() * 1.2) string(x, a.z1 - 0.4, Math.min(a.x1 - 0.3, x + 3.2), a.z0 + 0.7, y + R() * 0.3, 1.25);
+    if (a.z1 - a.z0 > 5.5) string(a.x0 + 0.3, (a.z0 + a.z1) / 2, a.x1 - 0.3, (a.z0 + a.z1) / 2 + (R() - 0.5), y + 0.45, 1.6);
+  }
   // 星台四角的燈柱
-  for (const [x, z] of [[-11.6, -44.6], [-0.4, -44.6], [-11.6, -40.4], [-0.4, -40.4]]) {
+  const SP = AREA.specula;
+  for (const [x, z] of [[SP.x0 + 0.4, SP.z0 + 0.4], [SP.x1 - 0.6, SP.z0 + 0.4], [SP.x0 + 0.4, SP.z1 - 0.4], [SP.x1 - 0.6, SP.z1 - 0.4]]) {
     k.box(0.12, 2.2, 0.12, DARK, x, 14 + 1.1, z);
     lantern(k, x, 14 + 2.0, z, 0.9);
     obstacles.push({ x, z, hw: 0.12, hd: 0.12 });
   }
   // 星台上的望遠鏡
   {
-    const x = -8.5, z = -42, y = 14;
+    const x = -12, z = -45, y = 14;
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2;
       k.cyl(0.03, 0.03, 1.3, '#8a6a3a', x + Math.cos(a) * 0.25, y + 0.62, z + Math.sin(a) * 0.25, { rx: Math.sin(a) * 0.2, rz: -Math.cos(a) * 0.2 }, 5);
@@ -812,22 +993,23 @@ export function buildHaishi(scene, { coarse = false } = {}) {
 
   // ---------- 遠眺台：山頂一圈矮石牆和幾塊立石，只有一盞冷冷的小燈，看得到整座鎮和海 ----------
   {
-    const y = S.y;
+    const S = AREA.summit, y = S.y, cx = (S.x0 + S.x1) / 2, cz = (S.z0 + S.z1) / 2;
     for (let i = 0; i < 7; i++) {
-      const a = (i / 7) * Math.PI * 2, x = -21 + Math.cos(a) * 3.4, z = -56.5 + Math.sin(a) * 1.9, h = 1.2 + R() * 0.8;
-      if (z > -56.8) continue;   // 只立在北側，往海那邊不擋
+      const a = (i / 7) * Math.PI * 2, x = cx + Math.cos(a) * 3.4, z = cz + Math.sin(a) * 1.9, h = 1.2 + R() * 0.8;
+      if (z > cz - 0.3) continue;   // 只立在北側，往海那邊不擋
       k.box(0.5, h, 0.32, '#5a5862', x, y + h / 2, z, { ry: -a, color2: '#6a6872' });
       obstacles.push({ x, z, hw: 0.32, hd: 0.32 });
     }
-    k.box(0.1, 1.8, 0.1, DARK, -16, y + 0.9, -58.4);
-    k.cyl(0.06, 0.07, 0.18, '#a8c8ff', -16, y + 1.9, -58.4, { glow: true });
-    k.light(-16, y + 1.9, -58.4, '#8ab0ff', 0.35);
-    obstacles.push({ x: -16, z: -58.4, hw: 0.12, hd: 0.12 });
+    const lx = S.x1 - 1, lz = S.z0 + 0.6;
+    k.box(0.1, 1.8, 0.1, DARK, lx, y + 0.9, lz);
+    k.cyl(0.06, 0.07, 0.18, '#a8c8ff', lx, y + 1.9, lz, { glow: true });
+    k.light(lx, y + 1.9, lz, '#8ab0ff', 0.35);
+    obstacles.push({ x: lx, z: lz, hw: 0.12, hd: 0.12 });
   }
 
   // 工坊街西邊那棵大楓樹：彎彎曲曲的樹幹，紅葉裡掛著一盞一盞小紙燈
   {
-    const x = -10.5, z = -32.5, y = terrain(x, z);
+    const x = -13.8, z = -34.6, y = terrain(x, z);
     k.cyl(0.5, 0.8, 4.5, '#4a3428', x, y + 2.25, z, { rz: 0.12 }, 7);
     k.cyl(0.3, 0.45, 3, '#4a3428', x + 0.6, y + 5.2, z - 0.2, { rz: -0.4 }, 6);
     // 樹冠和裡面的紙燈一組，擋住鏡頭時淡掉。紅要比瓦頂亮一截，夜裡才不會變成一團暗褐
@@ -955,7 +1137,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     k.box(s, s * 0.8, s, '#7a5a3a', x, y + s * 0.4, z, { ry: (R() - 0.5) * 0.4, color2: '#9a7a52' });
   };
   for (const [x, z, n] of [[-14.6, 5.55, 3], [-9.5, 5.5, 2], [-20.4, 5.5, 2], [9.7, 5.5, 3]]) {
-    for (let i = 0; i < n; i++) crate(x + (i % 2) * 0.62, z + (i > 1 ? 0 : 0), 0.6, i > 1 ? 0.48 : 0);
+    for (let i = 0; i < n; i++) crate(x + (i % 2) * 0.62, z, 0.6, i > 1 ? 0.48 : 0);
     obstacles.push({ x: x + 0.3, z, hw: 0.7, hd: 0.4 });
   }
   // 魚箱：一排藍白相間的淺箱子，鋪著冰，躺著幾條魚
@@ -966,17 +1148,17 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     for (let f = 0; f < 2; f++) k.ball(0.06, pick(['#b8c4cc', '#e0a050', '#c8a8b8']), x - 0.1 + f * 0.2, 0.2, z, { sx: 2.2, sy: 0.5 });
   }
   obstacles.push({ x: -11.36, z: 5.75, hw: 1.5, hd: 0.3 });
-  for (const [x, z] of [[-17.2, 5.45], [-16.7, 5.6], [14.3, 5.45]]) {
+  for (const [x, z] of [[-16.4, 5.45], [-15.9, 5.6], [8.7, 5.45]]) {
     k.cyl(0.25, 0.25, 0.65, '#6a4a30', x, 0.33, z, { color2: '#8a6440' }, 10);
     k.torus(0.25, 0.025, Math.PI * 2, DARK, x, 0.15, z, { rx: Math.PI / 2 });
     k.torus(0.25, 0.025, Math.PI * 2, DARK, x, 0.5, z, { rx: Math.PI / 2 });
     obstacles.push({ x, z, hw: 0.28, hd: 0.28 });
   }
   {
-    const x = -19.4, z = 5.7;
+    const x = -18.6, z = 5.7;
     k.box(1.1, 0.08, 0.7, '#8a6440', x, 0.55, z);
     for (const sz of [-1, 1]) k.box(1.1, 0.25, 0.04, '#7a5636', x, 0.7, z + sz * 0.33);
-    for (const sz of [-1, 1]) k.torus(0.28, 0.05, Math.PI * 2, DARK, x - 0.1, 0.28, z + sz * 0.42, {}, 0);
+    for (const sz of [-1, 1]) k.torus(0.28, 0.05, Math.PI * 2, DARK, x - 0.1, 0.28, z + sz * 0.42);
     for (const sz of [-1, 1]) k.box(0.9, 0.05, 0.05, WOOD, x + 0.9, 0.62, z + sz * 0.28, { rz: 0.15 });
     crate(x - 0.2, z, 0.45, 0.6);
     obstacles.push({ x: x + 0.3, z, hw: 0.9, hd: 0.45 });
@@ -1060,7 +1242,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     obstacles.push({ x: cx, z: P.z0 + 0.35, hw: 0.28, hd: 0.18 });
     solid(cx - 1.1, cx + 1.1, cz - 1, cz + 0.8, y + 2);
     // 石燈籠
-    for (const x of [-23.3, -20.2]) {
+    for (const x of [-23.3, -20.7]) {
       const z = P.z0 + 0.5;
       k.cyl(0.18, 0.24, 0.12, '#7a7a80', x, y + 0.06, z, {}, 6);
       k.cyl(0.07, 0.09, 0.6, '#7a7a80', x, y + 0.42, z, {}, 6);
@@ -1089,33 +1271,52 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     x += w;
   }
 
-  // ---------- 船 ----------
-  // 漁船：船尾一間小駕駛艙，桅杆上拉一串集魚燈，從船頭經過桅杆頂拉到船尾
-  const fishingBoat = (vk, len, beam, color) => {
-    vk.add(hull(len, beam, 0.7, { y: 0.4, w: 0.86 }), color, 0, 0, 0, { color2: shade(color, 0.12), ao: false });
-    const cz = -len * 0.26;
-    vk.box(beam * 0.6, 0.85, 1.1, CREAM, 0, 0.15, cz, { color2: '#f4ecd8' });
-    vk.box(beam * 0.72, 0.06, 1.3, '#3a4a5a', 0, 0.6, cz);
-    vk.plane(beam * 0.4, 0.28, PAPER, 0, 0.3, cz + 0.56, { glow: true });
-    const mz = len * 0.06;
-    vk.cyl(0.035, 0.05, 2.5, WOOD, 0, 0.95, mz, {}, 5);
-    const top = [0, 2.15, mz];
-    for (const end of [[0, 0.35, len * 0.47], [0, 0.45, -len * 0.47]]) {
-      const n = 7;
-      for (let i = 1; i < n; i++) {
-        const t = i / n, x = top[0] + (end[0] - top[0]) * t, y = top[1] + (end[1] - top[1]) * t - Math.sin(t * Math.PI) * 0.12, z = top[2] + (end[2] - top[2]) * t;
-        vk.ball(0.07, '#fff6dc', x, y, z, { glow: true });
-        if (i % 2) vk.light(x, y, z, '#fff0c0', 0.5);
+  // ---------- 欄杆：自動圍 ----------
+  // 每塊路面的四邊掃一遍：外面接著別的路就不圍，有房子、石階的矮牆擋著也不圍，外面往下掉才圍。
+  // 港邊（高度 0）一律不圍。石階兩側本來就有矮牆，坡道照平均高度圍
+  for (const a of AREAS) {
+    if (a.lo != null && !a.slope) continue;
+    const y = a.y ?? (a.lo + a.hi) / 2;
+    if (y < 0.5) continue;
+    for (const [ax, az, bx, bz, nx, nz] of [[a.x0, a.z0, a.x1, a.z0, 0, -1], [a.x0, a.z1, a.x1, a.z1, 0, 1], [a.x0, a.z0, a.x0, a.z1, -1, 0], [a.x1, a.z0, a.x1, a.z1, 1, 0]]) {
+      const n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / 0.25)), pt = (t) => [ax + (bx - ax) * t - nx * 0.12, az + (bz - az) * t - nz * 0.12];
+      let start = -1;
+      for (let i = 0; i <= n; i++) {
+        const t = i / n, x = ax + (bx - ax) * t, z = az + (bz - az) * t, ox = x + nx * 0.3, oz = z + nz * 0.3;
+        const b = areaAt(ox, oz), open = b && Math.abs(heightIn(b, ox, oz) - heightIn(a, x, z)) < 0.35;
+        const walled = solids.some((s) => !s.ground && ox > s.x0 && ox < s.x1 && oz > s.z0 && oz < s.z1);
+        const need = i < n && !open && !walled && groundY(ox, oz) < y - 0.8;
+        if (need && start < 0) start = t;
+        if (!need && start >= 0) {
+          rail(...pt(start), ...pt(t), y);
+          start = -1;
+        }
       }
     }
-    lantern(vk, 0, 0.95, cz + 0.65, 0.55);
+  }
+
+  // ---------- 船 ----------
+  // 漁船：船身中段一頂竹蓆篷，船尾一盞紙燈籠；船頭伸出一根竿子，吊著燒柴的鐵火籠，夜裡用火光引魚
+  const fishingBoat = (vk, len, beam, color) => {
+    vk.add(hull(len, beam, 0.7, { y: 0.4, w: 0.86 }), color, 0, 0, 0, { color2: shade(color, 0.12), ao: false });
+    const r = beam * 0.38;
+    vk.add(new THREE.CylinderGeometry(r, r, len * 0.36, 9, 1, true, Math.PI / 2, Math.PI), '#8a6a3a', 0, -0.28, -len * 0.08, { rx: Math.PI / 2, color2: '#a8864a' });
+    for (const dz of [-0.17, 0.17]) vk.torus(r + 0.01, 0.025, Math.PI, '#5a4028', 0, -0.28, -len * 0.08 + dz * len, {});
+    lantern(vk, 0, 0.55, -len * 0.42, 0.55);
+    // 火籠：竿子從船頭斜斜伸出去，尾端吊一個鐵籠子，裡面的火一團橘紅
+    const bz = len * 0.42;
+    vk.box(0.05, 0.05, 1.5, WOOD, 0, 0.55, bz + 0.3, { rx: -0.45 });
+    const fz = bz + 0.95, fy = 0.65;
+    vk.cyl(0.2, 0.13, 0.32, '#2a2622', 0, fy, fz, {}, 6);
+    vk.rock(0.15, '#ff4a12', 0, fy + 0.08, fz, { glow: true, sy: 1.3, color2: '#ffa030' });
+    vk.light(0, fy + 0.1, fz, '#ff8a3a', 1.3);
   };
   for (const [x, z, len, beam, color, ph] of [[-25.6, 13, 5, 1.5, '#2a4a6a', 0], [-21.95, 13.5, 4.6, 1.45, '#8a2a22', 1.7], [-20.05, 12.4, 4.2, 1.4, '#2a5a4a', 3.1], [-11.9, 12.6, 4.8, 1.5, '#e0d8c8', 4.4]]) {
     const g = vessel((vk) => fishingBoat(vk, len, beam, color));
     g.position.set(x, SEA + 0.45, z);
     g.rotation.y = R() < 0.5 ? 0 : Math.PI;
     harborFx.push((now) => bob(g, now, ph, SEA + 0.45));
-    shimmerMore.push({ x, z: z + len * 0.3, w: 0.6, l: 4, color: '#fff0c0', a: 0.3 });
+    shimmerMore.push({ x, z: z + len * 0.6 * Math.cos(g.rotation.y), w: 0.5, l: 4, color: '#ff8a3a', a: 0.4 });
   }
 
   // 舢舨：一個人戴斗笠站在船尾搖櫓，船頭一盞燈
@@ -1158,16 +1359,19 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     });
   }
 
-  // 屋形船：外海一艘長長的船，整排紙窗亮著，屋簷下掛紅燈籠，慢慢繞一個大圈
+  // 畫舫：外海一艘長長的遊船，整排雕花紙窗亮著，屋頂兩頭翹起，簷下掛紅燈籠，慢慢繞一個大圈
   {
     const g = vessel((vk) => {
       vk.add(hull(7.5, 2.4, 0.6, { y: 0.45, w: 0.9 }), '#3a2a20', 0, 0, 0, { color2: '#5a4030', ao: false });
-      vk.box(1.9, 1.0, 5.4, '#4a3428', 0, 0.25, -0.2);
+      vk.box(1.9, 1.0, 5.4, '#5a2a22', 0, 0.25, -0.2);
       for (const sx of [-1, 1]) {
-        vk.plane(5.0, 0.6, PAPER, sx * 0.96, 0.32, -0.2, { glow: true, ry: (sx * Math.PI) / 2, color2: '#ffeccc' });
-        for (let i = 0; i < 5; i++) lantern(vk, sx * 1.15, 0.78, -2.3 + i * 1.05, 0.5);
+        for (let i = 0; i < 5; i++) {
+          vk.plane(0.75, 0.55, PAPER, sx * 0.96, 0.32, -2.3 + i * 1.05, { glow: true, ry: (sx * Math.PI) / 2, color2: '#ffeccc' });
+          vk.torus(0.24, 0.03, Math.PI * 2, '#3a2a1e', sx * 0.97, 0.32, -2.3 + i * 1.05, { ry: (sx * Math.PI) / 2 });
+          lantern(vk, sx * 1.15, 0.78, -2.3 + i * 1.05, 0.5);
+        }
       }
-      addRoof(vk, 0, 0.75, -0.2, 6.0, 2.6, 0.45, { ry: Math.PI / 2, tile: '#2a2c32', lift: 0.2, ridge: 3.0 });
+      addRoof(vk, 0, 0.75, -0.2, 6.0, 2.6, 0.5, { ry: Math.PI / 2, tile: '#2a2c32', lift: 0.35, ridge: 3.0, curl: 0.3 });
     });
     const T = 420;
     harborFx.push((now) => {
@@ -1179,20 +1383,27 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     });
   }
 
-  // 大渡船：紅色船身、白色的客艙一整排亮著的窗，頂上一根煙囪。十分鐘一班：
+  // 大渡船：木造的樓船，兩層船樓開著一整排紙窗，中間一根桅杆掛著收起一半的竹骨硬帆。十分鐘一班：
   // 從外海開進來、船頭朝岸靠在石堤東邊，停四分多鐘；倒退出去、在港外掉頭，再往外海開走，消失在霧裡
   {
     const g = vessel((vk) => {
-      vk.add(hull(9, 3, 1.2, { y: 0.35, w: 0.88 }), '#6a2a22', 0, 0, 0, { color2: '#8a3a2a', ao: false });
-      vk.box(2.3, 1.4, 5.2, CREAM, 0, 0.28, -0.4, { color2: '#f4ecd8' });
-      for (const sx of [-1, 1]) for (let i = 0; i < 6; i++) vk.plane(0.5, 0.42, PAPER, sx * 1.16, 0.45, -2.6 + i * 0.88, { glow: true, ry: (sx * Math.PI) / 2, color2: '#ffeccc' });
-      vk.box(2.7, 0.1, 5.8, '#2a2c32', 0, 1.02, -0.4);
-      vk.cyl(0.28, 0.32, 1.1, '#1e1c1e', 0, 1.6, -1.8, {}, 10);
-      vk.cyl(0.33, 0.33, 0.2, '#a8322a', 0, 2.05, -1.8, {}, 10);
-      for (const sx of [-1, 1]) for (let i = 0; i < 4; i++) lantern(vk, sx * 1.3, 0.85, -2.6 + i * 1.5, 0.55);
-      lantern(vk, 0, 1.1, 3.9, 0.7);
-      vk.box(0.04, 1.4, 0.04, DARK, 0, 1.7, 1.6);
-      vk.plane(0.5, 0.3, '#a8322a', 0.26, 2.2, 1.6, { ry: Math.PI / 2 });
+      vk.add(hull(9, 3, 1.2, { y: 0.35, w: 0.88 }), '#4a3226', 0, 0, 0, { color2: '#6a4a34', ao: false });
+      vk.box(2.3, 1.3, 4.6, '#5a3826', 0, 0.23, -1.2, { color2: '#6a4430' });
+      vk.box(1.8, 0.8, 2.4, '#5a3826', 0, 1.3, -2.0, { color2: '#6a4430' });
+      for (const sx of [-1, 1]) {
+        for (let i = 0; i < 5; i++) lattice(vk, sx * 1.16, 0.4, -3.1 + i * 0.95, 0.6, 0.5, true, (sx * Math.PI) / 2);
+        for (let i = 0; i < 2; i++) lattice(vk, sx * 0.91, 1.35, -2.6 + i * 1.2, 0.5, 0.4, true, (sx * Math.PI) / 2);
+      }
+      addRoof(vk, 0, 0.88, -1.2, 5.0, 2.8, 0.35, { ry: Math.PI / 2, tile: '#2a2c32', lift: 0.25, ridge: 2.5 });
+      addRoof(vk, 0, 1.7, -2.0, 2.9, 2.2, 0.45, { ry: Math.PI / 2, tile: '#6a3428', lift: 0.3, ridge: 1.45, curl: 0.25 });
+      for (const sx of [-1, 1]) for (let i = 0; i < 3; i++) lantern(vk, sx * 1.4, 0.7, -3.0 + i * 1.6, 0.55);
+      // 桅杆和硬帆：帆收到下半截，一道一道竹骨橫著
+      const mz = 1.6;
+      vk.cyl(0.08, 0.11, 5.4, '#4a3428', 0, 2.3, mz, {}, 6);
+      vk.box(0.06, 1.5, 1.9, '#8a3a2a', 0, 1.35, mz - 0.1, { color2: '#a84a32' });
+      for (let i = 0; i < 5; i++) vk.box(0.09, 0.05, 2.0, '#3a2a1e', 0, 0.65 + i * 0.36, mz - 0.1);
+      lantern(vk, 0, 4.9, mz, 0.6);
+      lantern(vk, 0, 0.9, 4.0, 0.7);
     });
     const DOCK = new THREE.Vector3(14.7, 0, 15), OUT = new THREE.Vector3(14.7, 0, 30), FAR = new THREE.Vector3(60, 0, 170);
     const inbound = new THREE.QuadraticBezierCurve3(FAR, new THREE.Vector3(18, 0, 90), DOCK);
@@ -1246,14 +1457,16 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     });
     const rope = new THREE.Mesh(new THREE.BoxGeometry(0.025, 1, 0.025).translate(0, -0.5, 0), new THREE.MeshBasicMaterial({ color: '#2a201c' }));
     group.add(rope);
-    const tip = new THREE.Vector3(), REST = -Math.PI / 2, OVER = 0.1;
+    // 吊臂斜斜往上，末端在柱頂外 3.27、高 0.3 的地方
+    const tip = new THREE.Vector3(), REST = -Math.PI / 2, OVER = 0.1, REACH = 3.27;
     let yaw = REST, dropT = 0;
     harborFx.push((now, dt) => {
       const c = (now % 40) / 40, want = docked ? REST + (OVER - REST) * (0.5 - 0.5 * Math.cos(c * Math.PI * 2)) : REST;
       yaw += (want - yaw) * Math.min(1, dt * 2);
       boom.rotation.set(0, yaw, 0);
-      dropT += ((docked ? 1.0 + 1.2 * Math.sin(c * Math.PI * 2) ** 2 : 0.6) - dropT) * Math.min(1, dt * 1.5);
-      tip.set(mx + Math.cos(yaw) * 3.25, MY + 0.6, mz - Math.sin(yaw) * 3.25);
+      // 擺到兩頭（船上、堤上）才把木箱放低，中間吊高了再擺過去；最低也在頭頂上面
+      dropT += ((docked ? 0.8 + 0.8 * Math.cos(c * Math.PI * 2) ** 2 : 0.6) - dropT) * Math.min(1, dt * 1.5);
+      tip.set(mx + Math.cos(yaw) * REACH, MY + 0.3, mz - Math.sin(yaw) * REACH);
       rope.position.copy(tip);
       rope.scale.y = dropT;
       load.position.set(tip.x, tip.y - dropT, tip.z);
@@ -1265,31 +1478,96 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   const inArea = (x, z, pad) => AREAS.some((a) => x > a.x0 - pad && x < a.x1 + pad && z > a.z0 - pad && z < a.z1 + pad);
   const inSolid = (x, z) => solids.some((b) => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1);
   for (let i = 0; i < (coarse ? 260 : 420); i++) {
-    const x = TOWN_X0 + R() * (TOWN_X1 - TOWN_X0), z = 4 - R() * 64, y = terrain(x, z);
+    const x = TOWN_X0 + R() * (TOWN_X1 - TOWN_X0), z = 4 - R() * 68, y = terrain(x, z);
     if (y < SEA + 0.2 || inArea(x, z, 0.7) || inSolid(x, z)) continue;
     const r = 0.35 + R() * 0.6;
     k.rock(r, pick(['#2e4a3a', '#3a5a3e', '#2a4440', '#44583a']), x, y + r * 0.4, z, { sy: 0.75, ao: false });
     if (R() < 0.35) for (let f = 0; f < 4; f++) k.rock(0.06, pick(['#f0a0b8', '#f8f0d8', '#f0d060', '#b8a0f0']), x + (R() - 0.5) * r * 1.4, y + r * 0.75, z + (R() - 0.5) * r * 1.4, { ao: false });
   }
+  // 山上的人家聚成幾個小聚落：幾戶沿著等高線排成一彎，臉朝山下，背後一棵老樹或一座小祠。
+  // 門口有石板小路一戶接一戶，再有一條往山下彎進樹林裡。這些路只是看得到，走不上去
+  const HAMLETS = [[-44, -6, 6], [-50, -28, 5], [-42, -50, 7], [-28, -80, 5], [27, -8, 5], [33, -30, 6], [27, -55, 5], [-4, -88, 6], [16, -76, 4], [-64, -60, 4], [55, -42, 4]];
+  const zones = [], trails = [];
+  const downhill = (x, z) => {
+    const gx = terrain(x + 1, z) - terrain(x - 1, z), gz = terrain(x, z + 1) - terrain(x, z - 1), l = Math.hypot(gx, gz) || 1;
+    return [-gx / l, -gz / l];
+  };
+  // 假路：沿著折線每隔一小段鋪一塊石板，走一段路旁立一根矮燈柱
+  const trail = (pts) => {
+    let walked = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [ax, az] = pts[i], [bx, bz] = pts[i + 1], len = Math.hypot(bx - ax, bz - az), ry = -Math.atan2(bz - az, bx - ax);
+      for (let t = 0; t < len; t += 0.6) {
+        const x = ax + ((bx - ax) * t) / len + (R() - 0.5) * 0.15, z = az + ((bz - az) * t) / len + (R() - 0.5) * 0.15, y = terrain(x, z);
+        k.box(0.55, 0.08, 0.4, pick(STONES), x, y + 0.02, z, { ry: ry + (R() - 0.5) * 0.4, ao: false });
+        trails.push([x, z]);
+        walked += 0.6;
+        if (walked > 7 && R() < 0.3) {
+          walked = 0;
+          const px = x + ((bz - az) / len) * 0.6, pz = z - ((bx - ax) / len) * 0.6, py = terrain(px, pz);
+          k.box(0.08, 1.0, 0.08, DARK, px, py + 0.5, pz, { ao: false });
+          lantern(k, px, py + 1.15, pz, 0.6);
+        }
+      }
+    }
+  };
+  for (const [hx, hz, n] of HAMLETS) {
+    const [dx, dz] = downhill(hx, hz), cx = -dz, cz = dx, face = Math.atan2(dx, dz), fronts = [];
+    for (let i = 0; i < n; i++) {
+      // 沿等高線排開，兩頭微微往山下彎；隔幾戶有一間往山上退一點
+      const t = (i - (n - 1) / 2) * (4.4 + R() * 0.8), drop = t * t * 0.02 - (i % 3 === 1 ? 2.2 : 0) + (R() - 0.5) * 1.2;
+      const x = hx + cx * t + dx * drop, z = hz + cz * t + dz * drop, y = terrain(x, z);
+      if (x > TOWN_X0 - 4 && x < TOWN_X1 + 4 && z > -68) continue;   // 排到鎮子裡就不蓋
+      const w = 2.8 + R() * 2.2, d = 2.8 + R() * 0.8, h = 1.8 + R() * 1.4, wall = R() < 0.5 ? pick(PLASTER) : pick(TIMBER);
+      let foot = y;
+      for (const [u, v] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) foot = Math.min(foot, terrain(x + cx * u * w * 0.5 + dx * v * d * 0.5, z + cz * u * w * 0.5 + dz * v * d * 0.5));
+      foot -= 0.6;
+      // 牆腳壓暗，房子才像坐在坡上；有的頂上再疊一小間竹屋
+      k.box(w, y + h - foot, d, shade(wall, -0.3), x, (y + h + foot) / 2, z, { ry: face, ao: false, color2: wall });
+      k.add(roofGeo(w + 1.0, d + 1.2, 0.9 + R() * 0.5, { tile: pick(TILES), lift: 0.35 + R() * 0.2, seg: 0.3, ridge: R() < 0.5 ? (w + 1) / 2 : (w - 1) / 2 }), null, x, y + h, z, { ry: face, ao: false });
+      if (R() < 0.35) {
+        const w2 = w * 0.5, off = (R() - 0.5) * (w - w2) * 0.6;
+        k.box(w2, 1.4, d * 0.6, pick(BAMBOO), x + cx * off, y + h + 0.5, z + cz * off, { ry: face, ao: false });
+        k.add(roofGeo(w2 + 0.6, d * 0.6 + 0.9, 0.5, { tile: pick(TILES), lift: 0.25, seg: 0.3 }), null, x + cx * off, y + h + 1.2, z + cz * off, { ry: face, ao: false });
+      }
+      const fx = x + dx * (d / 2 + 0.03), fz = z + dz * (d / 2 + 0.03);
+      if (R() < 0.85) k.plane(w * 0.45, 0.75, WARM, fx, y + h * 0.5, fz, { glow: true, ry: face, color2: PAPER });
+      if (R() < 0.6) lantern(k, fx + cx * (w / 2 - 0.3) + dx * 0.4, y + h - 0.3, fz + cz * (w / 2 - 0.3) + dz * 0.4, 1.2);
+      fronts.push([x + dx * (d / 2 + 1.2), z + dz * (d / 2 + 1.2)]);
+    }
+    if (!fronts.length) continue;
+    trail(fronts);
+    // 從中間那戶門口往山下彎彎曲曲走一段，進到樹林裡
+    const down = [fronts[Math.floor(fronts.length / 2)]];
+    for (let i = 0; i < 9; i++) {
+      const [px, pz] = down[down.length - 1], [ex, ez] = downhill(px, pz), wig = (R() - 0.5) * 1.4;
+      const nx = px + ex * 1.8 - ez * wig, nz = pz + ez * 1.8 + ex * wig;
+      if ((nx > TOWN_X0 - 3 && nx < TOWN_X1 + 3 && nz > -66) || terrain(nx, nz) < SEA + 0.6) break;
+      down.push([nx, nz]);
+    }
+    trail(down);
+    // 聚落背後：一棵老樹，或一座小祠
+    const bx = hx - dx * 3.4, bz = hz - dz * 3.4, by = terrain(bx, bz);
+    if (R() < 0.5) {
+      k.cyl(0.35, 0.55, 3.4, '#3a2a20', bx, by + 1.7, bz, { rz: (R() - 0.5) * 0.3, ao: false }, 6);
+      for (let i = 0; i < 4; i++) k.rock(1.2 + R() * 0.6, pick(['#1e3a30', '#2a4436', '#24402e']), bx + (R() - 0.5) * 2, by + 3.6 + R() * 1.2, bz + (R() - 0.5) * 2, { sy: 0.7, ao: false });
+    } else {
+      k.box(1.0, 1.4, 0.8, '#5a3826', bx, by + 0.3, bz, { ry: face, ao: false });
+      k.add(roofGeo(1.6, 1.4, 0.5, { tile: '#2c3038', lift: 0.3, seg: 0.3 }), null, bx, by + 1.0, bz, { ry: face, ao: false });
+      k.plane(0.5, 0.45, PAPER, bx + dx * 0.42, by + 0.55, bz + dz * 0.42, { glow: true, ry: face, color2: '#fff0d0' });
+      k.light(bx + dx * 0.6, by + 0.6, bz + dz * 0.6, '#ffcf80', 0.6);
+    }
+    zones.push([hx, hz, n * 2.6 + 4]);
+  }
+  // 樹：聚落和小路上不種
   for (let i = 0; i < (coarse ? 300 : 520); i++) {
     const x = -100 + R() * 190, z = 20 - R() * 150;
-    if (x > TOWN_X0 - 1 && x < TOWN_X1 + 1 && z > -62) continue;
+    if (x > TOWN_X0 - 1 && x < TOWN_X1 + 1 && z > -64) continue;
     const y = terrain(x, z);
     if (y < SEA + 0.5) continue;
-    if (R() < 0.12) {
-      // 山上的人家：矮矮寬寬的木屋，瓦頂壓得很低，門口一盞燈
-      // 牆腳壓暗，房子才像坐在坡上，不會像一個一個方塊浮著
-      // 坡陡的地方牆要砌到下坡那一角的地面，不然從上面看房子是懸空的
-      const w = 3 + R() * 2.5, h = 1.6 + R() * 1.4, wall = R() < 0.5 ? pick(PLASTER) : pick(TIMBER);
-      const foot = Math.min(y, terrain(x - w / 2, z - 1.5), terrain(x + w / 2, z - 1.5), terrain(x - w / 2, z + 1.5), terrain(x + w / 2, z + 1.5)) - 0.75;
-      k.box(w, y + h - foot, 3, shade(wall, -0.32), x, (y + h + foot) / 2, z, { ao: false, color2: wall });
-      k.add(roofGeo(w + 1.2, 4.2, 1.2 + R() * 0.5, { tile: pick(TILES), lift: 0.4, seg: 0.3, ridge: R() < 0.5 ? (w + 1.2) / 2 : (w - 1.2) / 2 }), null, x, y + h, z, { ao: false });
-      if (R() < 0.85) k.plane(w * 0.5, 0.8, WARM, x, y + h * 0.5, z + 1.52, { glow: true, color2: PAPER });
-      if (R() < 0.6) lantern(k, x + w / 2 - 0.3, y + h - 0.3, z + 1.9, 1.4);
-    } else {
-      const s = 0.8 + R() * 1.4;
-      k.cone(1.1 * s, 3 * s, '#1a2a2a', x, y + 1.1 * s, z, { color2: '#2e4440', ao: false });
-    }
+    if (zones.some(([hx, hz, r]) => Math.hypot(x - hx, z - hz) < r) || trails.some(([px, pz]) => Math.abs(px - x) < 1.3 && Math.abs(pz - z) < 1.3)) continue;
+    const s = 0.8 + R() * 1.4;
+    k.cone(1.1 * s, 3 * s, '#1a2a2a', x, y + 1.1 * s, z, { color2: '#2e4440', ao: false });
   }
   k.add(terrainGeometry(), '#24302e', 0, 0, 0, { color2: '#46523e', ao: false });
 
@@ -1310,14 +1588,15 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   // ---------- 霧：夾在層與層之間，鎮子兩側的山谷裡也有；街道上方也飄幾團，在屋頂之間 ----------
   const MR = rng('haishi-mist'), mists = [];
   for (let i = 0; mists.length < (coarse ? 20 : 36) && i < 600; i++) {
-    const x = TOWN_X0 - 4 + MR() * (TOWN_X1 - TOWN_X0 + 8), z = 6 - MR() * 66, over = inArea(x, z, 1.5);
+    const x = TOWN_X0 - 4 + MR() * (TOWN_X1 - TOWN_X0 + 8), z = 6 - MR() * 70, over = inArea(x, z, 1.5);
     if (over && MR() < 0.6) continue;
     mists.push({ x, y: tz(z) + (over ? 5 + MR() * 3 : 1.5 + MR() * 3.5), z, s: 9 + MR() * 9, p: MR() * 10 });
   }
   group.add(mist(mists));
   // 每條街上方一層被燈籠照暖的霧，從海上遠遠看，一層一層的街都在發光
   const glow = [];
-  for (const [x0, x1, z, y] of [[-6, 6, 8.5, 0], [-3, 3, -2.8, 2.4], [-14, 12, -12.5, 6.8], [-12, 10, -22.5, 9.2], [-6, 12, -32.5, 11.6]]) {
+  const glowRows = [[-6, 6, 8.5, 0], [-25, -10, 7, 0], [9, 14, 7, 0], [-3, 3, -2.8, 2.4], ...AREAS.filter((a) => a.street && a.y != null && a.y > 5 && a.y < 13).map((a) => [a.x0 + 1, a.x1 - 1, (a.z0 + a.z1) / 2, a.y])];
+  for (const [x0, x1, z, y] of glowRows) {
     for (let x = x0; x <= x1; x += 5) glow.push({ x: x + (MR() - 0.5) * 2, y: y + 3.4 + MR(), z: z + (MR() - 0.5) * 2, s: 8 + MR() * 4, p: MR() * 10 });
   }
   group.add(mist(glow, { color: '#ff8a48', alpha: 0.22, warm: true }));
@@ -1325,7 +1604,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   const shimmer = [{ x: 0, z: 12.2, w: 16, l: 20, color: '#ff8a48', a: 0.16 }];
   for (let x = -7.5; x <= 7.5; x += 1.5) if (Math.abs(x) > 1.5) shimmer.push({ x: x + (MR() - 0.5) * 0.4, z: 12.2, w: 0.35, l: 4 + MR() * 3, color: '#ff7a40', a: 0.5 });
   for (const z of [16, 22, 29.6]) for (const sx of [-1, 1]) shimmer.push({ x: sx * 1.5, z: z + 0.1, w: 0.3, l: 3 + MR() * 1.5, color: '#ff7a40', a: 0.55 });
-  group.add(ripples(shimmer, SEA));
+  group.add(ripples(shimmer.concat(shimmerMore), SEA));
 
   // ---------- 海和天 ----------
   // 海是深藍，不是黑的：夜色映在水上，燈影才有東西可以浮在上面
@@ -1474,7 +1753,10 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     spawn: { x: 0, z: 26.4, heading: Math.PI },
     exits: [{ x: 0.6, z: 27.9, r: 1.4, to: 'gallery', label: '搭船', title: '回畫廊' }],
     roomIndexAt: () => 0,
-    placeAt: (x, z) => PLACES[areaAt(x, z)?.id] || null,
+    placeAt: (x, z) => {
+      const a = areaAt(x, z);
+      return (a && PLACES[a.street ?? a.id]) || null;
+    },
     walkable, findWalkable, findPath, groundY, camFloor, camClip,
     setCurrentRoom() {},
     // 測試用：地形高度、房子和石台的範圍、欄杆、擋路的東西（tools/check-haishi.mjs）
@@ -1503,6 +1785,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       boat.position.y = SEA + 0.36 + Math.sin(t * 1.3) * 0.05;
       boat.rotation.set(Math.sin(t * 0.9) * 0.03, 0.08 + Math.sin(t * 0.3) * 0.05, Math.sin(t * 1.1 + 1) * 0.05);
       const now = Date.now() / 1000;
+      for (const f of harborFx) f(now, dt);
       towerSize.setX(0, 30 * (1 + 1.5 * bump(towerPhase(now), 0.52, 0.07)));
       towerSize.needsUpdate = true;
     },
