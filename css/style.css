@@ -205,8 +205,20 @@ body.flat #stage::after { display: none; }
 }
 #top-btns .icon-btn span { font-size: 14px; letter-spacing: .2em; margin-right: -.2em; }
 #sound-btn .off, #sound-btn.muted .on { display: none; }
-#director-btn.on { color: var(--gold-hi); border-color: var(--gold); }
-#director-btn.on svg path:first-child { fill: rgba(232, 184, 106, .18); }
+/* 導演運鏡：打開時整顆填金、場記板合上；關掉時淡色虛線框、板子張開 */
+#director-btn .stick { transform-box: view-box; transform-origin: 4.5px 10.5px; transform: rotate(-14deg); transition: transform .25s cubic-bezier(.5, 0, .7, 1.4); }
+#director-btn:not(.on) { color: var(--muted); border-style: dashed; }
+#director-btn.on {
+  color: #2a1a0c; background: var(--gold-fill); border-color: var(--gold-hi);
+  box-shadow: inset 0 0 0 1px rgba(255, 244, 220, .5), 0 0 12px rgba(232, 184, 106, .35);
+}
+#director-btn.on .stick { transform: rotate(9deg); }
+#director-btn.on .board { fill: rgba(42, 26, 12, .18); }
+#director-btn.clap { animation: clap .35s ease-out; }
+@keyframes clap { 40% { transform: scale(1.12); } }
+@media (hover: hover) {
+  #director-btn.on:hover { color: #2a1a0c; filter: brightness(1.06); }
+}
 #sound-btn.muted .off { display: block; }
 #sound-btn.muted { color: var(--muted); }
 
