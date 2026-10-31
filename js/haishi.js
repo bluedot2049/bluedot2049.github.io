@@ -604,10 +604,10 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       hk.rock(0.12, '#2a2c32', bx, top + RH + 0.08, bz, { sy: 1.4 });
       hk.ball(0.05, '#3a3c44', bx + (along ? e * 0.08 : 0), top + RH + 0.22, bz + (along ? 0 : e * 0.08));
     }
-    // 屋簷下一排燈籠；簷角掛銅鈴
+    // 屋簷下一排燈籠（至少兩顆才掛，單顆孤零零的沒有味道）；簷角掛銅鈴
     if (R() < 0.65) {
       const k2 = Math.max(1, Math.floor(pw / 1.4));
-      for (let i = 0; i < k2; i++) lantern(hk, px - pw / 2 + (pw * (i + 0.5)) / k2, top - 0.42, lampZ + over, 0.85);
+      if (k2 > 1) for (let i = 0; i < k2; i++) lantern(hk, px - pw / 2 + (pw * (i + 0.5)) / k2, top - 0.42, lampZ + over, 0.85);
     }
     if (R() < 0.25) for (const e of [-1, 1]) hk.cone(0.07, 0.13, GOLD, px + e * (RW / 2 - 0.25), top - 0.12, rz + RD / 2 - 0.2);
     // 後來加蓋的：屋頂上的竹木小閣樓、從二樓挑出去的吊樓、曬衣竿
@@ -654,7 +654,6 @@ export function buildHaishi(scene, { coarse = false } = {}) {
         if (Math.abs(wx + w * 0.25) > bdw / 2 + 0.45) opening(hk, kind, wx, o.back + 1.35, bz, hand * 0.85, R() < 0.7, Math.PI);
       }
       addRoof(hk, 0, o.back + 2.0, bz, w + 0.1, 1.6, 0.3, { front: true, ry: Math.PI, tile, lift: 0.08, curl: 0 });
-      lantern(hk, -w * 0.25 + 0.65, o.back + 1.6, bz - 0.55, 0.7);
       hk.pool(-w * 0.25, o.back, bz - 1.0, 1.6, '#ffa860', 0.26);
     }
     const side = Math.abs(Math.sin(rot)) > 0.5, hw = (side ? d : w) / 2 + 0.4, hd = (side ? w : d) / 2 + 0.45;
@@ -1608,10 +1607,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
         trails.push([x, z]);
         walked += 0.6;
         if (walked > 7 && R() < 0.3) {
-          walked = 0;
-          const px = x + ((bz - az) / len) * 0.6, pz = z - ((bx - ax) / len) * 0.6, py = terrain(px, pz);
-          k.box(0.08, 1.0, 0.08, DARK, px, py + 0.5, pz, { ao: false });
-          lantern(k, px, py + 1.15, pz, 0.6);
+          walked = 0;   // 山上的假路不立燈柱了，鎮子以外不放燈籠
         }
       }
     }
@@ -1637,7 +1633,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       }
       const fx = x + dx * (d / 2 + 0.03), fz = z + dz * (d / 2 + 0.03);
       if (R() < 0.85) k.plane(w * 0.45, 0.75, WARM, fx, y + h * 0.5, fz, { glow: true, ry: face, color2: PAPER });
-      if (R() < 0.6) lantern(k, fx + cx * (w / 2 - 0.3) + dx * 0.4, y + h - 0.3, fz + cz * (w / 2 - 0.3) + dz * 0.4, 1.2);
+      R();   // 原本這裡抽一次決定掛不掛門口燈籠，山上人家不掛了，亂數照舊抽掉
       fronts.push([x + dx * (d / 2 + 1.2), z + dz * (d / 2 + 1.2)]);
     }
     if (!fronts.length) continue;
