@@ -50,7 +50,42 @@ function lfo(ctx, t, dur, rate, depth, param) {
   o.stop(t + dur + 0.05);
 }
 
+// 短短一下的雜訊，濾成想要的音色
+function hiss(ctx, out, noise, t, dur, type, freq, peak, Q = 1) {
+  const src = ctx.createBufferSource();
+  src.buffer = noise;
+  src.connect(biquad(ctx, type, freq, Q)).connect(envelope(ctx, t, 0.002, dur, peak)).connect(out);
+  src.start(t, Math.random() * 7);
+  src.stop(t + dur + 0.02);
+}
+
 const VOICES = {
+  // 相機（cameras.js）：葉片快門喀嚓兩下
+  shutter(ctx, out, t, p, noise) {
+    hiss(ctx, out, noise, t, 0.018, 'bandpass', 3200 * p, 1.1, 2);
+    hiss(ctx, out, noise, t + 0.055, 0.025, 'bandpass', 2300 * p, 0.8, 2);
+    return 0.09;
+  },
+  // 閃光燈泡：啪一聲很亮的爆，底下一記悶的，最後燈絲燒完嘶嘶的
+  flash(ctx, out, t, p, noise) {
+    hiss(ctx, out, noise, t, 0.07, 'highpass', 1400, 1.4);
+    osc(ctx, 'sine', t, 0.14, [[0, 150 * p], [0.14, 55 * p]]).connect(envelope(ctx, t, 0.003, 0.14, 0.9)).connect(out);
+    hiss(ctx, out, noise, t + 0.03, 0.45, 'highpass', 6500, 0.18);
+    return 0.5;
+  },
+  // 換燈泡：燒過的燈泡退出來叮一聲，新的轉進去嘰嘰兩下，最後卡一聲到位
+  bulb(ctx, out, t, p, noise) {
+    hiss(ctx, out, noise, t, 0.03, 'bandpass', 1800, 0.6, 3);
+    osc(ctx, 'sine', t + 0.01, 0.25, [[0, 3100 * p], [0.25, 3050 * p]]).connect(envelope(ctx, t + 0.01, 0.003, 0.25, 0.22)).connect(out);
+    for (const dt of [0.55, 0.78]) hiss(ctx, out, noise, t + dt, 0.12, 'bandpass', 5200 * p, 0.28, 6);
+    hiss(ctx, out, noise, t + 1.25, 0.03, 'bandpass', 2600 * p, 0.9, 2);
+    return 1.3;
+  },
+  // 對到焦：兩聲短短的嗶
+  focus(ctx, out, t, p) {
+    for (const dt of [0, 0.075]) osc(ctx, 'sine', t + dt, 0.045, [[0, 2700 * p]]).connect(envelope(ctx, t + dt, 0.004, 0.045, 0.3)).connect(out);
+    return 0.13;
+  },
   // 哞——：低沉的鋸齒波，共振峰從閉著嘴的「m」慢慢打開成「o」
   moo(ctx, out, t, p) {
     const d = 1.3 + Math.random() * 0.5;

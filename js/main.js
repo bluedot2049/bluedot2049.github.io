@@ -5,7 +5,7 @@ import { Player } from './player.js';
 import { Character } from './character.js';
 import { sanitizeLook, randomPreset, getSave, putSave } from './looks.js';
 import { decodeLook, decodeSave, tryOn, hasProgress, restoreSave } from './savecode.js';
-import { Creator, FACE_TABS } from './creator.js';
+import { Creator } from './creator.js';
 import { layoutBubbles } from './bubbles.js';
 import { UI, panelW } from './ui.js';
 import { bindJoystick } from './joystick.js';
@@ -18,7 +18,9 @@ import { createPostFX } from './postfx.js';
 import { PhotoMode } from './photo.js';
 import { Studio } from './studio.js';
 import { lens, LensPass } from './lens.js';
+import { dof, DofPass } from './dof.js';
 import { fullscreenButton } from './screen.js';
+import { CAMERAS, TABLE, carried, carry } from './cameras.js';
 
 // 世界分成幾個區域，一次只建一個，用 ?z= 指定，沒有寫就是畫廊。每個區域的內容寫在自己的 zone-*.js，用到才下載。
 // 換區域時整頁重新載入：瀏覽器一定會把上一個區域的記憶體收回去，手機才撐得住。
@@ -159,6 +161,9 @@ async function start() {
   const sun = new THREE.DirectionalLight(0xffcf98, 1.3);
   sun.position.set(4, 8, 3);
   scene.add(sun);
+  // 閃光燈（cameras.js）：一開始就放好、平常不亮，拍照時才調亮。半路才加燈的話，所有材質都要重編著色器
+  const flashLight = new THREE.PointLight(0xffffff, 0, 0, 2);
+  scene.add(flashLight);
   // 燈也要在反射的圖層上，不然反射裡的山坡是黑的
   hemi.layers.enable(REFLECT_LAYER);
   sun.layers.enable(REFLECT_LAYER);
@@ -193,21 +198,24 @@ async function start() {
   const shadowTex = TX.shadowTexture();
   let look = loadLook();
   const character = new Character(shadowTex, look);
+  character.setCamera(carried());
+  world.camTable?.setCarried(carried());
   scene.add(character.group);
   // 角色出來之前先站好的（畫廊的胖頭頭人）
   const { manatee = null, host = null } = Z.residents?.({ scene, world, shadowTex }) ?? {};
   const ambience = new Ambience();
   let lastInput = performance.now();
   let swipeHinted = false;
+  let camSwipeHinted = false;
   let mp = null;
   let studio = null;   // 海市信差站的照相館（studio.js），畫廊沒有
   let place = null;   // 戶外現在在哪裡：null 是陽台，否則是草原或棧橋盡頭的地名
   let sitHinted = false;
 
   // 捏角色：每改一下就套到角色身上、存起來、告訴別人，鏡頭照目前那一頁取景
-  let dressTab = 'race';
+  let dressView = 'face';
   const visH = () => (panelW() || !ui.panel ? 1 : 1 - ui.panel.offsetHeight / window.innerHeight);
-  const frameMirror = () => player.frameMirror(FACE_TABS.includes(dressTab) ? 'face' : 'body', visH());
+  const frameMirror = () => player.frameMirror(dressView, visH());
   const creator = new Creator({
     onChange(L) {
       look = L;
@@ -217,8 +225,8 @@ async function start() {
       frameMirror();
       lastInput = performance.now();
     },
-    onTab(t) {
-      dressTab = t;
+    onView(v) {
+      dressView = v;
       frameMirror();
     },
     onPaint(cells) {
@@ -231,6 +239,7 @@ async function start() {
     onInput(kind) {
       lastInput = performance.now();
       ui.hidePainting();
+      ui.hideCams();
       // 照鏡子時拖曳、縮放是在轉著看自己，面板留著
       if (!(kind === 'drag' && player.focus?.kind === 'mirror')) ui.hideDress();
       ui.hideHint();
@@ -268,6 +277,24 @@ async function start() {
       try { localStorage.setItem('director', on ? '1' : '0'); } catch {}
       ui.hint(on ? '導演運鏡　鏡頭跟著你走' : '自由鏡頭　視角自己轉', 2000);
       lastInput = performance.now();
+    },
+    // 相機桌：走過去先看身上那台原本的位置，沒帶就從最左邊看起
+    onCameras() {
+      const mine = carried();
+      player.goToCameras(mine ? TABLE.indexOf(mine) : 0);
+    },
+    onArriveCameras(i) {
+      showCams(i);
+      if (coarse && !camSwipeHinted) {
+        camSwipeHinted = true;
+        ui.hint('左右滑動換一台', 3500);
+      }
+    },
+    onCamStep(dir) {
+      const f = player.focus, i = f ? THREE.MathUtils.clamp(f.slot + dir, 0, TABLE.length - 1) : -1;
+      if (i < 0 || i === f.slot) return;
+      player.viewCamSlot(i);
+      showCams(i);
     },
     onArrivePainting(p) {
       ui.showPainting(p, p.url);
@@ -323,6 +350,26 @@ async function start() {
     lastInput = performance.now();
   };
   ui.onClose = () => player.exitFocus();
+
+  // 相機桌的面板：左右換一台，帶走或放回去。一次只能帶一台，換的時候原本那台自己回到桌上
+  function showCams(i) {
+    const id = TABLE[i], mine = carried();
+    ui.showCams({ i, n: TABLE.length, cam: CAMERAS[id] || null, carried: !!id && mine === id, other: !!mine });
+  }
+  document.getElementById('cams-prev').addEventListener('click', () => player.events.onCamStep(-1));
+  document.getElementById('cams-next').addEventListener('click', () => player.events.onCamStep(1));
+  document.getElementById('cams-take').addEventListener('click', () => {
+    const f = player.focus, id = f?.kind === 'cameras' ? TABLE[f.slot] : null;
+    if (!id) return;
+    const next = carried() === id ? null : id;
+    carry(next);
+    character.setCamera(next);
+    world.camTable.setCarried(next);
+    mp?.setCamera(next);
+    ambience.voice('shutter', 0.5);
+    ui.hint(next ? `帶著${CAMERAS[next].name}出門。按右上角的相機鈕拍照` : '放回桌上了。拍照時又是畫廊的眼睛，可以到處飛', 4000);
+    showCams(f.slot);
+  });
   // 導演運鏡：預設打開，記住上次的選擇。轉多快每個區域自己定
   const directorBtn = document.getElementById('director-btn');
   function showDirector(on) {
@@ -358,7 +405,7 @@ async function start() {
   const actionBtn = document.getElementById('action-btn');
   actionBtn.addEventListener('click', () => player.action());
   const actionLabel = actionBtn.querySelector('.a1');
-  const LABELS = { painting: '看畫', mirror: '照鏡子', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來' };
+  const LABELS = { painting: '看畫', mirror: '照鏡子', cameras: '挑相機', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來' };
   let nearKey = null;
   function updateAction() {
     const t = player.actionTarget();
@@ -443,6 +490,7 @@ async function start() {
       onStudio: (m) => studio?.onMessage(m),
     }, look);
     mp.claude = params.get('as') === 'claude';   // 開發時我進站拍照：在場的人看到的是燈籠
+    mp.camera = carried();
     mp.connect().catch((e) => console.warn('多人連線失敗：', e));
     if (visitors) visitors.mp = mp;
     // 電腦：數字鍵 1–5 送表情
@@ -456,6 +504,9 @@ async function start() {
   let fx = null;
   // 攝影模式的魚眼：有後製就接在後製最後面，沒有就自己先畫進一張圖再彎
   const lensPass = new LensPass();
+  // 帶著實體相機時的景深：有後製就接在後製中間，沒有就自己畫
+  const dofPass = new DofPass();
+  dofPass.camera = camera;
   // 魚眼的中間是放大過的：有後製的電腦預覽時多畫 1.4 倍（最多 2 倍），中間比較不糊
   let boost = 1;
   const lensBoost = () => {
@@ -469,6 +520,7 @@ async function start() {
   const draw = (dt) => {
     if (fx) fx.render(dt);
     else if (lens.on) lensPass.renderScene(renderer, scene, camera);
+    else if (dof.on) dofPass.renderScene(renderer, scene, camera);
     else renderer.render(scene, camera);
   };
 
@@ -477,7 +529,7 @@ async function start() {
     renderer, scene, camera, player, world, character, ambience, ui, coarse,
     title: gallery.title || '煉金畫廊',
     render: draw,
-    lensPass,
+    lensPass, dofPass, flashLight,
     resizeFX: (w, h) => fx?.setSize(w, h),
   });
   document.getElementById('photo-btn').addEventListener('click', () => photo.enter());
@@ -489,7 +541,7 @@ async function start() {
   }
 
   if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals, visitors, vendors, passers, quality, host, photo, studio };
-  const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
+  const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass, dofPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
     if (!q.post && fx) { fx.dispose(); fx = null; }
@@ -505,6 +557,17 @@ async function start() {
   if (fxJob) {
     fx = await fxJob;
     fx?.render(0);   // 後製的著色器也趁載入畫面先編好
+  }
+  // 景深的兩組取樣也先編：有後製時畫進浮點的圖，沒有時直接上螢幕
+  {
+    const rt = fx ? new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }) : null;
+    renderer.setRenderTarget(rt);
+    for (const m of [dofPass.fast, dofPass.fine]) {
+      dofPass.quad.material = m;
+      renderer.compile(dofPass.scene, dofPass.cam);
+    }
+    renderer.setRenderTarget(null);
+    rt?.dispose();
   }
   const stats = params.has('debug') ? debugStats(renderer, quality) : null;
   // 改地圖、調色用的小工具：?ref= 疊參考圖，?debug 調光線（見 devtools.js）
@@ -620,6 +683,10 @@ async function start() {
     vendors?.update(dt, player, camera);
     passers?.update(dt, player);
     manatee?.update(dt, player.pos.x, player.pos.z, camera);
+    if (world.camTable) {
+      world.camTable.look(player.focus?.kind === 'cameras' ? player.focus.slot : -1);
+      world.camTable.update(dt);
+    }
     const othersMoving = mp ? mp.update(dt, performance.now()) : false;
     const fading = updateMirrorFade(dt);
     if (host) {

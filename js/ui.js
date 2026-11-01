@@ -38,6 +38,7 @@ export class UI {
     this.gallery = gallery;
     this.sheet = $('#sheet');
     this.dress = $('#dress');
+    this.cams = $('#cams');
     this.toastEl = $('#toast');
     this.list = $('#list');
     this.onGoTo = null;
@@ -50,6 +51,7 @@ export class UI {
     }
     $('#sheet-close').addEventListener('click', () => { this.hidePainting(); this.onClose?.(); });
     $('#dress-close').addEventListener('click', () => { this.hideDress(); this.onClose?.(); });
+    $('#cams-close').addEventListener('click', () => { this.hideCams(); this.onClose?.(); });
     $('#sheet-thumb').addEventListener('click', () => this.openViewer($('#sheet-img').src));
     $('#viewer-close').addEventListener('click', () => this.closeViewer());
     this.bindViewer();
@@ -84,7 +86,32 @@ export class UI {
 
   // 目前打開的抽屜，主程式用它的高度挪畫面
   get panel() {
-    return [this.sheet, this.dress].find((el) => el.classList.contains('open')) || null;
+    return [this.sheet, this.dress, this.cams].find((el) => el.classList.contains('open')) || null;
+  }
+
+  // 相機桌：v = { i, n, cam, carried }。cam 是 null 的位置還沒有相機
+  showCams(v) {
+    const c = v.cam;
+    $('#cams-name').textContent = c ? c.name : '空位';
+    $('#cams-line').textContent = c ? c.line : '這個位置的相機還在做，之後再來看看';
+    $('#cams-spec').innerHTML = c ? c.spec.map((t) => `<li>${esc(t)}</li>`).join('') : '';
+    $('#cams-dots').innerHTML = Array.from({ length: v.n }, (_, i) => `<i class="${i === v.i ? 'on' : ''}"></i>`).join('');
+    const take = $('#cams-take');
+    take.textContent = !c ? '之後' : v.carried ? '放回桌上' : v.other ? '換這台' : '帶這台';
+    take.disabled = !c;
+    take.classList.toggle('primary', !!c && !v.carried);
+    take.classList.toggle('disabled', !c);
+    $('#cams-prev').disabled = v.i === 0;
+    $('#cams-next').disabled = v.i === v.n - 1;
+    if (this.cams.classList.contains('open')) return;
+    this.cams.classList.add('open');
+    this.onSheet?.(true);
+  }
+
+  hideCams() {
+    if (!this.cams.classList.contains('open')) return;
+    this.cams.classList.remove('open');
+    this.onSheet?.(false);
   }
 
   showDress() {
@@ -200,7 +227,8 @@ export class UI {
   // 平面清單：舊手機或不想走動的人，直接看全部作品
   buildList(canWalk) {
     const body = $('#list-body');
-    body.innerHTML = this.gallery.rooms.map((r, ri) => `
+    // 沒有畫的房間（前廳擺的是相機桌）不列出來
+    body.innerHTML = this.gallery.rooms.map((r, ri) => !r.paintings?.length ? '' : `
       <section>
         <h2>${esc(r.name)}${r.subtitle ? `<small>${esc(r.subtitle)}</small>` : ''}</h2>
         ${(r.paintings || []).map((p, pi) => `

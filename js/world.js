@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import * as TX from './textures.js';
 import { PROPS, SETS, Kit, rng, newBucket, weightedPick, buildWindow } from './props.js';
 import { buildMirror } from './mirror.js';
+import { buildCamTable, TABLE_W, TABLE_D } from './camtable.js';
 import { buildOutdoor, OUTDOOR_ROOM } from './outdoor.js';
 import { catRoomOf } from './animals.js';
 import { makePathfinder } from './pathgrid.js';
@@ -404,8 +405,8 @@ function hitObstacle(list, x, z, pad) {
   return false;
 }
 
-// noCat：黑貓住的房間，不再擺睡著的貓
-function furnish(room, R, set, noCat) {
+// noCat：黑貓住的房間，不再擺睡著的貓；tidy：前廳有相機桌，中間不擺雜物
+function furnish(room, R, set, noCat, tidy = false) {
   const s = shared();
   const roomBucket = newBucket();
   const entryBuckets = new Map();
@@ -494,7 +495,7 @@ function furnish(room, R, set, noCat) {
     reserved.push([vx, vz, 0, vz, 0.5]);
   }
   const inside = set.inside.slice();
-  const count = { hall: 4, corridor: 1, rotunda: 3 }[room.type];
+  const count = tidy ? 0 : { hall: 4, corridor: 1, rotunda: 3 }[room.type];
   let placed = 0, catDone = noCat;
   for (let tries = 0; tries < 80 && placed < count; tries++) {
     let name = inside[Math.floor(R() * inside.length)];
@@ -614,7 +615,7 @@ function stringLights(room, R, bucket) {
 
 export function buildWorld(scene, gallery) {
   const rooms = [], paintings = [], entries = [], raycastTargets = [];
-  let mirror = null, outdoor = null;
+  let mirror = null, outdoor = null, camTable = null;
   let z = 0;
 
   // gallery.json 的 outdoor 為 true 時，最後一間房後面接陽台和草原
@@ -696,6 +697,15 @@ export function buildWorld(scene, gallery) {
       room.obstacles.push({ x, z, hw: 0.55, hd: 0.25, rot });
       raycastTargets.push(glass);
       mirror = { x, z, n: { x: pt.nx, z: pt.nz } };
+
+      // 左牆中間是相機桌（camtable.js）：出門前在這裡挑一台帶走
+      const side = room.spans[0], sc = room.d / 2;
+      side.occ.push([sc - TABLE_W / 2 - 0.15, sc + TABLE_W / 2 + 0.15]);
+      const sp2 = side.at(sc), trot = Math.atan2(sp2.nx, sp2.nz);
+      const tx = sp2.x + sp2.nx * (TABLE_D / 2 + 0.06), tz = sp2.z + sp2.nz * (TABLE_D / 2 + 0.06);
+      camTable = buildCamTable(tx, tz, trot);
+      room.group.add(camTable.group);
+      room.obstacles.push({ x: tx, z: tz, hw: TABLE_W / 2, hd: TABLE_D / 2, rot: trot });
     }
 
     const slots = slotsFor(room);
@@ -711,7 +721,7 @@ export function buildWorld(scene, gallery) {
       paintings.push(p);
     });
 
-    furnish(room, rng(room.id + (room.data.seed || '')), SETS[room.propSet], room === catRoom);
+    furnish(room, rng(room.id + (room.data.seed || '')), SETS[room.propSet], room === catRoom, room.index === 0 && !!camTable);
     room.group.add(dust(room));
     scene.add(room.group);
   }
@@ -946,5 +956,5 @@ export function buildWorld(scene, gallery) {
   // 搭船去別的區域：棧橋邊繫著的小划船
   const exits = outdoor?.ferry ? [{ ...outdoor.ferry, to: 'haishi', label: '搭船', title: '往海市' }] : [];
 
-  return { rooms, paintings, mirror, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, setCurrentRoom, update, fadeVariants: (on) => roomFader.all(on) };
+  return { rooms, paintings, mirror, camTable, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, setCurrentRoom, update, fadeVariants: (on) => roomFader.all(on) };
 }

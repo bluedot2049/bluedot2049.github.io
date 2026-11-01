@@ -111,7 +111,7 @@ export const lockedBy = (k, id) => LOCKS.get(k + ':' + id);
 export const lockKeys = () => [...LOCKS.keys()];
 
 // ---------- 存檔 ----------
-// 身上的東西（造型、衣櫃、解鎖、各攤上次來的日子）合成一份，帶版本號。音量、操作習慣這些屬於裝置，不放這裡。
+// 身上的東西（造型、衣櫃、解鎖、各攤上次來的日子、帶的相機）合成一份，帶版本號。音量、操作習慣這些屬於裝置，不放這裡。
 // 版本不對或沒有存檔就整份重來：舊的 look／outfit／closet／unlocked 直接刪掉，大家像第一次來。
 // 以後格式改了，在 getSave 裡把舊版轉成新版再寫回，不要再清空
 const SAVE_V = 1;
@@ -131,6 +131,7 @@ export function getSave() {
     closet: Array.isArray(s.closet) ? s.closet.slice(0, 3) : [],
     unlocked: Array.isArray(s.unlocked) ? s.unlocked.filter((x) => typeof x === 'string') : [],
     visits: s.visits && typeof s.visits === 'object' ? s.visits : {},
+    camera: typeof s.camera === 'string' ? s.camera : null,   // 帶在身上的相機（cameras.js）
   };
   if (fresh) {
     putSave({});

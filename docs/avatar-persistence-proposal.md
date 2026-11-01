@@ -208,3 +208,40 @@ Messaging apps (LINE, IG, Messenger) recompress images and strip metadata; postc
   - Measured with jsQR on synthetic cards: everything passes at original size and at 1280 px long edge (LINE); portrait 寄給自己 faces fail at ≤960 px.
 - [ ] Postcard seal (original plan, superseded by the line above): QR rendering in seal style, 寄給朋友 / 寄給自己 modes, COM segment, lazy jsQR reader.
 - [ ] Tests: codec round-trip, truncated / malformed codes fall back safely, `#look=` never changes unlocks, reset runs exactly once, QR survives JPEG recompression at quality ~0.7 and a downscale to 50%.
+
+## 7. Mirror selfie save (decided 2026-11-01, not built yet)
+
+Supersedes the mirror-drawer parts of §6.4 and §6.5. **Haishi is untouched**: postcards, the 茜紅 friend stamp and the 藍染 行囊 stamp keep working exactly as now.
+
+### 7.1 Decisions
+- The mirror's 衣櫃 page keeps **image-only** save/load. Remove 複製存檔碼 / 複製連結 / 貼上存檔碼 from the UI.
+- Old carriers stay readable forever: Haishi postcards (both stamp kinds, film edges) and `#save=` / `#look=` links.
+- Taking a selfie at the mirror **is** saving. One choice before the shutter: **with the full code** (save + closet + drawn faces) or **a plain photo** (no code). No friend/try-on variant at the mirror.
+- The code only has to be read by this game's own reader, never by a phone camera. It does not have to be a standard QR: free to be deformed, abstract, on-theme.
+- The reflection is **mirrored left-right**, like a real mirror.
+
+### 7.2 The eye
+- A floating dark eye takes the picture and is in the picture: the mirror is fake (the mirror camera looks from the glass back at the player, `player.mirrorCamera`), so the eye floats by the player's shoulder with its pupil facing the glass. In the photo it stares straight at the viewer, like a phone in a real mirror selfie.
+- Flow: 衣櫃 page → 請眼睛拍一張 → drawer closes → the glass ripples, the eye rises out of it and circles to the shoulder → the pupil contracts three times (countdown, no digits; emotes allowed meanwhile) → a blink is the shutter, the glass flashes → the eye sinks back → preview: 收進相簿 / 重拍.
+- Look: not pure black (see scene colour rules) — blue-violet charcoal ball, gold iris, lids, a wisp of smoke behind; idles with a slow bob, gaze follows the player.
+- Saving the file: phone → `navigator.share({ files })` (iOS 儲存影像 into Photos), fallback download; desktop → download.
+- Reading: 從照片讀取 (album picker); desktop also drag-and-drop onto the window and Ctrl+V paste.
+
+### 7.3 Payload
+- Full save text today: ~155 chars (look + 3 closet looks + all unlocks + visits). Drawn faces: deflate-raw, typically 100–400 bytes each, up to 4 (worn + closet).
+- Plan: pack the save body as binary (not the text alphabet) + version + Reed-Solomon; faces in a second, separately-corrected region so a damaged face region never blocks the save itself (same split as stamp vs film edge).
+
+### 7.4 Open: code visual (to choose from the design canvas)
+Candidates, all readable only by our reader:
+1. **Iris code** — the eye's iris drawn large on the frame: concentric rings cut into light/dark arcs; the pupil plus a gold ring is the finder (circles survive scaling).
+2. **Frame runes** — the arched mirror frame's border carries brush-tick cells (the filmcode engine, restyled), diamond marks at the corners as finders.
+3. **Constellation** — dots on a hidden hex grid inside a round field, three larger guide stars as finders.
+Working recommendation: iris holds the save, frame runes hold the faces.
+
+### 7.5 Checklist
+- [ ] Remove copy/paste/link buttons from 行囊; keep 從照片讀取 (+ drag/drop, paste on desktop).
+- [ ] Eye model + idle, rise/return animation, pupil countdown, blink shutter, flash.
+- [ ] Selfie render from the mirror camera, flipped, eye placed at shoulder facing the glass; hide UI and passers-by.
+- [ ] Photo layout: arched mirror frame, date plate (glyphs.js), code regions.
+- [ ] Binary save packing + RS; encoder/decoder for the chosen code; reader tries the new code first, then the old postcard path.
+- [ ] Tests: round-trip at original size, after JPEG 0.7, after 50 % downscale, after a phone screenshot crop.

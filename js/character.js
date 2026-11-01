@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { Kit, mergeBucket } from './props.js';
 import { HEADS, rod } from './heads.js';
 import { HAT_COLORS, HAIR_COLORS, SKINS, CLOTH, FACE, FACE_INK, raceOf, sizes, sanitizeLook, lookKey, decodeFace } from './looks.js';
+import { strapModel } from './cameras.js';
 import { HIP, HOODED, HAND_POSE, bodyGeo, armGeo, legGeo, capeGeo, capeAt, wingGeo, wingAt, hasWings, tailGeo, tailAt, handGeo, hood } from './clothes.js';
 
 function mat(color) {
@@ -408,6 +409,8 @@ export class Character {
     };
     this.torso = mesh(body);
     this.scarfTail = mesh(body);
+    this.camMesh = mesh(body);      // 胸前掛的相機
+    this.camId = null;
     // 會動的衣服：披風、翅膀、尾巴各掛在一個關節上
     const joint = (parent) => {
       const p = new THREE.Group();
@@ -547,6 +550,7 @@ export class Character {
     this.tail.position.set(...tailAt(W));
     swap(this.handMesh, handGeo(L));
     this.handPose = HAND_POSE[L.hand] || null;
+    this.hangCamera();
 
     if (race.id !== this.faceRace) {
       this.faceRace = race.id;
@@ -563,6 +567,19 @@ export class Character {
       headH: H * hs * head,
     };
     this.shadowS = Math.max(0.85, W) * H;
+  }
+
+  // 帶在身上的相機（cameras.js 的 id，null 是沒帶）
+  setCamera(id) {
+    if ((id || null) === this.camId) return;
+    this.camId = id || null;
+    this.hangCamera();
+  }
+
+  // 用背帶掛在胸口，離身體多遠照胖瘦算；換造型時身形變了要重掛
+  hangCamera() {
+    const W = this.S?.W ?? 1;
+    swap(this.camMesh, this.camId ? build((k) => strapModel(k, this.camId, 0.4, 0.235 * W + 0.05, 0.9)) : null);
   }
 
   // 自己畫的臉。畫的途中每一筆都直接更新貼圖，不用整個重建

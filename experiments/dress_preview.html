@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>鏡子面板預覽</title>
+<link rel="stylesheet" href="../css/style.css">
+<script type="importmap">{ "imports": { "three": "../vendor/three.module.min.js" } }</script>
+<style>body { background: #2a1d15; }</style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs><symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol></defs>
+  </svg>
+  <aside id="dress" class="panel open" aria-label="捏角色">
+    <button id="dress-close" class="icon-btn round close" aria-label="關閉"><svg><use href="#i-close"/></svg></button>
+    <h2 class="dress-head">鏡子<small>Speculum</small></h2>
+    <nav id="dress-tabs"></nav>
+    <nav id="dress-subs"></nav>
+    <div id="dress-body"></div>
+    <div id="dress-paint" hidden></div>
+  </aside>
+  <script type="module">
+    import { Creator } from '../js/creator.js';
+    import { presetLook, randomLook, putSave, lockKeys } from '../js/looks.js';
+    const q = new URLSearchParams(location.search);
+    // ?fill：衣櫃放兩套、海市的東西拿一半，看衣櫃頁和紅印
+    if (q.has('fill')) putSave({ closet: [randomLook(presetLook(1)), randomLook(presetLook(3))], unlocked: lockKeys().filter((_, i) => i % 2) });
+    const c = new Creator({ onChange() {}, onView() {}, onPaint() {} });
+    if (q.get('tab')) c.tab = q.get('tab');
+    if (q.get('sub')) c.sub[c.tab] = q.get('sub');
+    c.open(presetLook(0));
+    window.creator = c;
+  </script>
+</body>
+</html>

@@ -161,8 +161,8 @@ export class Player {
       }
       if (!p.drag && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) > DRAG_THRESHOLD) {
         p.drag = true;
-        // 觸控看畫時，左右滑是切換作品，不轉鏡頭
-        p.swipe = this.focus?.kind === 'painting' && !p.mouse && Math.abs(e.clientX - p.sx) > Math.abs(e.clientY - p.sy);
+        // 觸控看畫時，左右滑是切換作品，不轉鏡頭；挑相機時是換一台
+        p.swipe = (this.focus?.kind === 'painting' || this.focus?.kind === 'cameras') && !p.mouse && Math.abs(e.clientX - p.sx) > Math.abs(e.clientY - p.sy);
       }
       if (p.drag && !multi && !p.swipe) this.orbit(dx, dy, p.mouse);
       el.classList.toggle('dragging', p.drag && p.mouse);
@@ -369,6 +369,33 @@ export class Player {
     }
   }
 
+  // 挑相機：站在桌前，鏡頭從角色前面斜斜地往下看著第 i 個位置；換位置時鏡頭滑過去
+  planCameras(i) {
+    const t = this.world.camTable, n = t.n;
+    const stand = this.world.findWalkable(t.x + n.x * (t.hd + 0.75), t.z + n.z * (t.hd + 0.75), this.pos.x, this.pos.z) || { x: this.pos.x, z: this.pos.z };
+    return { kind: 'cameras', n, stand, slot: i, ...this.camSlotView(i) };
+  }
+
+  camSlotView(i) {
+    const t = this.world.camTable, n = t.n, w = t.slots[i].world;
+    return {
+      camPos: new THREE.Vector3(w.x + n.x * 1.05, w.y + 0.62, w.z + n.z * 1.05),
+      look: new THREE.Vector3(w.x, w.y + 0.08, w.z),
+      fadeTarget: new THREE.Vector3(w.x + n.x * 0.3, 0, w.z + n.z * 0.3),
+    };
+  }
+
+  // 挑相機時換到第 i 個位置
+  viewCamSlot(i) {
+    if (this.focus?.kind !== 'cameras') return;
+    this.focus.slot = i;
+    Object.assign(this.focus, this.camSlotView(i));
+  }
+
+  goToCameras(i) {
+    if (this.world.camTable) this.goTo(this.planCameras(i));
+  }
+
   goToPainting(p) {
     this.goTo(this.planFocus(p));
   }
@@ -403,8 +430,9 @@ export class Player {
     this.arrive();
   }
 
-  // 看畫時換到前一幅或後一幅，順序同 gallery.json，到頭就停
+  // 看畫時換到前一幅或後一幅，順序同 gallery.json，到頭就停；挑相機時交給 onCamStep
   switchPainting(dir) {
+    if (this.focus?.kind === 'cameras') return this.events.onCamStep?.(dir);
     if (this.focus?.kind !== 'painting') return;
     const list = this.world.paintings, i = list.indexOf(this.focus.p) + dir;
     if (i >= 0 && i < list.length) this.showPainting(list[i]);
@@ -651,6 +679,13 @@ export class Player {
       const dx = x - m.x, dz = z - m.z, d = Math.hypot(dx, dz);
       if (dx * m.n.x + dz * m.n.z > 0.3 && d < 3) list.push({ kind: 'mirror', d });
     }
+    const ct = this.world.camTable;
+    if (ct) {
+      // 量到桌子邊緣的距離，站在桌子前面那一側才算
+      const dx = x - ct.x, dz = z - ct.z, lx = dx * ct.along.x + dz * ct.along.z, lz = dx * ct.n.x + dz * ct.n.z;
+      const d = Math.hypot(Math.max(0, Math.abs(lx) - ct.hw), Math.max(0, lz - ct.hd));
+      if (lz > 0 && d < 1.3) list.push({ kind: 'cameras', d });
+    }
     const out = this.world.outdoor;
     if (out && this.room === this.world.rooms.length - 1) {
       out.seats.forEach((st, i) => {
@@ -681,6 +716,7 @@ export class Player {
     switch (t.kind) {
       case 'painting': this.goToPainting(t.p); break;
       case 'mirror': this.goToMirror(); break;
+      case 'cameras': this.events.onCameras?.(); break;
       case 'seat': this.goTo(this.planSeat(t.p)); break;
       case 'pet': this.goToAnimal(t.p); break;
       case 'talk': t.p.talkTo(); break;
@@ -712,6 +748,7 @@ export class Player {
     this.pending = null;
     this.focus = plan;
     if (plan.kind === 'mirror') this.events.onArriveMirror?.();
+    else if (plan.kind === 'cameras') this.events.onArriveCameras?.(plan.slot);
     else if (plan.kind === 'seat') this.events.onSit?.(true);   // 真正坐下去要等挪進座位，見 update
     else if (plan.kind === 'pet') {
       if (!plan.a.within(this)) { this.focus = null; return; }   // 走到時牠已經跑掉了

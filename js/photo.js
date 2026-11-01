@@ -5,12 +5,16 @@
 // 照片另外用 setViewOffset 把取景框那一塊重畫成大圖；錄影每一幀把畫面裁進一張 2D 畫布再交給 MediaRecorder。
 // 角色留在原地照常動，表情、坐下都會出現在畫面裡；對話框是 HTML，拍的時候照著位置畫進去。
 // 變焦從望遠一路拉到廣角，再往上就慢慢彎成魚眼；怎麼彎、怎麼畫在 lens.js。
+// 身上帶著實體相機（cameras.js）時改成手持：鏡頭在角色手上，走路構圖，點一下對焦，景深在 dof.js，
+// 閃光燈照對焦的距離打亮；按住快門不放是長曝光，每一幀疊起來，放開時再閃一下。
 import * as THREE from 'three';
 import { lens, fitSource, unbend } from './lens.js';
 import { makePostcard, loadQR } from './postcard.js';
 import { packFace } from './filmcode.js';
 import { getSave, sanitizeLook, decodeFace } from './looks.js';
 import { encodeLook, encodeSave } from './savecode.js';
+import { CAMERAS, carried, longTan } from './cameras.js';
+import { dof, dofK } from './dof.js';
 
 const ASPECTS = [
   { label: '螢幕', r: 0 },
@@ -46,6 +50,18 @@ const ALT_MARKS = [['俯瞰', 8], ['眼高', 1.6], ['貼地', 0.3]];
 const altAt = (h) => Math.log(h / H_MIN) / Math.log(H_MAX / H_MIN);
 const MAX_REC = 60;   // 錄影最長秒數
 const KEY = 'photo';
+// 帶著相機時：拿法、按住快門多久算長曝光、長曝光最長幾秒。拿法和閃光每台相機各記各的
+const GRIPS = ['蹲低', '眼高', '舉高', '自拍'];
+const HOLD_MS = 280, MAX_EXPOSE = 10;
+const GEAR_KEY = 'photoGear';
+// 長曝光：每幀先把亮部撐開再加起來，燈籠拖出的光痕才不會灰灰的，最後再壓回來
+const EXPAND = 0.9;
+const QUAD_VERT = /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = vec4(position.xy, 0.0, 1.0);
+}`;
 
 // 等效全片幅焦距，給變焦時顯示用
 const focal = (fov) => Math.round(12 / Math.tan(THREE.MathUtils.degToRad(fov / 2)));
@@ -89,8 +105,9 @@ function pickMime() {
 
 export class PhotoMode {
   // render(dt)：照目前的設定畫一幀（有後製就走後製）；resizeFX(w, h)：後製跟著換尺寸；lensPass：拍魚眼照片時拿來彎大圖
-  constructor({ renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass }) {
-    Object.assign(this, { renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass });
+  // dofPass：景深（dof.js）；flashLight：閃光燈，平常亮度是 0
+  constructor({ renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass, dofPass, flashLight }) {
+    Object.assign(this, { renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass, dofPass, flashLight });
     this.active = false;
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
@@ -117,6 +134,16 @@ export class PhotoMode {
     this.noise = noiseTile();
     this.frame = { x: 0, y: 0, w: 1, h: 1 };
     this.result = null;                     // 剛拍好的 { blob, url, name, video }
+    this.gear = null;                       // 帶著的相機（cameras.js）；null 是畫廊的眼睛，鏡頭自由飛
+    this.grip = 1;                          // 拿法：GRIPS 的第幾個
+    this.upright = 0;                       // 0 橫拿、1 直拿
+    this.flashOn = 0;                       // 0 開、1 關
+    this.focusD = 3;                        // 對焦的距離（公尺）
+    this.af = null;                         // 正在對焦 { from, to, t }
+    this.bulbAt = 0;                        // 燈泡換好的時間（performance.now）
+    this.pressing = null;                   // 按著快門還沒放開 { timer }
+    this.expo = null;                       // 長曝光中
+    this.v2 = new THREE.Vector2();
     const s = this.load();
     this.aspect = s.aspect; this.look = s.look; this.move = 0;
     this.grid = s.grid; this.self = s.self; this.talk = s.talk; this.sig = s.sig;
@@ -141,6 +168,37 @@ export class PhotoMode {
   save() {
     const { aspect, look, grid, self, talk, sig } = this;
     try { localStorage.setItem(KEY, JSON.stringify({ aspect, look, grid, self, talk, sig })); } catch {}
+    if (this.gear) this.saveGear();
+  }
+
+  // 每台相機各自記得的拿法、方向、閃光
+  gearPrefs() {
+    try {
+      const all = JSON.parse(localStorage.getItem(GEAR_KEY));
+      return all && typeof all === 'object' ? all : {};
+    } catch { return {}; }
+  }
+
+  saveGear() {
+    const all = this.gearPrefs();
+    all[this.gear.id] = { grip: this.grip, upright: this.upright, flash: this.flashOn };
+    try { localStorage.setItem(GEAR_KEY, JSON.stringify(all)); } catch {}
+  }
+
+  // 拿起相機：鏡頭回到角色手上，先對畫面中央的東西對一次焦
+  holdGear(id) {
+    const g = (this.gear = { id, ...CAMERAS[id] }), s = this.gearPrefs()[id] || {};
+    const pick = (v, n, d) => (Number.isInteger(v) && v >= 0 && v < n ? v : d);
+    this.grip = pick(s.grip, GRIPS.length, 1);
+    this.upright = pick(s.upright, 2, 0);
+    this.flashOn = pick(s.flash, 2, 0);
+    this.aimPitch = this.pitch = THREE.MathUtils.clamp(this.pitch * 0.3, -0.3, 0.3);
+    this.af = null;
+    this.needAF = true;
+    dof.on = true;
+    dof.k = dofK(g.focal, g.fstop);
+    dof.max = 0.012;
+    this.$('#ph-frame .gear').textContent = `${g.name}　${g.focal}mm`;
   }
 
   // ───────── 進出 ─────────
@@ -172,12 +230,18 @@ export class PhotoMode {
     this.fov = this.cur = cam.fov;
     this.room = -1;
     this.active = true;
+    this.gear = null;
+    const gear = studio ? null : carried();
+    if (gear) this.holdGear(gear);
+    document.body.classList.toggle('photo-gear', !!gear);
+    this.$('#ph-frame').classList.toggle('bulb', !!this.gear?.flash?.bulb);
     document.body.classList.add('photo');
     this.$('#photo').hidden = false;
     this.showControls(true);
     this.refresh();
     if (studio) this.setStudio(studio);
     else if (postcard) this.ui.hint('拍一張做成明信片，拍好就能寄出去', 6000);
+    else if (gear) this.ui.hint(this.coarse ? '搖桿走路　拖曳轉身　點一下對焦　按住快門慢慢曝光' : 'WASD 走路　拖曳轉身　點一下對焦　空白鍵拍照，按住不放慢慢曝光', 6000);
     else this.ui.hint(this.coarse ? '拖曳轉頭　雙指變焦　點兩下靠近　點一下收起按鈕' : 'WASD 移動　E / Q 升降　拖曳轉頭　滾輪變焦　點兩下靠近　空白鍵拍照　H 收起按鈕', 6000);
   }
 
@@ -186,15 +250,22 @@ export class PhotoMode {
     const left = this.studio && this.studioHooks?.exit;
     this.setStudio(null);
     if (this.rec) this.stopRecording();
+    clearTimeout(this.pressing?.timer);
+    this.pressing = null;
+    this.cancelExposure();
     this.closeResult();
     this.closeMenu();
     this.active = false;
+    this.gear = null;
+    dof.on = false;
+    this.flashLight.intensity = 0;
+    this.player.setJoystick(0, 0);
     this.postcard = false;
     lens.on = false;
     this.keys.clear();
     this.joy.x = this.joy.y = 0;
     this.lift = 0;
-    document.body.classList.remove('photo', 'photo-bare', 'photo-hush');
+    document.body.classList.remove('photo', 'photo-bare', 'photo-hush', 'photo-gear', 'photo-expose');
     this.$('#photo').hidden = true;
     this.renderer.domElement.style.filter = '';
     this.character.group.visible = true;
@@ -257,11 +328,15 @@ export class PhotoMode {
   bindUI() {
     // 每個鈕點開是一排選項；「顯示」是幾個開關，可以連著點，點選單外面才收
     // lock：錄影中不能換（比例會改掉影片大小，運鏡錄到一半換會跳）
+    // gear：false 只在畫廊的眼睛出現，true 只在帶著相機時出現，'flash' 要相機有閃光燈；沒寫的兩邊都有
     const chips = this.$('#ph-chips');
     this.chips = [
-      { k: 'aspect', label: '比例', lock: true, opts: ASPECTS.map((a) => a.label), get: () => this.aspect, set: (i) => { this.aspect = i; } },
-      { k: 'look', label: '色調', opts: LOOKS.map((l) => l.label), get: () => this.look, set: (i) => { this.look = i; } },
-      { k: 'move', label: '運鏡', lock: true, opts: MOVES, get: () => this.move, set: (i) => { this.move = i; }, note: '按下錄影才開始動' },
+      { k: 'aspect', label: '比例', gear: false, lock: true, opts: ASPECTS.map((a) => a.label), get: () => this.aspect, set: (i) => { this.aspect = i; } },
+      { k: 'look', label: '色調', gear: false, opts: LOOKS.map((l) => l.label), get: () => this.look, set: (i) => { this.look = i; } },
+      { k: 'move', label: '運鏡', gear: false, lock: true, opts: MOVES, get: () => this.move, set: (i) => { this.move = i; }, note: '按下錄影才開始動' },
+      { k: 'grip', label: '拿法', gear: true, opts: GRIPS, get: () => this.grip, set: (i) => { this.grip = i; }, note: '自拍是把手伸長，從前面拍自己' },
+      { k: 'turn', label: '方向', gear: true, opts: ['橫拿', '直拿'], get: () => this.upright, set: (i) => { this.upright = i; } },
+      { k: 'flash', label: '閃光', gear: 'flash', opts: ['開', '關'], get: () => this.flashOn, set: (i) => { this.flashOn = i; }, note: '閃一次要換一顆燈泡' },
       { k: 'show', label: '顯示', toggles: [['self', '自己入鏡'], ['talk', '對話框'], ['sig', '落款'], ['grid', '格線']] },
     ];
     chips.innerHTML = this.chips.map((c) => `<button class="ph-chip" data-k="${c.k}"><span>${c.label}</span><b></b></button>`).join('');
@@ -300,7 +375,17 @@ export class PhotoMode {
       if (btn) this.zoom(LENSES[+btn.dataset.i][1]);
     });
     this.$('#ph-exit').addEventListener('click', () => this.exit());
-    this.$('#ph-shutter').addEventListener('click', () => this.press());
+    // 帶著能長曝光的相機時，按下和放開分開算：按一下是一張，按住不放是長曝光
+    const shutter = this.$('#ph-shutter');
+    shutter.addEventListener('pointerdown', (e) => {
+      if (!this.holdable()) return;
+      e.preventDefault();
+      shutter.setPointerCapture(e.pointerId);
+      this.shutterDown();
+    });
+    shutter.addEventListener('pointerup', () => this.holdable() && this.shutterUp());
+    shutter.addEventListener('pointercancel', () => this.holdable() && this.shutterUp(true));
+    shutter.addEventListener('click', () => !this.holdable() && this.press());
     const recBtn = this.$('#ph-record');
     if (this.mime) recBtn.addEventListener('click', () => (this.rec ? this.stopRecording() : this.startRecording()));
     else recBtn.hidden = true;
@@ -320,27 +405,37 @@ export class PhotoMode {
   }
 
   refresh() {
+    const g = this.gear;
     for (const c of this.chips) {
+      c.el.hidden = c.gear === false ? !!g : c.gear === 'flash' ? !g?.flash : c.gear ? !g : false;
       c.b.textContent = c.opts ? c.opts[c.get()] : '';
       c.el.classList.toggle('off', !!(c.lock && this.rec));
     }
     this.markLens();
-    const look = LOOKS[this.look];
+    // 帶著相機時色調是相機自己的；手持看不到自己，自拍才看得到
+    const look = g ? g.develop : LOOKS[this.look];
     this.renderer.domElement.style.filter = look.filter;
-    this.character.group.visible = this.self;
-    this.player.marker.visible = this.self;
+    const seen = g ? this.grip === 3 : this.self;
+    this.character.group.visible = seen;
+    this.player.marker.visible = seen && !g;
     document.body.classList.toggle('photo-hush', !this.talk);
     const fr = this.$('#ph-frame');
     fr.classList.toggle('grid', this.grid);
-    fr.classList.toggle('masked', ASPECTS[this.aspect].r > 0);
+    fr.classList.toggle('masked', this.ratio() > 0);
     fr.style.setProperty('--vig', look.vig);
     fr.querySelector('.grain').style.opacity = look.grain;
     this.layoutFrame();
   }
 
+  // 照片的長寬比：帶著相機時照相機，直拿就倒過來；0 是跟螢幕一樣
+  ratio() {
+    const g = this.gear;
+    return g ? (this.upright ? 1 / g.aspect : g.aspect) : ASPECTS[this.aspect].r;
+  }
+
   // 取景框：照比例放到最大，置中
   layoutFrame() {
-    const W = window.innerWidth, H = window.innerHeight, r = ASPECTS[this.aspect].r;
+    const W = window.innerWidth, H = window.innerHeight, r = this.ratio();
     let w = W, h = H;
     if (r) {
       if (W / H > r) w = Math.round(H * r);
@@ -367,7 +462,7 @@ export class PhotoMode {
     this.menu = c;
     m.classList.toggle('toggles', !!c.toggles);
     m.innerHTML = c.toggles
-      ? c.toggles.map(([k, label]) => `<button data-t="${k}" class="${this[k] ? 'on' : ''}">${label}</button>`).join('')
+      ? c.toggles.filter(([k]) => !(this.gear && k === 'self')).map(([k, label]) => `<button data-t="${k}" class="${this[k] ? 'on' : ''}">${label}</button>`).join('')
       : c.opts.map((label, i) => `<button data-i="${i}" class="${i === c.get() ? 'on' : ''}">${label}</button>`).join('') + (c.note ? `<p>${c.note}</p>` : '');
     m.hidden = false;
     const r = c.el.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight;
@@ -456,8 +551,8 @@ export class PhotoMode {
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, drag: false, mouse: e.pointerType === 'mouse', quiet: this.swallowTap });
       if (pts.size === 2) {
         const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
-        // 推鏡時記下開始時離畫面中央多遠，手指張開多少就靠近多少
-        pinch = this.pushing() ? { d, dist: this.centerDist(), moved: 0 } : { d, fov: this.fov };
+        // 推鏡時記下開始時離畫面中央多遠，手指張開多少就靠近多少；定焦鏡頭不能變焦
+        pinch = this.gear ? { d, prime: true } : this.pushing() ? { d, dist: this.centerDist(), moved: 0 } : { d, fov: this.fov };
         multi = true;
       }
     });
@@ -469,7 +564,8 @@ export class PhotoMode {
       p.y = e.clientY;
       if (pinch && pts.size >= 2) {
         const [a, b] = [...pts.values()], r = pinch.d / Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
-        if (pinch.fov) this.zoomBy(pinch.fov * r);
+        if (pinch.prime) { if (Math.abs(Math.log(r)) > 0.15) this.primeNote(); }
+        else if (pinch.fov) this.zoomBy(pinch.fov * r);
         else {
           const to = Math.max(NEAR_STOP, pinch.dist * r), go = pinch.dist - to;
           this.dolly += go - pinch.moved;
@@ -490,7 +586,10 @@ export class PhotoMode {
       const p = pts.get(e.pointerId);
       if (!p) return;
       pts.delete(e.pointerId);
-      if (this.active && e.type === 'pointerup' && !p.drag && !p.quiet && !multi && !this.result) this.tap(e.clientX, e.clientY);
+      if (this.active && e.type === 'pointerup' && !p.drag && !p.quiet && !multi && !this.result) {
+        if (this.gear) this.focusAt(e.clientX, e.clientY);
+        else this.tap(e.clientX, e.clientY);
+      }
       if (pts.size < 2) pinch = null;
       if (pts.size === 0) multi = false;
     };
@@ -499,7 +598,8 @@ export class PhotoMode {
     el.addEventListener('wheel', (e) => {
       if (!this.active) return;
       e.preventDefault();
-      if (this.pushing()) this.push(Math.exp(e.deltaY * 0.0015));
+      if (this.gear) this.primeNote();
+      else if (this.pushing()) this.push(Math.exp(e.deltaY * 0.0015));
       else this.zoomBy(this.fov * (1 + e.deltaY * 0.001));
     }, { passive: false });
 
@@ -516,14 +616,17 @@ export class PhotoMode {
       if (e.key === 'Escape') return this.menu ? this.closeMenu() : this.exit();
       if (e.key === ' ') {
         e.preventDefault();
-        if (!e.repeat) this.press();
+        if (!e.repeat) this.holdable() ? this.shutterDown() : this.press();
         return;
       }
       if (e.key === 'h' || e.key === 'H') return this.showControls(document.body.classList.contains('photo-bare'));
       this.keys.add(e.key.toLowerCase());
     });
-    window.addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
-    window.addEventListener('blur', () => { this.keys.clear(); this.lift = 0; });
+    window.addEventListener('keyup', (e) => {
+      if (e.key === ' ' && this.holdable()) this.shutterUp();
+      this.keys.delete(e.key.toLowerCase());
+    });
+    window.addEventListener('blur', () => { this.keys.clear(); this.lift = 0; this.shutterUp(true); });
   }
 
   setJoystick(x, y) {
@@ -653,9 +756,14 @@ export class PhotoMode {
   }
 
   // 照目前的視角擺好鏡頭：一般鏡頭直接設 fov；魚眼的話鏡頭負責畫原圖，視角要廣到整個螢幕彎回去的地方
+  // 帶著相機時照焦距算：取景框的長邊就是底片的 36mm，螢幕比取景框大的部分是框外面
   applyLens() {
     const cam = this.camera, W = window.innerWidth, H = window.innerHeight;
-    if (this.cur <= FISH) {
+    if (this.gear) {
+      lens.on = false;
+      const fr = this.frame, fpx = Math.max(fr.w, fr.h) / 2 / longTan(this.gear.focal);
+      cam.fov = this.fov = this.cur = THREE.MathUtils.radToDeg(2 * Math.atan(H / 2 / fpx));
+    } else if (this.cur <= FISH) {
       lens.on = false;
       cam.fov = this.cur;
     } else {
@@ -687,6 +795,7 @@ export class PhotoMode {
       this.applyLens();
       return;
     }
+    if (this.gear) return this.updateHeld(dt);
     const k = this.keys;
     let f = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
     let s = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
@@ -763,9 +872,101 @@ export class PhotoMode {
     }
   }
 
-  // 牆要不要降下來：自己入鏡時跟走路一樣顧著角色，不入鏡就只看鏡頭在哪
+  // 手持相機：鏡頭在角色手上。走路交給角色，方向照鏡頭算，拿著相機走慢一點；
+  // 角色面向鏡頭看的方向，自拍時反過來面向鏡頭。蹲低、眼高、舉高照角色的身高算
+  updateHeld(dt) {
+    const p = this.player, ch = this.character, k = this.keys, cam = this.camera;
+    let f = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
+    let s = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
+    if (Math.hypot(this.joy.x, this.joy.y) > 0.12) { f = -this.joy.y; s = this.joy.x; }
+    const m = Math.min(1, Math.hypot(f, s)), a = Math.atan2(s, f);
+    p.camYaw = this.yaw;
+    p.setJoystick(m ? Math.sin(a) * m * 0.65 : 0, m ? -Math.cos(a) * m * 0.65 : 0);
+
+    const t = 1 - Math.exp(-dt * 12);
+    this.yaw += (this.aimYaw - this.yaw) * t;
+    this.pitch += (this.aimPitch - this.pitch) * t;
+    const selfie = this.grip === 3;
+    p.heading = selfie ? this.yaw : this.yaw + Math.PI;
+    ch.group.rotation.y = p.heading;
+    const hx = -Math.sin(this.yaw), hz = -Math.cos(this.yaw), d = ch.dims, y = p.pos.y;
+    const want = selfie
+      ? new THREE.Vector3(p.pos.x - hx * 0.9, y + d.faceY + 0.12, p.pos.z - hz * 0.9)
+      : new THREE.Vector3(p.pos.x + hx * 0.12, y + [d.faceY * 0.5, d.faceY, d.topY + 0.35][this.grip], p.pos.z + hz * 0.12);
+    if (this.needAF) this.pos.copy(want);
+    else this.pos.lerp(want, 1 - Math.exp(-dt * 18));
+    cam.position.copy(this.pos);
+    cam.lookAt(this.pos.clone().add(this.forward(new THREE.Vector3())));
+    this.applyLens();
+    if (this.needAF) {
+      this.needAF = false;
+      this.focusD = this.depthAt(0, 0);
+    }
+
+    // 對焦環轉向要的距離：在屈光度上轉，近的地方轉得細、遠的一下就到；快到時多轉一點再退回來，像在找焦
+    const af = this.af;
+    if (af) {
+      af.t = Math.min(1, af.t + dt / 0.3);
+      const u = 1 - Math.pow(1 - af.t, 3) + Math.sin(af.t * Math.PI) * 0.18, p0 = 1 / af.from, p1 = 1 / af.to;
+      this.focusD = 1 / Math.max(1e-3, p0 + (p1 - p0) * u);
+      if (af.t >= 1) {
+        this.focusD = af.to;
+        this.af = null;
+        this.focused();
+      }
+    }
+    dof.focus = this.focusD;
+    dof.long = Math.max(this.frame.w, this.frame.h) * this.renderer.getPixelRatio();
+
+    const room = this.world.roomIndexAt(this.pos.z);
+    if (room !== this.room) {
+      this.room = room;
+      this.world.setCurrentRoom(room);
+    }
+  }
+
+  // 畫面上 (nx, ny) 看到的東西沿著鏡頭的方向有多遠（景深算的是這個）；天空當成很遠
+  depthAt(nx, ny) {
+    const cam = this.camera;
+    cam.updateMatrixWorld();
+    const h = this.pickAt(nx, ny);
+    if (!h) return 80;
+    return Math.max(0.3, h.point.clone().sub(cam.position).dot(cam.getWorldDirection(new THREE.Vector3())));
+  }
+
+  // 點一下對焦：對焦框跳到點的地方，對焦環慢慢轉過去
+  focusAt(x, y) {
+    const fr = this.frame;
+    if (x < fr.x || x > fr.x + fr.w || y < fr.y || y > fr.y + fr.h || this.gear.focus !== 'tap') return;
+    this.af = { from: this.focusD, to: this.depthAt((x / window.innerWidth) * 2 - 1, 1 - (y / window.innerHeight) * 2), t: 0 };
+    const el = this.$('#ph-af');
+    Object.assign(el.style, { left: x + 'px', top: y + 'px' });
+    el.className = 'hunt';
+    clearTimeout(this.afTimer);
+  }
+
+  // 對到焦：嗶兩聲，框停住，過一下淡掉。鎖住以後轉動鏡頭焦距也不變，可以先對焦再構圖
+  focused() {
+    const el = this.$('#ph-af');
+    if (el.className === 'hunt') {
+      el.className = 'lock';
+      this.afTimer = setTimeout(() => { el.className = ''; }, 1300);
+    }
+    this.ambience.voice('focus', 0.35);
+    this.showZoom(`對焦 ${dist(this.focusD)}`);
+  }
+
+  // 定焦鏡頭不能變焦：提醒一次走近或退後
+  primeNote() {
+    this.showZoom(`${this.gear.focal}mm 定焦`);
+    if (this.primeHinted) return;
+    this.primeHinted = true;
+    this.ui.hint('定焦鏡頭：想拍大一點就走近，想拍多一點就退後', 3500);
+  }
+
+  // 牆要不要降下來：自己入鏡時跟走路一樣顧著角色，不入鏡就只看鏡頭在哪；手持時鏡頭本來就在角色身上
   fadeTarget() {
-    return this.self ? this.player.pos : this.pos;
+    return this.self || this.gear ? this.player.pos : this.pos;
   }
 
   // ───────── 合成：畫面 → 2D 畫布 ─────────
@@ -773,11 +974,20 @@ export class PhotoMode {
   // 把剛畫好的 3D 畫面（src 的 sx..sh 那一塊）加上色調、對話框、暗角、顆粒和落款，畫進 ctx（W × H）
   // k：取景框裡 1 個 CSS 像素對應輸出幾個像素
   compose(ctx, src, sx, sy, sw, sh, W, H, k, grainShift) {
-    const look = LOOKS[this.look];
+    const look = this.gear ? this.gear.develop : LOOKS[this.look];
     ctx.save();
     ctx.filter = look.filter || 'none';
     ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
     ctx.restore();
+    // 亮的地方暈開一點：再疊一張糊過的上去（不支援 ctx.filter 的瀏覽器就不疊，免得整張變亮）
+    if (look.halo && 'filter' in ctx) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = look.halo;
+      ctx.filter = `blur(${Math.max(2, Math.round(Math.max(W, H) * 0.006))}px) ${look.filter || ''}`;
+      ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
+      ctx.restore();
+    }
     if (this.talk) this.drawBubbles(ctx, k);
     if (look.vig > 0) {
       ctx.save();
@@ -871,6 +1081,176 @@ export class PhotoMode {
     else this.shoot();
   }
 
+  // 帶著能按住曝光的相機，快門鈕和空白鍵按下、放開分開算
+  holdable() {
+    return !!(this.active && this.gear?.hold && !this.studio);
+  }
+
+  // 閃光開著、這台相機有閃光燈
+  fires() {
+    return !!(this.gear?.flash && this.flashOn === 0);
+  }
+
+  // 閃光燈泡相機：閃過一次要換燈泡，換好之前按不下去
+  waitingBulb() {
+    return this.fires() && !!this.gear.flash.bulb && performance.now() < this.bulbAt;
+  }
+
+  shutterDown() {
+    if (!this.active || this.result || this.pressing || this.expo) return;
+    if (this.waitingBulb()) return this.ui.hint('燈泡還在換', 1500);
+    this.pressing = { timer: setTimeout(() => this.startExposure(), HOLD_MS) };
+  }
+
+  // 放開：按得短是一張，按得久是長曝光收尾；cancel 是手指滑掉或視窗失去焦點，長曝光就不要了
+  shutterUp(cancel = false) {
+    const p = this.pressing;
+    if (!p) return;
+    clearTimeout(p.timer);
+    this.pressing = null;
+    if (this.expo) return cancel ? this.cancelExposure() : this.finishExposure();
+    if (!cancel) this.shoot();
+  }
+
+  // 閃光燈放在鏡頭上方一點，照對焦的距離調亮：對到焦的人亮度剛好，比他近的過曝，遠的暗下去
+  light(on) {
+    const L = this.flashLight, f = this.gear.flash;
+    L.position.copy(this.camera.position);
+    L.position.y += 0.12;
+    L.color.setHex(f.color);
+    L.intensity = on ? f.power * this.focusD * this.focusD : 0;
+  }
+
+  // 閃過了：啪一聲，鏡頭前飄過一陣煙，接著換燈泡
+  fired() {
+    this.ambience.voice('flash', 0.7);
+    const bulb = this.gear.flash.bulb;
+    if (!bulb) return;
+    this.bulbAt = performance.now() + bulb * 1000;
+    setTimeout(() => this.active && this.ambience.voice('bulb', 0.45), 450);
+    const el = this.$('#ph-smoke');
+    el.classList.remove('puff');
+    void el.offsetWidth;
+    el.classList.add('puff');
+  }
+
+  // 長曝光（B 快門）：按住的這段時間，每一幀畫好的取景框都疊進一張浮點的圖，放開時（閃光開著就再閃一下）收起來。
+  // 用螢幕上的解析度，不另外畫大圖：一秒幾十張大圖畫不動，糊掉的照片也用不到那麼細
+  startExposure() {
+    if (!this.pressing || this.expo || !this.active) return;
+    const r = this.renderer, fr = this.frame, px = r.getPixelRatio();
+    const w = Math.round(fr.w * px), h = Math.round(fr.h * px);
+    const acc = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, depthBuffer: false });
+    r.setRenderTarget(acc);
+    r.clear();
+    r.setRenderTarget(null);
+    const now = performance.now();
+    this.expo = {
+      acc, grab: new THREE.FramebufferTexture(w, h), w, h,
+      x: Math.round(fr.x * px), y: Math.round((window.innerHeight - fr.y - fr.h) * px),
+      sum: 0, t0: now, last: now,
+    };
+    document.body.classList.add('photo-expose');
+    this.ambience.voice('shutter', 0.3);
+  }
+
+  cancelExposure() {
+    const e = this.expo;
+    if (!e) return;
+    this.expo = null;
+    e.acc.dispose();
+    e.grab.dispose();
+    document.body.classList.remove('photo-expose');
+  }
+
+  // 疊畫面用的兩道著色器：add 把這一幀撐開亮部、乘上這一幀的秒數加進去；done 平均起來，混進閃光那一幀，再壓回來
+  expoPass() {
+    if (this.ep) return this.ep;
+    const mat = (frag, extra) => new THREE.ShaderMaterial({ vertexShader: QUAD_VERT, fragmentShader: frag, depthTest: false, depthWrite: false, ...extra });
+    const expand = `vec3 expand(vec3 c) { c = min(c, vec3(0.999)); return c / (1.0 - ${EXPAND.toFixed(2)} * c); }`;
+    const add = mat(`uniform sampler2D tex; uniform float w; varying vec2 vUv; ${expand}
+      void main() { gl_FragColor = vec4(expand(texture2D(tex, vUv).rgb) * w, 1.0); }`,
+      { uniforms: { tex: { value: null }, w: { value: 0 } }, blending: THREE.AdditiveBlending, transparent: true });
+    const done = mat(`uniform sampler2D acc, lit; uniform float sum, a; varying vec2 vUv; ${expand}
+      void main() {
+        vec3 x = mix(texture2D(acc, vUv).rgb / sum, expand(texture2D(lit, vUv).rgb), a);
+        gl_FragColor = vec4(x / (1.0 + ${EXPAND.toFixed(2)} * x), 1.0);
+      }`,
+      { uniforms: { acc: { value: null }, lit: { value: null }, sum: { value: 1 }, a: { value: 0 } } });
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), add);
+    quad.frustumCulled = false;
+    const scene = new THREE.Scene();
+    scene.add(quad);
+    return (this.ep = { add, done, quad, scene, cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1) });
+  }
+
+  // 每幀畫完：把螢幕上取景框那一塊拷下來疊進去
+  exposeFrame() {
+    const e = this.expo, r = this.renderer, ep = this.expoPass(), now = performance.now();
+    const dt = Math.min(0.1, (now - e.last) / 1000);
+    e.last = now;
+    r.copyFramebufferToTexture(e.grab, this.v2.set(e.x, e.y));
+    ep.quad.material = ep.add;
+    ep.add.uniforms.tex.value = e.grab;
+    ep.add.uniforms.w.value = dt;
+    const auto = r.autoClear;
+    r.autoClear = false;
+    r.setRenderTarget(e.acc);
+    r.render(ep.scene, ep.cam);
+    r.setRenderTarget(null);
+    r.autoClear = auto;
+    e.sum += dt;
+    const sec = (now - e.t0) / 1000;
+    this.showZoom(`曝光 ${sec.toFixed(1)} 秒`);
+    if (sec >= MAX_EXPOSE) {
+      clearTimeout(this.pressing?.timer);
+      this.pressing = null;
+      this.finishExposure();
+    }
+  }
+
+  // 放開快門：閃光開著就打亮畫一幀，人停在最後的位置，前面走過的路拖成殘影
+  finishExposure() {
+    const e = this.expo;
+    if (!e) return;
+    const r = this.renderer, ep = this.expoPass(), fire = this.fires();
+    if (fire) {
+      this.light(true);
+      this.render(0);
+      this.light(false);
+      r.copyFramebufferToTexture(e.grab, this.v2.set(e.x, e.y));
+    }
+    const out = new THREE.WebGLRenderTarget(e.w, e.h, { depthBuffer: false });
+    const u = ep.done.uniforms;
+    u.acc.value = e.acc.texture;
+    u.lit.value = fire ? e.grab : e.acc.texture;
+    u.sum.value = Math.max(e.sum, 1e-4);
+    u.a.value = fire ? (e.sum > 0 ? 0.45 : 1) : 0;
+    ep.quad.material = ep.done;
+    r.setRenderTarget(out);
+    r.render(ep.scene, ep.cam);
+    const px = new Uint8Array(e.w * e.h * 4);
+    r.readRenderTargetPixels(out, 0, 0, e.w, e.h, px);
+    r.setRenderTarget(null);
+    out.dispose();
+    this.cancelExposure();
+    // 讀出來是從下往上排的，一列一列翻過來
+    const img = new ImageData(e.w, e.h), row = e.w * 4;
+    for (let y = 0; y < e.h; y++) img.data.set(px.subarray((e.h - 1 - y) * row, (e.h - y) * row), y * row);
+    const raw = document.createElement('canvas');
+    raw.width = e.w;
+    raw.height = e.h;
+    raw.getContext('2d').putImageData(img, 0, 0);
+    const shot = document.createElement('canvas');
+    shot.width = e.w;
+    shot.height = e.h;
+    this.compose(shot.getContext('2d'), raw, 0, 0, e.w, e.h, e.w, e.h, e.w / this.frame.w, Math.random());
+    this.flash();
+    if (fire) this.fired();
+    else this.ambience.voice('shutter', 0.5);
+    this.deliver(shot);
+  }
+
   flash() {
     const el = this.$('#ph-frame');
     el.classList.remove('flash');
@@ -882,6 +1262,8 @@ export class PhotoMode {
   // 不先做的話，按下快門後第一次會多等一兩秒
   shoot(dry = false) {
     if (!this.active || this.result) return;
+    if (!dry && this.waitingBulb()) return this.ui.hint('燈泡還在換', 1500);
+    const fire = !dry && this.fires(), wasLong = dof.long;
     const fr = this.frame, r = this.renderer, cam = this.camera;
     const W = window.innerWidth, H = window.innerHeight;
     // 長邊：電腦 3840、手機 2560，不超過顯示卡能畫的大小
@@ -898,6 +1280,10 @@ export class PhotoMode {
     const dpr = r.getPixelRatio();
     try {
       r.setPixelRatio(1);
+      // 景深的模糊圈照照片的大小算，取樣也多一點
+      dof.long = Math.max(outW, outH);
+      this.dofPass.hq = true;
+      if (fire) this.light(true);
       if (lens.on) this.renderFish(outW, outH);
       else {
         r.setSize(outW, outH, false);
@@ -908,6 +1294,9 @@ export class PhotoMode {
       // 畫完馬上拷走，不然下一幀之前 WebGL 會把畫面清掉
       this.compose(ctx, r.domElement, 0, 0, outW, outH, outW, outH, k, Math.random());
     } finally {
+      if (fire) this.light(false);
+      this.dofPass.hq = false;
+      dof.long = wasLong;
       cam.clearViewOffset();
       cam.aspect = W / H;
       this.applyLens();
@@ -921,6 +1310,13 @@ export class PhotoMode {
       return;
     }
     this.flash();
+    if (fire) this.fired();
+    else if (this.gear) this.ambience.voice('shutter', 0.5);
+    this.deliver(out);
+  }
+
+  // 拍好的畫布：從信差站來的做成明信片，不然存成 JPG
+  deliver(out) {
     if (this.postcard) {
       this.ui.hint('照相師沖洗中…', 30000);
       this.shot = out;
@@ -1042,8 +1438,9 @@ export class PhotoMode {
     this.refresh();
   }
 
-  // 每次畫完一幀呼叫：錄影中就把取景框那一塊拷進錄影的畫布
+  // 每次畫完一幀呼叫：長曝光中就把取景框疊進去，錄影中就把取景框那一塊拷進錄影的畫布
   afterRender() {
+    if (this.expo) this.exposeFrame();
     const rec = this.rec;
     if (!rec) return;
     const src = this.renderer.domElement, fr = this.frame;
