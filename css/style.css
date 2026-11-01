@@ -863,6 +863,30 @@ body.desk #ph-rec { top: calc(18px + env(safe-area-inset-top)); }
 body.desk #ph-alt { right: calc(70px + env(safe-area-inset-right)); bottom: auto; top: 50%; transform: translateY(-50%); }
 body.desk .ph-alt-track { height: 240px; }
 
+/* 照相館（studio.js） */
+.studio-card {
+  position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 45;
+  width: min(360px, calc(100vw - 32px)); padding: 16px; display: flex; flex-direction: column; gap: 12px;
+  background: rgba(20, 14, 10, .92); border: 1px solid var(--line); border-radius: 14px; color: var(--text);
+}
+.studio-card[hidden] { display: none; }
+.studio-card p { margin: 0; font-size: 14px; letter-spacing: .1em; text-align: center; }
+.studio-spots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.studio-spots .btn { flex-direction: column; height: auto; padding: 10px 4px; letter-spacing: .12em; }
+.studio-spots small { display: block; margin-top: 4px; font-size: 11px; letter-spacing: .05em; color: var(--muted); }
+.studio-row { display: flex; gap: 8px; justify-content: center; }
+#studio-fade { position: fixed; inset: 0; z-index: 60; background: #0e0906; opacity: 0; pointer-events: none; transition: opacity .35s; }
+#studio-fade.on { opacity: 1; }
+body.photo-studio #ph-alt, body.photo-studio #ph-record, body.photo-studio #ph-lens, body.photo-studio #ph-zoom { display: none; }
+body.photo-guest #ph-shutter { visibility: hidden; }
+#ph-count {
+  position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 30; pointer-events: none;
+  font: 600 min(28vw, 160px)/1 serif; color: rgba(255, 244, 220, .9); text-shadow: 0 2px 24px rgba(0, 0, 0, .5);
+}
+#ph-count[hidden] { display: none; }
+#ph-count.beat { animation: ph-beat .9s ease-out; }
+@keyframes ph-beat { from { opacity: 0; transform: translate(-50%, -50%) scale(1.3); } 25% { opacity: 1; transform: translate(-50%, -50%) scale(1); } to { opacity: .2; } }
+
 /* 拍好之後 */
 #ph-result {
   position: fixed; inset: 0; z-index: 40;

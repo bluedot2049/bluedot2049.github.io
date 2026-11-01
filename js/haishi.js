@@ -1874,6 +1874,15 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       return (a && PLACES[a.street ?? a.id]) || null;
     },
     walkable, findWalkable, findPath, groundY, camFloor, camClip,
+    // 照相館的景（studio.js）：人站在 (x, z)，鏡頭往 (dx, dz) 方向退 dist 公尺回頭拍，up 是注視點再抬高多少
+    studios: [
+      // 下街中段，鏡頭站在眺台的欄杆內側往北拍，背後是下街的店面和燈籠
+      { id: 'street', name: '下街', note: '店面和燈籠', x: -1, z: -14.2, dx: 0, dz: 1, dist: 4.5 },
+      // 防波堤上，背後隔著港是整座山城的燈
+      { id: 'harbor', name: '防波堤', note: '港和山城', x: -28, z: 21, dx: -0.56, dz: 0.83, dist: 4.6, up: 0.5 },
+      // 燈巷中段，鏡頭沿著巷子往西拍，燈籠一路排到後面
+      { id: 'lantern', name: '燈巷', note: '一路的燈籠', x: -1.5, z: -26.6, dx: 1, dz: 0, dist: 4.6 },
+    ],
     // 路人用的地點（passersby.js）：門口、港口上下船的地方、看風景的地方、攤位和推車前面客人站的位置。
     // heading 是站在那裡時面向哪裡（0 朝南）
     crowdSpots: {

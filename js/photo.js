@@ -145,8 +145,9 @@ export class PhotoMode {
 
   // ───────── 進出 ─────────
 
-  // postcard：從海市的信差站進來，拍好的照片做成明信片
-  enter({ postcard = false } = {}) {
+  // postcard：從海市的信差站進來，拍好的照片做成明信片。
+  // studio：照相館（studio.js）架好的鏡頭 { pos, yaw, pitch, fov, host }，鏡頭不能動，快門要數三聲
+  enter({ postcard = false, studio = null } = {}) {
     if (this.active) return;
     this.postcard = postcard;
     const p = this.player, cam = this.camera;
@@ -175,12 +176,15 @@ export class PhotoMode {
     this.$('#photo').hidden = false;
     this.showControls(true);
     this.refresh();
-    if (postcard) this.ui.hint('拍一張做成明信片，拍好就能寄出去', 6000);
+    if (studio) this.setStudio(studio);
+    else if (postcard) this.ui.hint('拍一張做成明信片，拍好就能寄出去', 6000);
     else this.ui.hint(this.coarse ? '拖曳轉頭　雙指變焦　點兩下靠近　點一下收起按鈕' : 'WASD 移動　E / Q 升降　拖曳轉頭　滾輪變焦　點兩下靠近　空白鍵拍照　H 收起按鈕', 6000);
   }
 
   exit() {
     if (!this.active) return;
+    const left = this.studio && this.studioHooks?.exit;
+    this.setStudio(null);
     if (this.rec) this.stopRecording();
     this.closeResult();
     this.closeMenu();
@@ -201,6 +205,48 @@ export class PhotoMode {
     this.player.paused = false;
     this.world.setCurrentRoom(this.player.room, true);   // 鏡頭一下子跳回角色身邊，房間也直接切
     this.ui.hideHint();
+    left?.();
+  }
+
+  // 照相館的鏡頭：固定在 c 的位置和方向；null 就回到自己拍
+  setStudio(c) {
+    this.studio = c;
+    document.body.classList.toggle('photo-studio', !!c);
+    document.body.classList.toggle('photo-guest', !!c && !c.host);
+    if (!c) return;
+    this.pos.copy(c.pos);
+    this.vel.set(0, 0, 0);
+    this.fly = null;
+    this.yaw = this.aimYaw = c.yaw;
+    this.pitch = this.aimPitch = c.pitch;
+    this.fov = this.cur = c.fov;
+    this.self = true;
+    this.ui.hint(c.host ? '站好了。按快門，照相師會數三聲' : '站好了，等拍照的人按快門', 6000);
+  }
+
+  // 照相館的快門：三、二、一，閃光一下才拍
+  countdown() {
+    if (this.counting || this.result || !this.active) return;
+    this.counting = true;
+    const el = this.$('#ph-count');
+    let n = 3;
+    const tick = () => {
+      if (!this.active) { this.counting = false; el.hidden = true; return; }
+      if (!n) {
+        el.hidden = true;
+        this.counting = false;
+        this.shoot();
+        return;
+      }
+      el.textContent = '一二三'[n - 1];
+      el.hidden = false;
+      el.classList.remove('beat');
+      void el.offsetWidth;
+      el.classList.add('beat');
+      n--;
+      setTimeout(tick, 900);
+    };
+    tick();
   }
 
   toggle() { this.active ? this.exit() : this.enter(); }
@@ -253,7 +299,7 @@ export class PhotoMode {
       if (btn) this.zoom(LENSES[+btn.dataset.i][1]);
     });
     this.$('#ph-exit').addEventListener('click', () => this.exit());
-    this.$('#ph-shutter').addEventListener('click', () => this.shoot());
+    this.$('#ph-shutter').addEventListener('click', () => this.press());
     const recBtn = this.$('#ph-record');
     if (this.mime) recBtn.addEventListener('click', () => (this.rec ? this.stopRecording() : this.startRecording()));
     else recBtn.hidden = true;
@@ -469,7 +515,7 @@ export class PhotoMode {
       if (e.key === 'Escape') return this.menu ? this.closeMenu() : this.exit();
       if (e.key === ' ') {
         e.preventDefault();
-        if (!e.repeat) this.shoot();
+        if (!e.repeat) this.press();
         return;
       }
       if (e.key === 'h' || e.key === 'H') return this.showControls(document.body.classList.contains('photo-bare'));
@@ -628,6 +674,18 @@ export class PhotoMode {
   // 每幀在 player.update 之後呼叫，鏡頭交給這裡擺
   update(dt) {
     if (!this.active) return;
+    if (this.studio) {
+      // 照相館：鏡頭釘在架好的位置，拖曳、搖桿、變焦都不理
+      const st = this.studio, cam = this.camera;
+      this.pos.copy(st.pos);
+      this.yaw = this.aimYaw = st.yaw;
+      this.pitch = this.aimPitch = st.pitch;
+      this.fov = this.cur = st.fov;
+      cam.position.copy(this.pos);
+      cam.lookAt(this.pos.clone().add(this.forward(new THREE.Vector3())));
+      this.applyLens();
+      return;
+    }
     const k = this.keys;
     let f = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
     let s = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
@@ -805,6 +863,12 @@ export class PhotoMode {
   }
 
   // ───────── 拍照 ─────────
+
+  // 快門鈕：照相館要數三聲，開場的人才按得了
+  press() {
+    if (this.studio) this.studioHooks?.shutter();
+    else this.shoot();
+  }
 
   flash() {
     const el = this.$('#ph-frame');

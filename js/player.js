@@ -15,6 +15,9 @@ const SWIPE_MIN = 40;
 const INTRO_LEN = 18;   // 開場遠景：沿棧橋走這麼遠，鏡頭換到角色背後
 // 鏡頭追目標的時間：跟著角色、看畫照鏡子
 const FOLLOW_T = 0.2, VIEW_T = 0.32;
+// 照鏡子時繞著自己轉：俯角範圍、離注視點的遠近、角度追手指的快慢、放手後還滑多久
+const ORB_LOW = -0.3, ORB_HIGH = 1.2, ORB_NEAR = 0.45, ORB_FAR = 6.5, ORB_ZOOM = [0.3, 1.8];
+const ORB_EASE = 7, ORB_COAST = 0.22;
 // 導演運鏡：使用者自己轉鏡頭後讓幾秒；照路線走時看前面幾公尺
 const DIRECTOR_HOLD = 5, DIRECTOR_AHEAD = 3.5;
 // 鏡頭自己轉會暈，所以轉得少、轉得慢：跟目標差超過 DEAD 才開始轉，轉到差 SETTLE 以內就停，不追到正後方。
@@ -173,6 +176,7 @@ export class Player {
       if (e.type === 'pointercancel') this.mouseRun = false;
       if (this.paused) { pts.clear(); pinch = null; multi = false; return; }
       if (e.type === 'pointerup' && !p.drag && !multi) this.tap(e.clientX, e.clientY);
+      if (e.type === 'pointerup' && p.drag && !multi) this.mirrorFling();
       if (e.type === 'pointerup' && p.swipe && !multi && Math.abs(e.clientX - p.sx) > SWIPE_MIN) this.switchPainting(e.clientX < p.sx ? 1 : -1);
       if (pts.size < 2) pinch = null;
       if (pts.size === 0) multi = false;
@@ -219,6 +223,7 @@ export class Player {
   }
 
   orbit(dx, dy, mouse = false) {
+    if (this.focus?.orb) return this.mirrorOrbit(dx, dy, mouse);
     this.exitView();
     this.handOver();
     const k = (mouse ? 9 : 5.5) / Math.max(this.dom.clientWidth, this.dom.clientHeight);
@@ -229,13 +234,41 @@ export class Player {
     this.events.onInput('drag');
   }
 
-  // 縮放的距離：還在看開場遠景時縮的是遠景
+  // 照鏡子時拖曳是繞著自己轉，不離開鏡子。角度先記在目標上，鏡頭慢慢追過去；放手時照最後的速度再滑一段
+  mirrorOrbit(dx, dy, mouse) {
+    const o = this.focus.orb, now = performance.now();
+    const k = (mouse ? 9 : 5.5) / Math.max(this.dom.clientWidth, this.dom.clientHeight);
+    const s = mouse ? 1 : -1;
+    const dYaw = -dx * k * s, dPitch = dy * k * s;
+    o.tYaw += dYaw;
+    o.tPitch = THREE.MathUtils.clamp(o.tPitch + dPitch, ORB_LOW - 1.5, ORB_HIGH + 1.5);
+    const gap = Math.max(8, now - o.last);
+    o.vYaw += (dYaw / gap - o.vYaw) * 0.5;
+    o.vPitch += (dPitch / gap - o.vPitch) * 0.5;
+    o.last = now;
+    o.touched = true;
+    this.events.onInput('drag');
+  }
+
+  mirrorFling() {
+    const o = this.focus?.orb;
+    if (!o || performance.now() - o.last > 80) return;
+    o.tYaw += o.vYaw * ORB_COAST * 1000;
+    o.tPitch += o.vPitch * ORB_COAST * 1000;
+    o.vYaw = o.vPitch = 0;
+  }
+
+  // 縮放的距離：還在看開場遠景時縮的是遠景，照鏡子時縮的是鏡子的取景
   get zoomDist() {
+    if (this.focus?.orb) return this.focus.orb.tZoom;
     return this.introIdle ? this.intro.dist : this.camDist;
   }
 
   set zoomDist(d) {
-    if (this.introIdle) this.intro.dist = THREE.MathUtils.clamp(d, DIST_MIN, this.intro.max);
+    if (this.focus?.orb) {
+      this.focus.orb.tZoom = THREE.MathUtils.clamp(d, ...ORB_ZOOM);
+      this.focus.orb.touched = true;
+    } else if (this.introIdle) this.intro.dist = THREE.MathUtils.clamp(d, DIST_MIN, this.intro.max);
     else this.camDist = THREE.MathUtils.clamp(d, DIST_MIN, this.distMax);
   }
 
@@ -305,6 +338,7 @@ export class Player {
     const stand = this.world.findWalkable(m.x + n.x * d, m.z + n.z * d, this.pos.x, this.pos.z) || { x: this.pos.x, z: this.pos.z };
     return {
       kind: 'mirror', n, stand,
+      orb: { yaw: 0, pitch: 0, zoom: 1, tYaw: 0, tPitch: 0, tZoom: 1, vYaw: 0, vPitch: 0, last: 0, touched: false },
       camPos: new THREE.Vector3(m.x + n.x * 0.35, 1.05, m.z + n.z * 0.35),
       look: new THREE.Vector3(stand.x, 0.85, stand.z),
       fadeTarget: new THREE.Vector3(stand.x, 0, stand.z),
@@ -317,6 +351,9 @@ export class Player {
     const f = this.focus, m = this.world.mirror;
     if (f?.kind !== 'mirror') return;
     const dims = this.character.dims, n = f.n, p = this.pos;
+    // 換到臉或全身時遠近回到預設，轉到的角度留著
+    if (f.mode && f.mode !== mode) f.orb.tZoom = 1;
+    f.mode = mode;
     const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * visH;
     const gap = Math.max(0.9, (p.x - m.x) * n.x + (p.z - m.z) * n.z);
     if (mode === 'face') {
@@ -728,7 +765,33 @@ export class Player {
     return this.focus?.fadeTarget || this.pos;
   }
 
+  // 照鏡子的鏡頭：把鏡子取景的位置繞著注視點轉、拉遠拉近。轉到鏡子那面牆後面時，牆和鏡子會自己淡掉（見 world.js）
+  mirrorCamera(outPos, outLook) {
+    const f = this.focus, o = f.orb, c = f.look;
+    const ox = f.camPos.x - c.x, oy = f.camPos.y - c.y, oz = f.camPos.z - c.z;
+    const h = Math.hypot(ox, oz), r = Math.hypot(h, oy);
+    const a = Math.atan2(ox, oz) + o.yaw;
+    const e = THREE.MathUtils.clamp(Math.atan2(oy, h) + o.pitch, ORB_LOW, ORB_HIGH);
+    const d = THREE.MathUtils.clamp(r * o.zoom, ORB_NEAR, ORB_FAR);
+    outPos.set(c.x + d * Math.cos(e) * Math.sin(a), Math.max(0.15, c.y + d * Math.sin(e)), c.z + d * Math.cos(e) * Math.cos(a));
+    outLook.copy(c);
+  }
+
+  // 繞鏡子的角度和遠近追向目標；俯角的目標拉回能轉到的範圍，往上推到底再往下拉不用先倒回來
+  easeOrb(dt) {
+    const f = this.focus, o = f?.orb;
+    if (!o) return false;
+    const c = f.look, e0 = Math.atan2(f.camPos.y - c.y, Math.hypot(f.camPos.x - c.x, f.camPos.z - c.z));
+    o.tPitch = THREE.MathUtils.clamp(o.tPitch, ORB_LOW - e0, ORB_HIGH - e0);
+    const k = Math.min(1, dt * ORB_EASE);
+    o.yaw += (o.tYaw - o.yaw) * k;
+    o.pitch += (o.tPitch - o.pitch) * k;
+    o.zoom += (o.tZoom - o.zoom) * k;
+    return Math.abs(o.tYaw - o.yaw) + Math.abs(o.tPitch - o.pitch) + Math.abs(o.tZoom - o.zoom) > 1e-4;
+  }
+
   desiredCamera(outPos, outLook) {
+    if (this.focus?.orb) return this.mirrorCamera(outPos, outLook);
     if (this.focus?.camPos) {
       outPos.copy(this.focus.camPos);
       outLook.copy(this.focus.look);
@@ -794,7 +857,8 @@ export class Player {
     const fwd = (k.has('w') || k.has('arrowup') || this.mouseRun ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
     const side = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
     const turn = (k.has('q') ? 1 : 0) - (k.has('e') ? 1 : 0);
-    if (turn) { this.exitView(); this.handOver(); this.camYaw += turn * 1.8 * dt; }
+    if (turn && this.focus?.orb) { this.focus.orb.tYaw += turn * 1.8 * dt; this.focus.orb.touched = true; }
+    else if (turn) { this.exitView(); this.handOver(); this.camYaw += turn * 1.8 * dt; }
 
     // 鍵盤和搖桿都換算成相對鏡頭的方向
     let mf = fwd, ms = side, mag = fwd || side ? 1 : 0;
@@ -876,9 +940,11 @@ export class Player {
     if (this.intro) this.updateIntro(dt);
     this.direct(dt);
     if (!this.paused) {
+      if (this.easeOrb(dt)) settling = true;
       const dPos = new THREE.Vector3(), dLook = new THREE.Vector3();
       this.desiredCamera(dPos, dLook);
-      const T = this.focus?.camPos ? VIEW_T : FOLLOW_T;
+      // 剛走到鏡前慢慢滑進取景；開始自己轉以後角度已經有緩動，鏡頭跟緊一點，不然繞圈時會從角色身上切過去
+      const T = this.focus?.orb?.touched ? FOLLOW_T : this.focus?.camPos ? VIEW_T : FOLLOW_T;
       for (const k of 'xyz') {
         damp(this.camPos, k, dPos[k], this.posVel, T, dt);
         damp(this.camLook, k, dLook[k], this.lookVel, T, dt);

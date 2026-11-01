@@ -35,9 +35,12 @@ function fakePhoto(w, h, seed) {
   c.width = w; c.height = h;
   const g = c.getContext('2d');
   const sky = g.createLinearGradient(0, 0, 0, h);
-  sky.addColorStop(0, '#1a2050'); sky.addColorStop(0.6, '#6a4a7a'); sky.addColorStop(1, '#2a1a28');
+  // 單數是戶外的粉橘夕陽，雙數是海市的藍夜
+  const day = seed % 2 === 1;
+  const C = day ? ['#f6b48a', '#f4d0b0', '#e8a0a8', '#6a8a5a'] : ['#1a2050', '#6a4a7a', '#2a1a28', '#20182a'];
+  sky.addColorStop(0, C[0]); sky.addColorStop(0.6, C[1]); sky.addColorStop(1, C[2]);
   g.fillStyle = sky; g.fillRect(0, 0, w, h);
-  g.fillStyle = '#20182a';
+  g.fillStyle = C[3];
   g.beginPath(); g.moveTo(0, h);
   for (let x = 0; x <= w; x += w / 12) g.lineTo(x, h * (0.55 + 0.15 * Math.sin(x * 0.004 + seed)));
   g.lineTo(w, h); g.fill();
@@ -89,7 +92,7 @@ for (const mode of ['friend', 'self']) {
         ? ORIGIN + '#look=' + encodeLook(rl(0), { face: false })
         : ORIGIN + '#save=' + encodeSave({ look: rl(0), closet: [rl(1), null, rl(3)], unlocked: ['hand:fish'], visits: {} }, { face: false });
       const card = makePostcard(fakePhoto(pw, ph, i), new Date(2026, 10, 1), { films, qr: { text, kind: mode === 'friend' ? 'look' : 'save' } });
-      if (i === 0) { const w = document.createElement('div'); w.className = 'card' + (ph > pw ? ' tall' : ''); w.append(card); document.getElementById('cards').append(w); }
+      if (i === +(P.get('show') ?? 0)) { const w = document.createElement('div'); w.className = 'card' + (ph > pw ? ' tall' : ''); w.append(card); document.getElementById('cards').append(w); }
       for (let j = 0; j < LEVELS.length; j++) {
         const [, l2, q] = LEVELS[j];
         const r = await readPostcard(await degrade(card, l2, q));

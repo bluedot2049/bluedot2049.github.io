@@ -476,6 +476,7 @@ export class Passersby {
     this.s = new THREE.Vector3();
     this.c = new THREE.Color();
     this.at = { x: 0, z: 0, heading: 0, walking: false };
+    this.hidden = false;      // 照相館拍照中：路人全部藏起來
   }
 
   // 第 i 組人這一趟：換趟的時候重新排
@@ -505,6 +506,12 @@ export class Passersby {
   }
 
   update(dt, player) {
+    this.glows.visible = !this.hidden;
+    if (this.hidden) {
+      for (const e of this.pool) { e.key = null; e.ch.group.visible = false; }
+      this.bodies.count = this.heads.count = 0;
+      return;
+    }
     const now = Date.now() / 1000, world = this.world, P = player.pos;
     this.busy = this.force ?? busyAt(now);
     this.planned = 0;

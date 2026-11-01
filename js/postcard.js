@@ -3,7 +3,7 @@
 // 明信片：在海市的信差站拍的照片，外面加一圈紙邊，右上角貼郵票、蓋郵戳，下面寫寄自哪裡和日期。
 // 輸入攝影模式拍好的畫布，回傳一張新的畫布
 import { drawText } from './glyphs.js';
-import { filmGeometry, drawFilm, readFilm, unpackFace } from './filmcode.js';
+import { filmGeometry, drawFilm, readFilm, unpackFace, tone } from './filmcode.js';
 
 const PAPER = '#f2ead8', INK = 'rgba(52, 36, 28, 0.62)', BROWN = '#4a3022';
 
@@ -119,6 +119,67 @@ export function guessFilm(W, H) {
   return out;
 }
 
+// 底片邊的色塊：先抓出整張照片的幾個主色（k-means，取樣 48×48），再加上最鮮豔的那個顏色，
+// 每條邊用這幾個主色輪流排，寬度照一組長短不一的比例切，四條邊的起點錯開
+const WIDTHS = [5, 3, 8, 2, 5, 13, 3, 8];
+function photoPalette(photo, k = 5) {
+  const S = 48, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(photo, 0, 0, S, S);
+  const d = g.getImageData(0, 0, S, S).data, px = [];
+  for (let i = 0; i < d.length; i += 4) px.push([d[i], d[i + 1], d[i + 2]]);
+  const lum = (p) => 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2];
+  // 起點：照亮度排序後平均取 k 個
+  const sorted = [...px].sort((a, b) => lum(a) - lum(b));
+  let C = Array.from({ length: k }, (_, i) => [...sorted[Math.floor(((i + 0.5) * sorted.length) / k)]]);
+  let label = new Array(px.length).fill(0);
+  for (let it = 0; it < 8; it++) {
+    label = px.map((p) => {
+      let best = 0, bd = Infinity;
+      C.forEach((q, j) => { const dd = (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2; if (dd < bd) { bd = dd; best = j; } });
+      return best;
+    });
+    C = C.map((q, j) => {
+      const m = px.filter((_, i) => label[i] === j);
+      return m.length ? [0, 1, 2].map((ch) => m.reduce((s, p) => s + p[ch], 0) / m.length) : q;
+    });
+  }
+  const count = C.map((_, j) => label.filter((l) => l === j).length);
+  // 太少的（不到 3%）和跟別人太像的不要，照份量排
+  const out = [];
+  C.map((q, j) => [q, count[j]]).sort((a, b) => b[1] - a[1]).forEach(([q, n]) => {
+    if (n < px.length * 0.03) return;
+    if (out.some((o) => Math.hypot(o[0] - q[0], o[1] - q[1], o[2] - q[2]) < 28)) return;
+    out.push(q);
+  });
+  // 最鮮豔的那一點點（夜景的燈、夕陽）面積小，上面會被濾掉，另外抓回來排第二
+  const vivid = (p) => { const mx = Math.max(...p), mn = Math.min(...p); return mx ? ((mx - mn) / mx) * (mx / 255) : 0; };
+  // 小小的燈縮成 48 格會糊進背景，這裡另外用 128 格、不平滑地取樣
+  const A = 128;
+  c.width = c.height = A;
+  g.imageSmoothingEnabled = false;
+  g.drawImage(photo, 0, 0, A, A);
+  const ad = g.getImageData(0, 0, A, A).data, apx = [];
+  for (let i = 0; i < ad.length; i += 4) apx.push([ad[i], ad[i + 1], ad[i + 2]]);
+  const top = apx.sort((a, b) => vivid(b) - vivid(a)).slice(0, Math.ceil(apx.length * 0.01));
+  const acc = [0, 1, 2].map((ch) => top.reduce((s2, p) => s2 + p[ch], 0) / top.length);
+  if (vivid(acc) > 0.35 && !out.some((o) => Math.hypot(o[0] - acc[0], o[1] - acc[1], o[2] - acc[2]) < 40)) out.splice(1, 0, acc);
+  return out.length ? out : [C[0]];
+}
+
+function edgeBlocks(pal, edge) {
+  const k = { bottom: 0, top: 3, left: 5, right: 1 }[edge], n = 6;
+  const ws = Array.from({ length: n }, (_, i) => WIDTHS[(i + k) % WIDTHS.length]), sum = ws.reduce((a, b) => a + b, 0);
+  let t = 0;
+  const out = ws.map((wd, i) => {
+    t += wd / sum;
+    return { t, ...tone(pal[(i + k) % pal.length]) };
+  });
+  out[out.length - 1].t = 1;
+  return out;
+}
+
 // films：要印在底片邊的資料（自己畫的臉），{ bottom, top, left, right }，沒給的邊不印。
 // qr：{ text, kind }，存檔郵票，疊在原本那張郵票下面
 export function makePostcard(photo, date = new Date(), { films = null, qr = null } = {}) {
@@ -136,10 +197,12 @@ export function makePostcard(photo, date = new Date(), { films = null, qr = null
   g.strokeRect(px - long * 0.004, py - long * 0.004, pw + long * 0.008, ph + long * 0.008);
   // 臉畫太滿、放不下的那條印成空的，記在 c.lost
   c.lost = [];
+  const pal = films && Object.keys(films).length ? photoPalette(photo) : null;
   for (const [e, data] of Object.entries(films || {})) {
-    if (!drawFilm(g, Lay.strips[e], Lay.strips[e].w, long, data, PAPER)) {
+    const opt = { paper: PAPER, blocks: edgeBlocks(pal, e) };
+    if (!drawFilm(g, Lay.strips[e], Lay.strips[e].w, long, data, opt)) {
       c.lost.push(e);
-      drawFilm(g, Lay.strips[e], Lay.strips[e].w, long, new Uint8Array(0), PAPER);
+      drawFilm(g, Lay.strips[e], Lay.strips[e].w, long, new Uint8Array(0), opt);
     }
   }
 

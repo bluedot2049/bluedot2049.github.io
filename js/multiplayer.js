@@ -101,6 +101,7 @@ export class Multiplayer {
     this.lastJump = 0;
     this.lastPet = 0;
     this.lastTrack = -Infinity;
+    this.only = null;               // 照相館拍照中：只畫入鏡的人（id 的 Set）
   }
 
   async connect() {
@@ -119,6 +120,7 @@ export class Multiplayer {
       .on('broadcast', { event: 'emote' }, ({ payload }) => this.onEmote(payload))
       .on('broadcast', { event: 'jump' }, ({ payload }) => this.onJump(payload))
       .on('broadcast', { event: 'pet' }, ({ payload }) => this.onPet(payload))
+      .on('broadcast', { event: 'studio' }, ({ payload }) => this.onStudio(payload))
       .on('presence', { event: 'sync' }, () => {
         const state = ch.presenceState();
         this.present = new Set(Object.keys(state));
@@ -299,6 +301,20 @@ export class Multiplayer {
     this.fx.push({ s, group, y, t: 0 });
   }
 
+  // 照相館（studio.js）：邀請、加入、名單、快門、收場
+  studio(msg) {
+    if (!this.active || !this.channel) return;
+    this.channel.send({ type: 'broadcast', event: 'studio', payload: { id: this.id, ...msg } });
+  }
+
+  onStudio(m) {
+    if (!m || !isId(m.id) || m.id === this.id || !isId(m.sid)) return;
+    if (!['invite', 'join', 'leave', 'members', 'shoot', 'end'].includes(m.t)) return;
+    if (m.t === 'invite' && !(Number.isInteger(m.spot) && m.spot >= 0 && m.spot < 8)) return;
+    if (m.t === 'members' && !(Array.isArray(m.ids) && m.ids.length <= 4 && m.ids.every(isId))) return;
+    this.events.onStudio?.(m);
+  }
+
   // 回傳畫面上是否還有東西在動，主迴圈用來決定要不要降幀
   update(dt, now) {
     if (this.active) this.send(now);
@@ -313,7 +329,7 @@ export class Multiplayer {
         else if (now - o.born > UNVERIFIED_TTL) { this.remove(id); continue; }
       }
       const t = o.target;
-      if (Math.abs(t.r - me.room) <= 1) near.push([Math.hypot(t.x - me.pos.x, t.z - me.pos.z), o]);
+      if (Math.abs(t.r - me.room) <= 1 && (!this.only || this.only.has(id))) near.push([Math.hypot(t.x - me.pos.x, t.z - me.pos.z), o]);
       else o.ch.group.visible = false;
     }
     near.sort((a, b) => a[0] - b[0]);

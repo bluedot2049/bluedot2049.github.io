@@ -16,6 +16,7 @@ import { ANIMAL_LAYER, REFLECT_LAYER } from './scenery.js';
 import { Quality } from './quality.js';
 import { createPostFX } from './postfx.js';
 import { PhotoMode } from './photo.js';
+import { Studio } from './studio.js';
 import { lens, LensPass } from './lens.js';
 
 // 世界分成幾個區域，一次只建一個，用 ?z= 指定，沒有寫就是畫廊。每個區域的內容寫在自己的 zone-*.js，用到才下載。
@@ -198,6 +199,7 @@ async function start() {
   let lastInput = performance.now();
   let swipeHinted = false;
   let mp = null;
+  let studio = null;   // 海市信差站的照相館（studio.js），畫廊沒有
   let place = null;   // 戶外現在在哪裡：null 是陽台，否則是草原或棧橋盡頭的地名
   let sitHinted = false;
 
@@ -228,7 +230,8 @@ async function start() {
     onInput(kind) {
       lastInput = performance.now();
       ui.hidePainting();
-      ui.hideDress();
+      // 照鏡子時拖曳、縮放是在轉著看自己，面板留著
+      if (!(kind === 'drag' && player.focus?.kind === 'mirror')) ui.hideDress();
       ui.hideHint();
     },
     onArriveMirror() {
@@ -285,7 +288,7 @@ async function start() {
   // 這一區走來走去的：畫廊有動物和搭船來看畫的冒險者，海市有攤販和路人
   const { animals = null, visitors = null, vendors = null, passers = null } = Z.crowd({
     scene, world, shadowTex, player, camera, ambience, host, coarse, params, ui,
-    postcard: () => photo.enter({ postcard: true }),
+    postcard: () => (studio ? studio.open() : photo.enter({ postcard: true })),
   });
   const crowd = visitors || vendors;
   player.animals = animals;
@@ -436,6 +439,7 @@ async function start() {
       onJump(o) {
         animals?.startle(o.pos.x, o.pos.z);
       },
+      onStudio: (m) => studio?.onMessage(m),
     }, look);
     mp.claude = params.get('as') === 'claude';   // 開發時我進站拍照：在場的人看到的是燈籠
     mp.connect().catch((e) => console.warn('多人連線失敗：', e));
@@ -476,8 +480,14 @@ async function start() {
     resizeFX: (w, h) => fx?.setSize(w, h),
   });
   document.getElementById('photo-btn').addEventListener('click', () => photo.enter());
+  if (world.studios) {
+    studio = new Studio({ world, player, photo, passers });
+    studio.mp = mp;
+    // ?studio=0：直接到第 0 個景（測試構圖用）
+    if (params.has('studio')) setTimeout(() => studio.begin(+params.get('studio') || 0), 1500);
+  }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals, visitors, vendors, passers, quality, host, photo };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals, visitors, vendors, passers, quality, host, photo, studio };
   const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
@@ -525,7 +535,7 @@ async function start() {
     const isMirror = player.focus?.kind === 'mirror';
     if (!isMirror && !mirrorFading) return false;
 
-    const cam = player.focus?.camPos;
+    const cam = isMirror ? player.camPos : null;   // 鏡頭會繞著人轉，照實際的位置算
     const px = player.pos.x, pz = player.pos.z;
     const cx = cam?.x ?? 0, cz = cam?.z ?? 0;
     const dx = isMirror && cam ? px - cx : 0, dz = isMirror && cam ? pz - cz : 0;

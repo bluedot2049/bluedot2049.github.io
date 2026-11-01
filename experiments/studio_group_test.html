@@ -1,0 +1,60 @@
+<!doctype html><meta charset="utf-8">
+<!-- © 2026 bluedot2049《煉金畫廊》。照相館合照的訊息流程測試：兩個 Studio 中間接一條假的訊息通道，不連真的多人頻道。用 http://localhost:8000/experiments/studio_group_test.html 打開 -->
+<script type="importmap">{ "imports": { "three": "../vendor/three.module.min.js" } }</script>
+<div id="studio-menu" hidden><p></p><div class="studio-spots"></div></div>
+<div id="studio-invite" hidden><p></p><button data-act="yes">yes</button><button data-act="no">no</button></div>
+<div id="studio-fade"></div>
+<pre id="out"></pre>
+<script type="module">
+import { Studio } from '../js/studio.js';
+const out = [];
+const log = (s) => { out.push(s); document.getElementById('out').textContent = out.join('\n'); };
+const spots = [{ id: 'harbor', name: '防波堤', note: '', x: -28, z: 21, dx: -0.56, dz: 0.83, dist: 4.6 }];
+const world = { studios: spots, walkable: () => true, findWalkable: (x, z) => ({ x, z }), groundY: () => 0 };
+// 兩個玩家：A 開場、B 在旁邊
+const bus = [];
+function make(id, x, z) {
+  const player = { pos: { x, z }, place(px, pz, h) { this.pos = { x: px, z: pz }; this.heading = h; } };
+  const photo = {
+    active: false, result: null, studio: null, counted: 0,
+    enter({ studio }) { this.active = true; this.setStudio(studio); },
+    setStudio(c) { this.studio = c; },
+    exit() { const hook = this.studio && this.studioHooks?.exit; this.active = false; this.studio = null; hook?.(); },
+    countdown() { this.counted++; },
+  };
+  const s = new Studio({ world, player, photo, passers: { hidden: false } });
+  s.mp = { id, others: new Map(), only: null, sendNow() {}, studio: (m) => bus.push({ from: id, m: { id, ...m } }) };
+  return { s, player, photo };
+}
+const A = make('aaaa', -10, 0), B = make('bbbb', -9, 0.5), C = make('cccc', 40, 40);
+for (const [p, list] of [[A, [B, C]], [B, [A, C]], [C, [A, B]]]) for (const q of list) p.s.mp.others.set(q.s.mp.id, { pos: q.player.pos });
+const players = { aaaa: A, bbbb: B, cccc: C };
+const flush = async () => {
+  while (bus.length) {
+    const { from, m } = bus.shift();
+    for (const [id, p] of Object.entries(players)) if (id !== from) p.s.onMessage(m);
+  }
+  await new Promise((r) => setTimeout(r, 450));
+};
+
+A.s.begin(0);
+await flush();
+log(`B 收到邀請：${!document.getElementById('studio-invite').hidden}　文字：${document.querySelector('#studio-invite p').textContent}`);
+log(`C 離太遠，沒有 pending：${C.s.pending === null}`);
+B.s.answer(true);
+await flush();
+await flush();
+log(`A 名單：${A.s.session.ids}　B 名單：${B.s.session.ids}`);
+log(`A 站位 ${A.player.pos.x.toFixed(2)},${A.player.pos.z.toFixed(2)}　B 站位 ${B.player.pos.x.toFixed(2)},${B.player.pos.z.toFixed(2)}　間隔 ${Math.hypot(A.player.pos.x - B.player.pos.x, A.player.pos.z - B.player.pos.z).toFixed(2)}`);
+log(`兩邊鏡頭一樣：${JSON.stringify(A.photo.studio.pos) === JSON.stringify(B.photo.studio.pos)}　A 只畫 ${[...A.s.mp.only]}　B 是 host：${B.photo.studio.host}`);
+A.s.shutter();
+await flush();
+log(`快門：A 倒數 ${A.photo.counted} 次、B 倒數 ${B.photo.counted} 次、C ${C.photo.counted} 次`);
+B.s.shutter();
+await flush();
+log(`B 按快門沒用：A ${A.photo.counted}、B ${B.photo.counted}`);
+A.photo.exit();
+await flush();
+log(`A 收場後：B 還在攝影模式 ${B.photo.active}、B session ${B.s.session}、B only ${B.s.mp.only}`);
+log('DONE');
+</script>

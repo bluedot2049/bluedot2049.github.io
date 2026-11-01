@@ -10,6 +10,13 @@ const ROWS = 13;           // 時脈列＋12 列資料
 const PAD_Y = 3;           // 上下各留幾格給齒孔
 const PER_LONG = 300;      // 一格是明信片長邊的幾分之一（縮到長邊 960 時一格約 2.7 像素）
 const ECC = 0.4;           // 每段有多少比例拿來更正錯誤
+const SWATCH = 3;         // 頭尾色票的寬度（格）
+const PAD_X = SWATCH + 6; // 帶子頭尾到定位條之間（色票、再留 5 格片基）
+// 資料欄數由寬度決定，一定是偶數（時脈列亮暗剛好成對）
+function colsFor(w, u) {
+  const c = Math.floor(w / u) - PAD_X * 2 - 6;   // 頭尾定位條各 3 格（亮亮暗）
+  return c - (c % 2);
+}
 
 // ---------- GF(256) 和 Reed-Solomon ----------
 const EXP = new Uint8Array(512), LOG = new Uint8Array(256);
@@ -105,8 +112,7 @@ function rsDecode(code, nsym) {
 // 資料欄數由寬度決定，一定是偶數（時脈列亮暗剛好成對）
 export function filmGeometry(w, long) {
   const u = long / PER_LONG;
-  let cols = Math.floor(w / u) - 4 - 6;   // 左右各留 2 格，頭尾定位條各 3 格（亮亮暗）
-  cols -= cols % 2;
+  const cols = colsFor(w, u);
   return { u, cols, rows: ROWS, pad: PAD_Y, h: (ROWS + PAD_Y * 2) * u };
 }
 
@@ -194,37 +200,69 @@ export async function unpackFace(bytes) {
 }
 
 // ---------- 畫 ----------
-const BASE = '#241c26';
-// 亮格沿著帶子換色：琥珀、珊瑚、米白、薑黃。四個都夠亮，跟片基的亮暗差一樣大
-const GLOW = ['#f0b050', '#f2906a', '#f3dcae', '#e8b04a'];
+// 沒給配色時的預設：深紫片基，亮格琥珀
+const BASE = '#241c26', GLOW = '#f0b050';
+
+// 照片的顏色 → 帶子的一段色塊：片基取同色相的深色、亮格取同色相的淺色。
+// 亮暗差固定拉開（片基亮度約 0.14、亮格約 0.76），讀的時候只看亮暗，顏色怎麼變都不影響
+export function tone([r, g, b]) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d) h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  h = (h * 60 + 360) % 360;
+  const l = (max + min) / 2, s = d ? d / (1 - Math.abs(2 * l - 1)) : 0;
+  // 飽和度拉高一點，色塊才分得出來（照片的顏色縮小取樣後都偏灰）；灰的就讓它灰
+  const hsl = (sat, light) => `hsl(${h.toFixed(0)} ${(Math.min(sat, 0.85) * 100).toFixed(0)}% ${light * 100}%)`;
+  const boost = s < 0.08 ? s : s * 1.4 + 0.12;
+  return { base: hsl(boost * 0.8, 0.14), glow: hsl(boost, 0.76), raw: `rgb(${Math.round(r * 255)} ${Math.round(g * 255)} ${Math.round(b * 255)})` };
+}
 
 // 畫一條長 w 的底片邊。at = {x, y, angle}：帶子左上角在圖上的位置和旋轉（左右兩邊的帶子是直的）。
-// data 可以是空的（衣櫃那一套沒畫臉），帶子照畫，讀出來是空的。回傳有沒有放得下
-export function drawFilm(g, at, w, long, data, paper = '#f2ead8') {
+// data 可以是空的（衣櫃那一套沒畫臉），帶子照畫，讀出來是空的。
+// blocks：色塊 [{ t, base, glow, raw }]，t 是這一塊結束的位置（0–1，沿著帶子），沒給就用預設的一色。
+// 回傳有沒有放得下
+export function drawFilm(g, at, w, long, data, { paper = '#f2ead8', blocks = null } = {}) {
   const G = filmGeometry(w, long), { u, cols } = G;
   const bits = filmBits(data, cols);
   if (!bits) return false;
+  const B = blocks?.length ? blocks : [{ t: 1, base: BASE, glow: GLOW, raw: GLOW }];
+  const blockAt = (x) => B.find((b) => x / w <= b.t) || B[B.length - 1];
   g.save();
   g.translate(at.x, at.y);
   g.rotate(at.angle || 0);
-  const x = 0, y = 0;
-  g.fillStyle = BASE;
-  g.fillRect(x, y, w, G.h);
+  // 片基：一段段色塊，接縫不留空
+  let t0 = 0;
+  for (const b of B) {
+    g.fillStyle = b.base;
+    g.fillRect(t0 * w, 0, (b.t - t0) * w + 0.5, G.h);
+    t0 = b.t;
+  }
   // 齒孔：上下各一排，用紙色挖掉。頭尾定位條的上下不開孔，免得讀的時候孔跟亮條連在一起
-  const x0 = x + (w - (cols + 6) * u) / 2, y0 = y + PAD_Y * u;
+  const x0 = (w - (cols + 6) * u) / 2, y0 = PAD_Y * u;
   g.fillStyle = paper;
   const hw = 1.5 * u, hh = 1.3 * u;
   for (let hx = x0 + 4 * u; hx + hw < x0 + (cols + 2) * u; hx += 4.5 * u) {
-    for (const hy of [y + 0.85 * u, y + G.h - 0.85 * u - hh]) {
+    for (const hy of [0.85 * u, G.h - 0.85 * u - hh]) {
       g.beginPath();
       g.roundRect(hx, hy, hw, hh, u * 0.35);
       g.fill();
     }
   }
-  const grad = g.createLinearGradient(x, 0, x + w, 0);
-  GLOW.forEach((c, i) => grad.addColorStop(i / (GLOW.length - 1), c));
-  g.fillStyle = grad;
-  const cell = (c, r) => g.fillRect(x0 + c * u, y0 + r * u, u + 0.6, u + 0.6);
+  // 頭尾的色票：照片原本的顏色，一格一格疊起來，像沖印用的色彩校正條。離定位條遠一點，不會被當成定位條
+  const sw = SWATCH * u, n = Math.min(4, B.length), sh = (ROWS * u) / Math.max(n, 1);
+  const picks = Array.from({ length: n }, (_, i) => B[Math.floor((i * B.length) / n)]);
+  for (const [sx, list] of [[u, picks], [w - u - sw, [...picks].reverse()]]) {
+    list.forEach((b, i) => {
+      g.fillStyle = b.raw;
+      g.fillRect(sx, y0 + i * sh, sw, sh - u * 0.25);
+    });
+  }
+  const cell = (c, r) => {
+    const cx = x0 + c * u;
+    g.fillStyle = blockAt(cx + u / 2).glow;
+    g.fillRect(cx, y0 + r * u, u + 0.6, u + 0.6);
+  };
   for (let r = 0; r < ROWS; r++) for (const c of [0, 1, cols + 4, cols + 5]) cell(c, r);
   for (let c = 0; c < cols; c += 2) cell(3 + c, 0);
   bits.forEach((b, i) => { if (b) cell(3 + Math.floor(i / (ROWS - 1)), 1 + (i % (ROWS - 1))); });
@@ -259,7 +297,7 @@ export function readFilm(img, est, dbg = null) {
   const mid = (lo + hi) / 2;
   if (hi - lo < 40) return null;
   // 起頭的定位條：一條 2 格寬、ROWS 格高的亮條。在估計位置附近找最像的
-  const expX = (est.w - Math.floor(est.w / u0 - 10) * u0 - 6 * u0) / 2 - u0 / 2;
+  const expX = (est.w - (colsFor(est.w, u0) + 6) * u0) / 2;
   // 分數一樣高的位置可能有一小片，取中間
   let best = null, hits = [];
   for (let gx = expX - 3 * u0; gx <= expX + 4 * u0; gx += u0 / 4) {
