@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { Kit, mergeBucket } from './props.js';
 import { rod } from './heads.js';
-import { CLOTH } from './looks.js';
+import { CLOTH, HOODED } from './looks.js';
 
 export const HIP = 0.42;
 const WHITE = '#f4f2ec', BLACK = '#1e1c1e', DARK = '#3a2414', GOLD = '#d4a54a', METAL = '#a0a6ae', WOOD = '#7a5432', LEATHER = '#5a3a24';
@@ -32,6 +32,28 @@ function palette(L) {
 const chest = (y, W) => (0.235 - (0.065 * (y - 0.45)) / 0.35) * W;
 const slope = (W) => Math.atan((0.065 * W) / 0.35);
 const lerp = (a, b, t) => a + (b - a) * t;
+
+// 比身體寬的外套和連身裝：一段一段 [y0, y1, r0, r1]，半徑要再乘胖瘦。outer()、onepiece() 照這個做，shell() 也照這個算
+const COAT = {
+  cloak: [[0.14, 0.83, 0.36, 0.2]],
+  raincoat: [[0.16, 0.83, 0.34, 0.19]],
+  blazer: [[0.36, 0.81, 0.25, 0.18]],
+  haori: [[0.4, 0.81, 0.255, 0.18]],
+  mino: [[0.2, 0.5, 0.36, 0.26], [0.42, 0.68, 0.3, 0.22], [0.6, 0.84, 0.26, 0.17]],
+};
+const SUIT_COAT = [[0.3, 0.8, 0.25, 0.18]];
+const ONE_COAT = { dino: SUIT_COAT, panda: SUIT_COAT, astronaut: SUIT_COAT, banana: [[0.08, 0.8, 0.26, 0.2]], yukata: [[0.08, 0.8, 0.27, 0.17]] };
+
+// 身上最外層在 y 高度離中線多遠（前後一樣）。領帶、項鍊、背包、腰包照它擺，穿了斗篷、蓑衣也不會埋進去。
+// 沒穿寬外套時就是 chest()，原本的位置不變
+function shell(L, W) {
+  const segs = (L.one !== 'none' ? ONE_COAT[L.one] : COAT[L.outer]) || [];
+  return (y) => {
+    let r = chest(y, W);
+    for (const [y0, y1, r0, r1] of segs) if (y >= y0 && y <= y1) r = Math.max(r, lerp(r0, r1, (y - y0) / (y1 - y0)) * W);
+    return r;
+  };
+}
 
 // 一段下粗上細（或反過來）的圓筒，照花紋上色。y0 在下、y1 在上。
 // 條紋是切成好幾段輪流換色，一條線是腰上多一圈，點點是在表面撒小圓片
@@ -192,7 +214,7 @@ function outer(k, L, W, P) {
       k.rock(0.025, GOLD, 0, 0.79, 0.17 * W + 0.03);
       break;
     case 'cloak': {
-      const f = coat(0.14, 0.83, 0.36 * W, 0.2 * W, 10);
+      const [[y0, y1, r0, r1]] = COAT.cloak, f = coat(y0, y1, r0 * W, r1 * W, 10);
       k.ball(0.15, c, 0, 0.84, -0.14 * W, { sx: 1.3, sy: 0.75 });
       k.rock(0.025, GOLD, 0, 0.79, f.z(0.79) + 0.01);
       break;
@@ -205,14 +227,14 @@ function outer(k, L, W, P) {
     }
     case 'blazer': {
       // 開襟：中間露出裡面的上衣，兩邊翻領
-      const f = coat(0.36, 0.81, 0.25 * W, 0.18 * W);
+      const [[y0, y1, r0, r1]] = COAT.blazer, f = coat(y0, y1, r0 * W, r1 * W);
       k.box(0.08, 0.2, 0.01, P.top, 0, 0.7, f.z(0.7) + 0.006, { rx: -f.th });
       for (const s of [-1, 1]) k.box(0.045, 0.16, 0.012, c2, s * 0.05, 0.71, f.z(0.71) + 0.01, { rx: -f.th, rz: -s * 0.35 });
       for (const y of [0.5, 0.58]) k.rock(0.013, BLACK, 0, y, f.z(y) + 0.006);
       break;
     }
     case 'raincoat': {
-      const f = coat(0.16, 0.83, 0.34 * W, 0.19 * W, 10);
+      const [[y0, y1, r0, r1]] = COAT.raincoat, f = coat(y0, y1, r0 * W, r1 * W, 10);
       k.ball(0.14, c, 0, 0.86, -0.13 * W, { sx: 1.3, sy: 0.75 });
       for (const y of [0.35, 0.5, 0.65]) k.box(0.04, 0.012, 0.012, c2, 0, y, f.z(y) + 0.006);
       break;
@@ -229,7 +251,7 @@ function outer(k, L, W, P) {
       break;
     }
     case 'haori': {
-      const f = coat(0.4, 0.81, 0.255 * W, 0.18 * W);
+      const [[y0, y1, r0, r1]] = COAT.haori, f = coat(y0, y1, r0 * W, r1 * W);
       k.box(0.05, 0.36, 0.01, P.top, 0, 0.6, f.z(0.6) + 0.006, { rx: -f.th });
       for (const s of [-1, 1]) k.box(0.035, 0.38, 0.012, c2, s * 0.04, 0.6, f.z(0.6) + 0.01, { rx: -f.th });
       k.rock(0.022, c2, 0, 0.62, f.z(0.62) + 0.02);
@@ -237,9 +259,9 @@ function outer(k, L, W, P) {
     }
     case 'mino':
       // 蓑衣：三層稻草，一層蓋一層
-      for (const [y0, y1, r0, r1, sh] of [[0.2, 0.5, 0.36, 0.26, 0], [0.42, 0.68, 0.3, 0.22, 0.12], [0.6, 0.84, 0.26, 0.17, 0.24]]) {
-        k.cyl(r1 * W, r0 * W, y1 - y0, mix('#9a7a3a', '#d8c080', sh), 0, (y0 + y1) / 2, 0, {}, 12);
-      }
+      COAT.mino.forEach(([y0, y1, r0, r1], i) => {
+        k.cyl(r1 * W, r0 * W, y1 - y0, mix('#9a7a3a', '#d8c080', i * 0.12), 0, (y0 + y1) / 2, 0, {}, 12);
+      });
       break;
   }
 }
@@ -247,14 +269,15 @@ function outer(k, L, W, P) {
 // ---------- 連身裝 ----------
 // 穿了就蓋掉上衣、下身和外套。袖子、腿的顏色另外看 ONE_SLEEVE 和 ONE_LEG
 
-export const HOODED = ['dino', 'panda', 'banana', 'astronaut'];
+export { HOODED };
 const ONE_LEG = { dino: 'one', panda: BLACK, banana: BANANA, astronaut: SUIT };
 
 function onepiece(k, L, W, P) {
   const rr = (y, r0, r1, y0 = 0.08) => lerp(r0, r1, (y - y0) / (0.8 - y0));
   // 恐龍、熊貓、太空衣是連身褲：身體做到屁股，腿另外穿（見 legGeo）
-  const suit = (c) => tube(k, 0.3, 0.8, 0.25 * W, 0.18 * W, c, c, 'plain', 10);
-  const sr = (y) => rr(y, 0.25 * W, 0.18 * W, 0.3);
+  const [[s0, s1, sb, st]] = SUIT_COAT;
+  const suit = (c) => tube(k, s0, s1, sb * W, st * W, c, c, 'plain', 10);
+  const sr = (y) => rr(y, sb * W, st * W, s0);
   switch (L.one) {
     case 'dino':
       suit(P.one);
@@ -269,18 +292,20 @@ function onepiece(k, L, W, P) {
       tube(k, 0.66, 0.81, sr(0.66) + 0.004, 0.184 * W, BLACK, BLACK);
       k.ball(0.06, WHITE, 0, 0.34, -sr(0.34) - 0.02);
       break;
-    case 'banana':
-      tube(k, 0.08, 0.8, 0.26 * W, 0.2 * W, BANANA, BANANA, 'plain', 10);
+    case 'banana': {
+      const [[, , b0, b1]] = ONE_COAT.banana;
+      tube(k, 0.08, 0.8, b0 * W, b1 * W, BANANA, BANANA, 'plain', 10);
       // 下襬三片剝開的皮
       for (let i = 0; i < 3; i++) {
         const a = (i / 3) * Math.PI * 2 + 0.4;
         k.box(0.14 * W, 0.2, 0.02, BANANA, Math.sin(a) * 0.28 * W, 0.12, Math.cos(a) * 0.28 * W, { ry: a, rx: 0.5 });
       }
       for (const [a, y] of [[0.4, 0.6], [2.5, 0.35], [-1.2, 0.5], [3.6, 0.7]]) {
-        const r = rr(y, 0.26 * W, 0.2 * W) + 0.003;
+        const r = rr(y, b0 * W, b1 * W) + 0.003;
         k.rock(0.02, '#7a5a2a', Math.sin(a) * r, y, Math.cos(a) * r, { sz: 0.35, ry: a });
       }
       break;
+    }
     case 'astronaut': {
       suit(SUIT);
       const z = sr(0.6);
@@ -293,7 +318,7 @@ function onepiece(k, L, W, P) {
     }
     case 'yukata': {
       // 浴衣：長到腳踝，身上小花，腰上寬寬的帶子，背後打結，領口交叉
-      const r0 = 0.27 * W, r1 = 0.17 * W, th = Math.atan((r0 - r1) / 0.72);
+      const [[, , a0, a1]] = ONE_COAT.yukata, r0 = a0 * W, r1 = a1 * W, th = Math.atan((r0 - r1) / 0.72);
       tube(k, 0.08, 0.8, r0, r1, P.one, P.one2, 'dot', 10);
       k.cyl(rr(0.56, r0, r1) + 0.012, rr(0.46, r0, r1) + 0.012, 0.1, P.one2, 0, 0.51, 0);
       for (const s of [-1, 1]) {
@@ -305,9 +330,10 @@ function onepiece(k, L, W, P) {
   }
 }
 
-// 連身裝的頭套：罩住後腦和兩側，前面開一個洞露出臉。原點在脖子，跟頭一起縮放
+// 連身裝的頭套：罩住後腦和兩側，前面開一個洞露出臉。原點在脖子，跟頭一起縮放。
+// 頭比頭套大的種族（looks.js 的 hood: false）不戴，頭套掛在背後看不到
 export function hood(k, L, race) {
-  if (!['dino', 'panda', 'banana'].includes(L.one)) return;
+  if (!['dino', 'panda', 'banana'].includes(L.one) || race.hood === false) return;
   const R = 0.24 * race.hs, cy = race.top - 0.12;
   const c = L.one === 'dino' ? col(L.oneC) : L.one === 'panda' ? WHITE : BANANA;
   k.add(new THREE.SphereGeometry(R, 12, 8, Math.PI * 0.75, Math.PI * 1.5, 0, Math.PI * 0.82), c, 0, cy, -0.02);
@@ -340,9 +366,10 @@ export function hood(k, L, race) {
 // ---------- 脖子 ----------
 
 function neck(k, L, W, P) {
-  const c = P.neck, nr = 0.15 * (0.8 + 0.2 * W), th = slope(W);
+  // 脖子這一圈照最外層算：穿了斗篷，圍巾、項鍊、花環就繞在斗篷的領口上
+  const c = P.neck, sh = shell(L, W), nr = 0.15 * (0.8 + 0.2 * W) + sh(0.8) - chest(0.8, W), th = slope(W);
   // 領帶、毛巾要蓋在外套前面
-  const fz = (y) => chest(y, W) + 0.026;
+  const fz = (y) => sh(y) + 0.026;
   switch (L.neck) {
     case 'scarf': k.torus(nr, 0.06, Math.PI * 2, c, 0, 0.8, 0, { rx: Math.PI / 2 }); break;
     case 'tie':
@@ -354,7 +381,8 @@ function neck(k, L, W, P) {
       k.rock(0.015, c, 0, 0.77, fz(0.77) + 0.015);
       break;
     case 'necklace': {
-      const r = nr + 0.02, a = 0.35;
+      // 斜掛著，前面垂到 0.71 左右，照那裡的外套寬度撐開
+      const r = 0.15 * (0.8 + 0.2 * W) + 0.02 + sh(0.71) - chest(0.71, W), a = 0.35;
       k.torus(r, 0.008, Math.PI * 2, GOLD, 0, 0.77, 0.02, { rx: Math.PI / 2 + a });
       k.rock(0.025, c, 0, 0.77 - r * Math.sin(a) - 0.02, 0.02 + r * Math.cos(a) + 0.005);
       break;
@@ -381,18 +409,21 @@ function neck(k, L, W, P) {
 // 翅膀和尾巴會動，另外做；這裡是背著不動的東西
 
 function back(k, L, W, P) {
-  const c = P.back, bz = (y) => -chest(y, W) - 0.005;
+  // 背的東西貼著最外層：穿了斗篷、蓑衣，包包背在外面
+  const c = P.back, sh = shell(L, W), bz = (y) => -sh(y) - 0.005;
   switch (L.back) {
-    case 'pouch':
+    case 'pouch': {
       // 掛在左後腰，避開垂下來的左手
-      k.box(0.16, 0.16, 0.08, c, -0.17 * W, 0.42, -0.19 * W, { rx: 0.15, ry: 0.7, rz: 0.1 });
+      const r = 0.255 * W + sh(0.42) - chest(0.42, W);
+      k.box(0.16, 0.16, 0.08, c, -r * Math.sin(0.73), 0.42, -r * Math.cos(0.73), { rx: 0.15, ry: 0.7, rz: 0.1 });
       break;
+    }
     case 'backpack':
       k.ball(0.15, c, 0, 0.6, bz(0.6) - 0.08, { sx: 0.9 * Math.max(1, W * 0.8), sy: 1.1, sz: 0.55 });
       k.ball(0.09, mix(c, '#000000', 0.15), 0, 0.52, bz(0.52) - 0.14, { sx: 1.1, sy: 0.7, sz: 0.4 });
       for (const s of [-1, 1]) {
         rod(k, [s * 0.09, 0.72, bz(0.72)], [s * 0.1 * W, 0.8, 0], 0.012, mix(c, '#000000', 0.25), { flat: 0.01 });
-        rod(k, [s * 0.1 * W, 0.8, 0], [s * 0.1 * W, 0.55, chest(0.55, W) + 0.006], 0.012, mix(c, '#000000', 0.25), { flat: 0.01 });
+        rod(k, [s * 0.1 * W, 0.8, 0], [s * 0.1 * W, 0.55, sh(0.55) + 0.006], 0.012, mix(c, '#000000', 0.25), { flat: 0.01 });
       }
       break;
     case 'schoolbag':
@@ -402,14 +433,14 @@ function back(k, L, W, P) {
       k.box(0.05, 0.03, 0.01, GOLD, 0, 0.57, bz(0.6) - 0.135);
       for (const s of [-1, 1]) {
         rod(k, [s * 0.08, 0.72, bz(0.72)], [s * 0.1 * W, 0.8, 0], 0.012, BLACK, { flat: 0.01 });
-        rod(k, [s * 0.1 * W, 0.8, 0], [s * 0.1 * W, 0.55, chest(0.55, W) + 0.006], 0.012, BLACK, { flat: 0.01 });
+        rod(k, [s * 0.1 * W, 0.8, 0], [s * 0.1 * W, 0.55, sh(0.55) + 0.006], 0.012, BLACK, { flat: 0.01 });
       }
       break;
     case 'satchel': {
       // 斜背的郵差包，袋口露出一封信
-      const x = -chest(0.42, W) - 0.05;
-      rod(k, [0.15 * W, 0.8, chest(0.8, W) + 0.01], [x + 0.02, 0.46, 0.1 * W], 0.02, LEATHER, { flat: 0.012 });
-      rod(k, [0.15 * W, 0.8, -chest(0.8, W) - 0.01], [x + 0.02, 0.46, -0.1 * W], 0.02, LEATHER, { flat: 0.012 });
+      const x = -sh(0.42) - 0.05;
+      rod(k, [0.15 * W, 0.8, sh(0.8) + 0.01], [x + 0.02, 0.46, 0.1 * W], 0.02, LEATHER, { flat: 0.012 });
+      rod(k, [0.15 * W, 0.8, -sh(0.8) - 0.01], [x + 0.02, 0.46, -0.1 * W], 0.02, LEATHER, { flat: 0.012 });
       k.box(0.1, 0.22, 0.3, c, x, 0.4, 0.02);
       k.box(0.02, 0.06, 0.1, WHITE, x - 0.02, 0.52, 0.05);
       break;
@@ -420,7 +451,7 @@ function back(k, L, W, P) {
       k.ball(0.1, c, -0.02, 0.58, z, { sz: 0.35 });
       k.cyl(0.035, 0.035, 0.01, BLACK, 0.03, 0.47, z - 0.046, { rx: Math.PI / 2 }, 10);
       rod(k, [-0.03, 0.62, z], [-0.2, 1.05, z], 0.02, WOOD, { flat: 0.015 });
-      rod(k, [0.15 * W, 0.8, chest(0.8, W) + 0.01], [-0.2 * W, 0.4, chest(0.4, W) + 0.01], 0.012, BLACK, { flat: 0.008 });
+      rod(k, [0.15 * W, 0.8, sh(0.8) + 0.01], [-0.2 * W, 0.4, sh(0.4) + 0.01], 0.012, BLACK, { flat: 0.008 });
       break;
     }
     case 'sword': {
@@ -575,7 +606,7 @@ export const capeAt = (W) => [0, 0.8, -chest(0.8, W) - 0.01];
 
 // 翅膀：一邊一片，原點在背上，往 side 那一側伸出去，平面朝後
 export const hasWings = (L) => L.one === 'none' && ['wingA', 'wingB', 'wingC'].includes(L.back);
-export const wingAt = (W, side) => [side * 0.06, 0.66, -chest(0.66, W) - 0.03];
+export const wingAt = (L, W, side) => [side * 0.06, 0.66, -shell(L, W)(0.66) - 0.03];
 export function wingGeo(L, side) {
   if (!hasWings(L)) return null;
   const c = col(L.backC);

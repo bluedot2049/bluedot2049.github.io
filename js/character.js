@@ -123,8 +123,13 @@ function decalGeo(m) {
 
 const INK_RGB = FACE_INK.map((c) => (c ? [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)) : null));
 
-// 頭髮：只有人有。原點在脖子，頭的中心在 0.2
-function hair(k, style, c) {
+// 戴帽子時讓開頭髮：lift 帽子往上抬多少、grow 放大幾倍；top 是頭髮頂多高（鏡子取景用）。沒寫的照原本的帽子
+const HAIR_FIT = { afro: { lift: 0.17, grow: 1.4, top: 0.6 }, buns: { lift: 0.03, grow: 1.12, top: 0.46 }, spiky: { top: 0.52 } };
+// 戴頭套、頭盔時頭髮收進去，大頭髮只留貼著頭的那一層
+export const TUCKED = { afro: 'short', spiky: 'short', long: 'short', buns: 'short' };
+
+// 頭髮：只有人有。原點在脖子，頭的中心在 0.2。hat：戴著帽子，刺蝟頭只留最下面一圈，免得刺穿帽子
+function hair(k, style, c, hat = false) {
   const top = () => k.ball(0.21, c, 0, 0.23, -0.04, { sy: 0.9, sz: 0.95 });
   switch (style) {
     case 'short': top(); break;
@@ -145,7 +150,7 @@ function hair(k, style, c) {
       break;
     case 'spiky':
       top();
-      for (const [e, n] of [[1.25, 3], [0.75, 5], [0.3, 5]]) {
+      for (const [e, n] of hat ? [[0.3, 5]] : [[1.25, 3], [0.75, 5], [0.3, 5]]) {
         for (let i = 0; i < n; i++) {
           const a = Math.PI * (0.4 + (1.2 * (i + 0.5)) / n), d = [Math.sin(a) * Math.cos(e), Math.sin(e), Math.cos(a) * Math.cos(e)];
           k.cone(0.05, 0.16, c, d[0] * 0.2, 0.23 + d[1] * 0.19, -0.04 + d[2] * 0.2, { rx: Math.acos(d[1]), ry: Math.atan2(d[0], d[2]) });
@@ -201,8 +206,10 @@ function features(k, L, race, S, m, skin) {
     case 'sad': for (const s of [-1, 1]) k.box(0.07 * fs, 0.014 * fs, 0.012, bc, s * ex, by, zAt(s * ex, by, 0.004), { rz: -s * 0.35 }); break;
   }
 
+  // 搞笑眼鏡自己有鼻子和鬍子，原本的就不畫，不然長鼻子會從假鼻子後面刺出來
+  const groucho = L.glasses === 'groucho';
   const ny = ey - 0.055 * fs;
-  switch (L.nose) {
+  switch (groucho ? 'none' : L.nose) {
     case 'ball': put(0.022 * fs, mix(base, '#000000', 0.12), 0, ny, 0.008); break;
     case 'big': put(0.06 * fs, '#e0806a', 0, ny - 0.01 * fs, 0.025); break;
     case 'pig':
@@ -234,7 +241,7 @@ function features(k, L, race, S, m, skin) {
   }
 
   const cx = ex + 0.05 * fs, cyk = ey - 0.05 * fs;
-  const mark = L.mark === 'base' ? (race.id === 'human' ? 'blush' : null) : L.mark;
+  const mark = L.mark === 'base' ? (race.id === 'human' ? 'blush' : null) : groucho && L.mark === 'stache' ? null : L.mark;
   switch (mark) {
     case 'blush': for (const s of [-1, 1]) put(0.03 * fs, '#f29a8a', s * cx, cyk, 0, { sz: 0.25 }); break;
     case 'stache': for (const s of [-1, 1]) put(0.035 * fs, hc, s * 0.03 * fs, ny - 0.03 * fs, 0.006, { sx: 1.4, sy: 0.55, sz: 0.5, rz: s * 0.25 }); break;
@@ -294,7 +301,8 @@ function headGeo(L, race, S, skin) {
   const m = faceMap(race);
   return build((k) => {
     HEADS[race.head](k, skin, mix(skin, '#f8f0e4', 0.55));
-    if (race.hair) hair(k, L.hair, hex(HAIR_COLORS[L.hairC]));
+    const hooded = HOODED.includes(L.one);
+    if (race.hair) hair(k, hooded ? TUCKED[L.hair] ?? L.hair : L.hair, hex(HAIR_COLORS[L.hairC]), !hooded && L.hat !== 'none');
     if (!L.face || L.keep) features(k, L, race, S, m, skin);
     glasses(k, L, race, S, m);
     hood(k, L, race);
@@ -534,12 +542,15 @@ export class Character {
     const hat = hooded ? { main: null, prop: null } : hatGeo(L);
     swap(this.hatMesh, hat.main);
     swap(this.prop, hat.prop);
-    this.glass.visible = L.one === 'astronaut';
+    // 頭盔罩不住的頭（錘頭、蘑菇傘、紙箱、牛角）就不戴玻璃罩
+    this.glass.visible = L.one === 'astronaut' && race.helmet !== false;
     this.glass.position.set(0, race.top - 0.12, 0.02);
     this.glass.scale.setScalar(0.31 * race.hs);
-    this.hatY = race.top;
-    this.hat.position.y = race.top;
-    this.hat.scale.setScalar(race.hs);
+    // 頭髮大的，帽子往上抬、放大，戴在頭髮上
+    const fit = race.hair && !hooded ? HAIR_FIT[L.hair] : null, grow = fit?.grow ?? 1;
+    this.hatY = race.top + (fit?.lift ?? 0);
+    this.hat.position.y = this.hatY;
+    this.hat.scale.setScalar(race.hs * grow);
 
     const [aL, aR, fL, fR] = this.limbs, sh = 0.07 + 0.17 * W;
     this.armL.position.x = -sh;
@@ -559,7 +570,7 @@ export class Character {
     this.wings.forEach(([p, m], i) => {
       const side = i ? 1 : -1;
       swap(m, wingGeo(L, side));
-      p.position.set(...wingAt(W, side));
+      p.position.set(...wingAt(L, W, side));
     });
     this.flaps = hasWings(L);
     swap(this.tailMesh, tailGeo(L, skin));
@@ -576,7 +587,7 @@ export class Character {
 
     // 照鏡子時鏡頭要知道臉和頭頂在哪
     // 頭頂算到帽尖。舉高的雨傘、氣球不算，手機上要全身入鏡，傘頂切掉一點沒關係
-    const H = S.H, hs = S.hs, head = race.top + (hooded ? 0.15 : HAT_H[L.hat] ?? 0.1) * race.hs;
+    const H = S.H, hs = S.hs, head = Math.max(hooded ? race.top + 0.15 * race.hs : this.hatY + (HAT_H[L.hat] ?? 0.1) * race.hs * grow, fit?.top ?? 0);
     this.dims = {
       faceY: H * (NECK + hs * (race.ey + S.fy)),
       topY: H * (NECK + hs * head),

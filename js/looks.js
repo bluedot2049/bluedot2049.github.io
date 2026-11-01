@@ -23,32 +23,33 @@ const WHITE = 16, BOOT = 18;
 
 // 種族。head 是 heads.js 的造型；own 表示頭上本來就有五官，選了「原本」就不另外貼
 // ey 眼睛高度、ex 眼睛離中線多遠、fs 五官大小，都從脖子算；top 帽子戴多高、hs 帽子大小；skin 預設膚色
+// hood: false 頭比連身裝的頭套大，不戴頭套；helmet: false 太空衣的玻璃罩罩不住
 export const RACES = [
   { id: 'human', name: '人', head: 'human', ey: 0.2, ex: 0.07, top: 0.33, hs: 1, skin: 0, hair: true },
   { id: 'cat', name: '貓', head: 'cat', own: true, ey: 0.23, ex: 0.08, top: 0.33, hs: 1, skin: 7 },
   { id: 'dog', name: '狗', head: 'dog', own: true, ey: 0.25, ex: 0.075, top: 0.34, hs: 1, skin: 2 },
-  { id: 'bull', name: '牛', head: 'bull', own: true, ey: 0.26, ex: 0.11, top: 0.35, hs: 1.1, skin: 3 },
+  { id: 'bull', name: '牛', head: 'bull', own: true, ey: 0.26, ex: 0.11, top: 0.35, hs: 1.1, skin: 3, helmet: false },
   { id: 'goat', name: '羊', head: 'goat', own: true, ey: 0.24, ex: 0.075, top: 0.37, hs: 1, skin: 4 },
   { id: 'fox', name: '狐狸', head: 'fox', own: true, ey: 0.25, ex: 0.075, top: 0.33, hs: 0.95, skin: 7 },
   { id: 'bear', name: '熊', head: 'bear', own: true, ey: 0.26, ex: 0.075, top: 0.35, hs: 1.05, skin: 3 },
   { id: 'rabbit', name: '兔子', head: 'rabbit', own: true, ey: 0.24, ex: 0.085, top: 0.33, hs: 0.95, skin: 4 },
   { id: 'frog', name: '青蛙', head: 'frog', own: true, ey: 0.3, ex: 0.12, top: 0.26, hs: 1.15, skin: 9 },
   { id: 'lizard', name: '蜥蜴', head: 'lizard', own: true, ey: 0.26, ex: 0.11, top: 0.31, hs: 0.95, skin: 10 },
-  { id: 'mushroom', name: '蘑菇', head: 'mushroom', own: true, ey: 0.18, ex: 0.055, top: 0.47, hs: 0.8, skin: 14 },
+  { id: 'mushroom', name: '蘑菇', head: 'mushroom', own: true, ey: 0.18, ex: 0.055, top: 0.47, hs: 0.8, skin: 14, hood: false, helmet: false },
   { id: 'pigeon', name: '鴿子', head: 'pigeon', own: true, ey: 0.245, ex: 0.13, top: 0.32, hs: 0.95, skin: 5 },
   { id: 'bigeye', name: '大眼睛', head: 'bigeye', own: true, ey: 0.24, ex: 0.1, top: 0.36, hs: 1, skin: 9 },
   { id: 'tails', name: '垂鬚', head: 'tails', own: true, ey: 0.22, ex: 0.075, top: 0.34, hs: 0.95, skin: 11 },
-  { id: 'hammer', name: '錘頭', head: 'hammer', own: true, ey: 0.37, ex: 0.24, top: 0.39, hs: 0.85, skin: 2 },
+  { id: 'hammer', name: '錘頭', head: 'hammer', own: true, ey: 0.37, ex: 0.24, top: 0.39, hs: 0.85, skin: 2, hood: false, helmet: false },
   { id: 'squid', name: '鬚臉', head: 'squid', own: true, ey: 0.25, ex: 0.15, top: 0.4, hs: 1, skin: 12 },
   { id: 'alien', name: '小灰人', head: 'alien', own: true, ey: 0.22, ex: 0.085, top: 0.44, hs: 1.05, skin: 5, odd: true },
   { id: 'egg', name: '蛋頭', head: 'egg', ey: 0.29, ex: 0.07, top: 0.47, hs: 0.9, odd: true },
-  { id: 'toast', name: '吐司', head: 'toast', ey: 0.27, ex: 0.08, top: 0.44, hs: 1, odd: true },
+  { id: 'toast', name: '吐司', head: 'toast', ey: 0.27, ex: 0.08, top: 0.44, hs: 1, odd: true, hood: false },
   { id: 'boba', name: '珍奶', head: 'boba', ey: 0.27, ex: 0.075, top: 0.44, hs: 1, odd: true },
-  { id: 'onigiri', name: '飯糰', head: 'onigiri', ey: 0.27, ex: 0.055, fs: 0.8, top: 0.38, hs: 0.8, odd: true },
+  { id: 'onigiri', name: '飯糰', head: 'onigiri', ey: 0.27, ex: 0.055, fs: 0.8, top: 0.38, hs: 0.8, odd: true, hood: false },
   { id: 'potato', name: '馬鈴薯', head: 'potato', ey: 0.24, ex: 0.07, top: 0.38, hs: 1, odd: true },
-  { id: 'tv', name: '電視', head: 'tv', ey: 0.28, ex: 0.08, top: 0.42, hs: 1.15, ink: '#b8f0d8', odd: true },
-  { id: 'box', name: '紙箱', head: 'box', ey: 0.25, ex: 0.09, top: 0.4, hs: 1.2, odd: true },
-  { id: 'robot', name: '機器人', head: 'robot', ey: 0.23, ex: 0.08, top: 0.36, hs: 1.05, odd: true },
+  { id: 'tv', name: '電視', head: 'tv', ey: 0.28, ex: 0.08, top: 0.42, hs: 1.15, ink: '#b8f0d8', odd: true, hood: false },
+  { id: 'box', name: '紙箱', head: 'box', ey: 0.25, ex: 0.09, top: 0.4, hs: 1.2, odd: true, hood: false, helmet: false },
+  { id: 'robot', name: '機器人', head: 'robot', ey: 0.23, ex: 0.08, top: 0.36, hs: 1.05, odd: true, hood: false },
   { id: 'snowman', name: '雪人', head: 'snowman', ey: 0.25, ex: 0.07, top: 0.36, hs: 1, odd: true },
 ];
 const RACE_BY_ID = new Map(RACES.map((r) => [r.id, r]));
@@ -160,6 +161,8 @@ export function unlock(items) {
 export const isOpen = (k, id, set) => !LOCKS.has(k + ':' + id) || set.has(k + ':' + id);
 // 帽子顏色只套在這幾種帽子上，其他帽子有自己的顏色
 export const TINTED_HATS = ['wizard', 'propeller', 'party'];
+// 連身裝裡有頭套或頭盔的，穿了就不戴帽子
+export const HOODED = ['dino', 'panda', 'banana', 'astronaut'];
 
 // 滑桿：0 到 10，[代號, 名字, 預設]
 export const SLIDERS = [['head', '頭的大小', 5], ['tall', '身高', 5], ['fat', '胖瘦', 5], ['eyeSize', '眼睛大小', 5], ['eyeGap', '眼距', 5], ['eyeOdd', '大小眼', 0], ['faceY', '五官高低', 5]];
@@ -289,6 +292,12 @@ export function randomLook(prev, set = new Set()) {
   }
   // 連身裝會蓋掉其他衣服，少抽一點
   if (Math.random() < 0.75) L.one = 'none';
+  // 抽出來的東西都要看得到：戴頭套就不抽帽子，搞笑眼鏡自己有鼻子和鬍子
+  if (HOODED.includes(L.one)) L.hat = 'none';
+  if (L.glasses === 'groucho') {
+    L.nose = 'none';
+    if (L.mark === 'stache') L.mark = 'none';
+  }
   for (const k in COUNTS) if (k !== 'skin') L[k] = R(COUNTS[k]);
   // 比例大多落在中間附近，偶爾才抽到誇張的
   for (const [k, , v] of SLIDERS) L[k] = Math.random() < 0.35 ? R(SLIDER_MAX + 1) : Math.max(0, Math.min(SLIDER_MAX, v + R(5) - 2));

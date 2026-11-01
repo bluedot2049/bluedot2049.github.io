@@ -5,8 +5,8 @@
 // 海市攤販送的東西還沒拿到前蓋紅印，點了會說去哪一攤拿。衣櫃頁放三套造型和拿到的東西（郵票冊）。
 // 存讀檔是行囊（pack.js），在右上角那排，不在這個面板裡。
 // 畫臉是 64 × 64 的格子，畫的途中直接更新角色臉上的貼圖，放開手才存起來、傳給別人。
-import { RACES, OPTIONS, SLIDERS, SKINS, HAT_COLORS, HAIR_COLORS, CLOTH, GIFTS, TINTED_HATS, FACE, FACE_INK, raceOf, randomLook, presetLook, sanitizeLook, encodeFace, decodeFace, unlockedSet, getSave, putSave, isOpen, lockedBy, optionName } from './looks.js';
-import { faceMap } from './character.js';
+import { RACES, OPTIONS, SLIDERS, SKINS, HAT_COLORS, HAIR_COLORS, CLOTH, GIFTS, TINTED_HATS, FACE, FACE_INK, raceOf, randomLook, presetLook, sanitizeLook, encodeFace, decodeFace, unlockedSet, getSave, putSave, isOpen, lockedBy, optionName, HOODED } from './looks.js';
+import { faceMap, TUCKED } from './character.js';
 import { cached, request } from './thumbs.js';
 
 // 圖示：24 × 24 的線條
@@ -192,7 +192,8 @@ export class Creator {
   tiles(k, title, list = OPTIONS[k], hint = true) {
     const L = this.look;
     const base = { ...L };
-    if (LAYERED.includes(k)) base.one = 'none';
+    if (LAYERED.includes(k) || k === 'hair') base.one = 'none';
+    if ((k === 'nose' || k === 'mark') && base.glasses === 'groucho') base.glasses = 'none';
     if (k === 'hair' || k === 'race') base.hat = 'none';
     if (FACE_PARTS.includes(k)) Object.assign(base, { face: '', keep: 1 });
     const cards = list.map(([id, name]) => {
@@ -221,8 +222,10 @@ export class Creator {
     switch (id) {
       case 'race': return this.tiles('race', '人和動物', races(false), false) + this.tiles('race', '其他', races(true));
       case 'shape': return this.slider('tall') + this.slider('fat') + this.slider('head');
-      case 'hair': return raceOf(L).hair ? this.tiles('hair') : '<p class="dress-note">這個種族沒有頭髮，換成「人」才能選</p>';
+      case 'hair': return !raceOf(L).hair ? '<p class="dress-note">這個種族沒有頭髮，換成「人」才能選</p>'
+        : (HOODED.includes(L.one) && TUCKED[L.hair] ? `<p class="dress-note">穿著${optionName('one', L.one)}，頭髮收在裡面<button data-act="unone">脫掉</button></p>` : '') + this.tiles('hair');
       case 'parts': return (L.face && !L.keep ? `<p class="dress-note">畫了臉，原本的五官先收起來了<button data-act="keep">叫回來</button></p>` : '')
+        + (L.glasses === 'groucho' ? '<p class="dress-note">戴著搞笑眼鏡，鼻子和八字鬍先收起來了<button data-act="unglasses">摘掉</button></p>' : '')
         + this.tiles('eyes', '眼睛') + this.tiles('brows', '眉毛') + this.tiles('nose', '鼻子') + this.tiles('mouth', '嘴巴') + this.tiles('mark', '臉上');
       case 'pos': return this.slider('eyeSize') + this.slider('eyeGap') + this.slider('eyeOdd') + this.slider('faceY');
       case 'glasses': return this.tiles('glasses');
@@ -241,7 +244,7 @@ export class Creator {
             </div>
           </div>
         </div>`;
-      case 'hat': return this.tiles('hat');
+      case 'hat': return (HOODED.includes(L.one) ? `<p class="dress-note">穿著${optionName('one', L.one)}，帽子先收起來了<button data-act="unone">脫掉</button></p>` : '') + this.tiles('hat');
       case 'top': return covered + this.tiles('top') + this.tiles('topPat', '花紋');
       case 'bottom': return covered + this.tiles('bottom') + this.tiles('botPat', '花紋');
       case 'outer': return covered + this.tiles('outer');
@@ -329,6 +332,7 @@ export class Creator {
       case 'slot': this.slot = this.slot ? 0 : 1; this.renderPaint(this.page); return;
       case 'keep': this.set({ ...L, keep: L.keep ? 0 : 1 }, true); return;
       case 'unone': this.set({ ...L, one: 'none' }, true); return;
+      case 'unglasses': this.set({ ...L, glasses: 'none' }, true); return;
       case 'wear': {
         const s = loadCloset()[+b.dataset.i];
         if (s) this.set(sanitizeLook(s), true);

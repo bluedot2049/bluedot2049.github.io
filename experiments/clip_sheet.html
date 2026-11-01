@@ -9,7 +9,7 @@
 <body>
 <script type="module">
   // 穿模總表：兩樣東西排成格子，每格從斜前方和側面（或背面）各拍一張，一眼看出哪些組合會穿。
-  // ?set=hathair 人的髮型 × 帽子｜racehat 種族 × 帽子｜hood 連身頭套 × 髮型和種族｜outerback 外套 × 背上｜outerneck 外套 × 脖子｜cam 相機 × 下身和外套
+  // ?set=hathair 人的髮型 × 帽子｜face 五官 × 眼鏡｜beard 鬍子 × 脖子｜racehat 種族 × 帽子｜hood 連身頭套 × 髮型和種族｜outerback 外套 × 背上｜outerneck 外套 × 脖子｜cam 相機 × 下身和外套
   // 拍完把整張圖放在 window.sheet（dataURL），#out 出現
   import * as THREE from 'three';
   import { Character } from '../js/character.js';
@@ -25,6 +25,9 @@
       look: (r, c) => { const [k, v] = r.split(':'), L = { ...base(), one: c }; if (k === 'hair') L.hair = v; else { L.race = v; L.skin = RACES.find((x) => x.id === v).skin ?? 0; } return L; }, frame: 'head', views: ['front', 'side'] },
     outerback: { rows: ids('outer'), cols: ids('back'), look: (r, c) => ({ ...base(), outer: r, back: c }), frame: 'body', views: ['front', 'back'] },
     outerneck: { rows: ids('outer'), cols: ids('neck'), look: (r, c) => ({ ...base(), outer: r, neck: c }), frame: 'body', views: ['front', 'side'] },
+    face: { rows: [...ids('nose').map((v) => 'nose:' + v), ...ids('mark').map((v) => 'mark:' + v), ...ids('mouth').map((v) => 'mouth:' + v)], cols: ids('glasses'),
+      look: (r, c) => { const [k, v] = r.split(':'); return { ...base(), hat: 'none', [k]: v, glasses: c }; }, frame: 'head', views: ['front', 'side'] },
+    beard: { rows: ['none', 'stache', 'beard'], cols: ids('neck'), look: (r, c) => ({ ...base(), hat: 'none', mark: r, neck: c }), frame: 'head', views: ['front', 'side'] },
     cam: { rows: [...ids('bottom').map((b) => 'bottom:' + b), ...ids('outer').map((o) => 'outer:' + o), ...ids('one').map((o) => 'one:' + o)], cols: ['cam'],
       look: (r) => { const [k, v] = r.split(':'); return { ...base(), [k]: v }; }, frame: 'body', views: ['front', 'side'], camera: true },
   };
