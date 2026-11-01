@@ -561,6 +561,8 @@ export function buildOutdoor(room, h) {
     k.box(SW * 2, top - YB, tread + 0.02, i % 2 ? '#b0a090' : '#a89888', 0, (top + YB) / 2, Z(rel));
     for (const sx of [-1, 1]) k.box(0.3, top + 0.35 - YB, tread + 0.02, '#9a8a7c', sx * (SW + 0.15), (top + 0.35 + YB) / 2, Z(rel));
   }
+  // 兩側矮牆擋著：草原外的山坡一直鋪到石階旁邊，沒擋的話會從側面的草地一步跨上石階，人和鏡頭一下高一公尺
+  for (const sx of [-1, 1]) block(sx * (SW + 0.15), Z(TD + SD / 2), 0.15, SD / 2);
 
   // 長桌在左邊，主人（胖頭頭人）站在桌頭
   const tableX = -3.6, tableRel = 3.4, tableLen = 3.6;

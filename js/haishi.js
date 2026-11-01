@@ -2250,7 +2250,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     return (cf[i] * (1 - fu) + cf[i + 1] * fu) * (1 - fv) + (cf[i + CF.cols] * (1 - fu) + cf[i + CF.cols + 1] * fu) * fv;
   }
   // 從角色頭部往鏡頭走，鑽進山坡或石台就停：回傳停在全程的幾成，沒被擋住是 1。
-  // 只有往下拖得很低、又背對山坡時才會碰到；鏡頭沿著原本的方向往前推，斜度不變
+  // 往下拖得很低、背對山坡，或順著陡石階往下走時會碰到；被擋時鏡頭先往上抬，抬不過去才往前推（player.desiredCamera）
   function camClip(a, b) {
     const n = Math.ceil(a.distanceTo(b) / 0.3);
     for (let i = Math.ceil(0.8 / 0.3); i <= n; i++) {

@@ -15,6 +15,8 @@ const SWIPE_MIN = 40;
 const INTRO_LEN = 18;   // 開場遠景：沿棧橋走這麼遠，鏡頭換到角色背後
 // 鏡頭追目標的時間：跟著角色、看畫照鏡子
 const FOLLOW_T = 0.2, VIEW_T = 0.32;
+// 被山坡、石階擋住時鏡頭最多往上抬幾度（弧度），抬到這裡還擋著才往前推
+const CLIP_LIFT = 0.7;
 // 照鏡子時繞著自己轉：俯角範圍、離注視點的遠近、角度追手指的快慢、放手後還滑多久
 const ORB_LOW = -0.3, ORB_HIGH = 1.2, ORB_NEAR = 0.45, ORB_FAR = 6.5, ORB_ZOOM = [0.3, 1.8];
 const ORB_EASE = 7, ORB_COAST = 0.22;
@@ -100,6 +102,7 @@ export class Player {
     this.posVel = {};               // 鏡頭位置和注視點的彈簧速度
     this.lookVel = {};
     this.headPos = new THREE.Vector3();
+    this.liftPos = new THREE.Vector3();
     this.introPos = new THREE.Vector3();
     this.keys = new Set();
     this.joy = { x: 0, y: 0 };      // 虛擬搖桿，-1 ~ 1
@@ -967,10 +970,31 @@ export class Player {
       const center = this.introPos.set(this.pos.x, this.pos.y + 0.9, this.pos.z).lerp(outLook, e);
       this.aim(outPos, outLook, center, this.camYaw, lerp(it.pitch, pitch, e), lerp(it.dist, dist, e), { x: it.at.x * (1 - e), y: it.at.y * (1 - e) });
     }
-    // 角色和鏡頭之間隔著山坡或石台時，鏡頭沿原方向往前移（海市）。房子不推鏡頭，是淡掉
+    // 角色和鏡頭之間隔著山坡或石台時，鏡頭繞著角色的頭往上抬，抬到剛好看得到，遠近不變；抬到 CLIP_LIFT 還擋著，才沿原方向往前移。
+    // 不直接往前推：順著陡石階往下走時鏡頭跟坡面差不多斜，擋住的那一點會在近處和遠處之間跳，鏡頭一下拉近一下放開；
+    // 要抬多少是跟著地形連續變的。房子不推鏡頭，是淡掉
     if (this.world.camClip) {
-      const head = this.headPos.set(this.pos.x, this.pos.y + 1.2, this.pos.z), clip = this.world.camClip(head, outPos);
-      if (clip < 1) outPos.lerpVectors(head, outPos, Math.max(clip, 0.15));
+      const head = this.headPos.set(this.pos.x, this.pos.y + 1.2, this.pos.z);
+      if (this.world.camClip(head, outPos) < 1) {
+        const dx = outPos.x - head.x, dy = outPos.y - head.y, dz = outPos.z - head.z;
+        const h = Math.hypot(dx, dz) || 1e-4, len = Math.hypot(h, dy), e0 = Math.atan2(dy, h);
+        const lifted = (a) => {
+          const e = Math.min(e0 + a, ZENITH);
+          return this.liftPos.set(head.x + (dx / h) * Math.cos(e) * len, head.y + Math.sin(e) * len, head.z + (dz / h) * Math.cos(e) * len);
+        };
+        // 二分找最少要抬多少
+        let lo = 0, hi = CLIP_LIFT;
+        if (this.world.camClip(head, lifted(hi)) >= 1) {
+          for (let i = 0; i < 8; i++) {
+            const m = (lo + hi) / 2;
+            if (this.world.camClip(head, lifted(m)) < 1) lo = m;
+            else hi = m;
+          }
+        }
+        outPos.copy(lifted(hi));
+        const clip = this.world.camClip(head, outPos);
+        if (clip < 1) outPos.lerpVectors(head, outPos, Math.max(clip, 0.15));
+      }
     }
     // 鏡頭不鑽進地面，也不退進樹林裡
     outPos.y = Math.max(outPos.y, this.world.camFloor(outPos.x, outPos.z) + 0.3);

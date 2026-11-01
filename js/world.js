@@ -899,7 +899,7 @@ export function buildWorld(scene, gallery) {
     return outdoor && zz < outdoor.door ? outdoor.camFloor(x, zz) : 0;
   }
 
-  // 戶外：角色和鏡頭之間隔著陽台邊、山坡或樹冠時，鏡頭沿原方向往前移（跟海市同一套）。回傳鏡頭能退到幾成，1 是沒擋到。
+  // 戶外：角色和鏡頭之間隔著陽台邊、山坡或樹冠時，鏡頭先往上抬、抬不過去才往前移（跟海市同一套）。回傳鏡頭能退到幾成，1 是沒擋到。
   // a 是角色的頭；草原比陽台低，越肩鏡頭又低，從腰（往下 0.7）量起，身體才不會被陽台邊切掉
   function camClip(a, b) {
     if (!outdoor || (a.z >= outdoor.door && b.z >= outdoor.door)) return 1;
