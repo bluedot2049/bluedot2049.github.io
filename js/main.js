@@ -18,7 +18,7 @@ import { createPostFX } from './postfx.js';
 import { PhotoMode } from './photo.js';
 import { Studio } from './studio.js';
 import { lens, LensPass } from './lens.js';
-import { rotateTip, fullscreenButton } from './screen.js';
+import { fullscreenButton } from './screen.js';
 
 // 世界分成幾個區域，一次只建一個，用 ?z= 指定，沒有寫就是畫廊。每個區域的內容寫在自己的 zone-*.js，用到才下載。
 // 換區域時整頁重新載入：瀏覽器一定會把上一個區域的記憶體收回去，手機才撐得住。
@@ -528,7 +528,6 @@ async function start() {
 
   ui.loading(null);
   fullscreenButton(coarse);
-  setTimeout(() => rotateTip(coarse), 1500);
   if (params.has('photo')) photo.enter();
   else ui.hint(coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿或點地面走路　拖曳轉視角` : `點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下${zone === 'gallery' ? '　Enter 看畫' : ''}`, 6000);
 

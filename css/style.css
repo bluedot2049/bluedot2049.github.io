@@ -929,9 +929,6 @@ body.desk .ph-alt-track { height: 240px; }
 .studio-spots .btn { flex-direction: column; height: auto; padding: 10px 4px; letter-spacing: .12em; }
 .studio-spots small { display: block; margin-top: 4px; font-size: 11px; letter-spacing: .05em; color: var(--muted); }
 .studio-row { display: flex; gap: 8px; justify-content: center; }
-/* 直拿手機時的橫放提示（screen.js）：自己淡入淡出 */
-#rotate-tip { top: 26%; bottom: auto; opacity: 0; pointer-events: none; transition: opacity .6s; }
-#rotate-tip.on { opacity: 1; pointer-events: auto; }
 #studio-fade { position: fixed; inset: 0; z-index: 60; background: #0e0906; opacity: 0; pointer-events: none; transition: opacity .35s; }
 #studio-fade.on { opacity: 1; }
 body.photo-studio #ph-alt, body.photo-studio #ph-record, body.photo-studio #ph-lens, body.photo-studio #ph-zoom { display: none; }
