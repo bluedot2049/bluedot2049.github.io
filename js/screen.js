@@ -5,19 +5,37 @@
 const KEY = 'rotateTip';
 const SHOW_MS = 9000;
 
+// 手機專用的全螢幕鈕：點一下進全螢幕，再點一下退出。方向不鎖，讓玩家自己轉。不支援全螢幕的（iPhone）就不顯示
+export function fullscreenButton(coarse) {
+  const btn = document.getElementById('full-btn');
+  if (!btn || !coarse || !document.fullscreenEnabled) return;
+  btn.hidden = false;
+  const sync = () => btn.classList.toggle('on', !!document.fullscreenElement);
+  document.addEventListener('fullscreenchange', sync);
+  btn.addEventListener('click', async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+      }
+    } catch {}
+  });
+}
+
 export function rotateTip(coarse) {
   if (!coarse) return;
   try { if (localStorage.getItem(KEY)) return; } catch {}
   const portrait = () => window.innerHeight > window.innerWidth;
   if (!portrait()) return;
 
-  // 全螢幕＋鎖橫向只有 Android Chrome 等做得到；iPhone Safari 只能請玩家自己轉
-  const canLock = !!(document.documentElement.requestFullscreen && document.fullscreenEnabled && screen.orientation?.lock);
+  // 全螢幕 iPhone Safari 做不到，那邊只提示橫放
+  const canFull = !!(document.documentElement.requestFullscreen && document.fullscreenEnabled);
 
   const el = document.createElement('div');
   el.id = 'rotate-tip';
   el.className = 'studio-card';
-  el.innerHTML = `<p>橫著拿，畫面比較寬</p><div class="studio-row">${canLock ? '<button class="btn primary" data-act="go">轉橫式</button>' : ''}<button class="btn" data-act="no">${canLock ? '不用' : '好'}</button></div>`;
+  el.innerHTML = `<p>橫著拿更好玩</p><div class="studio-row">${canFull ? '<button class="btn primary" data-act="go">全螢幕</button>' : ''}<button class="btn" data-act="no">${canFull ? '不用' : '好'}</button></div>`;
   document.body.appendChild(el);
   requestAnimationFrame(() => el.classList.add('on'));
   try { localStorage.setItem(KEY, '1'); } catch {}
@@ -39,9 +57,6 @@ export function rotateTip(coarse) {
     if (!act) return;
     close();
     if (act !== 'go') return;
-    try {
-      await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
-      await screen.orientation.lock('landscape');
-    } catch {}   // 不給鎖就算了，玩家自己轉也行
+    try { await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch {}
   });
 }

@@ -211,6 +211,7 @@ body.flat #stage::after { display: none; }
 }
 #top-btns .icon-btn span { font-size: 14px; letter-spacing: .2em; margin-right: -.2em; }
 #sound-btn .off, #sound-btn.muted .on { display: none; }
+#full-btn.on { color: var(--gold-hi); border-color: var(--gold); }
 /* 導演運鏡：打開時整顆填金、場記板合上；關掉時淡色虛線框、板子張開 */
 #director-btn .stick { transform-box: view-box; transform-origin: 4.5px 10.5px; transform: rotate(-14deg); transition: transform .25s cubic-bezier(.5, 0, .7, 1.4); }
 #director-btn:not(.on) { color: var(--muted); border-style: dashed; }
