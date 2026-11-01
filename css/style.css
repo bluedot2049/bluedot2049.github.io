@@ -100,6 +100,105 @@ body.flat #stage::after { display: none; }
 .sigil .ring-c { animation: spin 14s linear infinite; }
 .sigil .core { fill: var(--gold-hi); stroke: none; transform-origin: 60px 60px; animation: breathe 2.4s ease-in-out infinite; }
 #loading .brand { margin-top: 30px; width: 190px; height: auto; }
+
+/* ───────── 門口：黃昏裡畫廊的前門 ─────────
+   牆面背光，左邊帶一點晚霞的粉，門和門邊的燈把牆照暖。--dh 是門框的高，寬照門框的比例（150 × 230 公分）。
+   字標掛在門的上方像招牌；載入中慢慢開出一條縫，載完往裡整個打開，屋裡的光鋪滿畫面（ui.enterDoor） */
+#loading { --dh: min(44vh, 320px); }
+#loading:not(.plain):not(.crossing) {
+  background:
+    radial-gradient(ellipse 34% 40% at 50% 48%, rgba(255, 186, 120, .14), transparent 70%),
+    linear-gradient(100deg, rgba(240, 156, 140, .12), transparent 45%),
+    linear-gradient(#251b22, #3e2d35 45%, #4a353b);
+}
+#loading:not(.plain) .sigil, #loading.plain .gate, #loading.plain .flood, #loading.crossing .gate, #loading.crossing .flood { display: none; }
+#loading:not(.plain):not(.crossing) .brand { order: -1; margin: 0 0 26px; width: 170px; }
+#loading.first .msg { display: none; }
+.gate { display: flex; flex-direction: column; align-items: center; gap: 28px; }
+.porch { position: relative; }
+.door { position: relative; height: var(--dh); width: calc(var(--dh) * 150 / 230); }
+/* 地面：門檻以下一路鋪到畫面外 */
+.door::after {
+  content: ""; position: absolute; z-index: -1; top: 100%; left: -100vw; right: -100vw; height: 100vh;
+  background: linear-gradient(#2e2226, #1c1517 30%); border-top: 1px solid rgba(232, 184, 106, .12);
+}
+.door .jamb { position: absolute; inset: 0; width: 100%; height: 100%; }
+.door .inside, .door .leaf { position: absolute; left: 16.667%; top: 8.26%; width: 66.667%; height: 91.3%; }
+.door .inside { background: radial-gradient(ellipse 80% 70% at 50% 72%, #ffe9c4, #f4b77a 60%, #c9784e); }
+/* 門板：鉸鏈在右邊，往屋裡開。載入時慢慢開出一條縫，一直不會開大，載完再整個推開 */
+.door .leaf { transform-origin: right center; animation: ajar 16s cubic-bezier(.15, .55, .3, 1) forwards; }
+.door .leaf svg { display: block; width: 100%; height: 100%; }
+.door .pane { fill: #ffd9a0; animation: flicker 3.7s linear infinite; }
+@keyframes ajar { from { transform: perspective(600px) rotateY(0deg); } to { transform: perspective(600px) rotateY(-14deg); } }
+/* 門邊的壁燈 */
+.lamp {
+  position: absolute; left: calc(100% + var(--dh) * .07); top: 24%;
+  width: calc(var(--dh) * .045); height: calc(var(--dh) * .07); border-radius: 2px; background: #ffd890;
+  box-shadow: 0 0 calc(var(--dh) * .06) calc(var(--dh) * .02) rgba(255, 200, 120, .45), 0 0 calc(var(--dh) * .4) rgba(255, 180, 110, .22);
+  animation: flicker 4.3s linear infinite;
+}
+.lamp::before { content: ""; position: absolute; left: -25%; right: -25%; top: -18%; height: 18%; background: #241c1b; }
+.flood {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at 50% 50%, #fff3dc, #ffd9a8 45%, #f4b984);
+  transition: opacity .7s .75s;
+}
+/* 推門：告示和字標先收掉，門閂一響門先推開一點、頓一下再整個打開，同時往門口走近，屋裡的光鋪滿畫面 */
+#loading.opening .flood { opacity: 1; }
+.porch { transform-origin: 50% 62%; transition: transform 1.7s cubic-bezier(.5, 0, .2, 1) .15s; }
+#loading.opening .porch { transform: scale(1.35); }
+#loading.opening .lamp { filter: brightness(1.4); }
+#loading.opening .notice, #loading.opening .brand { opacity: 0; transform: translateY(6px); transition: opacity .35s, transform .35s; }
+
+/* 第一次來：門旁邊貼一張告示。直式在門下面，橫式在門右邊。
+   直角、細線、字靠左，像一張說明卡。色票拉開、清單一行一行浮上來；讀完按鈕亮起來變成「進入」 */
+#loading.first { --dh: min(30vh, 240px); }
+.notice {
+  width: min(320px, calc(100vw - 32px)); padding: 20px 22px 18px;
+  display: flex; flex-direction: column; gap: 12px;
+  background: rgba(16, 11, 9, .86); border: 1px solid rgba(232, 184, 106, .2); border-radius: 2px;
+}
+.notice p { margin: 0; }
+.notice .lead { font-size: 15px; letter-spacing: .2em; color: var(--text); }
+.notice .lead .en { letter-spacing: .04em; }
+.notice .sub { margin-top: -6px; font-size: 12.5px; letter-spacing: .12em; color: var(--muted); }
+.notice .swatch { display: flex; height: 3px; transform-origin: left; animation: swatch-in .9s cubic-bezier(.3, .7, .3, 1) .15s both; }
+.notice .swatch i { background: var(--c); }
+.notice .tasks { list-style: none; margin: 0; padding: 0; }
+.notice .tasks li {
+  display: grid; grid-template-columns: 18px 1fr 9px; align-items: center; gap: 12px; padding: 11px 0;
+  border-bottom: 1px solid rgba(232, 184, 106, .1); font-size: 13.5px; letter-spacing: .06em; color: var(--text);
+  animation: row-in .45s ease-out both;
+}
+.notice .tasks li:nth-child(1) { animation-delay: .2s; }
+.notice .tasks li:nth-child(2) { animation-delay: .3s; }
+.notice .tasks li:nth-child(3) { animation-delay: .4s; }
+.notice .tasks svg { width: 18px; height: 18px; fill: none; stroke: var(--gold); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
+.notice .tasks i { width: 9px; height: 9px; border: 1px solid var(--gold-lo); }
+.notice .enter { width: 100%; min-height: 42px; margin-top: 4px; gap: 12px; border-radius: 2px; letter-spacing: .5em; }
+.notice .enter:disabled { color: var(--muted); border-color: rgba(232, 184, 106, .2); cursor: var(--cur-default); }
+.notice .enter.primary { box-shadow: none; animation: ready .6s ease-out; }
+.notice .enter kbd { padding: 0 5px; font: 11px/1.5 var(--latin); letter-spacing: .04em; border: 1px solid rgba(42, 26, 12, .35); border-radius: 2px; opacity: .6; }
+.notice .enter:disabled kbd { display: none; }
+@media (pointer: coarse) { .notice .enter kbd { display: none; } }
+@keyframes swatch-in { from { transform: scaleX(0); } }
+@keyframes row-in { from { opacity: 0; transform: translateX(-4px); } }
+@keyframes ready { from { filter: brightness(1.25); } }
+@media (orientation: landscape) {
+  #loading.first { --dh: min(54vh, 320px); }
+  #loading.first .gate { flex-direction: row; gap: max(48px, 8vw); }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  #loading.first .brand { display: none; }
+  #loading.first { --dh: 62vh; }
+  .notice { padding: 12px 16px 10px; gap: 9px; }
+  .notice .tasks li { padding: 8px 0; }
+  .notice .enter { min-height: 38px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .door .leaf, .door .pane, .lamp, .notice * { animation: none; }
+  .porch { transition: none; }
+}
 /* ───────── 渡海：霧裡一艘船，船頭一盞冷白的燈，要去的地方從海平線上慢慢浮出來 ─────────
    出發地的天色鋪底，目的地的天色（.tint）慢慢蓋上來：畫廊外是粉橘的黃昏，海市是藍夜。
    所有動畫的 delay 都是 --t（負的、已經過了多久），換頁之後從斷掉的地方接著跑 */
@@ -300,30 +399,34 @@ body.flat #stage::after { display: none; }
 }
 #top-btns .icon-btn span { font-size: 14px; letter-spacing: .2em; margin-right: -.2em; }
 #sound-btn .off, #sound-btn.muted .on { display: none; }
-/* 攝影：外圈細金框＋暖色漸層底＋金色相機，比其他按鈕講究一些 */
+/* 攝影：縮小版的金快門。外金圈、一道深縫，中間一塊太陽紋金片，相機刻在金片上（深色線＋底下一道亮邊）。
+   按鈕小，細紋放寬，主要靠兩道亮帶看出是金屬；滑過時亮帶轉一點，像換了角度 */
+@property --sheen { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 #photo-btn {
-  position: relative; color: var(--gold-hi); border-color: var(--gold);
-  background: radial-gradient(circle at 35% 25%, rgba(90, 62, 36, .98), rgba(34, 22, 14, .98) 70%);
-  box-shadow: 0 0 0 3px rgba(20, 14, 10, .85), 0 0 0 4px rgba(232, 184, 106, .55), var(--shadow), inset 0 1px 0 rgba(255, 230, 190, .22);
+  position: relative; margin: 0 4px; color: #3a2410; border-color: rgba(120, 78, 32, .9);
+  background:
+    radial-gradient(circle, rgba(219, 168, 92, .85) 0 18%, transparent 46%),
+    radial-gradient(circle, transparent 60%, rgba(90, 52, 18, .25) 100%),
+    repeating-conic-gradient(rgba(255, 244, 220, .08) 0 1.2deg, rgba(80, 45, 12, .07) 1.2deg 2.4deg),
+    repeating-conic-gradient(from 2deg, rgba(255, 244, 220, .05) 0 4deg, transparent 4deg 9deg, rgba(80, 45, 12, .05) 9deg 13deg, transparent 13deg 17deg),
+    conic-gradient(from var(--sheen), #dba85c, #b5813f 45deg, #d9a457 90deg, #ebc27d 135deg, #d9a457 180deg, #b07c3e 225deg, #dba85c 270deg, #f4d59a 315deg, #dba85c);
+  box-shadow: 0 0 0 3px rgba(20, 14, 10, .85), 0 0 0 4px rgba(232, 184, 106, .55),
+    inset 0 1px 1px rgba(255, 240, 210, .55), inset 0 -1px 2px rgba(80, 45, 12, .45);
+  transition: --sheen .4s ease-out, transform .1s;
 }
-#photo-btn svg { stroke-width: 1.5; filter: drop-shadow(0 0 4px rgba(232, 184, 106, .45)); }
+#photo-btn svg { stroke-width: 1.6; filter: drop-shadow(0 .7px 0 rgba(255, 240, 205, .65)); }
+#photo-btn:active { transform: scale(.92); }
 @media (hover: hover) {
-  #photo-btn:hover { background: radial-gradient(circle at 35% 25%, rgba(110, 76, 44, .98), rgba(40, 26, 16, .98) 70%); }
+  #photo-btn:hover { color: #3a2410; --sheen: 18deg; }
 }
-/* 導演運鏡：打開時整顆填金、場記板合上；關掉時淡色虛線框、板子張開 */
+/* 導演運鏡：打開時金框金字、場記板合上；關掉時淡色虛線框、板子張開。不填滿金色，整排只留相機按鈕是金片 */
 #director-btn .stick { transform-box: view-box; transform-origin: 4.5px 10.5px; transform: rotate(-14deg); transition: transform .25s cubic-bezier(.5, 0, .7, 1.4); }
 #director-btn:not(.on) { color: var(--muted); border-style: dashed; }
-#director-btn.on {
-  color: #2a1a0c; background: var(--gold-fill); border-color: var(--gold-hi);
-  box-shadow: inset 0 0 0 1px rgba(255, 244, 220, .5), 0 0 12px rgba(232, 184, 106, .35);
-}
+#director-btn.on { color: var(--gold-hi); background: rgba(232, 184, 106, .14); border-color: var(--gold); }
 #director-btn.on .stick { transform: rotate(9deg); }
-#director-btn.on .board { fill: rgba(42, 26, 12, .18); }
+#director-btn.on .board { fill: rgba(246, 219, 166, .16); }
 #director-btn.clap { animation: clap .35s ease-out; }
 @keyframes clap { 40% { transform: scale(1.12); } }
-@media (hover: hover) {
-  #director-btn.on:hover { color: #2a1a0c; filter: brightness(1.06); }
-}
 #sound-btn.muted .off { display: block; }
 #sound-btn.muted { color: var(--muted); }
 
@@ -998,8 +1101,8 @@ body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #emote, body.phot
 #ph-frame .gear { display: none; position: absolute; left: 12px; top: 10px; font-size: 11px; letter-spacing: .25em; color: rgba(246, 219, 166, .7); }
 body.photo-gear #ph-frame .gear { display: block; }
 body.photo-gear #ph-lens, body.photo-gear #ph-alt, body.photo-gear #ph-record { display: none; }
-/* 長曝光中：快門鈕裡面縮成紅色的一點，取景框的邊也變紅 */
-body.photo-expose #ph-shutter::after { background: #c4452d; inset: 14px; transition: inset .2s; }
+/* 長曝光中：快門鈕中間冒出紅色的一點，取景框的邊也變紅 */
+body.photo-expose #ph-shutter::before { inset: 16px; }
 body.photo-expose #ph-frame { outline-color: rgba(196, 69, 45, .7); }
 
 /* 對焦框：找焦時一縮一放，對到了停住變小，過一下淡掉 */
@@ -1115,7 +1218,25 @@ body.desk .ph-chip span { color: var(--muted); }
   background: rgba(30, 20, 14, .5); border: 2px solid var(--gold-hi); cursor: var(--cur-pointer);
   transition: transform .1s;
 }
-#ph-shutter::after { content: ""; position: absolute; inset: 6px; border-radius: 50%; background: var(--gold-fill); }
+/* 畫廊的金快門：外圈金線，中間一塊太陽紋的金片。細紋只用一種間距（兩種疊起來會起摩爾紋），
+   不整齊的感覺交給一層很淡的寬紋；光從左上來，左上、右下兩道亮帶；
+   細紋往中心收得比像素還細，中間用柔邊蓋掉 */
+#ph-shutter::after {
+  content: ""; position: absolute; inset: 6px; border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(219, 168, 92, .85) 0 12%, transparent 34%),
+    radial-gradient(circle, transparent 62%, rgba(90, 52, 18, .22) 100%),
+    repeating-conic-gradient(rgba(255, 244, 220, .08) 0 .8deg, rgba(80, 45, 12, .07) .8deg 1.6deg),
+    repeating-conic-gradient(from 2deg, rgba(255, 244, 220, .05) 0 4deg, transparent 4deg 9deg, rgba(80, 45, 12, .05) 9deg 13deg, transparent 13deg 17deg),
+    conic-gradient(#dba85c, #b5813f 45deg, #d9a457 90deg, #ebc27d 135deg, #d9a457 180deg, #b07c3e 225deg, #dba85c 270deg, #f4d59a 315deg, #dba85c);
+  box-shadow: inset 0 1px 1px rgba(255, 240, 210, .55), inset 0 -1px 2px rgba(80, 45, 12, .45);
+}
+/* 長曝光時中間冒出的紅點，平常縮在正中間看不到 */
+#ph-shutter::before {
+  content: ""; position: absolute; inset: 50%; z-index: 1; border-radius: 50%;
+  background: #c4452d; box-shadow: inset 0 1px 2px rgba(40, 10, 5, .55);
+  transition: inset .2s;
+}
 #ph-shutter:active { transform: scale(.92); }
 /* 帶著相機時，快門換成相機自己的（cameras.js 的 shutterKnob）。閃光燈泡相機是灰鋼外環的葉片快門：
    .snap 按一下張開又闔上；body.photo-expose 按住就一直開著，.tick.lit 錶刻一秒亮一格；.locked 換燈泡時卡榫卡進來；.jam 卡住了還硬按 */
@@ -1126,7 +1247,7 @@ body.desk .ph-chip span { color: var(--muted); }
     conic-gradient(from 15deg, #8e9297, #cfd2d6 10%, #7d8186 22%, #b9bcc0 35%, #85898e 48%, #d3d6d9 60%, #7f8388 73%, #bfc2c6 86%, #8e9297);
   box-shadow: inset 0 1px 1px rgba(255, 255, 255, .55), inset 0 -2px 3px rgba(0, 0, 0, .35), 0 2px 8px rgba(0, 0, 0, .5);
 }
-#ph-shutter.gear::after { content: none; }
+#ph-shutter.gear::after, #ph-shutter.gear::before { content: none; }
 #ph-shutter.gear svg { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 #ph-shutter .bezel { fill: #1d1f22; stroke: #5a5e63; stroke-width: .8; }
 #ph-shutter .glass { fill: #26333a; }
@@ -1347,3 +1468,101 @@ body.selfie > :not(#stage):not(#selfie) { visibility: hidden; }
 }
 .selfie-tip { max-width: 34em; margin: 0; font-size: 12px; line-height: 1.7; letter-spacing: .1em; color: var(--muted); text-align: center; }
 .selfie-tip:empty { display: none; }
+
+/* ───────── 組隊同行（js/party.js） ───────── */
+/* 同行按鈕：組了隊外圈變金，右下角排出全隊的顏色；等人答應時虛線框 */
+#party-btn { position: relative; }
+#party-btn.on, #party-btn.open { border-color: var(--gold); color: var(--gold-hi); }
+#party-btn.wait { border-style: dashed; color: var(--gold-hi); }
+#party-btn .dots { position: absolute; right: -2px; bottom: -3px; display: flex; gap: 2px; margin: 0 !important; }
+#party-btn .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--pc); box-shadow: 0 0 0 1.5px rgba(20, 14, 10, .9); }
+#party-card .studio-row { flex-wrap: wrap; }
+#party-card .btn { padding: 0 16px; letter-spacing: .14em; }
+.party-who { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: center; }
+.mate-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; letter-spacing: .08em; color: var(--muted); }
+.mate-chip i { width: 9px; height: 9px; border-radius: 50%; background: var(--pc); box-shadow: 0 0 6px var(--pc); }
+body.desk #party-card, body.desk #party-invite { bottom: calc(84px + env(safe-area-inset-bottom)); }
+
+/* 隊友的記號：頭上一顆小燈；跑出畫面時在邊上指方向；在別的區域時左上角掛名牌。位置由 party.js 用 transform 擺 */
+#mates { position: fixed; inset: 0; z-index: 8; pointer-events: none; overflow: hidden; }
+body.photo #mates { display: none; }
+.mate { position: absolute; left: 0; top: 0; transition: opacity .4s; will-change: transform; }
+.mate[hidden] { display: none; }
+.mate.away { opacity: .45; }
+.mate i {
+  position: absolute; left: -5px; top: -5px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--pc); box-shadow: 0 0 0 1.5px rgba(28, 19, 13, .75), 0 0 10px var(--pc);
+}
+.mate b { display: none; position: absolute; left: -17px; top: -17px; width: 34px; height: 34px; }
+.mate span { display: none; }
+.mate[data-mode="edge"] i { left: -8px; top: -8px; width: 16px; height: 16px; box-shadow: 0 0 0 2px rgba(28, 19, 13, .8), 0 0 0 3px var(--pc), 0 0 14px var(--pc); }
+.mate[data-mode="edge"] b { display: block; }
+.mate[data-mode="edge"] b::after {
+  content: ""; position: absolute; right: 0; top: 50%; margin-top: -6px;
+  border: 6px solid transparent; border-left: 8px solid var(--pc); border-right: 0;
+  filter: drop-shadow(0 0 3px rgba(28, 19, 13, .8));
+}
+.mate.mark i { border-radius: 2px; transform: rotate(45deg) scale(.85); }
+.mate[data-mode="far"] span {
+  display: block; position: absolute; left: 12px; top: -11px; height: 22px; padding: 0 10px; white-space: nowrap;
+  font-size: 12px; line-height: 22px; letter-spacing: .12em; color: var(--text);
+  background: var(--panel-soft); border: 1px solid var(--line-soft); border-radius: 999px;
+}
+.mate.ask i { animation: mate-ask 1.2s ease-in-out infinite; }
+@keyframes mate-ask { 50% { transform: scale(1.6); } }
+
+/* 隊友說的話：跟一般對話框一樣，前面一顆隊伍顏色的小點 */
+.speech.party-say .pc { display: inline-block; width: 8px; height: 8px; margin: 0 7px 2px 0; border-radius: 50%; background: var(--pc); vertical-align: middle; box-shadow: 0 0 0 1px rgba(26, 18, 12, .5); }
+
+/* 打字框：手機貼在鍵盤上緣（--kb 是鍵盤高度），電腦在下方按鈕列上面。上面列出剛剛說的幾句 */
+#chat {
+  position: fixed; left: 50%; bottom: calc(var(--kb, 0px) + 12px + env(safe-area-inset-bottom)); z-index: 46;
+  transform: translateX(-50%); width: min(520px, calc(100vw - 24px));
+  display: flex; flex-direction: column; gap: 8px;
+}
+#chat[hidden] { display: none; }
+body.desk #chat { bottom: calc(84px + env(safe-area-inset-bottom)); }
+#chat-log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+#chat-log li {
+  max-width: 100%; padding: 4px 12px; border-radius: 12px;
+  font-size: 13px; line-height: 1.5; letter-spacing: .06em; color: var(--text); overflow-wrap: anywhere;
+  background: rgba(20, 14, 10, .72);
+}
+#chat-log li i { display: inline-block; width: 7px; height: 7px; margin: 0 7px 1px 0; border-radius: 50%; background: var(--pc); vertical-align: middle; }
+.chat-row {
+  display: flex; gap: 8px; align-items: center; padding: 6px;
+  background: rgba(20, 14, 10, .92); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--shadow);
+}
+#chat-input {
+  flex: 1; min-width: 0; height: 40px; padding: 0 14px;
+  font: inherit; font-size: 16px; letter-spacing: .04em; color: var(--text);
+  background: transparent; border: 0; outline: none;
+}
+#chat-input::placeholder { color: var(--muted); }
+.chat-row .btn { min-height: 40px; padding: 0 16px; letter-spacing: .14em; }
+.chat-row .icon-btn { width: 40px; min-width: 40px; height: 40px; box-shadow: none; }
+/* 打字時：走路、跳、坐、動作、表情先收起來，畫面留給對話框和隊友的記號；上面的按鈕淡一點 */
+body.chatting #joy, body.chatting #swap-btn, body.chatting .seal, body.chatting #action-btn, body.chatting #emote, body.chatting #hint { opacity: 0 !important; pointer-events: none !important; }
+body.chatting.touch #top-btns { opacity: .35; }
+/* 按了「標記」，等點地面 */
+body.party-arming #stage canvas { cursor: crosshair; }
+/* 常用的話：一排小籤，點了直接送出。放不下就左右滑 */
+.chat-quick { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 0; }
+.chat-quick::-webkit-scrollbar { display: none; }
+.chat-quick .btn {
+  flex: 0 0 auto; min-height: 34px; padding: 0 14px;
+  font-size: 13px; letter-spacing: .1em; white-space: nowrap;
+  background: rgba(20, 14, 10, .88); border-color: var(--line-soft);
+}
+/* 手機橫拿：畫面本來就矮。打字框開著時上面的按鈕整排收起，剛剛的話只留最後兩句；
+   鍵盤出來時只剩打字那一行，話看頭上的對話框 */
+@media (orientation: landscape) and (max-height: 500px) {
+  body.chatting.touch #top-btns { display: none; }
+  body.touch #chat-log li:nth-last-child(n+3) { display: none; }
+  body.typing #chat-log, body.typing .chat-quick { display: none; }
+  body.touch #chat { gap: 6px; bottom: calc(var(--kb, 0px) + 8px + env(safe-area-inset-bottom)); }
+  body.touch .chat-row { padding: 3px; }
+  body.touch #chat-input { height: 36px; }
+  body.touch .chat-row .btn, body.touch .chat-row .icon-btn { min-height: 36px; height: 36px; }
+  body.touch .chat-row .icon-btn { width: 36px; min-width: 36px; }
+}

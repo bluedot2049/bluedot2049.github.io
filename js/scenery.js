@@ -38,7 +38,8 @@ export function bucketObjects(b, ghost = false, floor = null, far = false) {
 // 再疊一道很慢的亮度波從海邊往山上推，遠看像風一層一層吹過整座鎮。遠處的點至少留 2.5 像素，不會縮成亂閃的次像素
 // 中心是燈本身的顏色，往外偏深、偏紅，像燈在霧裡那樣；疊的方式是 screen（越疊越接近飽和，不會像直接相加那樣爆成白的）。
 // 有調色的區域（grade.js）跟著霧淡掉；sky 是掛在天上的（星、月暈、海對面的塔），不吃霧
-export function glowPoints(list, { far = false, sky = false } = {}) {
+// gain：遠處的亮度倍數（近處照舊）；dot：遠處至少幾像素。要從很遠就看得清楚的燈（上星廟的山路）才調高
+export function glowPoints(list, { far = false, sky = false, gain = 1, dot = 2.5 } = {}) {
   const n = list.length;
   const pos = new Float32Array(n * 3), col = new Float32Array(n * 3), size = new Float32Array(n), phase = new Float32Array(n);
   const c = new THREE.Color(), pr = Math.min(window.devicePixelRatio, 2);
@@ -55,9 +56,9 @@ export function glowPoints(list, { far = false, sky = false } = {}) {
   geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
   geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uTime, uScale: { value: 150 * pr }, uPr: { value: pr }, uFar: { value: far ? 1 : 0 }, uAir: { value: sky ? 0 : 1 }, ...gradeUniforms() },
+    uniforms: { uTime, uScale: { value: 150 * pr }, uPr: { value: pr }, uFar: { value: far ? 1 : 0 }, uAir: { value: sky ? 0 : 1 }, uGain: { value: gain }, uDot: { value: dot }, ...gradeUniforms() },
     vertexShader: GRADE_VERT + `
-      uniform float uTime; uniform float uScale; uniform float uPr; uniform float uFar; uniform float uAir;
+      uniform float uTime; uniform float uScale; uniform float uPr; uniform float uFar; uniform float uAir; uniform float uGain; uniform float uDot;
       attribute vec3 aColor; attribute float aSize; attribute float aPhase;
       varying vec3 vC; varying float vA;
       void main() {
@@ -70,9 +71,9 @@ export function glowPoints(list, { far = false, sky = false } = {}) {
         float s2 = 0.5 + 0.5 * sin(uTime * (0.23 + 0.4 * fract(aPhase * 3.17)) + aPhase * 5.0);
         float spark = pow(s1 * s2, 18.0);
         float breeze = 0.5 + 0.5 * sin(uTime * 0.5 + position.z * 0.12 + position.x * 0.04);
-        vA = mix(flick, 0.42 + 0.22 * breeze + 1.1 * spark, f) * mix(1.0, gradeLight(gradeFog((modelMatrix * vec4(position, 1.0)).xyz)), uAir);
+        vA = mix(flick, (0.42 + 0.22 * breeze + 1.1 * spark) * uGain, f) * mix(1.0, gradeLight(gradeFog((modelMatrix * vec4(position, 1.0)).xyz)), uAir);
         vC = mix(aColor, vec3(1.0, 0.94, 0.8), spark * f * 0.5);
-        gl_PointSize = mix(px, max(px, 2.5 * uPr) * (1.0 + 2.0 * spark), f);
+        gl_PointSize = mix(px, max(px, uDot * uPr) * (1.0 + 2.0 * spark), f);
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `

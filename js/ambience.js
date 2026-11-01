@@ -81,6 +81,20 @@ const VOICES = {
     hiss(ctx, out, noise, t + 1.25, 0.03, 'bandpass', 2600 * p, 0.9, 2);
     return 1.3;
   },
+  // 前門（frontdoor.js、載入畫面）：門閂喀一聲，門軸低低嘎一下
+  latch(ctx, out, t, p, noise) {
+    hiss(ctx, out, noise, t, 0.02, 'bandpass', 2400 * p, 0.9, 3);
+    hiss(ctx, out, noise, t + 0.06, 0.03, 'bandpass', 1500 * p, 0.6, 3);
+    const o = osc(ctx, 'sawtooth', t + 0.12, 0.55, [[0, 170 * p], [0.25, 196 * p], [0.55, 150 * p]]);
+    o.connect(biquad(ctx, 'bandpass', 900, 4)).connect(envelope(ctx, t + 0.12, 0.08, 0.55, 0.12)).connect(out);
+    return 0.7;
+  },
+  // 門在背後靠上（留著一條縫，門閂沒落下）：一記悶的木頭聲
+  doorshut(ctx, out, t, p, noise) {
+    osc(ctx, 'sine', t, 0.2, [[0, 110 * p], [0.2, 52 * p]]).connect(envelope(ctx, t, 0.004, 0.2, 0.8)).connect(out);
+    hiss(ctx, out, noise, t, 0.06, 'lowpass', 700, 0.7);
+    return 0.25;
+  },
   // 對到焦：兩聲短短的嗶
   focus(ctx, out, t, p) {
     for (const dt of [0, 0.075]) osc(ctx, 'sine', t + dt, 0.045, [[0, 2700 * p]]).connect(envelope(ctx, t + dt, 0.004, 0.045, 0.3)).connect(out);

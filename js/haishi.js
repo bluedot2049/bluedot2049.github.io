@@ -89,11 +89,29 @@ const AREAS = [
   { id: 'lowerVR', street: 'lower', x0: 4, x1: 5.5, z0: -11.5, z1: -9.4, lo: 6.8, hi: 7.2, dir: 'e', slope: true, view: true, added: true },
   // 漁港的岸壁往海裡補到跟碼頭前緣齊，沿著水邊從碼頭走得到第三道小棧橋
   { id: 'apron', x0: -12.8, x1: -8, z0: 9, z1: 12, y: 0, added: true },
+  // 後山的星廟（temple）：從遠眺台北邊穿過山門，石階和轉角平台之字往上爬，中間穿過山上聚落的一條空隙，
+  // 過了聚落往東橫切山坡，走到碼頭、牌樓那條中軸的正上方，一座跨在路上的亭子，再往上是廟前的石埕，再上幾階是殿。
+  // 地形照原本的山算，只在這條路底下往下削（terrain）
+  { id: 'tS1', x0: -25.3, x1: -23.3, z0: -69, z1: -62, lo: 19.2, hi: 23.8, dir: 'n', added: true, temple: true },
+  { id: 'tB1', x0: -28, x1: -23.3, z0: -71.2, z1: -69, y: 23.8, added: true, temple: true },
+  { id: 'tS2', x0: -28, x1: -26, z0: -76.4, z1: -71.2, lo: 23.8, hi: 28, dir: 'n', added: true, temple: true },
+  { id: 'tB2', x0: -28, x1: -22, z0: -78.2, z1: -76.4, y: 28, added: true, temple: true },
+  { id: 'tS3', x0: -24, x1: -22, z0: -86.4, z1: -78.2, lo: 28, hi: 34.4, dir: 'n', added: true, temple: true },
+  { id: 'tB3', x0: -24, x1: -16, z0: -88.6, z1: -86.4, y: 34.4, added: true, temple: true },
+  { id: 'tS4', x0: -18, x1: -16, z0: -96.6, z1: -88.6, lo: 34.4, hi: 40.8, dir: 'n', added: true, temple: true },
+  { id: 'tB4', x0: -18, x1: -15.6, z0: -98.8, z1: -96.6, y: 40.8, added: true, temple: true },
+  { id: 'tS5', x0: -15.6, x1: -8.4, z0: -98.8, z1: -96.6, lo: 40.8, hi: 42.4, dir: 'e', added: true, temple: true },
+  { id: 'tB5', x0: -8.4, x1: -3.6, z0: -99.2, z1: -96.2, y: 42.4, added: true, temple: true },
+  { id: 'tS6', x0: -7, x1: -5, z0: -106, z1: -99.2, lo: 42.4, hi: 46.4, dir: 'n', added: true, temple: true },
+  { id: 'tCourt', x0: -14, x1: 2, z0: -110.5, z1: -106, y: 46.4, added: true, temple: true },
+  { id: 'tS7', x0: -7, x1: -5, z0: -112.5, z1: -110.5, lo: 46.4, hi: 48, dir: 'n', added: true, temple: true },
+  { id: 'tHall', x0: -12, x1: 0, z0: -121, z1: -112.5, y: 48, added: true, temple: true },
 ];
 for (const a of AREAS) if (a.y == null) a.n = Math.round((a.hi - a.lo) / RISE);
 const AREA = Object.fromEntries(AREAS.map((a) => [a.id, a]));
 // 改地圖之前就有的路面：灌木、霧、街上的暖霧、天燈只照這些放，位置才跟原本一樣
 const ORIGINAL = AREAS.filter((a) => !a.added);
+const TEMPLE = AREAS.filter((a) => a.temple);
 
 // 走進去時報的地名。碼頭不報，剛下船時畫面上已經是「海市」。
 // 同一個地名跨兩塊地的要共用同一個物件，在兩塊之間走來走去才不會一直報
@@ -113,6 +131,9 @@ const PLACES = {
   specula: { name: '星台', subtitle: 'Specula' },
   summit: { name: '遠眺台', subtitle: 'Prospectus' },
 };
+// templum 原本是占卜的人在天上劃出來、專門用來看的那一塊天
+const SEMITA = { name: '山路', subtitle: 'Semita' }, TEMPLUM = { name: '星廟', subtitle: 'Templum' };
+for (const a of TEMPLE) PLACES[a.id] = a.id === 'tCourt' || a.id === 'tS7' || a.id === 'tHall' ? TEMPLUM : SEMITA;
 
 // 店：沿著各層街道靠山的那一側（北邊）。at 是哪一條街，x 決定落在那條街的哪一段，店面開在那一段的北邊上
 // 攤販的樣子和台詞在 vendors.js，用 id 對起來
@@ -168,10 +189,10 @@ const shade = (c, l) => new THREE.Color(c).offsetHSL(0, 0, l).getStyle();
 const SHORE = [[40, -3.2], [12, -1.6], [5, -0.9], [-1, 1.3]];
 const TK = (() => {
   const low = (a, z) => (a.y != null ? a.y : a.dir === 'n' ? heightIn(a, 0, z) : a.lo);
-  const end = Math.min(...AREAS.map((a) => a.z0)), pts = [...SHORE];
+  const town = AREAS.filter((a) => !a.temple), end = Math.min(...town.map((a) => a.z0)), pts = [...SHORE];
   let cap = 1.3;
   for (let z = -1.5; z >= end; z -= 0.5) {
-    const here = AREAS.filter((a) => z >= a.z0 && z <= a.z1);
+    const here = town.filter((a) => z >= a.z0 && z <= a.z1);
     if (here.length) cap = Math.min(...here.map((a) => low(a, z))) - 0.6;
     pts.push([z, cap]);
   }
@@ -189,10 +210,25 @@ function tz(z) {
 // 鎮子在一道山谷裡，兩側的山往外升高；鎮子範圍裡的起伏只往下，不會高過路面
 const TOWN_X0 = -31, TOWN_X1 = 16;
 function terrain(x, z) {
+  return carve(x, z, hill(x, z));
+}
+// 削之前的山坡：山上人家照這個蓋、照這個決定朝向，才跟有星廟之前一模一樣
+function hill(x, z) {
   const out = Math.max(0, x - TOWN_X1) + Math.max(0, TOWN_X0 - x);
   const small = Math.sin(x * 0.23 + z * 0.11) * 0.2 + Math.sin(x * 0.07 - z * 0.17) * 0.18 - 0.4;
   const big = (Math.sin(x * 0.05 + z * 0.03) * 3 + Math.sin(x * 0.11 - z * 0.07) * 1.5) * smooth(0, 12, out);
   return tz(z) + out * 0.34 + small + big;
+}
+// 上星廟的路沿著山坡蓋，平台的後半截會吃進坡裡：路底下和兩旁 CUT 公尺內往下削，削到路面再低 0.6，
+// 越往外削得越少。只往下削、不墊高，路比山坡高的地方由石台、石階自己的側牆一路砌下去
+const CUT = 2.4;
+function carve(x, z, h) {
+  if (x < -36 || x > 6 || z > -61.9 || z < -126) return h;   // 遠眺台以南不動
+  for (const a of TEMPLE) {
+    const cx = Math.min(a.x1, Math.max(a.x0, x)), cz = Math.min(a.z1, Math.max(a.z0, z)), d = Math.hypot(x - cx, z - cz);
+    if (d < CUT) h = Math.min(h, heightIn(a, cx, cz) - 0.6 + (h - heightIn(a, cx, cz) + 0.6) * smooth(0, CUT, d));
+  }
+  return h;
 }
 
 function heightIn(a, x, z) {
@@ -217,7 +253,7 @@ function floorBelow(x, y, z) {
 }
 // 每塊平的路面怎麼鋪（pave.js）。跟欄杆一樣越往上越老：港邊大塊花崗岩，下街亂石，燈巷條石，
 // 工坊街補過的地，星台以上大方石；牌樓、小祠、轉角平台這些停下來喘口氣的地方鋪成波浪的碎石
-const paveOf = (a) => a.id === 'summit' ? 'summit'
+const paveOf = (a) => a.id === 'summit' || a.temple ? 'summit'
   : { lower: 'cobble', lantern: 'strip', upper: 'patch', specula: 'great' }[a.street] ?? (a.y === 0 ? 'granite' : 'pebble');
 
 function terrainGeometry() {
@@ -350,6 +386,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   const SEEK = { cliff: 2945, rails: 4434 };
   const group = new THREE.Group(), obstacles = [], solids = [], rails = [];
   const doors = [];   // 住家的門口（世界座標），路人從這裡進出
+  const farLamps = [];   // 上星廟那條路的燈：遠遠看是一串會閃的小點（glowPoints 的 far）
   const solid = (x0, x1, z0, z1, top, ground = false) => solids.push({ x0, x1, z0, z1, top, ground });
   const pick = (arr) => arr[Math.floor(R() * arr.length)];
   // 擋住視線時會淡掉的東西，一組一組登記（見 fade.js）
@@ -761,7 +798,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       const st = paveOf(a), yt = a.y - BED;
       const g = new THREE.BoxGeometry(a.x1 - a.x0, yt - yb, a.z1 - a.z0).toNonIndexed();
       const pos = g.attributes.position, col = new Float32Array(pos.count * 3), c = new THREE.Color();
-      const lo = new THREE.Color(a.id === 'summit' ? '#3a3840' : STONE), hi = new THREE.Color(a.id === 'summit' ? '#4a4852' : PAVE), seam = new THREE.Color(PAVES[st].grout);
+      const dark = a.id === 'summit' || a.temple, lo = new THREE.Color(dark ? '#3a3840' : STONE), hi = new THREE.Color(dark ? '#4a4852' : PAVE), seam = new THREE.Color(PAVES[st].grout);
       for (let i = 0; i < pos.count; i++) (i >= 12 && i < 18 ? seam : c.copy(lo).lerp(hi, pos.getY(i) / (yt - yb) + 0.5)).toArray(col, i * 3);
       g.setAttribute('color', new THREE.BufferAttribute(col, 3));
       k.add(g, null, (a.x0 + a.x1) / 2, (yt + yb) / 2, (a.z0 + a.z1) / 2, { ao: false });
@@ -808,11 +845,19 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       if (ns) for (const sx of [a.x0 - 0.12, a.x1 + 0.12]) k.box(0.24, top - yb, tread * 2, STONE, sx, (top + yb) / 2, p);
       else for (const sz of [a.z0 - 0.12, a.z1 + 0.12]) k.box(tread * 2, top - yb, 0.24, STONE, p, (top + yb) / 2, sz);
     }
-    // 上遠眺台的那段石階要暗，只在矮牆上放幾盞冷冷的小燈
-    const dim = a.id === 'sH';
-    for (let s = 0.6; s < len; s += dim ? 3 : 1.5) {
+    // 上遠眺台的那段石階要暗，只在矮牆上放幾盞冷冷的小燈；上星廟的山路更稀
+    const dim = a.id === 'sH' || a.temple;
+    for (let s = 0.6; s < len; s += a.temple ? 2.4 : dim ? 3 : 1.5) {
       const p = along(s);
-      if (dim) {
+      if (a.temple) {
+        // 星廟的山路：矮牆上立一根小石柱，燈點在柱頂，從山下低低地看過來也不會被牆擋住。
+        // 往北爬的立在西邊的牆上，橫著爬的立在靠山下那一邊
+        const x = ns ? a.x0 - 0.12 : p, z = ns ? p : a.z1 + 0.12, h = ns ? heightIn(a, 0, p) : heightIn(a, p, 0);
+        k.box(0.18, 0.55, 0.18, '#5a5862', x, h + 0.78, z);
+        k.box(0.14, 0.14, 0.14, '#a8c8ff', x, h + 1.12, z, { glow: true, color2: '#e0ecff' });
+        k.light(x, h + 1.12, z, '#8ab0ff', 0.25);
+        farLamps.push({ x, y: h + 1.12, z, color: '#e4ecff', size: 0.3 });
+      } else if (dim) {
         k.cyl(0.04, 0.05, 0.12, '#a8c8ff', a.x0 - 0.12, heightIn(a, 0, p) + 0.62, p, { glow: true });
         k.light(a.x0 - 0.12, heightIn(a, 0, p) + 0.62, p, '#8ab0ff', 0.2);
       } else if (ns) for (const sx of [a.x0 - 0.12, a.x1 + 0.12]) lantern(k, sx, heightIn(a, 0, p) + 1.9, p, 0.7);
@@ -1586,16 +1631,17 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   for (let i = 0; i < (coarse ? 260 : 420); i++) {
     const x = TOWN_X0 + R() * (TOWN_X1 - TOWN_X0), z = 4 - R() * 68, y = terrain(x, z);
     if (y < SEA + 0.2 || inArea(x, z, 0.7, ORIGINAL) || inSolid(x, z)) continue;
-    const r = 0.35 + R() * 0.6;
-    k.rock(r, pick(['#2e4a3a', '#3a5a3e', '#2a4440', '#44583a']), x, y + r * 0.4, z, { sy: 0.75, ao: false });
-    if (R() < 0.35) for (let f = 0; f < 4; f++) k.rock(0.06, pick(['#f0a0b8', '#f8f0d8', '#f0d060', '#b8a0f0']), x + (R() - 0.5) * r * 1.4, y + r * 0.75, z + (R() - 0.5) * r * 1.4, { ao: false });
+    // 落在上星廟的路上的照樣抽完亂數，只是不放（丟進用不到的 Kit），後面的灌木、人家、樹才不會換位置
+    const r = 0.35 + R() * 0.6, bk = inArea(x, z, 0.7, TEMPLE) ? new Kit(R) : k;
+    bk.rock(r, pick(['#2e4a3a', '#3a5a3e', '#2a4440', '#44583a']), x, y + r * 0.4, z, { sy: 0.75, ao: false });
+    if (R() < 0.35) for (let f = 0; f < 4; f++) bk.rock(0.06, pick(['#f0a0b8', '#f8f0d8', '#f0d060', '#b8a0f0']), x + (R() - 0.5) * r * 1.4, y + r * 0.75, z + (R() - 0.5) * r * 1.4, { ao: false });
   }
   // 山上的人家聚成幾個小聚落：幾戶沿著等高線排成一彎，臉朝山下，背後一棵老樹或一座小祠。
   // 門口有石板小路一戶接一戶，再有一條往山下彎進樹林裡。這些路只是看得到，走不上去
   const HAMLETS = [[-44, -6, 6], [-50, -28, 5], [-42, -50, 7], [-28, -80, 5], [27, -8, 5], [33, -30, 6], [27, -55, 5], [-4, -88, 6], [16, -76, 4], [-64, -60, 4], [55, -42, 4]];
   const zones = [], trails = [];
   const downhill = (x, z) => {
-    const gx = terrain(x + 1, z) - terrain(x - 1, z), gz = terrain(x, z + 1) - terrain(x, z - 1), l = Math.hypot(gx, gz) || 1;
+    const gx = hill(x + 1, z) - hill(x - 1, z), gz = hill(x, z + 1) - hill(x, z - 1), l = Math.hypot(gx, gz) || 1;
     return [-gx / l, -gz / l];
   };
   // 假路：沿著折線每隔一小段鋪一塊石板，走一段路旁立一根矮燈柱
@@ -1619,22 +1665,24 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     for (let i = 0; i < n; i++) {
       // 沿等高線排開，兩頭微微往山下彎；隔幾戶有一間往山上退一點
       const t = (i - (n - 1) / 2) * (4.4 + R() * 0.8), drop = t * t * 0.02 - (i % 3 === 1 ? 2.2 : 0) + (R() - 0.5) * 1.2;
-      const x = hx + cx * t + dx * drop, z = hz + cz * t + dz * drop, y = terrain(x, z);
+      const x = hx + cx * t + dx * drop, z = hz + cz * t + dz * drop, y = hill(x, z);
       if (x > TOWN_X0 - 4 && x < TOWN_X1 + 4 && z > -68) continue;   // 排到鎮子裡就不蓋
       const w = 2.8 + R() * 2.2, d = 2.8 + R() * 0.8, h = 1.8 + R() * 1.4, wall = R() < 0.5 ? pick(PLASTER) : pick(TIMBER);
       let foot = y;
-      for (const [u, v] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) foot = Math.min(foot, terrain(x + cx * u * w * 0.5 + dx * v * d * 0.5, z + cz * u * w * 0.5 + dz * v * d * 0.5));
+      for (const [u, v] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) foot = Math.min(foot, hill(x + cx * u * w * 0.5 + dx * v * d * 0.5, z + cz * u * w * 0.5 + dz * v * d * 0.5));
       foot -= 0.6;
+      // 擋到上星廟那條路的一間不蓋，空出來讓路從聚落中間穿過去；亂數一樣照抽
+      const hk = TEMPLE.some((a) => x + w / 2 > a.x0 - 0.2 && x - w / 2 < a.x1 + 0.2 && z + d / 2 > a.z0 - 0.2 && z - d / 2 < a.z1 + 0.2) ? new Kit(R) : k;
       // 牆腳壓暗，房子才像坐在坡上；有的頂上再疊一小間竹屋
-      k.box(w, y + h - foot, d, shade(wall, -0.3), x, (y + h + foot) / 2, z, { ry: face, ao: false, color2: wall });
-      k.add(roofGeo(w + 1.0, d + 1.2, 0.9 + R() * 0.5, { tile: pick(TILES), lift: 0.35 + R() * 0.2, seg: 0.3, ridge: R() < 0.5 ? (w + 1) / 2 : (w - 1) / 2 }), null, x, y + h, z, { ry: face, ao: false });
+      hk.box(w, y + h - foot, d, shade(wall, -0.3), x, (y + h + foot) / 2, z, { ry: face, ao: false, color2: wall });
+      hk.add(roofGeo(w + 1.0, d + 1.2, 0.9 + R() * 0.5, { tile: pick(TILES), lift: 0.35 + R() * 0.2, seg: 0.3, ridge: R() < 0.5 ? (w + 1) / 2 : (w - 1) / 2 }), null, x, y + h, z, { ry: face, ao: false });
       if (R() < 0.35) {
         const w2 = w * 0.5, off = (R() - 0.5) * (w - w2) * 0.6;
-        k.box(w2, 1.4, d * 0.6, pick(BAMBOO), x + cx * off, y + h + 0.5, z + cz * off, { ry: face, ao: false });
-        k.add(roofGeo(w2 + 0.6, d * 0.6 + 0.9, 0.5, { tile: pick(TILES), lift: 0.25, seg: 0.3 }), null, x + cx * off, y + h + 1.2, z + cz * off, { ry: face, ao: false });
+        hk.box(w2, 1.4, d * 0.6, pick(BAMBOO), x + cx * off, y + h + 0.5, z + cz * off, { ry: face, ao: false });
+        hk.add(roofGeo(w2 + 0.6, d * 0.6 + 0.9, 0.5, { tile: pick(TILES), lift: 0.25, seg: 0.3 }), null, x + cx * off, y + h + 1.2, z + cz * off, { ry: face, ao: false });
       }
       const fx = x + dx * (d / 2 + 0.03), fz = z + dz * (d / 2 + 0.03);
-      if (R() < 0.85) k.plane(w * 0.45, 0.75, WARM, fx, y + h * 0.5, fz, { glow: true, ry: face, color2: PAPER });
+      if (R() < 0.85) hk.plane(w * 0.45, 0.75, WARM, fx, y + h * 0.5, fz, { glow: true, ry: face, color2: PAPER });
       R();   // 原本這裡抽一次決定掛不掛門口燈籠，山上人家不掛了，亂數照舊抽掉
       fronts.push([x + dx * (d / 2 + 1.2), z + dz * (d / 2 + 1.2)]);
     }
@@ -1645,12 +1693,12 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     for (let i = 0; i < 9; i++) {
       const [px, pz] = down[down.length - 1], [ex, ez] = downhill(px, pz), wig = (R() - 0.5) * 1.4;
       const nx = px + ex * 1.8 - ez * wig, nz = pz + ez * 1.8 + ex * wig;
-      if ((nx > TOWN_X0 - 3 && nx < TOWN_X1 + 3 && nz > -66) || terrain(nx, nz) < SEA + 0.6) break;
+      if ((nx > TOWN_X0 - 3 && nx < TOWN_X1 + 3 && nz > -66) || hill(nx, nz) < SEA + 0.6) break;
       down.push([nx, nz]);
     }
     trail(down);
     // 聚落背後：一棵老樹，或一座小祠
-    const bx = hx - dx * 3.4, bz = hz - dz * 3.4, by = terrain(bx, bz);
+    const bx = hx - dx * 3.4, bz = hz - dz * 3.4, by = hill(bx, bz);
     if (R() < 0.5) {
       k.cyl(0.35, 0.55, 3.4, '#3a2a20', bx, by + 1.7, bz, { rz: (R() - 0.5) * 0.3, ao: false }, 6);
       for (let i = 0; i < 4; i++) k.rock(1.2 + R() * 0.6, pick(['#1e3a30', '#2a4436', '#24402e']), bx + (R() - 0.5) * 2, by + 3.6 + R() * 1.2, bz + (R() - 0.5) * 2, { sy: 0.7, ao: false });
@@ -1662,7 +1710,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     }
     zones.push([hx, hz, n * 2.6 + 4]);
   }
-  // 樹：聚落和小路上不種
+  // 樹：聚落、小路和上星廟的路上不種
   for (let i = 0; i < (coarse ? 300 : 520); i++) {
     const x = -100 + R() * 190, z = 20 - R() * 150;
     if (x > TOWN_X0 - 1 && x < TOWN_X1 + 1 && z > -64) continue;
@@ -1670,9 +1718,141 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     if (y < SEA + 0.5) continue;
     if (zones.some(([hx, hz, r]) => Math.hypot(x - hx, z - hz) < r) || trails.some(([px, pz]) => Math.abs(px - x) < 1.3 && Math.abs(pz - z) < 1.3)) continue;
     const s = 0.8 + R() * 1.4;
+    if (inArea(x, z, 2, TEMPLE)) continue;   // 亂數抽完才跳過
     k.cone(1.1 * s, 3 * s, '#1a2a2a', x, y + 1.1 * s, z, { color2: '#2e4440', ao: false });
   }
   k.add(terrainGeometry(), '#24302e', 0, 0, 0, { color2: '#46523e', ao: false });
+
+  // ---------- 星廟：後山上一座不供神像的廟，拜的是天 ----------
+  // 全鎮最暗的地方，燈只照腳下。從碼頭遠遠看得到的是：一串冷白的小燈之字往上爬，最上面一座樓的剪影頂著銅渾天儀。
+  // 用自己的一串亂數，排在灌木、人家、樹後面才登記擋路的範圍，前面那些照原本的樣子抽
+  {
+    const TR = rng('haishi-temple'), tk = new Kit(TR), far = farLamps;
+    const BRONZE = '#8a7a58', PILLAR = '#3e2a24', TSTONE = '#5a5862';
+    // 石燈：方座、短柱、一格冷白的火室、小屋頂。遠處的那一點另外記下來，從碼頭看會像星星一樣閃
+    const stoneLamp = (x, y, z) => {
+      tk.box(0.44, 0.18, 0.44, TSTONE, x, y + 0.09, z);
+      tk.cyl(0.08, 0.1, 0.62, TSTONE, x, y + 0.49, z, {}, 6);
+      tk.box(0.34, 0.08, 0.34, TSTONE, x, y + 0.84, z);
+      tk.box(0.24, 0.22, 0.24, '#a8c8ff', x, y + 0.99, z, { glow: true, color2: '#e0ecff' });
+      tk.cone(0.3, 0.22, '#3a3a42', x, y + 1.21, z);
+      tk.light(x, y + 0.99, z, '#8ab0ff', 0.45);
+      far.push({ x, y: y + 1, z, color: '#e4ecff', size: 0.5 });
+      obstacles.push({ x, z, hw: 0.25, hd: 0.25 });
+    };
+
+    // 山門：遠眺台北邊、上山石階的起點，夾在遠眺台北側兩塊立石的後面。兩根石柱一道橫樑，樑上立一個石環，環裡一顆四角星
+    {
+      const y = AREA.summit.y, z = AREA.summit.z0 + 0.35, cx = (AREA.tS1.x0 + AREA.tS1.x1) / 2;
+      for (const sx of [-1.25, 1.25]) {
+        tk.box(0.5, 0.3, 0.5, TSTONE, cx + sx, y + 0.15, z);
+        tk.box(0.34, 3.1, 0.34, '#625f68', cx + sx, y + 1.7, z, { color2: '#6e6b74' });
+        obstacles.push({ x: cx + sx, z, hw: 0.25, hd: 0.25 });
+      }
+      tk.box(3.1, 0.26, 0.38, '#625f68', cx, y + 3.3, z);
+      tk.torus(0.62, 0.09, Math.PI * 2, '#6e6b74', cx, y + 4.1, z, {});
+      for (const rz of [0, Math.PI / 2]) tk.add(new THREE.CircleGeometry(0.36, 4), '#9ab0d8', cx, y + 4.1, z, { rz, sx: 0.28, glow: true });
+      solid(cx - 1.7, cx + 1.7, z - 0.3, z + 0.3, y + 4.8);
+    }
+    // 每個轉角平台一盞石燈，放在路轉過去的那一角，從遠處看一盞左一盞右
+    stoneLamp(AREA.tB1.x1 - 0.35, AREA.tB1.y, AREA.tB1.z0 + 0.35);
+    stoneLamp(AREA.tB2.x0 + 0.35, AREA.tB2.y, AREA.tB2.z0 + 0.35);
+    stoneLamp(AREA.tB3.x0 + 0.35, AREA.tB3.y, AREA.tB3.z0 + 0.35);
+    stoneLamp(AREA.tB4.x0 + 0.35, AREA.tB4.y, AREA.tB4.z0 + 0.35);
+    stoneLamp(AREA.tB5.x1 - 0.35, AREA.tB5.y, AREA.tB5.z0 + 0.35);
+    // 半山亭：橫切過山坡、轉往廟去的那個平台上，從西邊走進亭子，往北走出去
+    {
+      const B = AREA.tB5, y = B.y, cx = (B.x0 + B.x1) / 2, cz = (B.z0 + B.z1) / 2, pk = new Kit(TR);
+      for (const sx of [-1.5, 1.5]) for (const sz of [-0.85, 0.85]) {
+        tk.box(0.16, 2.5, 0.16, PILLAR, cx + sx, y + 1.25, cz + sz);
+        obstacles.push({ x: cx + sx, z: cz + sz, hw: 0.12, hd: 0.12 });
+      }
+      pk.box(3.3, 0.14, 1.9, PILLAR, cx, y + 2.55, cz);
+      addRoof(pk, cx, y + 2.62, cz, 4.4, 3.0, 0.75, { ridge: 1.6, lift: 0.4, tile: '#2c3038' });
+      pk.cyl(0.12, 0.16, 0.3, BRONZE, cx, y + 2.2, cz, {}, 8);   // 一口小銅鐘
+      pk.fid = fader.add([[cx - 2.3, y + 2.3, cz - 1.6, cx + 2.3, y + 3.8, cz + 1.6]]);
+      pk.emit(bucket, 0, 0, 0);
+    }
+
+    // 廟前的石埕：正中一座銅香爐冒著煙，上殿的石階兩旁各一盞石燈
+    const C = AREA.tCourt, H = AREA.tHall;
+    {
+      const x = (AREA.tS7.x0 + AREA.tS7.x1) / 2, z = (C.z0 + C.z1) / 2 + 0.4, y = C.y;
+      tk.cyl(0.55, 0.45, 0.6, BRONZE, x, y + 0.5, z, {}, 10);
+      tk.torus(0.55, 0.05, Math.PI * 2, BRONZE, x, y + 0.8, z, { rx: Math.PI / 2 });
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2 + 0.5;
+        tk.cyl(0.05, 0.07, 0.3, BRONZE, x + Math.cos(a) * 0.38, y + 0.15, z + Math.sin(a) * 0.38, {}, 5);
+      }
+      tk.puff(x, y + 0.9, z, 'smoke', 0.8);
+      obstacles.push({ x, z, hw: 0.6, hd: 0.6 });
+      for (const sx of [AREA.tS7.x0 - 0.5, AREA.tS7.x1 + 0.5]) stoneLamp(sx, C.y, C.z0 + 0.4);
+    }
+    // 觀星樓：石埕西頭一座瘦高的樓，三層往上收，底層木構、上兩層白灰牆（霧裡才浮得出來），頂上沒有屋頂，只有一座銅渾天儀。從山下看是廟的記號
+    {
+      const x = C.x0 + 1.7, z = (C.z0 + C.z1) / 2 - 0.2, y = C.y, ok = new Kit(TR);
+      tk.box(2.6, 2.2, 2.6, TSTONE, x, y + 1.1, z, { color2: '#66646c' });
+      let s = 2.1, top = y + 2.2;
+      for (let i = 0; i < 3; i++) {
+        const th = 2.2 - i * 0.3, wall = i ? PLASTER[3 - i] : '#3e302c';
+        ok.box(s, th, s, wall, x, top + th / 2, z, { color2: shade(wall, 0.04) });
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) ok.box(0.12, th, 0.12, PILLAR, x + sx * s / 2, top + th / 2, z + sz * s / 2);
+        top += th;
+        if (i < 2) addRoof(ok, x, top, z, s + 1.1, s + 1.1, 0.5, { ridge: 0, lift: 0.35, tile: '#2a2c32' });
+        top += 0.25;
+        s *= 0.82;
+      }
+      // 樓頂的平台和渾天儀：三個銅環各斜一個角度，中間一顆小球
+      ok.box(s + 0.5, 0.16, s + 0.5, TSTONE, x, top, z);
+      const ay = top + 1.15;
+      ok.cyl(0.06, 0.1, 0.9, BRONZE, x, top + 0.45, z, {}, 6);
+      ok.torus(0.85, 0.05, Math.PI * 2, BRONZE, x, ay, z, {});
+      ok.torus(0.85, 0.05, Math.PI * 2, BRONZE, x, ay, z, { ry: Math.PI / 2 });
+      ok.torus(0.78, 0.045, Math.PI * 2, BRONZE, x, ay, z, { rx: Math.PI / 2 - 0.41 });
+      ok.ball(0.14, '#c8b080', x, ay, z);
+      solid(x - 1.4, x + 1.4, z - 1.4, z + 1.4, ay + 1);
+      obstacles.push({ x, z, hw: 1.35, hd: 1.35 });
+      ok.fid = fader.add([[x - 1.8, y + 2.2, z - 1.8, x + 1.8, ay + 1, z + 1.8]]);
+      ok.emit(bucket, 0, 0, 0);
+    }
+    // 無像殿：圓的，十根柱子一圈，正面空出兩根當門。屋頂是一圈往中間斜上去的瓦，正中間開一個圓天井，不封。
+    // 殿裡不放神像，地上一池黑水倒映天井那一塊天
+    {
+      const x = (H.x0 + H.x1) / 2, z = (H.z0 + H.z1) / 2 + 0.3, y = H.y, r = 3.7, hk = new Kit(TR), N = 10;
+      for (let i = 0; i < N; i++) {
+        const a = ((i + 0.5) / N) * Math.PI * 2;
+        if (Math.abs(Math.sin(a / 2)) < 0.2) continue;   // 正南（朝石埕）那兩根空出來
+        const px = x + Math.sin(a) * r, pz = z + Math.cos(a) * r;
+        tk.cyl(0.16, 0.19, 3.4, PILLAR, px, y + 1.7, pz, {}, 8);
+        tk.box(0.5, 0.2, 0.5, TSTONE, px, y + 0.1, pz);
+        obstacles.push({ x: px, z: pz, hw: 0.22, hd: 0.22 });
+        // 後半圈柱子之間一道矮牆
+        if (Math.cos(a) < -0.2) {
+          const b = ((i + 1.5) / N) * Math.PI * 2, mx = x + (Math.sin(a) + Math.sin(b)) * r / 2, mz = z + (Math.cos(a) + Math.cos(b)) * r / 2;
+          if (Math.cos(b) < -0.2) tk.box(2 * r * Math.sin(Math.PI / N) - 0.3, 1.1, 0.22, '#4a4650', mx, y + 0.55, mz, { ry: -(a + b) / 2 + Math.PI / 2 });
+        }
+      }
+      // 屋頂：外面看是一圈瓦，從殿裡抬頭也看得到瓦底（同一圈再做一份朝裡的）
+      const roof = new THREE.CylinderGeometry(1.5, r + 1.4, 1.5, 28, 1, true);
+      hk.add(roof, '#2c3038', x, y + 4.1, z, { color2: '#3a4048' });
+      hk.add(roof.clone(), '#3a2a24', x, y + 4.08, z, { sx: -1 });
+      hk.torus(r + 1.4, 0.08, Math.PI * 2, '#2a2c32', x, y + 3.36, z, { rx: Math.PI / 2 });
+      hk.torus(1.5, 0.09, Math.PI * 2, BRONZE, x, y + 4.86, z, { rx: Math.PI / 2 });
+      hk.torus(r, 0.12, Math.PI * 2, PILLAR, x, y + 3.4, z, { rx: Math.PI / 2 });
+      hk.fid = fader.add([[x - r - 1.6, y + 3.2, z - r - 1.6, x + r + 1.6, y + 5, z + r + 1.6]]);
+      hk.emit(bucket, 0, 0, 0);
+      // 水鏡：一圈石沿，裡面一池黑水
+      tk.add(new THREE.RingGeometry(1.5, 1.75, 32), '#5a5862', x, y + 0.02, z, { rx: -Math.PI / 2, ao: false });
+      tk.add(new THREE.CircleGeometry(1.5, 32), '#0c1020', x, y + 0.015, z, { rx: -Math.PI / 2, ao: false });
+      obstacles.push({ x, z, hw: 1.2, hd: 1.2 });
+      // 門口右手邊一盞燈，殿裡就只有這一盞
+      stoneLamp(x + 2.1, y, z + r + 0.2);
+      // 殿後的擋土牆：削進山坡的那一面
+      tk.box(H.x1 - H.x0 + 0.6, 3.4, 0.5, '#46444c', x, y + 1.2, H.z0 - 0.25, { color2: '#55535c' });
+    }
+    tk.emit(bucket, 0, 0, 0);
+    group.add(glowPoints(far, { far: true, gain: 7, dot: 4 }));
+  }
 
   k.emit(bucket, 0, 0, 0);
   fader.tag(bucket.lit);

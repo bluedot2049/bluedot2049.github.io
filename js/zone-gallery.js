@@ -28,7 +28,7 @@ export function env() {
 
 // 角色出來之前先站好的：前廳的胖頭頭人擋住一小塊地面，玩家靠近時會轉過來面對；陽台長桌的主人也是一隻胖頭頭人
 export function residents({ scene, world, shadowTex }) {
-  const spot = world.findWalkable(1.9, -3.4, 0, -2) || { x: 1.9, z: -3.4 };
+  const spot = world.findWalkable(2.0, -5.6, 0, -2) || { x: 2.0, z: -5.6 };
   const manatee = new Manatee(shadowTex, spot.x, spot.z);
   scene.add(manatee.group);
   world.rooms[0].obstacles.push({ x: spot.x, z: spot.z, hw: 0.4, hd: 0.4, rot: 0 });
@@ -57,6 +57,16 @@ export function arrive({ player, world, params, ui }) {
     player.startIntro({
       wide: { dist: 10, at: { x: -0.42, y: -0.5 }, mark: tree, markAt: { x: 0.3, y: 0.15 } },
       tall: { dist: 13, at: { x: -0.1, y: -0.45 }, mark: tree, markAt: { x: 0.12, y: 0.2 } },
+    });
+    world.frontDoor?.shut(0, true);
+  } else if (world.frontDoor) {
+    // 一般進來：剛跨過前門站在腳踏墊上。鏡頭在房間深處回頭看，角色在畫面右邊，背後的門在左邊，門開著透進黃昏的光；
+    // 載入畫面收掉以後門在背後闔上（main.js）。角色開始走，鏡頭照走過的距離換回跟拍
+    const d = world.frontDoor, h = d.spawn.heading - 0.52;
+    player.place(d.spawn.x, d.spawn.z, d.spawn.heading);
+    player.startIntro({
+      wide: { dist: 4, at: { x: 0.22, y: -0.35 }, yaw: h, pitch: 0.22 },
+      tall: { dist: 4.6, at: { x: 0.05, y: -0.42 }, yaw: h, pitch: 0.26 },
     });
   }
   const go = params.get('go')?.split('.').map(Number);

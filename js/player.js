@@ -466,6 +466,12 @@ export class Player {
     const down = 0.9 / shot.dist / tanV + 0.06, up = 1 / shot.dist / tanV + 0.06;
     it.at = { x: THREE.MathUtils.clamp(shot.at.x, -0.8, 0.8), y: THREE.MathUtils.clamp(shot.at.y, band.lo + down, band.hi - up) };
     if (it.moved) return;
+    // 沒有地標的鏡位直接給方位和俯角（前廳太小，用解的會找到牆角去）
+    if (!shot.mark) {
+      this.camYaw = shot.yaw;
+      it.pitch = shot.pitch;
+      return;
+    }
     // 地標落到 markAt：解鏡頭的方位和俯角，牛頓法，偏微分用差分算
     const center = new THREE.Vector3(this.pos.x, this.pos.y + 0.9, this.pos.z), mark = new THREE.Vector3(...shot.mark);
     const P = new THREE.Vector3(), L = new THREE.Vector3(), q = new THREE.Vector2();

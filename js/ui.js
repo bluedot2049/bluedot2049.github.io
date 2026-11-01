@@ -258,10 +258,12 @@ export class UI {
     this.list.classList.toggle('open', open);
   }
 
+  // 收掉載入畫面。回傳的 promise 在真的進到遊戲時完成：門口要等門打開（第一次來的人要先按「進入」）
   loading(text) {
     const el = $('#loading');
-    if (text != null) { el.querySelector('.msg').textContent = text; return; }
-    if (!el.classList.contains('crossing') || el.classList.contains('done')) { el.classList.add('done'); return; }
+    if (text != null) { el.querySelector('.msg').textContent = text; return Promise.resolve(); }
+    if (el.classList.contains('done') || el.classList.contains('plain')) { el.classList.add('done'); return Promise.resolve(); }
+    if (!el.classList.contains('crossing')) return this.enterDoor(el);
     // 渡海到了：霧散開、對岸亮起來、蜃景消掉，再淡出到遊戲畫面
     for (const [sel, o] of [['.land', 1], ['.mirage', 0], ['.fog', 0.25]]) {
       for (const e of el.querySelectorAll(sel)) {
@@ -271,5 +273,41 @@ export class UI {
       }
     }
     setTimeout(() => el.classList.add('done'), 700);
+    return Promise.resolve();
+  }
+
+  // 門口：來過的人載完直接開門；第一次來的人看完門邊的告示，按「進入」（或 Enter、空白鍵）才開。
+  // 門閂一響，門板從那條縫先推開一點、頓一下，再整個往裡打開；鏡頭往門口走近，屋裡的光鋪滿畫面，再淡出到前廳。
+  // onDoorOpen：推門的那一刻（main.js 放門閂聲，這時候是使用者的手勢，聲音放得出來）
+  enterDoor(el) {
+    return new Promise((resolve) => {
+      let opened = false;
+      const open = () => {
+        if (opened) return;
+        opened = true;
+        removeEventListener('keydown', key, true);
+        try { localStorage.setItem('entered', '1'); } catch {}
+        this.onDoorOpen?.();
+        const leaf = el.querySelector('.leaf'), from = getComputedStyle(leaf).transform, at = (d) => `perspective(600px) rotateY(${d}deg)`;
+        for (const a of leaf.getAnimations()) a.cancel();
+        leaf.animate([
+          { transform: from, easing: 'ease-out' },
+          { transform: at(-26), offset: 0.2 },
+          { transform: at(-26), offset: 0.3, easing: 'cubic-bezier(.5, 0, .3, 1)' },
+          { transform: at(-86) },
+        ], { duration: 1500, fill: 'forwards' });
+        el.classList.add('opening');
+        setTimeout(() => { el.classList.add('done'); resolve(); }, 1450);
+      };
+      // 先攔下來，空白鍵和 Enter 不會同時讓角色跳起來、去看畫
+      const key = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); open(); } };
+      if (!el.classList.contains('first')) return open();
+      const btn = el.querySelector('.notice .enter');
+      btn.disabled = false;
+      btn.querySelector('span').textContent = '進入';
+      btn.classList.add('primary');
+      btn.addEventListener('click', open, { once: true });
+      addEventListener('keydown', key, true);
+    });
   }
 }

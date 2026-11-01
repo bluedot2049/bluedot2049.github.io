@@ -18,6 +18,7 @@ import { createPostFX } from './postfx.js';
 import { PhotoMode } from './photo.js';
 import { Selfie } from './selfie.js';
 import { Studio } from './studio.js';
+import { Party } from './party.js';
 import { lens, LensPass } from './lens.js';
 import { dof, DofPass } from './dof.js';
 import { fullscreenButton } from './screen.js';
@@ -217,6 +218,7 @@ async function start() {
   let swipeHinted = false;
   let camSwipeHinted = false;
   let mp = null;
+  let party = null;   // 組隊同行（party.js），有連線才有
   let studio = null;   // 海市信差站的照相館（studio.js），畫廊沒有
   let place = null;   // 戶外現在在哪裡：null 是陽台，否則是草原或棧橋盡頭的地名
   let sitHinted = false;
@@ -362,7 +364,7 @@ async function start() {
     el.querySelector('.msg').textContent = ZONES[to].crossing;
     try { sessionStorage.setItem('crossAt', Date.now()); } catch (e) {}
     el.style.setProperty('--t', '0ms');
-    el.classList.remove('to-gallery', 'to-haishi', 'done');
+    el.classList.remove('to-gallery', 'to-haishi', 'done', 'first', 'opening');
     el.classList.add('crossing', `to-${to}`);
     mp?.sendNow();
     setTimeout(() => location.replace(`${location.pathname}?${q}`), 850);
@@ -478,7 +480,12 @@ async function start() {
     lastInput = performance.now();
   };
 
+  // 手機打字時鍵盤把整頁變矮（Android）：寬度沒變就先不改畫面大小，3D 畫面不會重新取景跳一下，
+  // 下半部讓鍵盤蓋著就好。打字框收起來時 party.js 會再送一次 resize 補回來
+  let lastW = window.innerWidth;
   window.addEventListener('resize', () => {
+    if (document.body.classList.contains('chatting') && window.innerWidth === lastW) return;
+    lastW = window.innerWidth;
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -518,11 +525,18 @@ async function start() {
       onLand: (ch) => ambience.footstep(ch, 0, true),
       onEmote: (ch, e) => ambience.cheer(ch, e),
       onStudio: (m) => studio?.onMessage(m),
+      onParty: (m) => party?.onInvite(m),
       onFlash: (ch) => flashFx.fire(ch),
     }, look);
     mp.claude = params.get('as') === 'claude';   // 開發時我進站拍照：在場的人看到的是燈籠
     mp.camera = carried();
-    mp.connect().catch((e) => console.warn('多人連線失敗：', e));
+    // 隊伍頻道不分區域，渡海換頁也接得回去
+    party = new Party({
+      mp, player, character, camera, scene, world, zone, ui,
+      channel: `${rt.channel || 'gallery'}-party-`,
+      busy: () => photo.active || !!ui.panel || player.boarding,
+    });
+    mp.connect().then(() => party.resume()).catch((e) => console.warn('多人連線失敗：', e));
     if (visitors) visitors.mp = mp;
     // 電腦：數字鍵 1–5 送表情
     window.addEventListener('keydown', (e) => {
@@ -581,7 +595,7 @@ async function start() {
     if (params.has('studio')) setTimeout(() => studio.begin(+params.get('studio') || 0), 1500);
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, animals, visitors, vendors, passers, quality, host, photo, studio };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, passers, quality, host, photo, studio };
   const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass, dofPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
@@ -631,10 +645,19 @@ async function start() {
     history.replaceState(null, '', s ? `${location.pathname}?${s}` : location.pathname);
   }
 
-  ui.loading(null);
+  // 推門的那一刻門閂響；門在背後靠上時悶的一聲
+  ui.onDoorOpen = () => ambience.voice('latch', 0.55);
+  if (world.frontDoor) world.frontDoor.onClose = () => ambience.voice('doorshut', 0.4);
+  const entered = ui.loading(null);
   fullscreenButton(coarse);
-  if (params.has('photo')) photo.enter();
-  else ui.hint(coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿或點地面走路　拖曳轉視角` : `點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下${zone === 'gallery' ? '　Enter 看畫' : ''}`, 6000);
+  // 進門以後：前門在背後闔上，跳出這間房的名字，再跳操作提示。不能 await，下面還要開始畫
+  entered.then(() => {
+    const byDoor = world.frontDoor && !params.has('from');
+    world.frontDoor?.shut(0.15);
+    if (byDoor) ui.toast(world.rooms[0].data.name, world.rooms[0].data.subtitle);
+    if (params.has('photo')) photo.enter();
+    else setTimeout(() => ui.hint(coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿或點地面走路　拖曳轉視角` : `點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下${zone === 'gallery' ? '　Enter 看畫' : ''}`, 6000), byDoor ? 2600 : 0);
+  });
 
   // 照鏡子時：太靠近玩家或擋在鏡頭與玩家之間的訪客與其他玩家淡成半透明
   let mirrorFading = false;
