@@ -877,6 +877,13 @@ body.desk .ph-alt-track { height: 240px; }
   object-fit: contain; border: 1px solid var(--line-soft); background: #000;
   -webkit-touch-callout: default; -webkit-user-select: auto; user-select: auto;
 }
+#ph-mode { display: flex; gap: 6px; }
+#ph-mode[hidden] { display: none; }
+#ph-mode button {
+  height: 32px; padding: 0 14px; font: inherit; font-size: 13px; letter-spacing: .12em;
+  color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 999px; cursor: var(--cur-pointer);
+}
+#ph-mode button[aria-pressed="true"] { color: var(--text); border-color: var(--text); }
 #ph-tip { margin: 0; font-size: 12px; letter-spacing: .1em; color: var(--muted); }
 #ph-tip:empty { display: none; }
 .ph-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }

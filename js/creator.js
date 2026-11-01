@@ -3,6 +3,8 @@
 // 捏角色的面板：在鏡子前打開。分成種族、臉、頭、衣服、配件、畫臉六頁，點了馬上套到角色身上。
 // 衣服和配件底下再分小頁。海市攤販送的東西還沒拿到前是鎖著的，點了會說去哪一攤拿。
 // 畫臉是 64 × 64 的格子，畫的途中直接更新角色臉上的貼圖，放開手才存起來、傳給別人。
+import { encodeSave, decodeSave, decodeLook, tryOn, shareLink, codeFrom, hasProgress, restoreSave } from './savecode.js';
+import { readPostcard } from './postcard.js';
 import { RACES, OPTIONS, SLIDERS, SKINS, HAT_COLORS, HAIR_COLORS, CLOTH, GIFTS, TINTED_HATS, FACE, FACE_INK, raceOf, randomLook, presetLook, sanitizeLook, encodeFace, decodeFace, unlockedSet, getSave, putSave, isOpen, lockedBy, optionName } from './looks.js';
 import { faceMap } from './character.js';
 
@@ -161,7 +163,36 @@ export class Creator {
       const what = s ? `${raceOf(s).name}・${s.one !== 'none' ? optionName('one', s.one) : optionName('top', s.top) + '配' + optionName('bottom', s.bottom)}` : '空的';
       return `<div class="closet-slot"><span>第 ${i + 1} 套<small>${what}</small></span>
         <button data-act="wear" data-i="${i}" ${s ? '' : 'disabled'}>穿上</button><button data-act="store" data-i="${i}">存進來</button></div>`;
-    }).join('');
+    }).join('') + `<p class="dress-note">換手機、換瀏覽器之前，把存檔碼複製起來收好。裡面有造型、衣櫃和拿到的東西</p>
+      <div class="closet-slot"><span>存檔碼</span><button data-act="link-copy">複製連結</button><button data-act="code-copy">複製碼</button><button data-act="code-paste">貼上</button></div>
+      <p class="dress-note">連結比較短，不含衣櫃；碼含衣櫃</p>
+      <div class="closet-slot"><span>明信片<small>海市寄出的明信片，讀郵票和底片邊</small></span><button data-act="card-read">從明信片讀取</button></div>`;
+  }
+
+  // 明信片：郵票是存檔碼（行囊）或造型碼（寄給朋友的），底片邊是畫的臉。
+  // 行囊：整份還原（先問），臉放回身上那套和衣櫃三套。朋友的：試穿，沒拿到的部位換回預設
+  async fromPostcard(file, b) {
+    const label = b.textContent;
+    b.textContent = '讀取中…';
+    b.disabled = true;
+    let r = null;
+    try { r = await readPostcard(file); } catch {}
+    b.textContent = label;
+    b.disabled = false;
+    const code = r?.text && codeFrom(r.text);
+    const face = (e) => (r.faces[e] ? encodeFace(r.faces[e]) : undefined);
+    const sv = code && decodeSave(code), L = code && !sv && decodeLook(code);
+    if (sv) {
+      if (sv.look) sv.look.face = face('bottom');
+      ['top', 'left', 'right'].forEach((e, i) => { if (sv.closet[i]) sv.closet[i].face = face(e); });
+      if (hasProgress() && !confirm('這台裝置上已經有東西了，要用這張明信片蓋掉嗎？')) return;
+      restoreSave(sv);
+      location.reload();
+    } else if (L) {
+      this.set(tryOn({ ...L, face: face('bottom') }), true);
+    } else {
+      alert('這張圖上找不到郵票。可能被裁掉了，或不是海市寄出的明信片');
+    }
   }
 
   onClick(e) {
@@ -203,6 +234,32 @@ export class Creator {
         slots[+b.dataset.i] = L;
         putSave({ closet: slots });
         this.render();
+        return;
+      }
+      case 'link-copy': case 'code-copy': {
+        const code = b.dataset.act === 'link-copy' ? shareLink() : encodeSave();
+        const label = b.textContent;
+        const done = () => { b.textContent = '已複製'; setTimeout(() => { b.textContent = label; }, 1500); };
+        if (navigator.clipboard?.writeText) navigator.clipboard.writeText(code).then(done, () => prompt('複製這串', code));
+        else prompt('複製這串', code);
+        return;
+      }
+      case 'code-paste': {
+        const text = prompt('貼上存檔碼');
+        if (!text) return;
+        const sv = decodeSave(codeFrom(text));
+        if (!sv) { alert('這串存檔碼打不開，可能少了幾個字'); return; }
+        if (hasProgress() && !confirm('這台裝置上已經有東西了，要用存檔碼蓋掉嗎？')) return;
+        restoreSave(sv);
+        location.reload();
+        return;
+      }
+      case 'card-read': {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = () => input.files[0] && this.fromPostcard(input.files[0], b);
+        input.click();
         return;
       }
       case 'sym': this.sym = !this.sym; break;

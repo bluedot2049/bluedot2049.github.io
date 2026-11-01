@@ -7,7 +7,10 @@
 // 變焦從望遠一路拉到廣角，再往上就慢慢彎成魚眼；怎麼彎、怎麼畫在 lens.js。
 import * as THREE from 'three';
 import { lens, fitSource, unbend } from './lens.js';
-import { makePostcard } from './postcard.js';
+import { makePostcard, loadQR } from './postcard.js';
+import { packFace } from './filmcode.js';
+import { getSave, sanitizeLook, decodeFace } from './looks.js';
+import { encodeLook, encodeSave } from './savecode.js';
 
 const ASPECTS = [
   { label: '螢幕', r: 0 },
@@ -258,6 +261,13 @@ export class PhotoMode {
     this.$('#ph-share').addEventListener('click', () => this.share());
     this.$('#ph-save').addEventListener('click', () => this.download());
     this.$('#ph-again').addEventListener('click', () => this.closeResult());
+    this.$('#ph-mode').addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-mode]');
+      if (b && this.shot && b.dataset.mode !== this.cardMode) {
+        this.cardMode = b.dataset.mode;
+        this.postcardResult();
+      }
+    });
     this.$('#ph-frame .grain').style.backgroundImage = `url(${this.noise.toDataURL()})`;
     window.addEventListener('resize', () => this.active && this.refresh());
   }
@@ -838,9 +848,14 @@ export class PhotoMode {
       this.render(0);
     }
     this.flash();
-    const card = this.postcard ? makePostcard(out) : out;
-    card.toBlob((blob) => {
-      if (blob) this.showResult(blob, `${this.postcard ? '海市明信片' : '煉金畫廊'}-${stamp()}.jpg`, false);
+    if (this.postcard) {
+      this.shot = out;
+      this.cardMode = 'friend';
+      this.postcardResult();
+      return;
+    }
+    out.toBlob((blob) => {
+      if (blob) this.showResult(blob, `煉金畫廊-${stamp()}.jpg`, false);
     }, 'image/jpeg', 0.92);
   }
 
@@ -972,8 +987,36 @@ export class PhotoMode {
 
   // ───────── 拍好之後 ─────────
 
+  // 明信片：郵票是存檔碼，照片四周的底片邊是自己畫的臉（郵票的 QR 放不下臉）。
+  // 寄給朋友：茜紅郵票只帶身上這套造型，下緣一條底片邊。寄給自己：藍染郵票帶整份進度（含衣櫃），四邊都有底片邊
+  async postcardResult() {
+    const mode = this.cardMode, save = getSave(), mine = mode === 'self';
+    await loadQR();
+    const face = (L) => {
+      const c = L && decodeFace(L.face);
+      return c ? packFace(c) : Promise.resolve(new Uint8Array(0));
+    };
+    const look = sanitizeLook(save.look), films = {};
+    if (mine) [films.bottom, films.top, films.left, films.right] = await Promise.all([look, ...[0, 1, 2].map((i) => save.closet[i])].map(face));
+    else if (decodeFace(look.face)) films.bottom = await face(look);
+    const url = location.origin + location.pathname;
+    const qr = mine
+      ? { kind: 'save', text: url + '#save=' + encodeSave(save, { face: false }) }
+      : { kind: 'look', text: url + '#look=' + encodeLook(look, { face: false }) };
+    if (!this.shot || mode !== this.cardMode) return;   // 等的時候離開了或換了另一種
+    const card = makePostcard(this.shot, new Date(), { films, qr });
+    const blob = await new Promise((ok) => card.toBlob(ok, 'image/jpeg', 0.92));
+    if (!blob || !this.shot || mode !== this.cardMode) return;
+    this.showResult(blob, `${mine ? '海市行囊' : '海市明信片'}-${stamp()}.jpg`, false);
+    this.$('#ph-tip').textContent = card.lost.length ? '有一張臉畫得太滿，明信片放不下，記得用鏡子裡的「複製碼」備份'
+      : mine ? '這張留給自己：換手機的時候，在鏡子前讀這張明信片，東西就回來了'
+      : '按分享，選要寄給誰。朋友掃郵票就能試穿你這一身';
+  }
+
   showResult(blob, name, video) {
+    const shot = this.shot;
     this.closeResult();
+    this.shot = shot;
     const url = URL.createObjectURL(blob);
     this.result = { blob, url, name, video };
     const box = this.$('#ph-media');
@@ -986,12 +1029,15 @@ export class PhotoMode {
     this.$('#ph-share').hidden = !navigator.canShare?.({ files: [file] });
     this.$('#ph-tip').textContent = this.postcard ? '按分享，選要寄給誰' : video ? '' : this.coarse ? '也可以長按照片存起來' : '';
     this.$('#ph-result').hidden = false;
+    this.$('#ph-mode').hidden = !this.postcard || video;
+    for (const b of this.$('#ph-mode').querySelectorAll('button')) b.setAttribute('aria-pressed', b.dataset.mode === this.cardMode);
   }
 
   closeResult() {
     if (!this.result) return;
     URL.revokeObjectURL(this.result.url);
     this.result = null;
+    this.shot = null;
     this.$('#ph-media').innerHTML = '';
     this.$('#ph-result').hidden = true;
   }

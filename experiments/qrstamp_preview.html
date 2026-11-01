@@ -1,0 +1,115 @@
+<!doctype html>
+<!-- © 2026 bluedot2049《煉金畫廊》。試做：存檔郵票（QR）的外觀和掃描測試。用 http://localhost:8000/experiments/qrstamp_preview.html 打開 -->
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>存檔郵票試做</title>
+<style>
+  body { margin: 0; padding: 16px; background: #2a2630; color: #eee; font: 14px/1.5 sans-serif; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  canvas { max-width: 100%; height: auto; display: block; }
+  .card { flex: 1 1 520px; }
+  pre { background: #1a1820; padding: 12px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div class="row" id="stamps"></div>
+<div class="row" id="cards"></div>
+<pre id="out">測試中…</pre>
+<script src="../vendor/qrcode.js"></script>
+<script src="../vendor/jsQR.js"></script>
+<script type="module">
+import { makePostcard, qrStamp } from '../js/postcard.js';
+import { presetLook, randomLook, sanitizeLook, encodeFace } from '../js/looks.js';
+import { encodeLook, encodeSave } from '../js/savecode.js';
+
+const ORIGIN = 'https://bluedot2049.github.io/';
+const out = [];
+const log = (s) => { out.push(s); document.getElementById('out').textContent = out.join('\n'); };
+
+// 假的照片：夜色、山、幾盞燈，比較接近明信片實際的背景
+function fakePhoto(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const sky = g.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, '#1a2050'); sky.addColorStop(0.6, '#6a4a7a'); sky.addColorStop(1, '#e08a5a');
+  g.fillStyle = sky; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#2a2238';
+  g.beginPath(); g.moveTo(0, h);
+  for (let x = 0; x <= w; x += w / 12) g.lineTo(x, h * (0.55 + 0.15 * Math.sin(x * 0.004)));
+  g.lineTo(w, h); g.fill();
+  for (let i = 0; i < 60; i++) {
+    g.fillStyle = `rgba(255, ${150 + (i * 37) % 80}, 80, 0.8)`;
+    g.beginPath(); g.arc((i * 997) % w, h * 0.6 + ((i * 431) % (h * 0.35)), 6 + (i % 5) * 3, 0, Math.PI * 2); g.fill();
+  }
+  return c;
+}
+
+function face(seed) {
+  const cells = new Uint8Array(4096);
+  for (let i = 0; i < 40; i++) cells[(seed * 131 + i * 977) % 4096] = 1 + (i % 8);
+  return encodeFace(cells);
+}
+
+const look = sanitizeLook({ ...randomLook(presetLook(2)), face: face(1) });
+const plain = sanitizeLook(randomLook(presetLook(3)));
+const lockAll = ['one:yukata', 'outer:haori', 'bottom:hakama', 'shoes:geta', 'hand:fish', 'hand:teacup', 'hand:squid'];
+const saveTypical = { look: plain, closet: [randomLook(presetLook(1)), null, randomLook(presetLook(5))], unlocked: lockAll, visits: { maps: '2026-11-01' } };
+const saveHeavy = { look, closet: [0, 1, 2].map((i) => ({ ...randomLook(presetLook(i)), face: face(i + 2) })), unlocked: lockAll, visits: { maps: '2026-11-01' } };
+
+const P = new URLSearchParams(location.search), ECC = P.get('ecc') || 'L', SZ = +(P.get('size') || 1.5), PLAIN = P.has('plain'), TILT = +(P.get('tilt') ?? 0.04), N = +(P.get('n') || 6);
+const rl = (i) => sanitizeLook(randomLook(presetLook(i)));
+const mk = (i) => [
+  { name: '寄給朋友（造型）', kind: 'look', text: ORIGIN + '#look=' + encodeLook(rl(i), { face: false }) },
+  { name: '寄給自己（衣櫃一套）', kind: 'save', text: ORIGIN + '#save=' + encodeSave({ ...saveTypical, look: rl(i), closet: [rl(i + 1)] }, { face: false }) },
+  { name: '寄給自己（衣櫃三套）', kind: 'save', text: ORIGIN + '#save=' + encodeSave({ ...saveHeavy, look: rl(i), closet: [rl(i + 1), rl(i + 2), rl(i + 3)] }, { face: false }) },
+];
+const cases = mk(0);
+log(`容錯 ${ECC}、存檔郵票 ${SZ} 倍、${PLAIN ? '普通方塊' : '墨點'}、傾斜 ${TILT}、每種 ${N} 組`);
+// 單張郵票放大看
+for (const c of cases.slice(0, 2)) {
+  const cv = document.createElement('canvas');
+  cv.width = 420; cv.height = 520;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#f2ead8'; g.fillRect(0, 0, cv.width, cv.height);
+  qrStamp(g, 210, 260, 320, c.text, { kind: c.kind, tilt: 0, ecc: ECC, plain: PLAIN });
+  document.getElementById('stamps').append(cv);
+}
+
+const toCanvas = (blob) => new Promise((ok) => { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; c.getContext('2d').drawImage(im, 0, 0); ok(c); }; im.src = URL.createObjectURL(blob); });
+const shrink = (src, long, q) => new Promise((ok) => {
+  const k = long / Math.max(src.width, src.height), c = document.createElement('canvas');
+  c.width = Math.round(src.width * k); c.height = Math.round(src.height * k);
+  const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(src, 0, 0, c.width, c.height);
+  c.toBlob((b) => toCanvas(b).then(ok), 'image/jpeg', q);
+});
+const read = (c) => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height); return jsQR(d.data, c.width, c.height)?.data ?? null; };
+
+await document.fonts.ready;
+const LEVELS = [['原圖', 0, 0], ['LINE 1280/0.7', 1280, 0.7], ['960/0.6', 960, 0.6], ['720/0.5', 720, 0.5]];
+const photo = fakePhoto(2560, 1707);
+for (let k = 0; k < 3; k++) {
+  const ok = LEVELS.map(() => 0);
+  let info, len;
+  for (let i = 0; i < N; i++) {
+    const c = mk(i * 4 + 1)[k];
+    const card = makePostcard(photo, new Date(2026, 10, 1));
+    const g = card.getContext('2d');
+    const pw = photo.width, ph = photo.height, long = Math.max(pw, ph), m = Math.round(long * 0.045);
+    const s = Math.round(Math.min(pw, ph) * 0.17), qs = c.kind === 'save' ? s * SZ : s;
+    info = qrStamp(g, m + pw - s * 0.62, m + s * 1.4 + qs * 0.66, qs, c.text, { kind: c.kind, tilt: TILT, ecc: ECC, plain: PLAIN });
+    len = c.text.length;
+    if (i === 0 && !document.querySelector('#cards canvas.k' + k)) { card.className = 'k' + k; const w = document.createElement('div'); w.className = 'card'; w.append(card); document.getElementById('cards').append(w); }
+    for (let j = 0; j < LEVELS.length; j++) {
+      const [, l2, q] = LEVELS[j];
+      if (read(l2 ? await shrink(card, l2, q) : card) === c.text) ok[j]++;
+    }
+  }
+  log(`${cases[k].name}：約 ${len} 字，第 ${info.version} 版　` + LEVELS.map(([n], j) => `${n} ${ok[j]}/${N}`).join('　'));
+}
+log('DONE');
+</script>
+</body>
+</html>

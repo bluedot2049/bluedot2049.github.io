@@ -107,6 +107,8 @@ export const GIFTS = {
 const LOCKS = new Map();
 for (const [v, g] of Object.entries(GIFTS)) for (const [k, id] of g.items) LOCKS.set(k + ':' + id, v);
 export const lockedBy = (k, id) => LOCKS.get(k + ':' + id);
+// 要去拿的東西的完整清單（存檔碼照這個順序記，只能往後加）
+export const lockKeys = () => [...LOCKS.keys()];
 
 // ---------- 存檔 ----------
 // 身上的東西（造型、衣櫃、解鎖、各攤上次來的日子）合成一份，帶版本號。音量、操作習慣這些屬於裝置，不放這裡。

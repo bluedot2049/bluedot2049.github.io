@@ -1,0 +1,107 @@
+<!doctype html>
+<!-- © 2026 bluedot2049《煉金畫廊》。試做：明信片上的存檔郵票（QR）＋底片邊（自己畫的臉），外觀和讀取測試。用 http://localhost:8000/experiments/filmcode_preview.html 打開 -->
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>明信片存檔試做</title>
+<style>
+  body { margin: 0; padding: 16px; background: #2a2630; color: #eee; font: 14px/1.5 sans-serif; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  canvas { max-width: 100%; height: auto; display: block; }
+  .card { flex: 1 1 520px; }
+  .card.tall { flex: 0 1 360px; }
+  pre { background: #1a1820; padding: 12px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<pre id="out">測試中…</pre>
+<div class="row" id="cards"></div>
+<script src="../vendor/qrcode.js"></script>
+<script src="../vendor/jsQR.js"></script>
+<script type="module">
+import { makePostcard, readPostcard } from '../js/postcard.js';
+import { packFace } from '../js/filmcode.js';
+import { presetLook, randomLook, sanitizeLook } from '../js/looks.js';
+import { encodeLook, encodeSave } from '../js/savecode.js';
+
+const P = new URLSearchParams(location.search), N = +(P.get('n') || 3);
+const out = [];
+const log = (s) => { out.push(s); document.getElementById('out').textContent = out.join('\n'); };
+window.addEventListener('unhandledrejection', (e) => log('ERR ' + (e.reason?.stack || e.reason)));
+
+function fakePhoto(w, h, seed) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const sky = g.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, '#1a2050'); sky.addColorStop(0.6, '#6a4a7a'); sky.addColorStop(1, '#2a1a28');
+  g.fillStyle = sky; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#20182a';
+  g.beginPath(); g.moveTo(0, h);
+  for (let x = 0; x <= w; x += w / 12) g.lineTo(x, h * (0.55 + 0.15 * Math.sin(x * 0.004 + seed)));
+  g.lineTo(w, h); g.fill();
+  for (let i = 0; i < 60; i++) {
+    g.fillStyle = `rgba(255, ${150 + (i * 37) % 80}, 80, 0.8)`;
+    g.beginPath(); g.arc((i * 997 + seed * 50) % w, h * 0.6 + ((i * 431) % (h * 0.38)), 6 + (i % 5) * 3, 0, Math.PI * 2); g.fill();
+  }
+  return c;
+}
+
+// 合成的臉：眼睛、嘴巴、腮紅
+function face(seed) {
+  const c = new Uint8Array(4096), set = (x, y, v) => { if (x >= 0 && y >= 0 && x < 64 && y < 64) c[y * 64 + x] = v; };
+  const disc = (cx, cy, r, v) => { for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) if (x * x + y * y <= r * r) set(cx + x, cy + y, v); };
+  const o = seed % 5;
+  disc(22, 28 + o, 5, 1); disc(42, 28 + o, 5, 1); disc(20, 26 + o, 1, 2); disc(40, 26 + o, 1, 2);
+  for (let x = 24; x <= 40; x++) set(x, 44 + Math.round(((x - 32) ** 2) / (20 + seed % 9)), 3);
+  disc(15, 38, 3, 4); disc(49, 38, 3, 4);
+  for (let x = 14; x < 50; x++) set(x, 18 - ((x + seed) % 3), 1 + seed % 8);
+  return c;
+}
+const same = (a, b) => a && b && a.every((v, k) => v === b[k]);
+
+const toBlob = (c, type, q) => new Promise((ok) => c.toBlob(ok, type, q));
+async function degrade(card, long, q) {
+  if (!long) return toBlob(card, 'image/png');
+  const k = long / Math.max(card.width, card.height), c = document.createElement('canvas');
+  c.width = Math.round(card.width * k); c.height = Math.round(card.height * k);
+  const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(card, 0, 0, c.width, c.height);
+  return toBlob(c, 'image/jpeg', q);
+}
+
+const ORIGIN = 'https://bluedot2049.github.io/';
+const LEVELS = [['原圖', 0, 0], ['1280/0.7', 1280, 0.7], ['960/0.6', 960, 0.6], ['720/0.5', 720, 0.5]];
+const SHAPES = [['橫 3:2', 2560, 1707], ['直 2:3', 1707, 2560], ['方 1:1', 2048, 2048]];
+const EDGES = ['bottom', 'top', 'left', 'right'];
+await document.fonts.ready;
+
+for (const mode of ['friend', 'self']) {
+  for (const [shape, pw, ph] of SHAPES) {
+    const okQ = LEVELS.map(() => 0), okF = LEVELS.map(() => 0);
+    for (let i = 0; i < N; i++) {
+      const rl = (j) => sanitizeLook(randomLook(presetLook(i + j)));
+      // 寄給自己：下緣、上緣、左邊有臉，右邊（衣櫃第三套）沒畫臉
+      const cells = { bottom: face(i * 7 + 1), top: face(i * 7 + 2), left: face(i * 7 + 3), right: null };
+      const films = {};
+      for (const e of mode === 'friend' ? ['bottom'] : EDGES) films[e] = cells[e] ? await packFace(cells[e]) : new Uint8Array(0);
+      const text = mode === 'friend'
+        ? ORIGIN + '#look=' + encodeLook(rl(0), { face: false })
+        : ORIGIN + '#save=' + encodeSave({ look: rl(0), closet: [rl(1), null, rl(3)], unlocked: ['hand:fish'], visits: {} }, { face: false });
+      const card = makePostcard(fakePhoto(pw, ph, i), new Date(2026, 10, 1), { films, qr: { text, kind: mode === 'friend' ? 'look' : 'save' } });
+      if (i === 0) { const w = document.createElement('div'); w.className = 'card' + (ph > pw ? ' tall' : ''); w.append(card); document.getElementById('cards').append(w); }
+      for (let j = 0; j < LEVELS.length; j++) {
+        const [, l2, q] = LEVELS[j];
+        const r = await readPostcard(await degrade(card, l2, q));
+        if (r.text === text) okQ[j]++;
+        // 有臉的邊要讀到一樣的臉，空的邊要讀到 null
+        if (Object.keys(films).every((e) => (cells[e] ? same(r.faces[e], cells[e]) : r.faces[e] === null)) && Object.keys(r.faces).length === Object.keys(films).length) okF[j]++;
+      }
+    }
+    log(`${mode === 'friend' ? '寄給朋友' : '寄給自己'} ${shape}：` + LEVELS.map(([nm], j) => `${nm} 臉 ${okF[j]}/${N} QR ${okQ[j]}/${N}`).join('　'));
+  }
+}
+log('DONE');
+</script>
+</body>
+</html>

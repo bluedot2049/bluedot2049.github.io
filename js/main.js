@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { Player } from './player.js';
 import { Character } from './character.js';
 import { sanitizeLook, randomPreset, getSave, putSave } from './looks.js';
+import { decodeLook, decodeSave, tryOn, hasProgress, restoreSave } from './savecode.js';
 import { Creator, FACE_TABS } from './creator.js';
 import { layoutBubbles } from './bubbles.js';
 import { UI, panelW } from './ui.js';
@@ -61,7 +62,20 @@ document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('dragstart', (e) => { if (e.target.tagName === 'IMG' && !e.target.closest('#ph-media')) e.preventDefault(); });
 
 // 自己捏的樣子存在這台裝置上（looks.js 的存檔），下次來還是同一個。第一次來隨機配一套顏色
+// 網址帶 #save=存檔碼：整份存檔搬過來（蓋掉之前先問）。#look=造型碼：只是試穿，不存、不動解鎖，重新整理就回到自己的樣子
 function loadLook() {
+  const m = /^#(save|look)=([\w.,:~-]+)$/.exec(location.hash);
+  if (m) {
+    try { history.replaceState(null, '', location.pathname + location.search); } catch {}
+    if (m[1] === 'save') {
+      const sv = decodeSave(m[2]);
+      if (!sv) alert('這串存檔碼打不開，可能少了幾個字');
+      else if (!hasProgress() || confirm('這台裝置上已經有東西了，要用存檔碼蓋掉嗎？')) restoreSave(sv);
+    } else {
+      const L = decodeLook(m[2]);
+      if (L) return tryOn(L);
+    }
+  }
   const raw = getSave().look;
   if (raw) return sanitizeLook(raw);
   const L = randomPreset();
