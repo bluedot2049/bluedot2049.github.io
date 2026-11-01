@@ -5,10 +5,28 @@
 const KEY = 'rotateTip';
 const SHOW_MS = 9000;
 
-// 手機專用的全螢幕鈕：點一下進全螢幕，再點一下退出。方向不鎖，讓玩家自己轉。不支援全螢幕的（iPhone）就不顯示
+const standalone = () => navigator.standalone === true || matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches;
+
+// iPhone 沒有網頁全螢幕，唯一的辦法是加到主畫面；點鈕跳出兩步驟說明
+function homeScreenCard(btn) {
+  btn.hidden = false;
+  btn.addEventListener('click', () => {
+    if (document.getElementById('a2hs-tip')) return;
+    const el = document.createElement('div');
+    el.id = 'a2hs-tip';
+    el.className = 'studio-card';
+    el.innerHTML = '<p>點下方分享　→　加入主畫面</p><p>從桌面圖示開，就是全螢幕</p><div class="studio-row"><button class="btn primary">好</button></div>';
+    el.querySelector('button').addEventListener('click', () => el.remove());
+    document.body.appendChild(el);
+  });
+}
+
+// 手機專用的全螢幕鈕：點一下進全螢幕，再點一下退出。方向不鎖，讓玩家自己轉。
+// 不支援全螢幕的（iPhone）改成教加到主畫面；已經從主畫面開的就不顯示
 export function fullscreenButton(coarse) {
   const btn = document.getElementById('full-btn');
-  if (!btn || !coarse || !document.fullscreenEnabled) return;
+  if (!btn || !coarse || standalone()) return;
+  if (!document.fullscreenEnabled) { homeScreenCard(btn); return; }
   btn.hidden = false;
   const sync = () => btn.classList.toggle('on', !!document.fullscreenElement);
   document.addEventListener('fullscreenchange', sync);

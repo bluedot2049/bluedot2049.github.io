@@ -10,76 +10,81 @@
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
   <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="煉金畫廊">
   <!-- 拉丁副標和數字用的字體；連不上就退回系統襯線字 -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&display=swap">
-  <link rel="stylesheet" href="css/style.css?v=202611012137">
+  <link rel="stylesheet" href="css/style.css?v=202611012139">
   <script type="importmap">
     { "imports": {
-      "three": "./vendor/three.module.min.js?v=202611012137",
-      "./js/ambience.js": "./js/ambience.js?v=202611012137",
-      "./js/animals.js": "./js/animals.js?v=202611012137",
-      "./js/arcane.js": "./js/arcane.js?v=202611012137",
-      "./js/bubbles.js": "./js/bubbles.js?v=202611012137",
-      "./js/character.js": "./js/character.js?v=202611012137",
-      "./js/clothes.js": "./js/clothes.js?v=202611012137",
-      "./js/creator.js": "./js/creator.js?v=202611012137",
-      "./js/devtools.js": "./js/devtools.js?v=202611012137",
-      "./js/distant.js": "./js/distant.js?v=202611012137",
-      "./js/eaves.js": "./js/eaves.js?v=202611012137",
-      "./js/fade.js": "./js/fade.js?v=202611012137",
-      "./js/filmcode.js": "./js/filmcode.js?v=202611012137",
-      "./js/glyphs.js": "./js/glyphs.js?v=202611012137",
-      "./js/grade.js": "./js/grade.js?v=202611012137",
-      "./js/haishi.js": "./js/haishi.js?v=202611012137",
-      "./js/harbor.js": "./js/harbor.js?v=202611012137",
-      "./js/haze.js": "./js/haze.js?v=202611012137",
-      "./js/heads.js": "./js/heads.js?v=202611012137",
-      "./js/joystick.js": "./js/joystick.js?v=202611012137",
-      "./js/lantern.js": "./js/lantern.js?v=202611012137",
-      "./js/lens.js": "./js/lens.js?v=202611012137",
-      "./js/looks.js": "./js/looks.js?v=202611012137",
-      "./js/lore.js": "./js/lore.js?v=202611012137",
-      "./js/main.js": "./js/main.js?v=202611012137",
-      "./js/manatee.js": "./js/manatee.js?v=202611012137",
-      "./js/mirror.js": "./js/mirror.js?v=202611012137",
-      "./js/multiplayer.js": "./js/multiplayer.js?v=202611012137",
-      "./js/names.js": "./js/names.js?v=202611012137",
-      "./js/outdoor.js": "./js/outdoor.js?v=202611012137",
-      "./js/passersby.js": "./js/passersby.js?v=202611012137",
-      "./js/pathgrid.js": "./js/pathgrid.js?v=202611012137",
-      "./js/pave.js": "./js/pave.js?v=202611012137",
-      "./js/photo.js": "./js/photo.js?v=202611012137",
-      "./js/player.js": "./js/player.js?v=202611012137",
-      "./js/postcard.js": "./js/postcard.js?v=202611012137",
-      "./js/postfx.js": "./js/postfx.js?v=202611012137",
-      "./js/props.js": "./js/props.js?v=202611012137",
-      "./js/quality.js": "./js/quality.js?v=202611012137",
-      "./js/savecode.js": "./js/savecode.js?v=202611012137",
-      "./js/scenery.js": "./js/scenery.js?v=202611012137",
-      "./js/screen.js": "./js/screen.js?v=202611012137",
-      "./js/shots.js": "./js/shots.js?v=202611012137",
-      "./js/studio.js": "./js/studio.js?v=202611012137",
-      "./js/textures.js": "./js/textures.js?v=202611012137",
-      "./js/tree.js": "./js/tree.js?v=202611012137",
-      "./js/ui.js": "./js/ui.js?v=202611012137",
-      "./js/vendors.js": "./js/vendors.js?v=202611012137",
-      "./js/visitor-lines.js": "./js/visitor-lines.js?v=202611012137",
-      "./js/visitors.js": "./js/visitors.js?v=202611012137",
-      "./js/world.js": "./js/world.js?v=202611012137",
-      "./js/yatai.js": "./js/yatai.js?v=202611012137",
-      "./js/zone-gallery.js": "./js/zone-gallery.js?v=202611012137",
-      "./js/zone-haishi.js": "./js/zone-haishi.js?v=202611012137"
+      "three": "./vendor/three.module.min.js?v=202611012139",
+      "./js/ambience.js": "./js/ambience.js?v=202611012139",
+      "./js/animals.js": "./js/animals.js?v=202611012139",
+      "./js/arcane.js": "./js/arcane.js?v=202611012139",
+      "./js/bubbles.js": "./js/bubbles.js?v=202611012139",
+      "./js/character.js": "./js/character.js?v=202611012139",
+      "./js/clothes.js": "./js/clothes.js?v=202611012139",
+      "./js/creator.js": "./js/creator.js?v=202611012139",
+      "./js/devtools.js": "./js/devtools.js?v=202611012139",
+      "./js/distant.js": "./js/distant.js?v=202611012139",
+      "./js/eaves.js": "./js/eaves.js?v=202611012139",
+      "./js/fade.js": "./js/fade.js?v=202611012139",
+      "./js/filmcode.js": "./js/filmcode.js?v=202611012139",
+      "./js/glyphs.js": "./js/glyphs.js?v=202611012139",
+      "./js/grade.js": "./js/grade.js?v=202611012139",
+      "./js/haishi.js": "./js/haishi.js?v=202611012139",
+      "./js/harbor.js": "./js/harbor.js?v=202611012139",
+      "./js/haze.js": "./js/haze.js?v=202611012139",
+      "./js/heads.js": "./js/heads.js?v=202611012139",
+      "./js/joystick.js": "./js/joystick.js?v=202611012139",
+      "./js/lantern.js": "./js/lantern.js?v=202611012139",
+      "./js/lens.js": "./js/lens.js?v=202611012139",
+      "./js/looks.js": "./js/looks.js?v=202611012139",
+      "./js/lore.js": "./js/lore.js?v=202611012139",
+      "./js/main.js": "./js/main.js?v=202611012139",
+      "./js/manatee.js": "./js/manatee.js?v=202611012139",
+      "./js/mirror.js": "./js/mirror.js?v=202611012139",
+      "./js/multiplayer.js": "./js/multiplayer.js?v=202611012139",
+      "./js/names.js": "./js/names.js?v=202611012139",
+      "./js/outdoor.js": "./js/outdoor.js?v=202611012139",
+      "./js/passersby.js": "./js/passersby.js?v=202611012139",
+      "./js/pathgrid.js": "./js/pathgrid.js?v=202611012139",
+      "./js/pave.js": "./js/pave.js?v=202611012139",
+      "./js/photo.js": "./js/photo.js?v=202611012139",
+      "./js/player.js": "./js/player.js?v=202611012139",
+      "./js/postcard.js": "./js/postcard.js?v=202611012139",
+      "./js/postfx.js": "./js/postfx.js?v=202611012139",
+      "./js/props.js": "./js/props.js?v=202611012139",
+      "./js/quality.js": "./js/quality.js?v=202611012139",
+      "./js/savecode.js": "./js/savecode.js?v=202611012139",
+      "./js/scenery.js": "./js/scenery.js?v=202611012139",
+      "./js/screen.js": "./js/screen.js?v=202611012139",
+      "./js/shots.js": "./js/shots.js?v=202611012139",
+      "./js/studio.js": "./js/studio.js?v=202611012139",
+      "./js/textures.js": "./js/textures.js?v=202611012139",
+      "./js/tree.js": "./js/tree.js?v=202611012139",
+      "./js/ui.js": "./js/ui.js?v=202611012139",
+      "./js/vendors.js": "./js/vendors.js?v=202611012139",
+      "./js/visitor-lines.js": "./js/visitor-lines.js?v=202611012139",
+      "./js/visitors.js": "./js/visitors.js?v=202611012139",
+      "./js/world.js": "./js/world.js?v=202611012139",
+      "./js/yatai.js": "./js/yatai.js?v=202611012139",
+      "./js/zone-gallery.js": "./js/zone-gallery.js?v=202611012139",
+      "./js/zone-haishi.js": "./js/zone-haishi.js?v=202611012139"
     } }
   </script>
   <!-- 依區域先下載會用到的模組，不必等 import 一層一層往下找。tools/stamp.ps1 上傳時產生，不用手改 -->
   <script id="preload">
     (function () {
-      var core = ['vendor/three.module.min.js?v=202611012137', 'js/ambience.js?v=202611012137', 'js/bubbles.js?v=202611012137', 'js/character.js?v=202611012137', 'js/clothes.js?v=202611012137', 'js/creator.js?v=202611012137', 'js/filmcode.js?v=202611012137', 'js/glyphs.js?v=202611012137', 'js/heads.js?v=202611012137', 'js/joystick.js?v=202611012137', 'js/lantern.js?v=202611012137', 'js/lens.js?v=202611012137', 'js/looks.js?v=202611012137', 'js/multiplayer.js?v=202611012137', 'js/photo.js?v=202611012137', 'js/player.js?v=202611012137', 'js/postcard.js?v=202611012137', 'js/postfx.js?v=202611012137', 'js/props.js?v=202611012137', 'js/quality.js?v=202611012137', 'js/savecode.js?v=202611012137', 'js/scenery.js?v=202611012137', 'js/screen.js?v=202611012137', 'js/studio.js?v=202611012137', 'js/textures.js?v=202611012137', 'js/ui.js?v=202611012137', 'vendor/BufferGeometryUtils.js'];
+      var core = ['vendor/three.module.min.js?v=202611012139', 'js/ambience.js?v=202611012139', 'js/bubbles.js?v=202611012139', 'js/character.js?v=202611012139', 'js/clothes.js?v=202611012139', 'js/creator.js?v=202611012139', 'js/filmcode.js?v=202611012139', 'js/glyphs.js?v=202611012139', 'js/heads.js?v=202611012139', 'js/joystick.js?v=202611012139', 'js/lantern.js?v=202611012139', 'js/lens.js?v=202611012139', 'js/looks.js?v=202611012139', 'js/multiplayer.js?v=202611012139', 'js/photo.js?v=202611012139', 'js/player.js?v=202611012139', 'js/postcard.js?v=202611012139', 'js/postfx.js?v=202611012139', 'js/props.js?v=202611012139', 'js/quality.js?v=202611012139', 'js/savecode.js?v=202611012139', 'js/scenery.js?v=202611012139', 'js/screen.js?v=202611012139', 'js/studio.js?v=202611012139', 'js/textures.js?v=202611012139', 'js/ui.js?v=202611012139', 'vendor/BufferGeometryUtils.js'];
       var zones = {
-        gallery: ['js/animals.js?v=202611012137', 'js/arcane.js?v=202611012137', 'js/fade.js?v=202611012137', 'js/harbor.js?v=202611012137', 'js/lore.js?v=202611012137', 'js/manatee.js?v=202611012137', 'js/mirror.js?v=202611012137', 'js/names.js?v=202611012137', 'js/outdoor.js?v=202611012137', 'js/pathgrid.js?v=202611012137', 'js/tree.js?v=202611012137', 'js/visitor-lines.js?v=202611012137', 'js/visitors.js?v=202611012137', 'js/world.js?v=202611012137', 'js/zone-gallery.js?v=202611012137', 'vendor/Water.js'],
-        haishi: ['js/distant.js?v=202611012137', 'js/eaves.js?v=202611012137', 'js/fade.js?v=202611012137', 'js/grade.js?v=202611012137', 'js/haishi.js?v=202611012137', 'js/harbor.js?v=202611012137', 'js/haze.js?v=202611012137', 'js/names.js?v=202611012137', 'js/passersby.js?v=202611012137', 'js/pathgrid.js?v=202611012137', 'js/pave.js?v=202611012137', 'js/shots.js?v=202611012137', 'js/vendors.js?v=202611012137', 'js/yatai.js?v=202611012137', 'js/zone-haishi.js?v=202611012137']
+        gallery: ['js/animals.js?v=202611012139', 'js/arcane.js?v=202611012139', 'js/fade.js?v=202611012139', 'js/harbor.js?v=202611012139', 'js/lore.js?v=202611012139', 'js/manatee.js?v=202611012139', 'js/mirror.js?v=202611012139', 'js/names.js?v=202611012139', 'js/outdoor.js?v=202611012139', 'js/pathgrid.js?v=202611012139', 'js/tree.js?v=202611012139', 'js/visitor-lines.js?v=202611012139', 'js/visitors.js?v=202611012139', 'js/world.js?v=202611012139', 'js/zone-gallery.js?v=202611012139', 'vendor/Water.js'],
+        haishi: ['js/distant.js?v=202611012139', 'js/eaves.js?v=202611012139', 'js/fade.js?v=202611012139', 'js/grade.js?v=202611012139', 'js/haishi.js?v=202611012139', 'js/harbor.js?v=202611012139', 'js/haze.js?v=202611012139', 'js/names.js?v=202611012139', 'js/passersby.js?v=202611012139', 'js/pathgrid.js?v=202611012139', 'js/pave.js?v=202611012139', 'js/shots.js?v=202611012139', 'js/vendors.js?v=202611012139', 'js/yatai.js?v=202611012139', 'js/zone-haishi.js?v=202611012139']
       };
       var z = new URLSearchParams(location.search).get('z');
       var all = core.concat(Object.prototype.hasOwnProperty.call(zones, z) ? zones[z] : zones.gallery);
@@ -243,6 +248,6 @@
     <div id="list-body"></div>
   </div>
 
-  <script type="module" src="js/main.js?v=202611012137"></script>
+  <script type="module" src="js/main.js?v=202611012139"></script>
 </body>
 </html>

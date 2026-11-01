@@ -1,0 +1,13 @@
+{
+  "name": "煉金畫廊",
+  "short_name": "煉金畫廊",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "background_color": "#1c130d",
+  "theme_color": "#1c130d",
+  "icons": [
+    { "src": "assets/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}
