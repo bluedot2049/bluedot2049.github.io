@@ -110,6 +110,7 @@ export class Player {
     this.markerT = 1;
     this.moving = true;
     this.paused = false;            // 攝影模式：不接輸入，鏡頭交給 photo.js
+    this.aim = null;                // 攝影模式中舉相機的樣子 { grip, pitch }，送給別人看（photo.js 每幀填）
     this.desiredCamera(this.camPos, this.camLook);
     this.bind();
   }

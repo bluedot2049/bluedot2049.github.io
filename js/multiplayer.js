@@ -19,6 +19,7 @@ const COORD_LIMIT = 200;    // 畫廊遠小於這個範圍，超過的座標一�
 const EMOTE_GAP = 800;      // 自己送表情的最短間隔
 const JUMP_GAP = 400;       // 自己送跳躍的最短間隔
 const PET_GAP = 1500;       // 自己送摸動物的最短間隔
+const FLASH_GAP = 1000;     // 別人的閃光最短間隔（燈泡要換），亂送的也只會一秒閃一次
 const LOOK_DELAY = 1000;    // 捏角色停手這麼久才送出，連點選項、拖滑桿不會一直送
 // Supabase 每條連線 30 秒內最多登記 5 次在線名單，超過會直接關掉頻道，之後誰都看不到誰。
 // 換樣子再怎麼頻繁，兩次登記至少隔這麼久，連線剛建好那一次也算在內
@@ -92,7 +93,7 @@ export class Multiplayer {
     this.shadowTex = shadowTex;
     this.player = player;
     this.cfg = cfg;
-    this.events = events;           // { onCount(n), onReady(), onPet(other, i), onJump(other) }
+    this.events = events;           // { onCount(n), onReady(), onPet(other, i), onJump(other), onFlash(character) }
     this.id = Math.random().toString(36).slice(2, 10);
     this.others = new Map();        // id -> { ch, pos, target, heading, seen, speed }
     this.present = new Set();       // 目前在線上的訪客 id（來自 presence）
@@ -129,6 +130,7 @@ export class Multiplayer {
       .on('broadcast', { event: 'emote' }, ({ payload }) => this.onEmote(payload))
       .on('broadcast', { event: 'jump' }, ({ payload }) => this.onJump(payload))
       .on('broadcast', { event: 'pet' }, ({ payload }) => this.onPet(payload))
+      .on('broadcast', { event: 'flash' }, ({ payload }) => this.onFlash(payload))
       .on('broadcast', { event: 'studio' }, ({ payload }) => this.onStudio(payload))
       .on('presence', { event: 'sync' }, () => {
         const state = ch.presenceState();
@@ -202,9 +204,11 @@ export class Multiplayer {
   send(now) {
     const p = this.player;
     // s：0 沒坐、-1 坐在地上、i + 1 坐在第 i 個座位；f：手上的點心
-    const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room, s: p.sitCode, f: p.character.foodCode };
+    // a：舉相機的拿法 + 1（0 是沒舉，5 是沒帶相機在比取景框），q：抬頭的角度，取到 0.05 才不會一直送
+    const aim = p.aim;
+    const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room, s: p.sitCode, f: p.character.foodCode, a: aim ? aim.grip + 1 : 0, q: aim ? Math.round(aim.pitch * 20) / 20 : 0 };
     const l = this.last;
-    const changed = !l || Math.abs(st.x - l.x) > 0.02 || Math.abs(st.z - l.z) > 0.02 || Math.abs(wrapAngle(st.h - l.h)) > 0.05 || st.r !== l.r || st.s !== l.s || st.f !== l.f;
+    const changed = !l || Math.abs(st.x - l.x) > 0.02 || Math.abs(st.z - l.z) > 0.02 || Math.abs(wrapAngle(st.h - l.h)) > 0.05 || st.r !== l.r || st.s !== l.s || st.f !== l.f || st.a !== l.a || st.q !== l.q;
     if (now - this.lastSent < (changed ? SEND_MOVING : SEND_IDLE)) return;
     this.channel.send({ type: 'broadcast', event: 'pos', payload: { id: this.id, ...st } });
     this.last = st;
@@ -219,6 +223,8 @@ export class Multiplayer {
     const seats = this.player.world.outdoor?.seats || [];
     m.s = Number.isInteger(m.s) && m.s >= -1 && m.s <= seats.length ? m.s : 0;
     m.f = isFood(m.f) ? m.f : 0;
+    m.a = Number.isInteger(m.a) && m.a >= 0 && m.a <= 5 ? m.a : 0;
+    m.q = isNum(m.q, 2) ? m.q : 0;
     let o = this.others.get(m.id);
     if (!o) {
       if (this.others.size >= MAX_TRACKED) return;
@@ -273,6 +279,19 @@ export class Multiplayer {
       o.ch.jump();
       this.events.onJump?.(o);
     }
+  }
+
+  // 閃光燈閃了：只送這件事，閃在哪裡由各自的畫面照那個人舉相機的位置算
+  flash() {
+    if (!this.active) return;
+    this.channel.send({ type: 'broadcast', event: 'flash', payload: { id: this.id } });
+  }
+
+  onFlash(m) {
+    const now = performance.now(), o = m && isId(m.id) ? this.others.get(m.id) : null;
+    if (!o || !o.ch.group.visible || !o.ch.camG || now - (o.lastFlash || 0) < FLASH_GAP) return;
+    o.lastFlash = now;
+    this.events.onFlash?.(o.ch);
   }
 
   // 動物的行程每台算出來都一樣，摸了哪一隻只要傳編號
@@ -370,6 +389,7 @@ export class Multiplayer {
       o.ch.sitting = t.s !== 0;
       if (t.s) o.ch.lift = seat ? seat.lift : 0.02;
       if (t.f !== o.ch.foodCode) o.ch.setFoodCode(t.f);
+      o.ch.setAim?.(t.a ? { grip: t.a - 1, pitch: t.q } : null);
       g.position.copy(o.pos);
       g.rotation.y = o.heading;
       o.ch.update(dt, t.s ? 0 : o.speed);

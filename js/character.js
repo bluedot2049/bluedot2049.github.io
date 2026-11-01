@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { Kit, mergeBucket } from './props.js';
 import { HEADS, rod } from './heads.js';
 import { HAT_COLORS, HAIR_COLORS, SKINS, CLOTH, FACE, FACE_INK, raceOf, sizes, sanitizeLook, lookKey, decodeFace } from './looks.js';
-import { strapModel } from './cameras.js';
+import { strapModel, cameraModel } from './cameras.js';
 import { HIP, HOODED, HAND_POSE, bodyGeo, armGeo, legGeo, capeGeo, capeAt, wingGeo, wingAt, hasWings, tailGeo, tailAt, handGeo, hood } from './clothes.js';
 
 function mat(color) {
@@ -15,6 +15,9 @@ function mat(color) {
 
 export const JUMP_V = 4.2, GRAVITY = 14;
 const ACT_TIME = 1.6;
+const AIM_TIME = 0.45;     // 舉起相機要多久：前三分之一收起手上的東西，後面才舉
+const STOW = 0.35;
+const CAM_S = 0.9;         // 掛在身上的相機的大小
 const PET_TIME = 2.4;      // 摸動物摸多久
 // 長袍上窄下寬，手臂要從肩膀往外張開一點，手才會沿著袍子外側垂下，不會插進身體
 const ARM_OUT = 0.28;
@@ -409,8 +412,17 @@ export class Character {
     };
     this.torso = mesh(body);
     this.scarfTail = mesh(body);
-    this.camMesh = mesh(body);      // 胸前掛的相機
+    // 胸前掛的相機：背帶固定在身上，相機自己一個關節，舉起來時從胸口移到臉前
+    this.strapMesh = mesh(body);
+    this.camG = new THREE.Group();
+    this.camG.scale.setScalar(CAM_S);
+    body.add(this.camG);
+    this.camMesh = mesh(this.camG);
     this.camId = null;
+    this.aim = null;                // 正在舉相機 { grip, pitch }（見 setAim）
+    this.aimP = 0;                  // 舉相機的進度：0 放下、1 舉好
+    this.aimG = { grip: 1, pitch: 0 };   // 正在演的拿法，放下的途中還記著
+    this.camLocal = true;           // 自己的畫面裡要不要畫胸前那台（自拍時會擋住鏡頭）
     // 會動的衣服：披風、翅膀、尾巴各掛在一個關節上
     const joint = (parent) => {
       const p = new THREE.Group();
@@ -565,6 +577,7 @@ export class Character {
       faceY: H * (NECK + hs * (race.ey + S.fy)),
       topY: H * (NECK + hs * head),
       headH: H * hs * head,
+      crownY: H * (NECK + hs * race.top),   // 頭頂，不算帽子
     };
     this.shadowS = Math.max(0.85, W) * H;
   }
@@ -578,8 +591,18 @@ export class Character {
 
   // 用背帶掛在胸口，離身體多遠照胖瘦算；換造型時身形變了要重掛
   hangCamera() {
-    const W = this.S?.W ?? 1;
-    swap(this.camMesh, this.camId ? build((k) => strapModel(k, this.camId, 0.4, 0.235 * W + 0.05, 0.9)) : null);
+    const id = this.camId;
+    this.camHang = new THREE.Vector3(0, 0.4, 0.235 * (this.S?.W ?? 1) + 0.05);
+    swap(this.strapMesh, id ? build((k) => strapModel(k, this.camHang.y, this.camHang.z)) : null);
+    swap(this.camMesh, id ? build((k) => cameraModel(k, id)) : null);
+    this.camG.position.copy(this.camHang);
+  }
+
+  // 舉相機（攝影模式）：a = { grip, pitch }，null 是放下。grip：0 蹲低、1 眼高、2 舉高、3 自拍（右手伸長、相機轉過來），
+  // 4 沒帶相機時雙手在臉前比一個取景框。pitch 是抬頭的角度。舉起來之前先把手上的東西收起來，放下之後才拿出來
+  setAim(a) {
+    this.aim = a;
+    if (a) this.aimG = a;
   }
 
   // 自己畫的臉。畫的途中每一筆都直接更新貼圖，不用整個重建
@@ -809,9 +832,56 @@ export class Character {
     this.shadow.scale.setScalar((1 - Math.min(0.4, this.jumpY * 0.5)) * this.shadowS);
 
     if (this.act) this.pose(dt, Math.max(w, sk));
+    this.aimPose(dt);
     // 手上的東西抵銷手臂的轉動，不管手怎麼擺都直立
     const A = this.armL.rotation;
     this.handG.rotation.set(-A.x, -A.y, -A.z);
+  }
+
+  // 舉相機：進度前段把手上的東西縮小收起來（自拍只收右手的點心，左手的照拿），後段才把手抬起來。
+  // 放下時同一段倒著走：先放下手，東西最後才長回來。東西只是藏起來，咬到第幾口都還在
+  aimPose(dt) {
+    this.aimP = clamp01(this.aimP + (this.aim ? dt : -dt) / AIM_TIME);
+    const a = this.aimG, p = this.aimP, selfie = a.grip === 3;
+    const stow = smooth(clamp01(p / STOW)), r = smooth(clamp01((p - STOW) / (1 - STOW)));
+    this.handG.scale.setScalar(selfie ? 1 : 1 - stow);
+    if (this.foodMesh) this.foodMesh.scale.setScalar((1 - this.bites * 0.28) * (1 - stow));
+    this.head.rotation.x = -(selfie ? 0.1 : a.grip === 4 ? 0 : a.pitch * 0.7) * r;
+    if (!this.camId && a.grip !== 4) return;
+    this.strapMesh.visible = !!this.camId && r < 0.3;
+    this.camMesh.visible = !!this.camId && (this.camLocal || r < 0.5);
+    if (r <= 0) {
+      this.camG.position.copy(this.camHang);
+      this.camG.rotation.set(0, 0, 0);
+      return;
+    }
+    const L = this.armL.rotation, R = this.armR.rotation;
+    const arms = (lx, ly, lz, rx, ry, rz) => {
+      L.x += (lx - L.x) * r; L.y += (ly - L.y) * r; L.z += (lz - L.z) * r;
+      R.x += (rx - R.x) * r; R.y += (ry - R.y) * r; R.z += (rz - R.z) * r;
+    };
+    const hs = this.S.hs, face = this.dims.faceY / this.S.H, front = 0.25 * hs + 0.05;
+    const to = new THREE.Vector3(0, face - 0.05, front), lift = a.grip === 2;
+    if (a.grip === 4) arms(-2.5, 0.2, -0.45, -2.5, -0.2, 0.45);
+    else if (selfie) {
+      arms(L.x, L.y, L.z, -1.75, -0.15, 0.05);
+      this.armR.updateMatrix();
+      to.set(0, -0.36, 0).applyMatrix4(this.armR.matrix);
+    } else if (lift) {
+      arms(-2.85, 0.3, -0.05, -2.85, -0.3, 0.05);
+      to.set(0, this.dims.crownY / this.S.H, front * 0.8);
+    } else arms(-2.45, 0.6, -0.1, -2.45, -0.6, 0.1);
+    // 蹲低：身體往下沉，腿往前收
+    if (a.grip === 0) {
+      this.group.position.y -= 0.2 * this.S.H * r;
+      this.shadow.position.y += 0.2 * this.S.H * r;
+      for (const f of [this.footL, this.footR]) f.rotation.x += (-1.0 - f.rotation.x) * r;
+      this.body.rotation.x += 0.12 * r;
+    }
+    if (!this.camId) return;
+    this.camG.position.lerpVectors(this.camHang, to, r);
+    // 鏡頭跟著抬頭低頭；自拍時轉過來對著自己
+    this.camG.rotation.set(selfie ? 0.15 * r : -a.pitch * r, selfie ? Math.PI * r : 0, 0);
   }
 
   // 表情動作疊在走路動作上面。走路時只動手，站著時整個身體一起演

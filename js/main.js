@@ -22,6 +22,7 @@ import { lens, LensPass } from './lens.js';
 import { dof, DofPass } from './dof.js';
 import { fullscreenButton } from './screen.js';
 import { CAMERAS, TABLE, carried, carry } from './cameras.js';
+import { FlashFx } from './flashfx.js';
 
 // 世界分成幾個區域，一次只建一個，用 ?z= 指定，沒有寫就是畫廊。每個區域的內容寫在自己的 zone-*.js，用到才下載。
 // 換區域時整頁重新載入：瀏覽器一定會把上一個區域的記憶體收回去，手機才撐得住。
@@ -205,6 +206,8 @@ async function start() {
   // 角色出來之前先站好的（畫廊的胖頭頭人）
   const { manatee = null, host = null } = Z.residents?.({ scene, world, shadowTex }) ?? {};
   const ambience = new Ambience();
+  // 別人閃燈時，那盞閃光燈移過去亮一下
+  const flashFx = new FlashFx(scene, flashLight, camera, ambience);
   let lastInput = performance.now();
   let swipeHinted = false;
   let camSwipeHinted = false;
@@ -500,6 +503,7 @@ async function start() {
         animals?.startle(o.pos.x, o.pos.z);
       },
       onStudio: (m) => studio?.onMessage(m),
+      onFlash: (ch) => flashFx.fire(ch),
     }, look);
     mp.claude = params.get('as') === 'claude';   // 開發時我進站拍照：在場的人看到的是燈籠
     mp.camera = carried();
@@ -541,7 +545,8 @@ async function start() {
     renderer, scene, camera, player, world, character, ambience, ui, coarse,
     title: gallery.title || '煉金畫廊',
     render: draw,
-    lensPass, dofPass, flashLight,
+    lensPass, dofPass, flashLight, flashFx,
+    onFlash: () => mp?.flash(),
     resizeFX: (w, h) => fx?.setSize(w, h),
   });
   const selfie = new Selfie({
@@ -705,6 +710,7 @@ async function start() {
     vendors?.update(dt, player, camera);
     passers?.update(dt, player);
     manatee?.update(dt, player.pos.x, player.pos.z, camera);
+    flashFx.update(dt);
     if (world.camTable) {
       world.camTable.look(player.focus?.kind === 'cameras' ? player.focus.slot : -1);
       world.camTable.update(dt);

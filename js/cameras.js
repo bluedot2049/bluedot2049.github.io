@@ -4,8 +4,6 @@
 // 沒帶相機時，拍照模式是畫廊的「眼睛」，鏡頭可以離開角色自由飛（photo.js 原本那套）。
 // 帶了相機，鏡頭就在角色手上：構圖靠走路、轉身、蹲低舉高；鏡頭、對焦、照片的樣子都由相機決定。
 // 新相機加在 CAMERAS，模型加在 cameraModel，桌上的位置照 TABLE 的順序。
-import * as THREE from 'three';
-import { Kit } from './props.js';
 import { rod } from './heads.js';
 import { getSave, putSave } from './looks.js';
 
@@ -58,12 +56,7 @@ export function cameraModel(k, id) {
   }
 }
 
-// 掛在胸前的樣子：背帶繞過脖子，相機垂在胸口。y0 是相機底部的高度，z0 是胸口前緣，s 是相機的大小
-export function strapModel(k, id, y0, z0, s) {
-  const neck = y0 + 0.36;
-  for (const x of [-0.07, 0.07]) rod(k, [x, y0 + 0.1 * s, z0 + 0.02], [x * 1.2, neck, z0 - 0.06], 0.006, DARK, { seg: 4 });
-  const c = new Kit(null);
-  cameraModel(c, id);
-  const m = new THREE.Matrix4().makeScale(s, s, s).setPosition(0, y0, z0);
-  for (const g of c.lit) k.lit.push(g.applyMatrix4(m));
+// 背帶：繞過脖子垂到胸口，相機（cameraModel）另外一個網格掛在 y0、z0，舉起來時才拿得走。y0 是相機底部的高度，z0 是胸口前緣
+export function strapModel(k, y0, z0) {
+  for (const x of [-0.07, 0.07]) rod(k, [x, y0 + 0.09, z0 + 0.02], [x * 1.2, y0 + 0.36, z0 - 0.06], 0.006, DARK, { seg: 4 });
 }

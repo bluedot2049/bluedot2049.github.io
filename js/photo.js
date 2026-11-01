@@ -105,9 +105,10 @@ function pickMime() {
 
 export class PhotoMode {
   // render(dt)：照目前的設定畫一幀（有後製就走後製）；resizeFX(w, h)：後製跟著換尺寸；lensPass：拍魚眼照片時拿來彎大圖
-  // dofPass：景深（dof.js）；flashLight：閃光燈，平常亮度是 0
-  constructor({ renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass, dofPass, flashLight }) {
-    Object.assign(this, { renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass, dofPass, flashLight });
+  // dofPass：景深（dof.js）；flashLight：閃光燈，平常亮度是 0；flashFx：別人閃燈時借用同一盞燈（flashfx.js）
+  // onFlash：自己閃了燈，告訴別人
+  constructor({ renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass, dofPass, flashLight, flashFx, onFlash }) {
+    Object.assign(this, { renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass, dofPass, flashLight, flashFx, onFlash });
     this.active = false;
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
@@ -258,8 +259,11 @@ export class PhotoMode {
     this.active = false;
     this.gear = null;
     dof.on = false;
-    this.flashLight.intensity = 0;
+    this.flashFx.restore();
     this.player.setJoystick(0, 0);
+    this.player.aim = null;
+    this.character.setAim(null);
+    this.character.camLocal = true;
     this.postcard = false;
     lens.on = false;
     this.keys.clear();
@@ -784,6 +788,12 @@ export class PhotoMode {
   // 每幀在 player.update 之後呼叫，鏡頭交給這裡擺
   update(dt) {
     if (!this.active) return;
+    // 別人看到的自己：帶著相機就照拿法舉起來；沒帶相機在臉前比個取景框，只給別人看，自己拍到的自己照常站著。
+    // 照相館裡是被拍的人，不舉
+    const aim = this.studio ? null : this.gear ? { grip: this.grip, pitch: this.pitch } : { grip: 4, pitch: 0 };
+    this.player.aim = aim;
+    this.character.setAim(this.gear ? aim : null);
+    this.character.camLocal = !(this.gear && this.grip === 3);
     if (this.studio) {
       // 照相館：鏡頭釘在架好的位置，拖曳、搖桿、變焦都不理
       const st = this.studio, cam = this.camera;
@@ -1127,12 +1137,14 @@ export class PhotoMode {
     L.position.copy(this.camera.position);
     L.position.y += 0.12;
     L.color.setHex(f.color);
-    L.intensity = on ? f.power * this.focusD * this.focusD : 0;
+    if (on) L.intensity = f.power * this.focusD * this.focusD;
+    else this.flashFx.restore();   // 別人那一閃還沒暗完，就還給它
   }
 
   // 閃過了：啪一聲，鏡頭前飄過一陣煙，接著換燈泡
   fired() {
     this.ambience.voice('flash', 0.7);
+    this.onFlash?.();
     const bulb = this.gear.flash.bulb;
     if (!bulb) return;
     this.bulbAt = performance.now() + bulb * 1000;
