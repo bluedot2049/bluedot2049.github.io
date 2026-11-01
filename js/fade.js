@@ -107,71 +107,116 @@ export class Fader {
   }
 }
 
-// 畫廊走進下一間時，遠處的房間（或後門外的戶外）整間出現或藏起來，用同一種網點在 0.5 秒裡淡進淡出。
-// discard 會讓手機的 GPU 少掉一些省工夫的手段，所以平常不開：只有正在淡的那幾間，材質才打開 ROOM_FADE，淡完就關。
+// 畫廊裡整間房出現、藏起來（走進下一間時的遠處房間、後門外的戶外），還有房間裡自己淡的部件
+// （過門時降下的牆和門框、牆上的畫、房子外觀），都用同一種網點淡進淡出。
+// 留下來的像素同時往霧的顏色靠，看起來像從暮色裡浮出來，不是一顆一顆撒出來。
+// discard 會讓手機的 GPU 少掉一些省工夫的手段，所以平常不開：只有正在淡的那幾組，材質才打開 ROOM_FADE，淡完就關。
 // 兩種著色器都在載入畫面先編好（main.js 的 precompile），切換時不會卡。
-// 一個材質同時用在好幾間房的話，第二間以後複製一份，各房自己淡
+// 一個材質同時用在好幾組的話，第二組以後複製一份，各組自己淡
+export const ease = (a) => a * a * (3 - 2 * a);
+
 export class RoomFader {
-  constructor(groups) {
-    this.rooms = groups.map((group) => ({ group, a: 1, want: true, on: false, u: { value: 1 }, mats: [], alias: new Map() }));
-    this.owner = new WeakMap();   // 加過網點的材質 → 第幾間
+  // tint：霧的顏色（scene.fog.color，跟著室內外漸變）
+  constructor(groups, tint) {
+    this.rooms = groups.map((group) => ({ group, a: 1, want: true, on: false, u: { value: 1 }, mats: [], alias: new Map(), parts: [] }));
+    this.tint = { value: tint };
+    this.one = { value: 1 };
+    this.owner = new WeakMap();   // 加過網點的材質 → 哪一組
     this.base = new WeakMap();    // 原本的材質 → 加網點之前的 onBeforeCompile 和快取鍵
+    this.info = new WeakMap();    // 加過網點的材質 → { room, part }，決定要不要打開
+  }
+
+  // 房間 k 裡另外自己淡的一塊。u 可以好幾塊共用（同一段牆的牆面在這間、畫掛在隔壁間），淡的程度跟房間的相乘
+  part(k, objs, u) {
+    const room = this.rooms[k];
+    const p = { room, objs, u, on: false, mats: [], alias: new Map() };
+    room.parts.push(p);
+    return p;
   }
 
   // 房間裡後來才放進去的東西（貓、小船）也補上。編過著色器以後再補的，第一次淡的時候才編
   scan() {
-    this.rooms.forEach((r, k) => {
-      const fix = (m) => {
-        if (this.owner.get(m) === k) return m;
-        if (r.alias.has(m)) return r.alias.get(m);
-        let n = m;
-        if (this.owner.has(m)) {
-          n = m.clone();
-          if (m.isShaderMaterial) n.uniforms = { ...m.uniforms };   // uTime 這類要跟原本的共用同一個
-          this.base.set(n, this.base.get(m));
-        } else {
-          this.base.set(m, { obc: m.onBeforeCompile, key: m.customProgramCacheKey() });
-        }
-        this.patch(n, r.u);
-        this.owner.set(n, k);
-        r.alias.set(m, n);
-        r.mats.push(n);
-        return n;
-      };
-      r.group.traverse((o) => {
-        if (o.material) o.material = Array.isArray(o.material) ? o.material.map(fix) : fix(o.material);
-      });
-    });
+    const fix = (unit, room, part) => (m) => {
+      if (this.owner.get(m) === unit) return m;
+      if (unit.alias.has(m)) return unit.alias.get(m);
+      let n = m;
+      if (this.owner.has(m)) {
+        n = m.clone();
+        if (m.isShaderMaterial) n.uniforms = { ...m.uniforms };   // uTime 這類要跟原本的共用同一個
+        this.base.set(n, this.base.get(m));
+      } else {
+        this.base.set(m, { obc: m.onBeforeCompile, key: m.customProgramCacheKey() });
+      }
+      this.patch(n, room.u, part ? part.u : this.one);
+      this.owner.set(n, unit);
+      this.info.set(n, { room, part });
+      unit.alias.set(m, n);
+      unit.mats.push(n);
+      this.sync(n);
+      return n;
+    };
+    const apply = (o, f) => { if (o.material) o.material = Array.isArray(o.material) ? o.material.map(f) : f(o.material); };
+    const inPart = new WeakSet();
+    for (const r of this.rooms) {
+      for (const p of r.parts) {
+        const f = fix(p, r, p);
+        for (const obj of p.objs) obj.traverse((o) => { inPart.add(o); apply(o, f); });
+      }
+    }
+    for (const r of this.rooms) {
+      const f = fix(r, r, null);
+      r.group.traverse((o) => { if (!inPart.has(o)) apply(o, f); });
+    }
   }
 
-  patch(m, u) {
+  patch(m, roomU, partU) {
     const { obc, key } = this.base.get(m);
+    const tint = m.blending !== THREE.AdditiveBlending;   // 發光的是疊上去的，往霧色靠反而變亮
     m.onBeforeCompile = (sh, renderer) => {
       obc.call(m, sh, renderer);
-      sh.uniforms.uRoomA = u;
-      sh.fragmentShader = 'uniform float uRoomA;\n' + sh.fragmentShader.replace(/void\s+main\s*\(\s*\)\s*\{/,
-        `$&\n#ifdef ROOM_FADE\nif (uRoomA <= ${DITHER}) discard;\n#endif\n`);   // 有的著色器整段寫在同一行，#endif 後面要換行
+      Object.assign(sh.uniforms, { uRoomA: roomU, uPartA: partU, uFadeTint: this.tint });
+      const mix = tint ? '#ifdef ROOM_FADE\ngl_FragColor.rgb = mix(uFadeTint, gl_FragColor.rgb, fadeA);\n#endif\n' : '';
+      let f = 'uniform float uRoomA; uniform float uPartA; uniform vec3 uFadeTint;\n' + sh.fragmentShader.replace(/void\s+main\s*\(\s*\)\s*\{/,
+        `$&\n#ifdef ROOM_FADE\nfloat fadeA = uRoomA * uPartA;\nif (fadeA <= ${DITHER}) discard;\n#endif\n`);   // 有的著色器整段寫在同一行，#endif 後面要換行
+      // 霧色在霧之前混進去，後面再上一層霧，跟真的霧一致；沒有霧的著色器混在最後
+      f = f.includes('#include <fog_fragment>') ? f.replace('#include <fog_fragment>', mix + '#include <fog_fragment>') : f.replace(/\}\s*$/, mix + '}');
+      sh.fragmentShader = f;
     };
     m.customProgramCacheKey = () => key + '|room-fade';
   }
 
-  // 打開或關掉一間房的網點
-  variant(r, on) {
-    if (r.on === on) return;
-    r.on = on;
-    for (const m of r.mats) {
-      const d = { ...m.defines };
-      if (on) d.ROOM_FADE = '';
-      else delete d.ROOM_FADE;
-      m.defines = d;
-      m.needsUpdate = true;
-    }
+  // 房間或部件正在淡（或停在半淡）時打開網點
+  sync(m) {
+    const { room, part } = this.info.get(m);
+    const on = room.on || !!part?.on;
+    if (('ROOM_FADE' in (m.defines || {})) === on) return;
+    const d = { ...m.defines };
+    if (on) d.ROOM_FADE = '';
+    else delete d.ROOM_FADE;
+    m.defines = d;
+    m.needsUpdate = true;
+  }
+
+  turn(unit, on) {
+    if (unit.on === on) return;
+    if (on) this.scan();
+    unit.on = on;
+    for (const m of unit.mats) this.sync(m);
+    if (unit.parts) for (const p of unit.parts) for (const m of p.mats) this.sync(m);
+  }
+
+  // 部件淡到 a（0～1，已經套過曲線）。parts 是共用同一個 u 的那幾塊
+  setPart(parts, a) {
+    parts[0].u.value = a;
+    for (const p of parts) this.turn(p, a > 0 && a < 1);
   }
 
   // 預先編譯時全部打開編一次，再關回來
   all(on) {
-    if (on) this.scan();
-    for (const r of this.rooms) this.variant(r, on);
+    for (const r of this.rooms) {
+      this.turn(r, on);
+      for (const p of r.parts) this.turn(p, on);
+    }
   }
 
   // want：每一間要不要看得到。snap：直接切換，不淡（剛進場、拍照回來）
@@ -181,7 +226,7 @@ export class RoomFader {
       if (snap) {
         r.a = r.u.value = r.want ? 1 : 0;
         r.group.visible = r.want;
-        this.variant(r, false);
+        this.turn(r, false);
       } else if (r.want) r.group.visible = true;
     });
   }
@@ -190,15 +235,12 @@ export class RoomFader {
     for (const r of this.rooms) {
       const to = r.want ? 1 : 0;
       if (r.a === to) continue;
-      if (!r.on) {
-        this.scan();
-        this.variant(r, true);
-      }
+      this.turn(r, true);
       r.a = to > r.a ? Math.min(1, r.a + dt * ROOM_SPEED) : Math.max(0, r.a - dt * ROOM_SPEED);
-      r.u.value = r.a;
+      r.u.value = ease(r.a);
       if (r.a === to) {
         r.group.visible = r.want;
-        this.variant(r, false);
+        this.turn(r, false);
       }
     }
   }

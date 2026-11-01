@@ -11,7 +11,7 @@ import { buildOutdoor, OUTDOOR_ROOM } from './outdoor.js';
 import { catRoomOf } from './animals.js';
 import { makePathfinder } from './pathgrid.js';
 import { uTime, tag, bucketObjects, glowPoints } from './scenery.js';
-import { RoomFader } from './fade.js';
+import { RoomFader, ease } from './fade.js';
 
 export const WALL_H = 3.2;
 export const DOOR_W = 2;
@@ -19,6 +19,10 @@ export const DOOR_H = 2.4;
 const MARGIN = 0.32;       // 角色半徑
 const STUB_H = 0.5;        // 降下後的矮牆高度
 const WALL_T = 0.12;
+const WALL_DOWN = 4;       // 牆降下（淡掉）的速度：擋住視線的要快點讓開
+const WALL_UP = 2;         // 牆立回來的速度：0.5 秒
+const WALL_HOLD = 0.3;     // 不擋了以後再等一下才立回來，鏡頭在牆邊晃不會一升一降
+const SHELL_SPAN = 1.5;    // 房子外觀：鏡頭離開屋子這麼遠才完全看得到
 const PAINT_SCALE = 1.5;   // 實際尺寸放大倍數
 
 const ROOM_TYPES = {
@@ -115,7 +119,7 @@ function stubAndCap(e, cx, cz, rotY, width, door) {
 }
 
 function makeEntry(rooms, px, pz, nx, nz, half, outerRoom = null) {
-  return { rooms, px, pz, nx, nz, tx: -nz, tz: nx, half, outerRoom, full: [], stub: [], tall: [], paintings: [], faded: false };
+  return { rooms, px, pz, nx, nz, tx: -nz, tz: nx, half, outerRoom, full: [], stub: [], tall: [], paintings: [], k: 0 };
 }
 
 function doorFrame(e, z) {
@@ -647,6 +651,7 @@ export function buildWorld(scene, gallery) {
   for (const e of entries) {
     let owner = rooms[Math.max(...e.rooms)];
     if (owner.type === 'outdoor') owner = rooms[owner.index - 1];   // 後門的門框屬於赤化，戶外藏起來時門框還要在
+    e.owner = owner.index;
     for (const m of [...e.full, ...e.stub]) owner.group.add(m);
     for (const m of e.stub) m.visible = false;
   }
@@ -792,8 +797,21 @@ export function buildWorld(scene, gallery) {
   }
 
   // 遠處的房間整間出現、藏起來時淡進淡出（見 fade.js）。第一次和 snap 時直接切
-  const roomFader = new RoomFader(rooms.map((r) => r.group));
+  const roomFader = new RoomFader(rooms.map((r) => r.group), scene.fog?.color || new THREE.Color(0));
   let placed = false, lastT = null;
+  // 每段牆的牆面、牆頂、門框，和掛在上面的畫，降下時一起淡掉。畫掛在哪間就算哪間的
+  for (const e of entries) {
+    e.k = 0;
+    e.hold = 0;
+    const u = { value: 1 };
+    e.parts = [roomFader.part(e.owner, e.full, u)];
+    for (const r of new Set(e.paintings.map((p) => p.room.index))) {
+      e.parts.push(roomFader.part(r, e.paintings.filter((p) => p.room.index === r).map((p) => p.group), u));
+    }
+  }
+  const shellParts = outdoor ? [roomFader.part(rooms.length - 1, [outdoor.shell], { value: 0 })] : [];
+  let shellA = 0;
+  if (outdoor) outdoor.shell.visible = false;
   function setCurrentRoom(i, snap = false) {
     currentRoom = i;
     updateTextures(i);
@@ -818,18 +836,21 @@ export function buildWorld(scene, gallery) {
     return outdoor && zz < outdoor.door ? outdoor.camFloor(x, zz) : 0;
   }
 
-  function setFaded(e, faded) {
-    e.faded = faded;
-    for (const m of e.full) m.visible = !faded;
-    for (const m of e.stub) m.visible = faded;
-    // 高家具變半透明（碰撞還在，所以不能整個藏起來），光暈和光束直接隱藏
+  // k：0 是立著，1 是整面降下。牆面、門框和畫用網點淡掉；矮牆一開始降就出來，藏在牆裡，牆淡掉才看得到
+  function setFaded(e, k) {
+    e.k = k;
+    const s = ease(k);
+    roomFader.setPart(e.parts, 1 - s);
+    for (const m of e.full) m.visible = k < 1;
+    for (const m of e.stub) m.visible = k > 0;
+    // 高家具變半透明（碰撞還在，所以不能整個藏起來），光暈和光束淡到一半時藏起來
     for (const m of e.tall) {
-      if (m.isPoints || m.userData.hideOnFade) { m.visible = !faded; continue; }
-      m.material.opacity = faded ? 0.18 : 1;
-      m.material.depthWrite = !faded;
-      m.userData.ghost = faded;
+      if (m.isPoints || m.userData.hideOnFade) { m.visible = k < 0.5; continue; }
+      m.material.opacity = 1 - 0.82 * s;
+      m.material.depthWrite = k === 0;
+      m.userData.ghost = k > 0;
     }
-    for (const p of e.paintings) p.group.visible = !faded;
+    for (const p of e.paintings) p.group.visible = k < 1;
   }
 
   function shouldFade(e, cam, tgt) {
@@ -852,11 +873,18 @@ export function buildWorld(scene, gallery) {
 
   function update(t, cam, target, view) {
     uTime.value = t;
-    roomFader.update(lastT === null ? 0 : Math.min(0.1, t - lastT));
+    const dt = lastT === null ? 0 : Math.min(0.1, t - lastT);
     lastT = t;
+    roomFader.update(dt);
     if (outdoor) {
-      // 房子外殼只在人走出去、鏡頭也在屋外時出現，不然會擋住室內
-      outdoor.shell.visible = currentRoom === rooms.length - 1 && !outdoor.insideShell(cam);
+      // 房子外殼只在人走出去、鏡頭也在屋外時出現，不然會擋住室內。
+      // 跟著鏡頭離屋子多遠淡進來（不是跟著時間），鏡頭停在半路就停在半淡；走回屋裡時快一點淡掉
+      const want = currentRoom === rooms.length - 1 ? Math.min(1, Math.max(0, outdoor.shellGap(cam) / SHELL_SPAN)) : 0;
+      if (shellA !== want) {
+        shellA = want > shellA ? Math.min(want, shellA + dt * WALL_UP) : Math.max(want, shellA - dt * WALL_DOWN);
+        roomFader.setPart(shellParts, ease(shellA));
+        outdoor.shell.visible = shellA > 0;
+      }
       outdoor.sky.position.copy(cam);
       if (rooms[rooms.length - 1].group.visible) outdoor.update(t, target, cam);
       // 海的反射要多畫一次場景，只在人已經走到戶外、鏡頭也看得到海時才開
@@ -865,8 +893,10 @@ export function buildWorld(scene, gallery) {
       if (seaOn) outdoor.water.material.uniforms.time.value = t * 0.5;
     }
     for (const e of entries) {
-      const f = shouldFade(e, cam, target);
-      if (f !== e.faded) setFaded(e, f);
+      if (shouldFade(e, cam, target)) e.hold = WALL_HOLD;
+      else e.hold -= dt;
+      const to = e.hold > 0 ? 1 : 0;
+      if (e.k !== to) setFaded(e, to > e.k ? Math.min(1, e.k + dt * WALL_DOWN) : Math.max(0, e.k - dt * WALL_UP));
     }
   }
 

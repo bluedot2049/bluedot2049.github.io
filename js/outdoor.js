@@ -1005,7 +1005,8 @@ export function buildOutdoor(room, h) {
     // 草原上這一點的地名：走到棧橋盡頭的方台是「渡口」，其他地方都是「原野」
     placeAt: (x, z) => (onJetty(x, z0 - z) && z0 - z > JETTY.r1 ? JETTY_NAME : MEADOW_NAME),
     meadow: MEADOW_NAME,
-    insideShell: (p) => Math.abs(p.x) < BW + 0.3 && p.z > z0 - 0.2 && p.z < zFront + 0.3,
+    // 離屋子多遠：在屋裡是負的
+    shellGap: (p) => Math.max(Math.abs(p.x) - (BW + 0.3), z0 - 0.2 - p.z, p.z - (zFront + 0.3)),
     inField,
   };
 }

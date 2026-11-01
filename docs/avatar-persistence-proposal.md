@@ -1,8 +1,8 @@
 # Architecture Proposal: Avatar Persistence & Ultra-Compact Codec
 
 > **Target Audience**: AI Agents & Technical Collaborators  
-> **Status**: Design Discussion / Draft (Do NOT apply changes to runtime code without explicit user instruction)  
-> **Related Files**: [`js/looks.js`](file:///g:/煉金畫廊/js/looks.js), [`js/main.js`](file:///g:/煉金畫廊/js/main.js), [`js/creator.js`](file:///g:/煉金畫廊/js/creator.js)
+> **Status**: Design agreed with user 2026-11-01 (see §6). Not implemented yet — do not change runtime code without explicit user instruction.  
+> **Related Files**: [`js/looks.js`](file:///g:/煉金畫廊/js/looks.js), [`js/main.js`](file:///g:/煉金畫廊/js/main.js), [`js/creator.js`](file:///g:/煉金畫廊/js/creator.js), [`js/vendors.js`](file:///g:/煉金畫廊/js/vendors.js), [`js/photo.js`](file:///g:/煉金畫廊/js/photo.js)
 
 ---
 
@@ -142,3 +142,65 @@ When the user asks to implement this specification:
   - Bijection: `importLookCode(exportLookCode(L)) == L`
   - Backward compatibility: Fallback defaults on truncated strings.
   - Safe failure: Malformed strings safely fall back to `presetLook(0)`.
+
+---
+
+## 6. Decisions (2026-11-01)
+
+These supersede §4 where they conflict. The scope grew from "avatar look" to "the whole player save", because Haishi gifts are about to get harder to obtain (barter + time conditions, see §6.1), which makes losing `localStorage` much more costly.
+
+### 6.1 Gift acquisition (context for the save format)
+- **No in-game currency. No server-side limited stock** (no accounts exist; anonymous Supabase identity lives in `localStorage` and is lost the same way).
+- Vendor gifts get three tiers:
+  1. Free on first talk (as today) — some items stay here so new players get something immediately.
+  2. **Barter**: talk to vendor B while holding vendor A's item in the `hand` slot. Check `look.hand` inside `Vendor.talkTo()`.
+  3. **Conditions**: Taiwan-time windows (reuse the reversed crowd schedule, e.g. only in the quiet hours 19–22), "come back on another day" (needs per-vendor last-visit date), or two online players at the stall together (presence already exists in `multiplayer.js`).
+- Rare global daily limits (a single Supabase counter) are allowed later as decoration only, not as the main system.
+
+### 6.2 One-time reset
+- Ships **in the same release** as the new gift rules. Resetting earlier is pointless: players would re-collect everything under the old free rules.
+- **Wipe everything the player owns, no partial stripping** (user decision): delete `look`, `outfit`, `closet`, `unlocked`, and the `look` inside photo settings (`photo.js`, key `KEY`). Everyone starts over with a fresh random look, like a first visit.
+- Keep per-device preferences (`muted`, `director`, `joySwap`, quality, the rest of the photo settings) — they are not possessions.
+- Driven by the save version number (§6.3): no `save` key, or an old version → wipe once, then write the new `save`.
+- No announcement and no mirror hint line.
+
+### 6.3 Save structure (phase 1 — required, same release)
+- Merge into one `localStorage` key `save`: `{ v, look, closet, unlocked, trade, visits }`
+  - `trade`: barter/condition progress per vendor
+  - `visits`: per-vendor last talk date (Taiwan date string)
+- First release: old keys are wiped (§6.2), not migrated. From then on, any `save` format change is migrated on load and **written back immediately** (fixes §1.2 item 2).
+- Call `navigator.storage.persist()` once (best effort; reduces eviction, Safari's 7-day script-storage purge is a key reason backups are needed).
+- Keep per-device conveniences (`muted`, `director`, `joySwap`, quality) out of `save`.
+
+### 6.4 Save code (phase 2)
+- Full save → compact string, with a version byte and a short checksum. The checksum only catches typos; **no anti-cheat** (single-player collection, forging only affects the forger).
+- Two URL forms with different meaning — never mix them:
+  - `#look=<code>` — **try-on only**: applies the outfit; parts the receiver hasn't unlocked fall back to defaults; never touches `unlocked` / `trade` / `visits`. Safe to auto-sync into the URL (§4.2).
+  - `#save=<code>` — **full restore** of the player's own save. Never auto-synced into the address bar. Ask before overwriting an existing save that has more unlocks.
+- Mirror drawer: copy / paste for the full save code (includes closet).
+- Cloud login (phase 3) is deferred until an account is needed for other reasons (e.g. a real merch shop).
+
+### 6.5 Postcard as save carrier
+Messaging apps (LINE, IG, Messenger) recompress images and strip metadata; postcards are already JPEG 0.92 (`photo.js` `card.toBlob`). So the save must be **visible on the image**:
+
+| Method | Original file | After LINE | After screenshot |
+| :--- | :--- | :--- | :--- |
+| JPEG metadata (COM segment) | yes | stripped | lost |
+| Pixel steganography | yes | broken | mostly broken |
+| **Printed QR / seal** | yes | yes | yes |
+
+- Stamp a vermilion seal in a corner of the postcard; it is a QR code with dot / brush-styled modules (keep enough contrast). Draw it with the house style ([`js/glyphs.js`](file:///g:/煉金畫廊/js/glyphs.js) for any surrounding marks).
+- The QR content is a full URL (`https://…/#look=…` or `#save=…`), so a phone camera scan opens the site directly.
+- In-site "從明信片讀取": pick an image from the album → decode. Try the JPEG COM segment first (exact, also written), fall back to QR.
+- Decoder: jsQR in `vendor/` (~45 KB min), loaded lazily only when the user opens the reader. `BarcodeDetector` is not available on iOS Safari, so it cannot be the only path.
+- Capacity: the postcard carries only **current look + face + unlocked + trade/visits** (~50 chars, ~110 with a painted face). The closet goes through the menu save code only — a full closet would make the seal too large.
+- Two postcard modes:
+  - **寄給朋友** → seal contains `#look=` (try-on only; the friend still has to earn items in Haishi themselves).
+  - **寄給自己** → seal contains `#save=` (backup).
+
+### 6.6 Execution checklist (replaces §5 when implementing)
+- [ ] Phase 1 (with the new gift rules): `save` object + version, one-time wipe of old possession keys (look / outfit / closet / unlocked / photo-settings look), migration + write-back for later versions, `storage.persist()`.
+- [ ] Vendor gift tiers: barter via `look.hand`, time / revisit / two-player conditions, data in `GIFTS`.
+- [ ] Phase 2: save codec (§3 recommendations still apply: bit-packing body + Base64 RLE face), checksum, `#look=` / `#save=` handling, copy/paste UI.
+- [ ] Postcard seal: QR rendering in seal style, 寄給朋友 / 寄給自己 modes, COM segment, lazy jsQR reader.
+- [ ] Tests: codec round-trip, truncated / malformed codes fall back safely, `#look=` never changes unlocks, reset runs exactly once, QR survives JPEG recompression at quality ~0.7 and a downscale to 50%.
