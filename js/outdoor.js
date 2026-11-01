@@ -11,6 +11,7 @@ import { buildHarbor, onJetty, JETTY } from './harbor.js';
 import { buildLore } from './lore.js';
 import { buildTree } from './tree.js';
 import { REFLECT_LAYER } from './scenery.js';
+import { GRADE_GLSL, gradeUniforms, gradeCurvesOnly } from './grade.js';
 
 export const DROP = 1.6;
 const TW = 6, TD = 7;                  // 陽台半寬、深度
@@ -999,6 +1000,8 @@ export function buildOutdoor(room, h) {
     dock: harbor.dock,
     ferry: harbor.ferry,
     door: z0,
+    // 導演運鏡的鏡位範圍（shots.js）：草原到棧橋盡頭一整塊，陽台不算
+    camAreas: [{ id: 'meadow', x0: -MEADOW.rx, x1: MEADOW.rx, z0: Z(JETTY.end), z1: Z(MEADOW.c - MEADOW.rz), y: G }],
     // 室內 0、走出後門 1，主程式用來切換光線和霧
     outdoorness: (z) => smooth(z0 + 3, z0 - 2, z),
     inMeadow: (z) => z0 - z > TD + SD * 0.6,
@@ -1305,10 +1308,10 @@ function smoke(x, y, z) {
   return p;
 }
 
-// 天空：黃昏的漸層和太陽，跟著鏡頭走，永遠在最遠處
+// 天空：黃昏的漸層和太陽，跟著鏡頭走，永遠在最遠處。有調色時跟完全進霧的遠景一起過曲線（grade.js），地平線不會多一條線
 function buildSky() {
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uSun: { value: SUN_DIR } },
+    uniforms: { uSun: { value: SUN_DIR }, ...gradeUniforms() },
     vertexShader: `
       varying vec3 vD;
       void main() {
@@ -1316,7 +1319,7 @@ function buildSky() {
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         gl_Position.z = gl_Position.w;   // 貼在最遠處：最後才畫，只填其他東西都沒蓋到的像素
       }`,
-    fragmentShader: `
+    fragmentShader: GRADE_GLSL + `
       uniform vec3 uSun; varying vec3 vD;
       void main() {
         vec3 d = normalize(vD);
@@ -1337,6 +1340,7 @@ function buildSky() {
         c += vec3(1.0, 0.75, 0.45) * pow(s, 8.0) * 0.35 + vec3(1.0, 0.9, 0.7) * pow(s, 90.0) * 0.6;
         c = mix(c, vec3(1.0, 0.97, 0.86), smoothstep(0.9988, 0.9993, s));
         gl_FragColor = vec4(c, 1.0);
+        gl_FragColor.rgb = gradeCurvesOut(gl_FragColor.rgb);
       }`,
     side: THREE.BackSide, depthWrite: false, fog: false,
   });
@@ -1472,7 +1476,7 @@ function buildFar(mz, R) {
     }
   }
   const geo = mergeBucket(k.lit, false);
-  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }));
+  const m = new THREE.Mesh(geo, gradeCurvesOnly(new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide })));
   m.frustumCulled = false;
   m.renderOrder = ORDER.far;
   return m;

@@ -24,7 +24,7 @@ import { dof, DofPass } from './dof.js';
 import { fullscreenButton } from './screen.js';
 import { CAMERAS, TABLE, carried, carry } from './cameras.js';
 import { FlashFx } from './flashfx.js';
-import { installGrade } from './grade.js';
+import { installGrade, NEUTRAL } from './grade.js';
 
 // 世界分成幾個區域，一次只建一個，用 ?z= 指定，沒有寫就是畫廊。每個區域的內容寫在自己的 zone-*.js，用到才下載。
 // 換區域時整頁重新載入：瀏覽器一定會把上一個區域的記憶體收回去，手機才撐得住。
@@ -172,8 +172,10 @@ async function start() {
   hemi.layers.enable(REFLECT_LAYER);
   sun.layers.enable(REFLECT_LAYER);
 
-  // 有匯出調色的區域（zone-*.js 的 grade）在建場景之前換上高度霧和調色。?grade=0 看原本的霧
-  if (Z.grade && params.get('grade') !== '0') installGrade(Z.grade);
+  // 有匯出調色的區域（zone-*.js 的 grade）在建場景之前換上高度霧和調色。?grade=0 看原本的霧。
+  // 沒匯出的區域在 ?debug 時裝一組不改畫面的（NEUTRAL），調色面板一樣打得開
+  const grade = params.get('grade') === '0' ? null : Z.grade || (params.has('debug') ? NEUTRAL : null);
+  if (grade) installGrade(grade);
   const world = Z.build(scene, { gallery, coarse, params });
 
   // 光線、霧。畫廊有室內和戶外兩組，走出後門時在兩組之間漸變；只有一組的區域兩頭都用它
@@ -265,6 +267,11 @@ async function start() {
       // 照鏡子時拖曳、縮放是在轉著看自己，面板留著
       if (!(kind === 'drag' && player.focus?.kind === 'mirror')) ui.hideDress();
       ui.hideHint();
+      ui.hideGuide();
+    },
+    // 門邊的問號立牌：再看一次操作說明
+    onGuide() {
+      ui.guide(true);
     },
     onArriveMirror() {
       ui.showDress();
@@ -435,7 +442,7 @@ async function start() {
   const actionBtn = document.getElementById('action-btn');
   actionBtn.addEventListener('click', () => player.action());
   const actionLabel = actionBtn.querySelector('.a1');
-  const LABELS = { painting: '看畫', mirror: '照鏡子', cameras: '挑相機', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來' };
+  const LABELS = { painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來' };
   let nearKey = null;
   function updateAction() {
     const t = player.actionTarget();
@@ -629,7 +636,7 @@ async function start() {
   if (params.has('debug') || params.has('ref')) {
     import('./devtools.js').then(({ refOverlay, envPanel, gradePanel }) => {
       if (params.has('ref')) refOverlay(params.get('ref'));
-      if (params.has('debug') && Z.grade && params.get('grade') !== '0') gradePanel();
+      if (params.has('debug') && grade) gradePanel();
       if (params.has('debug')) envPanel(ENV, () => { const t = Math.max(0, envT); envT = -1; applyEnv(t); }, envs.length === 1);
     });
   }
@@ -650,13 +657,15 @@ async function start() {
   if (world.frontDoor) world.frontDoor.onClose = () => ambience.voice('doorshut', 0.4);
   const entered = ui.loading(null);
   fullscreenButton(coarse);
-  // 進門以後：前門在背後闔上，跳出這間房的名字，再跳操作提示。不能 await，下面還要開始畫
+  // 進門以後：前門在背後闔上，跳出這間房的名字，再跳操作說明卡（已經先動起來的人就不打擾，下次進門再出現）。
+  // 搭船回來、直接開海市的，還是底下那行操作提示。不能 await，下面還要開始畫
   entered.then(() => {
-    const byDoor = world.frontDoor && !params.has('from');
+    const byDoor = world.frontDoor && !params.has('from'), at = performance.now();
     world.frontDoor?.shut(0.15);
     if (byDoor) ui.toast(world.rooms[0].data.name, world.rooms[0].data.subtitle);
     if (params.has('photo')) photo.enter();
-    else setTimeout(() => ui.hint(coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿或點地面走路　拖曳轉視角` : `點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下${zone === 'gallery' ? '　Enter 看畫' : ''}`, 6000), byDoor ? 2600 : 0);
+    else if (byDoor) setTimeout(() => { if (lastInput < at) ui.guide(); }, 2600);
+    else setTimeout(() => ui.hint(coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿或點地面走路　拖曳轉視角` : `點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下${zone === 'gallery' ? '　Enter 看畫' : ''}`, 6000));
   });
 
   // 照鏡子時：太靠近玩家或擋在鏡頭與玩家之間的訪客與其他玩家淡成半透明

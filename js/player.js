@@ -87,9 +87,13 @@ export class Player {
     this.yawRate = 0;               // 導演轉鏡頭的角速度
     this.chasing = false;           // 差太多了，正在轉回去
     this.moveBasis = null;          // 導演運鏡時，搖桿和方向鍵照按下那一刻的鏡頭方向走
-    this.shots = null;              // 海市的鏡位，見 shots.js
+    this.shots = null;              // 導演運鏡的鏡位，見 shots.js
     this.shotK = 1;                 // 鏡位的距離倍率，乘在 camDist 上
+    this.shotSide = 0;              // 越肩：角色在畫面左右的位置
+    this.shotGaze = 0;              // 越肩：角色在畫面上下的位置，往下壓時視線抬高
     this.shotId = null;
+    this.pitchBias = 0;             // 使用者自己拉的俯角，疊在鏡位上，導演接回來時不蓋掉
+    this.lookedAround = false;      // 站著自己轉過鏡頭：走之前不再轉回這裡好看的方向
     this.debug = false;             // ?debug：V 鍵印出鏡頭位置
     this.camPos = new THREE.Vector3();
     this.camLook = new THREE.Vector3();
@@ -192,8 +196,8 @@ export class Player {
     }, { passive: false });
 
     window.addEventListener('keydown', (e) => {
-      // 捏角色面板裡的按鈕和滑桿、隊伍的打字框自己吃鍵盤，不拿來走路
-      if (this.paused || e.target.closest?.('#dress, input, textarea')) return;
+      // 捏角色面板裡的按鈕和滑桿、隊伍的打字框自己吃鍵盤，不拿來走路（勾選方框不算，勾完還是可以直接走）
+      if (this.paused || e.target.closest?.('#dress, input:not([type=checkbox]), textarea')) return;
       if (e.key === 'Enter') {
         e.preventDefault();
         this.action();
@@ -231,7 +235,10 @@ export class Player {
     const s = mouse ? 1 : -1;   // 觸控是手指拖著畫面走，方向跟滑鼠相反
     this.camYaw -= dx * k * s;
     if (this.introIdle) this.intro.pitch = THREE.MathUtils.clamp(this.intro.pitch + dy * k * s, PITCH_LOW, PITCH_MAX);
-    else this.camPitch = THREE.MathUtils.clamp(this.camPitch + dy * k * s, PITCH_MIN, PITCH_MAX);
+    else {
+      this.camPitch = THREE.MathUtils.clamp(this.camPitch + dy * k * s, PITCH_MIN, PITCH_MAX);
+      if (this.director) this.pitchBias = THREE.MathUtils.clamp(this.pitchBias + dy * k * s, -0.5, 0.5);
+    }
     this.events.onInput('drag');
   }
 
@@ -286,7 +293,7 @@ export class Player {
     if (now - (this.hoverT || 0) < 100) return;
     this.hoverT = now;
     const u = this.pick(cx, cy)?.object.userData;
-    this.dom.classList.toggle('hot', !!(u && ((WORKS_OPEN && u.painting) || u.mirror || u.animal)));
+    this.dom.classList.toggle('hot', !!(u && ((WORKS_OPEN && u.painting) || u.mirror || u.animal || u.guide)));
   }
 
   tap(cx, cy) {
@@ -298,6 +305,7 @@ export class Player {
     if (WORKS_OPEN && hit.object.userData.painting) return this.goToPainting(hit.object.userData.painting);
     if (hit.object.userData.mirror) return this.goToMirror();
     if (hit.object.userData.animal) return this.goToAnimal(hit.object.userData.animal);
+    if (hit.object.userData.guide) return this.events.onGuide?.();
     const t =this.world.findWalkable(hit.point.x, hit.point.z, this.pos.x, this.pos.z);
     if (!t) return;
     this.exitFocus();
@@ -533,6 +541,7 @@ export class Player {
     // 鏡位的距離併進使用者的距離，關掉時鏡頭才不會動
     this.camDist = THREE.MathUtils.clamp(this.camDist * this.shotK, DIST_MIN, this.distMax);
     this.shotK = 1;
+    this.pitchBias = 0;
     this.directorHold = 0;
     this.directorEngage = this.director;
     this.dirVel = {};
@@ -546,13 +555,14 @@ export class Player {
     const r = (v, n = 1) => +v.toFixed(n), deg = (a) => r((THREE.MathUtils.radToDeg(a) % 360 + 360) % 360, 0);
     const dist = this.camDist * this.shotK;
     console.log(`?z=haishi&view=${r(this.pos.x)},${r(this.pos.z)},${deg(this.heading)},${r(dist)},${deg(this.camPitch)}`);
-    console.log(`鏡位 { pitch: ${r(this.camPitch, 2)}, k: ${r(dist / defaultDist(), 2)} }　鏡頭朝 ${deg(this.camYaw + Math.PI)}°　在 ${this.shotId || '沒有鏡位的地方'}`);
+    console.log(`鏡位 { pitch: ${r(this.camPitch, 2)}, k: ${r(dist / defaultDist(), 2)}, side: ${r(this.shotSide, 2)}, gaze: ${r(this.shotGaze, 2)} }　鏡頭朝 ${deg(this.camYaw + Math.PI)}°　在 ${this.shotId || '沒有鏡位的地方'}`);
   }
 
   // 使用者自己轉了鏡頭：導演先讓位，搖桿的方向也改照新的鏡頭算
   handOver() {
     if (this.intro) this.intro.moved = true;   // 開場遠景轉過螢幕時，不再把鏡頭轉回原本的構圖
     this.directorHold = DIRECTOR_HOLD;
+    this.lookedAround = true;
     this.directorEngage = false;
     this.dirVel = {};
     this.yawRate = 0;
@@ -573,10 +583,16 @@ export class Player {
   }
 
   // 導演運鏡：走路時鏡頭慢慢轉到前進方向的後面，俯角和距離換成這裡的鏡位（沒有鏡位就是預設）；
-  // 照路線走時看前面幾公尺，轉角前就先轉。站著不動時不轉。
+  // 照路線走時看前面幾公尺，轉角前就先轉。站著不動時不轉，除非這裡有好看的方向（鏡位的 face）。
   // 使用者自己轉了鏡頭先讓幾秒，走進下一個鏡位就提早接回來；開場遠景、看畫、照鏡子、攝影模式時不插手
   direct(dt) {
     this.directorHold = Math.max(0, this.directorHold - dt);
+    if (this.speed > 0.05) this.lookedAround = false;
+    // 關掉以後越肩慢慢收回正中間，不然走到哪都偏著
+    if (!this.director) {
+      damp(this, 'shotSide', 0, this.dirVel, 2, dt);
+      damp(this, 'shotGaze', 0, this.dirVel, 2, dt);
+    }
     if (!this.director || this.intro || this.focus?.camPos || this.paused) return;
     const shot = this.shots?.at(this.pos.x, this.pos.z, Math.sin(this.heading), Math.cos(this.heading));
     if (shot && shot.id !== this.shotId) {
@@ -592,11 +608,24 @@ export class Player {
       const a = this.pathAhead(DIRECTOR_AHEAD), dx = a.x - this.pos.x, dz = a.z - this.pos.z;
       if (Math.hypot(dx, dz) > 1.2) want = Math.atan2(dx, dz) + Math.PI;
     } else if (this.speed > 0.05) still = true;
+    // 有好看方向的地方：走的方向跟它差不到 60° 左右就把鏡頭帶過去，角色斜斜地走進風景裡；
+    // 差太多（往回走、橫著走）照舊跟在背後。站著也轉過去，除非使用者自己轉過鏡頭
+    const sh = shot?.w ? shot : { w: 0, pitch: 0, k: 1, side: 0, gaze: 0, face: null, fw: 0 };
+    let viewing = false;
+    if (!engage && sh.face !== null) {
+      const travel = want !== null ? want - Math.PI : still ? this.heading : null;
+      const d = travel === null ? 0 : wrapAngle(sh.face - travel);
+      const a = sh.fw * (1 - smoothstep(Math.abs(d), 1.0, 1.6));
+      if (travel === null ? sh.fw > 0.5 && !this.lookedAround : a > 0.01) {
+        want = (travel ?? sh.face) + d * a + Math.PI;
+        viewing = true;
+      }
+    }
     const diff = want === null ? 0 : wrapAngle(want - this.camYaw), ad = Math.abs(diff);
-    // 差得不多就不轉，角色在畫面裡稍微斜著走沒關係；差太多才轉，轉到幾乎對準就停
+    // 差得不多就不轉，角色在畫面裡稍微斜著走沒關係；差太多才轉，轉到幾乎對準就停。看風景的構圖要對得準一點
     if (want === null) this.chasing = false;
-    else if (ad > (engage ? 0 : DIRECTOR_DEAD)) this.chasing = true;
-    else if (ad < (engage ? 0.02 : DIRECTOR_SETTLE)) this.chasing = false;
+    else if (ad > (engage ? 0 : viewing ? 0.2 : DIRECTOR_DEAD)) this.chasing = true;
+    else if (ad < (engage ? 0.02 : viewing ? 0.05 : DIRECTOR_SETTLE)) this.chasing = false;
     // 朝著鏡頭走時不繞到背後去，免得整個畫面甩半圈
     const away = engage ? 1 : 1 - smoothstep(ad, 1.6, 2.1);
     const lag = engage ? 0.35 : this.directorLag, rate = DIRECTOR_RATE / lag, accel = DIRECTOR_ACCEL / lag;
@@ -604,12 +633,14 @@ export class Player {
     const goal = this.chasing ? THREE.MathUtils.clamp(diff * 0.8, -rate, rate) * away : 0;
     this.yawRate += THREE.MathUtils.clamp(goal - this.yawRate, -accel * dt, accel * dt);
     this.camYaw += this.yawRate * dt;
-    // 俯角和距離換得更慢；站著不動時照樣算一次，換到一半停下來會慢慢減速
-    const sh = shot?.w ? shot : { w: 0, pitch: 0, k: 1 };
-    const pitch = THREE.MathUtils.lerp(PITCH_DEFAULT, sh.pitch, sh.w), k = THREE.MathUtils.lerp(1, sh.k, sh.w);
+    // 俯角、距離、越肩換得更慢；站著不動時照樣算一次，換到一半停下來會慢慢減速。使用者拉過的俯角疊在上面
+    const lerp = THREE.MathUtils.lerp;
+    const pitch = THREE.MathUtils.clamp(lerp(PITCH_DEFAULT, sh.pitch, sh.w) + this.pitchBias, PITCH_LOW, PITCH_MAX), k = lerp(1, sh.k, sh.w);
     const hold = want === null && !still;
     damp(this, 'camPitch', hold ? this.camPitch : pitch, v, 3 * lag, dt);
     damp(this, 'shotK', hold ? this.shotK : k, v, 3.5 * lag, dt);
+    damp(this, 'shotSide', hold ? this.shotSide : sh.side * sh.w, v, 3.5 * lag, dt);
+    damp(this, 'shotGaze', hold ? this.shotGaze : sh.gaze * sh.w, v, 3.5 * lag, dt);
     if (engage && ad < 0.02 && Math.abs(this.camPitch - pitch) < 0.01) this.directorEngage = false;
   }
 
@@ -703,7 +734,7 @@ export class Player {
     }
   }
 
-  // 動作按鈕現在該做什麼：看畫、照鏡子、坐下、拿點心、摸動物、跟訪客聊天、搭船、吃一口、起來。回傳 { kind, p? } 或 null
+  // 動作按鈕現在該做什麼：看畫、照鏡子、挑相機、看說明、坐下、拿點心、摸動物、跟訪客聊天、搭船、吃一口、起來。回傳 { kind, p? } 或 null
   actionTarget() {
     const ch = this.character;
     if (this.sitting) {
@@ -725,6 +756,11 @@ export class Player {
       const dx = x - ct.x, dz = z - ct.z, lx = dx * ct.along.x + dz * ct.along.z, lz = dx * ct.n.x + dz * ct.n.z;
       const d = Math.hypot(Math.max(0, Math.abs(lx) - ct.hw), Math.max(0, lz - ct.hd));
       if (lz > 0 && d < 1.3) list.push({ kind: 'cameras', d });
+    }
+    const gs = this.world.guideSign;
+    if (gs) {
+      const d = Math.hypot(x - gs.x, z - gs.z);
+      if (d < gs.r) list.push({ kind: 'guide', d });
     }
     const out = this.world.outdoor;
     if (out && this.room === this.world.rooms.length - 1) {
@@ -757,6 +793,7 @@ export class Player {
       case 'painting': this.goToPainting(t.p); break;
       case 'mirror': this.goToMirror(); break;
       case 'cameras': this.events.onCameras?.(); break;
+      case 'guide': this.events.onGuide?.(); break;
       case 'seat': this.goTo(this.planSeat(t.p)); break;
       case 'pet': this.goToAnimal(t.p); break;
       case 'talk': t.p.talkTo(); break;
@@ -884,6 +921,14 @@ export class Player {
       outLook.y + Math.sin(pitch) * dist,
       outLook.z + Math.cos(this.camYaw) * c * dist
     );
+    // 越肩：鏡頭和注視點一起往右平移，角色落到畫面左邊 shotSide 的位置
+    const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    if (this.shotSide) {
+      const s = -this.shotSide * Math.max(1, dist * c - ahead) * tanV * this.camera.aspect;
+      const rx = Math.cos(this.camYaw), rz = -Math.sin(this.camYaw);
+      outLook.x += rx * s; outLook.z += rz * s;
+      outPos.x += rx * s; outPos.z += rz * s;
+    }
     // 開場：從遠景換到跟拍。繞的中心、距離、俯角慢慢換成跟拍的，角色在畫面的位置也慢慢移回中間，
     // 每一刻都是繞著角色、對準角色的鏡頭，角色不會跑出畫面。走完時剛好就是跟拍的鏡頭
     const it = this.intro;
@@ -900,9 +945,10 @@ export class Player {
     }
     // 鏡頭不鑽進地面，也不退進樹林裡
     outPos.y = Math.max(outPos.y, this.world.camFloor(outPos.x, outPos.z) + 0.3);
-    // 再往下拉的部分換成抬頭：鏡頭位置不動，視線往上轉，最多接近正上方
-    const extra = PITCH_LOW - this.camPitch;
-    if (extra > 0) {
+    // 再往下拉的部分換成抬頭：鏡頭位置不動，視線往上轉，最多接近正上方。
+    // 越肩的 shotGaze 也是同一招：視線抬高一點，角色往畫面下面沉，遠方多出來
+    const extra = Math.max(0, PITCH_LOW - this.camPitch) + Math.atan(-this.shotGaze * tanV);
+    if (extra) {
       const dx = outLook.x - outPos.x, dy = outLook.y - outPos.y, dz = outLook.z - outPos.z;
       const h = Math.hypot(dx, dz) || 1e-4, len = Math.hypot(h, dy);
       const e = Math.min(ZENITH, Math.atan2(dy, h) + extra);

@@ -54,6 +54,7 @@ export class UI {
     $('#cams-close').addEventListener('click', () => { this.hideCams(); this.onClose?.(); });
     $('#sheet-thumb').addEventListener('click', () => this.openViewer($('#sheet-img').src));
     $('#viewer-close').addEventListener('click', () => this.closeViewer());
+    $('#guide .enter').addEventListener('click', () => this.hideGuide());
     this.bindViewer();
     $('#list-btn').addEventListener('click', () => this.toggleList(true));
     if (!WORKS_OPEN) $('#list-btn').hidden = true;
@@ -222,6 +223,34 @@ export class UI {
 
   hideHint() {
     $('#hint').classList.remove('show');
+  }
+
+  // 操作說明卡。進門時呼叫的（again 為假）勾過「下次不用顯示」就不出來；門邊的問號立牌打開的（again）一定出來。
+  // 開著的時候 Enter、空白鍵是「確認」，先攔下來，角色不會同時去看畫、跳起來；方框有焦點時空白鍵照樣是勾選。
+  // 走動、轉鏡頭也會收掉（main.js 的 onInput）。收掉時照方框記下來，沒勾的話下次進門還會出現
+  guide(again = false) {
+    const el = $('#guide');
+    let off = false;
+    try { off = localStorage.getItem('guideOff') === '1'; } catch {}
+    if ((off && !again) || el.classList.contains('show')) return;
+    el.querySelector('.skip input').checked = off;
+    el.classList.add('show');
+    this.guideKey = (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.stopPropagation();
+      if (e.key === ' ' && e.target.closest?.('.skip')) return;
+      e.preventDefault();
+      this.hideGuide();
+    };
+    addEventListener('keydown', this.guideKey, true);
+  }
+
+  hideGuide() {
+    const el = $('#guide');
+    if (!el.classList.contains('show')) return;
+    el.classList.remove('show');
+    removeEventListener('keydown', this.guideKey, true);
+    try { localStorage.setItem('guideOff', el.querySelector('.skip input').checked ? '1' : '0'); } catch {}
   }
 
   // 平面清單：舊手機或不想走動的人，直接看全部作品

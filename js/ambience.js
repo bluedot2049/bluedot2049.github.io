@@ -363,15 +363,18 @@ const CHEERS = {
 };
 
 // ---------- 人潮聲 ----------
-// 海市街上的人聲也是合成的，刻意不像任何一種語言：沒有子音，只有母音的哼聲，
-// 每個人說話的音高都落在同一組五聲音階上，一句話尾巴往下收，一整條街聽起來像低低的合唱。
+// 海市街上的人聲也是合成的，刻意不像任何一種語言：沒有子音，只有母音的哼聲，帶一點氣音。
+// 音高照海市的配樂（assets/audio/haishi.m4a）：曲子在 C 小調、B♭ 大調、F 大調、G 小調之間換，
+// 每一段都站得住的只有 B♭ C D F G，人聲只用這五個音，落在低低的音域。
+// 一句話大多停在同一個音，偶爾往旁邊挪一格，句尾往下收：聽起來是遠遠的人在講話，不是一群人在唱歌。
 // 進海市時用 OfflineAudioContext 先算好一段，之後循環播，手機不用一直開著幾百個振盪器
 const MURMUR_LEN = 12, MURMUR_XF = 1.5;   // 一段幾秒、頭尾交疊幾秒，接起來聽不出縫
 const MURMUR_SR = 22050;                 // 人聲用不到高頻，取樣率減半省記憶體
-const MURMUR_TALKERS = 16;               // 這一段裡有幾個人在講話
+const MURMUR_TALKERS = 10;               // 這一段裡有幾個人在講話
 const MURMUR_VOL = 0.22;
 const MURMUR_DUCK = 0.35;                // 人最多的時候，背景音樂壓低幾成
 const MURMUR_RMS = 0.12;                 // 算好之後整段調到這個響度
+const MURMUR_NOTES = [87.31, 98, 116.54, 130.81, 146.83, 174.61];   // F2 G2 B♭2 C3 D3 F3
 const VOWELS = [[700, 1200], [400, 2000], [300, 800], [500, 1500], [350, 2300], [600, 1000]];
 
 function renderMurmur() {
@@ -379,32 +382,46 @@ function renderMurmur() {
   if (!OAC) return Promise.resolve(null);
   const total = MURMUR_LEN + MURMUR_XF, ctx = new OAC(2, Math.ceil(total * MURMUR_SR), MURMUR_SR);
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const breath = ctx.createBuffer(1, MURMUR_SR * 2, MURMUR_SR), bd = breath.getChannelData(0);
+  for (let i = 0; i < bd.length; i++) bd[i] = Math.random() * 2 - 1;
   for (let v = 0; v < MURMUR_TALKERS; v++) {
-    const root = 98 * PENTA[Math.floor(Math.random() * 5)] * (Math.random() < 0.4 ? 2 : 1);
+    // 大多是低的四個音，四個人裡有一個高一點、小聲一點
+    const high = Math.random() < 0.25, root = high ? 4 + Math.floor(Math.random() * 2) : Math.floor(Math.random() * 4);
     const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain();
-    if (pan.pan) pan.pan.value = Math.random() * 1.6 - 0.8;
+    if (pan.pan) pan.pan.value = Math.random() - 0.5;
     pan.connect(ctx.destination);
-    // 一句三到八個音節，句子之間停一下
-    for (let t = Math.random() * 3; t < total;) {
-      const n = 3 + Math.floor(Math.random() * 6), peak = 0.15 + Math.random() * 0.1;
-      let deg = 1 + Math.floor(Math.random() * 3);
+    // 一句三到七個音節，句子之間停久一點
+    for (let t = Math.random() * 4; t < total;) {
+      const n = 3 + Math.floor(Math.random() * 5), peak = (0.15 + Math.random() * 0.08) * (high ? 0.7 : 1);
+      let deg = root;
       for (let i = 0; i < n && t < total; i++) {
-        const d = 0.09 + Math.random() * 0.13, last = i === n - 1;
-        deg = last ? 0 : Math.max(0, Math.min(4, deg + Math.floor(Math.random() * 3) - 1));
-        const f = root * PENTA[deg];
-        const o = osc(ctx, 'sawtooth', t, d + 0.05, [[0, f], [d, f * (last ? 0.94 : 1.02)]]);
+        const d = 0.14 + Math.random() * 0.16, last = i === n - 1;
+        if (last) deg = Math.max(0, root - 1);
+        else if (Math.random() < 0.3) deg = Math.max(0, Math.min(MURMUR_NOTES.length - 1, root + (Math.random() < 0.5 ? -1 : 1)));
+        else deg = root;
+        const f = MURMUR_NOTES[deg];
+        const o = osc(ctx, 'sawtooth', t, d + 0.05, [[0, f], [d, f * (last ? 0.97 : 1.005)]]);
         const g = ctx.createGain();
         g.gain.setValueAtTime(0, t);
-        g.gain.linearRampToValueAtTime(peak, t + 0.03);
+        g.gain.linearRampToValueAtTime(peak, t + 0.04);
         g.gain.linearRampToValueAtTime(peak * 0.7, t + d * 0.7);
-        g.gain.linearRampToValueAtTime(0, t + d + 0.04);
-        const [f1, f2] = pick(VOWELS), soft = biquad(ctx, 'lowpass', 2500);
-        o.connect(biquad(ctx, 'bandpass', f1, 5)).connect(g);
-        o.connect(biquad(ctx, 'bandpass', f2, 7)).connect(soft).connect(g);
+        g.gain.linearRampToValueAtTime(0, t + d + 0.05);
+        // 鋸齒波先磨掉高頻再過母音，第二個共振峰小聲一點，比較悶、比較不刺
+        const [f1, f2] = pick(VOWELS), src = o.connect(biquad(ctx, 'lowpass', 1400, 0.5)), f2g = ctx.createGain();
+        f2g.gain.value = 0.6;
+        src.connect(biquad(ctx, 'bandpass', f1, 5)).connect(g);
+        src.connect(biquad(ctx, 'bandpass', f2, 7)).connect(f2g).connect(g);
+        // 同一個母音的氣音，蓋掉一點音高感
+        const air = ctx.createBufferSource(), ag = ctx.createGain();
+        air.buffer = breath;
+        ag.gain.value = 0.5;
+        air.connect(biquad(ctx, 'bandpass', f1, 3)).connect(ag).connect(g);
+        air.start(t, Math.random() * 1.5);
+        air.stop(t + d + 0.06);
         g.connect(pan);
-        t += d + 0.02 + Math.random() * 0.04;
+        t += d + 0.03 + Math.random() * 0.05;
       }
-      t += 0.5 + Math.random() * 2.5;
+      t += 1 + Math.random() * 3;
     }
   }
   return new Promise((done) => {
@@ -679,7 +696,7 @@ export class Ambience {
     this.murmurAt = t;
     const level = 1 - Math.exp(-amount / 3);
     this.murmurGain.gain.setTargetAtTime(MURMUR_VOL * level, t, 0.8);
-    this.murmurFilter.frequency.setTargetAtTime(450 + 2000 * near * near, t, 0.5);
+    this.murmurFilter.frequency.setTargetAtTime(400 + 1100 * near * near, t, 0.5);
     this.murmurPan?.pan.setTargetAtTime(this.panOf(dx, dz, 1) * Math.min(1, Math.hypot(dx, dz)) * 0.7, t, 0.8);
     const duck = MURMUR_DUCK * level;
     if (Math.abs(duck - this.duck) > 0.03) {

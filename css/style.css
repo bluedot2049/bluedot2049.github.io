@@ -407,6 +407,53 @@ body.flat #stage::after { display: none; }
 }
 #hint.show { opacity: 1; }
 
+/* 進門以後的操作說明：門口告示（.notice）同一張卡，這裡只管位置和裡面多出來的東西。
+   橫式靠左、垂直置中，不擋住畫面中間的角色；直式貼底，房間外那片空的地方剛好放得下 */
+#guide {
+  position: fixed; left: calc(24px + env(safe-area-inset-left)); top: 50%; z-index: 25;
+  display: none; transform: translateY(-50%);
+  background: rgba(16, 11, 9, .94); box-shadow: var(--shadow);
+}
+#guide.show { display: flex; animation: guide-in .4s ease-out both; }
+@keyframes guide-in { from { opacity: 0; transform: translateY(calc(-50% + 6px)); } }
+#guide .keys { list-style: none; margin: 0; padding: 0; }
+#guide .keys li {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 9px 0;
+  border-bottom: 1px solid rgba(232, 184, 106, .1); font-size: 13.5px; letter-spacing: .06em; color: var(--text);
+  animation: row-in .45s ease-out both;
+}
+#guide .keys li > span:last-child { display: flex; align-items: center; gap: 4px; color: var(--muted); white-space: nowrap; }
+#guide .keys li:nth-child(2) { animation-delay: .06s; }
+#guide .keys li:nth-child(3) { animation-delay: .12s; }
+#guide .keys li:nth-child(4) { animation-delay: .18s; }
+#guide .keys li:nth-child(5) { animation-delay: .24s; }
+#guide .keys kbd {
+  min-width: 20px; padding: 0 5px; text-align: center;
+  font: 11.5px/1.6 var(--latin); letter-spacing: .04em; color: var(--text);
+  border: 1px solid rgba(232, 184, 106, .35); border-radius: 2px;
+}
+body.touch #guide .for-desk, body:not(.touch) #guide .for-touch { display: none; }
+#guide .again { font-size: 12.5px; letter-spacing: .08em; color: var(--muted); }
+/* 「下次不用顯示」：跟門口告示待辦後面的方框同一款，勾了填金色 */
+#guide .skip { display: flex; align-items: center; gap: 10px; font-size: 12.5px; letter-spacing: .08em; color: var(--muted); cursor: var(--cur-pointer); }
+#guide .skip input { position: absolute; opacity: 0; pointer-events: none; }
+#guide .skip i { width: 9px; height: 9px; border: 1px solid var(--gold-lo); }
+#guide .skip input:checked + i { background: var(--gold); border-color: var(--gold); }
+#guide .skip input:focus-visible + i { outline: 1px solid var(--gold-hi); outline-offset: 2px; }
+@media (orientation: portrait) {
+  #guide {
+    left: 16px; right: 16px; top: auto; bottom: calc(16px + env(safe-area-inset-bottom));
+    width: auto; max-width: 420px; margin: 0 auto; transform: none;
+  }
+  #guide.show { animation-name: guide-up; }
+}
+@keyframes guide-up { from { opacity: 0; transform: translateY(6px); } }
+@media (orientation: landscape) and (max-height: 560px) {
+  #guide .keys li { padding: 6px 0; }
+  #guide .again { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { #guide.show, #guide .keys li { animation: none; } }
+
 /* ───────── 一般按鈕 ───────── */
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;

@@ -12,11 +12,14 @@ import * as THREE from 'three';
 // contrast：混完霧再拉一條 S 曲線，1 是不拉；vivid：越亮的地方飽和度加越多（燈籠、窗光、燈照到的牆），暗部不動
 // glow：疊上去發光的那幾層（光暈、燈照地面、水上燈影、被燈照暖的霧）整體再乘多少
 // curves：亮度和紅綠藍四條曲線，每條是 [輸入, 輸出] 的點，0 到 1。紅綠藍先套，亮度最後套在三個色版上
+// linear：1 是不換高度霧，內建材質照舊用場景的線性霧（光線面板的 near、far），只調顏色（畫廊）
 export const GRADE = {
-  on: 0, density: 0.016, falloff: 0.04, base: -0.6, start: 6, maxFog: 1,
+  on: 0, linear: 0, density: 0.016, falloff: 0.04, base: -0.6, start: 6, maxFog: 1,
   shadow: new THREE.Vector3(), desat: 0.2, cool: 0.9, contrast: 1.6, vivid: 0.6, glow: 1,
   lut: null,
 };
+// 不改畫面的一組：沒有匯出 grade 的區域（畫廊）在 ?debug 時先裝這組，調色面板才打得開。調好按「複製」貼回 zone-*.js 才會上線
+export const NEUTRAL = { linear: 1, density: 0, desat: 0, cool: 0, contrast: 1, vivid: 0, glow: 1, shadow: '#000000' };
 export const NUMBERS = ['density', 'falloff', 'base', 'start', 'maxFog', 'desat', 'cool', 'contrast', 'vivid', 'glow'];
 const LINE = () => [[0, 0], [1, 1]];
 export const CURVES = { l: LINE(), r: LINE(), g: LINE(), b: LINE() };
@@ -80,7 +83,7 @@ bakeCurves();
 // 最後的曲線天空球也要過（gradeCurvesOut），完全進霧的東西和天空才會一起變
 // GRADE_VERT 只有霧和發光，頂點著色器也能用；GRADE_GLSL 是完整的，給片段著色器
 export const GRADE_VERT = `
-struct Grade { float on; float density; float falloff; float base; float start; float maxFog; vec3 shadow; float desat; float cool; float contrast; float vivid; float glow; sampler2D lut; };
+struct Grade { float on; float linear; float density; float falloff; float base; float start; float maxFog; vec3 shadow; float desat; float cool; float contrast; float vivid; float glow; sampler2D lut; };
 uniform Grade uGrade;
 float gradeFog( vec3 world ) {
 	vec3 ray = world - cameraPosition;
@@ -162,7 +165,11 @@ const PARS_FRAGMENT = `#ifdef USE_FOG
 // 霧在 colorspace 之後才上：直接畫上螢幕時這裡已經是 sRGB，畫進後製的貼圖時還是線性的，three.js 給的 fogColor 也跟著同一個空間
 const FRAGMENT = `#ifdef USE_FOG
 	if ( uGrade.on > 0.5 ) {
-		gl_FragColor.rgb = gradeSurface( gl_FragColor.rgb, gradeFog( vFogWorld ), fogColor );
+		float gradeF = gradeFog( vFogWorld );
+		#ifndef FOG_EXP2
+			if ( uGrade.linear > 0.5 ) gradeF = smoothstep( fogNear, fogFar, vFogDepth );
+		#endif
+		gl_FragColor.rgb = gradeSurface( gl_FragColor.rgb, gradeF, fogColor );
 	} else {
 		#ifdef FOG_EXP2
 			float fogFactor = 1.0 - exp( - fogDensity * fogDensity * vFogDepth * vFogDepth );
@@ -178,6 +185,7 @@ const FRAGMENT = `#ifdef USE_FOG
 export function installGrade(preset = {}) {
   const { shadow, curves, ...nums } = preset;
   for (const k of NUMBERS) if (nums[k] != null) GRADE[k] = nums[k];
+  GRADE.linear = nums.linear ? 1 : 0;
   if (shadow) setShadow(shadow);
   if (curves) for (const k of ['l', 'r', 'g', 'b']) if (curves[k]) CURVES[k] = curves[k].map((p) => [...p]);
   bakeCurves();
@@ -208,7 +216,7 @@ export const TUNE = [];
 export function presetText() {
   const r = (v) => +v.toFixed(3);
   const curves = Object.fromEntries(Object.entries(CURVES).filter(([, p]) => p.length !== 2 || p[0][0] || p[0][1] || p[1][0] !== 1 || p[1][1] !== 1).map(([k, p]) => [k, p.map(([x, y]) => [r(x), r(y)])]));
-  const grade = { ...Object.fromEntries(NUMBERS.map((k) => [k, GRADE[k]])), shadow: GRADE.shadowHex, ...(Object.keys(curves).length ? { curves } : {}) };
+  const grade = { ...(GRADE.linear ? { linear: 1 } : {}), ...Object.fromEntries(NUMBERS.map((k) => [k, GRADE[k]])), shadow: GRADE.shadowHex, ...(Object.keys(curves).length ? { curves } : {}) };
   const tune = Object.fromEntries(TUNE.map((t) => [t.key, t.kind === 'color' ? '#' + t.uniform.value.getHexString() : t.uniform.value]));
   return `export const grade = ${JSON.stringify(grade)};` + (TUNE.length ? `\n// 另外調的：${JSON.stringify(tune)}` : '');
 }

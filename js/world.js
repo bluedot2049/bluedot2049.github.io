@@ -9,6 +9,7 @@ import { PROPS, SETS, Kit, rng, newBucket, weightedPick, buildWindow } from './p
 import { buildMirror } from './mirror.js';
 import { buildCamTable, TABLE_W, TABLE_D } from './camtable.js';
 import { buildFrontDoor } from './frontdoor.js';
+import { buildGuideSign } from './guidesign.js';
 import { buildOutdoor, OUTDOOR_ROOM } from './outdoor.js';
 import { catRoomOf } from './animals.js';
 import { makePathfinder } from './pathgrid.js';
@@ -618,7 +619,7 @@ function stringLights(room, R, bucket) {
 
 export function buildWorld(scene, gallery) {
   const rooms = [], paintings = [], entries = [], raycastTargets = [];
-  let mirror = null, outdoor = null, camTable = null, frontDoor = null;
+  let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null;
   let z = 0;
 
   // gallery.json 的 outdoor 為 true 時，最後一間房後面接陽台和草原
@@ -703,7 +704,7 @@ export function buildWorld(scene, gallery) {
 
       // 右牆靠前是前門（frontdoor.js）：進來的那道門，門外是黃昏的光，不能開
       const right = room.spans[1], sd = 2.0;
-      right.clear = [[sd - 1.3, sd + 1.3]];
+      right.clear = [[sd - 1.3, sd + 2.0]];
       const dp = right.at(sd), drot = Math.atan2(dp.nx, dp.nz), dc = Math.cos(drot), ds = Math.sin(drot);
       const toWorld = (o) => ({ x: dp.x + o.x * dc + o.z * ds, z: dp.z - o.x * ds + o.z * dc });
       const door = buildFrontDoor();
@@ -715,6 +716,12 @@ export function buildWorld(scene, gallery) {
       door.tall.traverse((m) => { if (m.isMesh || m.isPoints) right.entry.tall.push(m); });
       for (const o of door.obstacles) room.obstacles.push({ ...toWorld(o), hw: o.hw, hd: o.hd, rot: drot });
       frontDoor = { ...door, spawn: { ...toWorld(door.spawn), heading: drot }, mark: [dp.x, 1.2, dp.z] };
+      // 門的花瓶那側再過去一點是問號立牌（guidesign.js）：兩面朝著房間和門那面牆，微微轉向門口
+      const gp = toWorld({ x: -1.6, z: 0.55 });
+      guideSign = buildGuideSign(gp.x, gp.z, drot + 0.35);
+      room.group.add(guideSign.group);
+      room.obstacles.push({ x: gp.x, z: gp.z, hw: 0.3, hd: 0.22, rot: drot + 0.35 });
+      raycastTargets.push(...guideSign.faces);
 
       // 左牆中間是相機桌（camtable.js）：出門前在這裡挑一台帶走
       const side = room.spans[0], sc = room.d / 2;
@@ -975,5 +982,5 @@ export function buildWorld(scene, gallery) {
   // 搭船去別的區域：棧橋邊繫著的小划船
   const exits = outdoor?.ferry ? [{ ...outdoor.ferry, to: 'haishi', label: '搭船', title: '往海市' }] : [];
 
-  return { rooms, paintings, mirror, camTable, frontDoor, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, setCurrentRoom, update, fadeVariants: (on) => roomFader.all(on) };
+  return { rooms, paintings, mirror, camTable, frontDoor, guideSign, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, setCurrentRoom, update, fadeVariants: (on) => roomFader.all(on) };
 }

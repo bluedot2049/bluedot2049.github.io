@@ -8,6 +8,7 @@ import { Manatee, TABLE_LINES } from './manatee.js';
 import { Animals } from './animals.js';
 import { Visitors } from './visitors.js';
 import { HORIZON, SUN_DIR } from './outdoor.js';
+import { buildShots } from './shots.js';
 
 // 背景音樂：走進「歡迎光臨煉金畫廊」那間才開始放，往後的房間和戶外一路放著
 export const bgm = { src: 'assets/audio/gallery.m4a', from: '02-nigredo' };
@@ -50,6 +51,7 @@ export function crowd({ scene, world, shadowTex, player, camera, ambience, host,
 // 角色沿棧橋往草原走，鏡頭照走過的距離換到跟拍（跟海市開場同一套，見 player.startIntro）
 // ?go=房間.畫 是在海市點了清單裡的畫，到了直接站到那幅畫前面
 export function arrive({ player, world, params, ui }) {
+  if (world.outdoor) player.shots = buildShots(world.outdoor.camAreas);
   const ferry = world.exits[0];
   if (params.get('from') === 'haishi' && ferry) {
     player.place(ferry.x, ferry.z + 1.8, 0);
@@ -60,13 +62,14 @@ export function arrive({ player, world, params, ui }) {
     });
     world.frontDoor?.shut(0, true);
   } else if (world.frontDoor) {
-    // 一般進來：剛跨過前門站在腳踏墊上。鏡頭在房間深處回頭看，角色在畫面右邊，背後的門在左邊，門開著透進黃昏的光；
+    // 一般進來：剛跨過前門站在腳踏墊上，腳下是門口灑進來的光。鏡頭在門那面牆外的斜上方往房間裡看（牆自己降下來），
+    // 鏡子、相機桌、往下一間的門洞、門邊的問號立牌都在畫面裡，一進來就知道要往哪走；
     // 載入畫面收掉以後門在背後闔上（main.js）。角色開始走，鏡頭照走過的距離換回跟拍
-    const d = world.frontDoor, h = d.spawn.heading - 0.52;
+    const d = world.frontDoor, h = d.spawn.heading + Math.PI;
     player.place(d.spawn.x, d.spawn.z, d.spawn.heading);
     player.startIntro({
-      wide: { dist: 4, at: { x: 0.22, y: -0.35 }, yaw: h, pitch: 0.22 },
-      tall: { dist: 4.6, at: { x: 0.05, y: -0.42 }, yaw: h, pitch: 0.26 },
+      wide: { dist: 7, at: { x: 0, y: -0.3 }, yaw: h, pitch: 0.7 },
+      tall: { dist: 11, at: { x: 0, y: -0.05 }, yaw: h, pitch: 0.95 },
     });
   }
   const go = params.get('go')?.split('.').map(Number);
