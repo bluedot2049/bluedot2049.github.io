@@ -31,6 +31,9 @@
     if (q.get('sub')) c.sub[c.tab] = q.get('sub');
     c.open(presetLook(0));
     window.creator = c;
+    // ?scroll=像素：面板往下捲；自動截圖用的 #out 在小圖拍好後出現
+    if (q.get('scroll')) setTimeout(() => { document.getElementById('dress-body').scrollTop = +q.get('scroll'); }, 2000);
+    const o = document.createElement('pre'); o.id = 'out'; o.hidden = true; o.textContent = 'done'; setTimeout(() => document.body.appendChild(o), 2500);
   </script>
 </body>
 </html>

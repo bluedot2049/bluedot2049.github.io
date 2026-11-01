@@ -116,15 +116,19 @@ export function filmGeometry(w, long) {
   return { u, cols, rows: ROWS, pad: PAD_Y, h: (ROWS + PAD_Y * 2) * u };
 }
 
-function blocks(cols) {
-  const total = Math.floor(((ROWS - 1) * cols) / 8), nb = Math.ceil(total / 255), out = [];
+// total 個位元組切成每段最多 255 的幾段，每段 ecc 比例拿來更正錯誤
+function blocksOf(total, ecc) {
+  const nb = Math.ceil(total / 255), out = [];
   for (let i = 0; i < nb; i++) {
-    const n = Math.floor(total / nb) + (i < total % nb ? 1 : 0), e = Math.floor(n * ECC);
+    const n = Math.floor(total / nb) + (i < total % nb ? 1 : 0), e = Math.floor(n * ecc);
     out.push({ n, e, k: n - e });
   }
   return out;
 }
+const blocks = (cols) => blocksOf(Math.floor(((ROWS - 1) * cols) / 8), ECC);
 export const filmCapacity = (cols) => blocks(cols).reduce((s, b) => s + b.k, 0) - 4;
+// 任意形狀的版面（鏡中照片的眼紋、鏡框）：n 個格子放得下多少位元組
+export const codeCapacity = (n, ecc) => blocksOf(Math.floor(n / 8), ecc).reduce((s, b) => s + b.k, 0) - 4;
 
 function crc16(bytes) {
   let c = 0xffff;
@@ -145,8 +149,11 @@ function whiten(bits) {
 }
 
 // 資料 → 每一格亮不亮（rows-1 列 × cols 欄，一欄一欄往右排）。放不下回傳 null
-export function filmBits(data, cols) {
-  const B = blocks(cols), cap = B.reduce((s, b) => s + b.k, 0) - 4;
+export const filmBits = (data, cols) => codeBits(data, (ROWS - 1) * cols, ECC);
+
+// 資料 → n 個格子各自亮不亮：前面加長度和校驗，切段加 Reed-Solomon，段跟段交錯排，再跟固定的亂數 XOR。放不下回傳 null
+export function codeBits(data, n, ecc) {
+  const B = blocksOf(Math.floor(n / 8), ecc), cap = B.reduce((s, b) => s + b.k, 0) - 4;
   if (data.length > cap) return null;
   const c = crc16(data);
   const payload = [data.length >> 8, data.length & 255, c >> 8, c & 255, ...data];
@@ -155,14 +162,15 @@ export function filmBits(data, cols) {
   const coded = B.map((b) => rsEncode(payload.slice(at, (at += b.k)), b.e));
   const stream = [];
   for (let p = 0; p < 255; p++) coded.forEach((cw) => { if (p < cw.length) stream.push(cw[p]); });
-  const bits = new Uint8Array((ROWS - 1) * cols);
+  const bits = new Uint8Array(n);
   stream.forEach((byte, i) => { for (let j = 0; j < 8; j++) bits[i * 8 + j] = (byte >> (7 - j)) & 1; });
   return whiten(bits);
 }
 
 // 每一格亮不亮 → 資料，救不回來或校驗不對是 null
-export function filmData(bits, cols) {
-  const B = blocks(cols), raw = whiten(Uint8Array.from(bits)), total = B.reduce((s, b) => s + b.n, 0);
+export const filmData = (bits, cols) => codeData(bits, ECC);
+export function codeData(bits, ecc) {
+  const B = blocksOf(Math.floor(bits.length / 8), ecc), raw = whiten(Uint8Array.from(bits)), total = B.reduce((s, b) => s + b.n, 0);
   const stream = [];
   for (let i = 0; i + 8 <= raw.length && stream.length < total; i += 8) {
     let v = 0;

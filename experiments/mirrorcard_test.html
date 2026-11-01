@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>鏡中照片測試</title>
+<script type="importmap">{ "imports": { "three": "../vendor/three.module.min.js" } }</script>
+<style>
+  body { margin: 0; background: #222; color: #eee; font: 14px/1.6 monospace; display: flex; gap: 16px; padding: 16px; }
+  img { height: 900px; display: block; }
+  pre { white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <img id="card" alt="">
+  <pre id="out">running…</pre>
+  <script type="module">
+    // 鏡中照片：用一個小場景拍角色和眼睛，做成照片，再壓 JPEG、縮小，看存檔讀不讀得回來
+    import * as THREE from 'three';
+    import { Character } from '../js/character.js';
+    import { Eye } from '../js/eye.js';
+    import { makeMirrorCard, readMirrorCard, PHOTO_W, PHOTO_H, capacity } from '../js/mirrorcard.js';
+    import { presetLook, randomLook, putSave, getSave, lockKeys, encodeFace, GIFTS } from '../js/looks.js';
+
+    const log = (s) => { out.textContent = (out.textContent === 'running…' ? '' : out.textContent) + s + '\n'; };
+    const face = () => { const c = new Uint8Array(4096); for (let i = 0; i < 4096; i++) if (((i * 2654435761) >>> 0) % 7 < 2) c[i] = 1 + (i % 8); return c; };
+    const smile = () => { const c = new Uint8Array(4096); for (let x = 18; x < 46; x++) c[(40 + Math.round(Math.sin((x - 18) / 28 * Math.PI) * 5)) * 64 + x] = 3; c[24 * 64 + 22] = c[24 * 64 + 41] = 1; return c; };
+    const a = { ...randomLook(presetLook(1)), face: encodeFace(smile()) }, b = randomLook(presetLook(2)), c = { ...randomLook(presetLook(3)), face: encodeFace(face()) };
+    putSave({ look: a, closet: [a, b, c], unlocked: lockKeys().filter((_, i) => i % 3), visits: Object.fromEntries(Object.keys(GIFTS).map((k) => [k, '2026-10-2' + (k.length % 10)])) });
+    const save = getSave();
+    log('capacity ' + JSON.stringify(capacity));
+
+    // 小場景：角色站著、鏡頭在鏡子的位置往回看，眼睛浮在肩膀旁
+    const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    r.outputColorSpace = THREE.SRGBColorSpace;
+    r.setSize(PHOTO_W, PHOTO_H, false);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x3a2a20);
+    scene.add(new THREE.HemisphereLight(0xfff0dc, 0x6a4a34, 1.9));
+    const sun = new THREE.DirectionalLight(0xffcf98, 1.3); sun.position.set(2, 4, 3); scene.add(sun);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshLambertMaterial({ color: 0x2a1d15 })); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+    const ch = new Character(null, a); ch.shadow.visible = false; scene.add(ch.group); ch.update(1, 0);
+    const cam = new THREE.PerspectiveCamera(50, PHOTO_W / PHOTO_H, 0.1, 50);
+    cam.position.set(0, ch.dims.topY * 0.55, 2.6); cam.lookAt(0, ch.dims.topY * 0.5, 0);
+    const eye = new Eye(); eye.addTo(scene);
+    eye.group.position.set(-0.42, ch.dims.faceY * 0.96, 0.28); eye.setOpen(1); eye.setPupil(0.4);
+    for (let i = 0; i < 30; i++) { eye.group.position.y += Math.sin(i / 5) * 0.004; eye.update(1 / 30, cam.position); }
+    r.render(scene, cam);
+    const photo = document.createElement('canvas'); photo.width = PHOTO_W; photo.height = PHOTO_H;
+    photo.getContext('2d').drawImage(r.domElement, 0, 0);
+
+    const t0 = performance.now();
+    const { canvas, lost } = await makeMirrorCard(photo, { save, date: new Date(2026, 10, 1) });
+    log(`made in ${Math.round(performance.now() - t0)} ms, lost faces: ${JSON.stringify(lost)}`);
+    const blobOf = (cv, q) => new Promise((ok) => cv.toBlob(ok, 'image/jpeg', q));
+    const scaled = (k) => { const s = document.createElement('canvas'); s.width = Math.round(canvas.width * k); s.height = Math.round(canvas.height * k); const g = s.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(canvas, 0, 0, s.width, s.height); return s; };
+    const padded = () => { const s = document.createElement('canvas'); s.width = 1170; s.height = 2532; const g = s.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, s.width, s.height); const h = 1170 * 4 / 3; g.drawImage(canvas, 0, (2532 - h) / 2, 1170, h); return s; };
+    const main = await blobOf(canvas, 0.92);
+    document.getElementById('card').src = URL.createObjectURL(main);
+    const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+    const cases = [['原圖 JPEG .92', canvas, 0.92], ['LINE 1280 長邊 .8', scaled(0.64), 0.8], ['縮一半 .7', scaled(0.5), 0.7], ['縮到 0.4 .7', scaled(0.4), 0.7], ['iPhone 上下黑邊', padded(), 0.85]];
+    for (const [name, cv, q] of cases) {
+      const blob = await blobOf(cv, q);
+      const m = await readMirrorCard(blob);
+      if (!m) { log(`${name} (${cv.width}×${cv.height}, ${Math.round(blob.size / 1024)} KB): 讀不到`); continue; }
+      const okLook = same({ ...m.save.look, face: '' }, { ...save.look, face: '' }) || same(m.save.look.race, save.look.race);
+      const okUn = same([...m.save.unlocked].sort(), [...save.unlocked].sort());
+      const okCloset = m.full && m.save.closet.length === 3 && m.save.closet.every((x, i) => x && x.race === save.closet[i].race);
+      const okFaces = m.faces.map((f, i) => (f ? encodeFace(f) === ([save.look, ...save.closet][i]?.face || '') : 'none'));
+      log(`${name} (${cv.width}×${cv.height}, ${Math.round(blob.size / 1024)} KB): look ${okLook} unlocks ${okUn} full ${m.full} closet ${okCloset} visits ${same(m.save.visits, save.visits)} faces ${JSON.stringify(okFaces)}`);
+    }
+    log('done');
+  </script>
+</body>
+</html>

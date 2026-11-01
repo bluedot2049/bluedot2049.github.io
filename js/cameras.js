@@ -13,7 +13,8 @@ import { getSave, putSave } from './looks.js';
 export const longTan = (mm) => 18 / mm;
 
 // focal：焦距（mm）。prime：定焦，不能變焦，想拍大一點就走近。
-// fstop：光圈，景深照它算，數字越小背景越糊。focus：tap 點按對焦。
+// fstop：光圈，景深照它算，數字越小背景越糊。bokeh：畫面上把景深放大幾倍——這個世界多是平塗的色塊，照實算的景深幾乎看不出來。
+// focus：tap 點按對焦。
 // aspect：照片長寬比（橫拿），直拿就倒過來。
 // flash：閃光燈；bulb：閃一次要換一顆燈泡，換好之前不能拍。hold：按住快門不放就一直曝光（B 快門），放開時才閃
 // develop：沖出來的樣子，跟 photo.js 的色調同一種寫法；halo：亮的地方暈開一點
@@ -21,8 +22,8 @@ export const CAMERAS = {
   bulb: {
     name: '閃光燈泡相機',
     line: '方盒子旁邊夾著一把銀傘，閃一下就要換一顆燈泡。夜裡拍人最好看',
-    spec: ['定焦 35mm', '點一下對焦', '閃光燈泡', '按住快門慢慢曝光'],
-    focal: 35, prime: true, fstop: 1.4, focus: 'tap', aspect: 3 / 2,
+    spec: ['定焦 27mm', '點一下對焦', '閃光燈泡', '按住快門慢慢曝光'],
+    focal: 27, prime: true, fstop: 1.4, bokeh: 4, focus: 'tap', aspect: 3 / 2,
     flash: { color: 0xfff1dc, power: 2.6, bulb: 1.6 },
     hold: true,
     develop: { filter: 'sepia(.16) saturate(.92) contrast(1.08) brightness(1.02)', vig: 0.62, grain: 0.07, halo: 0.16 },

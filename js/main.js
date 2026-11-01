@@ -16,6 +16,7 @@ import { ANIMAL_LAYER, REFLECT_LAYER } from './scenery.js';
 import { Quality } from './quality.js';
 import { createPostFX } from './postfx.js';
 import { PhotoMode } from './photo.js';
+import { Selfie } from './selfie.js';
 import { Studio } from './studio.js';
 import { lens, LensPass } from './lens.js';
 import { dof, DofPass } from './dof.js';
@@ -232,6 +233,17 @@ async function start() {
     onPaint(cells) {
       character.paintFace(cells);
       lastInput = performance.now();
+    },
+    // 請鏡子裡的眼睛拍一張：面板先收起來，鏡頭退到看全身，拍完再打開
+    onSelfie(withCode) {
+      const back = dressView;
+      dressView = 'body';
+      ui.hideDress();
+      frameMirror();
+      if (!selfie.start(withCode)) {
+        dressView = back;
+        ui.showDress();
+      }
     },
   });
 
@@ -532,6 +544,15 @@ async function start() {
     lensPass, dofPass, flashLight,
     resizeFX: (w, h) => fx?.setSize(w, h),
   });
+  const selfie = new Selfie({
+    renderer, scene, camera, player, character, ambience, render: draw,
+    resizeFX: (w, h) => fx?.setSize(w, h),
+    onDone() {
+      if (player.focus?.kind !== 'mirror') return;
+      ui.showDress();
+      creator.open(look);
+    },
+  });
   document.getElementById('photo-btn').addEventListener('click', () => photo.enter());
   if (world.studios) {
     studio = new Studio({ world, player, photo, passers });
@@ -678,6 +699,7 @@ async function start() {
     const dt = Math.min(clock.getDelta(), 0.05);
     player.update(dt);
     photo.update(dt);
+    selfie.update(dt);
     animals?.update(dt);
     visitors?.update(dt);
     vendors?.update(dt, player, camera);

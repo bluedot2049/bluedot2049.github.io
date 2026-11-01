@@ -209,7 +209,7 @@ Messaging apps (LINE, IG, Messenger) recompress images and strip metadata; postc
 - [ ] Postcard seal (original plan, superseded by the line above): QR rendering in seal style, 寄給朋友 / 寄給自己 modes, COM segment, lazy jsQR reader.
 - [ ] Tests: codec round-trip, truncated / malformed codes fall back safely, `#look=` never changes unlocks, reset runs exactly once, QR survives JPEG recompression at quality ~0.7 and a downscale to 50%.
 
-## 7. Mirror selfie save (decided 2026-11-01, not built yet)
+## 7. Mirror selfie save (decided and built 2026-11-01, not committed)
 
 Supersedes the mirror-drawer parts of §6.4 and §6.5. **Haishi is untouched**: postcards, the 茜紅 friend stamp and the 藍染 行囊 stamp keep working exactly as now.
 
@@ -231,17 +231,22 @@ Supersedes the mirror-drawer parts of §6.4 and §6.5. **Haishi is untouched**: 
 - Full save text today: ~155 chars (look + 3 closet looks + all unlocks + visits). Drawn faces: deflate-raw, typically 100–400 bytes each, up to 4 (worn + closet).
 - Plan: pack the save body as binary (not the text alphabet) + version + Reed-Solomon; faces in a second, separately-corrected region so a damaged face region never blocks the save itself (same split as stamp vs film edge).
 
-### 7.4 Open: code visual (to choose from the design canvas)
-Candidates, all readable only by our reader:
+### 7.4 Code visual — chosen: iris + frame runes, constellation as decoration
+Candidates that were shown (all readable only by our reader):
 1. **Iris code** — the eye's iris drawn large on the frame: concentric rings cut into light/dark arcs; the pupil plus a gold ring is the finder (circles survive scaling).
 2. **Frame runes** — the arched mirror frame's border carries brush-tick cells (the filmcode engine, restyled), diamond marks at the corners as finders.
 3. **Constellation** — dots on a hidden hex grid inside a round field, three larger guide stars as finders.
-Working recommendation: iris holds the save, frame runes hold the faces.
+Chosen: iris holds the core, frame runes hold the full save and faces, stars are decoration only. Built in `js/mirrorcard.js`:
+- Fixed 1500×2000 card, black ground. Arched mirror window 930×1340 (photo flipped), gold frame band 110 wide, eye 910 wide on top, date plate at the bottom (glyphs.js), stars and four corner constellations in the free black areas.
+- Iris: 11 rings × ~9 px arcs = 1074 cells, RS 30 % → 71 bytes. Holds `encodeSave` without closet, visits or faces (~44 chars).
+- Frame runes: 12 rows × 7.5 px cells along the arch = 6180 cells, RS 30 % → 533 bytes. Holds `[1][len][deflate(full save text)][4 × (len + packFace)]`; faces that do not fit are dropped from closet 3 backwards and reported.
+- Reader: geometry from the image size (full image, or fit by width / by height for letterboxed screenshots), threshold per region from the 25th/75th percentile. Iris alone restores look + unlocks if the frame fails (the player is asked first).
+- Measured (`experiments/mirrorcard_test.html`): everything incl. faces reads back at original JPEG 0.92, LINE 960×1280 q0.8, half size q0.7, 600×800 q0.7, and an iPhone-style 1170×2532 letterboxed image.
 
 ### 7.5 Checklist
-- [ ] Remove copy/paste/link buttons from 行囊; keep 從照片讀取 (+ drag/drop, paste on desktop).
-- [ ] Eye model + idle, rise/return animation, pupil countdown, blink shutter, flash.
-- [ ] Selfie render from the mirror camera, flipped, eye placed at shoulder facing the glass; hide UI and passers-by.
-- [ ] Photo layout: arched mirror frame, date plate (glyphs.js), code regions.
-- [ ] Binary save packing + RS; encoder/decoder for the chosen code; reader tries the new code first, then the old postcard path.
-- [ ] Tests: round-trip at original size, after JPEG 0.7, after 50 % downscale, after a phone screenshot crop.
+- [x] Remove copy/paste/link buttons from 行囊; keep 從照片讀取 (+ drag/drop, paste on desktop). (`js/creator.js`)
+- [x] Eye model + idle, rise/return animation, pupil countdown, blink shutter, flash. (`js/eye.js`, `js/selfie.js`)
+- [x] Selfie render from the mirror camera, flipped, eye placed at shoulder facing the glass; hide UI. Passers-by are **not** hidden yet.
+- [x] Photo layout: arched mirror frame, date plate (glyphs.js), code regions.
+- [x] RS packing generalised in `filmcode.js` (`codeBits` / `codeData`, film edges unchanged); reader tries the mirror card first, then the old postcard path.
+- [x] Tests: see §7.4. Not covered: a screenshot that also crops into the card, emote during the countdown, testing on a real phone.

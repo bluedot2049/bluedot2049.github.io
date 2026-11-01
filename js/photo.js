@@ -196,8 +196,8 @@ export class PhotoMode {
     this.af = null;
     this.needAF = true;
     dof.on = true;
-    dof.k = dofK(g.focal, g.fstop);
-    dof.max = 0.012;
+    dof.k = dofK(g.focal, g.fstop) * (g.bokeh || 1);
+    dof.max = 0.016;
     this.$('#ph-frame .gear').textContent = `${g.name}　${g.focal}mm`;
   }
 
@@ -666,6 +666,7 @@ export class PhotoMode {
   // ───────── 推鏡、靠近 ─────────
 
   // 畫面上 (nx, ny)（-1..1）看到的東西。看不見的、淡掉的牆、粒子和線都不算；太遠（天空）當成沒有，推鏡就照 8 公尺算
+  // 不寫深度的也不算：包住鏡頭的天光和霧、窗戶的光束、燈的光暈都是加亮上去的，景深的深度圖裡也沒有它們
   pickAt(nx, ny) {
     const v = unbend(new THREE.Vector2(nx, ny)), ray = this.ray;
     ray.layers.mask = this.camera.layers.mask;
@@ -674,7 +675,7 @@ export class PhotoMode {
     for (const h of ray.intersectObject(this.scene, true)) {
       if (!h.object.isMesh) continue;
       const m = h.object.material;
-      if (m && !Array.isArray(m) && (!m.visible || (m.transparent && m.opacity < 0.5))) continue;
+      if (m && !Array.isArray(m) && (!m.visible || !m.depthWrite || m.blending === THREE.AdditiveBlending || (m.transparent && m.opacity < 0.5))) continue;
       let o = h.object;
       while (o && o.visible) o = o.parent;
       if (!o) return h;
@@ -925,13 +926,21 @@ export class PhotoMode {
     }
   }
 
-  // 畫面上 (nx, ny) 看到的東西沿著鏡頭的方向有多遠（景深算的是這個）；天空當成很遠
+  // 畫面上 (nx, ny) 看到的東西沿著鏡頭的方向有多遠（景深算的是這個）；天空當成很遠。
+  // 對焦點是一小塊不是一個點：正中間剛好點到空隙（欄杆之間、人的輪廓邊）時，看旁邊一圈，取最近的
   depthAt(nx, ny) {
-    const cam = this.camera;
+    const cam = this.camera, dir = cam.getWorldDirection(new THREE.Vector3());
     cam.updateMatrixWorld();
-    const h = this.pickAt(nx, ny);
-    if (!h) return 80;
-    return Math.max(0.3, h.point.clone().sub(cam.position).dot(cam.getWorldDirection(new THREE.Vector3())));
+    const at = (x, y) => {
+      const h = this.pickAt(x, y);
+      return h ? Math.max(0.3, h.point.clone().sub(cam.position).dot(dir)) : Infinity;
+    };
+    let d = at(nx, ny);
+    if (d === Infinity) {
+      const r = 0.025, ry = r * window.innerWidth / window.innerHeight;
+      for (const [dx, dy] of [[r, 0], [-r, 0], [0, ry], [0, -ry]]) d = Math.min(d, at(nx + dx, ny + dy));
+    }
+    return d === Infinity ? 80 : d;
   }
 
   // 點一下對焦：對焦框跳到點的地方，對焦環慢慢轉過去

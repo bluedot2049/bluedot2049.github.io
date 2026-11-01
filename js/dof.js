@@ -35,8 +35,11 @@ void main() {
   float zc = dist(vUv), cc = coc(zc);
   vec3 col = texture2D(tDiffuse, vUv).rgb;
   float tot = 1.0, soft = uMax / sqrt(float(TAPS)) + 0.5;
+  // 每個像素把螺旋轉一個不同的角度、往外挪一點：取樣點的間隔不會排成一格一格的紋路，散成細顆粒。
+  // 只看像素的位置，不看時間，畫面不會閃
+  float j = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
   for (int i = 0; i < TAPS; i++) {
-    float t = (float(i) + 0.5) / float(TAPS), r = sqrt(t) * uMax, a = float(i) * 2.39996323;
+    float t = (float(i) + j) / float(TAPS), r = sqrt(t) * uMax, a = float(i) * 2.39996323 + j * 6.2831853;
     vec2 uv = vUv + vec2(cos(a), sin(a)) * r * uTexel;
     float zs = dist(uv), cs = coc(zs);
     if (zs > zc) cs = min(cs, cc * 2.0);
