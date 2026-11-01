@@ -148,13 +148,14 @@ body.flat #stage::after { display: none; }
 .porch { transform-origin: 50% 62%; transition: transform 1.7s cubic-bezier(.5, 0, .2, 1) .15s; }
 #loading.opening .porch { transform: scale(1.35); }
 #loading.opening .lamp { filter: brightness(1.4); }
-#loading.opening .notice, #loading.opening .brand { opacity: 0; transform: translateY(6px); transition: opacity .35s, transform .35s; }
+#loading.opening .notice, #loading.opening .brand, #loading.opening .mark { opacity: 0; transform: translateY(6px); transition: opacity .35s, transform .35s; }
 
-/* 第一次來：門旁邊貼一張告示。直式在門下面，橫式在門右邊。
-   直角、細線、字靠左，像一張說明卡。色票拉開、清單一行一行浮上來；讀完按鈕亮起來變成「進入」 */
-#loading.first { --dh: min(30vh, 240px); }
+/* 第一次來：門旁邊貼一張告示。直角、細線、字靠左，像一張說明卡。色票拉開、清單一行一行浮上來；讀完按鈕亮起來變成「進入」。
+   版面分兩種（見下面的 media）：橫式左門右欄，直式字標、門、告示由上往下，告示貼底 */
+#loading.first .brand { display: none; }
+.side .mark { display: block; width: 180px; height: auto; }
 .notice {
-  width: min(320px, calc(100vw - 32px)); padding: 20px 22px 18px;
+  width: 340px; max-width: 100%; padding: 20px 22px 18px;
   display: flex; flex-direction: column; gap: 12px;
   background: rgba(16, 11, 9, .86); border: 1px solid rgba(232, 184, 106, .2); border-radius: 2px;
 }
@@ -184,16 +185,51 @@ body.flat #stage::after { display: none; }
 @keyframes swatch-in { from { transform: scaleX(0); } }
 @keyframes row-in { from { opacity: 0; transform: translateX(-4px); } }
 @keyframes ready { from { filter: brightness(1.25); } }
+/* 橫式（電腦、手機橫拿）：左邊門，右邊一欄字標和告示。兩邊的底對齊，告示跟門站在同一條地平線上。
+   門照螢幕高度放大，大螢幕上不會縮成中間一小塊 */
 @media (orientation: landscape) {
-  #loading.first { --dh: min(54vh, 320px); }
-  #loading.first .gate { flex-direction: row; gap: max(48px, 8vw); }
+  #loading.first { --dh: clamp(220px, 58vh, 460px); }
+  #loading.first .gate { flex-direction: row; align-items: flex-end; gap: clamp(40px, 7vw, 120px); }
+  #loading.first .side { display: flex; flex-direction: column; gap: 22px; }
 }
-@media (orientation: landscape) and (max-height: 500px) {
-  #loading.first .brand { display: none; }
-  #loading.first { --dh: 62vh; }
-  .notice { padding: 12px 16px 10px; gap: 9px; }
+/* 大螢幕：告示跟著放大，字不會比門小一截 */
+@media (orientation: landscape) and (min-width: 1300px) and (min-height: 820px) {
+  .side .mark { width: 220px; }
+  .notice { width: 400px; padding: 26px 28px 22px; gap: 14px; }
+  .notice .lead { font-size: 18px; }
+  .notice .sub { font-size: 14px; }
+  .notice .tasks li { grid-template-columns: 20px 1fr 10px; padding: 14px 0; font-size: 15.5px; }
+  .notice .tasks svg { width: 20px; height: 20px; }
+  .notice .tasks i { width: 10px; height: 10px; }
+  .notice .enter { min-height: 50px; font-size: 16px; }
+}
+@media (orientation: landscape) and (max-height: 560px) {
+  /* 門的高度也看寬度：門、間距、告示要排得下，門不會貼到螢幕邊 */
+  #loading.first { --dh: min(calc(100vh - 72px), calc((100vw - 430px) * 1.53)); --dh: min(calc(100dvh - 72px), calc((100vw - 430px) * 1.53)); }
+  #loading.first .side .mark { display: none; }
+  .notice { padding: 12px 16px 10px; gap: 8px; }
+  .notice .sub { display: none; }
+  .notice .tasks li { padding: 7px 0; }
+  .notice .enter { min-height: 38px; margin-top: 2px; }
+}
+/* 直式（手機）：由下往上疊：告示貼著畫面下緣（按鈕在拇指按得到的地方），門站在告示上面的地上，字標掛在門上。
+   告示和字標的高度固定，門拿剩下的高度，多出來的空間留在最上面當牆；很矮的螢幕（瀏覽器的列很高）就收掉字標 */
+@media (orientation: portrait) {
+  #loading.first { --dh: clamp(96px, calc(100vh - 440px), 300px); --dh: clamp(96px, calc(100dvh - 440px), 300px); }
+  #loading.first .gate {
+    position: absolute; inset: 0; display: grid; grid-template-rows: 1fr auto auto auto; grid-template-columns: minmax(0, 1fr); justify-items: center; row-gap: 18px;
+    padding: calc(env(safe-area-inset-top) + 22px) 16px calc(env(safe-area-inset-bottom) + 16px);
+  }
+  #loading.first .side { display: contents; }
+  #loading.first .side .mark { grid-row: 2; width: 150px; }
+  #loading.first .porch { grid-row: 3; }
+  #loading.first .notice { grid-row: 4; width: 420px; }
+}
+@media (orientation: portrait) and (max-height: 600px) {
+  #loading.first { --dh: clamp(96px, calc(100vh - 380px), 300px); --dh: clamp(96px, calc(100dvh - 380px), 300px); }
+  #loading.first .side .mark { display: none; }
+  .notice { padding: 14px 18px 12px; gap: 10px; }
   .notice .tasks li { padding: 8px 0; }
-  .notice .enter { min-height: 38px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .door .leaf, .door .pane, .lamp, .notice * { animation: none; }

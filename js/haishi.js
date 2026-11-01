@@ -223,13 +223,21 @@ function hill(x, z) {
 // 越往外削得越少。只往下削、不墊高，路比山坡高的地方由石台、石階自己的側牆一路砌下去
 const CUT = 2.4;
 function carve(x, z, h) {
-  if (x < -36 || x > 6 || z > -61.9 || z < -126) return h;   // 遠眺台以南不動
+  if (x < -36 || x > 14 || z > -61.9 || z < -144) return h;   // 遠眺台以南不動
   for (const a of TEMPLE) {
     const cx = Math.min(a.x1, Math.max(a.x0, x)), cz = Math.min(a.z1, Math.max(a.z0, z)), d = Math.hypot(x - cx, z - cz);
     if (d < CUT) h = Math.min(h, heightIn(a, cx, cz) - 0.6 + (h - heightIn(a, cx, cz) + 0.6) * smooth(0, CUT, d));
   }
+  // 殿後面原本是三十度的陡坡，在廟前回頭看海時鏡頭會被推進坡裡、擠到樹中間。
+  // 削成一塊往後緩緩升起的平台（每公尺升 0.35），十公尺以後再慢慢接回原本的山，兩側八公尺內收掉
+  const H = AREA.tHall, back = H.z0 - z;
+  if (back > 0) {
+    const cap = H.y - 0.6 + 0.35 * back, side = Math.max(H.x0 - x, x - H.x1, 0);
+    if (cap < h) h = cap + (h - cap) * Math.max(smooth(10, 22, back), smooth(0, 8, side));
+  }
   return h;
 }
+const onShelf = (x, z) => z < AREA.tHall.z0 + 1 && z > AREA.tHall.z0 - 18 && x > AREA.tHall.x0 - 6 && x < AREA.tHall.x1 + 6;
 
 function heightIn(a, x, z) {
   if (a.y != null) return a.y;
@@ -1718,7 +1726,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     if (y < SEA + 0.5) continue;
     if (zones.some(([hx, hz, r]) => Math.hypot(x - hx, z - hz) < r) || trails.some(([px, pz]) => Math.abs(px - x) < 1.3 && Math.abs(pz - z) < 1.3)) continue;
     const s = 0.8 + R() * 1.4;
-    if (inArea(x, z, 2, TEMPLE)) continue;   // 亂數抽完才跳過
+    if (inArea(x, z, 2, TEMPLE) || onShelf(x, z)) continue;   // 亂數抽完才跳過；殿後的平台上也不種
     k.cone(1.1 * s, 3 * s, '#1a2a2a', x, y + 1.1 * s, z, { color2: '#2e4440', ao: false });
   }
   k.add(terrainGeometry(), '#24302e', 0, 0, 0, { color2: '#46523e', ao: false });
@@ -1847,8 +1855,6 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       obstacles.push({ x, z, hw: 1.2, hd: 1.2 });
       // 門口右手邊一盞燈，殿裡就只有這一盞
       stoneLamp(x + 2.1, y, z + r + 0.2);
-      // 殿後的擋土牆：削進山坡的那一面
-      tk.box(H.x1 - H.x0 + 0.6, 3.4, 0.5, '#46444c', x, y + 1.2, H.z0 - 0.25, { color2: '#55535c' });
     }
     tk.emit(bucket, 0, 0, 0);
     group.add(glowPoints(far, { far: true, gain: 7, dot: 4 }));
