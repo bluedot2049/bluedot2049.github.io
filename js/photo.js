@@ -230,6 +230,7 @@ export class PhotoMode {
     this.counting = true;
     const el = this.$('#ph-count');
     let n = 3;
+    setTimeout(() => { if (this.active && this.counting) this.shoot(true); }, 700);
     const tick = () => {
       if (!this.active) { this.counting = false; el.hidden = true; return; }
       if (!n) {
@@ -877,13 +878,17 @@ export class PhotoMode {
     el.classList.add('flash');
   }
 
-  shoot() {
+  // dry：只暖機，不出圖。照相館倒數的三秒先照著正式的大小畫一張，顯示卡第一次畫那麼大的畫面要編譯、暖機，
+  // 不先做的話，按下快門後第一次會多等一兩秒
+  shoot(dry = false) {
     if (!this.active || this.result) return;
     const fr = this.frame, r = this.renderer, cam = this.camera;
     const W = window.innerWidth, H = window.innerHeight;
     // 長邊：電腦 3840、手機 2560，不超過顯示卡能畫的大小
     const gl = r.getContext();
-    const cap = Math.min(this.coarse ? 2560 : 3840, gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), r.capabilities.maxTextureSize);
+    // 明信片外面還要加紙邊和底片邊，成品比照片大一圈，而且傳到通訊軟體還會被縮小，所以拍得小一點，出圖才快
+    const long = this.postcard ? (this.coarse ? 2048 : 2560) : this.coarse ? 2560 : 3840;
+    const cap = Math.min(long, gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), r.capabilities.maxTextureSize);
     const k = cap / Math.max(fr.w, fr.h);
     const outW = Math.round(fr.w * k), outH = Math.round(fr.h * k);
     const out = document.createElement('canvas');
@@ -911,8 +916,13 @@ export class PhotoMode {
       this.resizeFX(W, H);
       this.render(0);
     }
+    if (dry) {
+      ctx.getImageData(0, 0, 1, 1);   // 讀一個點，逼顯示卡把剛才排的工作做完
+      return;
+    }
     this.flash();
     if (this.postcard) {
+      this.ui.hint('照相師沖洗中…', 30000);
       this.shot = out;
       this.cardMode = 'friend';
       this.postcardResult();
@@ -1093,6 +1103,7 @@ export class PhotoMode {
     this.$('#ph-share').hidden = !navigator.canShare?.({ files: [file] });
     this.$('#ph-tip').textContent = this.postcard ? '按分享，選要寄給誰' : video ? '' : this.coarse ? '也可以長按照片存起來' : '';
     this.$('#ph-result').hidden = false;
+    if (this.postcard) this.ui.hideHint();
     this.$('#ph-mode').hidden = !this.postcard || video;
     for (const b of this.$('#ph-mode').querySelectorAll('button')) b.setAttribute('aria-pressed', b.dataset.mode === this.cardMode);
   }
