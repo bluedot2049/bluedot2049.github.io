@@ -25,7 +25,7 @@ export class Selfie {
     this.el.addEventListener('click', (e) => {
       const b = e.target.closest('button');
       if (!b) return;
-      if (b.dataset.act === 'keep') this.keep();
+      if (b.dataset.act === 'download') this.download();
       else if (b.dataset.act === 'again') { this.closeResult(); this.start(this.withCode); }
       else if (b.dataset.act === 'close') this.finish();
     });
@@ -98,6 +98,7 @@ export class Selfie {
         eye.setPupil([1, 0.74, 0.52, 0.34][this.ticks] * pulse);
         if (at(this.t0) >= TICK * 3 + 0.25) {
           eye.update(0, cam);
+          this.from.copy(eye.group.position);   // 快門之後眼睛就停在這裡，不再跟著晃
           this.shot = this.capture();
           this.ambience?.voice('shutter', 0.5);
           this.flash();
@@ -107,16 +108,18 @@ export class Selfie {
         break;
       }
       case 'blink': {
-        this.anchor(eye.group.position);
+        eye.group.position.copy(this.from);
         const k = at(this.t0) / BLINK;
         eye.setOpen(Math.abs(1 - 2 * Math.min(1, k)));
-        if (k >= 1) { this.state = 'back'; this.t0 = this.t; this.anchor(this.from); this.to.copy(cam); }
+        if (k >= 1) { this.state = 'back'; this.t0 = this.t; }
         break;
       }
       case 'back': {
+        // 在拍照的位置原地闔眼、縮小消失
         const k = Math.min(1, at(this.t0) / BACK), e = ease(k);
-        eye.group.position.copy(this.from).lerp(this.to, e * 0.92);
-        eye.group.scale.setScalar(1 - 0.85 * e);
+        eye.group.position.copy(this.from);
+        eye.group.scale.setScalar(1 - 0.95 * e);
+        eye.setOpen(1 - e);
         eye.setPupil(0.34 + 0.66 * e);
         if (k >= 1) { this.dropEye(); this.develop(); }
         break;
@@ -170,23 +173,20 @@ export class Selfie {
     if (this.state !== 'result' || this.shot !== shot) return;
     const blob = await new Promise((ok) => canvas.toBlob(ok, 'image/jpeg', 0.92));
     if (!blob || this.state !== 'result') return;
-    this.result = { blob, url: URL.createObjectURL(blob), name: `鏡中-${stamp()}.jpg` };
+    const name = `${this.withCode ? '鏡中存檔' : '鏡中'}-${stamp()}.jpg`;
+    this.result = { blob, url: URL.createObjectURL(blob), name };
     this.img.src = this.result.url;
     const which = ['身上這套', '衣櫃第一套', '衣櫃第二套', '衣櫃第三套'];
     this.tip.textContent = !this.withCode ? '這張只是照片，沒有印存檔'
-      : lost.length ? `${lost.map((i) => which[i]).join('、')}畫的臉太滿，鏡框放不下，其他都印上了`
-      : '存檔印在眼睛和鏡框上。整張收好、傳原圖，換手機時在鏡子前讀這張就回來了';
+      : lost.length ? `這張就是你的存檔。${lost.map((i) => which[i]).join('、')}畫的臉太滿，鏡框放不下，其他都印上了`
+      : '這張圖就是你的存檔。下載收好、別壓縮，換手機時在鏡子前讀這張，東西就回來了';
     this.el.classList.add('done');
   }
 
-  // 收進相簿：手機用分享面板（iOS 選「儲存影像」），不行就下載
-  async keep() {
+  // 存成圖片檔，原圖不經壓縮，存檔才讀得回來
+  download() {
     const r = this.result;
     if (!r) return;
-    const file = new File([r.blob], r.name, { type: r.blob.type });
-    if (navigator.canShare?.({ files: [file] })) {
-      try { await navigator.share({ files: [file] }); return; } catch (e) { if (e.name === 'AbortError') return; }
-    }
     const a = document.createElement('a');
     a.href = r.url;
     a.download = r.name;

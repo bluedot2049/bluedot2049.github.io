@@ -114,7 +114,7 @@ function seeded(n) {
 function stars(g, rnd) {
   const free = (x, y) => {
     if (x > 165 && x < 1335 && y > 280 && y < 1860) return false;            // 鏡子和鏡框
-    if (Math.hypot((x - EYE.x) / 480, (y - EYE.y) / 210) < 1) return false;  // 眼睛
+    if (Math.hypot((x - EYE.x) / 570, (y - EYE.y) / 225) < 1) return false;  // 眼睛和捲草
     if (y > 1868 && Math.abs(x - 750) < 330) return false;                   // 銘牌
     return true;
   };
@@ -222,38 +222,79 @@ function glass(g, photo) {
   g.restore();
 }
 
-// 眼睛：杏仁形的眼眶、睫毛、虹膜（眼紋）、瞳孔和金圈
+// 眼眶：左右眼角尖、上下兩道三次曲線，最高最低處離虹膜邊只留一點點
+const LID_W = 455, LID_H = 230, LID_C = 0.7;
+const lidPath = (g) => {
+  const { x, y } = EYE, w = LID_W, h = LID_H, c = w * LID_C;
+  g.beginPath();
+  g.moveTo(x - w, y);
+  g.bezierCurveTo(x - c, y - h, x + c, y - h, x + w, y);
+  g.bezierCurveTo(x + c, y + h, x - c, y + h, x - w, y);
+  g.closePath();
+};
+// 眼皮上的點：s = -1 上、1 下，t 從左眼角 0 到右眼角 1
+const lidAt = (s, t) => {
+  const u = 1 - t;
+  return { x: EYE.x + LID_W * (-u * u * u + 3 * LID_C * t * u * (t - u) + t * t * t), y: EYE.y + s * 3 * t * u * LID_H };
+};
+
+// 一條粗細會變的線，像沾水筆畫的：pts 是線走過的點，width(t) 是 t（0 到 1）處的寬。
+// side 0 往兩邊長；1、-1 只往一邊長（線走的方向的右手邊是 1），眼眶用它往外長，不吃到眼白
+function ribbon(g, pts, width, side = 0) {
+  const a = [], b = [];
+  pts.forEach((p, i) => {
+    const o = pts[Math.max(0, i - 1)], q = pts[Math.min(pts.length - 1, i + 1)];
+    const d = Math.hypot(q.x - o.x, q.y - o.y) || 1, nx = -(q.y - o.y) / d, ny = (q.x - o.x) / d;
+    const w = width(i / (pts.length - 1)), lo = side ? 0 : -w / 2, hi = side ? w * side : w / 2;
+    a.push([p.x + nx * lo, p.y + ny * lo]);
+    b.push([p.x + nx * hi, p.y + ny * hi]);
+  });
+  g.beginPath();
+  a.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+  for (let i = b.length - 1; i >= 0; i--) g.lineTo(...b[i]);
+  g.closePath();
+  g.fill();
+}
+
+// 眼尾的捲草：從眼角出發，先往反方向輕輕一沉（dip），再越走越彎捲成小渦。回傳走過的點
+function scrollPts(x0, y0, a, len, curl, dip = 0) {
+  const n = 64, step = len / n, pts = [{ x: x0, y: y0 }];
+  let px = x0, py = y0;
+  for (let i = 0; i < n; i++) {
+    const t = i / n;
+    a += curl * (0.23 * t * t - dip * (1 - t) ** 3);
+    px += Math.cos(a) * step * (1 - t * 0.55);
+    py += Math.sin(a) * step * (1 - t * 0.55);
+    pts.push({ x: px, y: py });
+  }
+  return pts;
+}
+
+// 捲草的粗細：眼角接眼眶那頭是細的，前段鼓起來，捲進去之前收細，最後一顆圓珠收尾
+function flourish(g, pts, fat) {
+  ribbon(g, pts, (t) => 1.1 + fat * Math.sin(Math.PI * Math.min(1, t / 0.68)) ** 1.3);
+  const e = pts[pts.length - 1];
+  g.beginPath();
+  g.arc(e.x, e.y, 1.1 + fat * 0.5, 0, Math.PI * 2);
+  g.fill();
+}
+
+// 眼睛：杏仁形的眼眶（上粗下細，眼角收成細線）、眼尾捲草、虹膜（眼紋）、瞳孔和金圈。
+// 眼紋格子的位置和深淺不能動，讀檔靠它；其他都只是裝飾
 function eye(g, bits) {
   const { x, y, R } = EYE;
-  const lid = () => {
-    g.beginPath();
-    g.moveTo(x - 455, y);
-    g.quadraticCurveTo(x, y - 340, x + 455, y);
-    g.quadraticCurveTo(x, y + 340, x - 455, y);
-    g.closePath();
-  };
-  // 睫毛：沿上眼皮往外放射，下眼皮短一點
-  g.strokeStyle = '#c99448';
-  g.lineCap = 'round';
-  for (const [up, n, len] of [[1, 17, 46], [-1, 9, 26]]) {
-    for (let i = 0; i < n; i++) {
-      const t = 0.1 + (i / (n - 1)) * 0.8, px = x - 455 + 910 * t, py = y - up * 2 * t * (1 - t) * 340;
-      const a = Math.atan2(py - (y + up * 260), px - x), L = len * (0.6 + Math.sin(t * Math.PI) * 0.6);
-      g.lineWidth = 3.4;
-      g.beginPath();
-      g.moveTo(px, py);
-      g.lineTo(px + Math.cos(a) * L, py + Math.sin(a) * L);
-      g.stroke();
-    }
-  }
-  g.fillStyle = '#1b1826';
-  lid();
+  // 眼白：深藍紫，上眼皮底下壓一層影子
+  const sh = g.createLinearGradient(0, y - LID_H * 0.75, 0, y + LID_H * 0.75);
+  sh.addColorStop(0, '#0f0d17');
+  sh.addColorStop(0.42, '#221d33');
+  sh.addColorStop(1, '#1a1726');
+  g.fillStyle = sh;
+  lidPath(g);
   g.fill();
-  g.strokeStyle = '#c99448';
-  g.lineWidth = 4;
-  lid();
-  g.stroke();
-  g.fillStyle = '#e9cf98';
+  const ir = g.createRadialGradient(x, y, IRIS0, x, y, R);
+  ir.addColorStop(0, '#f2dcaa');
+  ir.addColorStop(1, '#ddb97c');
+  g.fillStyle = ir;
   g.beginPath();
   g.arc(x, y, R, 0, Math.PI * 2);
   g.fill();
@@ -285,19 +326,43 @@ function eye(g, bits) {
   g.beginPath();
   g.arc(x, y, R, 0, Math.PI * 2);
   g.stroke();
+  // 瞳孔：金圈裡再一道細圈，中間不是死黑，往中心微微透出藍紫
   g.strokeStyle = '#e8b86a';
-  g.lineWidth = 5;
+  g.lineWidth = 3.5;
   g.beginPath();
-  g.arc(x, y, IRIS0 - 4, 0, Math.PI * 2);
+  g.arc(x, y, IRIS0 - 3, 0, Math.PI * 2);
   g.stroke();
-  g.fillStyle = '#110d16';
+  const pu = g.createRadialGradient(x, y, 0, x, y, IRIS0 - 6);
+  pu.addColorStop(0, '#221c30');
+  pu.addColorStop(1, '#0e0b13');
+  g.fillStyle = pu;
   g.beginPath();
-  g.arc(x, y, IRIS0 - 8, 0, Math.PI * 2);
+  g.arc(x, y, IRIS0 - 5, 0, Math.PI * 2);
   g.fill();
-  g.fillStyle = 'rgba(255,244,224,.8)';
+  g.strokeStyle = 'rgba(232,184,106,.6)';
+  g.lineWidth = 1.2;
+  g.beginPath();
+  g.arc(x, y, IRIS0 - 10, 0, Math.PI * 2);
+  g.stroke();
+  g.fillStyle = 'rgba(255,244,224,.85)';
   g.beginPath();
   g.ellipse(x - 20, y - 22, 13, 8, -0.7, 0, Math.PI * 2);
   g.fill();
+  g.fillStyle = 'rgba(255,244,224,.45)';
+  g.beginPath();
+  g.arc(x + 22, y + 19, 4, 0, Math.PI * 2);
+  g.fill();
+  // 眼眶：上眼皮中間最粗，下眼皮細一點，兩頭都收成細線，在眼角接上捲草
+  g.fillStyle = '#c99448';
+  const lid = (s) => Array.from({ length: 81 }, (_, i) => lidAt(s, i / 80));
+  ribbon(g, lid(-1), (t) => 1.2 + 9 * Math.sin(Math.PI * t) ** 1.6, -1);
+  ribbon(g, lid(1), (t) => 1.2 + 4.5 * Math.sin(Math.PI * t) ** 1.6, 1);
+  // 眼尾：上面一條長的往上捲，下面一條短的往下捲，兩條從眼角分開、不交叉，像一對羊角
+  for (const sd of [-1, 1]) {
+    const cx = x + sd * LID_W, a = sd < 0 ? Math.PI : 0;
+    flourish(g, scrollPts(cx, y, a - sd * 0.15, 210, -sd * 1.15, 0.035), 6.5);
+    flourish(g, scrollPts(cx, y, a + sd * 0.38, 115, sd * 1.1), 3.8);
+  }
 }
 
 // 鏡框符文：1 是一道垂直於鏡框的深色短痕
