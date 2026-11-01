@@ -248,7 +248,6 @@ export class PhotoMode {
   // eye：帶著相機也用畫廊的眼睛，相機留在身上
   enter({ postcard = false, studio = null, eye = false } = {}) {
     if (this.active) return;
-    this.closePick();
     this.postcard = postcard;
     const p = this.player, cam = this.camera;
     this.ui.hidePainting();
@@ -371,24 +370,14 @@ export class PhotoMode {
     tick();
   }
 
-  toggle() { this.active ? this.exit() : this.open(); }
+  toggle() { this.active ? this.exit() : this.enter(); }
 
-  // 右上的相機鈕。帶著相機時先問一聲：拿起相機拍，還是用畫廊的眼睛到處飛（相機照樣掛在身上，拍得到自己帶著它）
-  open() {
-    const id = carried(), m = this.$('#photo-pick');
-    if (this.active || !id) return this.enter();
-    if (!m.hidden) return this.closePick();
-    m.innerHTML = `<button data-eye="0" role="menuitem">${CAMERAS[id].name}<kbd>1</kbd></button>`
-      + `<button data-eye="1" role="menuitem">畫廊的眼睛<kbd>2</kbd></button>`;
-    m.hidden = false;
-    // 按鈕在上半邊就往下開，在下面那排就往上開
-    const r = this.$('#photo-btn').getBoundingClientRect(), H = window.innerHeight, below = r.top < H / 2;
-    const left = Math.max(12, Math.min(r.left + r.width / 2 - m.offsetWidth / 2, window.innerWidth - m.offsetWidth - 12));
-    Object.assign(m.style, { left: left + 'px', top: below ? r.bottom + 10 + 'px' : '', bottom: below ? '' : H - r.top + 10 + 'px' });
-  }
-
-  closePick() {
-    this.$('#photo-pick').hidden = true;
+  // 帶著相機時，拿相機拍和畫廊的眼睛（相機照樣掛在身上，拍得到自己帶著它）在攝影模式裡直接換，不用先退出
+  swapEye(eye) {
+    if (!!this.eyeCam === eye) return;
+    const postcard = this.postcard;
+    this.exit();
+    this.enter({ postcard, eye });
   }
 
   // ───────── 介面 ─────────
@@ -397,8 +386,10 @@ export class PhotoMode {
     // 每個鈕點開是一排選項；「顯示」是幾個開關，可以連著點，點選單外面才收
     // lock：錄影中不能換（比例會改掉影片大小，運鏡錄到一半換會跳）
     // gear：false 只在畫廊的眼睛出現，true 只在帶著相機時出現；沒寫的兩邊都有。閃光不在這裡，是快門旁邊的開關
+    // swap：身上有相機才出現，選項是那台相機的名字和畫廊的眼睛（refresh 時填）
     const chips = this.$('#ph-chips');
     this.chips = [
+      { k: 'eye', label: '用', swap: true, lock: true, opts: [], get: () => (this.eyeCam ? 1 : 0), set: (i) => this.swapEye(i === 1) },
       { k: 'aspect', label: '比例', gear: false, lock: true, opts: ASPECTS.map((a) => a.label), get: () => this.aspect, set: (i) => { this.aspect = i; } },
       { k: 'look', label: '色調', gear: false, opts: LOOKS.map((l) => l.label), get: () => this.look, set: (i) => { this.look = i; } },
       { k: 'move', label: '運鏡', gear: false, lock: true, opts: MOVES, get: () => this.move, set: (i) => { this.move = i; }, note: '按下錄影才開始動' },
@@ -442,14 +433,6 @@ export class PhotoMode {
       const btn = e.target.closest('button');
       if (btn) this.zoom(LENSES[+btn.dataset.i][1]);
     });
-    const pick = this.$('#photo-pick');
-    pick.addEventListener('click', (e) => {
-      const b = e.target.closest('button[data-eye]');
-      if (b) this.enter({ eye: b.dataset.eye === '1' });
-    });
-    document.addEventListener('pointerdown', (e) => {
-      if (!pick.hidden && !pick.contains(e.target) && !e.target.closest('#photo-btn')) this.closePick();
-    }, true);
     this.$('#ph-exit').addEventListener('click', () => this.exit());
     this.$('#ph-flash').addEventListener('click', () => this.toggleFlash());
     this.$('#ph-date').addEventListener('click', () => this.toggleDate());
@@ -485,7 +468,8 @@ export class PhotoMode {
   refresh() {
     const g = this.gear;
     for (const c of this.chips) {
-      c.el.hidden = c.carry ? !this.eyeCam : c.gear === false ? !!g : c.gear ? !g : false;
+      if (c.swap) c.opts = [CAMERAS[this.gear?.id || this.eyeCam]?.name, '畫廊的眼睛'];
+      c.el.hidden = c.swap ? !g && !this.eyeCam : c.carry ? !this.eyeCam : c.gear === false ? !!g : c.gear ? !g : false;
       c.b.textContent = c.opts ? c.opts[c.get()] : '';
       c.el.classList.toggle('off', !!(c.lock && this.rec));
     }
@@ -695,11 +679,6 @@ export class PhotoMode {
     window.addEventListener('keydown', (e) => {
       if (e.key === 'p' || e.key === 'P') {
         if (!this.result) this.toggle();
-        return;
-      }
-      if (!this.$('#photo-pick').hidden) {
-        if (e.key === '1' || e.key === '2') this.enter({ eye: e.key === '2' });
-        else if (e.key === 'Escape') this.closePick();
         return;
       }
       if (!this.active) return;

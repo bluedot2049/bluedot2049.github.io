@@ -144,19 +144,27 @@ export const tickClock = (now) => { uClock.value = now % 86400; };
 export const SHIP_PERIODS = [600, 720, 900, 1200, 1440, 1800, 2400, 2700, 3600];
 
 const LAMP = '#ff9a50', WINDOW = '#ffb468', MAST = '#ffe2b8', ODD = '#7fe8ff';
-// 船上的燈：[沿著船身往船頭幾公尺, 離水面多高, 顏色, 大小]。大小 0.8 以上的燈才有倒影
+// 船上的燈：[沿著船身往船頭幾公尺, 離水面多高, 顏色, 大小, 亮度, 像不像星星]。大小 0.8 以上的燈才有倒影；
+// 只有桅頂那一盞像星星，其他是燈籠和艙窗
 const HULLS = [
   // 大貨船：一排艙窗，船頭船尾各一盞燈籠，主桅頂一盞
-  [[-7, 3, LAMP, 1.1], [7.5, 2.4, LAMP, 1], [0, 11, MAST, 0.8], ...[-5, -3, -1, 1, 3, 5].map((u) => [u, 1.4, WINDOW, 0.55])],
+  [[-7, 3, LAMP, 1.1], [7.5, 2.4, LAMP, 1], [0, 11, MAST, 0.8, 1, 1], ...[-5, -3, -1, 1, 3, 5].map((u) => [u, 1.4, WINDOW, 0.55])],
   // 小帆船：兩盞燈籠，桅頂一盞
-  [[-3, 2, LAMP, 1], [3, 1.6, LAMP, 0.9], [0, 7, MAST, 0.7]],
+  [[-3, 2, LAMP, 1], [3, 1.6, LAMP, 0.9], [0, 7, MAST, 0.7, 1, 1]],
   // 客船：上下兩層窗，有幾格沒點燈
-  [[-8, 3.8, LAMP, 1], [8, 3, LAMP, 1], [-2, 9, MAST, 0.7], ...[-6, -4, -2, 0, 2, 4, 6].flatMap((u, i) => [[u, 1.4, WINDOW, 0.5], [u, 2.8, WINDOW, 0.5]].filter((_, j) => (i * 2 + j) % 5 !== 3))],
+  [[-8, 3.8, LAMP, 1], [8, 3, LAMP, 1], [-2, 9, MAST, 0.7, 1, 1], ...[-6, -4, -2, 0, 2, 4, 6].flatMap((u, i) => [[u, 1.4, WINDOW, 0.5], [u, 2.8, WINDOW, 0.5]].filter((_, j) => (i * 2 + j) % 5 !== 3))],
 ];
 // 不太對勁的那艘：青色的燈，開得比別人快，一個小時才經過一次
 const ODD_HULL = [[-2, 1.6, ODD, 0.9], [1, 1.6, ODD, 0.9], [3, 2, ODD, 0.9], [0, 5, '#c8f6ff', 0.8]];
-// 漁火：船邊一根竿子吊一盞大燈照水面，艙裡一盞小的
-const FISHER = [[1.2, 2, '#ffc27a', 2.2], [-1.5, 1, LAMP, 0.7]];
+
+// 星星的樣子：很小很亮的芯、散得很開的光暈，夠亮的有一點點十字光芒。漁火、桅頂燈、天上那幾顆亮星共用
+const STAR_GLSL = `
+  vec3 starGlow(vec2 q, vec3 c) {
+    float r = length(q) * 2.0;
+    float core = 1.0 - smoothstep(0.04, 0.16, r), halo = pow(max(0.0, 1.0 - r), 3.0) * 0.9;
+    float spike = (exp(-abs(q.y) * 60.0) + exp(-abs(q.x) * 60.0)) * max(0.0, 1.0 - r) * smoothstep(0.6, 1.2, length(c)) * 0.35;
+    return c * (core * 2.2 + halo + spike);
+  }`;
 
 // 燈和倒影共用的後半段：前面的 motion 算出這盞燈在哪（p）、亮多少（a）、雜湊種子（seed）
 const LIGHT_VERT = `
@@ -169,10 +177,11 @@ const LIGHT_VERT = `
     a *= (1.0 - smoothstep(365.0, 392.0, d)) * mix(1.0, 0.6, smoothstep(120.0, 380.0, d));
     a *= 0.88 + 0.12 * sin(uTime * (4.0 + seed) + seed * 7.0);
     vS = seed;
+    vStar = aLamp.z;
     if (aLamp.y < 0.5) {
-      // 燈：遠處縮到幾個像素就不再縮，小燈暗一點
+      // 燈：遠處縮到幾個像素就不再縮，小燈暗一點。漁火的光暈比較開，點要放大一點才放得下
       vC = aColor * a * min(1.0, 0.45 + aLamp.x * 0.5);
-      gl_PointSize = a > 0.003 ? max(aLamp.x * 4.0 * uScale / d, (3.0 + 3.5 * aLamp.x) * uPr) : 0.0;
+      gl_PointSize = a > 0.003 ? max(aLamp.x * 4.0 * uScale / d, (3.0 + 3.5 * aLamp.x) * uPr) * (1.0 + 0.8 * aLamp.z) : 0.0;
     } else {
       // 倒影：浪把燈拉成一條，近的長、遠的短，但不會短到看不見
       float len = clamp(uScale * 8.0 / pow(d, 0.7), 12.0 * uPr, 64.0 * uPr) * sqrt(aLamp.x);
@@ -189,20 +198,24 @@ function seaLightMaterial(motion, uFade, sea) {
     uniforms: { uTime, uClock, uFade, uSea: { value: sea }, uScale: { value: 150 * PR() }, uPr: { value: PR() } },
     vertexShader: `
       uniform float uTime; uniform float uClock; uniform float uFade; uniform float uSea; uniform float uScale; uniform float uPr;
-      attribute vec3 aColor; attribute vec2 aLamp; attribute vec4 aA; attribute vec4 aB; attribute vec2 aLocal;
-      varying vec3 vC; varying float vS; varying float vL; varying float vW;
+      attribute vec3 aColor; attribute vec3 aLamp; attribute vec4 aA; attribute vec4 aB; attribute vec2 aLocal;
+      varying vec3 vC; varying float vS; varying float vL; varying float vW; varying float vStar;
       const float DAY = 6.2831853 / 86400.0;
       float hash(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
       void main() {
         vL = 0.0; vW = 0.0;
         ${motion}
         ${LIGHT_VERT}`,
-    fragmentShader: `
+    fragmentShader: STAR_GLSL + `
       uniform float uTime;
-      varying vec3 vC; varying float vS; varying float vL; varying float vW;
+      varying vec3 vC; varying float vS; varying float vL; varying float vW; varying float vStar;
       void main() {
         vec2 q = gl_PointCoord - 0.5;
         if (vL == 0.0) {
+          if (vStar > 0.5) {
+            gl_FragColor = vec4(starGlow(q, vC), 1.0);
+            return;
+          }
           // 中間一顆亮點，外面一圈淡淡的光暈
           float r = length(q) * 2.0;
           float core = 1.0 - smoothstep(0.2, 0.45, r), halo = pow(max(0.0, 1.0 - r), 2.0) * 0.8;
@@ -224,22 +237,52 @@ function seaLightMaterial(motion, uFade, sea) {
 }
 
 // 每盞燈一個點，大一點的燈多一個倒影點；ship 的 a、b 兩組數字交給 motion 去用
-function seaLights(ships, hullOf, motion, uFade, sea) {
+function seaLights(ships, hullOf, motion, uFade, sea, starAll = false) {
   const c = new THREE.Color(), rows = [];
   for (const s of ships) {
-    for (const [u, h, color, size] of hullOf(s)) {
-      c.set(color);
-      for (const kind of size >= 0.8 ? [0, 1] : [0]) rows.push({ s, u, h, rgb: c.toArray(), size, kind });
+    for (const [u, h, color, size, gain = 1, star = starAll] of hullOf(s)) {
+      c.set(color).multiplyScalar(gain);
+      for (const kind of size >= 0.8 ? [0, 1] : [0]) rows.push({ s, u, h, rgb: c.toArray(), size, kind, star: star ? 1 : 0 });
     }
   }
   return points([
     ['position', 3, rows.flatMap(() => [0, 0, 0])],
     ['aColor', 3, rows.flatMap((r) => r.rgb)],
-    ['aLamp', 2, rows.flatMap((r) => [r.size, r.kind])],
+    ['aLamp', 3, rows.flatMap((r) => [r.size, r.kind, r.star])],
     ['aA', 4, rows.flatMap((r) => r.s.a)],
     ['aB', 4, rows.flatMap((r) => r.s.b)],
     ['aLocal', 2, rows.flatMap((r) => [r.u, r.h])],
   ], seaLightMaterial(motion, uFade, sea));
+}
+
+// 天上挑出來的星星：跟漁火一個樣子。掛在天空球上，跟著 uFade 爬高才亮起來。
+// 分兩層：少數特別亮、慢慢閃；多一些暗的，閃得快、閃得深（depth 是暗下去多少，speed 是快慢）。
+// list 每顆 { x, y, z, color, size（像素）, gain（亮度）}
+export function brightStars(list, uFade, R, { depth = 0.6, speed = 1 } = {}) {
+  const c = new THREE.Color();
+  return points([
+    ['position', 3, list.flatMap((p) => [p.x, p.y, p.z])],
+    ['aColor', 3, list.flatMap((p) => c.set(p.color).multiplyScalar(p.gain).toArray())],
+    ['aSeed', 2, list.flatMap((p) => [p.size, R() * 10])],
+  ], new THREE.ShaderMaterial({
+    uniforms: { uTime, uFade, uPr: { value: PR() }, uDepth: { value: depth }, uSpeed: { value: speed } },
+    vertexShader: `
+      uniform float uTime; uniform float uFade; uniform float uPr; uniform float uDepth; uniform float uSpeed;
+      attribute vec3 aColor; attribute vec2 aSeed;
+      varying vec3 vC;
+      void main() {
+        float s = aSeed.y, t = uTime * uSpeed;
+        float w = sin(t * (0.8 + fract(s * 7.3)) + s * 3.0) * sin(t * (0.33 + fract(s * 3.1) * 0.4) + s);
+        float tw = 1.0 - uDepth * (0.5 - 0.5 * w);
+        vC = aColor * tw * (0.3 + 0.7 * clamp((uFade - 0.25) / 0.75, 0.0, 1.0));
+        gl_PointSize = aSeed.x * uPr;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: STAR_GLSL + `
+      varying vec3 vC;
+      void main() { gl_FragColor = vec4(starGlow(gl_PointCoord - 0.5, vC), 1.0); }`,
+    transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending,
+  }));
 }
 
 // 海平線上的大船：沿著一條航道從一頭開到另一頭，開完就消失，一個週期後再來；有些週期整趟不來。
@@ -254,15 +297,17 @@ export function horizonShips(lanes, { uFade, sea }) {
         float a = go * smoothstep(0.0, 25.0, x - aA.x) * smoothstep(0.0, 25.0, aA.y - x) * (0.35 + 0.65 * clamp((uFade - 0.25) / 0.75, 0.0, 1.0));`, uFade, sea);
 }
 
-// 中間海面的漁火：三五成群，在漁場裡慢慢漂、船頭慢慢轉；每艘每個週期有一段時間收工熄燈。
-// boats 每艘 { x, z, r（漂多遠）, seed, period, on（一個週期裡亮著的比例）, off }
+// 中間海面的漁火：像撒在海上的星星，每艘一盞（少數艙裡多一盞小的），大小、亮度、色溫各不相同。
+// 在原地慢慢漂、慢慢明暗；每艘每個週期有一段時間收工，燈花一兩分鐘慢慢暗下去，回來時再慢慢亮起。
+// boats 每艘 { x, z, r（漂多遠）, seed, period, on（一個週期裡亮著的比例）, off, lamps（[u, h, 顏色, 大小, 亮度]）}
 export function fishingFires(boats, { uFade, sea }) {
   const ships = boats.map((b) => ({ ...b, a: [b.x, b.z, b.r, b.seed], b: [b.period, b.on, b.off, 0] }));
-  return seaLights(ships, () => FISHER, `
+  return seaLights(ships, (b) => b.lamps, `
         float seed = aA.w;
         vec2 c = aA.xy + aA.z * vec2(sin(uClock * DAY * 29.0 + seed), cos(uClock * DAY * 23.0 + seed * 1.7));
         float yaw = seed * 6.2832 + sin(uClock * DAY * 7.0 + seed) * 1.5;
         vec3 p = vec3(c.x + cos(yaw) * aLocal.x, uSea + aLocal.y + sin(uClock * DAY * 12000.0 + seed) * 0.06, c.y + sin(yaw) * aLocal.x);
         float t = mod(uClock + aB.z, aB.x) / aB.x;
-        float a = smoothstep(0.0, 0.02, t) * (1.0 - smoothstep(aB.y - 0.02, aB.y, t)) * (0.7 + 0.3 * clamp((uFade - 0.25) / 0.75, 0.0, 1.0));`, uFade, sea);
+        float tw = 0.65 + 0.35 * sin(uTime * (0.5 + fract(seed * 7.3)) + seed * 3.0) * sin(uTime * (0.21 + fract(seed * 3.1) * 0.3) + seed);
+        float a = tw * smoothstep(0.0, 0.06, t) * (1.0 - smoothstep(aB.y - 0.06, aB.y, t)) * (0.7 + 0.3 * clamp((uFade - 0.25) / 0.75, 0.0, 1.0));`, uFade, sea, true);
 }

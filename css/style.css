@@ -494,6 +494,14 @@ body.touch #guide .for-desk, body:not(.touch) #guide .for-touch { display: none;
   #top-btns { gap: 5px; right: calc(10px + env(safe-area-inset-right)); }
   #top-btns .icon-btn.round { width: 40px; min-width: 40px; height: 40px; }
 }
+/* 「⋯」：按一下整排收進來，畫面乾淨；再按一下展開。收著時行囊有東西沒存，印泥亮在「⋯」上 */
+#top-btns > * { transition: opacity .25s, transform .25s, border-color .2s, color .2s, background .2s; }
+body.tidy #top-btns > :not(#more-btn) { opacity: 0; transform: translateX(14px) scale(.7); pointer-events: none; }
+body.desk.tidy #top-btns > :not(#more-btn) { display: none; }
+body.tidy #more-btn { color: var(--muted); border-style: dashed; }
+#more-btn { position: relative; }
+#more-btn .ink { display: none; }
+body.desk #more-btn { order: 2; }
 #sound-btn .off, #sound-btn.muted .on { display: none; }
 /* 攝影：縮小版的金快門。外金圈、一道深縫，中間一塊太陽紋金片，相機刻在金片上（深色線＋底下一道亮邊）。
    按鈕小，細紋放寬，主要靠兩道亮帶看出是金屬；滑過時亮帶轉一點，像換了角度 */
@@ -511,6 +519,8 @@ body.touch #guide .for-desk, body:not(.touch) #guide .for-touch { display: none;
   transition: --sheen .4s ease-out, transform .1s;
 }
 #photo-btn svg { stroke-width: 1.6; filter: drop-shadow(0 .7px 0 rgba(255, 240, 205, .65)); }
+#photo-btn .x, body.photo #photo-btn .cam { display: none; }
+body.photo #photo-btn .x { display: block; }
 #photo-btn:active { transform: scale(.92); }
 @media (hover: hover) {
   #photo-btn:hover { color: #3a2410; --sheen: 18deg; }
@@ -537,10 +547,9 @@ body.touch #guide .for-desk, body:not(.touch) #guide .for-touch { display: none;
   background: var(--gold-hi); box-shadow: none;
 }
 
-/* ───────── 表情：左下「跳」上方，點開往上排出一列 ───────── */
+/* ───────── 表情：「跳」正上方，點開往上排出一列（位置在下面的拇指弧） ───────── */
 #emote {
   position: fixed; z-index: 20;
-  left: calc(20px + env(safe-area-inset-left)); bottom: calc(130px + env(safe-area-inset-bottom));
   display: flex; flex-direction: column-reverse; align-items: flex-start; gap: 8px;
   transition: opacity .3s;
 }
@@ -612,15 +621,11 @@ body.touch #joy { display: block; }
 }
 .seal:active { transform: scale(.93); border-color: var(--gold); }
 #jump-btn {
-  left: calc(26px + env(safe-area-inset-left)); bottom: calc(44px + env(safe-area-inset-bottom));
-  width: 68px; height: 68px; font-size: 20px;
+  width: var(--seal); height: var(--seal); font-size: calc(var(--seal) * .3);
   touch-action: none;
 }
-/* 「跳」的右邊，坐著時變成「起」 */
-#sit-btn {
-  left: calc(108px + env(safe-area-inset-left)); bottom: calc(50px + env(safe-area-inset-bottom));
-  width: 56px; height: 56px; font-size: 17px;
-}
+/* 「跳」的內側，坐著時變成「起」 */
+#sit-btn { width: var(--sit); height: var(--sit); font-size: calc(var(--sit) * .3); }
 body.touch .seal { display: block; }
 body.panel-open .seal { opacity: 0; pointer-events: none; }
 body.sitting #sit-btn {
@@ -629,10 +634,9 @@ body.sitting #sit-btn {
   text-shadow: none;
 }
 
-/* ───────── 靠近畫作或鏡子時出現的金色徽章按鈕：手機在搖桿正上方，電腦在右下 ───────── */
+/* ───────── 靠近畫作或鏡子時出現的金色徽章按鈕：手機在拇指弧外圈，電腦在下方那排正上方 ───────── */
 #action-btn {
   position: fixed; z-index: 20;
-  right: calc(22px + env(safe-area-inset-right)); bottom: calc(44px + env(safe-area-inset-bottom));
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
   min-width: 104px; max-width: 160px; height: 68px; padding: 0 22px;
   color: #2a1a0c;
@@ -654,14 +658,14 @@ body.sitting #sit-btn {
   100% { opacity: 0; transform: scale(1.18, 1.3); }
 }
 #action-btn:active { filter: brightness(.92); }
-body.touch #action-btn { bottom: calc(166px + env(safe-area-inset-bottom)); right: calc(22px + env(safe-area-inset-right)); }
 #action-btn.show { opacity: 1; transform: none; pointer-events: auto; }
 #action-btn .a1 { font-size: 18px; letter-spacing: .3em; padding-left: .3em; font-weight: 600; }
 #action-btn .a2 { font-size: 11px; letter-spacing: .05em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .72; }
 #action-btn .a2:empty { display: none; }
-body.panel-open #joy, body.panel-open #action-btn, body.panel-open #emote, body.panel-open #swap-btn { opacity: 0; pointer-events: none; }
-/* 坐著看風景時，其他按鈕退到背景，但還是按得到 */
-body.sitting #joy, body.sitting #jump-btn, body.sitting #emote, body.sitting #top-btns, body.sitting #swap-btn { opacity: .3; }
+body.panel-open #joy, body.panel-open #action-btn, body.panel-open #emote, body.panel-open #swap-btn,
+body.panel-open:not(.desk) #photo-btn, body.panel-open:not(.desk) #say-btn { opacity: 0; pointer-events: none; }
+/* 坐著看風景時，其他按鈕退到背景，但還是按得到。相機不淡，坐著也常拍 */
+body.sitting #joy, body.sitting #jump-btn, body.sitting #emote, body.sitting #top-btns, body.sitting #swap-btn, body.sitting:not(.desk) #say-btn { opacity: .3; }
 
 /* ───────── 搖桿換邊：小圓鈕貼在搖桿內側。直拿預設搖桿在右，橫拿預設在左，按一下就反過來 ───────── */
 #swap-btn {
@@ -676,67 +680,83 @@ body.sitting #joy, body.sitting #jump-btn, body.sitting #emote, body.sitting #to
 #swap-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 #swap-btn:active { color: var(--gold-hi); border-color: var(--gold); }
 body.touch #swap-btn { display: flex; }
-/* 攝影模式的按鈕另有一套位置，搖桿固定在右邊 */
+/* 攝影模式不能換邊（換了快門會跑走），但照著平常的邊排 */
 body.photo #swap-btn { display: none; }
-body.joy-left:not(.photo) #joy { right: auto; left: calc(22px + env(safe-area-inset-left)); }
-body.joy-left:not(.photo) #swap-btn { right: auto; left: calc(154px + env(safe-area-inset-left)); }
-body.touch.joy-left #action-btn { right: auto; left: calc(22px + env(safe-area-inset-left)); }
-body.joy-left #jump-btn { left: auto; right: calc(26px + env(safe-area-inset-right)); }
-body.joy-left #sit-btn { left: auto; right: calc(108px + env(safe-area-inset-right)); }
-body.joy-left:not(.photo) #emote { left: auto; right: calc(20px + env(safe-area-inset-right)); align-items: flex-end; }
+body.joy-left #joy { right: auto; left: calc(22px + env(safe-area-inset-left)); }
+body.joy-left #swap-btn { right: auto; left: calc(154px + env(safe-area-inset-left)); }
 body.touch #hint { bottom: auto; top: calc(70px + env(safe-area-inset-top)); }
 
-/* 橫拿的手機：螢幕很矮，按鈕不能再全貼底邊。整組往上抬，大小跟著螢幕高度走。
-   搖桿在一邊；動作鈕、跳、坐在另一邊；表情在搖桿上方，往內橫向展開。攝影模式另有一套，不動 */
+/* ───────── 拇指弧（手機）：「跳」放在不推搖桿那隻手的角落當圓心，坐、相機、表情排在拇指掃得到的弧上，
+   看畫和說話在外圈。直拿弧往上開；橫拿螢幕矮，弧壓扁往內攤，大小跟著螢幕高度走、最小 44px。
+   搖桿換邊時整組鏡像（從右邊量）。攝影模式同一個位置換成快門和收相機 ───────── */
+body:not(.desk) {
+  --inset: env(safe-area-inset-left);
+  --seal: 68px; --sit: 56px; --cam: 50px;
+  --jx: calc(26px + var(--seal) / 2 + var(--inset));
+  --jy: calc(44px + var(--seal) / 2 + env(safe-area-inset-bottom));
+  --r1: 98px; --r2: 180px;
+  --a-sit: 0deg; --a-cam: 45deg; --a-emo: 90deg; --a-act: 50deg; --a-say: 90deg; --r-say: 172px;
+}
+body.joy-left:not(.desk) { --inset: env(safe-area-inset-right); }
+#jump-btn { --w: var(--seal); }
+#sit-btn { --w: var(--sit); --r: var(--r1); --a: var(--a-sit); }
+#photo-btn { --w: var(--cam); --r: var(--r1); --a: var(--a-cam); }
+#emote { --w: 44px; --r: var(--r1); --a: var(--a-emo); }
+#say-btn { --w: 44px; --r: var(--r-say); --a: var(--a-say); }
+#action-btn { --w: 104px; --h: 68px; --r: var(--r2); --a: var(--a-act); }
+body:not(.desk) :is(#jump-btn, #sit-btn, #photo-btn, #say-btn, #emote, #action-btn) {
+  position: fixed; z-index: 20; margin: 0;
+  left: calc(var(--jx) + var(--r, 0px) * cos(var(--a, 0deg)) - var(--w) / 2); right: auto;
+  bottom: calc(var(--jy) + var(--r, 0px) * sin(var(--a, 0deg)) - var(--h, var(--w)) / 2);
+}
+body.joy-left:not(.desk) :is(#jump-btn, #sit-btn, #photo-btn, #say-btn, #emote, #action-btn) {
+  left: auto; right: calc(var(--jx) + var(--r, 0px) * cos(var(--a, 0deg)) - var(--w) / 2);
+}
+body:not(.desk) #photo-btn { width: var(--cam); min-width: var(--cam); height: var(--cam); }
+body:not(.desk) #photo-btn svg { width: calc(var(--cam) * .44); height: calc(var(--cam) * .44); }
+body:not(.desk) #action-btn { height: var(--h); transform-origin: 30% 50%; }
+body.joy-left:not(.desk) #action-btn { transform-origin: 70% 50%; }
+body.joy-left:not(.desk) #emote { align-items: flex-end; }
+/* 表情點開時那一排會蓋到弧上其他按鈕，先讓它們退後 */
+body:not(.desk):has(#emote.open) :is(#sit-btn, #photo-btn, #say-btn, #action-btn.show) { opacity: .2; pointer-events: none; }
+body.flat :is(#photo-btn, #say-btn) { display: none; }
+
+/* 橫拿的手機：螢幕很矮，整組往上抬，弧往內側攤平；表情一排往畫面內側展開 */
 @media (orientation: landscape) and (max-height: 500px) {
-  body.touch:not(.photo) {
+  body:not(.desk) {
     --lift: clamp(30px, 12vh, 60px);
     --joy: clamp(92px, 30vh, 124px);
     --seal: clamp(50px, 16vh, 66px);
-    --edge: calc(max(22px, 4vh));
+    --sit: max(44px, var(--seal) * .84);
+    --cam: max(44px, var(--seal) * .74);
+    --edge: max(22px, 4vh);
+    --jx: calc(var(--edge) + var(--seal) / 2 + var(--inset));
+    --jy: calc(var(--lift) + 4vh + var(--seal) / 2 + env(safe-area-inset-bottom));
+    --r1: calc(var(--seal) * 1.5); --r2: calc(var(--seal) * 3.1); --r-say: var(--r2);
+    --a-sit: -8deg; --a-cam: 32deg; --a-emo: 80deg; --a-act: 18deg; --a-say: 60deg;
   }
-  body.touch:not(.photo) #joy {
+  body.touch #joy {
     width: var(--joy); height: var(--joy);
     bottom: calc(var(--lift) + env(safe-area-inset-bottom));
   }
-  body.touch:not(.photo) #joy::before {
+  body.touch #joy::before {
     -webkit-mask: radial-gradient(circle closest-side, transparent 92%, #000 93%);
     mask: radial-gradient(circle closest-side, transparent 92%, #000 93%);
   }
-  body.touch:not(.photo) #joy::after { inset: 26%; }
-  body.touch:not(.photo) #joy-knob {
+  body.touch #joy::after { inset: 26%; }
+  body.touch #joy-knob {
     width: calc(var(--joy) * .42); height: calc(var(--joy) * .42);
     margin: calc(var(--joy) * -.21) 0 0 calc(var(--joy) * -.21);
   }
-  body.touch:not(.photo) #swap-btn { bottom: calc(var(--lift) + env(safe-area-inset-bottom)); }
+  body.touch #swap-btn { bottom: calc(var(--lift) + env(safe-area-inset-bottom)); }
+  #action-btn { --h: calc(var(--seal) + 4px); }
 
-  body.touch:not(.photo) #jump-btn, body.touch:not(.photo) #sit-btn {
-    width: var(--seal); height: var(--seal); font-size: calc(var(--seal) * .3);
-  }
-  body.touch:not(.photo) #jump-btn { bottom: calc(var(--lift) + 4vh + env(safe-area-inset-bottom)); }
-  body.touch:not(.photo) #sit-btn { bottom: calc(var(--lift) + env(safe-area-inset-bottom)); }
-  body.touch.joy-left:not(.photo) #sit-btn { right: calc(var(--edge) + var(--seal) + 10px + env(safe-area-inset-right)); }
-  body.touch:not(.joy-left):not(.photo) #sit-btn { left: calc(var(--edge) + var(--seal) + 10px + env(safe-area-inset-left)); }
-
-  /* 動作鈕在跳的正上方，不再壓在搖桿旁、也不擋住畫面中間 */
-  body.touch:not(.photo) #action-btn {
-    height: calc(var(--seal) + 4px);
-    bottom: calc(var(--lift) + 4vh + var(--seal) + 16px + env(safe-area-inset-bottom));
-  }
-  body.touch.joy-left:not(.photo) #action-btn { left: auto; right: calc(var(--edge) + env(safe-area-inset-right)); }
-  body.touch:not(.joy-left):not(.photo) #action-btn { right: auto; left: calc(var(--edge) + env(safe-area-inset-left)); }
-
-  /* 表情：搖桿正上方，一排往畫面內側展開 */
-  body.touch:not(.photo) #emote {
-    bottom: calc(var(--lift) + var(--joy) + 10px + env(safe-area-inset-bottom));
-    flex-direction: row; align-items: center; gap: 6px;
-  }
-  body.touch:not(.joy-left):not(.photo) #emote { left: auto; right: calc(var(--edge) + env(safe-area-inset-right)); flex-direction: row-reverse; }
-  body.touch.joy-left:not(.photo) #emote { right: auto; left: calc(var(--edge) + env(safe-area-inset-left)); }
-  body.touch:not(.photo) #emote-bar { flex-direction: row; padding: 0; transform: translateX(-8px); }
-  body.touch:not(.joy-left):not(.photo) #emote-bar { flex-direction: row-reverse; transform: translateX(8px); }
-  body.touch:not(.photo) #emote.open #emote-bar { transform: none; }
-  body.touch:not(.photo) #emote-bar button { width: 40px; height: 40px; font-size: 19px; }
+  body:not(.desk) #emote { flex-direction: row; align-items: center; gap: 6px; }
+  body.joy-left:not(.desk) #emote { flex-direction: row-reverse; align-items: center; }
+  body:not(.desk) #emote-bar { flex-direction: row; padding: 0; transform: translateX(-8px); }
+  body.joy-left:not(.desk) #emote-bar { flex-direction: row-reverse; transform: translateX(8px); }
+  body:not(.desk) #emote.open #emote-bar { transform: none; }
+  body:not(.desk) #emote-bar button { width: 40px; height: 40px; font-size: 19px; }
 }
 
 /* ───────── 電腦版：按鈕集中在畫面下方中間一列，動作按鈕浮在那一列正上方，提示移到頂端 ───────── */
@@ -926,12 +946,12 @@ body.desk .pack-acts small { font-size: 11.5px; }
   width: 38px; height: 38px;
   box-shadow: inset 0 0 0 6px #6a2c22, inset 0 0 0 7.5px #4e2018;
 }
-.seal-wax.lit, #pack-btn.lit .ink {
+.seal-wax.lit, #pack-btn.lit .ink, body.tidy:has(#pack-btn.lit) #more-btn .ink {
   background: radial-gradient(circle at 46% 52%, #f0a050 0, #d0602e 34%, #8a3424 72%);
   animation: ember 3.6s ease-in-out infinite;
 }
 .seal-wax.lit { box-shadow: inset 0 0 0 6px rgba(138, 52, 36, .55), inset 0 0 0 7.5px #5a2219; }
-.seal-wax.lit::after, #pack-btn.lit .ink::after {
+.seal-wax.lit::after, #pack-btn.lit .ink::after, body.tidy:has(#pack-btn.lit) #more-btn .ink::after {
   content: ""; position: absolute; inset: 0; border-radius: inherit;
   background:
     radial-gradient(circle at 32% 38%, rgba(255, 214, 150, .9) 0 .8px, transparent 1.4px),
@@ -946,7 +966,7 @@ body.desk .pack-acts small { font-size: 11.5px; }
 @media (prefers-reduced-motion: reduce) { .seal-wax.lit, #pack-btn.lit .ink, .seal-wax.lit::after, #pack-btn.lit .ink::after { animation: none; } }
 #pack-btn { position: relative; }
 #pack-btn .ink { display: none; }
-#pack-btn.lit .ink { display: block; position: absolute; right: 3px; bottom: 3px; width: 10px; height: 10px; box-shadow: 0 0 0 1.5px rgba(20, 14, 10, .85); }
+#pack-btn.lit .ink, body.tidy:has(#pack-btn.lit) #more-btn .ink { display: block; position: absolute; right: 3px; bottom: 3px; width: 10px; height: 10px; box-shadow: 0 0 0 1.5px rgba(20, 14, 10, .85); }
 .pack h3 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .3em; color: var(--gold); }
 .pack p { margin: 0; font-size: 11px; line-height: 1.6; letter-spacing: .04em; color: var(--muted); }
 .pack .pack-state { margin-top: 2px; color: var(--text); }
@@ -1206,13 +1226,16 @@ body.flat #list-close, body.flat #top-btns { display: none; }
 }
 
 /* ───────── 攝影模式 ───────── */
-body.photo #top-btns, body.photo #action-btn, body.photo #jump-btn, body.photo #sit-btn, body.photo #toast { display: none !important; }
+body.photo #top-btns, body.photo #action-btn, body.photo #jump-btn, body.photo #sit-btn, body.photo #say-btn, body.photo #toast { display: none !important; }
 body.photo #stage::after { display: none; }   /* 暗角改由取景框畫，存檔時才一致 */
 body.photo #joy, body.photo #emote { opacity: 1; }
 body.photo-hush .speech { opacity: 0 !important; }
-body.photo:not(.desk) #emote { bottom: calc(184px + env(safe-area-inset-bottom)); }   /* 讓出快門上方的鏡頭鈕 */
+/* 手機：相機鈕留在原位變成收起（✕），右上角不另放離開鈕；表情讓出鏡頭鈕，退到外圈 */
+body.photo:not(.desk) #emote { --a: 90deg; --r: calc(var(--r2) + 6px); }
+body.photo.desk #photo-btn, body.photo:has(#ph-result:not([hidden])) #photo-btn { display: none; }
+body:not(.desk) #ph-exit { display: none; }
 body.photo-bare #ph-bar, body.photo-bare #ph-menu, body.photo-bare #ph-exit, body.photo-bare #ph-shoot, body.photo-bare #ph-alt,
-body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #emote, body.photo-bare #hint { display: none !important; }
+body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #emote, body.photo-bare #hint, body.photo-bare #photo-btn { display: none !important; }
 
 #ph-frame { position: fixed; z-index: 12; pointer-events: none; }
 #ph-frame.masked { box-shadow: 0 0 0 100vmax rgba(10, 6, 3, .62); outline: 1px solid rgba(246, 219, 166, .4); }
@@ -1276,6 +1299,7 @@ body.photo-expose #ph-frame { outline-color: rgba(196, 69, 45, .7); }
   top: calc(14px + env(safe-area-inset-top));
   left: calc(14px + env(safe-area-inset-left)); right: calc(68px + env(safe-area-inset-right));
 }
+body:not(.desk) #ph-bar { right: calc(14px + env(safe-area-inset-right)); }
 #ph-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; padding: 4px 0; }
 #ph-chips::-webkit-scrollbar { display: none; }
 .ph-chip {
@@ -1310,24 +1334,6 @@ body.desk .ph-chip span { color: var(--muted); }
 }
 #ph-menu button.on { color: var(--gold-hi); border-color: var(--gold); }
 #ph-menu.toggles button:not(.on) { color: var(--muted); }
-/* 帶著相機時按相機鈕跳出來的：拿相機拍，還是畫廊的眼睛 */
-#photo-pick {
-  position: fixed; z-index: 21;
-  display: flex; flex-direction: column; gap: 4px; padding: 6px;
-  background: var(--panel); border: 1px solid var(--line-soft); border-radius: 18px;
-  box-shadow: var(--shadow);
-}
-#photo-pick[hidden] { display: none; }
-#photo-pick button {
-  display: flex; align-items: center; justify-content: space-between; gap: 14px;
-  height: 36px; padding: 0 14px; border-radius: 999px;
-  color: var(--text); background: none; border: 1px solid transparent;
-  font-size: 13px; letter-spacing: .08em; text-align: left; cursor: var(--cur-pointer);
-}
-#photo-pick button:active { background: rgba(60, 40, 26, 0.95); }
-#photo-pick kbd { font: 11px/1.5 var(--latin); color: var(--muted); }
-body:not(.desk) #photo-pick kbd { display: none; }
-@media (hover: hover) { #photo-pick button:hover { border-color: var(--gold); color: var(--gold-hi); } }
 #ph-menu p { flex-basis: 100%; margin: 2px 8px 4px; font-size: 12px; letter-spacing: .08em; color: var(--muted); }
 
 #ph-exit { position: fixed; z-index: 20; top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right)); }
@@ -1351,13 +1357,22 @@ body:not(.desk) #photo-pick kbd { display: none; }
 }
 #ph-zoom.show { opacity: 1; }
 
-/* 快門和錄影：手機在左下，左手按快門、右手推搖桿；鏡頭鈕排在快門上面 */
+/* 快門和錄影：手機在「跳」的位置（拇指弧的圓心），閃光、日期、錄影往內排；
+   鏡頭鈕在相機鈕（攝影時是收起）上面。搖桿換邊時整組跟著鏡像 */
 #ph-shoot {
   position: fixed; z-index: 20;
-  left: calc(22px + env(safe-area-inset-left)); bottom: calc(30px + env(safe-area-inset-bottom));
+  left: calc(var(--jx) - 36px); bottom: calc(var(--jy) - 36px);
   display: flex; flex-direction: column; align-items: flex-start; gap: 14px;
 }
 .ph-keys { display: flex; align-items: center; gap: 14px; }
+body:not(.desk) .ph-keys { gap: 10px; }
+body.joy-left:not(.desk) #ph-shoot { left: auto; right: calc(var(--jx) - 36px); }
+body.joy-left:not(.desk) .ph-keys { flex-direction: row-reverse; }
+body:not(.desk) #ph-lens {
+  position: fixed; left: calc(var(--jx) - 36px);
+  bottom: calc(var(--jy) + var(--r1) * sin(var(--a-cam)) + var(--cam) / 2 + 12px);
+}
+body.joy-left:not(.desk) #ph-lens { left: auto; right: calc(var(--jx) - 36px); }
 #ph-lens {
   display: flex; gap: 2px; padding: 3px;
   background: var(--panel); border: 1px solid var(--line-soft); border-radius: 999px;
@@ -1506,6 +1521,13 @@ body.photo-rec #ph-record i { width: 18px; height: 18px; border-radius: 4px; }
   right: calc(60px + env(safe-area-inset-right)); bottom: calc(172px + env(safe-area-inset-bottom));
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   touch-action: none; user-select: none; -webkit-user-select: none;
+}
+body.joy-left:not(.desk) #ph-alt { right: auto; left: calc(60px + env(safe-area-inset-left)); }
+/* 橫拿：搖桿上面放不下，改排在搖桿內側 */
+@media (orientation: landscape) and (max-height: 500px) {
+  body:not(.desk) #ph-alt { bottom: calc(var(--lift) + env(safe-area-inset-bottom)); right: calc(22px + var(--joy) + 64px + env(safe-area-inset-right)); }
+  body.joy-left:not(.desk) #ph-alt { right: auto; left: calc(22px + var(--joy) + 64px + env(safe-area-inset-left)); }
+  body:not(.desk) .ph-alt-track { height: clamp(90px, 100vh - 200px, 150px); }
 }
 .ph-alt-step {
   width: 36px; height: 30px; padding: 0; border-radius: 999px;
@@ -1703,7 +1725,8 @@ body.desk #chat { bottom: calc(84px + env(safe-area-inset-bottom)); }
 .chat-row .btn { min-height: 40px; padding: 0 16px; letter-spacing: .14em; }
 .chat-row .icon-btn { width: 40px; min-width: 40px; height: 40px; box-shadow: none; }
 /* 打字時：走路、跳、坐、動作、表情先收起來，畫面留給對話框和隊友的記號；上面的按鈕淡一點 */
-body.chatting #joy, body.chatting #swap-btn, body.chatting .seal, body.chatting #action-btn, body.chatting #emote, body.chatting #hint { opacity: 0 !important; pointer-events: none !important; }
+body.chatting #joy, body.chatting #swap-btn, body.chatting .seal, body.chatting #action-btn, body.chatting #emote, body.chatting #hint,
+body.chatting:not(.desk) #photo-btn, body.chatting:not(.desk) #say-btn { opacity: 0 !important; pointer-events: none !important; }
 body.chatting.touch #top-btns { opacity: .35; }
 /* 按了「標記」，等點地面 */
 body.party-arming #stage canvas { cursor: crosshair; }

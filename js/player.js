@@ -30,11 +30,11 @@ const defaultDist = () => (window.innerWidth < window.innerHeight ? 12 : 9.5);
 const smoothstep = THREE.MathUtils.smoothstep;
 const UP = new THREE.Vector3(0, 1, 0);
 
-// 畫面上沒被按鈕蓋住的上下範圍（-1 ~ 1）：上面扣掉右上角那排按鈕，下面扣掉搖桿、跳、坐、表情這些
+// 畫面上沒被按鈕蓋住的上下範圍（-1 ~ 1）：上面扣掉右上角那排按鈕，下面扣掉搖桿和跳旁邊那圈（坐、相機、表情、說話）
 function safeBand() {
   const H = window.innerHeight;
   let top = 0, bottom = H;
-  for (const id of ['top-btns', 'joy', 'jump-btn', 'sit-btn', 'emote', 'swap-btn']) {
+  for (const id of ['top-btns', 'joy', 'jump-btn', 'sit-btn', 'photo-btn', 'emote', 'say-btn', 'swap-btn']) {
     const r = document.getElementById(id)?.getBoundingClientRect();
     if (!r?.height) continue;
     if (r.bottom < H * 0.4) top = Math.max(top, r.bottom);

@@ -44,11 +44,27 @@ export class UI {
     this.onGoTo = null;
     this.onSheet = null;
     this.onClose = null;
-    // 電腦版：表情和其他按鈕排成一列放在畫面下方中間，不再分散在左右兩邊
+    // 電腦版：表情、相機和其他按鈕排成一列放在畫面下方中間，不再分散在左右兩邊。
+    // 照用途分組：自己的（表情、相機、行囊）、同行、設定、清單
     if (!matchMedia('(pointer: coarse)').matches) {
       document.body.classList.add('desk');
-      $('#top-btns').prepend($('#emote'));
+      $('#top-btns').prepend($('#emote'), $('#photo-btn'), $('#pack-btn'), $('#party-btn'), $('#say-btn'));
     }
+    // 「⋯」：整排收起來讓畫面乾淨，再按一下展開。記住上次的選擇
+    const more = $('#more-btn');
+    const tidy = (on) => {
+      document.body.classList.toggle('tidy', on);
+      const text = on ? '展開按鈕' : '收起按鈕';
+      more.setAttribute('aria-expanded', !on);
+      more.setAttribute('aria-label', text);
+      more.title = text;
+    };
+    try { tidy(localStorage.getItem('tidy') === '1'); } catch {}
+    more.addEventListener('click', () => {
+      const on = !document.body.classList.contains('tidy');
+      tidy(on);
+      try { localStorage.setItem('tidy', on ? '1' : '0'); } catch {}
+    });
     $('#sheet-close').addEventListener('click', () => { this.hidePainting(); this.onClose?.(); });
     $('#dress-close').addEventListener('click', () => { this.hideDress(); this.onClose?.(); });
     $('#cams-close').addEventListener('click', () => { this.hideCams(); this.onClose?.(); });

@@ -22,7 +22,7 @@ import { Studio } from './studio.js';
 import { Party } from './party.js';
 import { lens, LensPass } from './lens.js';
 import { dof, DofPass } from './dof.js';
-import { fullscreenButton } from './screen.js';
+import { fullscreenButton, keepFullscreen } from './screen.js';
 import { CAMERAS, SOON, TABLE, carried, carry } from './cameras.js';
 import { FlashFx } from './flashfx.js';
 import { installGrade, gradeAt, NEUTRAL } from './grade.js';
@@ -404,6 +404,7 @@ async function start() {
     const el = document.getElementById('loading');
     el.querySelector('.msg').textContent = ZONES[to].crossing;
     try { sessionStorage.setItem('crossAt', Date.now()); } catch (e) {}
+    keepFullscreen();
     el.style.setProperty('--t', '0ms');
     el.classList.remove('to-gallery', 'to-haishi', 'done', 'first', 'opening');
     el.classList.add('crossing', `to-${to}`);
@@ -610,7 +611,7 @@ async function start() {
     else renderer.render(scene, camera);
   };
 
-  // 攝影模式：右上角相機按鈕或 P 鍵進出
+  // 攝影模式：相機按鈕（手機在跳旁邊，電腦在下方那排）或 P 鍵進出
   const photo = new PhotoMode({
     renderer, scene, camera, player, world, character, ambience, ui, coarse,
     title: gallery.title || '煉金畫廊',
@@ -628,7 +629,8 @@ async function start() {
       creator.open(look);
     },
   });
-  document.getElementById('photo-btn').addEventListener('click', () => photo.open());
+  // 手機上攝影時同一顆變成收起，按一下就出來
+  document.getElementById('photo-btn').addEventListener('click', () => photo.toggle());
   if (world.studios) {
     studio = new Studio({ world, player, photo, passers });
     studio.mp = mp;

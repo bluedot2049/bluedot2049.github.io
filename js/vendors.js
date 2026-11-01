@@ -91,6 +91,13 @@ export const VENDORS = {
     lines: ['這張是星圖', '西邊那顆星你看過嗎', '有人把地圖拿反過', '白塔在這裡', '船長都來我這裡買', '咕咕 地圖不要摺'],
     quiet: ['咕咕 這時候星星最清楚', '咕咕 船都還沒進來'],
   },
+  // 工坊街東頭的暗房（haishi.js 的 darkroom），站在取件口裡面。底片機還沒有，現在只聊天
+  darkroom: {
+    name: '洗照片師傅', race: 'squid', look: { hat: 'none', glasses: 'mono', top: 'shirt', topC: 28, bottom: 'pants', botC: 26, outer: 'apron', outC: 17, shoes: 'geta', shoeC: 26, neck: 'towel', neckC: 17, back: 'none' },
+    greet: ['門簾不要掀喔', '要洗照片嗎'],
+    lines: ['裡面在泡 門簾不要掀', '底片要全黑 洗相紙才開紅燈', '手是藥水染的 洗不掉了', '牆上那些 好久沒人來拿', '曝光過頭的 我反而喜歡', '洗好的會夾在門口那條繩子上', '有底片再拿來給我'],
+    quiet: ['沒人的時候 我在裡面泡片', '這時候安靜 洗得比較專心'],
+  },
   // 小吃推車，id 對應 haishi.js 的 CARTS
   squid: {
     name: '烤魷魚', race: 'hammer', look: { hat: 'none', clothes: 'tank', robe: 1 },
