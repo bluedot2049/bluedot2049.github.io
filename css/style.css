@@ -230,8 +230,8 @@ body.flat #stage::after { display: none; }
 
 /* 在線人數：一顆微亮的金點 */
 #online {
-  display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px;
-  font-size: 12px; letter-spacing: .12em; color: var(--muted);
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
+  font-size: 12px; letter-spacing: .04em; color: var(--muted);
   background: var(--panel-soft); border: 1px solid var(--line-soft); border-radius: 999px;
 }
 #online::before {
@@ -387,6 +387,59 @@ body.joy-left #jump-btn { left: auto; right: calc(26px + env(safe-area-inset-rig
 body.joy-left #sit-btn { left: auto; right: calc(108px + env(safe-area-inset-right)); }
 body.joy-left:not(.photo) #emote { left: auto; right: calc(20px + env(safe-area-inset-right)); align-items: flex-end; }
 body.touch #hint { bottom: auto; top: calc(70px + env(safe-area-inset-top)); }
+
+/* 橫拿的手機：螢幕很矮，按鈕不能再全貼底邊。整組往上抬，大小跟著螢幕高度走。
+   搖桿在一邊；動作鈕、跳、坐在另一邊；表情在搖桿上方，往內橫向展開。攝影模式另有一套，不動 */
+@media (orientation: landscape) and (max-height: 500px) {
+  body.touch:not(.photo) {
+    --lift: clamp(30px, 12vh, 60px);
+    --joy: clamp(92px, 30vh, 124px);
+    --seal: clamp(50px, 16vh, 66px);
+    --edge: calc(max(22px, 4vh));
+  }
+  body.touch:not(.photo) #joy {
+    width: var(--joy); height: var(--joy);
+    bottom: calc(var(--lift) + env(safe-area-inset-bottom));
+  }
+  body.touch:not(.photo) #joy::before {
+    -webkit-mask: radial-gradient(circle closest-side, transparent 92%, #000 93%);
+    mask: radial-gradient(circle closest-side, transparent 92%, #000 93%);
+  }
+  body.touch:not(.photo) #joy::after { inset: 26%; }
+  body.touch:not(.photo) #joy-knob {
+    width: calc(var(--joy) * .42); height: calc(var(--joy) * .42);
+    margin: calc(var(--joy) * -.21) 0 0 calc(var(--joy) * -.21);
+  }
+  body.touch:not(.photo) #swap-btn { bottom: calc(var(--lift) + env(safe-area-inset-bottom)); }
+
+  body.touch:not(.photo) #jump-btn, body.touch:not(.photo) #sit-btn {
+    width: var(--seal); height: var(--seal); font-size: calc(var(--seal) * .3);
+  }
+  body.touch:not(.photo) #jump-btn { bottom: calc(var(--lift) + 4vh + env(safe-area-inset-bottom)); }
+  body.touch:not(.photo) #sit-btn { bottom: calc(var(--lift) + env(safe-area-inset-bottom)); }
+  body.touch.joy-left:not(.photo) #sit-btn { right: calc(var(--edge) + var(--seal) + 10px + env(safe-area-inset-right)); }
+  body.touch:not(.joy-left):not(.photo) #sit-btn { left: calc(var(--edge) + var(--seal) + 10px + env(safe-area-inset-left)); }
+
+  /* 動作鈕在跳的正上方，不再壓在搖桿旁、也不擋住畫面中間 */
+  body.touch:not(.photo) #action-btn {
+    height: calc(var(--seal) + 4px);
+    bottom: calc(var(--lift) + 4vh + var(--seal) + 16px + env(safe-area-inset-bottom));
+  }
+  body.touch.joy-left:not(.photo) #action-btn { left: auto; right: calc(var(--edge) + env(safe-area-inset-right)); }
+  body.touch:not(.joy-left):not(.photo) #action-btn { right: auto; left: calc(var(--edge) + env(safe-area-inset-left)); }
+
+  /* 表情：搖桿正上方，一排往畫面內側展開 */
+  body.touch:not(.photo) #emote {
+    bottom: calc(var(--lift) + var(--joy) + 10px + env(safe-area-inset-bottom));
+    flex-direction: row; align-items: center; gap: 6px;
+  }
+  body.touch:not(.joy-left):not(.photo) #emote { left: auto; right: calc(var(--edge) + env(safe-area-inset-right)); flex-direction: row-reverse; }
+  body.touch.joy-left:not(.photo) #emote { right: auto; left: calc(var(--edge) + env(safe-area-inset-left)); }
+  body.touch:not(.photo) #emote-bar { flex-direction: row; padding: 0; transform: translateX(-8px); }
+  body.touch:not(.joy-left):not(.photo) #emote-bar { flex-direction: row-reverse; transform: translateX(8px); }
+  body.touch:not(.photo) #emote.open #emote-bar { transform: none; }
+  body.touch:not(.photo) #emote-bar button { width: 40px; height: 40px; font-size: 19px; }
+}
 
 /* ───────── 電腦版：按鈕集中在畫面下方中間一列，動作按鈕浮在那一列正上方，提示移到頂端 ───────── */
 body.desk #top-btns {

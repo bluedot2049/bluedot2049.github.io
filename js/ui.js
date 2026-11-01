@@ -161,7 +161,8 @@ export class UI {
   online(n) {
     const el = $('#online');
     el.hidden = false;
-    el.textContent = `${n} 人在線`;
+    el.textContent = n;
+    el.title = `${n} 人在線`;
   }
 
   // 表情按鈕：點一下展開，選了就收起來
