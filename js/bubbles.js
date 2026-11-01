@@ -5,18 +5,24 @@
 const GAP = 6;       // 對話框之間至少留幾像素
 const TAIL = 14;     // 對話框底邊離頭頂的距離，跟 CSS 的 translate 一樣
 const EDGE = 8;      // 離螢幕左右邊至少留幾像素
+const HOLD = 36;     // 兩個頭頂高低差在這以內就不換先後，免得鏡頭一動兩個對話框上下互換、一直跳
 
+// 回傳畫面上有幾個對話框，主迴圈有對話框時不降幀，不然字跟著半速的畫面一頓一頓
 export function layoutBubbles() {
   const list = [];
   for (const el of document.querySelectorAll('.speech.show')) {
     if (el.style.visibility === 'hidden') continue;
     const w = el.offsetWidth, ax = parseFloat(el.style.left);
     const x = Math.min(Math.max(ax, EDGE + w / 2), window.innerWidth - EDGE - w / 2);
-    list.push({ el, x, dx: Math.round(x - ax), y: parseFloat(el.style.top), w, h: el.offsetHeight });
+    const y = parseFloat(el.style.top);
+    // 排序用的高度只在頭頂移出 HOLD 範圍時才跟上
+    const k = el._sortY == null ? y : Math.min(Math.max(el._sortY, y - HOLD), y + HOLD);
+    el._sortY = k;
+    list.push({ el, x, dx: Math.round(x - ax), y, k, w, h: el.offsetHeight });
   }
-  if (!list.length) return;
+  if (!list.length) return 0;
   // 頭頂在畫面越下面的（通常離鏡頭越近）先排，留在原位
-  list.sort((a, b) => b.y - a.y);
+  list.sort((a, b) => b.k - a.k);
   const placed = [];
   for (const b of list) {
     let bottom = b.y - TAIL;
@@ -41,4 +47,5 @@ export function layoutBubbles() {
       b.el.style.setProperty('--dx', b.dx + 'px');
     }
   }
+  return list.length;
 }

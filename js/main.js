@@ -286,8 +286,14 @@ async function start() {
       mp?.pet(a.index);
       lastInput = performance.now();
     },
+    // 搭船：先跳進碼頭邊的渡船坐好，船夫在船頭現身、燈亮起來，再轉到渡海畫面
     onExit(ex) {
-      travel(ex.to);
+      if (!ex.boat) return travel(ex.to);
+      if (player.boarding) return;
+      player.board(ex.boat, () => {
+        ex.boat.board();
+        setTimeout(() => travel(ex.to), 1100);
+      });
     },
     onDirector(on) {
       showDirector(on);
@@ -716,6 +722,9 @@ async function start() {
     player.update(dt);
     photo.update(dt);
     selfie.update(dt);
+    // 鏡頭這一幀已經擺好：先算好矩陣，後面對話框、隊友記號照這一幀的鏡頭投影。
+    // 不然要等畫的時候才更新，所有頭上的東西都慢一幀，鏡頭一動就抖
+    camera.updateMatrixWorld();
     animals?.update(dt);
     visitors?.update(dt);
     vendors?.update(dt, player, camera);
@@ -733,7 +742,8 @@ async function start() {
       if (host.group.visible) host.update(dt, player.pos.x, player.pos.z, camera, visitors.hostFocus());
       else host.hush();
     }
-    layoutBubbles();
+    party?.update(dt);
+    const talking = layoutBubbles() > 0;
     if (frame % 6 === 0) updateAction();
     // 攝影模式時，光線、聲音、牆跟著鏡頭走
     const view = photo.active ? photo.pos : player.pos;
@@ -761,7 +771,7 @@ async function start() {
     if (photo.active) world.update(clock.elapsedTime, photo.pos, photo.fadeTarget(), camera, true);
     else world.update(clock.elapsedTime, player.camPos, player.fadeTarget(), camera);
     frame++;
-    const idle = !photo.active && !player.moving && !othersMoving && !fading && performance.now() - lastInput > 2000;
+    const idle = !photo.active && !player.moving && !othersMoving && !fading && !talking && performance.now() - lastInput > 2000;
     if (idle && frame % 2) return;
     if (!idle) quality.sample(dt);
     if (stats) renderer.info.reset();

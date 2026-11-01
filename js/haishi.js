@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { Kit, rng, newBucket } from './props.js';
 import { bucketObjects, glowPoints, uTime } from './scenery.js';
 import { makePathfinder } from './pathgrid.js';
-import { hull, towerPhase, bump } from './harbor.js';
+import { hull, towerPhase, bump, makeSkiff } from './harbor.js';
 import { addRoof, roofGeo, Signs } from './eaves.js';
 import { yatai } from './yatai.js';
 import { mist, smoke, pools, ripples } from './haze.js';
@@ -1765,14 +1765,9 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   far.add(towerGlow);
   group.add(far);
 
-  // ---------- 渡船：長棧橋盡頭右邊繫著一艘小划船，跟畫廊那邊的一樣 ----------
-  const boatKit = new Kit(R), boatBucket = newBucket(), boat = new THREE.Group();
-  boatKit.add(hull(3.2, 1.3, 0.55, { y: 0.45, w: 0.82 }), '#6e4a30', 0, 0, 0, { color2: '#a0704a', ao: false });
-  for (const z of [-0.5, 0.5]) boatKit.box(1.05, 0.05, 0.24, '#8a6440', 0, -0.12, z);
-  boatKit.emit(boatBucket, 0, 0, 0);
-  for (const o of bucketObjects(boatBucket)) boat.add(o);
+  // ---------- 渡船：長棧橋盡頭右邊繫著一艘，跟畫廊那邊同一款（harbor.js 的 makeSkiff） ----------
+  const ferry = makeSkiff(bucketObjects), boat = ferry.boat;
   boat.position.set(2.15, SEA + 0.36, 27.8);
-  boat.rotation.order = 'YXZ';
   group.add(boat);
 
   scene.add(group);
@@ -1869,7 +1864,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     camDistMax: 46,
     // 下船的地方：長棧橋的盡頭，離小船幾步，面向山上的鎮子
     spawn: { x: 0, z: 26.4, heading: Math.PI },
-    exits: [{ x: 0.6, z: 27.9, r: 1.4, to: 'gallery', label: '搭船', title: '回畫廊' }],
+    exits: [{ x: 0.6, z: 27.9, r: 1.4, to: 'gallery', label: '搭船', title: '回畫廊', boat: ferry }],
     roomIndexAt: () => 0,
     placeAt: (x, z) => {
       const a = areaAt(x, z);

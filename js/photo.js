@@ -13,7 +13,7 @@ import { makePostcard, loadQR } from './postcard.js';
 import { packFace } from './filmcode.js';
 import { getSave, sanitizeLook, decodeFace } from './looks.js';
 import { encodeLook, encodeSave } from './savecode.js';
-import { CAMERAS, carried, flashKnob, dateKnob, drawDate, longTan } from './cameras.js';
+import { CAMERAS, carried, dateKnob, drawDate, flashKnob, longTan, shutterKnob } from './cameras.js';
 import { dof, dofK } from './dof.js';
 
 const ASPECTS = [
@@ -67,6 +67,14 @@ void main() {
 const focal = (fov) => Math.round(12 / Math.tan(THREE.MathUtils.degToRad(fov / 2)));
 const pad2 = (n) => String(n).padStart(2, '0');
 const dist = (m) => (m < 10 ? m.toFixed(m < 1 ? 2 : 1) : Math.round(m)) + ' m';
+
+// 重播一段 CSS 動畫：拿掉 class、逼瀏覽器排版一次、再加回去
+function replay(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+}
+
 function stamp() {
   const d = new Date();
   return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
@@ -224,6 +232,10 @@ export class PhotoMode {
     knob.classList.remove('swap');
     if (g.flash?.bulb) knob.style.setProperty('--swap', g.flash.bulb + 's');
     this.$('#ph-date').innerHTML = dateKnob(id);
+    const sh = this.$('#ph-shutter'), art = shutterKnob(id, MAX_EXPOSE);
+    sh.innerHTML = art;
+    sh.classList.toggle('gear', !!art);
+    this.lit = 0;
   }
 
   // ───────── 進出 ─────────
@@ -294,6 +306,9 @@ export class PhotoMode {
     this.joy.x = this.joy.y = 0;
     this.lift = 0;
     document.body.classList.remove('photo', 'photo-bare', 'photo-hush', 'photo-gear', 'photo-expose');
+    const sh = this.$('#ph-shutter');
+    sh.innerHTML = '';
+    sh.classList.remove('gear', 'locked', 'snap', 'jam');
     this.$('#photo').hidden = true;
     this.renderer.domElement.style.filter = '';
     this.character.group.visible = true;
@@ -451,6 +466,7 @@ export class PhotoMode {
     die.classList.toggle('on', dated);
     die.setAttribute('aria-pressed', dated);
     die.title = dated ? '日期會燙在照片角落' : '不印日期';
+    this.latch();
     // 帶著相機時色調是相機自己的；手持看不到自己，自拍才看得到
     const look = g ? g.develop : LOOKS[this.look];
     this.renderer.domElement.style.filter = look.filter;
@@ -1191,9 +1207,34 @@ export class PhotoMode {
     return this.fires() && !!this.gear.flash.bulb && performance.now() < this.bulbAt;
   }
 
+  // 相機自己的快門鈕：換燈泡時卡榫卡進來
+  latch() {
+    this.$('#ph-shutter').classList.toggle('locked', this.waitingBulb());
+  }
+
+  // 卡住了還硬按：快門鈕晃一下；沒有自己快門鈕的相機用字講
+  jammed() {
+    const sh = this.$('#ph-shutter');
+    if (!sh.classList.contains('gear')) return this.ui.hint('燈泡還在換', 1500);
+    replay(sh, 'jam');
+  }
+
+  // 拍下去那一下，葉片張開又闔上
+  snap() {
+    const sh = this.$('#ph-shutter');
+    if (sh.classList.contains('gear')) replay(sh, 'snap');
+  }
+
+  // 長曝光時快門外環的錶刻：過一秒亮一格，0 是全暗
+  tickTo(n) {
+    if (n === this.lit) return;
+    this.lit = n;
+    this.$('#ph-shutter').querySelectorAll('.tick').forEach((t, i) => t.classList.toggle('lit', i < n));
+  }
+
   shutterDown() {
     if (!this.active || this.result || this.pressing || this.expo) return;
-    if (this.waitingBulb()) return this.ui.hint('燈泡還在換', 1500);
+    if (this.waitingBulb()) return this.jammed();
     this.pressing = { timer: setTimeout(() => this.startExposure(), HOLD_MS) };
   }
 
@@ -1229,7 +1270,8 @@ export class PhotoMode {
     void knob.offsetWidth;
     knob.classList.add('swap');
     clearTimeout(this.swapT);
-    this.swapT = setTimeout(() => knob.classList.remove('swap'), bulb * 1000 + 100);
+    this.latch();
+    this.swapT = setTimeout(() => { knob.classList.remove('swap'); this.latch(); }, bulb * 1000 + 100);
     setTimeout(() => this.active && this.ambience.voice('bulb', 0.45), 450);
     const el = this.$('#ph-smoke');
     el.classList.remove('puff');
@@ -1264,6 +1306,7 @@ export class PhotoMode {
     e.acc.dispose();
     e.grab.dispose();
     document.body.classList.remove('photo-expose');
+    this.tickTo(0);
   }
 
   // 疊畫面用的兩道著色器：add 把這一幀撐開亮部、乘上這一幀的秒數加進去；done 平均起來，混進閃光那一幀，再壓回來
@@ -1305,6 +1348,7 @@ export class PhotoMode {
     e.sum += dt;
     const sec = (now - e.t0) / 1000;
     this.showZoom(`曝光 ${sec.toFixed(1)} 秒`);
+    this.tickTo(Math.min(MAX_EXPOSE, Math.ceil(sec)));
     if (sec >= MAX_EXPOSE) {
       clearTimeout(this.pressing?.timer);
       this.pressing = null;
@@ -1366,7 +1410,7 @@ export class PhotoMode {
   // 不先做的話，按下快門後第一次會多等一兩秒
   shoot(dry = false) {
     if (!this.active || this.result) return;
-    if (!dry && this.waitingBulb()) return this.ui.hint('燈泡還在換', 1500);
+    if (!dry && this.waitingBulb()) return this.jammed();
     const fire = !dry && this.fires(), wasLong = dof.long;
     const fr = this.frame, r = this.renderer, cam = this.camera;
     const W = window.innerWidth, H = window.innerHeight;
@@ -1414,6 +1458,7 @@ export class PhotoMode {
       return;
     }
     this.flash();
+    this.snap();
     this.burned();
     if (fire) this.fired();
     else if (this.gear) this.ambience.voice('shutter', 0.5);

@@ -192,8 +192,8 @@ export class Player {
     }, { passive: false });
 
     window.addEventListener('keydown', (e) => {
-      // 捏角色面板裡的按鈕和滑桿自己吃鍵盤，不拿來走路
-      if (this.paused || e.target.closest?.('#dress')) return;
+      // 捏角色面板裡的按鈕和滑桿、隊伍的打字框自己吃鍵盤，不拿來走路
+      if (this.paused || e.target.closest?.('#dress, input, textarea')) return;
       if (e.key === 'Enter') {
         e.preventDefault();
         this.action();
@@ -290,6 +290,8 @@ export class Player {
   }
 
   tap(cx, cy) {
+    if (this.boarding) return;
+    if (this.onTap?.(cx, cy)) return;   // 組隊時按了「標記」，這一下是標記地點，不是走過去
     const hit = this.pick(cx, cy);
     if (!hit) return;
     this.events.onInput('tap');
@@ -651,6 +653,7 @@ export class Player {
 
   // 「坐」按鈕和 C 鍵：坐著就站起來；旁邊有座位就坐座位，沒有就原地坐在地上
   toggleSit() {
+    if (this.boarding) return;
     this.events.onInput('tap');
     if (this.sitting) return this.exitFocus();
     if (this.character.airborne) return;
@@ -662,6 +665,36 @@ export class Player {
     this.character.lift = 0.02;
     this.character.sitting = true;
     this.events.onSit?.(true);
+  }
+
+  // 上船：從碼頭跳進繫在旁邊的渡船（harbor.js 的 makeSkiff），坐在艙底面向船頭。
+  // 跳的途中和坐好以後都不理會移動、點地面，接著就要換頁渡海了。坐好時呼叫 onSeated
+  get boarding() {
+    return this.focus?.kind === 'board';
+  }
+
+  board(boat, onSeated) {
+    this.exitFocus();
+    this.stop();
+    const s = boat.seat();
+    this.focus = { kind: 'board', boat, n: { x: -Math.sin(s.h), z: -Math.cos(s.h) }, from: this.pos.clone(), t: 0, onSeated };
+  }
+
+  // 半秒多跳一道弧線落進船裡，坐下；坐好以後跟著船一起晃
+  updateBoard(dt) {
+    const b = this.focus, ch = this.character, s = b.boat.seat();
+    b.t = Math.min(1, b.t + dt / 0.75);
+    const e = b.t * b.t * (3 - 2 * b.t);
+    this.pos.x = b.from.x + (s.x - b.from.x) * e;
+    this.pos.z = b.from.z + (s.z - b.from.z) * e;
+    this.pos.y = b.from.y + (s.y - b.from.y) * e + Math.sin(Math.PI * b.t) * 0.4;
+    b.n.x = -Math.sin(s.h);
+    b.n.z = -Math.cos(s.h);
+    if (b.t >= 1 && !ch.sitting) {
+      ch.lift = 0.02;
+      ch.sitting = true;
+      b.onSeated?.();
+    }
   }
 
   // 動作按鈕現在該做什麼：看畫、照鏡子、坐下、拿點心、摸動物、跟訪客聊天、搭船、吃一口、起來。回傳 { kind, p? } 或 null
@@ -735,6 +768,7 @@ export class Player {
   }
 
   jump() {
+    if (this.boarding) return;
     if (this.sitting) this.exitFocus();
     if (this.character.sitP > 0) return;   // 還在站起來的途中
     if (!this.character.jump()) return;
@@ -902,7 +936,7 @@ export class Player {
     let mf = fwd, ms = side, mag = fwd || side ? 1 : 0;
     const jm = Math.hypot(this.joy.x, this.joy.y);
     if (jm > 0.15) { mf = -this.joy.y; ms = this.joy.x; mag = Math.min(1, (jm - 0.15) / 0.75); }
-    const manual = mag > 0;
+    const manual = mag > 0 && !this.boarding;
 
     if (manual) {
       this.stop();
@@ -960,7 +994,8 @@ export class Player {
         ch.sitting = true;
       }
     }
-    this.pos.y = w.groundY(this.pos.x, this.pos.z);
+    if (this.boarding) this.updateBoard(dt);
+    else this.pos.y = w.groundY(this.pos.x, this.pos.z);
 
     // 角色轉向：走路時面向前進方向，看畫或照鏡子時面向它
     let want = null;

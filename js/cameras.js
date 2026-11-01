@@ -6,7 +6,7 @@
 // 新相機加在 CAMERAS，模型加在 cameraModel，桌上的位置照 TABLE 的順序。
 import { rod } from './heads.js';
 import { getSave, putSave } from './looks.js';
-import { drawGlyph } from './glyphs.js';
+import { drawGlyph, strokes } from './glyphs.js';
 
 // 等效全片幅的焦距換成視角：照片長邊對應底片的 36mm
 export const longTan = (mm) => 18 / mm;
@@ -19,6 +19,7 @@ export const longTan = (mm) => 18 / mm;
 // develop：沖出來的樣子，跟 photo.js 的色調同一種寫法；halo：亮的地方暈開一點
 // date：照片角落的日期印記；knob：快門旁那個開關長什麼樣（KNOBS），ink：印記怎麼上到照片（INKS）。同一家工坊的相機用同一種
 // sig：false 是照片上不落畫廊的款，只留相機自己的印記
+// make：哪家工坊做的。mark 是商號（用海市的字刻），model 型號、serial 序號（用蘇州碼子的數字刻）；shutter：快門鈕長什麼樣（SHUTTERS）
 export const CAMERAS = {
   bulb: {
     name: '閃光燈泡相機',
@@ -27,6 +28,7 @@ export const CAMERAS = {
     focal: 27, prime: true, fstop: 1.4, bokeh: 4, focus: 'tap', aspect: 3 / 2,
     flash: { color: 0xfff1dc, power: 2.6, bulb: 1.6, knob: 'fan' },
     date: { knob: 'die', ink: 'burn' }, sig: false,
+    make: { mark: '火', model: 1, serial: [0, 4, 1, 7] }, shutter: 'leaf',
     hold: true,
     develop: { filter: 'sepia(.16) saturate(.92) contrast(1.08) brightness(1.02)', vig: 0.62, grain: 0.07, halo: 0.16 },
   },
@@ -103,6 +105,47 @@ const KNOBS = {
 
 export const flashKnob = (id) => KNOBS[CAMERAS[id]?.flash?.knob]?.() || '';
 export const dateKnob = (id) => KNOBS[CAMERAS[id]?.date?.knob]?.() || '';
+
+// 快門鈕的樣子：帶著相機時換掉畫廊的金色快門。動作寫在 style.css 的 #ph-shutter.gear
+const SHUTTERS = {
+  // 葉片快門：灰鋼外環刻著商號、型號、序號，中間六片葉片平常闔著。
+  // 按一下葉片張開一瞬又闔上；按住就一直開著，外環的錶刻一秒亮一格（ticks 格，就是長曝光最長幾秒）；燈泡還在換時卡榫卡進來，按不下去
+  leaf(g, ticks) {
+    // 六片葉片深淺各差一點，每片壓著下一片，闔著時疊成風車。
+    // 一圈疊回來最後一片要壓在第一片上，所以最先畫的那片（rotate 300）在右上那一角再畫一次蓋上去
+    const shade = ['#4b5058', '#3b4047', '#555a62', '#41464d', '#4f545c', '#383c43'];
+    const leaf = (i) => `<g transform="rotate(${i * 60})"><g class="leaf"><path fill="${shade[i]}" d="M-14 0Q6 -6 30 0V-30H-14Z"/><path class="edge" d="M-1.6 -2.5Q13.2 -4.2 30 0"/></g></g>`;
+    const leaves = [5, 4, 3, 2, 1, 0].map(leaf).join('') + `<g clip-path="url(#sh-q)">${leaf(5)}</g>`;
+    const tick = Array.from({ length: ticks }, (_, i) => `<path class="tick" transform="rotate(${(i + 0.5) * 360 / ticks})" d="M0-31V-34.4"/>`).join('');
+    const m = g.make, glyph = strokes(m.mark).map((st) => 'M' + st.poly.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L') + 'Z').join('');
+    // 型號、一個點、序號，排在下緣
+    const nums = [m.model, -1, ...m.serial], cw = 2.2, gap = 0.9, dot = 1.6;
+    let w = 0;
+    for (const n of nums) w += n < 0 ? dot : cw + gap;
+    let x = -w / 2;
+    const code = nums.map((n) => {
+      const d = n < 0 ? `M${(x + dot / 2 - gap / 2).toFixed(2)} 29.6v.5` : numPath(n, x, 26.6, cw, 3.6);
+      x += n < 0 ? dot : cw + gap;
+      return d;
+    }).join('');
+    // 刻痕：底下錯開一點的亮邊，像刻進金屬裡
+    const engrave = (cls, d, dy) => `<path class="${cls} lo" d="${d}" transform="translate(0 ${dy})"/><path class="${cls}" d="${d}"/>`;
+    return '<svg viewBox="-36 -36 72 72" aria-hidden="true">'
+      + '<defs><clipPath id="sh-ap"><circle r="22"/></clipPath><clipPath id="sh-q"><rect width="40" height="40" y="-40"/></clipPath></defs>'
+      + '<circle class="bezel" r="23.6"/>'
+      + `<g clip-path="url(#sh-ap)"><circle class="glass" r="22"/><circle class="glint" cx="-6" cy="-7" r="5"/>${leaves}</g>`
+      + '<circle class="lip" r="22.4"/>'
+      + `<g class="mark"><g transform="translate(-4.6 -34.2) scale(.092)">${engrave('glyph', glyph, 6)}</g></g>`
+      + engrave('code', code, 0.45)
+      + tick
+      + '<g transform="rotate(18)"><g class="latch"><rect x="23" y="-2.6" width="9" height="5.2" rx="1.2"/><circle cx="29.6" cy="0" r="1"/></g></g></svg>';
+  },
+};
+
+export const shutterKnob = (id, ticks) => {
+  const g = CAMERAS[id];
+  return SHUTTERS[g?.shutter]?.(g, ticks) || '';
+};
 
 // ───────── 日期印記 ─────────
 
