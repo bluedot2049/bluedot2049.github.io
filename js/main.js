@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { Player } from './player.js';
 import { Character } from './character.js';
-import { sanitizeLook, lookFromOutfit, randomPreset } from './looks.js';
+import { sanitizeLook, randomPreset, getSave, putSave } from './looks.js';
 import { Creator, FACE_TABS } from './creator.js';
 import { layoutBubbles } from './bubbles.js';
 import { UI, panelW } from './ui.js';
@@ -60,21 +60,17 @@ document.addEventListener('touchmove', (e) => {
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('dragstart', (e) => { if (e.target.tagName === 'IMG' && !e.target.closest('#ph-media')) e.preventDefault(); });
 
-// 自己捏的樣子存在這台裝置上，下次來還是同一個。舊版只存了三個色號，照著換過來。第一次來隨機配一套顏色
+// 自己捏的樣子存在這台裝置上（looks.js 的存檔），下次來還是同一個。第一次來隨機配一套顏色
 function loadLook() {
-  try {
-    const raw = localStorage.getItem('look');
-    if (raw) return sanitizeLook(JSON.parse(raw));
-    const old = lookFromOutfit(JSON.parse(localStorage.getItem('outfit')));
-    if (old) return old;
-  } catch {}
+  const raw = getSave().look;
+  if (raw) return sanitizeLook(raw);
   const L = randomPreset();
   saveLook(L);
   return L;
 }
 
 function saveLook(L) {
-  try { localStorage.setItem('look', JSON.stringify(L)); } catch {}
+  putSave({ look: L });
 }
 
 // world.fadeVariants：房間淡進淡出時用的那一組著色器（見 fade.js 的 RoomFader），打開再編一次

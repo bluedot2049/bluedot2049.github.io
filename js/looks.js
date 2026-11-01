@@ -88,17 +88,18 @@ const COUNTS = {
 
 // ---------- 海市攤販送的東西 ----------
 // 不在這張表裡的，鏡子裡一開始就有。表裡的要去海市跟那一攤聊天才拿得到，記在這台裝置的瀏覽器裡
+// 沒寫條件的，聊天就送；need：左手要拿著那樣東西來換；night：要在街上冷清的時候；again：第一次只記下來，隔天再來才送。ask 是還沒滿足時攤販講的話
 export const GIFTS = {
   tailor: { who: '裁縫', line: '這幾件你拿去穿穿看', items: [['one', 'yukata'], ['outer', 'haori'], ['bottom', 'hakama'], ['shoes', 'geta']] },
   junk: { who: '舊貨攤', line: '嘰咕 這兩個送你 不能退喔', items: [['back', 'shell'], ['shoes', 'odd']] },
-  herbs: { who: '藥草攤', line: '呱 這件蓑衣給你 下雨穿', items: [['outer', 'mino']] },
-  pigment: { who: '顏料攤', line: '這件沾到顏料了 送你啦', items: [['top', 'smock'], ['hand', 'brush']] },
-  lanterns: { who: '燈籠師傅', line: '拿一盞走 晚上比較好走', items: [['hand', 'lantern']] },
-  candle: { who: '蠟燭店', line: '這根送你 小心火', items: [['hand', 'candle']] },
+  herbs: { who: '藥草攤', line: '呱 這件蓑衣給你 下雨穿', items: [['outer', 'mino']], need: ['hand', 'fish'], ask: '呱 手上拿條魚來 我跟你換' },
+  pigment: { who: '顏料攤', line: '這件沾到顏料了 送你啦', items: [['top', 'smock'], ['hand', 'brush']], need: ['hand', 'flask'], ask: '手上拿個玻璃瓶來 我拿顏料跟你換' },
+  lanterns: { who: '燈籠師傅', line: '拿一盞走 晚上比較好走', items: [['hand', 'lantern']], need: ['hand', 'candle'], ask: '手上拿根蠟燭來 我換你一盞' },
+  candle: { who: '蠟燭店', line: '這根送你 小心火', items: [['hand', 'candle']], need: ['hand', 'teacup'], ask: '手上有杯熱茶的話 我就換你一根' },
   fish: { who: '魚販', line: '這隻送你 拿好 會滑', items: [['hand', 'fish']] },
-  glass: { who: '玻璃師傅', line: '吹歪的 拿去玩', items: [['hand', 'flask']] },
-  frames: { who: '木工', line: '哞 這個框多做了一個', items: [['hand', 'frame']] },
-  maps: { who: '航海圖店', line: '咕咕 望遠鏡借你 不用還', items: [['hand', 'scope']] },
+  glass: { who: '玻璃師傅', line: '吹歪的 拿去玩', items: [['hand', 'flask']], night: true, ask: '爐子現在不旺 晚上人少再來' },
+  frames: { who: '木工', line: '哞 這個框多做了一個', items: [['hand', 'frame']], need: ['hand', 'brush'], ask: '哞 拿支畫筆來 我就多做一個框' },
+  maps: { who: '航海圖店', line: '咕咕 望遠鏡借你 不用還', items: [['hand', 'scope']], again: true, ask: '咕咕 我找找看 改天再來' },
   bakery: { who: '麵包師傅', line: '這條烤太長了 拿去', items: [['hand', 'baguette']] },
   tea: { who: '茶攤', line: '杯子帶走沒關係', items: [['hand', 'teacup']] },
   squid: { who: '烤魷魚', line: '這串請你', items: [['hand', 'squid']] },
@@ -107,20 +108,47 @@ const LOCKS = new Map();
 for (const [v, g] of Object.entries(GIFTS)) for (const [k, id] of g.items) LOCKS.set(k + ':' + id, v);
 export const lockedBy = (k, id) => LOCKS.get(k + ':' + id);
 
-export function unlockedSet() {
-  try {
-    const a = JSON.parse(localStorage.getItem('unlocked'));
-    return new Set(Array.isArray(a) ? a : []);
-  } catch {
-    return new Set();
+// ---------- 存檔 ----------
+// 身上的東西（造型、衣櫃、解鎖、各攤上次來的日子）合成一份，帶版本號。音量、操作習慣這些屬於裝置，不放這裡。
+// 版本不對或沒有存檔就整份重來：舊的 look／outfit／closet／unlocked 直接刪掉，大家像第一次來。
+// 以後格式改了，在 getSave 裡把舊版轉成新版再寫回，不要再清空
+const SAVE_V = 1;
+let saveCache = null;
+export function getSave() {
+  if (saveCache) return saveCache;
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem('save')); } catch {}
+  const fresh = !s || typeof s !== 'object' || s.v !== SAVE_V;
+  if (fresh) {
+    try { for (const k of ['look', 'outfit', 'closet', 'unlocked']) localStorage.removeItem(k); } catch {}
+    s = {};
   }
+  saveCache = {
+    v: SAVE_V,
+    look: s.look && typeof s.look === 'object' ? s.look : null,
+    closet: Array.isArray(s.closet) ? s.closet.slice(0, 3) : [],
+    unlocked: Array.isArray(s.unlocked) ? s.unlocked.filter((x) => typeof x === 'string') : [],
+    visits: s.visits && typeof s.visits === 'object' ? s.visits : {},
+  };
+  if (fresh) {
+    putSave({});
+    // 請瀏覽器別隨便清掉（不保證有用）
+    try { navigator.storage?.persist?.(); } catch {}
+  }
+  return saveCache;
 }
+export function putSave(patch) {
+  const s = Object.assign(getSave(), patch);
+  try { localStorage.setItem('save', JSON.stringify(s)); } catch {}
+}
+
+export const unlockedSet = () => new Set(getSave().unlocked);
 
 // 收下禮物，回傳這次有沒有拿到新東西
 export function unlock(items) {
   const set = unlockedSet(), n = set.size;
   for (const [k, id] of items) set.add(k + ':' + id);
-  try { localStorage.setItem('unlocked', JSON.stringify([...set])); } catch {}
+  putSave({ unlocked: [...set] });
   return set.size > n;
 }
 

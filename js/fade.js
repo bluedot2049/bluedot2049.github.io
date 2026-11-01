@@ -219,29 +219,32 @@ export class RoomFader {
     }
   }
 
-  // want：每一間要不要看得到。snap：直接切換，不淡（剛進場、拍照回來）
+  // want：每一間要看得到幾成（0～1，靠近門口時是中間的值）。snap：直接切換，不淡（剛進場、拍照回來）
   show(want, snap) {
     this.rooms.forEach((r, k) => {
       r.want = want[k];
       if (snap) {
-        r.a = r.u.value = r.want ? 1 : 0;
-        r.group.visible = r.want;
-        this.turn(r, false);
-      } else if (r.want) r.group.visible = true;
+        r.a = r.want;
+        this.settle(r);
+      } else if (r.want > 0) r.group.visible = true;
     });
   }
 
+  // 往 want 追，最快 0.5 秒追完：靠近門口跟著距離走，一下子跳過去（傳送）也還是淡的
   update(dt) {
     for (const r of this.rooms) {
-      const to = r.want ? 1 : 0;
-      if (r.a === to) continue;
+      if (r.a === r.want) continue;
       this.turn(r, true);
-      r.a = to > r.a ? Math.min(1, r.a + dt * ROOM_SPEED) : Math.max(0, r.a - dt * ROOM_SPEED);
-      r.u.value = ease(r.a);
-      if (r.a === to) {
-        r.group.visible = r.want;
-        this.turn(r, false);
-      }
+      r.a = r.want > r.a ? Math.min(r.want, r.a + dt * ROOM_SPEED) : Math.max(r.want, r.a - dt * ROOM_SPEED);
+      if (r.a === r.want) this.settle(r);
+      else r.u.value = ease(r.a);
     }
+  }
+
+  // 追到了：全有或全無就關掉網點，停在半淡（站在門口）就開著
+  settle(r) {
+    r.u.value = ease(r.a);
+    r.group.visible = r.a > 0;
+    this.turn(r, r.a > 0 && r.a < 1);
   }
 }

@@ -159,14 +159,13 @@ These supersede §4 where they conflict. The scope grew from "avatar look" to "t
 
 ### 6.2 One-time reset
 - Ships **in the same release** as the new gift rules. Resetting earlier is pointless: players would re-collect everything under the old free rules.
-- **Wipe everything the player owns, no partial stripping** (user decision): delete `look`, `outfit`, `closet`, `unlocked`, and the `look` inside photo settings (`photo.js`, key `KEY`). Everyone starts over with a fresh random look, like a first visit.
-- Keep per-device preferences (`muted`, `director`, `joySwap`, quality, the rest of the photo settings) — they are not possessions.
+- **Wipe everything the player owns, no partial stripping** (user decision): delete `look`, `outfit`, `closet`, `unlocked`. Everyone starts over with a fresh random look, like a first visit.
+- Keep per-device preferences (`muted`, `director`, `joySwap`, quality, and the `photo` settings — its `look` is a camera grading index, not a possession) — they are not possessions.
 - Driven by the save version number (§6.3): no `save` key, or an old version → wipe once, then write the new `save`.
 - No announcement and no mirror hint line.
 
 ### 6.3 Save structure (phase 1 — required, same release)
-- Merge into one `localStorage` key `save`: `{ v, look, closet, unlocked, trade, visits }`
-  - `trade`: barter/condition progress per vendor
+- Merge into one `localStorage` key `save`: `{ v, look, closet, unlocked, visits }` (no `trade` field: barter is checked against the worn `look.hand` at talk time)
   - `visits`: per-vendor last talk date (Taiwan date string)
 - First release: old keys are wiped (§6.2), not migrated. From then on, any `save` format change is migrated on load and **written back immediately** (fixes §1.2 item 2).
 - Call `navigator.storage.persist()` once (best effort; reduces eviction, Safari's 7-day script-storage purge is a key reason backups are needed).
@@ -199,8 +198,8 @@ Messaging apps (LINE, IG, Messenger) recompress images and strip metadata; postc
   - **寄給自己** → seal contains `#save=` (backup).
 
 ### 6.6 Execution checklist (replaces §5 when implementing)
-- [ ] Phase 1 (with the new gift rules): `save` object + version, one-time wipe of old possession keys (look / outfit / closet / unlocked / photo-settings look), migration + write-back for later versions, `storage.persist()`.
-- [ ] Vendor gift tiers: barter via `look.hand`, time / revisit / two-player conditions, data in `GIFTS`.
+- [x] (done 2026-11-01: `getSave`/`putSave` in looks.js, `GIFTS` gates `need`/`night`/`again` + `Vendor.gate`) Phase 1 (with the new gift rules): `save` object + version, one-time wipe of old possession keys (look / outfit / closet / unlocked), migration + write-back for later versions, `storage.persist()`.
+- [x] Vendor gift tiers (two-player condition not done): barter via `look.hand`, time / revisit / two-player conditions, data in `GIFTS`.
 - [ ] Phase 2: save codec (§3 recommendations still apply: bit-packing body + Base64 RLE face), checksum, `#look=` / `#save=` handling, copy/paste UI.
 - [ ] Postcard seal: QR rendering in seal style, 寄給朋友 / 寄給自己 modes, COM segment, lazy jsQR reader.
 - [ ] Tests: codec round-trip, truncated / malformed codes fall back safely, `#look=` never changes unlocks, reset runs exactly once, QR survives JPEG recompression at quality ~0.7 and a downscale to 50%.

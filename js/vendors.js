@@ -5,7 +5,7 @@
 // 介面跟 visitors.js 一樣（nearest、blocks、list），玩家的動作按鈕和照鏡子時的半透明直接沿用。
 // 角色只在玩家附近、同一層附近時才畫，攤販多也不會拖慢手機
 import { Character } from './character.js';
-import { sanitizeLook, presetLook, RACES, GIFTS, unlock, unlockedSet, isOpen } from './looks.js';
+import { sanitizeLook, presetLook, RACES, GIFTS, unlock, unlockedSet, isOpen, getSave, putSave } from './looks.js';
 import { bend } from './lens.js';
 import { HOST_NAME } from './names.js';
 
@@ -149,6 +149,7 @@ class Vendor {
     this.actionLabel = spec.postcard ? '寄明信片' : null;
     this.onPostcard = onPostcard;
     this.onGift = onGift;
+    this.id = spot.id;
     this.gift = GIFTS[spot.id] || null;
     this.greeted = false;
     this.bag = [];
@@ -173,10 +174,29 @@ class Vendor {
     this.bubble.classList.remove('show');
   }
 
+  // 送禮的條件還沒滿足就回傳攤販要講的話，滿足了回傳 null（條件寫法見 looks.js 的 GIFTS）
+  gate(g) {
+    const { look, visits } = getSave();
+    if (g.need && look?.[g.need[0]] !== g.need[1]) return g.ask;
+    if (g.night && !this.quiet?.()) return g.ask;
+    if (g.again) {
+      const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);   // 台灣日期
+      const first = !visits[this.id];
+      if (first) putSave({ visits: { ...visits, [this.id]: today } });
+      if (first || visits[this.id] === today) return g.ask;
+    }
+    return null;
+  }
+
   // 台詞洗一輪才重來，同一句不會連著講。有東西要送的話，第一次聊天先送
   talkTo() {
     const g = this.gift;
     if (g && !g.items.every(([k, id]) => isOpen(k, id, unlockedSet()))) {
+      const why = this.gate(g);
+      if (why) {
+        this.say(why);
+        return;
+      }
       unlock(g.items);
       this.say(g.line);
       this.onGift?.(g);

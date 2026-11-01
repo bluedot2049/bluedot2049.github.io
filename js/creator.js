@@ -3,7 +3,7 @@
 // 捏角色的面板：在鏡子前打開。分成種族、臉、頭、衣服、配件、畫臉六頁，點了馬上套到角色身上。
 // 衣服和配件底下再分小頁。海市攤販送的東西還沒拿到前是鎖著的，點了會說去哪一攤拿。
 // 畫臉是 64 × 64 的格子，畫的途中直接更新角色臉上的貼圖，放開手才存起來、傳給別人。
-import { RACES, OPTIONS, SLIDERS, SKINS, HAT_COLORS, HAIR_COLORS, CLOTH, GIFTS, TINTED_HATS, FACE, FACE_INK, raceOf, randomLook, presetLook, sanitizeLook, encodeFace, decodeFace, unlockedSet, isOpen, lockedBy, optionName } from './looks.js';
+import { RACES, OPTIONS, SLIDERS, SKINS, HAT_COLORS, HAIR_COLORS, CLOTH, GIFTS, TINTED_HATS, FACE, FACE_INK, raceOf, randomLook, presetLook, sanitizeLook, encodeFace, decodeFace, unlockedSet, getSave, putSave, isOpen, lockedBy, optionName } from './looks.js';
 import { faceMap } from './character.js';
 
 const TABS = [['race', '種族'], ['face', '臉'], ['head', '頭'], ['clothes', '衣服'], ['acc', '配件'], ['draw', '畫臉']];
@@ -12,14 +12,7 @@ const SUBS = {
   acc: [['neck', '脖子'], ['back', '背上'], ['hand', '左手']],
 };
 const CLOSET = 3;
-function loadCloset() {
-  try {
-    const a = JSON.parse(localStorage.getItem('closet'));
-    return Array.isArray(a) ? a.slice(0, CLOSET) : [];
-  } catch {
-    return [];
-  }
-}
+const loadCloset = () => [...getSave().closet];
 // 這幾頁鏡頭湊近看臉，其他頁看全身
 export const FACE_TABS = ['face', 'head', 'draw'];
 const PAD = 256;           // 畫布像素，一格 4 像素
@@ -208,7 +201,7 @@ export class Creator {
       case 'store': {
         const slots = loadCloset();
         slots[+b.dataset.i] = L;
-        try { localStorage.setItem('closet', JSON.stringify(slots)); } catch {}
+        putSave({ closet: slots });
         this.render();
         return;
       }

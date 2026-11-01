@@ -23,6 +23,9 @@ const WALL_DOWN = 4;       // 牆降下（淡掉）的速度：擋住視線的�
 const WALL_UP = 2;         // 牆立回來的速度：0.5 秒
 const WALL_HOLD = 0.3;     // 不擋了以後再等一下才立回來，鏡頭在牆邊晃不會一升一降
 const SHELL_SPAN = 1.5;    // 房子外觀：鏡頭離開屋子這麼遠才完全看得到
+const SEA_SPAN = 3;        // 海面：鏡頭走出後門這麼遠才完全看得到
+const ROOM_NEAR = 3;       // 離門口這麼近，隔壁的房間就開始淡進來（或還沒淡完）
+const DOOR_NEAR = 1.2;     // 角色走到離門口這麼近，房間之間的牆就開始淡
 const PAINT_SCALE = 1.5;   // 實際尺寸放大倍數
 
 const ROOM_TYPES = {
@@ -798,7 +801,7 @@ export function buildWorld(scene, gallery) {
 
   // 遠處的房間整間出現、藏起來時淡進淡出（見 fade.js）。第一次和 snap 時直接切
   const roomFader = new RoomFader(rooms.map((r) => r.group), scene.fog?.color || new THREE.Color(0));
-  let placed = false, lastT = null;
+  let snapNext = true, lastT = null;
   // 每段牆的牆面、牆頂、門框，和掛在上面的畫，降下時一起淡掉。畫掛在哪間就算哪間的
   for (const e of entries) {
     e.k = 0;
@@ -809,22 +812,47 @@ export function buildWorld(scene, gallery) {
       e.parts.push(roomFader.part(r, e.paintings.filter((p) => p.room.index === r).map((p) => p.group), u));
     }
   }
+  // 房子外觀和海面跟著鏡頭的距離淡（見 update）
   const shellParts = outdoor ? [roomFader.part(rooms.length - 1, [outdoor.shell], { value: 0 })] : [];
-  let shellA = 0;
-  if (outdoor) outdoor.shell.visible = false;
+  const seaParts = outdoor ? [roomFader.part(rooms.length - 1, [outdoor.water], { value: 0 })] : [];
+  let shellA = 0, seaA = 0;
+  if (outdoor) outdoor.shell.visible = outdoor.water.visible = false;
+
   function setCurrentRoom(i, snap = false) {
     currentRoom = i;
     updateTextures(i);
-    const want = rooms.map((r) => Math.abs(r.index - i) <= 2);
-    // 戶外很大，只有在最後一間房或已經走出去時才畫；走出去之後，室內只留赤化
+    if (snap) snapNext = true;
+  }
+
+  // 站在第 i 間時哪幾間要畫：前後兩間以內。戶外很大，只有在最後一間房或已經走出去時才畫；走出去之後，室內只留赤化
+  function roomRule(i) {
+    const want = rooms.map((r) => (Math.abs(r.index - i) <= 2 ? 1 : 0));
     if (outdoor) {
       const last = rooms.length - 1;
-      want[last] = i >= last - 1;
-      if (i === last) for (const r of rooms) if (r.index < last - 1) want[r.index] = false;
+      want[last] = i >= last - 1 ? 1 : 0;
+      if (i === last) for (const r of rooms) if (r.index < last - 1) want[r.index] = 0;
     }
-    roomFader.show(want, snap || !placed);
-    placed = true;
+    return want;
   }
+
+  // 靠近門口就開始淡：快走到出口時，下一間才要畫的房間先淡進來；剛走進入口時，上一間才要畫的房間還沒淡完。
+  // 出現得早、消失得晚，兩邊都不會在眼前一下子冒出來或不見
+  function roomWant(i, z) {
+    const want = roomRule(i), r = rooms[i];
+    const blend = (j, near) => {
+      const t = Math.min(1, 1 - near / ROOM_NEAR);
+      if (j < 0 || j >= rooms.length || t <= 0) return;
+      const other = roomRule(j);
+      for (let k = 0; k < want.length; k++) if (other[k] > want[k]) want[k] = Math.max(want[k], t);
+    };
+    if (r.type !== 'outdoor') blend(i + 1, z - r.zEnd);
+    blend(i - 1, r.zStart - z);
+    return want;
+  }
+
+  // 0 到 1：從 a 往外走到 a + span
+  const ramp = (d, span) => Math.min(1, Math.max(0, d / span));
+  const chase = (a, want, dt) => (want > a ? Math.min(want, a + dt * WALL_UP) : Math.max(want, a - dt * WALL_DOWN));
 
   // 腳下地面的高度。只有戶外的石階和草原不是 0
   function groundY(x, zz) {
@@ -875,28 +903,43 @@ export function buildWorld(scene, gallery) {
     uTime.value = t;
     const dt = lastT === null ? 0 : Math.min(0.1, t - lastT);
     lastT = t;
+    // 算距離用站在目前這間的那個點：平常是角色，拍照時鏡頭自己飛
+    const here = roomIndexAt(target.z) === currentRoom ? target : cam;
+    roomFader.show(roomWant(currentRoom, here.z), snapNext);
+    snapNext = false;
     roomFader.update(dt);
     if (outdoor) {
+      const out = currentRoom === rooms.length - 1;
       // 房子外殼只在人走出去、鏡頭也在屋外時出現，不然會擋住室內。
       // 跟著鏡頭離屋子多遠淡進來（不是跟著時間），鏡頭停在半路就停在半淡；走回屋裡時快一點淡掉
-      const want = currentRoom === rooms.length - 1 ? Math.min(1, Math.max(0, outdoor.shellGap(cam) / SHELL_SPAN)) : 0;
-      if (shellA !== want) {
-        shellA = want > shellA ? Math.min(want, shellA + dt * WALL_UP) : Math.max(want, shellA - dt * WALL_DOWN);
+      const shellWant = out ? ramp(outdoor.shellGap(cam), SHELL_SPAN) : 0;
+      if (shellA !== shellWant) {
+        shellA = chase(shellA, shellWant, dt);
         roomFader.setPart(shellParts, ease(shellA));
         outdoor.shell.visible = shellA > 0;
       }
       outdoor.sky.position.copy(cam);
       if (rooms[rooms.length - 1].group.visible) outdoor.update(t, target, cam);
-      // 海的反射要多畫一次場景，只在人已經走到戶外、鏡頭也看得到海時才開
-      const seaOn = currentRoom === rooms.length - 1 && cam.z < outdoor.door && seaInView(view);
+      // 海面也跟著鏡頭走出後門多遠淡進來。反射要多畫一次場景，鏡頭看不到海時不畫
+      const seaWant = out ? ramp(outdoor.door - cam.z, SEA_SPAN) : 0;
+      if (seaA !== seaWant) {
+        seaA = chase(seaA, seaWant, dt);
+        roomFader.setPart(seaParts, ease(seaA));
+      }
+      const seaOn = seaA > 0 && seaInView(view);
       outdoor.water.visible = seaOn;
       if (seaOn) outdoor.water.material.uniforms.time.value = t * 0.5;
     }
     for (const e of entries) {
       if (shouldFade(e, cam, target)) e.hold = WALL_HOLD;
       else e.hold -= dt;
-      const to = e.hold > 0 ? 1 : 0;
-      if (e.k !== to) setFaded(e, to > e.k ? Math.min(1, e.k + dt * WALL_DOWN) : Math.max(0, e.k - dt * WALL_UP));
+      // 房間之間的牆：角色走到門口附近就跟著距離開始淡，跨過去時已經淡完。只算門那一段，站在牆前看畫不會淡
+      let near = 0;
+      if (e.outerRoom === null && Math.abs((target.x - e.px) * e.tx + (target.z - e.pz) * e.tz) < DOOR_W / 2 + 0.3) {
+        near = 1 - ramp(Math.abs((target.x - e.px) * e.nx + (target.z - e.pz) * e.nz), DOOR_NEAR);
+      }
+      const to = Math.max(e.hold > 0 ? 1 : 0, near);
+      if (e.k !== to) setFaded(e, to > e.k ? Math.min(to, e.k + dt * WALL_DOWN) : Math.max(to, e.k - dt * WALL_UP));
     }
   }
 
