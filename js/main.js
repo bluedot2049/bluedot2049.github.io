@@ -203,6 +203,8 @@ async function start() {
   character.setCamera(carried());
   world.camTable?.setCarried(carried());
   scene.add(character.group);
+  character.onLand = (c) => ambience.footstep(c, 0, true);
+  character.onEmote = (c, e) => ambience.cheer(c, e);
   // 角色出來之前先站好的（畫廊的胖頭頭人）
   const { manatee = null, host = null } = Z.residents?.({ scene, world, shadowTex }) ?? {};
   const ambience = new Ambience();
@@ -502,6 +504,8 @@ async function start() {
       onJump(o) {
         animals?.startle(o.pos.x, o.pos.z);
       },
+      onLand: (ch) => ambience.footstep(ch, 0, true),
+      onEmote: (ch, e) => ambience.cheer(ch, e),
       onStudio: (m) => studio?.onMessage(m),
       onFlash: (ch) => flashFx.fire(ch),
     }, look);
@@ -702,6 +706,7 @@ async function start() {
   });
   function tick() {
     const dt = Math.min(clock.getDelta(), 0.05);
+    ambience.listen(photo.active ? photo.pos : character.group.position, camera);
     player.update(dt);
     photo.update(dt);
     selfie.update(dt);

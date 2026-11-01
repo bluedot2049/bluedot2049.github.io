@@ -97,10 +97,26 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 // 錄影格式：能錄 mp4 就錄 mp4（IG、LINE 都收），不行才用 webm
+// avc1.64002a 是 High@4.2，1080p60 剛好裝得下；寫太低的等級有些顯卡的硬體編碼器會讓分頁直接當掉（STATUS_BREAKPOINT）。
+// 當掉的話 JS 接不到，所以錄 mp4 前記 'rec'、錄完擦掉；下次打開還在，就表示上次錄到一半當了，這台以後都錄 webm
+const REC_KEY = 'photoRec';
 function pickMime() {
   if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) return null;
-  const list = ['video/mp4;codecs=avc1.640028', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  let webmOnly = false;
+  try {
+    webmOnly = !!localStorage.getItem(REC_KEY);
+    if (webmOnly) localStorage.setItem(REC_KEY, 'webm');
+  } catch {}
+  const mp4 = ['video/mp4;codecs=avc1.64002a', 'video/mp4;codecs=avc1.4d002a', 'video/mp4;codecs=avc1', 'video/mp4'];
+  const webm = ['video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm'];
+  const list = webmOnly ? webm : [...mp4, ...webm];
   return list.find((m) => MediaRecorder.isTypeSupported?.(m)) || null;
+}
+function markRec(on) {
+  try {
+    if (on) localStorage.setItem(REC_KEY, 'rec');
+    else if (localStorage.getItem(REC_KEY) === 'rec') localStorage.removeItem(REC_KEY);
+  } catch {}
 }
 
 export class PhotoMode {
@@ -1397,9 +1413,10 @@ export class PhotoMode {
   startRecording() {
     if (this.rec || !this.mime) return;
     const fr = this.frame;
-    // 長邊：電腦 1920、手機 1280；H.264 要偶數
-    const long = this.coarse ? 1280 : 1920, k = long / Math.max(fr.w, fr.h);
-    const even = (v) => Math.max(2, Math.round(v / 2) * 2);
+    // 長邊：電腦 1920、手機 1280；總像素也不超過 1920×1080（1:1、直的才不會變成 1920×1920，超出 H.264 4.2 等級）；H.264 要偶數
+    const long = this.coarse ? 1280 : 1920;
+    const k = Math.min(long / Math.max(fr.w, fr.h), Math.sqrt(long * long * 9 / 16 / (fr.w * fr.h)));
+    const even = (v) => Math.max(2, Math.floor(v / 2) * 2);
     const c = document.createElement('canvas');
     c.width = even(fr.w * k);
     c.height = even(fr.h * k);
@@ -1427,8 +1444,17 @@ export class PhotoMode {
       return;
     }
     const chunks = [];
+    // 正常關掉分頁不算當掉
+    const bye = () => markRec(false);
+    if (this.mime.startsWith('video/mp4')) {
+      markRec(true);
+      window.addEventListener('pagehide', bye);
+    }
     mr.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    mr.onerror = (e) => console.warn('錄影出錯：', e.error || e);
     mr.onstop = () => {
+      markRec(false);
+      window.removeEventListener('pagehide', bye);
       if (tap) {
         try { a.master.disconnect(tap); a.sfx.disconnect(tap); } catch {}
         a.hold = false;

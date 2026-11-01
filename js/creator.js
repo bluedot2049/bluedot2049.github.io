@@ -114,6 +114,13 @@ export class Creator {
     this.nav.innerHTML = MENU.map((t) => `<button class="med" data-tab="${t.id}"><span>${icon(t.id)}</span>${t.name}</button>`).join('')
       + `<i></i><button class="med-mini" data-act="dice" aria-label="骰子">${icon('dice')}</button><button class="med-mini" data-act="reset" aria-label="重來">${icon('reset')}</button>`;
     for (const el of [this.nav, this.subs, this.body, this.paint]) el.addEventListener('click', (e) => this.onClick(e));
+    // 橫著排、捲軸藏起來的兩排：滑鼠滾輪改成左右捲，不然右邊的選不到
+    for (const el of [this.subs, this.paint]) el.addEventListener('wheel', (e) => {
+      const row = el === this.paint ? el.querySelector('.dabs') : el;
+      if (!row || row.scrollWidth <= row.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      row.scrollLeft += e.deltaY;
+      e.preventDefault();
+    }, { passive: false });
     this.body.addEventListener('input', (e) => {
       const el = e.target;
       if (el.type === 'range') this.set({ ...this.look, [el.dataset.k]: +el.value }, false);

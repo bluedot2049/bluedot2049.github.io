@@ -681,6 +681,9 @@ body.desk #hint { bottom: auto; top: calc(18px + env(safe-area-inset-top)); }
   #dress-subs { flex-wrap: wrap; padding: 14px 28px 0; overflow: visible; }
   #dress-body { padding: 18px 28px 28px; }
   #dress-paint { padding: 12px 28px 16px; }
+  /* 滑鼠不好橫著捲，顏色直接排成幾排 */
+  #dress-paint { align-items: flex-start; }
+  .dabs { flex-wrap: wrap; overflow: visible; }
 }
 /* 手機橫拿：圓章改成左邊直排，省下高度給圖卡 */
 @media (orientation: landscape) and (max-height: 500px) {
@@ -700,7 +703,8 @@ body.desk #hint { bottom: auto; top: calc(18px + env(safe-area-inset-top)); }
   #dress-subs { grid-column: 2; grid-row: 1; margin-right: 54px; padding: calc(10px + env(safe-area-inset-top)) 0 0 10px; }
   #dress-subs button { flex-basis: 52px; height: 56px; }
   #dress-body { grid-column: 2; grid-row: 2; padding: 12px calc(12px + env(safe-area-inset-right)) 14px 10px; }
-  #dress-paint { grid-column: 2; grid-row: 3; padding: 8px calc(12px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) 10px; }
+  #dress-paint { grid-column: 2; grid-row: 3; align-items: center; padding: 8px calc(12px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) 10px; }
+  .dabs { flex-wrap: nowrap; overflow-x: auto; }
 }
 @media (min-width: 900px), (orientation: landscape) and (max-height: 500px) {
   .pad { flex-direction: column; }

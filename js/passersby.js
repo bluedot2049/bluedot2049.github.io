@@ -25,6 +25,7 @@ const PUSH_TRIES = [[1, 0], [0.5, 0], [1, 1.1], [1, -1.1], [0.6, 2.2], [0.6, -2.
 const PUSH_MAX = 0.8;                // 為了讓路最多偏離時間表多遠
 const GLANCE = 0.15;                 // 玩家走到面前時，轉頭看一眼的機率
 const OWLS = 2;                      // 夜貓子：不管幾點都在外面晃，每一站停很久，最冷清的時候街上也不會空掉
+const MURMUR_R = 22;                 // 人潮聲算多遠以內的人
 const PLAN_MS = 3;                   // 每一幀花在排行程上的時間（毫秒），超過就留到下一幀；至少排一趟。剛進來時不會一下子卡住
 
 // 台灣時間每個整點的人潮（0 到 1），中間直線接起來。跟一般夜市反過來，最冷清的時候也留幾個人
@@ -436,8 +437,9 @@ function where(person, tt, out) {
 }
 
 export class Passersby {
-  constructor({ scene, world, shadowTex, coarse = false, force = null }) {
+  constructor({ scene, world, shadowTex, ambience = null, coarse = false, force = null }) {
     this.world = world;
+    this.ambience = ambience;
     this.spots = world.crowdSpots;
     this.roads = new Roads(world);
     this.slots = coarse ? SLOTS_LOW : SLOTS;
@@ -453,6 +455,8 @@ export class Passersby {
     for (let i = 0; i < (coarse ? POOL_LOW : POOL); i++) {
       const ch = new Character(shadowTex, presetLook(i));
       ch.group.visible = false;
+      // 只有穿木屐的人走路有聲音，喀、喀的是海市的街聲
+      ch.onStep = (c, foot) => c.look.shoes === 'geta' && ambience?.footstep(c, foot);
       scene.add(ch.group);
       this.pool.push({ ch, key: null });
     }
@@ -535,6 +539,17 @@ export class Passersby {
     this.separate(people);
     for (const q of people) this.settle(q, dt, P);
     this.last = people;   // 量測工具用
+    // 人潮聲：附近的人越多越大聲，上下樓層的人算遠一點；最近的那個越近聲音越亮，左右偏向人多的那一邊
+    let amount = 0, closest = 0, sx = 0, sz = 0;
+    for (const q of people) {
+      const d = Math.hypot(q.d, (q.y - P.y) * 2);
+      if (d >= MURMUR_R) continue;
+      const w = (1 - d / MURMUR_R) ** 2 * q.alpha;
+      amount += w;
+      closest = Math.max(closest, w);
+      if (q.d > 0.5) { sx += ((q.x - P.x) / q.d) * w; sz += ((q.z - P.z) / q.d) * w; }
+    }
+    this.ambience?.murmur(amount, closest, amount ? sx / amount : 0, amount ? sz / amount : 0);
     // 近的先分到完整的角色
     const near = people.filter((q) => q.near).sort((a, b) => a.d - b.d).slice(0, this.pool.length);
     const keep = new Set(near.map((q) => q.key));
@@ -556,6 +571,7 @@ export class Passersby {
         // 步伐、呼吸、帽子晃動的相位各自隨機，一群人不會手腳一起擺
         e.ch.phase = hash(q.i, q.p, 21) * Math.PI * 2;
         e.ch.time = hash(q.i, q.p, 22) * 60;
+        e.ch.tone = hash(q.i, q.p, 23);
         rebuilt++;
       }
       this.drive(e, q, dt, P, now);

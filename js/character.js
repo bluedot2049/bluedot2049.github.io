@@ -500,6 +500,10 @@ export class Character {
     this.time = 0;
     this.jumpY = 0;
     this.jumpV = 0;
+    this.onLand = null;            // 跳起來落地時呼叫 (角色)
+    this.onStep = null;            // 走路每踩一步呼叫 (角色, 0 左腳 1 右腳)
+    this.onEmote = null;           // 做表情時呼叫 (角色, 表情)
+    this.tone = 0.5;               // 木屐的音高落在五聲音階的哪一段（0 到 1），每個人不一樣
     this.act = null;               // 正在做的表情動作 { e, t }
     this.sitting = false;
     this.sitP = 0;                 // 坐下的進度：0 站著、1 坐好，站起來時倒著走
@@ -714,6 +718,7 @@ export class Character {
 
   emote(e) {
     this.act = { e, t: 0 };
+    this.onEmote?.(this, e);
   }
 
   // 摸動物：小動物彎腰伸手往下摸，乳牛手往前上方伸
@@ -731,7 +736,13 @@ export class Character {
     const walking = speed > 0.1;
     const target = walking ? 1 : 0;
     this.walk = (this.walk ?? 0) + (target - (this.walk ?? 0)) * Math.min(1, dt * 8);
+    const was = this.phase;
     this.phase += dt * (4 + speed * 3.5) * this.walk;
+    // 兩腳張到最開的那一刻算踩到地，交給 onStep 出聲（海市路人的木屐）
+    if (this.onStep && this.walk > 0.5 && !this.airborne && !this.sitP) {
+      const n = Math.floor(this.phase / Math.PI - 0.5);
+      if (n !== Math.floor(was / Math.PI - 0.5)) this.onStep(this, n & 1);
+    }
 
     const s = Math.sin(this.phase), w = this.walk;
     this.body.position.y = Math.abs(s) * 0.06 * w;
@@ -818,7 +829,10 @@ export class Character {
     if (this.airborne) {
       this.jumpV -= GRAVITY * dt;
       this.jumpY = Math.max(0, this.jumpY + this.jumpV * dt);
-      if (this.jumpY === 0) this.jumpV = 0;
+      if (this.jumpY === 0) {
+        this.jumpV = 0;
+        this.onLand?.(this);
+      }
     }
     // 呼叫端已經把 group 放在地面高度，這裡再加上跳躍和坐下的位移
     // 坐長椅時屁股比站著還高，順勢小跳一下坐上去

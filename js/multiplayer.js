@@ -93,7 +93,7 @@ export class Multiplayer {
     this.shadowTex = shadowTex;
     this.player = player;
     this.cfg = cfg;
-    this.events = events;           // { onCount(n), onReady(), onPet(other, i), onJump(other), onFlash(character) }
+    this.events = events;           // { onCount(n), onReady(), onPet(other, i), onJump(other), onLand(character), onEmote(character, e), onFlash(character) }
     this.id = Math.random().toString(36).slice(2, 10);
     this.others = new Map();        // id -> { ch, pos, target, heading, seen, speed }
     this.present = new Set();       // 目前在線上的訪客 id（來自 presence）
@@ -232,6 +232,8 @@ export class Multiplayer {
       if (!this.present.has(m.id) && [...this.others.values()].filter((x) => !x.verified).length >= MAX_UNVERIFIED) return;
       const ch = this.claudes.has(m.id) ? new Lantern(this.shadowTex) : new Character(this.shadowTex, this.looks.get(m.id) || fallbackLook(m.id));
       ch.setCamera?.(this.cams.get(m.id));
+      ch.onLand = this.events.onLand;
+      ch.onEmote = this.events.onEmote;
       this.scene.add(ch.group);
       o = { ch, pos: new THREE.Vector3(m.x, 0, m.z), heading: m.h, speed: 0, verified: this.present.has(m.id), born: performance.now() };
       this.others.set(m.id, o);
