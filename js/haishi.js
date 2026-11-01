@@ -7,7 +7,7 @@
 // 每個 x、z 只有一層地面，沒有天橋，尋路格子才能維持平面的
 import * as THREE from 'three';
 import { Kit, rng, newBucket } from './props.js';
-import { bucketObjects, glowPoints, uTime } from './world.js';
+import { bucketObjects, glowPoints, uTime } from './scenery.js';
 import { makePathfinder } from './pathgrid.js';
 import { hull, towerPhase, bump } from './harbor.js';
 import { addRoof, roofGeo, Signs } from './eaves.js';

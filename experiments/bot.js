@@ -4,7 +4,7 @@
 // 蒸氣龐克 × 方形重裝工業底盤 (Square Heavy Boiler Chassis) × 手臂液壓邏輯化 × 巨型活動板手與純金屬重工注油壺 × 雙層渾天神聖鍊成法陣
 // 徹底消除所有藥瓶感，回歸純粹俐落工程體態；法陣具備 360° 天文儀精密遊標度數環、環形海市秘傳符文銘文圈、七大金屬行星神龕壁龕、36齒重型工程齒圈與麥達昶神聖幾何全聯線網！
 import * as THREE from 'three';
-import { drawGlyph } from './glyphs.js';
+import { drawGlyph } from '../js/glyphs.js';
 
 // 建立材質（flatShading 確保 low-poly 經典手工工匠質感，效能極佳）
 function mat(color, extra = {}) {

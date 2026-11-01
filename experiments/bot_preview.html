@@ -194,8 +194,7 @@
   <script type="importmap">
     {
       "imports": {
-        "three": "./vendor/three.module.min.js",
-        "./js/bot.js": "./js/bot.js"
+        "three": "../vendor/three.module.min.js"
       }
     }
   </script>
@@ -240,7 +239,7 @@
 
   <script type="module">
     import * as THREE from 'three';
-    import { EngineeringBot } from './js/bot.js';
+    import { EngineeringBot } from './bot.js';
 
     // 建立場景
     const container = document.getElementById('canvas-container');

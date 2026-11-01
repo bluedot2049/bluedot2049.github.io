@@ -5,3 +5,6 @@ desktop.ini
 .DS_Store
 __pycache__/
 *.pyc
+
+# 工具產生的檔案（平面圖等），每次重跑就有
+tools/out/

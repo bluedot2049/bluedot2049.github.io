@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import { Character } from './character.js';
 import { sanitizeLook, presetLook, RACES, SLIDERS, CLOTH, SKINS } from './looks.js';
-import { glowPoints } from './world.js';
+import { glowPoints } from './scenery.js';
 
 const SLOTS = 110, SLOTS_LOW = 60;   // 最多幾組人
 const POOL = 18, POOL_LOW = 10;      // 完整的角色最多幾個

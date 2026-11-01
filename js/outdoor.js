@@ -10,6 +10,7 @@ import { buildArcane } from './arcane.js';
 import { buildHarbor, onJetty, JETTY } from './harbor.js';
 import { buildLore } from './lore.js';
 import { buildTree } from './tree.js';
+import { REFLECT_LAYER } from './scenery.js';
 
 export const DROP = 1.6;
 const TW = 6, TD = 7;                  // 陽台半寬、深度
@@ -22,8 +23,6 @@ const PAV = { x: -40, rel: 30, r: 2.8 };   // 涼亭石台的中心和半徑
 const BW = 5.6, EAVE = 4.2, RIDGE = 6.0;      // 房子外殼的半寬、屋簷高、屋脊高
 const YB = -DROP - 0.2;                // 台基埋進土裡的底部
 const SEA_LEVEL = -DROP - 0.9, SEA_BED = -DROP - 2.4;   // 草原盡頭的海：水面和海底的高度
-// 海面反射的鏡頭只看這個圖層。從草原看海只映得到天空、遠山、山坡和坡上的樹，草地、家具、房子、人都不用多畫一次
-export const REFLECT_LAYER = 2;
 // 不透明物件的繪製順序：大片的背景排在近處的東西後面畫，被擋住的像素在著色之前就被深度測試丟掉。
 // 都是不透明的，先畫後畫結果一樣，只是少算很多被蓋掉的像素（手機上主要的負擔）
 // 海面是一整張 600 公尺的平面，連草原底下都有，著色又最貴，排在地形之後才畫，被地面、山坡蓋住的部分就不用算
@@ -1005,6 +1004,7 @@ export function buildOutdoor(room, h) {
     inMeadow: (z) => z0 - z > TD + SD * 0.6,
     // 草原上這一點的地名：走到棧橋盡頭的方台是「渡口」，其他地方都是「原野」
     placeAt: (x, z) => (onJetty(x, z0 - z) && z0 - z > JETTY.r1 ? JETTY_NAME : MEADOW_NAME),
+    meadow: MEADOW_NAME,
     insideShell: (p) => Math.abs(p.x) < BW + 0.3 && p.z > z0 - 0.2 && p.z < zFront + 0.3,
     inField,
   };

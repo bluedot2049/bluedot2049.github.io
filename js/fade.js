@@ -9,6 +9,10 @@ import * as THREE from 'three';
 const FADED = 0.22;   // 擋住時留下幾成像素，看得出輪廓
 const SPEED = 4;      // 淡出、淡回的速度（每秒）
 const HOLD = 0.3;     // 不擋了以後再等一下才淡回來，走過房子之間的空隙不會一閃一閃
+const ROOM_SPEED = 2; // 畫廊整間房出現、消失：0.5 秒
+
+// 每個像素一個 0～1 的亂數，淡到多少就留下多少像素
+const DITHER = 'fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))))';
 
 // 線段 p→q 有沒有穿過盒子 b = [x0, y0, z0, x1, y1, z1]
 function cross(p, q, b) {
@@ -67,7 +71,7 @@ export class Fader {
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFade = texture2D(uFadeTex, vec2((aFid + 0.5) / uFadeN, 0.5)).r;');
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', '#include <common>\nvarying float vFade;')
-        .replace('void main() {', 'void main() {\nif (vFade < 0.996 && vFade <= fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))))) discard;');
+        .replace('void main() {', `void main() {\nif (vFade < 0.996 && vFade <= ${DITHER}) discard;`);
     };
     m.customProgramCacheKey = () => 'haishi-fade';
     return m;
@@ -100,5 +104,102 @@ export class Fader {
   show(i, u) {
     this.data[i * 4] = Math.round(u.a * 255);
     for (const o of u.objs) o.visible = u.a > 0.5;
+  }
+}
+
+// 畫廊走進下一間時，遠處的房間（或後門外的戶外）整間出現或藏起來，用同一種網點在 0.5 秒裡淡進淡出。
+// discard 會讓手機的 GPU 少掉一些省工夫的手段，所以平常不開：只有正在淡的那幾間，材質才打開 ROOM_FADE，淡完就關。
+// 兩種著色器都在載入畫面先編好（main.js 的 precompile），切換時不會卡。
+// 一個材質同時用在好幾間房的話，第二間以後複製一份，各房自己淡
+export class RoomFader {
+  constructor(groups) {
+    this.rooms = groups.map((group) => ({ group, a: 1, want: true, on: false, u: { value: 1 }, mats: [], alias: new Map() }));
+    this.owner = new WeakMap();   // 加過網點的材質 → 第幾間
+    this.base = new WeakMap();    // 原本的材質 → 加網點之前的 onBeforeCompile 和快取鍵
+  }
+
+  // 房間裡後來才放進去的東西（貓、小船）也補上。編過著色器以後再補的，第一次淡的時候才編
+  scan() {
+    this.rooms.forEach((r, k) => {
+      const fix = (m) => {
+        if (this.owner.get(m) === k) return m;
+        if (r.alias.has(m)) return r.alias.get(m);
+        let n = m;
+        if (this.owner.has(m)) {
+          n = m.clone();
+          if (m.isShaderMaterial) n.uniforms = { ...m.uniforms };   // uTime 這類要跟原本的共用同一個
+          this.base.set(n, this.base.get(m));
+        } else {
+          this.base.set(m, { obc: m.onBeforeCompile, key: m.customProgramCacheKey() });
+        }
+        this.patch(n, r.u);
+        this.owner.set(n, k);
+        r.alias.set(m, n);
+        r.mats.push(n);
+        return n;
+      };
+      r.group.traverse((o) => {
+        if (o.material) o.material = Array.isArray(o.material) ? o.material.map(fix) : fix(o.material);
+      });
+    });
+  }
+
+  patch(m, u) {
+    const { obc, key } = this.base.get(m);
+    m.onBeforeCompile = (sh, renderer) => {
+      obc.call(m, sh, renderer);
+      sh.uniforms.uRoomA = u;
+      sh.fragmentShader = 'uniform float uRoomA;\n' + sh.fragmentShader.replace(/void\s+main\s*\(\s*\)\s*\{/,
+        `$&\n#ifdef ROOM_FADE\nif (uRoomA <= ${DITHER}) discard;\n#endif\n`);   // 有的著色器整段寫在同一行，#endif 後面要換行
+    };
+    m.customProgramCacheKey = () => key + '|room-fade';
+  }
+
+  // 打開或關掉一間房的網點
+  variant(r, on) {
+    if (r.on === on) return;
+    r.on = on;
+    for (const m of r.mats) {
+      const d = { ...m.defines };
+      if (on) d.ROOM_FADE = '';
+      else delete d.ROOM_FADE;
+      m.defines = d;
+      m.needsUpdate = true;
+    }
+  }
+
+  // 預先編譯時全部打開編一次，再關回來
+  all(on) {
+    if (on) this.scan();
+    for (const r of this.rooms) this.variant(r, on);
+  }
+
+  // want：每一間要不要看得到。snap：直接切換，不淡（剛進場、拍照回來）
+  show(want, snap) {
+    this.rooms.forEach((r, k) => {
+      r.want = want[k];
+      if (snap) {
+        r.a = r.u.value = r.want ? 1 : 0;
+        r.group.visible = r.want;
+        this.variant(r, false);
+      } else if (r.want) r.group.visible = true;
+    });
+  }
+
+  update(dt) {
+    for (const r of this.rooms) {
+      const to = r.want ? 1 : 0;
+      if (r.a === to) continue;
+      if (!r.on) {
+        this.scan();
+        this.variant(r, true);
+      }
+      r.a = to > r.a ? Math.min(1, r.a + dt * ROOM_SPEED) : Math.max(0, r.a - dt * ROOM_SPEED);
+      r.u.value = r.a;
+      if (r.a === to) {
+        r.group.visible = r.want;
+        this.variant(r, false);
+      }
+    }
   }
 }

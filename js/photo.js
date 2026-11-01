@@ -196,7 +196,7 @@ export class PhotoMode {
     this.camera.near = 0.1;
     this.camera.updateProjectionMatrix();
     this.player.paused = false;
-    this.world.setCurrentRoom(this.player.room);
+    this.world.setCurrentRoom(this.player.room, true);   // 鏡頭一下子跳回角色身邊，房間也直接切
     this.ui.hideHint();
   }
 

@@ -3,7 +3,7 @@
 // 海市的空氣：霧、煙、蒸氣，還有燈照在石板上的一圈光。
 // 全部都是一片一片面向鏡頭（或平貼地面）的小方塊，每一種合成一次畫完，手機也撐得住
 import * as THREE from 'three';
-import { uTime } from './world.js';
+import { uTime } from './scenery.js';
 
 function instanced(attrs, count) {
   const plane = new THREE.PlaneGeometry(1, 1), g = new THREE.InstancedBufferGeometry();

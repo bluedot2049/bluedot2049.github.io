@@ -5,11 +5,13 @@
 // 牆分成一段一段（entry），擋住鏡頭和角色之間的那段會自動降成矮牆。
 import * as THREE from 'three';
 import * as TX from './textures.js';
-import { PROPS, SETS, Kit, rng, newBucket, mergeBucket, weightedPick, buildWindow } from './props.js';
+import { PROPS, SETS, Kit, rng, newBucket, weightedPick, buildWindow } from './props.js';
 import { buildMirror } from './mirror.js';
 import { buildOutdoor, OUTDOOR_ROOM } from './outdoor.js';
 import { catRoomOf } from './animals.js';
 import { makePathfinder } from './pathgrid.js';
+import { uTime, tag, bucketObjects, glowPoints } from './scenery.js';
+import { RoomFader } from './fade.js';
 
 export const WALL_H = 3.2;
 export const DOOR_W = 2;
@@ -41,8 +43,6 @@ const RUGS = {
 };
 const FRAMES = [0x5a3a22, 0xb08a45, 0x2a2220, 0xa87b4f];
 
-export const uTime = { value: 0 };
-
 let S;
 function shared() {
   if (S) return S;
@@ -57,8 +57,6 @@ function shared() {
     cap: new THREE.MeshLambertMaterial({ color: 0x3a2416 }),
     cap2: new THREE.MeshLambertMaterial({ color: 0x3a2416, side: THREE.DoubleSide }),
     door: new THREE.MeshLambertMaterial({ color: 0x6b4329 }),
-    lit: new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }),
-    glowMat: new THREE.MeshBasicMaterial({ vertexColors: true }),
     brass: new THREE.MeshLambertMaterial({ color: 0xb08a45, emissive: 0x2a1c08 }),
     lamp: new THREE.MeshBasicMaterial({ color: 0xfff0c8 }),
     wire: new THREE.LineBasicMaterial({ color: 0x2a1a10 }),
@@ -76,11 +74,6 @@ function setUV(geo, u0, u1, v0, v1) {
   for (let i = 0; i < uv.count; i++) uv.setXY(i, u0 + uv.getX(i) * (u1 - u0), v0 + uv.getY(i) * (v1 - v0));
   uv.needsUpdate = true;
   return geo;
-}
-
-export function tag(mesh, kind) {
-  mesh.userData.kind = kind;
-  return mesh;
 }
 
 function wallPlane(mat, width, y0, y1, cx, cz, rotY) {
@@ -129,73 +122,6 @@ function doorFrame(e, z) {
   const s = shared(), t = 0.22, depth = 0.5;
   for (const sx of [-1, 1]) e.full.push(wallBox(s.door, t, DOOR_H + t, depth, sx * (DOOR_W / 2 + t / 2), (DOOR_H + t) / 2, z, 0));
   e.full.push(wallBox(s.door, DOOR_W + t * 2, t, depth, 0, DOOR_H + t / 2, z, 0));
-}
-
-// 把桶子裡的零件合併成網格
-// ghost：靠牆的高家具，牆降下時要能變半透明，所以材質各自一份
-// far：海市用。遠處的光點改成星光的閃法（見 glowPoints）
-export function bucketObjects(b, ghost = false, floor = null, far = false) {
-  const s = shared(), out = [];
-  const mat = (m) => (ghost ? Object.assign(m.clone(), { transparent: true }) : m);
-  const lit = mergeBucket(b.lit, true, floor);
-  if (lit) out.push(tag(new THREE.Mesh(lit, mat(s.lit)), 'prop'));
-  const glow = mergeBucket(b.glow, false);
-  if (glow) out.push(tag(new THREE.Mesh(glow, mat(s.glowMat)), 'prop'));
-  if (b.glows.length) out.push(glowPoints(b.glows, { far }));
-  return out;
-}
-
-// far：離鏡頭越遠，越從燭火的抖動換成星光的閃法——大多時候穩穩的，偶爾亮一下、脹大一點。
-// 再疊一道很慢的亮度波從海邊往山上推，遠看像風一層一層吹過整座鎮。遠處的點至少留 2.5 像素，不會縮成亂閃的次像素
-export function glowPoints(list, { far = false } = {}) {
-  const n = list.length;
-  const pos = new Float32Array(n * 3), col = new Float32Array(n * 3), size = new Float32Array(n), phase = new Float32Array(n);
-  const c = new THREE.Color();
-  list.forEach((g, i) => {
-    pos.set([g.x, g.y, g.z], i * 3);
-    c.set(g.color);
-    col.set([c.r, c.g, c.b], i * 3);
-    size[i] = g.size;
-    phase[i] = Math.random() * 10;
-  });
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
-  geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
-  geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
-  const mat = new THREE.ShaderMaterial({
-    uniforms: { uTime, uScale: { value: 150 * shared().pr }, uPr: { value: shared().pr }, uFar: { value: far ? 1 : 0 } },
-    vertexShader: `
-      uniform float uTime; uniform float uScale; uniform float uPr; uniform float uFar;
-      attribute vec3 aColor; attribute float aSize; attribute float aPhase;
-      varying vec3 vC; varying float vA;
-      void main() {
-        vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        float d = -mv.z, px = aSize * uScale / d;
-        float flick = 0.5 + 0.08 * sin(uTime * 7.0 + aPhase) + 0.05 * sin(uTime * 13.0 + aPhase * 2.0);
-        float f = smoothstep(20.0, 60.0, d) * uFar;
-        // 兩道頻率對不上的慢波同時到頂才亮，什麼時候閃每盞都不一樣
-        float s1 = 0.5 + 0.5 * sin(uTime * (0.35 + 0.5 * fract(aPhase * 7.31)) + aPhase * 3.0);
-        float s2 = 0.5 + 0.5 * sin(uTime * (0.23 + 0.4 * fract(aPhase * 3.17)) + aPhase * 5.0);
-        float spark = pow(s1 * s2, 18.0);
-        float breeze = 0.5 + 0.5 * sin(uTime * 0.5 + position.z * 0.12 + position.x * 0.04);
-        vA = mix(flick, 0.42 + 0.22 * breeze + 1.1 * spark, f);
-        vC = mix(aColor, vec3(1.0, 0.94, 0.8), spark * f * 0.5);
-        gl_PointSize = mix(px, max(px, 2.5 * uPr) * (1.0 + 2.0 * spark), f);
-        gl_Position = projectionMatrix * mv;
-      }`,
-    fragmentShader: `
-      varying vec3 vC; varying float vA;
-      void main() {
-        float d = length(gl_PointCoord - 0.5) * 2.0;
-        float a = pow(max(0.0, 1.0 - d), 2.0) * vA;
-        gl_FragColor = vec4(vC * a, a);
-      }`,
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-  });
-  const p = new THREE.Points(geo, mat);
-  p.frustumCulled = false;
-  return p;
 }
 
 function dust(room) {
@@ -865,16 +791,21 @@ export function buildWorld(scene, gallery) {
     }
   }
 
-  function setCurrentRoom(i) {
+  // 遠處的房間整間出現、藏起來時淡進淡出（見 fade.js）。第一次和 snap 時直接切
+  const roomFader = new RoomFader(rooms.map((r) => r.group));
+  let placed = false, lastT = null;
+  function setCurrentRoom(i, snap = false) {
     currentRoom = i;
     updateTextures(i);
-    for (const r of rooms) r.group.visible = Math.abs(r.index - i) <= 2;
+    const want = rooms.map((r) => Math.abs(r.index - i) <= 2);
     // 戶外很大，只有在最後一間房或已經走出去時才畫；走出去之後，室內只留赤化
     if (outdoor) {
       const last = rooms.length - 1;
-      rooms[last].group.visible = i >= last - 1;
-      if (i === last) for (const r of rooms) if (r.index < last - 1) r.group.visible = false;
+      want[last] = i >= last - 1;
+      if (i === last) for (const r of rooms) if (r.index < last - 1) want[r.index] = false;
     }
+    roomFader.show(want, snap || !placed);
+    placed = true;
   }
 
   // 腳下地面的高度。只有戶外的石階和草原不是 0
@@ -921,6 +852,8 @@ export function buildWorld(scene, gallery) {
 
   function update(t, cam, target, view) {
     uTime.value = t;
+    roomFader.update(lastT === null ? 0 : Math.min(0.1, t - lastT));
+    lastT = t;
     if (outdoor) {
       // 房子外殼只在人走出去、鏡頭也在屋外時出現，不然會擋住室內
       outdoor.shell.visible = currentRoom === rooms.length - 1 && !outdoor.insideShell(cam);
@@ -940,5 +873,5 @@ export function buildWorld(scene, gallery) {
   // 搭船去別的區域：棧橋邊繫著的小划船
   const exits = outdoor?.ferry ? [{ ...outdoor.ferry, to: 'haishi', label: '搭船', title: '往海市' }] : [];
 
-  return { rooms, paintings, mirror, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, setCurrentRoom, update };
+  return { rooms, paintings, mirror, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, setCurrentRoom, update, fadeVariants: (on) => roomFader.all(on) };
 }

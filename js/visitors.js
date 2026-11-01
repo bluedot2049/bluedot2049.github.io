@@ -13,8 +13,8 @@
 // 每位訪客合併成六七個網格，最多三位；沒有訪客的時段整個模組只算一個時段編號。
 import * as THREE from 'three';
 import { hull, JETTY } from './harbor.js';
-import { REFLECT_LAYER } from './outdoor.js';
-import { ANIMAL_LAYER, LIT, GLOW, geo, hash, wrapAngle, along } from './animals.js';
+import { ANIMAL_LAYER, REFLECT_LAYER } from './scenery.js';
+import { LIT, GLOW, geo, hash, wrapAngle, along } from './animals.js';
 import { HEADS, rod } from './heads.js';
 import { bend } from './lens.js';
 import { LINES, HOST, VOICES, ROLE_LINES, BOAT, REGULARS, ORIGINS, EVENTS, NEXTS } from './visitor-lines.js';

@@ -3,7 +3,7 @@
 // 海市的遠景：鎮上偶爾升起的天燈、海面上一閃一閃的碎光、天上偶爾劃過的流星。
 // 怎麼動全部在 shader 裡照 uTime 算，JS 每一幀什麼都不用做；每一種一次畫完
 import * as THREE from 'three';
-import { uTime } from './world.js';
+import { uTime } from './scenery.js';
 
 const PR = () => Math.min(window.devicePixelRatio, 2);
 

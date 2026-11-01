@@ -13,7 +13,7 @@
     .note { position: fixed; top: 12px; left: 16px; font-size: 13px; opacity: 0.6; }
   </style>
   <script type="importmap">
-    { "imports": { "three": "./vendor/three.module.min.js" } }
+    { "imports": { "three": "../vendor/three.module.min.js" } }
   </script>
 </head>
 <body>
@@ -25,10 +25,10 @@
   </div>
   <script type="module">
     import * as THREE from 'three';
-    import { Lantern } from './js/lantern.js';
-    import { Character } from './js/character.js';
-    import { sanitizeLook } from './js/looks.js';
-    import { shadowTexture } from './js/textures.js';
+    import { Lantern } from '../js/lantern.js';
+    import { Character } from '../js/character.js';
+    import { sanitizeLook } from '../js/looks.js';
+    import { shadowTexture } from '../js/textures.js';
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));

@@ -8,11 +8,11 @@
 // 每種動物的零件合併成幾個網格，同種共用；一隻大約五到八次繪製。全部放在圖層 1，海面反射不畫牠們。
 import * as THREE from 'three';
 import { Kit, mergeBucket, rng } from './props.js';
+import { ANIMAL_LAYER } from './scenery.js';
 
 export const LIT = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
 export const GLOW = new THREE.MeshBasicMaterial({ vertexColors: true });   // 貓眼睛在暗處也看得到
 const SHADOW_GEO = new THREE.PlaneGeometry(1, 1);
-export const ANIMAL_LAYER = 1;
 
 const QUAD = [0, Math.PI, Math.PI, 0];   // 左前、右前、左後、右後：對角的兩隻腳一起動
 const BIPED = [0, Math.PI];
