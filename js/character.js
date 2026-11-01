@@ -19,6 +19,7 @@ const PET_TIME = 2.4;      // 摸動物摸多久
 const ARM_OUT = 0.28;
 const NECK = 0.8;          // 頭的原點（脖子）離腳底多高，身高另外整個縮放
 const SIT_TIME = 0.8;      // 坐下或站起來花幾秒
+const SEAT_BUTT = 0.3;     // 屁股（褲子）底部離身體原點多高，clothes.js 的 hip() 從這裡開始
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const WHITE = '#f4f2ec', GOLD = '#d4a54a';
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -783,7 +784,8 @@ export class Character {
     // 坐長椅時屁股比站著還高，順勢小跳一下坐上去
     // 坐地上時整個人再往下沉，腿從屁股伸出去才會貼著地
     const hop = this.lift > 0.2 ? Math.sin(lower * Math.PI) * 0.1 : 0;
-    const up = this.jumpY + (this.lift > 0.2 ? this.lift - 0.1 : -0.24) * lower + hop;
+    // 坐椅子：褲子底部在身體座標 0.3，抬到剛好貼著椅面（lift 是椅面高度）
+    const up = this.jumpY + (this.lift > 0.2 ? this.lift - SEAT_BUTT : -0.24) * lower + hop;
     this.group.position.y += up;
     // 影子留在地面，越高越小
     this.shadow.position.y = 0.012 - up;
