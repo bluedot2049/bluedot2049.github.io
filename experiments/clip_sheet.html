@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>穿模總表</title>
+<script type="importmap">{ "imports": { "three": "../vendor/three.module.min.js" } }</script>
+<style>body { margin: 0; background: #2a1d15; color: #e8dcc8; font: 13px sans-serif; } canvas { display: block; }</style>
+</head>
+<body>
+<script type="module">
+  // 穿模總表：兩樣東西排成格子，每格從斜前方和側面（或背面）各拍一張，一眼看出哪些組合會穿。
+  // ?set=hathair 人的髮型 × 帽子｜racehat 種族 × 帽子｜hood 連身頭套 × 髮型和種族｜outerback 外套 × 背上｜outerneck 外套 × 脖子｜cam 相機 × 下身和外套
+  // 拍完把整張圖放在 window.sheet（dataURL），#out 出現
+  import * as THREE from 'three';
+  import { Character } from '../js/character.js';
+  import { presetLook, OPTIONS, RACES } from '../js/looks.js';
+
+  const q = new URLSearchParams(location.search), set = q.get('set') || 'hathair';
+  const ids = (k) => OPTIONS[k].map(([id]) => id);
+  const base = () => ({ ...presetLook(2), neck: 'none', back: 'none', hand: 'none' });
+  const SETS = {
+    hathair: { rows: ids('hair'), cols: ids('hat'), look: (r, c) => ({ ...base(), hair: r, hat: c }), frame: 'head', views: ['front', 'side'] },
+    racehat: { rows: RACES.map((r) => r.id), cols: ids('hat'), look: (r, c) => ({ ...base(), race: r, skin: RACES.find((x) => x.id === r).skin ?? 0, hat: c }), frame: 'head', views: ['front', 'side'] },
+    hood: { rows: [...ids('hair').map((h) => 'hair:' + h), ...RACES.filter((r) => r.id !== 'human').map((r) => 'race:' + r.id)], cols: ['dino', 'panda', 'banana', 'astronaut'],
+      look: (r, c) => { const [k, v] = r.split(':'), L = { ...base(), one: c }; if (k === 'hair') L.hair = v; else { L.race = v; L.skin = RACES.find((x) => x.id === v).skin ?? 0; } return L; }, frame: 'head', views: ['front', 'side'] },
+    outerback: { rows: ids('outer'), cols: ids('back'), look: (r, c) => ({ ...base(), outer: r, back: c }), frame: 'body', views: ['front', 'back'] },
+    outerneck: { rows: ids('outer'), cols: ids('neck'), look: (r, c) => ({ ...base(), outer: r, neck: c }), frame: 'body', views: ['front', 'side'] },
+    cam: { rows: [...ids('bottom').map((b) => 'bottom:' + b), ...ids('outer').map((o) => 'outer:' + o), ...ids('one').map((o) => 'one:' + o)], cols: ['cam'],
+      look: (r) => { const [k, v] = r.split(':'); return { ...base(), [k]: v }; }, frame: 'body', views: ['front', 'side'], camera: true },
+  };
+  const S = SETS[set];
+  const CELL = +q.get('cell') || 150, LAB = 90, HEAD = 22, FOV = 26;
+  const vw = S.views.length;
+  const W = LAB + S.cols.length * CELL * vw, H = HEAD + S.rows.length * CELL;
+
+  const gl = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+  gl.setSize(CELL, CELL, false);
+  gl.outputColorSpace = THREE.SRGBColorSpace;
+  const scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight(0xfff0dc, 0x6a4a34, 1.9));
+  const sun = new THREE.DirectionalLight(0xffcf98, 1.3);
+  sun.position.set(2, 4, 5);
+  scene.add(sun);
+  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.05, 20);
+  const model = new Character(null, {});
+  model.shadow.visible = false;
+  scene.add(model.group);
+
+  const out = document.createElement('canvas');
+  out.width = W; out.height = H;
+  document.body.appendChild(out);
+  const g = out.getContext('2d');
+  g.fillStyle = '#2a1d15'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#e8dcc8'; g.font = '12px sans-serif'; g.textBaseline = 'middle';
+  S.cols.forEach((c, i) => g.fillText(c, LAB + i * CELL * vw + 6, HEAD / 2));
+
+  const sleep = () => new Promise((r) => requestAnimationFrame(r));
+  for (let ri = 0; ri < S.rows.length; ri++) {
+    g.fillStyle = '#e8dcc8';
+    g.fillText(S.rows[ri], 6, HEAD + ri * CELL + CELL / 2);
+    for (let ci = 0; ci < S.cols.length; ci++) {
+      model.setLook(S.look(S.rows[ri], S.cols[ci]));
+      if (S.camera) model.setCamera('bulb');
+      model.group.position.set(0, 0, 0);
+      model.update(1, 0);
+      model.group.updateMatrixWorld(true);
+      const h = model.S.H;
+      const f = S.frame === 'head'
+        ? { y: (h * 0.8 + model.dims.topY) / 2, s: Math.max(0.5, (model.dims.topY - h * 0.8) * 1.3 + 0.15) }
+        : { y: h * 0.52, s: 0.95 * h };
+      const d = f.s / 2 / Math.tan(THREE.MathUtils.degToRad(FOV / 2));
+      S.views.forEach((v, vi) => {
+        const a = v === 'front' ? 0.35 : v === 'side' ? Math.PI / 2 : Math.PI - 0.35;
+        camera.position.set(Math.sin(a) * d, f.y + f.s * 0.1, Math.cos(a) * d);
+        camera.lookAt(0, f.y, 0);
+        gl.render(scene, camera);
+        g.drawImage(gl.domElement, LAB + (ci * vw + vi) * CELL, HEAD + ri * CELL);
+      });
+      g.strokeStyle = 'rgba(232,184,106,.25)';
+      g.strokeRect(LAB + ci * vw * CELL + 0.5, HEAD + ri * CELL + 0.5, CELL * vw - 1, CELL - 1);
+    }
+    await sleep();
+  }
+  window.sheet = out.toDataURL('image/png');
+  const o = document.createElement('pre'); o.id = 'out'; o.textContent = 'done'; o.hidden = true; document.body.appendChild(o);
+</script>
+</body>
+</html>

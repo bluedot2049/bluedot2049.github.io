@@ -90,18 +90,19 @@ export class UI {
     return [this.sheet, this.dress, this.cams].find((el) => el.classList.contains('open')) || null;
   }
 
-  // 相機桌：v = { i, n, cam, carried }。cam 是 null 的位置還沒有相機
+  // 相機桌：v = { i, n, cam, ready, carried, other }。cam 是 null 的位置還沒有相機；ready 是 false 的擺著看、拿不走
   showCams(v) {
-    const c = v.cam;
+    const c = v.cam, ok = !!c && v.ready;
     $('#cams-name').textContent = c ? c.name : '空位';
-    $('#cams-line').textContent = c ? c.line : '這個位置的相機還在做，之後再來看看';
-    $('#cams-spec').innerHTML = c ? c.spec.map((t) => `<li>${esc(t)}</li>`).join('') : '';
+    $('#cams-spec').innerHTML = (c?.spec || []).map((t) => `<li>${esc(t)}</li>`).join('');
+    $('#cams-maker').textContent = c?.maker || '';
     $('#cams-dots').innerHTML = Array.from({ length: v.n }, (_, i) => `<i class="${i === v.i ? 'on' : ''}"></i>`).join('');
     const take = $('#cams-take');
-    take.textContent = !c ? '之後' : v.carried ? '放回桌上' : v.other ? '換這台' : '帶這台';
-    take.disabled = !c;
-    take.classList.toggle('primary', !!c && !v.carried);
-    take.classList.toggle('disabled', !c);
+    take.hidden = !c;
+    take.textContent = !ok ? '還不能帶' : v.carried ? '放回桌上' : v.other ? '換這台' : '帶這台';
+    take.disabled = !ok;
+    take.classList.toggle('primary', ok && !v.carried);
+    take.classList.toggle('disabled', !ok);
     $('#cams-prev').disabled = v.i === 0;
     $('#cams-next').disabled = v.i === v.n - 1;
     if (this.cams.classList.contains('open')) return;

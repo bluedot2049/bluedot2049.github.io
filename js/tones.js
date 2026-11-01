@@ -8,6 +8,8 @@ export const TONES = {
   海市藍夜: { density: 0.016, falloff: 0.04, base: -0.6, start: 6, maxFog: 1, desat: 0.2, cool: 0.9, contrast: 1.6, vivid: 0.6, glow: 1, shadow: '#16151b' },
   // 海市01：藍夜再調過，霧淡一點、色更冷，r/b 曲線壓暗，steam 偏藍紫
   '海市01': { density: 0.0125, falloff: 0.041, base: 6.7, start: 6, maxFog: 0.48, exposure: -0.12, desat: 0.63, keep: 0.42, cool: 1.24, sat: 1.05, vivid: 0.58, contrast: 1.54, glow: 1.01, shadow: '#16151b', gain: '#ffffff', curves: { l: [[0, 0], [0.2712, 0.2633], [0.5712, 0.8027], [1, 1]], r: [[0, 0], [0.3167, 0.2178], [0.6379, 0.6208], [1, 1]], b: [[0, 0], [0.2864, 0.2576], [1, 1]] }, tune: { steam: '#acb1cd', '霧Alpha': 0.17, '暖霧Alpha': 0.27 } },
+  // 海市02：01 再壓暗一點（曝光 -0.36、發光 0.73），亮部曲線抬高
+  '海市02': { density: 0.0125, falloff: 0.041, base: 6.7, start: 6, maxFog: 0.48, exposure: -0.36, desat: 0.63, keep: 0.42, cool: 1.24, sat: 0.96, vivid: 0.56, contrast: 1.54, glow: 0.73, shadow: '#16151b', gain: '#ffffff', curves: { l: [[0, 0], [0.3045, 0.3451], [0.5712, 0.8027], [1, 1]], r: [[0, 0], [0.3167, 0.2178], [0.6379, 0.6208], [1, 1]], b: [[0, 0], [0.2864, 0.2576], [1, 1]] }, tune: { steam: '#acb1cd', '霧Alpha': 0.17, '暖霧Alpha': 0.27 } },
   // 只把顏色放回原樣，霧不動：分區裡想讓某一塊看起來沒調過時用
   不調色: { exposure: 0, desat: 0, cool: 0, sat: 1, vivid: 0, contrast: 1, glow: 1, shadow: '#000000', gain: '#ffffff', curves: { l: [[0, 0], [1, 1]], r: [[0, 0], [1, 1]], g: [[0, 0], [1, 1]], b: [[0, 0], [1, 1]] } },
 };

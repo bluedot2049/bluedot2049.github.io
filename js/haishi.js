@@ -13,7 +13,7 @@ import { hull, towerPhase, bump, makeSkiff } from './harbor.js';
 import { addRoof, roofGeo, Signs } from './eaves.js';
 import { yatai } from './yatai.js';
 import { mist, smoke, pools, ripples } from './haze.js';
-import { skyLanterns, seaGlints, meteor } from './distant.js';
+import { skyLanterns, seaGlints, meteor, horizonShips, fishingFires, tickClock, SHIP_PERIODS } from './distant.js';
 import { Fader } from './fade.js';
 import { drawText } from './glyphs.js';
 import { GRADE, GRADE_GLSL, gradeCurvesOnly } from './grade.js';
@@ -1954,6 +1954,31 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   far.add(towerGlow);
   group.add(far);
 
+  // 海上的船：海平線上幾條航道有大船慢慢開過，中間的海面有幾群漁火。從碼頭看得到一些，爬上遠眺台和星廟就整片出來
+  // 航道在白塔那座小島（z 260 前後）的前面：再遠，從星廟看已經超過相機看得到的海面。
+  // 地形只做到 z 32，再出去都是海；航道兩頭在看得到的範圍外面，船開進來、開出去都是慢慢從霧裡淡出
+  const VR = rng('haishi-ships'), seaAt = (x, z) => z > 34 || terrain(x, z) < SEA - 0.3;
+  const lanes = [];
+  for (let i = 0; i < (coarse ? 10 : 16); i++) {
+    const odd = i === 0, z = odd ? 236 : 190 + VR() * 58, xa = -220, xb = 220;
+    const v = (odd ? 6 : 1.2 + VR() * 1.4) * (VR() < 0.5 ? -1 : 1), run = (xb - xa) / Math.abs(v);
+    const ok = SHIP_PERIODS.filter((p) => p >= run * (odd ? 1 : 1.5));
+    const period = odd ? 3600 : ok[Math.floor(VR() * Math.min(3, ok.length))] ?? 3600;
+    lanes.push({ xa, xb, z, v, period, off: VR() * period, seed: VR() * 10, hull: Math.floor(VR() * 3), odd });
+  }
+  group.add(horizonShips(lanes, { uFade: field.material.uniforms.uFade, sea: SEA }));
+  const fishers = [];
+  for (let g = 0, tries = 0; g < (coarse ? 3 : 5) && tries < 200; tries++) {
+    const cx = (VR() - 0.5) * 200, cz = 60 + VR() * 110;
+    if (![0, 1, 2, 3].every((k) => seaAt(cx + Math.sin(k * 1.57) * 18, cz + Math.cos(k * 1.57) * 18))) continue;
+    g++;
+    for (let n = 3 + Math.floor(VR() * 3), i = 0; i < n; i++) {
+      const period = SHIP_PERIODS[3 + Math.floor(VR() * 6)];
+      fishers.push({ x: cx + (VR() - 0.5) * 16, z: cz + (VR() - 0.5) * 12, r: 2 + VR() * 4, seed: VR() * 10, period, on: 0.7 + VR() * 0.25, off: VR() * period });
+    }
+  }
+  group.add(fishingFires(fishers, { uFade: field.material.uniforms.uFade, sea: SEA }));
+
   // ---------- 渡船：長棧橋盡頭右邊繫著一艘，跟畫廊那邊同一款（harbor.js 的 makeSkiff） ----------
   const ferry = makeSkiff(bucketObjects), boat = ferry.boat;
   boat.position.set(2.15, SEA + 0.36, 27.8);
@@ -2112,6 +2137,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       boat.position.y = SEA + 0.36 + Math.sin(t * 1.3) * 0.05;
       boat.rotation.set(Math.sin(t * 0.9) * 0.03, 0.08 + Math.sin(t * 0.3) * 0.05, Math.sin(t * 1.1 + 1) * 0.05);
       const now = Date.now() / 1000;
+      tickClock(now);
       for (const f of harborFx) f(now, dt);
       towerSize.setX(0, 30 * (1 + 1.5 * bump(towerPhase(now), 0.52, 0.07)));
       towerSize.needsUpdate = true;

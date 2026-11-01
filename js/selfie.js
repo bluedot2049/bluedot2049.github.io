@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { Eye } from './eye.js';
 import { makeMirrorCard, PHOTO_W, PHOTO_H } from './mirrorcard.js';
 import { getSave } from './looks.js';
+import { markPacked } from './pack.js';
 
 const SETTLE = 0.7, RISE = 1.3, TICK = 0.8, BLINK = 0.24, BACK = 1.0;
 const ease = (t) => t * t * (3 - 2 * t);
@@ -179,14 +180,15 @@ export class Selfie {
     const which = ['身上這套', '衣櫃第一套', '衣櫃第二套', '衣櫃第三套'];
     this.tip.textContent = !this.withCode ? '這張只是照片，沒有印存檔'
       : lost.length ? `這張就是你的存檔。${lost.map((i) => which[i]).join('、')}畫的臉太滿，鏡框放不下，其他都印上了`
-      : '這張圖就是你的存檔。下載收好、別壓縮，換手機時在鏡子前讀這張，東西就回來了';
+      : '這張圖就是你的存檔。下載收好、別壓縮，換手機時打開行囊讀這張，東西就回來了';
     this.el.classList.add('done');
   }
 
-  // 存成圖片檔，原圖不經壓縮，存檔才讀得回來
+  // 存成圖片檔，原圖不經壓縮，存檔才讀得回來。印了存檔的，行囊的封蠟就熄了
   download() {
     const r = this.result;
     if (!r) return;
+    if (this.withCode) markPacked();
     const a = document.createElement('a');
     a.href = r.url;
     a.download = r.name;

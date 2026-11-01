@@ -13,6 +13,7 @@ import { makePostcard, loadQR } from './postcard.js';
 import { packFace } from './filmcode.js';
 import { getSave, sanitizeLook, decodeFace } from './looks.js';
 import { encodeLook, encodeSave } from './savecode.js';
+import { markPacked } from './pack.js';
 import { CAMERAS, carried, dateKnob, drawDate, flashKnob, longTan, shutterKnob } from './cameras.js';
 import { dof, dofK } from './dof.js';
 
@@ -1679,8 +1680,8 @@ export class PhotoMode {
     const blob = await new Promise((ok) => card.toBlob(ok, 'image/jpeg', 0.92));
     if (!blob || !this.shot || mode !== this.cardMode) return;
     this.showResult(blob, `${mine ? '海市行囊' : '海市明信片'}-${stamp()}.jpg`, false);
-    this.$('#ph-tip').textContent = card.lost.length ? '有一張臉畫得太滿，明信片放不下，記得用鏡子裡的「複製碼」備份'
-      : mine ? '這張留給自己：換手機的時候，在鏡子前讀這張明信片，東西就回來了'
+    this.$('#ph-tip').textContent = card.lost.length ? '有一張臉畫得太滿，明信片放不下。要整份收好，到前廳的鏡子前請眼睛拍一張'
+      : mine ? '這張留給自己：換手機的時候，打開行囊讀這張明信片，東西就回來了'
       : '按分享，選要寄給誰。朋友掃郵票就能試穿你這一身';
   }
 
@@ -1719,6 +1720,7 @@ export class PhotoMode {
     if (!r) return;
     try {
       await navigator.share({ files: [new File([r.blob], r.name, { type: r.blob.type })], title: this.postcard ? '從海市寄來的明信片' : this.title });
+      this.packed();
     } catch (e) {
       if (e.name !== 'AbortError') this.download();
     }
@@ -1733,5 +1735,11 @@ export class PhotoMode {
     document.body.appendChild(a);
     a.click();
     a.remove();
+    this.packed();
+  }
+
+  // 寄給自己的明信片帶著整份存檔，存下來或寄出去以後行囊的封蠟就熄了
+  packed() {
+    if (this.postcard && this.cardMode === 'self' && !this.result?.video) markPacked();
   }
 }

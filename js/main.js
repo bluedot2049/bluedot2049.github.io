@@ -6,6 +6,7 @@ import { Character } from './character.js';
 import { sanitizeLook, randomPreset, getSave, putSave } from './looks.js';
 import { decodeLook, decodeSave, tryOn, hasProgress, restoreSave } from './savecode.js';
 import { Creator } from './creator.js';
+import { Pack } from './pack.js';
 import { layoutBubbles } from './bubbles.js';
 import { UI, panelW } from './ui.js';
 import { bindJoystick } from './joystick.js';
@@ -22,7 +23,7 @@ import { Party } from './party.js';
 import { lens, LensPass } from './lens.js';
 import { dof, DofPass } from './dof.js';
 import { fullscreenButton } from './screen.js';
-import { CAMERAS, TABLE, carried, carry } from './cameras.js';
+import { CAMERAS, SOON, TABLE, carried, carry } from './cameras.js';
 import { FlashFx } from './flashfx.js';
 import { installGrade, gradeAt, NEUTRAL } from './grade.js';
 
@@ -229,15 +230,16 @@ async function start() {
   let dressView = 'face';
   const visH = () => (panelW() || !ui.panel ? 1 : 1 - ui.panel.offsetHeight / window.innerHeight);
   const frameMirror = () => player.frameMirror(dressView, visH());
+  const wear = (L) => {
+    look = L;
+    character.setLook(L);
+    saveLook(L);
+    mp?.setLook(L);
+    frameMirror();
+    lastInput = performance.now();
+  };
   const creator = new Creator({
-    onChange(L) {
-      look = L;
-      character.setLook(L);
-      saveLook(L);
-      mp?.setLook(L);
-      frameMirror();
-      lastInput = performance.now();
-    },
+    onChange: wear,
     onView(v) {
       dressView = v;
       frameMirror();
@@ -246,6 +248,12 @@ async function start() {
       character.paintFace(cells);
       lastInput = performance.now();
     },
+  });
+
+  // 行囊：存讀檔，右上角那顆鈕。拍存檔只在鏡子前；朋友寄的明信片哪裡都能試穿
+  const atMirror = () => player.focus?.kind === 'mirror' && ui.dress.classList.contains('open');
+  const pack = new Pack({
+    canSelfie: atMirror,
     // 請鏡子裡的眼睛拍一張：面板先收起來，鏡頭退到看全身，拍完再打開
     onSelfie(withCode) {
       const back = dressView;
@@ -257,7 +265,33 @@ async function start() {
         ui.showDress();
       }
     },
+    onTryOn(L) {
+      if (atMirror()) creator.set(L, true);
+      else {
+        wear(L);
+        ui.hint('換上明信片上的這一身', 3000);
+      }
+    },
   });
+  // 前門的告示：換了裝置的人進門前就能讀。讀到朋友的明信片也先換上，進門就看得到
+  const soul = document.querySelector('#loading .notice .soul');
+  if (soul) {
+    soul.hidden = false;
+    soul.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = async () => {
+        const f = input.files[0];
+        if (!f) return;
+        const span = soul.querySelector('span');
+        span.textContent = '讀取中…';
+        const got = await pack.read(f);
+        span.textContent = got === 'look' ? '換上了，進去看看' : '讀取靈魂相片';
+      };
+      input.click();
+    });
+  }
 
   const player = new Player(camera, renderer.domElement, world, character, {
     onInput(kind) {
@@ -388,10 +422,10 @@ async function start() {
   };
   ui.onClose = () => player.exitFocus();
 
-  // 相機桌的面板：左右換一台，帶走或放回去。一次只能帶一台，換的時候原本那台自己回到桌上
+  // 相機桌的面板：左右換一台，帶走或放回去；SOON 裡的只看得到名字。一次只能帶一台，換的時候原本那台自己回到桌上
   function showCams(i) {
     const id = TABLE[i], mine = carried();
-    ui.showCams({ i, n: TABLE.length, cam: CAMERAS[id] || null, carried: !!id && mine === id, other: !!mine });
+    ui.showCams({ i, n: TABLE.length, cam: CAMERAS[id] || SOON[id] || null, ready: !!CAMERAS[id], carried: !!id && mine === id, other: !!mine });
   }
   document.getElementById('cams-prev').addEventListener('click', () => player.events.onCamStep(-1));
   document.getElementById('cams-next').addEventListener('click', () => player.events.onCamStep(1));
@@ -404,7 +438,7 @@ async function start() {
     world.camTable.setCarried(next);
     mp?.setCamera(next);
     ambience.voice('shutter', 0.5);
-    ui.hint(next ? `帶著${CAMERAS[next].name}出門。按右上角的相機鈕拍照` : '放回桌上了。拍照時又是畫廊的眼睛，可以到處飛', 4000);
+    ui.hint(next ? `帶著${CAMERAS[next].name}出門。按相機鈕拍照` : '放回桌上了。拍照時又是畫廊的眼睛，可以到處飛', 4000);
     showCams(f.slot);
   });
   // 導演運鏡：預設打開，記住上次的選擇。轉多快每個區域自己定

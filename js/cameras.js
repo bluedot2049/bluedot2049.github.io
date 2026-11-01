@@ -11,6 +11,7 @@ import { drawGlyph, strokes } from './glyphs.js';
 // 等效全片幅的焦距換成視角：照片長邊對應底片的 36mm
 export const longTan = (mm) => 18 / mm;
 
+// 相機桌面板像機身上的銘牌：name 名字，spec 跟別台不一樣的地方（閃光、鏡頭、數位或底片），maker 哪裡哪家做的。怎麼用不寫，拿起來自己摸
 // focal：焦距（mm）。prime：定焦，不能變焦，想拍大一點就走近。
 // fstop：光圈，景深照它算，數字越小背景越糊。bokeh：畫面上把景深放大幾倍——這個世界多是平塗的色塊，照實算的景深幾乎看不出來。
 // focus：tap 點按對焦。
@@ -22,9 +23,9 @@ export const longTan = (mm) => 18 / mm;
 // make：哪家工坊做的。mark 是商號（用海市的字刻），model 型號、serial 序號（用蘇州碼子的數字刻）；shutter：快門鈕長什麼樣（SHUTTERS）
 export const CAMERAS = {
   bulb: {
-    name: '閃光燈泡相機',
-    line: '方盒子旁邊夾著一把銀傘，閃一下就要換一顆燈泡。夜裡拍人最好看',
-    spec: ['定焦 27mm', '點一下對焦', '閃光燈泡', '按住快門慢慢曝光', '燙日期'],
+    name: '燭乙式',
+    spec: ['可開關閃光燈', '27mm 定焦鏡', '數位式'],
+    maker: '海市火記光學製造',
     focal: 27, prime: true, fstop: 1.4, bokeh: 4, focus: 'tap', aspect: 3 / 2,
     flash: { color: 0xfff1dc, power: 2.6, bulb: 1.6, knob: 'fan' },
     date: { knob: 'die', ink: 'burn' }, sig: false,
@@ -35,8 +36,10 @@ export const CAMERAS = {
 };
 
 // 桌上從左到右的位置；null 是還沒做出來的，留一個空位
-// gui 只有模型、還沒有 CAMERAS 設定：擺在桌上看得到，面板當它是還在做的空位，拿不走
 export const TABLE = ['bulb', 'gui', null];
+
+// 擺在桌上、還拿不走的：只有模型和名字，面板寫名字，按鈕是灰的
+export const SOON = { gui: { name: '晷' } };
 
 // 帶在身上的相機，記在存檔裡
 export const carried = () => (CAMERAS[getSave().camera] ? getSave().camera : null);

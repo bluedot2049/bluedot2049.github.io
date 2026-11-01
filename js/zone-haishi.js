@@ -12,7 +12,7 @@ export const bgm = { src: 'assets/audio/haishi.m4a', from: 'haishi' };
 export const directorLag = 1;
 
 // 海市的高度霧和調色（grade.js）：鎮子和山坡從近處就開始往夜色裡退。?debug 時右上角可以即時調，「複製」貼回這裡
-export const grade = { tone: '海市01' };
+export const grade = { tone: '海市02' };
 
 export function build(scene, { coarse }) {
   return buildHaishi(scene, { coarse });

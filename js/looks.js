@@ -143,6 +143,8 @@ export function getSave() {
 export function putSave(patch) {
   const s = Object.assign(getSave(), patch);
   try { localStorage.setItem('save', JSON.stringify(s)); } catch {}
+  // 行囊（pack.js）聽這個，看封蠟要不要亮
+  if (typeof dispatchEvent === 'function') dispatchEvent(new Event('savechange'));
 }
 
 export const unlockedSet = () => new Set(getSave().unlocked);
