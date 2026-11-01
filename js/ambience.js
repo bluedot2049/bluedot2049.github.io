@@ -387,6 +387,7 @@ function renderMurmur() {
   for (let v = 0; v < MURMUR_TALKERS; v++) {
     // 大多是低的四個音，四個人裡有一個高一點、小聲一點
     const high = Math.random() < 0.25, root = high ? 4 + Math.floor(Math.random() * 2) : Math.floor(Math.random() * 4);
+    const tune = 2 ** ((Math.random() - 0.5) / 24);   // 每個人的嗓子差一點點，前後 25 音分，還聽得出在調上，不會疊成整齊的和弦
     const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain();
     if (pan.pan) pan.pan.value = Math.random() - 0.5;
     pan.connect(ctx.destination);
@@ -399,8 +400,8 @@ function renderMurmur() {
         if (last) deg = Math.max(0, root - 1);
         else if (Math.random() < 0.3) deg = Math.max(0, Math.min(MURMUR_NOTES.length - 1, root + (Math.random() < 0.5 ? -1 : 1)));
         else deg = root;
-        const f = MURMUR_NOTES[deg];
-        const o = osc(ctx, 'sawtooth', t, d + 0.05, [[0, f], [d, f * (last ? 0.97 : 1.005)]]);
+        const f = MURMUR_NOTES[deg] * tune;
+        const o = osc(ctx, 'sawtooth', t, d + 0.05, [[0, f], [d, f * (last ? 0.95 : 0.985)]]);   // 每個字尾巴往下掉一點，像說話
         const g = ctx.createGain();
         g.gain.setValueAtTime(0, t);
         g.gain.linearRampToValueAtTime(peak, t + 0.04);
@@ -414,7 +415,7 @@ function renderMurmur() {
         // 同一個母音的氣音，蓋掉一點音高感
         const air = ctx.createBufferSource(), ag = ctx.createGain();
         air.buffer = breath;
-        ag.gain.value = 0.5;
+        ag.gain.value = 0.9;
         air.connect(biquad(ctx, 'bandpass', f1, 3)).connect(ag).connect(g);
         air.start(t, Math.random() * 1.5);
         air.stop(t + d + 0.06);

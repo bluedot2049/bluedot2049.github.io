@@ -35,7 +35,8 @@ export const CAMERAS = {
 };
 
 // 桌上從左到右的位置；null 是還沒做出來的，留一個空位
-export const TABLE = ['bulb', null, null];
+// gui 只有模型、還沒有 CAMERAS 設定：擺在桌上看得到，面板當它是還在做的空位，拿不走
+export const TABLE = ['bulb', 'gui', null];
 
 // 帶在身上的相機，記在存檔裡
 export const carried = () => (CAMERAS[getSave().camera] ? getSave().camera : null);
@@ -59,7 +60,80 @@ export function cameraModel(k, id) {
     k.cone(0.07, 0.04, SILVER, -0.1, 0.2, 0.012, { rx: -Math.PI / 2 });
     k.cyl(0.071, 0.071, 0.004, '#efe9da', -0.1, 0.2, 0.033, { rx: Math.PI / 2 }, 14);
     k.ball(0.016, '#f6f1e2', -0.1, 0.2, 0.04);
+  } else if (id === 'gui') {
+    guiModel(k);
   }
+}
+
+// 沙漠工坊「晷」：躺著的觀星儀。古銅偏金的機身左右不對稱，右頭一隻疊影窗，中間伸出變形長鏡筒，頂上一面日晷盤裝著圓盤底片
+const BRZ = '#8f6d3c', WORN = '#6b502c', GILT = '#c09a4e', DBRZ = '#4a3720', DIAL = '#b08e4c', CELL = '#7d5f33',
+  CLOTH = '#34374a', OCHRE = '#8f6c36', LENS = '#27353a', SAND = '#c9a66e', PALE = '#a9bcbc', VIAL = '#f3b457', HOLE = '#22190f';
+function guiModel(k) {
+  const W = 0.22, H = 0.09, D = 0.06, yc = H / 2, front = D / 2, face = { rx: Math.PI / 2 };
+  // 機身兩頭不一樣：右邊是滿高的大圓頭，帶著唯一一隻疊影窗；左邊矮一階，接一個小一號、壓低的圓頭。
+  // 底下一條被沙磨暗的邊，上緣一排鉚釘
+  const rx = 0.065, lx = -0.075, step = -0.04, lh = 0.068, lr = lh / 2;
+  k.box(rx - step, H, D, BRZ, (rx + step) / 2, yc, 0);
+  k.box(step - lx, lh, D, BRZ, (step + lx) / 2, lh / 2, 0);
+  k.cyl(yc, yc, D, BRZ, rx, yc, 0, face, 14);
+  k.cyl(lr, lr, D, BRZ, lx, lr, 0, face, 12);
+  k.box(rx - lx + 0.002, 0.012, D + 0.002, WORN, (rx + lx) / 2, 0.006, 0);
+  for (let x = step + 0.006; x <= rx; x += 0.018) k.box(0.003, 0.003, 0.002, GILT, x, H - 0.006, front);
+  k.box(0.01, 0.012, 0.012, DBRZ, 0.07, H + 0.004, -0.02);
+  k.box(0.01, 0.012, 0.012, DBRZ, lx, lh + 0.004, -0.02);
+  // 疊影窗：只有右邊一隻往前伸的眼睛
+  const wx = rx + 0.012;
+  k.cyl(0.017, 0.017, 0.003, DBRZ, wx, yc, front + 0.0015, face, 12);
+  k.cyl(0.0105, 0.012, 0.014, GILT, wx, yc, front + 0.008, face, 10);
+  k.cyl(0.0075, 0.0075, 0.002, LENS, wx, yc, front + 0.0152, face, 10);
+  // 鏡筒：前面板一圈橫橢圓，後段裹防沙布（斜纏的條紋），前段古銅筒、對焦環、往外開的橫橢圓遮光罩
+  k.cyl(0.027, 0.027, 0.004, DBRZ, 0, yc, front + 0.002, { ...face, sx: 1.65 }, 12);
+  k.cyl(0.027, 0.027, 0.06, CLOTH, 0, yc, front + 0.03, face, 12);
+  for (const z of [0.048, 0.072]) k.torus(0.027, 0.0018, Math.PI * 2, OCHRE, 0, yc, z, { rx: 0.45 });
+  k.cyl(0.024, 0.024, 0.06, BRZ, 0, yc, 0.12, face, 12);
+  k.cyl(0.0275, 0.0275, 0.018, GILT, 0, yc, 0.137, face, 12);
+  k.cyl(0.026, 0.023, 0.03, DBRZ, 0, yc, 0.165, { ...face, sx: 1.45 }, 12);
+  k.torus(0.026, 0.0016, Math.PI * 2, GILT, 0, yc, 0.18, { sx: 1.45 });
+  k.cyl(0.022, 0.022, 0.002, LENS, 0, yc, 0.181, { ...face, sx: 1.45 }, 12);
+  // 打孔銘牌，在鏡筒底下
+  k.box(0.038, 0.013, 0.002, GILT, 0, 0.0137, front + 0.001);
+  for (const [x, y] of [[-0.013, 0.017], [-0.009, 0.017], [0.0, 0.017], [0.009, 0.017], [0.014, 0.017], [-0.013, 0.011], [-0.004, 0.011], [0.005, 0.011], [0.014, 0.011]]) {
+    k.box(0.0018, 0.0018, 0.001, HOLE, x, y, front + 0.0025);
+  }
+  // 日晷盤：比機身深一點，前後都伸出去。盤緣一圈鉚釘，盤面八格寬扁的片窗；
+  // 晷針平貼在盤面上，像錶的指針，指著下一格（那格是暗的，影子落在那裡）
+  const top = H + 0.016, dx = 0.012;
+  k.cyl(0.047, 0.047, 0.012, DBRZ, dx, H + 0.006, 0, {}, 16);
+  k.cyl(0.041, 0.041, 0.004, DIAL, dx, H + 0.014, 0, {}, 16);
+  for (let i = 0; i < 8; i++) {
+    const a = (i + 0.5) * Math.PI / 4;
+    k.box(0.003, 0.003, 0.003, GILT, dx + Math.cos(a) * 0.044, H + 0.013, Math.sin(a) * 0.044);
+  }
+  const shade = 7, sa = (shade + 0.5) * Math.PI / 4;
+  for (let i = 0; i < 8; i++) {
+    const a = (i + 0.5) * Math.PI / 4;
+    k.box(0.022, 0.0016, 0.011, i === shade ? DBRZ : CELL, dx + Math.cos(a) * 0.026, top, -Math.sin(a) * 0.026, { ry: a });
+  }
+  k.box(0.03, 0.0012, 0.0026, DBRZ, dx + Math.cos(sa) * 0.016, top + 0.0014, -Math.sin(sa) * 0.016, { ry: sa });
+  k.cyl(0.0045, 0.0045, 0.003, GILT, dx, top + 0.0015, 0, {}, 8);
+  // 快門鈕，還有左邊矮的那階上一支轉圓盤的發條鑰匙
+  k.cyl(0.006, 0.007, 0.006, GILT, 0.075, H + 0.003, 0.012, {}, 8);
+  k.cyl(0.0025, 0.0025, 0.01, DBRZ, -0.058, lh + 0.005, 0.01, {}, 6);
+  k.box(0.016, 0.009, 0.002, GILT, -0.058, lh + 0.013, 0.01);
+  // 左邊掛沙漏：上半是空的玻璃，下半積了沙
+  const hx = lx - lr - 0.012;
+  k.box(0.012, 0.008, 0.008, DBRZ, lx - lr + 0.002, 0.05, 0);
+  for (const y of [0.035, 0.073]) k.cyl(0.011, 0.011, 0.004, GILT, hx, y, 0, {}, 8);
+  k.cone(0.0085, 0.018, PALE, hx, 0.063, 0, { rx: Math.PI });
+  k.cone(0.0085, 0.018, SAND, hx, 0.045, 0);
+  for (const a of [0.8, 3.9]) rod(k, [hx + Math.cos(a) * 0.01, 0.037, Math.sin(a) * 0.01], [hx + Math.cos(a) * 0.01, 0.071, Math.sin(a) * 0.01], 0.001, DBRZ);
+  // 右邊掛集光瓶：灌滿了，從裡面亮
+  const vx = W / 2 + 0.014;
+  k.box(0.01, 0.008, 0.008, DBRZ, W / 2 + 0.004, 0.054, 0);
+  k.cyl(0.011, 0.011, 0.036, VIAL, vx, 0.05, 0, { glow: true }, 10);
+  for (const y of [0.04, 0.06]) k.cyl(0.0115, 0.0115, 0.003, DBRZ, vx, y, 0, {}, 10);
+  k.cyl(0.0045, 0.0045, 0.008, PALE, vx, 0.072, 0, {}, 8);
+  k.cyl(0.006, 0.006, 0.006, GILT, vx, 0.079, 0, {}, 8);
 }
 
 // 背帶：繞過脖子垂到胸口，相機（cameraModel）另外一個網格掛在 y0、z0，舉起來時才拿得走。y0 是相機底部的高度，z0 是胸口前緣

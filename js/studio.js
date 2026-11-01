@@ -6,6 +6,7 @@
 // 拿到的明信片郵票和底片邊帶的都是自己的存檔。拍照的時候，沒入鏡的玩家和路人先藏起來。
 // 一場拍照由開場的人（host）管名單，其他人照名單上的順序站位。訊息走 multiplayer.js 的 studio
 import * as THREE from 'three';
+import { CAMERAS, carried } from './cameras.js';
 
 const NEAR = 6;            // 多遠以內的玩家會收到邀請
 const GAP = 0.9;           // 並排站的間隔
@@ -28,7 +29,7 @@ export class Studio {
       if (!b) return;
       this.close();
       if (b.dataset.spot) this.begin(+b.dataset.spot);
-      else if (b.dataset.act === 'self') this.photo.enter({ postcard: true });
+      else if (b.dataset.act === 'self') this.photo.enter({ postcard: true, eye: b.dataset.eye === '1' });
     });
     this.inviteEl = this.$('#studio-invite');
     this.inviteEl.addEventListener('click', (e) => {
@@ -46,6 +47,13 @@ export class Studio {
   // 跟信差說要寄明信片：先問要在哪裡拍
   open() {
     if (this.session || this.photo.active) return;
+    // 帶著相機時「自己拍」分成兩個：拿那台相機拍，或用畫廊的眼睛拍（相機照樣掛在身上）
+    const id = carried(), row = this.menu.querySelector('.studio-row');
+    row.querySelectorAll('[data-act="self"]').forEach((b) => b.remove());
+    row.classList.toggle('two', !!id);
+    row.insertAdjacentHTML('afterbegin', id
+      ? `<button class="btn" data-act="self" data-eye="0">${CAMERAS[id].name}<small>拿著自己拍</small></button><button class="btn" data-act="self" data-eye="1">畫廊的眼睛<small>鏡頭到處飛</small></button>`
+      : '<button class="btn" data-act="self">自己拍</button>');
     this.menu.hidden = false;
   }
 

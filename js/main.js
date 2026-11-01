@@ -24,7 +24,7 @@ import { dof, DofPass } from './dof.js';
 import { fullscreenButton } from './screen.js';
 import { CAMERAS, TABLE, carried, carry } from './cameras.js';
 import { FlashFx } from './flashfx.js';
-import { installGrade, NEUTRAL } from './grade.js';
+import { installGrade, gradeAt, NEUTRAL } from './grade.js';
 
 // 世界分成幾個區域，一次只建一個，用 ?z= 指定，沒有寫就是畫廊。每個區域的內容寫在自己的 zone-*.js，用到才下載。
 // 換區域時整頁重新載入：瀏覽器一定會把上一個區域的記憶體收回去，手機才撐得住。
@@ -175,7 +175,7 @@ async function start() {
   // 有匯出調色的區域（zone-*.js 的 grade）在建場景之前換上高度霧和調色。?grade=0 看原本的霧。
   // 沒匯出的區域在 ?debug 時裝一組不改畫面的（NEUTRAL），調色面板一樣打得開
   const grade = params.get('grade') === '0' ? null : Z.grade || (params.has('debug') ? NEUTRAL : null);
-  if (grade) installGrade(grade);
+  if (grade) installGrade(grade, scene);
   const world = Z.build(scene, { gallery, coarse, params });
 
   // 光線、霧。畫廊有室內和戶外兩組，走出後門時在兩組之間漸變；只有一組的區域兩頭都用它
@@ -594,7 +594,7 @@ async function start() {
       creator.open(look);
     },
   });
-  document.getElementById('photo-btn').addEventListener('click', () => photo.enter());
+  document.getElementById('photo-btn').addEventListener('click', () => photo.open());
   if (world.studios) {
     studio = new Studio({ world, player, photo, passers });
     studio.mp = mp;
@@ -632,12 +632,14 @@ async function start() {
     rt?.dispose();
   }
   const stats = params.has('debug') ? debugStats(renderer, quality) : null;
-  // 改地圖、調色用的小工具：?ref= 疊參考圖，?debug 調光線（見 devtools.js）
+  // 改地圖、調色用的小工具：?ref= 疊參考圖，?debug 開右邊的調色台（調色、分區、光線、參考圖，見 devtools.js）
   if (params.has('debug') || params.has('ref')) {
-    import('./devtools.js').then(({ refOverlay, envPanel, gradePanel }) => {
-      if (params.has('ref')) refOverlay(params.get('ref'));
-      if (params.has('debug') && grade) gradePanel();
-      if (params.has('debug')) envPanel(ENV, () => { const t = Math.max(0, envT); envT = -1; applyEnv(t); }, envs.length === 1);
+    import('./devtools.js').then(({ refOverlay, gradeDock }) => {
+      if (!params.has('debug')) return refOverlay(params.get('ref'));
+      gradeDock({
+        zone, renderer, scene, world, grade: !!grade, ref: params.get('ref'),
+        ENV, applyEnv: () => { const t = Math.max(0, envT); envT = -1; applyEnv(t); }, singleEnv: envs.length === 1,
+      });
     });
   }
 
@@ -800,6 +802,8 @@ async function start() {
         ui.toast(spot.name, spot.subtitle);
       }
     }
+    // 同一張地圖分區調色（zone 的 grade.regions）：照角色站的地方混，攝影模式照鏡頭
+    gradeAt(dt, view.x, view.z);
     if (photo.active) world.update(clock.elapsedTime, photo.pos, photo.fadeTarget(), camera, true);
     else world.update(clock.elapsedTime, player.camPos, player.fadeTarget(), camera);
     frame++;

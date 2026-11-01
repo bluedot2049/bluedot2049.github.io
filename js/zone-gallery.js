@@ -68,8 +68,8 @@ export function arrive({ player, world, params, ui }) {
     const d = world.frontDoor, h = d.spawn.heading + Math.PI;
     player.place(d.spawn.x, d.spawn.z, d.spawn.heading);
     player.startIntro({
-      wide: { dist: 7, at: { x: 0, y: -0.3 }, yaw: h, pitch: 0.7 },
-      tall: { dist: 11, at: { x: 0, y: -0.05 }, yaw: h, pitch: 0.95 },
+      wide: { dist: 7, at: { x: -0.25, y: -0.3 }, yaw: h, pitch: 0.7 },
+      tall: { dist: 11, at: { x: 0, y: -0.4 }, yaw: h, pitch: 0.95 },
     });
   }
   const go = params.get('go')?.split('.').map(Number);

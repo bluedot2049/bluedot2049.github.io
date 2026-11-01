@@ -62,7 +62,7 @@ export function mist(list, { color = '#9a94c8', alpha = 0.32, warm = false, tune
         a *= uAlpha * vNear;
         ${warm ? 'gl_FragColor = vec4(uColor * a, a);' : 'gl_FragColor = vec4(uColor, a);'}
         #include <colorspace_fragment>
-        ${warm ? 'gl_FragColor.rgb *= gradeLight(vFog);' : 'if (uGrade.on > 0.5) gl_FragColor.rgb = gradeSurface(gl_FragColor.rgb, vFog, fogColor);'}
+        ${warm ? 'gl_FragColor.rgb *= gradeLight(vFog);' : 'if (uGrade.on > 0.5) gl_FragColor.rgb = gradeSurface(gl_FragColor.rgb, vFog);'}
       }`,
     transparent: true, depthWrite: false, fog: true,
     blending: warm ? THREE.AdditiveBlending : THREE.NormalBlending,
@@ -130,7 +130,7 @@ export function smoke(list, coarse = false) {
         vec3 c = mix(uWarm, mix(uSteam, uSmoke, vKind), smoothstep(0.0, 0.55, vT));
         gl_FragColor = vec4(c, a * vA);
         #include <colorspace_fragment>
-        if (uGrade.on > 0.5) gl_FragColor.rgb = gradeSurface(gl_FragColor.rgb, vFog, fogColor);
+        if (uGrade.on > 0.5) gl_FragColor.rgb = gradeSurface(gl_FragColor.rgb, vFog);
       }`,
     transparent: true, depthWrite: false, fog: true,
   });

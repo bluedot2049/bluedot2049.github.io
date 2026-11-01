@@ -12,7 +12,7 @@ export const bgm = { src: 'assets/audio/haishi.m4a', from: 'haishi' };
 export const directorLag = 1;
 
 // 海市的高度霧和調色（grade.js）：鎮子和山坡從近處就開始往夜色裡退。?debug 時右上角可以即時調，「複製」貼回這裡
-export const grade = { density: 0.016, falloff: 0.04, base: -0.6, start: 6, maxFog: 1, desat: 0.2, cool: 0.9, contrast: 1.6, vivid: 0.6, glow: 1, shadow: '#16151b' };
+export const grade = { tone: '海市01' };
 
 export function build(scene, { coarse }) {
   return buildHaishi(scene, { coarse });
@@ -36,16 +36,17 @@ export function crowd({ scene, world, shadowTex, ambience, coarse, params, ui, p
   return { vendors, passers };
 }
 
-// 抵達：從碼頭開始。鏡頭在角色背後的海上，低低地往上看整座山城：角色在右下，城中在畫面中間偏左上。
-// 直式螢幕窄，角色放在中間偏下，城中在上面。角色沿棧橋往岸上走，鏡頭跟著慢慢換到角色背後（見 player.startIntro）
+// 抵達：從碼頭開始。鏡頭在角色背後的海上，低低地往上看整座山城：角色在左下，城中在畫面中間偏右上。
+// 角色放左邊是跟棧橋的越肩鏡位（shots.js）同一邊，角色沿棧橋往岸上走，鏡頭慢慢換到角色背後時角色不用橫越整個畫面（見 player.startIntro）。
+// 直式螢幕窄，角色放在中間稍左偏下，城中在上面
 export function arrive({ player, world, params }) {
   player.shots = buildShots(world.debug.areas);
   player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
   const mid = [0, 9, -20];   // 城中
   player.startIntro({
-    wide: { dist: 18, at: { x: 0.42, y: -0.5 }, mark: mid, markAt: { x: -0.18, y: 0.2 } },
-    tall: { dist: 24, at: { x: 0.12, y: -0.45 }, mark: mid, markAt: { x: -0.08, y: 0.25 } },
-    low: { dist: 11, at: { x: 0.38, y: -0.3 }, mark: mid, markAt: { x: -0.25, y: 0.3 } },   // 手機橫拿太矮，角色拉近一點才不會淹在燈籠裡
+    wide: { dist: 16, at: { x: -0.3, y: -0.5 }, mark: mid, markAt: { x: 0.12, y: 0.2 } },
+    tall: { dist: 24, at: { x: -0.12, y: -0.45 }, mark: mid, markAt: { x: 0.06, y: 0.25 } },
+    low: { dist: 11, at: { x: -0.32, y: -0.3 }, mark: mid, markAt: { x: 0.2, y: 0.3 } },   // 手機橫拿太矮，角色拉近一點才不會淹在燈籠裡
   });
   // 測試用：?view=x,z,面向(度),鏡頭距離,俯角(度)，直接站到那裡看，不看開場的遠景
   const view = params.get('view')?.split(',').map(Number);

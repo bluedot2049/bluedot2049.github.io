@@ -1000,8 +1000,9 @@ export function buildOutdoor(room, h) {
     dock: harbor.dock,
     ferry: harbor.ferry,
     door: z0,
-    // 導演運鏡的鏡位範圍（shots.js）：草原到棧橋盡頭一整塊，陽台不算
-    camAreas: [{ id: 'meadow', x0: -MEADOW.rx, x1: MEADOW.rx, z0: Z(JETTY.end), z1: Z(MEADOW.c - MEADOW.rz), y: G }],
+    // 導演運鏡的鏡位範圍（shots.js）：草原到棧橋盡頭一整塊。從陽台算起 12 公尺內不算：
+    // 越肩的鏡頭很低，退在角色後面會落到比草原高的陽台上，被陽台邊擋住；那一段用原本的跟拍，從陽台上方看出去
+    camAreas: [{ id: 'meadow', x0: -MEADOW.rx, x1: MEADOW.rx, z0: Z(JETTY.end), z1: Z(TD + 12), y: G }],
     // 室內 0、走出後門 1，主程式用來切換光線和霧
     outdoorness: (z) => smooth(z0 + 3, z0 - 2, z),
     inMeadow: (z) => z0 - z > TD + SD * 0.6,

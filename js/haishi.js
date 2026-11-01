@@ -1333,12 +1333,15 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       obstacles.push({ x: M.x1 - 0.12, z, hw: 0.08, hd: 0.08 });
       shimmerMore.push({ x: M.x1 + 0.2, z: z + 0.2, w: 0.3, l: 3.5, color: '#ff7a40', a: 0.45 });
     }
-    const lx = (M.x0 + M.x1) / 2, lz = M.z1 - 0.9;
-    k.cyl(0.62, 0.78, 4.2, '#ece6dc', lx, 2.1, lz, { color2: '#f4f0e8' }, 12);
-    for (const y of [1.0, 2.6]) k.cyl(0.66, 0.7, 0.45, '#a8322a', lx, y, lz, {}, 12);
-    k.cyl(0.85, 0.85, 0.1, DARK, lx, 4.25, lz, {}, 12);
-    k.cyl(0.42, 0.42, 0.6, '#ffd8c0', lx, 4.6, lz, { glow: true }, 10);
-    k.cone(0.55, 0.6, '#a8322a', lx, 5.2, lz);
+    // 燈塔自己一組，站在防波堤上回頭看山城時擋在鏡頭前面就淡掉（同一串亂數、同樣的順序，後面的東西不變）
+    const lx = (M.x0 + M.x1) / 2, lz = M.z1 - 0.9, lk = new Kit(R);
+    lk.cyl(0.62, 0.78, 4.2, '#ece6dc', lx, 2.1, lz, { color2: '#f4f0e8' }, 12);
+    for (const y of [1.0, 2.6]) lk.cyl(0.66, 0.7, 0.45, '#a8322a', lx, y, lz, {}, 12);
+    lk.cyl(0.85, 0.85, 0.1, DARK, lx, 4.25, lz, {}, 12);
+    lk.cyl(0.42, 0.42, 0.6, '#ffd8c0', lx, 4.6, lz, { glow: true }, 10);
+    lk.cone(0.55, 0.6, '#a8322a', lx, 5.2, lz);
+    lk.fid = fader.add([[lx - 0.9, SEA, lz - 0.9, lx + 0.9, 5.6, lz + 0.9]]);
+    lk.emit(bucket, 0, 0, 0);
     obstacles.push({ x: lx, z: lz, hw: 0.8, hd: 0.8 });
     const beacon = glowPoints([{ x: lx, y: 4.6, z: lz, color: '#ff4a2a', size: 16 }]), bs = beacon.geometry.attributes.aSize;
     group.add(beacon);
@@ -2036,7 +2039,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   }
 
   let lastT = 0;
-  const eyes = [], eyeA = new THREE.Vector3(), eyeB = new THREE.Vector3();
+  const eyes = [], eyeA = new THREE.Vector3(), eyeB = new THREE.Vector3(), eyeC = new THREE.Vector3(), fwd = new THREE.Vector3();
 
   const room = {
     index: 0, id: 'haishi', data: { name: '海市', subtitle: 'Fata Morgana', paintings: [] },
@@ -2093,6 +2096,12 @@ export function buildHaishi(scene, { coarse = false } = {}) {
           if (d < bd && Math.abs(s.y - target.y) < 1.5) { bd = d; best = s; }
         }
         if (best) eyes.push(eyeB.set(best.x, best.y + 1.05, best.z));
+        // 畫面正中央那條視線，走到跟角色一樣深：越肩時角色偏在左邊，中間到右邊是要給人看的風景，擋在前面的也淡掉
+        if (camera) {
+          camera.getWorldDirection(fwd);
+          const depth = (target.x - cam.x) * fwd.x + (target.y + 1.1 - cam.y) * fwd.y + (target.z - cam.z) * fwd.z;
+          if (depth > 0.5) eyes.push(eyeC.copy(cam).addScaledVector(fwd, depth));
+        }
       }
       fader.update(dt, cam, eyes, still || !target);
       uTime.value = t;

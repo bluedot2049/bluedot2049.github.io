@@ -161,6 +161,7 @@ export class PhotoMode {
     this.frame = { x: 0, y: 0, w: 1, h: 1 };
     this.result = null;                     // 剛拍好的 { blob, url, name, video }
     this.gear = null;                       // 帶著的相機（cameras.js）；null 是畫廊的眼睛，鏡頭自由飛
+    this.eyeCam = null;                     // 帶著相機卻選了畫廊的眼睛：身上那台的 id，照得到自己帶著它
     this.grip = 1;                          // 拿法：GRIPS 的第幾個
     this.upright = 0;                       // 0 橫拿、1 直拿
     this.flashOn = 0;                       // 0 開、1 關
@@ -173,28 +174,29 @@ export class PhotoMode {
     this.v2 = new THREE.Vector2();
     const s = this.load();
     this.aspect = s.aspect; this.look = s.look; this.move = 0;
-    this.grid = s.grid; this.self = s.self; this.talk = s.talk; this.sig = s.sig;
+    this.grid = s.grid; this.self = s.self; this.talk = s.talk; this.sig = s.sig; this.pose = s.pose;
     this.$ = (q) => document.querySelector(q);
     this.bindUI();
     this.bindInput();
   }
 
   load() {
-    const d = { aspect: 0, look: 0, grid: false, self: true, talk: true, sig: true };
+    const d = { aspect: 0, look: 0, grid: false, self: true, talk: true, sig: true, pose: 0 };
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
       if (s && typeof s === 'object') {
         for (const k of Object.keys(d)) if (typeof s[k] === typeof d[k]) d[k] = s[k];
         d.aspect = Math.min(Math.max(0, d.aspect | 0), ASPECTS.length - 1);
         d.look = Math.min(Math.max(0, d.look | 0), LOOKS.length - 1);
+        d.pose = d.pose === 1 ? 1 : 0;
       }
     } catch {}
     return d;
   }
 
   save() {
-    const { aspect, look, grid, self, talk, sig } = this;
-    try { localStorage.setItem(KEY, JSON.stringify({ aspect, look, grid, self, talk, sig })); } catch {}
+    const { aspect, look, grid, self, talk, sig, pose } = this;
+    try { localStorage.setItem(KEY, JSON.stringify({ aspect, look, grid, self, talk, sig, pose })); } catch {}
     if (this.gear) this.saveGear();
   }
 
@@ -242,8 +244,10 @@ export class PhotoMode {
 
   // postcard：從海市的信差站進來，拍好的照片做成明信片。
   // studio：照相館（studio.js）架好的鏡頭 { pos, yaw, pitch, fov, host }，鏡頭不能動，快門要數三聲
-  enter({ postcard = false, studio = null } = {}) {
+  // eye：帶著相機也用畫廊的眼睛，相機留在身上
+  enter({ postcard = false, studio = null, eye = false } = {}) {
     if (this.active) return;
+    this.closePick();
     this.postcard = postcard;
     const p = this.player, cam = this.camera;
     this.ui.hidePainting();
@@ -268,8 +272,9 @@ export class PhotoMode {
     this.room = -1;
     this.active = true;
     this.gear = null;
-    const gear = studio ? null : carried();
+    const gear = studio || eye ? null : carried();
     if (gear) this.holdGear(gear);
+    this.eyeCam = eye && !studio ? carried() : null;
     document.body.classList.toggle('photo-gear', !!gear);
     this.$('#ph-frame').classList.toggle('bulb', !!this.gear?.flash?.bulb);
     document.body.classList.add('photo');
@@ -294,6 +299,7 @@ export class PhotoMode {
     this.closeMenu();
     this.active = false;
     this.gear = null;
+    this.eyeCam = null;
     dof.on = false;
     this.flashFx.restore();
     this.player.setJoystick(0, 0);
@@ -364,7 +370,25 @@ export class PhotoMode {
     tick();
   }
 
-  toggle() { this.active ? this.exit() : this.enter(); }
+  toggle() { this.active ? this.exit() : this.open(); }
+
+  // 右上的相機鈕。帶著相機時先問一聲：拿起相機拍，還是用畫廊的眼睛到處飛（相機照樣掛在身上，拍得到自己帶著它）
+  open() {
+    const id = carried(), m = this.$('#photo-pick');
+    if (this.active || !id) return this.enter();
+    if (!m.hidden) return this.closePick();
+    m.innerHTML = `<button data-eye="0" role="menuitem">${CAMERAS[id].name}<kbd>1</kbd></button>`
+      + `<button data-eye="1" role="menuitem">畫廊的眼睛<kbd>2</kbd></button>`;
+    m.hidden = false;
+    // 按鈕在上半邊就往下開，在下面那排就往上開
+    const r = this.$('#photo-btn').getBoundingClientRect(), H = window.innerHeight, below = r.top < H / 2;
+    const left = Math.max(12, Math.min(r.left + r.width / 2 - m.offsetWidth / 2, window.innerWidth - m.offsetWidth - 12));
+    Object.assign(m.style, { left: left + 'px', top: below ? r.bottom + 10 + 'px' : '', bottom: below ? '' : H - r.top + 10 + 'px' });
+  }
+
+  closePick() {
+    this.$('#photo-pick').hidden = true;
+  }
 
   // ───────── 介面 ─────────
 
@@ -379,6 +403,7 @@ export class PhotoMode {
       { k: 'move', label: '運鏡', gear: false, lock: true, opts: MOVES, get: () => this.move, set: (i) => { this.move = i; }, note: '按下錄影才開始動' },
       { k: 'grip', label: '拿法', gear: true, opts: GRIPS, get: () => this.grip, set: (i) => { this.grip = i; }, note: '自拍是把手伸長，從前面拍自己' },
       { k: 'turn', label: '方向', gear: true, opts: ['橫拿', '直拿'], get: () => this.upright, set: (i) => { this.upright = i; } },
+      { k: 'pose', label: '相機', carry: true, opts: ['掛著', '舉起來'], get: () => this.pose, set: (i) => { this.pose = i; }, note: '舉起來是朝自己面對的方向拍' },
       { k: 'show', label: '顯示', toggles: [['self', '自己入鏡'], ['talk', '對話框'], ['sig', '落款'], ['grid', '格線']] },
     ];
     chips.innerHTML = this.chips.map((c) => `<button class="ph-chip" data-k="${c.k}"><span>${c.label}</span><b></b></button>`).join('');
@@ -416,6 +441,14 @@ export class PhotoMode {
       const btn = e.target.closest('button');
       if (btn) this.zoom(LENSES[+btn.dataset.i][1]);
     });
+    const pick = this.$('#photo-pick');
+    pick.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-eye]');
+      if (b) this.enter({ eye: b.dataset.eye === '1' });
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (!pick.hidden && !pick.contains(e.target) && !e.target.closest('#photo-btn')) this.closePick();
+    }, true);
     this.$('#ph-exit').addEventListener('click', () => this.exit());
     this.$('#ph-flash').addEventListener('click', () => this.toggleFlash());
     this.$('#ph-date').addEventListener('click', () => this.toggleDate());
@@ -451,7 +484,7 @@ export class PhotoMode {
   refresh() {
     const g = this.gear;
     for (const c of this.chips) {
-      c.el.hidden = c.gear === false ? !!g : c.gear ? !g : false;
+      c.el.hidden = c.carry ? !this.eyeCam : c.gear === false ? !!g : c.gear ? !g : false;
       c.b.textContent = c.opts ? c.opts[c.get()] : '';
       c.el.classList.toggle('off', !!(c.lock && this.rec));
     }
@@ -663,6 +696,11 @@ export class PhotoMode {
         if (!this.result) this.toggle();
         return;
       }
+      if (!this.$('#photo-pick').hidden) {
+        if (e.key === '1' || e.key === '2') this.enter({ eye: e.key === '2' });
+        else if (e.key === 'Escape') this.closePick();
+        return;
+      }
       if (!this.active) return;
       if (this.result) {
         if (e.key === 'Escape') this.closeResult();
@@ -842,9 +880,11 @@ export class PhotoMode {
     if (!this.active) return;
     // 別人看到的自己：帶著相機就照拿法舉起來；沒帶相機在臉前比個取景框，只給別人看，自己拍到的自己照常站著。
     // 照相館裡是被拍的人，不舉
-    const aim = this.studio ? null : this.gear ? { grip: this.grip, pitch: this.pitch } : { grip: 4, pitch: 0 };
+    // 帶著相機用畫廊的眼睛：掛著就照常站，舉起來是眼高的拿法朝前，自己和別人看到的一樣
+    const raise = !!this.eyeCam && this.pose === 1;
+    const aim = this.studio ? null : this.gear ? { grip: this.grip, pitch: this.pitch } : raise ? { grip: 1, pitch: 0 } : this.eyeCam ? null : { grip: 4, pitch: 0 };
     this.player.camAim = aim;
-    this.character.setAim(this.gear ? aim : null);
+    this.character.setAim(this.gear || raise ? aim : null);
     this.character.camLocal = !(this.gear && this.grip === 3);
     if (this.studio) {
       // 照相館：鏡頭釘在架好的位置，拖曳、搖桿、變焦都不理

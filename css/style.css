@@ -1255,6 +1255,24 @@ body.desk .ph-chip span { color: var(--muted); }
 }
 #ph-menu button.on { color: var(--gold-hi); border-color: var(--gold); }
 #ph-menu.toggles button:not(.on) { color: var(--muted); }
+/* 帶著相機時按相機鈕跳出來的：拿相機拍，還是畫廊的眼睛 */
+#photo-pick {
+  position: fixed; z-index: 21;
+  display: flex; flex-direction: column; gap: 4px; padding: 6px;
+  background: var(--panel); border: 1px solid var(--line-soft); border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+#photo-pick[hidden] { display: none; }
+#photo-pick button {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  height: 36px; padding: 0 14px; border-radius: 999px;
+  color: var(--text); background: none; border: 1px solid transparent;
+  font-size: 13px; letter-spacing: .08em; text-align: left; cursor: var(--cur-pointer);
+}
+#photo-pick button:active { background: rgba(60, 40, 26, 0.95); }
+#photo-pick kbd { font: 11px/1.5 var(--latin); color: var(--muted); }
+body:not(.desk) #photo-pick kbd { display: none; }
+@media (hover: hover) { #photo-pick button:hover { border-color: var(--gold); color: var(--gold-hi); } }
 #ph-menu p { flex-basis: 100%; margin: 2px 8px 4px; font-size: 12px; letter-spacing: .08em; color: var(--muted); }
 
 #ph-exit { position: fixed; z-index: 20; top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right)); }
@@ -1488,6 +1506,11 @@ body.desk .ph-alt-track { height: 240px; }
 .studio-spots .btn { flex-direction: column; height: auto; padding: 10px 4px; letter-spacing: .12em; }
 .studio-spots small { display: block; margin-top: 4px; font-size: 11px; letter-spacing: .05em; color: var(--muted); }
 .studio-row { display: flex; gap: 8px; justify-content: center; }
+/* 帶著相機時自己拍有兩種，並排一列，「算了」放下一行 */
+#studio-menu .studio-row.two { display: grid; grid-template-columns: 1fr 1fr; }
+#studio-menu .studio-row.two [data-act="no"] { grid-column: 1 / -1; justify-self: center; }
+#studio-menu .studio-row.two [data-act="self"] { flex-direction: column; height: auto; padding: 10px 4px; letter-spacing: .12em; }
+#studio-menu .studio-row.two small { display: block; margin-top: 4px; font-size: 11px; letter-spacing: .05em; color: var(--muted); }
 #studio-fade { position: fixed; inset: 0; z-index: 60; background: #0e0906; opacity: 0; pointer-events: none; transition: opacity .35s; }
 #studio-fade.on { opacity: 1; }
 body.photo-studio #ph-alt, body.photo-studio #ph-record, body.photo-studio #ph-lens, body.photo-studio #ph-zoom { display: none; }

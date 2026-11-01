@@ -24,6 +24,9 @@ const SEP = 0.8, SEP_PAIR = 0.45;      // 不同組的人靠近到這個距離�
 const PUSH_TRIES = [[1, 0], [0.5, 0], [1, 1.1], [1, -1.1], [0.6, 2.2], [0.6, -2.2]];   // [縮放, 轉幾弧度]
 const PUSH_MAX = 0.8;                // 為了讓路最多偏離時間表多遠
 const GLANCE = 0.15;                 // 玩家走到面前時，轉頭看一眼的機率
+// 走到鏡頭和玩家中間、或貼著鏡頭的路人淡成半透明，跟擋住視線的房子一樣（fade.js）：留幾成、淡的速度、不擋了再等多久
+const BLOCK_ALPHA = 0.3, BLOCK_SPEED = 4, BLOCK_HOLD = 0.3;
+const BLOCK_R = 0.8, BLOCK_CAM = 1.5;   // 離視線多近算擋住、離鏡頭多近算貼著
 const OWLS = 2;                      // 夜貓子：不管幾點都在外面晃，每一站停很久，最冷清的時候街上也不會空掉
 const MURMUR_R = 22;                 // 人潮聲算多遠以內的人
 const PLAN_MS = 3;                   // 每一幀花在排行程上的時間（毫秒），超過就留到下一幀；至少排一趟。剛進來時不會一下子卡住
@@ -556,6 +559,7 @@ export class Passersby {
     for (const e of this.pool) if (e.key && !keep.has(e.key)) { e.key = null; e.ch.group.visible = false; }
     let rebuilt = 0;
     const shown = new Set();
+    const cam = player.paused ? null : player.camera.position;   // 攝影模式拍到什麼就是什麼
     for (const q of near) {
       let e = this.pool.find((x) => x.key === q.key);
       if (!e) {
@@ -574,7 +578,7 @@ export class Passersby {
         e.ch.tone = hash(q.i, q.p, 23);
         rebuilt++;
       }
-      this.drive(e, q, dt, P, now);
+      this.drive(e, q, dt, P, now, cam);
       shown.add(q.key);
     }
     // 其他人：遠處的簡單人形
@@ -613,7 +617,7 @@ export class Passersby {
 
   stateOf(key) {
     let st = this.state.get(key);
-    if (!st) this.state.set(key, (st = { ox: 0, oz: 0, sx: 0, sz: 0, glanceT: 0, nextGlance: 0, head: 0 }));
+    if (!st) this.state.set(key, (st = { ox: 0, oz: 0, sx: 0, sz: 0, glanceT: 0, nextGlance: 0, head: 0, block: 1, blockHold: 0 }));
     return st;
   }
 
@@ -677,7 +681,7 @@ export class Passersby {
   }
 
   // 一個完整的角色這一幀：位置、轉身、轉頭、手上的東西、淡入淡出
-  drive(e, q, dt, P, now) {
+  drive(e, q, dt, P, now, cam) {
     const ch = e.ch;
     const st = this.stateOf(q.key);
     const at = { x: q.fx, z: q.fz };
@@ -706,7 +710,24 @@ export class Passersby {
     }
     st.head += (Math.max(-0.9, Math.min(0.9, want)) - st.head) * Math.min(1, dt * 5);
     ch.head.rotation.y = st.head;
+    // 擋在鏡頭前面就淡掉，走開了等一下再淡回來
+    if (this.blocks(cam, P, at.x, q.fy, at.z)) st.blockHold = BLOCK_HOLD;
+    else st.blockHold -= dt;
+    const bw = st.blockHold > 0 ? BLOCK_ALPHA : 1;
+    st.block = st.block < bw ? Math.min(bw, st.block + dt * BLOCK_SPEED) : Math.max(bw, st.block - dt * BLOCK_SPEED);
     // 從門口出來、走進門裡：慢慢浮現、慢慢淡掉
-    ch.setGhost(q.alpha > 0.98 ? 1 : Math.round(q.alpha * 20) / 20);
+    const a = q.alpha * st.block;
+    ch.setGhost(a > 0.98 ? 1 : Math.round(a * 20) / 20);
+  }
+
+  // 站在 (x, y, z) 的人有沒有擋住鏡頭看玩家：貼著鏡頭，或站在鏡頭到玩家胸口那條線旁邊
+  blocks(cam, P, x, y, z) {
+    if (!cam) return false;
+    const bx = x - cam.x, by = y + 0.9 - cam.y, bz = z - cam.z;
+    if (Math.hypot(bx, by, bz) < BLOCK_CAM) return true;
+    const lx = P.x - cam.x, ly = P.y + 0.9 - cam.y, lz = P.z - cam.z, ll = lx * lx + ly * ly + lz * lz;
+    const t = (bx * lx + by * ly + bz * lz) / ll;
+    if (t <= 0 || t >= 0.92) return false;   // 在玩家後面、或幾乎跟玩家並排的不算
+    return Math.hypot(bx - lx * t, by - ly * t, bz - lz * t) < BLOCK_R;
   }
 }
