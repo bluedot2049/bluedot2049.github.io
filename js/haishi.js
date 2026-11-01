@@ -16,6 +16,7 @@ import { mist, smoke, pools, ripples } from './haze.js';
 import { skyLanterns, seaGlints, meteor } from './distant.js';
 import { Fader } from './fade.js';
 import { drawText } from './glyphs.js';
+import { GRADE, GRADE_GLSL, gradeCurvesOnly } from './grade.js';
 import { paving, PAVES, BED } from './pave.js';
 
 const SEA = -0.6;
@@ -243,7 +244,7 @@ function skyDome(bg) {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       uLow: { value: new THREE.Color(bg) }, uTop: { value: new THREE.Color('#34405e') }, uWarm: { value: new THREE.Color('#b88a96') },
-      uBand: { value: BAND }, uMilk: { value: new THREE.Color('#4c5288') }, uStars: { value: 0 },
+      uBand: { value: BAND }, uMilk: { value: new THREE.Color('#4c5288') }, uStars: { value: 0 }, uGrade: { value: GRADE },
     },
     vertexShader: `
       varying vec3 vDir;
@@ -251,7 +252,7 @@ function skyDome(bg) {
         vDir = normalize(position);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }`,
-    fragmentShader: `
+    fragmentShader: GRADE_GLSL + `
       uniform vec3 uLow; uniform vec3 uTop; uniform vec3 uWarm; uniform vec3 uBand; uniform vec3 uMilk; uniform float uStars;
       varying vec3 vDir;
       void main() {
@@ -267,6 +268,7 @@ function skyDome(bg) {
         gl_FragColor = vec4(mix(c, uWarm, w * 0.55), 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
+        gl_FragColor.rgb = gradeCurvesOut(gl_FragColor.rgb);   // 跟完全進霧的山一起過曲線，接起來不會多一條線
       }`,
     side: THREE.BackSide, depthWrite: false, fog: false,
   });
@@ -1693,14 +1695,14 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     if (over && MR() < 0.6) continue;
     mists.push({ x, y: tz(z) + (over ? 5 + MR() * 3 : 1.5 + MR() * 3.5), z, s: 9 + MR() * 9, p: MR() * 10 });
   }
-  group.add(mist(mists, { color: '#8e98b0' }));   // 藍灰白的霧，不要偏紫
+  group.add(mist(mists, { color: '#66708e', alpha: 0.3, tune: '霧' }));   // 藍灰的霧，比夜空亮一點點就好，不要偏紫、不要白
   // 每條街上方一層被燈籠照暖的霧，從海上遠遠看，一層一層的街都在發光
   const glow = [];
   const glowRows = [[-6, 6, 8.5, 0], [-25, -10, 7, 0], [9, 14, 7, 0], [-3, 3, -2.8, 2.4], ...ORIGINAL.filter((a) => a.street && a.y != null && a.y > 5 && a.y < 13).map((a) => [a.x0 + 1, a.x1 - 1, (a.z0 + a.z1) / 2, a.y])];
   for (const [x0, x1, z, y] of glowRows) {
     for (let x = x0; x <= x1; x += 5) glow.push({ x: x + (MR() - 0.5) * 2, y: y + 3.4 + MR(), z: z + (MR() - 0.5) * 2, s: 8 + MR() * 4, p: MR() * 10 });
   }
-  group.add(mist(glow, { color: '#ff8a48', alpha: 0.22, warm: true }));
+  group.add(mist(glow, { color: '#ff8a48', alpha: 0.22, warm: true, tune: '暖霧' }));
   // 海上的燈影：碼頭靠海那一排、棧橋兩邊的燈籠，還有整座鎮映在水上的一大片暖光
   const shimmer = [{ x: 0, z: 12.2, w: 16, l: 20, color: '#ff8a48', a: 0.16 }];
   for (let x = -7.5; x <= 7.5; x += 1.5) if (Math.abs(x) > 1.5) shimmer.push({ x: x + (MR() - 0.5) * 0.4, z: 12.2, w: 0.35, l: 4 + MR() * 3, color: '#ff7a40', a: 0.5 });
@@ -1730,7 +1732,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   group.add(sea);
 
   // 月光幾乎是中性的灰，藍色留給空氣（霧和天空）：牆、瓦、石階才是灰的，燈照到的地方才是暖的，不會疊成紫紅
-  const env = { bg: 0x4b5574, near: 32, far: 200, sky: 0xb4b8c8, ground: 0x5e6270, hi: 1.85, sun: 0xff9a70, si: 0.55, dir: new THREE.Vector3(-6, 5, 8) };
+  const env = { bg: 0x4b5574, near: 32, far: 200, sky: 0x8c96b4, ground: 0x5e6270, hi: 1.6, sun: 0xff9a70, si: 0.55, dir: new THREE.Vector3(-6, 5, 8) };
   const sky = new THREE.Group(), dome = skyDome(env.bg), field = starField(coarse ? 2600 : 5200);
   sky.add(dome, field, meteor(field.material.uniforms.uFade));
   // 星空跟著角色的高度出來：碼頭和街上燈太亮只看得到一些，爬上遠眺台整片天和銀河才都出來
@@ -1743,8 +1745,8 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   }
   const moonDir = new THREE.Vector3(0.5, 0.42, -1).normalize().multiplyScalar(270);
   stars.push({ ...moonDir, color: '#fff4dc', size: 70 });
-  sky.add(glowPoints(stars));
-  const moon = new THREE.Mesh(new THREE.CircleGeometry(7, 24), new THREE.MeshBasicMaterial({ color: '#fff6e4', fog: false }));
+  sky.add(glowPoints(stars, { sky: true }));
+  const moon = new THREE.Mesh(new THREE.CircleGeometry(7, 24), gradeCurvesOnly(new THREE.MeshBasicMaterial({ color: '#fff6e4', fog: false })));
   moon.position.copy(moonDir);
   moon.lookAt(0, 0, 0);
   sky.add(moon);
@@ -1753,13 +1755,13 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   // 海的另一邊，畫廊那座白塔：遠遠一根淡淡的影子，塔頂的石頭和畫廊那邊同時亮起
   const far = new THREE.Group();
   far.position.set(-90, SEA, 260);
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.4, 22, 8), new THREE.MeshBasicMaterial({ color: '#8c88a8', fog: false }));
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.4, 22, 8), gradeCurvesOnly(new THREE.MeshBasicMaterial({ color: '#8c88a8', fog: false })));
   shaft.position.y = 11;
   far.add(shaft);
-  const isle = new THREE.Mesh(new THREE.SphereGeometry(9, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#4a4866', fog: false }));
+  const isle = new THREE.Mesh(new THREE.SphereGeometry(9, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), gradeCurvesOnly(new THREE.MeshBasicMaterial({ color: '#4a4866', fog: false })));
   isle.scale.y = 0.35;
   far.add(isle);
-  const towerGlow = glowPoints([{ x: 0, y: 24, z: 0, color: '#bcd8ff', size: 30 }]), towerSize = towerGlow.geometry.attributes.aSize;
+  const towerGlow = glowPoints([{ x: 0, y: 24, z: 0, color: '#bcd8ff', size: 30 }], { sky: true }), towerSize = towerGlow.geometry.attributes.aSize;
   far.add(towerGlow);
   group.add(far);
 

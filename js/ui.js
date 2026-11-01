@@ -260,7 +260,16 @@ export class UI {
 
   loading(text) {
     const el = $('#loading');
-    if (text == null) el.classList.add('done');
-    else el.querySelector('.msg').textContent = text;
+    if (text != null) { el.querySelector('.msg').textContent = text; return; }
+    if (!el.classList.contains('crossing') || el.classList.contains('done')) { el.classList.add('done'); return; }
+    // 渡海到了：霧散開、對岸亮起來、蜃景消掉，再淡出到遊戲畫面
+    for (const [sel, o] of [['.land', 1], ['.mirage', 0], ['.fog', 0.25]]) {
+      for (const e of el.querySelectorAll(sel)) {
+        const from = getComputedStyle(e).opacity;
+        for (const a of e.getAnimations()) a.cancel();
+        e.animate([{ opacity: from }, { opacity: o }], { duration: 900, easing: 'ease-out', fill: 'forwards' });
+      }
+    }
+    setTimeout(() => el.classList.add('done'), 700);
   }
 }

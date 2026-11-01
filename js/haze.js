@@ -4,6 +4,11 @@
 // 全部都是一片一片面向鏡頭（或平貼地面）的小方塊，每一種合成一次畫完，手機也撐得住
 import * as THREE from 'three';
 import { uTime } from './scenery.js';
+import { GRADE_VERT, GRADE_GLSL, gradeUniforms, TUNE } from './grade.js';
+
+// 這幾層都不經過內建的霧，自己接上 grade.js：霧和煙當成一般的東西調色、混霧；疊加發光的跟著霧淡掉（見 gradeLight）。
+// 霧的濃淡在頂點算一次就好，一片小方塊裡差不了多少
+const WORLD = 'cameraPosition + ( vec4( mv.xyz, 0.0 ) * viewMatrix ).xyz';
 
 function instanced(attrs, count) {
   const plane = new THREE.PlaneGeometry(1, 1), g = new THREE.InstancedBufferGeometry();
@@ -24,29 +29,32 @@ function finish(g, mat, order) {
 
 // 一團一團的薄霧，慢慢飄。離鏡頭太近的淡掉，不會糊住畫面。
 // warm：燈籠街上方被燈照暖的那層霧，用疊加的，遠遠看像整條街在發光
-export function mist(list, { color = '#9a94c8', alpha = 0.32, warm = false } = {}) {
+// tune：給個名字就把顏色和濃淡登記到調色面板（?debug），複製時用 key 當名字
+export function mist(list, { color = '#9a94c8', alpha = 0.32, warm = false, tune = null } = {}) {
   const g = instanced([
     ['aOffset', 3, list.flatMap((m) => [m.x, m.y, m.z])],
     ['aSize', 1, list.map((m) => m.s)],
     ['aPhase', 1, list.map((m) => m.p)],
   ], list.length);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uTime, uColor: { value: new THREE.Color(color) }, uAlpha: { value: alpha } },
-    vertexShader: `
+    uniforms: { uTime, uColor: { value: new THREE.Color(color) }, uAlpha: { value: alpha }, ...gradeUniforms() },
+    vertexShader: GRADE_VERT + `
       uniform float uTime;
       attribute vec3 aOffset; attribute float aSize; attribute float aPhase;
-      varying vec2 vUv; varying float vNear; varying float vPhase;
+      varying vec2 vUv; varying float vNear; varying float vPhase; varying float vFog;
       void main() {
         vec3 c = aOffset + vec3(sin(uTime * 0.05 + aPhase) * 2.5, sin(uTime * 0.07 + aPhase * 2.0) * 0.3, cos(uTime * 0.04 + aPhase) * 1.2);
         vec4 mv = modelViewMatrix * vec4(c, 1.0);
         mv.xy += position.xy * vec2(aSize, aSize * 0.55);
         vUv = uv; vPhase = aPhase;
         vNear = smoothstep(6.0, 18.0, -mv.z) * (1.0 - smoothstep(150.0, 260.0, -mv.z));
+        vFog = gradeFog(${WORLD});
         gl_Position = projectionMatrix * mv;
       }`,
-    fragmentShader: `
+    fragmentShader: GRADE_GLSL + `
+      uniform vec3 fogColor;
       uniform float uTime; uniform vec3 uColor; uniform float uAlpha;
-      varying vec2 vUv; varying float vNear; varying float vPhase;
+      varying vec2 vUv; varying float vNear; varying float vPhase; varying float vFog;
       void main() {
         vec2 p = (vUv - 0.5) * 2.0;
         float a = pow(max(0.0, 1.0 - dot(p, p)), 2.0);
@@ -54,10 +62,15 @@ export function mist(list, { color = '#9a94c8', alpha = 0.32, warm = false } = {
         a *= uAlpha * vNear;
         ${warm ? 'gl_FragColor = vec4(uColor * a, a);' : 'gl_FragColor = vec4(uColor, a);'}
         #include <colorspace_fragment>
+        ${warm ? 'gl_FragColor.rgb *= gradeLight(vFog);' : 'if (uGrade.on > 0.5) gl_FragColor.rgb = gradeSurface(gl_FragColor.rgb, vFog, fogColor);'}
       }`,
-    transparent: true, depthWrite: false, fog: false,
+    transparent: true, depthWrite: false, fog: true,
     blending: warm ? THREE.AdditiveBlending : THREE.NormalBlending,
   });
+  if (tune) {
+    TUNE.push({ label: tune + '色', key: tune + 'Color', uniform: mat.uniforms.uColor, kind: 'color' });
+    TUNE.push({ label: tune + '濃', key: tune + 'Alpha', uniform: mat.uniforms.uAlpha, kind: [0, 1, 0.01] });
+  }
   return finish(g, mat, warm ? 6 : 5);
 }
 
@@ -80,12 +93,13 @@ export function smoke(list, coarse = false) {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       uTime, uWind: { value: new THREE.Vector2(0.5, 0.25) },
-      uWarm: { value: new THREE.Color('#ffc890') }, uSteam: { value: new THREE.Color('#d8d4e8') }, uSmoke: { value: new THREE.Color('#8a8090') },
+      uWarm: { value: new THREE.Color('#ffc890') }, uSteam: { value: new THREE.Color('#aeb2c8') }, uSmoke: { value: new THREE.Color('#8a8090') },
+      ...gradeUniforms(),
     },
-    vertexShader: `
+    vertexShader: GRADE_VERT + `
       uniform float uTime; uniform vec2 uWind;
       attribute vec3 aOrigin; attribute float aSeed; attribute float aKind; attribute float aScale; attribute float aSpin;
-      varying vec2 vUv; varying float vT; varying float vA; varying float vKind;
+      varying vec2 vUv; varying float vT; varying float vA; varying float vKind; varying float vFog;
       void main() {
         float life = mix(2.4, 6.5, aKind);
         float t = fract(uTime / life + aSeed);
@@ -101,11 +115,13 @@ export function smoke(list, coarse = false) {
         mv.xy += mat2(c, s, -s, c) * position.xy * size;
         vUv = uv; vT = t; vKind = aKind;
         vA = smoothstep(0.0, 0.12, t) * pow(1.0 - t, 1.6) * mix(0.5, 0.36, aKind) * smoothstep(0.6, 2.0, -mv.z);
+        vFog = gradeFog(${WORLD});
         gl_Position = projectionMatrix * mv;
       }`,
-    fragmentShader: `
+    fragmentShader: GRADE_GLSL + `
+      uniform vec3 fogColor;
       uniform vec3 uWarm; uniform vec3 uSteam; uniform vec3 uSmoke;
-      varying vec2 vUv; varying float vT; varying float vA; varying float vKind;
+      varying vec2 vUv; varying float vT; varying float vA; varying float vKind; varying float vFog;
       void main() {
         vec2 p = (vUv - 0.5) * 2.0;
         float d = dot(p, p);
@@ -114,9 +130,11 @@ export function smoke(list, coarse = false) {
         vec3 c = mix(uWarm, mix(uSteam, uSmoke, vKind), smoothstep(0.0, 0.55, vT));
         gl_FragColor = vec4(c, a * vA);
         #include <colorspace_fragment>
+        if (uGrade.on > 0.5) gl_FragColor.rgb = gradeSurface(gl_FragColor.rgb, vFog, fogColor);
       }`,
-    transparent: true, depthWrite: false, fog: false,
+    transparent: true, depthWrite: false, fog: true,
   });
+  TUNE.push({ label: '蒸氣色', key: 'steam', uniform: mat.uniforms.uSteam, kind: 'color' }, { label: '煙色', key: 'smoke', uniform: mat.uniforms.uSmoke, kind: 'color' });
   return finish(g, mat, 4);
 }
 
@@ -129,14 +147,14 @@ export function pools(list, gain = 1) {
     ['aColor', 3, list.flatMap((p) => { const c = new THREE.Color(p.color); const a = p.a * gain; return [c.r * a, c.g * a, c.b * a]; })],
   ], list.length);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uTime },
-    vertexShader: `
+    uniforms: { uTime, ...gradeUniforms() },
+    vertexShader: GRADE_VERT + `
       attribute vec3 aPos; attribute float aR; attribute vec3 aColor;
       varying vec2 vP; varying vec3 vC;
       void main() {
         vec4 mv = modelViewMatrix * vec4(aPos + vec3(position.x, 0.0, -position.y) * aR * 2.0, 1.0);
         vP = position.xy * 2.0;
-        vC = aColor * (1.0 - smoothstep(40.0, 120.0, -mv.z));
+        vC = aColor * (1.0 - smoothstep(40.0, 120.0, -mv.z)) * gradeLight(gradeFog(${WORLD}));
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
@@ -146,7 +164,7 @@ export function pools(list, gain = 1) {
         gl_FragColor = vec4(vC * a, a);
         #include <colorspace_fragment>
       }`,
-    transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending,
+    transparent: true, depthWrite: false, fog: true, blending: THREE.AdditiveBlending,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   });
   return finish(g, mat, 3);
@@ -162,8 +180,8 @@ export function ripples(list, sea) {
     ['aSeed', 1, list.map((p) => p.x * 1.7 + p.z * 0.3)],
   ], list.length);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uTime },
-    vertexShader: `
+    uniforms: { uTime, ...gradeUniforms() },
+    vertexShader: GRADE_VERT + `
       uniform float uTime;
       attribute vec3 aPos; attribute vec2 aSize; attribute vec3 aColor; attribute float aSeed;
       varying vec2 vP; varying vec3 vC; varying float vSeed; varying float vW;
@@ -172,7 +190,7 @@ export function ripples(list, sea) {
         vec3 p = aPos + vec3(position.x * aSize.x + sin(v * 9.0 + uTime * 1.6 + aSeed) * 0.12 * v * aSize.x, 0.0, v * aSize.y);
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         vP = vec2(position.x * 2.0, v);
-        vC = aColor; vSeed = aSeed; vW = aSize.x;
+        vC = aColor * gradeLight(gradeFog(${WORLD})); vSeed = aSeed; vW = aSize.x;
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
@@ -186,7 +204,7 @@ export function ripples(list, sea) {
         gl_FragColor = vec4(vC * a, a);
         #include <colorspace_fragment>
       }`,
-    transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    transparent: true, depthWrite: false, fog: true, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
   });
   return finish(g, mat, 3);
 }

@@ -109,6 +109,76 @@ function keptLamp(k) {
   k.light(0, 0.15, 0, '#cfdcff', 2.2);
 }
 
+// ---------- 渡船：黑袍訪客那艘的小一號 ----------
+// 繫在碼頭邊，兩頭各一艘（畫廊的棧橋、海市的長棧橋）。平常船上沒有人、燈不亮；
+// 有人上船時，黑袍的船夫在船頭慢慢現身，燈亮起來，渡海畫面就是坐在這艘船上往前看。船頭朝本地 +z
+export const SKIFF = { len: 3.6, beam: 1.3, depth: 0.6, deck: 0.42 };
+const LAMP_AT = { x: 0.24, y: 1.05, z: SKIFF.len / 2 - 0.62 };
+function skiff(k) {
+  const { len: L, beam: B, depth: D } = SKIFF, o = { ao: false };
+  k.add(hull(L, B, D, { y: SKIFF.deck, w: 0.85 }), '#2a2230', 0, 0, 0, { ...o, color2: '#54445a' });
+  for (const sx of [-1, 1]) k.box(0.04, 0.05, L * 0.72, GOLD, sx * (B / 2 - 0.03), -0.02, 0, o);
+  for (const x of [-0.18, 0, 0.18]) k.box(0.15, 0.025, L * 0.55, '#3a2e38', x, -D * SKIFF.deck + 0.015, -0.1, o);
+  k.box(1.05, 0.05, 0.22, '#3a2e38', 0, -0.14, 0.55, o);
+  // 天鵝頸的船頭、金色的喙，捲起來的船尾，跟大船同一個樣子
+  const by = D * 0.45, r = 0.42, end = Math.PI * 0.55;
+  k.torus(r, 0.06, end, '#2a2230', 0, by, L / 2 - r, { ...o, ry: -Math.PI / 2 });
+  const hy = by + Math.sin(end) * r, hz = L / 2 - r + Math.cos(end) * r;
+  k.ball(0.09, '#2a2230', 0, hy, hz + 0.02, o);
+  k.cone(0.03, 0.15, GOLD, 0, hy - 0.03, hz + 0.14, { ...o, rx: Math.PI / 2 + 0.3 });
+  k.torus(0.2, 0.045, Math.PI * 0.6, '#2a2230', 0, D * 0.3, -L / 2 + 0.2, { ...o, ry: Math.PI / 2 });
+  // 船頭的燈柱，燈罩是暗的
+  k.cyl(0.02, 0.02, LAMP_AT.y + D * SKIFF.deck, POST, LAMP_AT.x, (LAMP_AT.y - D * SKIFF.deck) / 2, LAMP_AT.z, o, 4);
+  k.cyl(0.06, 0.06, 0.15, '#4a4e5e', LAMP_AT.x, LAMP_AT.y, LAMP_AT.z, o, 6);
+}
+function skiffCrew(k) {
+  robed(k, -0.05, -SKIFF.depth * SKIFF.deck, SKIFF.len / 2 - 0.85, 0.9);
+  k.cyl(0.065, 0.065, 0.16, '#e4ecff', LAMP_AT.x, LAMP_AT.y, LAMP_AT.z, { glow: true }, 6);
+  k.light(LAMP_AT.x, LAMP_AT.y, LAMP_AT.z, '#cfdcff', 1.1);
+}
+// 做一艘渡船。objects 把桶子換成網格（每個區域用自己的 bucketObjects）。
+// seat() 是坐的地方（艙底中間偏後，世界座標）和船頭朝的方向；board() 讓船夫現身、燈亮起來
+export function makeSkiff(objects) {
+  const R = rng('skiff');
+  const build = (fn) => {
+    const k = new Kit(R), b = newBucket(), g = new THREE.Group();
+    fn(k);
+    k.emit(b, 0, 0, 0);
+    for (const obj of objects(b)) g.add(obj);
+    return g;
+  };
+  const boat = build(skiff), crew = build(skiffCrew);
+  boat.rotation.order = 'YXZ';
+  crew.visible = false;
+  boat.add(crew);
+  const mats = [];
+  crew.traverse((c) => {
+    if (!c.isMesh) return;
+    c.material = Object.assign(c.material.clone(), { transparent: true, opacity: 0 });
+    mats.push(c.material);
+  });
+  return {
+    boat,
+    seat() {
+      boat.updateMatrixWorld();
+      const p = boat.localToWorld(new THREE.Vector3(0, -SKIFF.depth * SKIFF.deck + 0.03, -0.45));
+      const e = boat.matrixWorld.elements;
+      return { x: p.x, y: p.y, z: p.z, h: Math.atan2(e[8], e[10]) };
+    },
+    // 燈先亮，人再從空氣裡慢慢浮出來
+    board() {
+      crew.visible = true;
+      const t0 = performance.now();
+      const step = () => {
+        const a = Math.min(1, (performance.now() - t0) / 700);
+        for (const m of mats) m.opacity = a;
+        if (a < 1) requestAnimationFrame(step);
+      };
+      step();
+    },
+  };
+}
+
 // 船走的航線：從霧裡沿海灣左側進來，停在小島白塔下的石階邊，再從右側回到霧裡
 // 第一個點是泊位，FAR 是霧裡最遠的那一點，船在那裡等，下一趟才再出現。整圈閉合，船永遠往前開
 const ROUTE = [[3.5, 132.6], [11, 133.5], [18, 146], [22, 190], [12, 300], [-22, 290], [-14, 190], [-10, 145], [-4, 133]];

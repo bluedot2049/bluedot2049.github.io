@@ -103,3 +103,116 @@ export function envPanel(ENV, apply, single) {
   isolate(el);
   document.body.appendChild(el);
 }
+
+// 調色面板（grade.js）：右上角是數值滑桿、暗部顏色、各區域另外登記的參數（霧色、霧的濃淡），
+// 左邊另一塊是曲線：亮度、紅、綠、藍四條。點一下加點、拖曳移動、拖出框外或按兩下刪掉，兩端的點只能上下動。
+// 「關」跟原本的霧對照，「複製」把整組貼回 zone-*.js 的 grade
+const RANGES = {
+  density: [0, 0.06, 0.001], falloff: [0, 0.15, 0.002], base: [-10, 30, 0.5], start: [0, 40, 1], maxFog: [0, 1, 0.01],
+  desat: [0, 1, 0.01], cool: [0, 1.5, 0.01], contrast: [0.5, 3, 0.05], vivid: [0, 2, 0.05], glow: [0, 2, 0.05],
+};
+const CURVE_TABS = [['l', '亮度', '#ddd'], ['r', '紅', '#f66'], ['g', '綠', '#6d6'], ['b', '藍', '#69f']];
+export async function gradePanel() {
+  const { GRADE, NUMBERS, CURVES, TUNE, setShadow, bakeCurves, curveFn, presetText } = await import('./grade.js');
+  const el = document.createElement('div');
+  el.style.cssText = PANEL + ';right:8px;top:8px;grid-template-columns:auto 120px 56px;max-height:calc(100vh - 330px);overflow:auto';
+  for (const k of NUMBERS) row(el, k, ...slider(...RANGES[k], GRADE[k], (v) => { GRADE[k] = v; }));
+  const color = (value, onInput) => {
+    const c = document.createElement('input'), out = document.createElement('span');
+    Object.assign(c, { type: 'color', value });
+    out.textContent = value;
+    c.oninput = () => { out.textContent = c.value; onInput(c.value); };
+    return [c, out];
+  };
+  row(el, 'shadow', ...color(GRADE.shadowHex, setShadow));
+  for (const t of TUNE) {
+    if (t.kind === 'color') row(el, t.label, ...color('#' + t.uniform.value.getHexString(), (v) => t.uniform.value.set(v)));
+    else row(el, t.label, ...slider(...t.kind, t.uniform.value, (v) => { t.uniform.value = v; }));
+  }
+
+  // 曲線
+  const W = 180, PAD = 6;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = W * 2;
+  cv.style.cssText = `grid-column:1/-1;width:${W}px;height:${W}px;margin:6px auto 2px;background:#111;touch-action:none;cursor:crosshair`;
+  const g = cv.getContext('2d');
+  let tab = 'l';
+  const tabs = document.createElement('div');
+  tabs.style.cssText = 'grid-column:1/-1;display:flex;gap:4px;justify-content:center';
+  const tabBtns = CURVE_TABS.map(([k, name, col]) => {
+    const b = button(name, () => { tab = k; draw(); });
+    b.style.color = col;
+    tabs.append(b);
+    return [k, b];
+  });
+  const toPx = ([x, y]) => [PAD + x * (W - 2 * PAD), W - PAD - y * (W - 2 * PAD)];
+  const fromPx = (px, py) => [Math.min(1, Math.max(0, (px - PAD) / (W - 2 * PAD))), Math.min(1, Math.max(0, (W - PAD - py) / (W - 2 * PAD)))];
+  function draw() {
+    for (const [k, b] of tabBtns) b.style.outline = k === tab ? '1px solid #cfe' : 'none';
+    g.setTransform(2, 0, 0, 2, 0, 0);
+    g.clearRect(0, 0, W, W);
+    g.strokeStyle = '#333';
+    g.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      const v = PAD + (i / 4) * (W - 2 * PAD);
+      g.beginPath(); g.moveTo(v, PAD); g.lineTo(v, W - PAD); g.moveTo(PAD, v); g.lineTo(W - PAD, v); g.stroke();
+    }
+    g.strokeStyle = '#444';
+    g.beginPath(); g.moveTo(...toPx([0, 0])); g.lineTo(...toPx([1, 1])); g.stroke();
+    // 其他三條淡淡畫在後面，正在調的那條畫在最上面
+    for (const [k, , col] of [...CURVE_TABS.filter(([k]) => k !== tab), CURVE_TABS.find(([k]) => k === tab)]) {
+      const f = curveFn(CURVES[k]);
+      g.globalAlpha = k === tab ? 1 : 0.3;
+      g.strokeStyle = col;
+      g.lineWidth = k === tab ? 1.5 : 1;
+      g.beginPath();
+      for (let i = 0; i <= 64; i++) { const x = i / 64; g[i ? 'lineTo' : 'moveTo'](...toPx([x, Math.min(1, Math.max(0, f(x)))])); }
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+    g.fillStyle = CURVE_TABS.find(([k]) => k === tab)[2];
+    for (const p of CURVES[tab]) { const [x, y] = toPx(p); g.fillRect(x - 3, y - 3, 6, 6); }
+  }
+  let drag = -1;
+  const at = (e) => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  const apply = () => { CURVES[tab].sort((a, b) => a[0] - b[0]); bakeCurves(); draw(); };
+  cv.addEventListener('pointerdown', (e) => {
+    const [px, py] = at(e), pts = CURVES[tab];
+    drag = pts.findIndex((p) => { const [x, y] = toPx(p); return Math.hypot(x - px, y - py) < 8; });
+    if (drag < 0) { pts.push(fromPx(px, py)); pts.sort((a, b) => a[0] - b[0]); drag = pts.findIndex((p) => toPx(p)[0] >= px - 0.5); }
+    cv.setPointerCapture(e.pointerId);
+    apply();
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (drag < 0) return;
+    const pts = CURVES[tab], [px, py] = at(e), p = pts[drag], ends = drag === 0 || drag === pts.length - 1;
+    const out = px < -12 || px > W + 12 || py < -12 || py > W + 12;
+    if (out && !ends && pts.length > 2) { pts.splice(drag, 1); drag = -1; apply(); return; }
+    const [x, y] = fromPx(px, py);
+    p[1] = y;
+    if (!ends) p[0] = Math.min(pts[drag + 1][0] - 0.01, Math.max(pts[drag - 1][0] + 0.01, x));
+    bakeCurves();
+    draw();
+  });
+  cv.addEventListener('pointerup', () => { drag = -1; });
+  cv.addEventListener('dblclick', (e) => {
+    const [px, py] = at(e), pts = CURVES[tab];
+    const i = pts.findIndex((p) => { const [x, y] = toPx(p); return Math.hypot(x - px, y - py) < 8; });
+    if (i > 0 && i < pts.length - 1) { pts.splice(i, 1); apply(); }
+  });
+  const cel = document.createElement('div');
+  cel.style.cssText = PANEL + ';left:8px;top:84px;grid-template-columns:1fr 1fr 1fr';
+  cel.append(tabs, cv);
+  const reset = button('這條拉直', () => { CURVES[tab] = [[0, 0], [1, 1]]; apply(); });
+  const toggle = button('關', (e) => { GRADE.on = GRADE.on ? 0 : 1; e.target.textContent = GRADE.on ? '關' : '開'; });
+  const copy = button('複製', () => {
+    const text = presetText();
+    navigator.clipboard?.writeText(text);
+    console.log(text);
+  });
+  cel.append(reset, toggle, copy);
+  draw();
+  isolate(el);
+  isolate(cel);
+  document.body.append(el, cel);
+}

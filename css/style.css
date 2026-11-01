@@ -88,9 +88,10 @@ body.flat #stage::after { display: none; }
   position: fixed; inset: 0; z-index: 50;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: var(--bg);
-  transition: opacity .8s;
+  transition: opacity .8s, visibility 0s;
 }
-#loading.done { opacity: 0; pointer-events: none; }
+/* 淡出後整個藏起來，霧和水波不在玩的時候一直重畫 */
+#loading.done { opacity: 0; pointer-events: none; visibility: hidden; transition: opacity .8s, visibility 0s .8s; }
 .sigil { width: 112px; height: 112px; overflow: visible; }
 .sigil * { fill: none; stroke: var(--gold); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .sigil g { transform-origin: 60px 60px; }
@@ -99,16 +100,109 @@ body.flat #stage::after { display: none; }
 .sigil .ring-c { animation: spin 14s linear infinite; }
 .sigil .core { fill: var(--gold-hi); stroke: none; transform-origin: 60px 60px; animation: breathe 2.4s ease-in-out infinite; }
 #loading .brand { margin-top: 30px; width: 190px; height: auto; }
-/* 渡海：轉圈的符號換成一艘在浪上起伏的小船 */
-.crossing-boat { display: none; width: 160px; height: 70px; overflow: hidden; }
-.crossing-boat * { fill: none; stroke: var(--gold); stroke-width: 1.2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.crossing-boat .boat { animation: bob 3.2s ease-in-out infinite; transform-origin: 80px 46px; }
-.crossing-boat .wave { animation: drift 4s linear infinite; }
-.crossing-boat .w2 { opacity: .5; animation-duration: 6s; }
-#loading.crossing .sigil { display: none; }
-#loading.crossing .crossing-boat { display: block; margin-top: 21px; margin-bottom: 21px; }
-@keyframes bob { 50% { transform: translateY(3px) rotate(-3deg); } }
-@keyframes drift { to { transform: translateX(-40px); } }
+/* ───────── 渡海：霧裡一艘船，船頭一盞冷白的燈，要去的地方從海平線上慢慢浮出來 ─────────
+   出發地的天色鋪底，目的地的天色（.tint）慢慢蓋上來：畫廊外是粉橘的黃昏，海市是藍夜。
+   所有動畫的 delay 都是 --t（負的、已經過了多久），換頁之後從斷掉的地方接著跑 */
+#loading { --hz: 56%; --t: 0ms; }
+#loading.to-haishi {
+  --from: linear-gradient(#2a2133, #6e4c5a 54%, #8a6068 var(--hz), #4a3442 calc(var(--hz) + .5%), #1e1823);
+  --to: linear-gradient(#131a27, #364259 50%, #4c5a74 var(--hz), #2a3448 calc(var(--hz) + .5%), #0f141e);
+  --fog: rgba(150, 166, 194, .2); --ripple: rgba(214, 226, 255, .09);
+}
+#loading.to-gallery {
+  --from: linear-gradient(#131a27, #364259 50%, #4c5a74 var(--hz), #2a3448 calc(var(--hz) + .5%), #0f141e);
+  --to: linear-gradient(#2a2133, #6e4c5a 54%, #8a6068 var(--hz), #4a3442 calc(var(--hz) + .5%), #1e1823);
+  --fog: rgba(226, 178, 182, .18); --ripple: rgba(255, 220, 210, .09);
+}
+.sea { display: none; position: absolute; inset: 0; overflow: hidden; background: var(--from); }
+#loading.crossing .sea { display: block; }
+#loading.crossing .sigil, #loading.crossing .brand { display: none; }
+#loading.crossing .msg {
+  position: absolute; left: 0; right: 0; bottom: calc(9vh + env(safe-area-inset-bottom));
+  text-align: center; color: rgba(232, 226, 236, .62);
+}
+.sea .tint { position: absolute; inset: 0; background: var(--to); opacity: 0; animation: fade-in 12s ease-in-out var(--t) forwards; }
+
+.sea .far {
+  display: none; position: absolute; left: 50%; bottom: calc(100% - var(--hz));
+  width: min(110vw, 680px); transform: translateX(-46%);
+}
+#loading.to-haishi .far.to-haishi, #loading.to-gallery .far.to-gallery { display: block; }
+/* 海市的顏色寫在 path 的屬性上：蜃景是 <use> 複製出來的，吃不到這裡的選擇器 */
+.far.to-gallery path { fill: #3a2936; }
+.far.to-gallery .pale { fill: #c9b6b8; opacity: .7; }
+.far.to-gallery .lights { fill: #f4b870; }
+.far.to-haishi .lights .l2 { fill: #ec7658; }
+.far .stone { fill: #cfe0ff; animation: twinkle 4.8s ease-in-out var(--t) infinite; }
+/* 一直靠近、不會真的到：前幾秒浮得快，後面越來越慢，等載完再補最後一段（ui.loading） */
+.far .land { opacity: 0; animation: fade-in 18s cubic-bezier(.15, .55, .3, 1) var(--t) forwards; }
+.far .mirage { opacity: 0; animation: mirage 18s linear var(--t) forwards; }
+.far .shimmer { transform-box: view-box; transform-origin: 50% 63%; animation: shimmer 3.4s ease-in-out var(--t) infinite alternate; }
+.far .lights .l0 { animation: twinkle 3.1s ease-in-out var(--t) infinite; }
+.far .lights .l1 { animation: twinkle 4.3s ease-in-out calc(var(--t) - 1.2s) infinite; }
+
+.sea .fog { position: absolute; left: 0; width: 100%; pointer-events: none; }
+.sea .fog .drift {
+  width: 200vw; height: 100%;
+  background:
+    radial-gradient(ellipse 28vw 46% at 22vw 52%, var(--fog), transparent 72%),
+    radial-gradient(ellipse 22vw 38% at 56vw 40%, var(--fog), transparent 72%),
+    radial-gradient(ellipse 22vw 44% at 82vw 60%, var(--fog), transparent 72%);
+  background-size: 100vw 100%;
+  animation: sea-drift 70s linear var(--t) infinite;
+}
+.sea .f1 { top: calc(var(--hz) - 15%); height: 28%; }
+.sea .f2 { top: calc(var(--hz) + 16%); height: 34%; opacity: .7; }
+.sea .f2 .drift { animation-duration: 38s; }
+
+/* 水面一道道細細的反光往後流，遠的短而慢，近的長而快。寬度用 vw 的整數分之一，捲一個畫面寬剛好接回去 */
+.sea .ripples { position: absolute; left: 0; width: 200vw; animation: sea-drift 30s linear var(--t) infinite; }
+.sea .r1 {
+  top: calc(var(--hz) + .6%); height: 10%;
+  background:
+    linear-gradient(90deg, transparent 20%, var(--ripple) 20% 27%, transparent 27%) 0 12% / 20vw 1px repeat-x,
+    linear-gradient(90deg, transparent 55%, var(--ripple) 55% 60%, transparent 60%) 0 38% / 25vw 1px repeat-x,
+    linear-gradient(90deg, transparent 10%, var(--ripple) 10% 18%, transparent 18%) 0 66% / 12.5vw 1px repeat-x,
+    linear-gradient(90deg, transparent 70%, var(--ripple) 70% 79%, transparent 79%) 0 92% / 20vw 1px repeat-x;
+}
+.sea .r2 {
+  top: calc(var(--hz) + 12%); bottom: 0; animation-duration: 15s;
+  background:
+    linear-gradient(90deg, transparent 30%, var(--ripple) 30% 42%, transparent 42%) 0 8% / 50vw 1.5px repeat-x,
+    linear-gradient(90deg, transparent 5%, var(--ripple) 5% 14%, transparent 14%) 0 30% / 25vw 1.5px repeat-x,
+    linear-gradient(90deg, transparent 60%, var(--ripple) 60% 74%, transparent 74%) 0 55% / 50vw 2px repeat-x,
+    linear-gradient(90deg, transparent 22%, var(--ripple) 22% 31%, transparent 31%) 0 82% / 33.333vw 2px repeat-x;
+}
+
+/* 船：吃水線在 viewBox 的 y=110，對到海平線下面一點 */
+.sea .ferry {
+  position: absolute; left: 50%; top: calc(var(--hz) + 9%);
+  width: min(78vw, 360px); transform: translate(-50%, -64.7%); overflow: visible;
+}
+.ferry .ink { fill: #18141d; }
+.ferry .ink-line, .ferry .pole { fill: none; stroke: #18141d; stroke-linecap: round; }
+.ferry .ink-line { stroke-width: 4.2; }
+.ferry .pole { stroke-width: 1.6; }
+.ferry .gold { fill: var(--gold-lo); }
+.ferry .rail { fill: none; stroke: var(--gold-lo); stroke-width: .8; opacity: .7; }
+.ferry .lamp { fill: #eef3ff; }
+.ferry .wake { fill: none; stroke: var(--ripple); stroke-width: 1; }
+.ferry .refl rect { fill: #dfe8ff; }
+.ferry .bob { transform-box: view-box; transform-origin: 120px 110px; animation: bob 4.6s ease-in-out var(--t) infinite; }
+.ferry .glow { animation: flicker 3.7s linear var(--t) infinite; }
+.ferry .refl { transform-box: view-box; transform-origin: 182px 113px; animation: refl 2.9s ease-in-out var(--t) infinite alternate; }
+
+@keyframes fade-in { to { opacity: 1; } }
+@keyframes mirage { 0% { opacity: 0; } 18% { opacity: .5; } 55% { opacity: .2; } 100% { opacity: 0; } }
+@keyframes shimmer { from { transform: scaleY(.82) translateY(1%); } to { transform: scaleY(1.12) translateY(-1%); } }
+@keyframes twinkle { 50% { opacity: .45; } }
+@keyframes sea-drift { to { transform: translateX(-100vw); } }
+@keyframes bob { 50% { transform: translateY(1.6px) rotate(-1.1deg); } }
+@keyframes flicker { 0%, 100% { opacity: 1; } 18% { opacity: .82; } 22% { opacity: .95; } 61% { opacity: .86; } 70% { opacity: 1; } }
+@keyframes refl { from { transform: scaleX(.85); opacity: .75; } to { transform: scaleX(1.18); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .sea .drift, .sea .ripples, .far .shimmer, .ferry .bob, .ferry .refl, .ferry .glow { animation: none; }
+}
 #loading .msg {
   margin-top: 10px; padding-left: .4em;
   color: var(--muted); letter-spacing: .4em; font-size: 12px;
@@ -1039,6 +1133,67 @@ body.desk .ph-chip span { color: var(--muted); }
 body.photo-rec #ph-record { border-color: #c4452d; }
 body.photo-rec #ph-record i { width: 18px; height: 18px; border-radius: 4px; }
 
+/* 閃光開關：長成相機的零件，不跟其他金線按鈕一樣。圖是 cameras.js 的 flashKnob 畫的；
+   .on 扇子展開、燈泡亮著，.swap 是剛閃過、換燈泡（--swap 秒），邊上一圈走完就換好了。手機在快門右邊，電腦在左邊 */
+#ph-flash {
+  position: relative; width: 56px; height: 56px; padding: 0; border-radius: 50%; overflow: hidden;
+  background: radial-gradient(circle at 40% 32%, #4a3528, #2a1d15 72%);
+  border: 2px solid #a0a6ae; box-shadow: inset 0 1px 2px rgba(255, 255, 255, .18), 0 2px 6px rgba(0, 0, 0, .45);
+  cursor: var(--cur-pointer); transition: transform .1s;
+}
+#ph-flash:active { transform: scale(.92); }
+#ph-flash svg { display: block; width: 100%; height: 100%; overflow: visible; }
+#ph-flash .rib {
+  transform-box: view-box; transform-origin: 0 0; transform: rotate(var(--c));
+  stroke: rgba(40, 32, 28, .35); stroke-width: .4;
+  transition: transform .45s cubic-bezier(.3, .8, .3, 1);
+}
+#ph-flash.on .rib { transform: rotate(var(--o)); }
+#ph-flash .halo { fill: #ffd98a; opacity: 0; transition: opacity .3s; }
+#ph-flash.on .halo { opacity: .3; }
+#ph-flash .glass { fill: #5f5a52; stroke: #8b857a; stroke-width: .8; transition: fill .3s; }
+#ph-flash.on .glass { fill: #ffe9b8; stroke: #c9a24a; }
+#ph-flash .fil { fill: none; stroke: #3a3430; stroke-width: .7; stroke-linejoin: round; }
+#ph-flash.on .fil { stroke: #b07a2a; }
+#ph-flash .shine { fill: #fff; opacity: .55; }
+#ph-flash .old circle { fill: #dfe5ea; stroke: #8a9aa6; stroke-width: .8; }
+#ph-flash .old .soot { fill: #6d7680; stroke: none; opacity: .7; }
+#ph-flash .old, #ph-flash .puff, #ph-flash .ring { opacity: 0; }
+#ph-flash .puff { fill: rgba(236, 226, 210, .8); transform-box: fill-box; transform-origin: center; }
+#ph-flash .ring { fill: none; stroke: #c9a24a; stroke-width: 1.6; stroke-dasharray: 100; stroke-dashoffset: 100; }
+#ph-flash.swap .old { animation: ph-bulb-out var(--swap, 1.6s) ease-in both; }
+#ph-flash.swap .new { animation: ph-bulb-in var(--swap, 1.6s) ease-out both; }
+#ph-flash.swap .puff { animation: ph-puff .9s ease-out both; }
+#ph-flash.swap .ring { opacity: 1; animation: ph-ring var(--swap, 1.6s) linear both; }
+@keyframes ph-bulb-out { 0%, 30% { opacity: 1; transform: none; } 50%, 100% { opacity: 0; transform: translateY(26px); } }
+@keyframes ph-bulb-in { 0%, 55% { opacity: 0; transform: translateY(26px); } 100% { opacity: 1; transform: none; } }
+@keyframes ph-puff { from { opacity: .8; transform: scale(.6); } to { opacity: 0; transform: translate(6px, -16px) scale(2.2); } }
+@keyframes ph-ring { to { stroke-dashoffset: 0; } }
+
+/* 日期開關：一塊銅板開個小窗，窗裡是刻反字的日期銅模（cameras.js 的 dateKnob）。
+   關著時鐵蓋滑下來遮住，.on 拉開；.burn 是剛拍下去，小窗燒紅再暗回去 */
+#ph-date {
+  position: relative; width: 52px; height: 38px; padding: 0; border-radius: 5px; overflow: hidden;
+  background: #2a1d15; border: 0; box-shadow: 0 2px 6px rgba(0, 0, 0, .45);
+  cursor: var(--cur-pointer); transition: transform .1s;
+}
+#ph-date:active { transform: scale(.92); }
+#ph-date svg { display: block; width: 100%; height: 100%; }
+#ph-date .plate { fill: #8a6a34; stroke: #c9a24a; stroke-width: .8; }
+#ph-date .rivet { fill: #c9a24a; stroke: #5a4320; stroke-width: .4; }
+#ph-date .well { fill: #1c130e; }
+#ph-date .die { fill: none; stroke: #6b4a30; stroke-width: 1.2; stroke-linecap: butt; stroke-linejoin: miter; transition: stroke .3s; }
+#ph-date.on .die { stroke: #c27a44; }
+#ph-date .glow rect { fill: #ff8a3c; opacity: 0; }
+#ph-date.burn .glow rect { animation: ph-burn 1.4s ease-out both; }
+#ph-date.burn .die { animation: ph-burn-die 1.4s ease-out both; }
+#ph-date .lid { transition: transform .3s cubic-bezier(.3, .8, .3, 1); }
+#ph-date .lid rect { fill: #4d4a48; }
+#ph-date .lid path { stroke: #2c2a29; stroke-width: .8; }
+#ph-date.on .lid { transform: translateY(-19px); }
+@keyframes ph-burn { 0% { opacity: .85; } 100% { opacity: 0; } }
+@keyframes ph-burn-die { 0% { stroke: #ffe2b0; } 100% { stroke: #c27a44; } }
+
 /* 高度尺：手機疊在搖桿上方，電腦在右邊中間。刻度在左，圓點旁邊寫幾公尺 */
 #ph-alt {
   position: fixed; z-index: 20;
@@ -1081,6 +1236,9 @@ body.photo-rec #ph-record i { width: 18px; height: 18px; border-radius: 4px; }
 body.desk #ph-bar { top: auto; left: 50%; right: auto; bottom: calc(154px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: calc(100vw - 32px); }
 body.desk #ph-chips { flex-wrap: wrap; justify-content: center; overflow: visible; }
 body.desk #ph-shoot { left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom)); align-items: center; }
+body.desk .ph-keys { position: relative; }
+body.desk #ph-flash { position: absolute; right: calc(100% + 18px); top: calc(50% - 28px); }
+body.desk #ph-date { position: absolute; right: calc(100% + 86px); top: calc(50% - 19px); }
 body.desk #ph-rec { top: calc(18px + env(safe-area-inset-top)); }
 body.desk #ph-alt { right: calc(70px + env(safe-area-inset-right)); bottom: auto; top: 50%; transform: translateY(-50%); }
 body.desk .ph-alt-track { height: 240px; }

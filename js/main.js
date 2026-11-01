@@ -23,6 +23,7 @@ import { dof, DofPass } from './dof.js';
 import { fullscreenButton } from './screen.js';
 import { CAMERAS, TABLE, carried, carry } from './cameras.js';
 import { FlashFx } from './flashfx.js';
+import { installGrade } from './grade.js';
 
 // 世界分成幾個區域，一次只建一個，用 ?z= 指定，沒有寫就是畫廊。每個區域的內容寫在自己的 zone-*.js，用到才下載。
 // 換區域時整頁重新載入：瀏覽器一定會把上一個區域的記憶體收回去，手機才撐得住。
@@ -170,6 +171,8 @@ async function start() {
   hemi.layers.enable(REFLECT_LAYER);
   sun.layers.enable(REFLECT_LAYER);
 
+  // 有匯出調色的區域（zone-*.js 的 grade）在建場景之前換上高度霧和調色。?grade=0 看原本的霧
+  if (Z.grade && params.get('grade') !== '0') installGrade(Z.grade);
   const world = Z.build(scene, { gallery, coarse, params });
 
   // 光線、霧。畫廊有室內和戶外兩組，走出後門時在兩組之間漸變；只有一組的區域兩頭都用它
@@ -351,8 +354,10 @@ async function start() {
     for (const [k, v] of Object.entries(extra)) q.set(k, v);
     const el = document.getElementById('loading');
     el.querySelector('.msg').textContent = ZONES[to].crossing;
-    el.classList.add('crossing');
-    el.classList.remove('done');
+    try { sessionStorage.setItem('crossAt', Date.now()); } catch (e) {}
+    el.style.setProperty('--t', '0ms');
+    el.classList.remove('to-gallery', 'to-haishi', 'done');
+    el.classList.add('crossing', `to-${to}`);
     mp?.sendNow();
     setTimeout(() => location.replace(`${location.pathname}?${q}`), 850);
   }
@@ -602,8 +607,9 @@ async function start() {
   const stats = params.has('debug') ? debugStats(renderer, quality) : null;
   // 改地圖、調色用的小工具：?ref= 疊參考圖，?debug 調光線（見 devtools.js）
   if (params.has('debug') || params.has('ref')) {
-    import('./devtools.js').then(({ refOverlay, envPanel }) => {
+    import('./devtools.js').then(({ refOverlay, envPanel, gradePanel }) => {
       if (params.has('ref')) refOverlay(params.get('ref'));
+      if (params.has('debug') && Z.grade && params.get('grade') !== '0') gradePanel();
       if (params.has('debug')) envPanel(ENV, () => { const t = Math.max(0, envT); envT = -1; applyEnv(t); }, envs.length === 1);
     });
   }

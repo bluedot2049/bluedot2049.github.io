@@ -13,7 +13,7 @@ import { makePostcard, loadQR } from './postcard.js';
 import { packFace } from './filmcode.js';
 import { getSave, sanitizeLook, decodeFace } from './looks.js';
 import { encodeLook, encodeSave } from './savecode.js';
-import { CAMERAS, carried, longTan } from './cameras.js';
+import { CAMERAS, carried, flashKnob, dateKnob, drawDate, longTan } from './cameras.js';
 import { dof, dofK } from './dof.js';
 
 const ASPECTS = [
@@ -156,6 +156,7 @@ export class PhotoMode {
     this.grip = 1;                          // 拿法：GRIPS 的第幾個
     this.upright = 0;                       // 0 橫拿、1 直拿
     this.flashOn = 0;                       // 0 開、1 關
+    this.dateOn = 0;                        // 日期印記，0 開、1 關
     this.focusD = 3;                        // 對焦的距離（公尺）
     this.af = null;                         // 正在對焦 { from, to, t }
     this.bulbAt = 0;                        // 燈泡換好的時間（performance.now）
@@ -189,7 +190,7 @@ export class PhotoMode {
     if (this.gear) this.saveGear();
   }
 
-  // 每台相機各自記得的拿法、方向、閃光
+  // 每台相機各自記得的拿法、方向、閃光、日期印記
   gearPrefs() {
     try {
       const all = JSON.parse(localStorage.getItem(GEAR_KEY));
@@ -199,7 +200,7 @@ export class PhotoMode {
 
   saveGear() {
     const all = this.gearPrefs();
-    all[this.gear.id] = { grip: this.grip, upright: this.upright, flash: this.flashOn };
+    all[this.gear.id] = { grip: this.grip, upright: this.upright, flash: this.flashOn, date: this.dateOn };
     try { localStorage.setItem(GEAR_KEY, JSON.stringify(all)); } catch {}
   }
 
@@ -210,6 +211,7 @@ export class PhotoMode {
     this.grip = pick(s.grip, GRIPS.length, 1);
     this.upright = pick(s.upright, 2, 0);
     this.flashOn = pick(s.flash, 2, 0);
+    this.dateOn = pick(s.date, 2, 0);
     this.aimPitch = this.pitch = THREE.MathUtils.clamp(this.pitch * 0.3, -0.3, 0.3);
     this.af = null;
     this.needAF = true;
@@ -217,6 +219,11 @@ export class PhotoMode {
     dof.k = dofK(g.focal, g.fstop) * (g.bokeh || 1);
     dof.max = 0.016;
     this.$('#ph-frame .gear').textContent = `${g.name}　${g.focal}mm`;
+    const knob = this.$('#ph-flash');
+    knob.innerHTML = flashKnob(id);
+    knob.classList.remove('swap');
+    if (g.flash?.bulb) knob.style.setProperty('--swap', g.flash.bulb + 's');
+    this.$('#ph-date').innerHTML = dateKnob(id);
   }
 
   // ───────── 進出 ─────────
@@ -259,7 +266,7 @@ export class PhotoMode {
     this.refresh();
     if (studio) this.setStudio(studio);
     else if (postcard) this.ui.hint('拍一張做成明信片，拍好就能寄出去', 6000);
-    else if (gear) this.ui.hint(this.coarse ? '搖桿走路　拖曳轉身　點一下對焦　按住快門慢慢曝光' : 'WASD 走路　拖曳轉身　點一下對焦　空白鍵拍照，按住不放慢慢曝光', 6000);
+    else if (gear) this.ui.hint(this.coarse ? '搖桿走路　拖曳轉身　點一下對焦　按住快門慢慢曝光' : 'WASD 走路　拖曳轉身　點一下對焦　空白鍵拍照，按住不放慢慢曝光' + (this.gear.flash ? '　F 閃光' : ''), 6000);
     else this.ui.hint(this.coarse ? '拖曳轉頭　雙指變焦　點兩下靠近　點一下收起按鈕' : 'WASD 移動　E / Q 升降　拖曳轉頭　滾輪變焦　點兩下靠近　空白鍵拍照　H 收起按鈕', 6000);
   }
 
@@ -278,7 +285,7 @@ export class PhotoMode {
     dof.on = false;
     this.flashFx.restore();
     this.player.setJoystick(0, 0);
-    this.player.aim = null;
+    this.player.camAim = null;
     this.character.setAim(null);
     this.character.camLocal = true;
     this.postcard = false;
@@ -349,7 +356,7 @@ export class PhotoMode {
   bindUI() {
     // 每個鈕點開是一排選項；「顯示」是幾個開關，可以連著點，點選單外面才收
     // lock：錄影中不能換（比例會改掉影片大小，運鏡錄到一半換會跳）
-    // gear：false 只在畫廊的眼睛出現，true 只在帶著相機時出現，'flash' 要相機有閃光燈；沒寫的兩邊都有
+    // gear：false 只在畫廊的眼睛出現，true 只在帶著相機時出現；沒寫的兩邊都有。閃光不在這裡，是快門旁邊的開關
     const chips = this.$('#ph-chips');
     this.chips = [
       { k: 'aspect', label: '比例', gear: false, lock: true, opts: ASPECTS.map((a) => a.label), get: () => this.aspect, set: (i) => { this.aspect = i; } },
@@ -357,7 +364,6 @@ export class PhotoMode {
       { k: 'move', label: '運鏡', gear: false, lock: true, opts: MOVES, get: () => this.move, set: (i) => { this.move = i; }, note: '按下錄影才開始動' },
       { k: 'grip', label: '拿法', gear: true, opts: GRIPS, get: () => this.grip, set: (i) => { this.grip = i; }, note: '自拍是把手伸長，從前面拍自己' },
       { k: 'turn', label: '方向', gear: true, opts: ['橫拿', '直拿'], get: () => this.upright, set: (i) => { this.upright = i; } },
-      { k: 'flash', label: '閃光', gear: 'flash', opts: ['開', '關'], get: () => this.flashOn, set: (i) => { this.flashOn = i; }, note: '閃一次要換一顆燈泡' },
       { k: 'show', label: '顯示', toggles: [['self', '自己入鏡'], ['talk', '對話框'], ['sig', '落款'], ['grid', '格線']] },
     ];
     chips.innerHTML = this.chips.map((c) => `<button class="ph-chip" data-k="${c.k}"><span>${c.label}</span><b></b></button>`).join('');
@@ -396,6 +402,8 @@ export class PhotoMode {
       if (btn) this.zoom(LENSES[+btn.dataset.i][1]);
     });
     this.$('#ph-exit').addEventListener('click', () => this.exit());
+    this.$('#ph-flash').addEventListener('click', () => this.toggleFlash());
+    this.$('#ph-date').addEventListener('click', () => this.toggleDate());
     // 帶著能長曝光的相機時，按下和放開分開算：按一下是一張，按住不放是長曝光
     const shutter = this.$('#ph-shutter');
     shutter.addEventListener('pointerdown', (e) => {
@@ -428,11 +436,21 @@ export class PhotoMode {
   refresh() {
     const g = this.gear;
     for (const c of this.chips) {
-      c.el.hidden = c.gear === false ? !!g : c.gear === 'flash' ? !g?.flash : c.gear ? !g : false;
+      c.el.hidden = c.gear === false ? !!g : c.gear ? !g : false;
       c.b.textContent = c.opts ? c.opts[c.get()] : '';
       c.el.classList.toggle('off', !!(c.lock && this.rec));
     }
     this.markLens();
+    const knob = this.$('#ph-flash'), on = this.fires();
+    knob.hidden = !g?.flash;
+    knob.classList.toggle('on', on);
+    knob.setAttribute('aria-pressed', on);
+    knob.title = (on ? '閃光開著' : '閃光關著') + (g?.flash?.bulb ? '，閃一次要換一顆燈泡' : '') + (this.coarse ? '' : '（F）');
+    const die = this.$('#ph-date'), dated = this.dated();
+    die.hidden = !g?.date;
+    die.classList.toggle('on', dated);
+    die.setAttribute('aria-pressed', dated);
+    die.title = dated ? '日期會燙在照片角落' : '不印日期';
     // 帶著相機時色調是相機自己的；手持看不到自己，自拍才看得到
     const look = g ? g.develop : LOOKS[this.look];
     this.renderer.domElement.style.filter = look.filter;
@@ -467,7 +485,7 @@ export class PhotoMode {
     Object.assign(el.style, { left: f.x + 'px', top: f.y + 'px', width: w + 'px', height: h + 'px' });
     const sig = el.querySelector('.sig');
     this.sigSize = Math.max(11, Math.round(Math.min(w, h) * 0.028));
-    sig.hidden = !this.sig;
+    sig.hidden = !this.signed();
     Object.assign(sig.style, { height: this.sigSize * 1.1 + 'px', right: this.sigSize * 1.3 + 'px', bottom: this.sigSize * 1.1 + 'px' });
   }
 
@@ -483,7 +501,7 @@ export class PhotoMode {
     this.menu = c;
     m.classList.toggle('toggles', !!c.toggles);
     m.innerHTML = c.toggles
-      ? c.toggles.filter(([k]) => !(this.gear && k === 'self')).map(([k, label]) => `<button data-t="${k}" class="${this[k] ? 'on' : ''}">${label}</button>`).join('')
+      ? c.toggles.filter(([k]) => !(this.gear && (k === 'self' || (k === 'sig' && this.gear.sig === false)))).map(([k, label]) => `<button data-t="${k}" class="${this[k] ? 'on' : ''}">${label}</button>`).join('')
       : c.opts.map((label, i) => `<button data-i="${i}" class="${i === c.get() ? 'on' : ''}">${label}</button>`).join('') + (c.note ? `<p>${c.note}</p>` : '');
     m.hidden = false;
     const r = c.el.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight;
@@ -641,6 +659,7 @@ export class PhotoMode {
         return;
       }
       if (e.key === 'h' || e.key === 'H') return this.showControls(document.body.classList.contains('photo-bare'));
+      if ((e.key === 'f' || e.key === 'F') && this.gear?.flash) return e.repeat || this.toggleFlash();
       this.keys.add(e.key.toLowerCase());
     });
     window.addEventListener('keyup', (e) => {
@@ -808,7 +827,7 @@ export class PhotoMode {
     // 別人看到的自己：帶著相機就照拿法舉起來；沒帶相機在臉前比個取景框，只給別人看，自己拍到的自己照常站著。
     // 照相館裡是被拍的人，不舉
     const aim = this.studio ? null : this.gear ? { grip: this.grip, pitch: this.pitch } : { grip: 4, pitch: 0 };
-    this.player.aim = aim;
+    this.player.camAim = aim;
     this.character.setAim(this.gear ? aim : null);
     this.character.camLocal = !(this.gear && this.grip === 3);
     if (this.studio) {
@@ -1046,7 +1065,18 @@ export class PhotoMode {
       ctx.fillRect(0, 0, W, H);
       ctx.restore();
     }
-    if (this.sig) this.drawSig(ctx, W, H, k);
+    if (this.signed()) this.drawSig(ctx, W, H, k);
+    // 日期印記：右下角，有落款就排在落款左邊，底對齊
+    if (this.dated()) {
+      const img = this.$('#ph-frame .sig'), s = this.sigSize * k;
+      const sw = this.signed() && img.naturalWidth ? s * 1.1 * img.naturalWidth / img.naturalHeight + s * 0.8 : 0;
+      drawDate(this.gear.id, ctx, W - s * 1.3 - sw, H - s * 1.15, s * 0.62);
+    }
+  }
+
+  // 落款開著，而且帶著的相機肯讓畫廊落款（有些相機的照片只留它自己的印記）
+  signed() {
+    return this.sig && this.gear?.sig !== false;
   }
 
   // 落款：畫廊的毛筆字，位置大小和取景框裡的一樣
@@ -1122,9 +1152,38 @@ export class PhotoMode {
     return !!(this.active && this.gear?.hold && !this.studio);
   }
 
+  // 快門旁的閃光開關：點一下就切，每台相機各自記得
+  toggleFlash() {
+    if (!this.gear?.flash) return;
+    this.flashOn ^= 1;
+    this.save();
+    this.refresh();
+  }
+
   // 閃光開著、這台相機有閃光燈
   fires() {
     return !!(this.gear?.flash && this.flashOn === 0);
+  }
+
+  // 快門旁的日期開關，跟閃光一樣每台相機各自記得
+  toggleDate() {
+    if (!this.gear?.date) return;
+    this.dateOn ^= 1;
+    this.save();
+    this.refresh();
+  }
+
+  dated() {
+    return !!(this.gear?.date && this.dateOn === 0);
+  }
+
+  // 拍下去那一下，開關的小窗燒紅再暗回去
+  burned() {
+    if (!this.dated()) return;
+    const die = this.$('#ph-date');
+    die.classList.remove('burn');
+    void die.offsetWidth;
+    die.classList.add('burn');
   }
 
   // 閃光燈泡相機：閃過一次要換燈泡，換好之前按不下去
@@ -1165,6 +1224,12 @@ export class PhotoMode {
     const bulb = this.gear.flash.bulb;
     if (!bulb) return;
     this.bulbAt = performance.now() + bulb * 1000;
+    const knob = this.$('#ph-flash');   // 開關上那顆燈泡也燒掉、換新的
+    knob.classList.remove('swap');
+    void knob.offsetWidth;
+    knob.classList.add('swap');
+    clearTimeout(this.swapT);
+    this.swapT = setTimeout(() => knob.classList.remove('swap'), bulb * 1000 + 100);
     setTimeout(() => this.active && this.ambience.voice('bulb', 0.45), 450);
     const el = this.$('#ph-smoke');
     el.classList.remove('puff');
@@ -1284,6 +1349,7 @@ export class PhotoMode {
     shot.height = e.h;
     this.compose(shot.getContext('2d'), raw, 0, 0, e.w, e.h, e.w, e.h, e.w / this.frame.w, Math.random());
     this.flash();
+    this.burned();
     if (fire) this.fired();
     else this.ambience.voice('shutter', 0.5);
     this.deliver(shot);
@@ -1348,6 +1414,7 @@ export class PhotoMode {
       return;
     }
     this.flash();
+    this.burned();
     if (fire) this.fired();
     else if (this.gear) this.ambience.voice('shutter', 0.5);
     this.deliver(out);

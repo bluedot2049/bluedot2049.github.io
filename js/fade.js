@@ -171,7 +171,8 @@ export class RoomFader {
 
   patch(m, roomU, partU) {
     const { obc, key } = this.base.get(m);
-    const tint = m.blending !== THREE.AdditiveBlending;   // 發光的是疊上去的，往霧色靠反而變亮
+    // 發光的是疊上去的（相加或 screen），往霧色靠反而變亮
+    const tint = m.blending !== THREE.AdditiveBlending && m.blending !== THREE.CustomBlending;
     m.onBeforeCompile = (sh, renderer) => {
       obc.call(m, sh, renderer);
       Object.assign(sh.uniforms, { uRoomA: roomU, uPartA: partU, uFadeTint: this.tint });

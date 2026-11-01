@@ -4,6 +4,7 @@
 // 放在這裡，海市和之後的區域就不必為了這幾樣東西把整個畫廊（world.js、戶外、動物）一起載進來
 import * as THREE from 'three';
 import { mergeBucket } from './props.js';
+import { GRADE_VERT, gradeUniforms } from './grade.js';
 
 // 動物只在這個圖層；海面反射的鏡頭只看 REFLECT_LAYER。從草原看海只映得到天空、遠山、山坡和坡上的樹，草地、家具、房子、人都不用多畫一次
 export const ANIMAL_LAYER = 1;
@@ -35,7 +36,9 @@ export function bucketObjects(b, ghost = false, floor = null, far = false) {
 
 // far：離鏡頭越遠，越從燭火的抖動換成星光的閃法——大多時候穩穩的，偶爾亮一下、脹大一點。
 // 再疊一道很慢的亮度波從海邊往山上推，遠看像風一層一層吹過整座鎮。遠處的點至少留 2.5 像素，不會縮成亂閃的次像素
-export function glowPoints(list, { far = false } = {}) {
+// 中心是燈本身的顏色，往外偏深、偏紅，像燈在霧裡那樣；疊的方式是 screen（越疊越接近飽和，不會像直接相加那樣爆成白的）。
+// 有調色的區域（grade.js）跟著霧淡掉；sky 是掛在天上的（星、月暈、海對面的塔），不吃霧
+export function glowPoints(list, { far = false, sky = false } = {}) {
   const n = list.length;
   const pos = new Float32Array(n * 3), col = new Float32Array(n * 3), size = new Float32Array(n), phase = new Float32Array(n);
   const c = new THREE.Color(), pr = Math.min(window.devicePixelRatio, 2);
@@ -52,9 +55,9 @@ export function glowPoints(list, { far = false } = {}) {
   geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
   geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uTime, uScale: { value: 150 * pr }, uPr: { value: pr }, uFar: { value: far ? 1 : 0 } },
-    vertexShader: `
-      uniform float uTime; uniform float uScale; uniform float uPr; uniform float uFar;
+    uniforms: { uTime, uScale: { value: 150 * pr }, uPr: { value: pr }, uFar: { value: far ? 1 : 0 }, uAir: { value: sky ? 0 : 1 }, ...gradeUniforms() },
+    vertexShader: GRADE_VERT + `
+      uniform float uTime; uniform float uScale; uniform float uPr; uniform float uFar; uniform float uAir;
       attribute vec3 aColor; attribute float aSize; attribute float aPhase;
       varying vec3 vC; varying float vA;
       void main() {
@@ -67,7 +70,7 @@ export function glowPoints(list, { far = false } = {}) {
         float s2 = 0.5 + 0.5 * sin(uTime * (0.23 + 0.4 * fract(aPhase * 3.17)) + aPhase * 5.0);
         float spark = pow(s1 * s2, 18.0);
         float breeze = 0.5 + 0.5 * sin(uTime * 0.5 + position.z * 0.12 + position.x * 0.04);
-        vA = mix(flick, 0.42 + 0.22 * breeze + 1.1 * spark, f);
+        vA = mix(flick, 0.42 + 0.22 * breeze + 1.1 * spark, f) * mix(1.0, gradeLight(gradeFog((modelMatrix * vec4(position, 1.0)).xyz)), uAir);
         vC = mix(aColor, vec3(1.0, 0.94, 0.8), spark * f * 0.5);
         gl_PointSize = mix(px, max(px, 2.5 * uPr) * (1.0 + 2.0 * spark), f);
         gl_Position = projectionMatrix * mv;
@@ -77,9 +80,11 @@ export function glowPoints(list, { far = false } = {}) {
       void main() {
         float d = length(gl_PointCoord - 0.5) * 2.0;
         float a = pow(max(0.0, 1.0 - d), 2.0) * vA;
-        gl_FragColor = vec4(vC * a, a);
+        vec3 c = vC * mix(vec3(1.0), vec3(0.85, 0.42, 0.3), smoothstep(0.1, 0.8, d));
+        gl_FragColor = vec4(c * a * a, 1.0);
       }`,
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    transparent: true, depthWrite: false, fog: true,
+    blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcColorFactor,
   });
   const p = new THREE.Points(geo, mat);
   p.frustumCulled = false;
