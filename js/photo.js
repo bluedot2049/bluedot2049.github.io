@@ -100,7 +100,7 @@ function roundRect(ctx, x, y, w, h, r) {
 // avc1.64002a 是 High@4.2，1080p60 剛好裝得下；寫太低的等級有些顯卡的硬體編碼器會讓分頁直接當掉（STATUS_BREAKPOINT）。
 // 當掉的話 JS 接不到，所以錄 mp4 前記 'rec'、錄完擦掉；下次打開還在，就表示上次錄到一半當了，這台以後都錄 webm
 const REC_KEY = 'photoRec';
-function pickMime() {
+function pickMime(desktop) {
   if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) return null;
   let webmOnly = false;
   try {
@@ -109,7 +109,8 @@ function pickMime() {
   } catch {}
   const mp4 = ['video/mp4;codecs=avc1.64002a', 'video/mp4;codecs=avc1.4d002a', 'video/mp4;codecs=avc1', 'video/mp4'];
   const webm = ['video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm'];
-  const list = webmOnly ? webm : [...mp4, ...webm];
+  // 電腦版 Chrome 的 H.264 走顯卡硬體編碼，有些顯卡會直接讓分頁當掉（無痕、一般模式都會），所以電腦先錄 webm（軟體編碼）；手機和 Safari 照舊 mp4
+  const list = webmOnly || desktop ? [...webm, ...mp4] : [...mp4, ...webm];
   return list.find((m) => MediaRecorder.isTypeSupported?.(m)) || null;
 }
 function markRec(on) {
@@ -147,7 +148,7 @@ export class PhotoMode {
     this.room = -1;
     this.pivot = null;                      // 環繞的中心
     this.rec = null;
-    this.mime = pickMime();
+    this.mime = pickMime(!this.coarse);
     this.noise = noiseTile();
     this.frame = { x: 0, y: 0, w: 1, h: 1 };
     this.result = null;                     // 剛拍好的 { blob, url, name, video }
