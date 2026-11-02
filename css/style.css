@@ -417,6 +417,10 @@ body.flat #stage::after { display: none; }
   background: var(--gold); transform: rotate(45deg); opacity: .7;
 }
 #hint.show { opacity: 1; }
+body.shoulder #guide .for-free, body:not(.shoulder) #guide .for-shoulder { display: none; }
+/* 越肩那張比較長：行距收一點，矮的螢幕可以捲 */
+#guide { max-height: calc(100vh - 24px); overflow-y: auto; }
+#guide .for-shoulder li { padding: 6px 0; }
 
 /* 進門以後的操作說明：門口告示（.notice）同一張卡，這裡只管位置和裡面多出來的東西。
    橫式靠左、垂直置中，不擋住畫面中間的角色；直式貼底，房間外那片空的地方剛好放得下 */
@@ -571,6 +575,33 @@ body.desk #more-btn { order: 2; }
 }
 #photo-btn svg { stroke-width: 1.6; filter: drop-shadow(0 .7px 0 rgba(255, 240, 205, .65)); }
 /* 帶著相機時收起鈕跟相機的快門同一種舊金（#ph-shutter.gear） */
+/* 舉相機拍的照片存好：左下角閃一下縮圖和存到哪裡 */
+.snapsave { position: fixed; left: calc(18px + env(safe-area-inset-left)); bottom: calc(18px + env(safe-area-inset-bottom)); z-index: 30; display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 6px; background: rgba(16, 11, 9, .86); border: 1px solid rgba(232, 184, 106, .35); border-radius: 2px; font-size: 12.5px; letter-spacing: .08em; color: var(--text); pointer-events: none; animation: snapsave-in .45s ease-out both; transition: opacity .5s, transform .5s; }
+.snapsave img { width: 96px; height: auto; display: block; border: 1px solid rgba(246, 219, 166, .6); }
+.snapsave.out { opacity: 0; transform: translateY(6px); }
+@keyframes snapsave-in { 0% { opacity: 0; transform: translateY(8px) scale(.96); filter: brightness(2.2); } 35% { opacity: 1; filter: brightness(1.6); } 100% { transform: none; filter: none; } }
+/* 表情輪：一圈細金線，五個表情排在圈上，撥到的那個放大亮起來 */
+#wheel { position: fixed; left: 50%; top: 50%; width: 240px; height: 240px; margin: -120px 0 0 -120px; border-radius: 50%; border: 1px solid rgba(232, 184, 106, .35); background: radial-gradient(rgba(16, 11, 9, .55), rgba(16, 11, 9, .2) 70%); pointer-events: none; opacity: 0; transform: scale(.9); transition: opacity .15s, transform .2s; z-index: 26; }
+#wheel.show { opacity: 1; transform: none; }
+#wheel i { position: absolute; width: 50px; height: 50px; margin: -25px 0 0 -25px; display: grid; place-items: center; font-style: normal; font-size: 26px; border-radius: 50%; border: 1px solid transparent; transition: transform .15s, border-color .15s, background .15s; }
+#wheel i.on { transform: scale(1.25); border-color: var(--gold); background: rgba(232, 184, 106, .12); }
+/* 暫停選單：跟操作說明同一種卡，放在畫面中間 */
+#pause { position: fixed; left: 50%; top: 50%; z-index: 27; display: none; width: 380px; transform: translate(-50%, -50%); background: rgba(16, 11, 9, .94); box-shadow: var(--shadow); }
+#pause.show { display: flex; animation: pause-in .25s ease-out both; }
+@keyframes pause-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 6px)); } }
+#pause .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#pause .acts .btn { justify-content: space-between; min-height: 36px; padding: 0 12px; font-size: 13px; letter-spacing: .1em; }
+#pause kbd { padding: 0 5px; font: 11px/1.5 var(--latin); letter-spacing: .04em; color: var(--muted); border: 1px solid rgba(232, 184, 106, .3); border-radius: 2px; }
+#pause .set { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; letter-spacing: .08em; color: var(--text); }
+#pause .set input[type=range] { width: 160px; accent-color: var(--gold); }
+#pause .set input[type=checkbox] { accent-color: var(--gold); }
+#pause .keys { list-style: none; margin: 0; padding: 0; }
+#pause .keys li { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid rgba(232, 184, 106, .1); font-size: 12.5px; letter-spacing: .06em; color: var(--muted); }
+#pause .keys li > span:last-child { display: flex; gap: 4px; }
+/* 鎖住滑鼠時按鈕點不到：整排淡一點，每顆底下標快捷鍵（按住 Alt 叫出游標時照常） */
+body.desk.locked #top-btns { opacity: .6; }
+body.desk.locked #top-btns [data-key] { position: relative; }
+body.desk.locked #top-btns [data-key]::after { content: attr(data-key); position: absolute; left: 50%; bottom: -15px; transform: translateX(-50%); font-size: 10px; line-height: 1; letter-spacing: .05em; color: var(--gold-hi); white-space: nowrap; pointer-events: none; }
 body.photo-gear #photo-btn {
   color: #2e1c0c; border-color: rgba(90, 58, 24, .95);
   background:

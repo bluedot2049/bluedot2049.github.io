@@ -21,6 +21,8 @@ export const longTan = (mm) => 18 / mm;
 // develop：沖出來的樣子，跟 photo.js 的色調同一種寫法；halo：亮的地方暈開一點
 // date：照片角落的日期印記，開關點一下換一段：不印、月日、年月日；knob：快門旁那個開關長什麼樣（KNOBS），ink：印記怎麼上到照片（INKS）。同一家工坊的相機用同一種
 // mark：照片角落蓋哪個記號（marks.js 的名字）；沒寫就不蓋，只留相機自己的印記
+// af：自動對焦的個性。time 轉到位要幾秒、hunt 快到時多轉過頭幾成再退回來（找焦）、
+//     priority 'release' 快門隨時按得下去（還在找焦就照當下的焦距拍），'focus' 對好才放快門（按了先記著，對好自己拍）
 // make：哪家工坊做的。mark 是商號（用海市的字刻），model 型號、serial 序號（用蘇州碼子的數字刻）；shutter：快門鈕長什麼樣（SHUTTERS）
 export const CAMERAS = {
   bulb: {
@@ -28,6 +30,7 @@ export const CAMERAS = {
     spec: ['可開關閃光燈', '27mm 定焦鏡', '數位式'],
     maker: '海市火記光學製造',
     focal: 27, prime: true, fstop: 1.4, bokeh: 4, focus: 'tap', aspect: 3 / 2,
+    af: { time: 0.22, hunt: 0.1, priority: 'release' },   // 數位式：對得快、幾乎不找焦，快門不等人
     flash: { color: 0xfff1dc, power: 2.6, bulb: 1.6, knob: 'fan' },
     date: { knob: 'die', ink: 'burn' },
     make: { mark: '火', model: 1, serial: [0, 4, 1, 7] }, shutter: 'gold',

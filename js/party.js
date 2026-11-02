@@ -170,7 +170,9 @@ export class Party {
         e.preventDefault();
         this.openChat();
       } else if (k === 'g' && this.together) {
-        if (this.mouse) this.markAt(this.mouse.x, this.mouse.y);
+        // 越肩鎖住滑鼠時標在準心上
+        const at = this.player.locked ? this.player.aimPoint() : this.mouse;
+        if (at) this.markAt(at.x, at.y);
         else this.arm();
       }
     }, true);

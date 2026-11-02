@@ -858,14 +858,22 @@ export class Character {
 
     if (this.act) this.pose(dt, Math.max(w, sk));
     this.aimPose(dt);
-    // 越肩東張西望（player.gaze，同行的人由 multiplayer 填）：頭慢慢轉過去。路人自己管頭，不設 gaze
+    // 視線（player.gaze、gazeP，同行的人由 multiplayer 填）：頭慢慢轉過去、抬頭低頭。路人自己管頭，不設 gaze
+    // 先左右再上下（YXZ），歪頭看上面時才不會整顆頭斜掉；舉相機時上下交給相機的拿法
     if (this.gaze != null) {
       // 彈簧：起步和停下都是慢慢來，不會一下子扭過去
       const w = 8, h = Math.min(dt, 0.05);
       this.headYaw ??= 0;
-      this.headV = (this.headV ?? 0) + (w * w * (this.gaze - this.headYaw) - 2 * w * this.headV) * h;
+      this.headV ??= 0;
+      this.headPitch ??= 0;
+      this.headPV ??= 0;
+      this.headV += (w * w * (this.gaze - this.headYaw) - 2 * w * this.headV) * h;
       this.headYaw += this.headV * h;
+      this.headPV += (w * w * ((this.gazeP || 0) - this.headPitch) - 2 * w * this.headPV) * h;
+      this.headPitch += this.headPV * h;
+      this.head.rotation.order = 'YXZ';
       this.head.rotation.y = this.headYaw;
+      this.head.rotation.x -= this.headPitch * (1 - this.aimP);
     }
     // 手上的東西抵銷手臂的轉動，不管手怎麼擺都直立
     const A = this.armL.rotation;

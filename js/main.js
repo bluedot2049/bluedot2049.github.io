@@ -27,6 +27,7 @@ import { CAMERAS, SOON, TABLE, carried, carry } from './cameras.js';
 import { FlashFx } from './flashfx.js';
 import { installGrade, gradeAt, NEUTRAL } from './grade.js';
 import { Hollow } from './hollow.js';
+import { bindDeskKeys } from './deskkeys.js';
 
 // 世界分成幾個區域，一次只建一個，用 ?z= 指定，沒有寫就是畫廊。每個區域的內容寫在自己的 zone-*.js，用到才下載。
 // 換區域時整頁重新載入：瀏覽器一定會把上一個區域的記憶體收回去，手機才撐得住。
@@ -559,7 +560,7 @@ async function start() {
   player.cursorWanted = () => {
     const b = document.body.classList;
     return b.contains('panel-open') || b.contains('chatting') || !document.getElementById('pack-card').hidden
-      || !!document.querySelector('#list.open, #guide.show, #hollow.show') || !!document.activeElement?.closest?.('input, textarea');
+      || !!document.querySelector('#list.open, #guide.show, #hollow.show, #cams.open, #ferry.open') || !!document.activeElement?.closest?.('input, textarea');
   };
 
   // 聲音開關：戶外的風聲和動物叫聲共用，室內也有貓，所以一直都在
@@ -574,6 +575,15 @@ async function start() {
   soundBtn.hidden = false;
   soundBtn.addEventListener('click', () => { ambience.setMuted(!ambience.muted); soundLabel(); });
 
+  // 第一次鎖住滑鼠時提一下怎麼點按鈕
+  let lockTold = false;
+  document.addEventListener('pointerlockchange', () => {
+    if (!player.locked || lockTold) return;
+    lockTold = true;
+    ui.toast('按住 Alt 叫出游標', 'Esc 暫停選單');
+  });
+  // 中鍵標記地點：同行時才有
+  player.onPing = (x, y) => party?.markAt(x, y);
   // 越肩視角開關，player.js 記住上次的選擇；F 鍵切換時按鈕也跟著變
   const shoulderBtn = document.getElementById('shoulder-btn');
   const shoulderLabel = (on) => {
@@ -732,6 +742,8 @@ async function start() {
   document.getElementById('photo-btn').addEventListener('click', () => photo.toggle());
   if (world.studios) {
     studio = new Studio({ world, player, photo, passers });
+  // 電腦的快捷鍵、Q 表情輪、Esc 暫停選單（表情要連上線才送得出去）
+  bindDeskKeys({ player, ui, photo, emotes: EMOTES, emote: (e) => mp && sendEmote(e) });
     studio.mp = mp;
     // ?studio=0：直接到第 0 個景（測試構圖用）
     if (params.has('studio')) setTimeout(() => studio.begin(+params.get('studio') || 0), 1500);

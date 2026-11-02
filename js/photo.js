@@ -7,6 +7,10 @@
 // 變焦從望遠一路拉到廣角，再往上就慢慢彎成魚眼；怎麼彎、怎麼畫在 lens.js。
 // 身上帶著實體相機（cameras.js）時改成手持：鏡頭在角色手上，走路構圖，點一下對焦，景深在 dof.js，
 // 閃光燈照對焦的距離打亮；按住快門不放是長曝光，每一幀疊起來，放開時再閃一下。
+// 越肩鎖住滑鼠時另有「舉相機」（quick）：右鍵按住舉起來、左鍵快門，放開右鍵回到肩後；短按右鍵是一直舉著，再按一次放下。
+// 帶相機是手持取景，沒帶就是畫廊的眼睛當空拍機飛出去（WASD 飛、E/Q 升降、Shift 快）。介面全收起來，拍好自動存檔（photosave.js）。
+// 舉相機的對焦像攝影師的「背鍵對焦」：舉起來時相機朝準心對到的那一點看、對焦在那裡，然後鎖住，怎麼重新構圖都不跑；
+// 中鍵或 R 對準心重新對焦，中鍵按住一直追焦、放開鎖住；滾輪是手動對焦環。對焦快慢、等不等焦照相機的 af。
 import * as THREE from 'three';
 import { lens, fitSource, unbend } from './lens.js';
 import { makePostcard, loadQR } from './postcard.js';
@@ -17,6 +21,7 @@ import { markPacked } from './pack.js';
 import { CAMERAS, carried, dateKnob, drawDate, eyeShutter, flashKnob, longTan, shutterKnob } from './cameras.js';
 import { MARKS, markURL } from './marks.js';
 import { dof, dofK } from './dof.js';
+import { savePhoto } from './photosave.js';
 
 const ASPECTS = [
   { label: '螢幕', r: 0 },
@@ -163,6 +168,14 @@ export class PhotoMode {
     this.$ = (q) => document.querySelector(q);
     this.bindUI();
     this.bindInput();
+    // 越肩鎖住滑鼠時 player.js 把右鍵、左鍵、滑鼠移動轉過來；玩家按 Esc 放開滑鼠就放下相機
+    player.onAim = (down) => this.aimButton(down);
+    player.onShutter = (down) => this.quickShutter(down);
+    player.onPausedLook = (dx, dy) => this.quickLook(dx, dy);
+    player.onRefocus = (down) => this.refocusButton(down);
+    document.addEventListener('pointerlockchange', () => {
+      if (this.quick && this.active && !player.locked && player.userUnlock) this.exit();
+    });
   }
 
   load() {
@@ -229,9 +242,12 @@ export class PhotoMode {
   // postcard：從海市的信差站進來，拍好的照片做成明信片。
   // studio：照相館（studio.js）架好的鏡頭 { pos, yaw, pitch, fov, host }，鏡頭不能動，快門要數三聲
   // eye：帶著相機也用畫廊的眼睛，相機留在身上
-  enter({ postcard = false, studio = null, eye = false } = {}) {
+  enter({ postcard = false, studio = null, eye = false, quick = false } = {}) {
     if (this.active) return;
     this.postcard = postcard;
+    this.quick = quick;
+    this.sticky = false;
+    this.player.holdLock = quick;
     const p = this.player, cam = this.camera;
     this.ui.hidePainting();
     this.ui.hideDress();
@@ -268,10 +284,12 @@ export class PhotoMode {
     this.$('#ph-frame').classList.toggle('bulb', !!this.gear?.flash?.bulb);
     document.body.classList.add('photo');
     this.$('#photo').hidden = false;
-    this.showControls(true);
+    this.showControls(!quick);
+    document.body.classList.toggle('photo-quick', quick);
     this.useMark();
     this.refresh();
-    if (studio) this.setStudio(studio);
+    if (quick) this.quickHint();
+    else if (studio) this.setStudio(studio);
     else if (postcard) this.ui.hint('拍一張做成明信片，拍好就能寄出去', 6000);
     else if (gear) this.ui.hint(this.coarse ? '搖桿走路　拖曳轉身　點一下對焦　按住快門慢慢曝光' : 'WASD 走路　拖曳轉身　點一下對焦　空白鍵拍照，按住不放慢慢曝光' + (this.gear.flash ? '　F 閃光' : ''), 6000);
     else this.ui.hint(this.coarse ? '拖曳轉頭　雙指變焦　點兩下靠近　點一下收起按鈕' : 'WASD 移動　E / Q 升降　拖曳轉頭　滾輪變焦　點兩下靠近　空白鍵拍照　H 收起按鈕', 6000);
@@ -279,6 +297,17 @@ export class PhotoMode {
 
   exit() {
     if (!this.active) return;
+    const quick = this.quick;
+    this.afHold = false;
+    this.pendingShot = false;
+    this.aimTarget = null;
+    clearTimeout(this.afTimer);
+    this.$('#ph-af').className = '';
+    // 手持舉相機放下時，越肩的俯仰接著相機最後看的高低，不會一下子跳回原本的角度
+    if (quick && this.gear) this.player.shPitch = THREE.MathUtils.clamp(-this.pitch, -1.3, 1.2);
+    this.quick = false;
+    this.player.holdLock = false;
+    document.body.classList.remove('photo-quick');
     const left = this.studio && this.studioHooks?.exit;
     this.setStudio(null);
     if (this.rec) this.stopRecording();
@@ -312,7 +341,9 @@ export class PhotoMode {
     this.camera.near = 0.1;
     this.camera.updateProjectionMatrix();
     this.player.paused = false;
-    this.player.snapCamera();   // 拿著相機時人可能走遠了，跟拍鏡頭還停在拿起相機的地方
+    // 拿著相機時人可能走遠了，跟拍鏡頭還停在拿起相機的地方；舉相機、空拍放下時從相機那裡滑回肩後
+    if (quick) this.player.flyBack();
+    else this.player.snapCamera();
     this.world.setCurrentRoom(this.player.room, true);   // 鏡頭一下子跳回角色身邊，房間也直接切
     this.ui.hideHint();
     left?.();
@@ -363,6 +394,57 @@ export class PhotoMode {
   }
 
   toggle() { this.active ? this.exit() : this.enter(); }
+
+  // 右鍵：按下舉起來、放開放下；按一下就放（短於 0.25 秒）是一直舉著，再按一次才放下
+  aimButton(down) {
+    const now = performance.now();
+    if (down) {
+      if (this.active) {
+        if (this.quick && this.sticky) this.exit();
+        return;
+      }
+      const f = this.player.focus;
+      if (!this.player.shoulder || (f && f.kind !== 'seat')) return;   // 坐著可以舉，看畫照鏡子時不行
+      // 先瞄準再舉：記下準心（畫面正中間）對到的那一點，舉起來時相機朝那裡、對焦在那裡；什麼都沒對到就當 30 公尺外
+      if (carried()) {
+        const h = this.pickAt(0, 0), cam = this.camera;
+        this.aimTarget = h ? h.point.clone() : cam.position.clone().addScaledVector(cam.getWorldDirection(new THREE.Vector3()), 30);
+      }
+      this.enter({ quick: true });
+      this.aimAt = now;
+      return;
+    }
+    if (!this.active || !this.quick || this.sticky) return;
+    if (now - this.aimAt < 250) this.sticky = true;
+    else this.exit();
+  }
+
+  // 舉著相機時左鍵是快門；長曝光的相機按住不放
+  quickShutter(down) {
+    if (!this.active || !this.quick || this.result) return;
+    // 對好才放快門的相機：還在找焦就先記著，對好了自己拍
+    if (down && this.af && this.gear?.af?.priority === 'focus') { this.pendingShot = true; return; }
+    if (this.holdable()) down ? this.shutterDown() : this.shutterUp();
+    else if (down) this.press();
+  }
+
+  // 舉著相機時移動滑鼠：直接轉，望遠時轉得細一點
+  quickLook(dx, dy) {
+    if (!this.active || !this.quick) return;
+    const p = this.player, k = 0.0022 * p.mouseSens * Math.min(1, this.fov / 60);
+    this.aimYaw -= THREE.MathUtils.clamp(dx, -250, 250) * k;
+    this.aimPitch = THREE.MathUtils.clamp(this.aimPitch - THREE.MathUtils.clamp(dy, -250, 250) * k * (p.invertY ? -1 : 1), -1.5, 1.5);
+  }
+
+  // 第一次舉相機、第一次放空拍機時說一下怎麼操作（介面都收起來了，用右上的小提示）
+  quickHint() {
+    const key = this.gear ? 'held' : 'drone';
+    this.told ??= {};
+    if (this.told[key]) return;
+    this.told[key] = true;
+    if (this.gear) this.ui.toast('舉起就對準心對焦鎖定，左鍵拍照', '中鍵或 R 重新對焦　滾輪手動對焦　放開右鍵放下' + (this.gear.flash ? '　F 閃光' : ''));
+    else this.ui.toast('空拍機：WASD 飛、E / Q 升降', '左鍵拍照　滾輪變焦　放開右鍵飛回來　短按右鍵一直飛');
+  }
 
   // 帶著相機時，拿相機拍和畫廊的眼睛（相機照樣掛在身上，拍得到自己帶著它）在攝影模式裡直接換，不用先退出
   swapEye(eye) {
@@ -645,7 +727,8 @@ export class PhotoMode {
     el.addEventListener('wheel', (e) => {
       if (!this.active) return;
       e.preventDefault();
-      if (this.gear) this.primeNote();
+      // 帶著相機：滾輪是手動對焦環（定焦鏡；之後有變焦鏡的相機就 Shift+滾輪對焦）
+      if (this.gear) this.gear.prime || e.shiftKey ? this.focusRing(e.deltaY) : this.primeNote();
       else if (this.pushing()) this.push(Math.exp(e.deltaY * 0.0015));
       else this.zoomBy(this.fov * (1 + e.deltaY * 0.001));
     }, { passive: false });
@@ -668,6 +751,7 @@ export class PhotoMode {
       }
       if (e.key === 'h' || e.key === 'H') return this.showControls(document.body.classList.contains('photo-bare'));
       if ((e.key === 'f' || e.key === 'F') && this.gear?.flash) return e.repeat || this.toggleFlash();
+      if ((e.key === 'r' || e.key === 'R') && this.gear) return e.repeat || this.focusAt(window.innerWidth / 2, window.innerHeight / 2);
       this.keys.add(e.key.toLowerCase());
     });
     window.addEventListener('keyup', (e) => {
@@ -836,7 +920,8 @@ export class PhotoMode {
     // 照相館裡是被拍的人，不舉
     // 帶著相機用畫廊的眼睛：掛著就照常站，舉起來是眼高的拿法朝前，自己和別人看到的一樣
     const raise = !!this.eyeCam && this.pose === 1;
-    const aim = this.studio ? null : this.gear ? { grip: this.grip, pitch: this.pitch } : raise ? { grip: 1, pitch: 0 } : this.eyeCam ? null : { grip: 4, pitch: 0 };
+    // 舉相機時用畫廊的眼睛是空拍機：不比取景框，抬頭看著它飛（player.updateGaze）
+    const aim = this.studio ? null : this.gear ? { grip: this.grip, pitch: this.pitch } : raise ? { grip: 1, pitch: 0 } : this.eyeCam || this.quick ? null : { grip: 4, pitch: 0 };
     this.player.camAim = aim;
     this.character.setAim(this.gear || raise ? aim : null);
     this.character.camLocal = !(this.gear && this.grip === 3);
@@ -933,6 +1018,15 @@ export class PhotoMode {
   // 角色面向鏡頭看的方向，自拍時反過來面向鏡頭。蹲低、眼高、舉高照角色的身高算
   updateHeld(dt) {
     const p = this.player, ch = this.character, k = this.keys, cam = this.camera;
+    // 舉相機：手上的相機直接朝準心剛才對到的那一點看（肩後和手上差了半公尺，不轉過去會偏一點）
+    const tgt = this.aimTarget;
+    if (tgt) {
+      const hy = p.pos.y + [ch.dims.faceY * 0.5, ch.dims.faceY, ch.dims.topY + 0.35][this.grip];
+      const dx = tgt.x - p.pos.x, dy = tgt.y - hy, dz = tgt.z - p.pos.z, len = Math.hypot(dx, dy, dz) || 1;
+      this.aimYaw = this.yaw = Math.atan2(-dx, -dz);
+      this.aimPitch = this.pitch = Math.asin(THREE.MathUtils.clamp(dy / len, -1, 1));
+      this.aimDist = len;
+    }
     let f = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
     let s = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
     if (Math.hypot(this.joy.x, this.joy.y) > 0.12) { f = -this.joy.y; s = this.joy.x; }
@@ -957,14 +1051,22 @@ export class PhotoMode {
     this.applyLens();
     if (this.needAF) {
       this.needAF = false;
-      this.focusD = this.depthAt(0, 0);
+      // 舉相機：從原本的焦距轉到準心那一點，照這台相機的速度找焦，對好就鎖住
+      if (tgt && this.gear.focus === 'tap') this.afTo(this.aimDist, window.innerWidth / 2, window.innerHeight / 2);
+      else this.focusD = this.depthAt(0, 0);
+    }
+    this.aimTarget = null;
+    // 中鍵按住：一直追著畫面中間對焦，放開就鎖在最後的距離
+    if (this.afHold && !this.af && (this.afCheck = (this.afCheck || 0) - dt) <= 0) {
+      this.afCheck = 0.25;
+      if (Math.abs(1 / this.depthAt(0, 0) - 1 / this.focusD) > 0.1) this.focusAt(window.innerWidth / 2, window.innerHeight / 2);
     }
 
     // 對焦環轉向要的距離：在屈光度上轉，近的地方轉得細、遠的一下就到；快到時多轉一點再退回來，像在找焦
     const af = this.af;
     if (af) {
-      af.t = Math.min(1, af.t + dt / 0.3);
-      const u = 1 - Math.pow(1 - af.t, 3) + Math.sin(af.t * Math.PI) * 0.18, p0 = 1 / af.from, p1 = 1 / af.to;
+      af.t = Math.min(1, af.t + dt / (this.gear.af?.time ?? 0.3));
+      const u = 1 - Math.pow(1 - af.t, 3) + Math.sin(af.t * Math.PI) * (this.gear.af?.hunt ?? 0.18), p0 = 1 / af.from, p1 = 1 / af.to;
       this.focusD = 1 / Math.max(1e-3, p0 + (p1 - p0) * u);
       if (af.t >= 1) {
         this.focusD = af.to;
@@ -1003,11 +1105,36 @@ export class PhotoMode {
   focusAt(x, y) {
     const fr = this.frame;
     if (x < fr.x || x > fr.x + fr.w || y < fr.y || y > fr.y + fr.h || this.gear.focus !== 'tap') return;
-    this.af = { from: this.focusD, to: this.depthAt((x / window.innerWidth) * 2 - 1, 1 - (y / window.innerHeight) * 2), t: 0 };
+    this.afTo(this.depthAt((x / window.innerWidth) * 2 - 1, 1 - (y / window.innerHeight) * 2), x, y);
+  }
+
+  // 對焦到距離 d，對焦框放在 (x, y)
+  afTo(d, x, y) {
+    this.af = { from: this.focusD, to: d, t: 0 };
     const el = this.$('#ph-af');
     Object.assign(el.style, { left: x + 'px', top: y + 'px' });
     el.className = 'hunt';
     clearTimeout(this.afTimer);
+  }
+
+  // 手動對焦環：在屈光度上轉，近處轉得細、遠處一下就到。往前轉對遠、往後轉對近
+  focusRing(dy) {
+    if (this.gear.focus !== 'tap') return this.primeNote();
+    this.af = null;
+    this.afHold = false;
+    this.pendingShot = false;
+    this.focusD = 1 / THREE.MathUtils.clamp(1 / this.focusD + dy * 0.002, 1 / 80, 1 / 0.3);
+    clearTimeout(this.afTimer);
+    this.$('#ph-af').className = '';
+    this.showZoom(`手動對焦 ${dist(this.focusD)}`);
+  }
+
+  // 舉著相機時中鍵：按一下對準心重新對焦；按住一直追焦，放開鎖住
+  refocusButton(down) {
+    if (!this.active || !this.quick || !this.gear) return;
+    this.afHold = down;
+    this.afCheck = 0.25;
+    if (down) this.focusAt(window.innerWidth / 2, window.innerHeight / 2);
   }
 
   // 對到焦：嗶兩聲，框停住，過一下淡掉。鎖住以後轉動鏡頭焦距也不變，可以先對焦再構圖
@@ -1015,10 +1142,16 @@ export class PhotoMode {
     const el = this.$('#ph-af');
     if (el.className === 'hunt') {
       el.className = 'lock';
-      this.afTimer = setTimeout(() => { el.className = ''; }, 1300);
+      // 舉相機時對焦框留著，表示焦點鎖住了；按住中鍵追焦時不用一直閃
+      if (!this.quick) this.afTimer = setTimeout(() => { el.className = ''; }, 1300);
     }
-    this.ambience.voice('focus', 0.35);
-    this.showZoom(`對焦 ${dist(this.focusD)}`);
+    if (!this.afHold) this.ambience.voice('focus', 0.35);
+    this.showZoom(this.quick && !this.afHold ? `對焦鎖定 ${dist(this.focusD)}` : `對焦 ${dist(this.focusD)}`);
+    // 對好才放快門的相機：剛才按了快門，現在拍
+    if (this.pendingShot) {
+      this.pendingShot = false;
+      this.press();
+    }
   }
 
   // 定焦鏡頭不能變焦：提醒一次走近或退後
@@ -1423,6 +1556,11 @@ export class PhotoMode {
 
   // 拍好的畫布：從信差站來的做成明信片，不然存成 JPG
   deliver(out) {
+    // 舉相機拍的不跳結果面板，直接存檔，左下角閃一下
+    if (this.quick) {
+      out.toBlob((blob) => { if (blob) savePhoto(blob, `煉金畫廊-${stamp()}.jpg`); }, 'image/jpeg', 0.92);
+      return;
+    }
     if (this.postcard) {
       this.ui.hint('照相師沖洗中…', 30000);
       this.shot = out;
