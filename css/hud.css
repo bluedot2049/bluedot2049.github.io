@@ -318,11 +318,21 @@ body.desk.locked #top-btns [data-key]::after { content: attr(data-key); position
 }
 #emote-bar button:active { transform: scale(.9); }
 
+/* ───────── 手機按鈕的底線和邊線：搖桿、「跳」都貼著它。瀏海、home 條的安全區本身就是留白，不再另外加；
+   沒有安全區的手機留 14、16px。--safe-* 分開寫，測試時可以直接蓋掉模擬 iPhone ───────── */
+body {
+  --safe-b: env(safe-area-inset-bottom); --safe-l: env(safe-area-inset-left); --safe-r: env(safe-area-inset-right);
+  --edge-b: max(14px, var(--safe-b));
+  --joy: 124px;
+  --joy-x: max(16px, var(--safe-r));
+}
+body.joy-left { --joy-x: max(16px, var(--safe-l)); }
+
 /* ───────── 搖桿：星盤刻度，只在觸控裝置顯示 ───────── */
 #joy {
   position: fixed; z-index: 20;
-  right: calc(22px + env(safe-area-inset-right)); bottom: calc(26px + env(safe-area-inset-bottom));
-  width: 124px; height: 124px; border-radius: 50%;
+  right: var(--joy-x); bottom: var(--edge-b);
+  width: var(--joy); height: var(--joy); border-radius: 50%;
   background: rgba(30, 20, 14, 0.4);
   border: 1px solid var(--line);
   box-shadow: inset 0 0 0 5px rgba(18, 12, 8, .35), inset 0 0 0 6px var(--line-soft);
@@ -335,17 +345,18 @@ body.desk.locked #top-btns [data-key]::after { content: attr(data-key); position
   background:
     repeating-conic-gradient(from -1deg, rgba(232, 184, 106, .55) 0 2deg, transparent 2deg 90deg),
     repeating-conic-gradient(from -.75deg, rgba(232, 184, 106, .3) 0 1.5deg, transparent 1.5deg 30deg);
-  -webkit-mask: radial-gradient(circle, transparent 50px, #000 51px);
-  mask: radial-gradient(circle, transparent 50px, #000 51px);
+  -webkit-mask: radial-gradient(circle closest-side, transparent 92%, #000 93%);
+  mask: radial-gradient(circle closest-side, transparent 92%, #000 93%);
 }
 #joy::after {
-  content: ""; position: absolute; inset: 28px; border-radius: 50%;
+  content: ""; position: absolute; inset: 23%; border-radius: 50%;
   border: 1px dashed rgba(232, 184, 106, 0.22);
 }
 #joy.active { background: rgba(30, 20, 14, 0.6); }
 #joy-knob {
   position: absolute; left: 50%; top: 50%; z-index: 1;
-  width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%;
+  width: calc(var(--joy) * .42); height: calc(var(--joy) * .42);
+  margin: calc(var(--joy) * -.21) 0 0 calc(var(--joy) * -.21); border-radius: 50%;
   background: #e2ad5f;
   box-shadow: inset 0 0 0 1px rgba(255, 240, 210, .35);
   pointer-events: none;
@@ -374,7 +385,7 @@ body.touch #joy { display: block; }
   touch-action: none;
 }
 /* 「跳」的內側，坐著時變成「起」 */
-#sit-btn { width: var(--sit); height: var(--sit); font-size: calc(var(--sit) * .3); }
+#sit-btn { width: var(--btn); height: var(--btn); font-size: calc(var(--btn) * .3); }
 body.touch .seal { display: block; }
 body.panel-open .seal { opacity: 0; pointer-events: none; }
 body.sitting #sit-btn {
@@ -383,7 +394,7 @@ body.sitting #sit-btn {
   text-shadow: none;
 }
 
-/* ───────── 靠近畫作或鏡子時出現的金色徽章按鈕：手機在拇指弧外圈，電腦在下方那排正上方 ───────── */
+/* ───────── 靠近畫作或鏡子時出現的金色徽章按鈕：手機是搖桿內側斜上方一顆小圓章（見拇指弧那段），電腦在下方那排正上方 ───────── */
 #action-btn {
   position: fixed; z-index: 20;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
@@ -411,6 +422,7 @@ body.sitting #sit-btn {
 #action-btn .a1 { font-size: 18px; letter-spacing: .3em; padding-left: .3em; font-weight: 600; }
 #action-btn .a2 { font-size: 11px; letter-spacing: .05em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .72; }
 #action-btn .a2:empty { display: none; }
+#action-btn .a0 { display: none; }
 body.panel-open #joy, body.panel-open #action-btn, body.panel-open #emote, body.panel-open #emote-btn, body.panel-open #swap-btn,
 body.panel-open:not(.desk) #photo-btn, body.panel-open:not(.desk) #say-btn { opacity: 0; pointer-events: none; }
 /* 坐著看風景時，其他按鈕退到背景，但還是按得到。相機不淡，坐著也常拍 */
@@ -419,7 +431,7 @@ body.sitting #joy, body.sitting #jump-btn, body.sitting #emote, body.sitting #to
 /* ───────── 搖桿換邊：小圓鈕貼在搖桿內側。直拿預設搖桿在右，橫拿預設在左，按一下就反過來 ───────── */
 #swap-btn {
   position: fixed; z-index: 20;
-  right: calc(154px + env(safe-area-inset-right)); bottom: calc(26px + env(safe-area-inset-bottom));
+  right: calc(var(--joy-x) + var(--joy) + 10px); bottom: var(--edge-b);
   width: 34px; height: 34px; padding: 0; border-radius: 50%;
   color: var(--muted);
   background: rgba(30, 20, 14, 0.4); border: 1px solid var(--line-soft);
@@ -431,78 +443,71 @@ body.sitting #joy, body.sitting #jump-btn, body.sitting #emote, body.sitting #to
 body.touch #swap-btn { display: flex; }
 /* 攝影模式不能換邊（換了快門會跑走），但照著平常的邊排 */
 body.photo #swap-btn { display: none; }
-body.joy-left #joy { right: auto; left: calc(22px + env(safe-area-inset-left)); }
-body.joy-left #swap-btn { right: auto; left: calc(154px + env(safe-area-inset-left)); }
+body.joy-left #joy { right: auto; left: var(--joy-x); }
+body.joy-left #swap-btn { right: auto; left: calc(var(--joy-x) + var(--joy) + 10px); }
 body.touch #hint { bottom: auto; top: calc(70px + env(safe-area-inset-top)); }
 
 /* ───────── 拇指弧（手機）：「跳」放在不推搖桿那隻手的角落當圓心，坐、相機、表情排在拇指掃得到的弧上，
-   看畫和說話在外圈。直拿弧往上開；橫拿螢幕矮，弧壓扁往內攤，大小跟著螢幕高度走、最小 44px。
+   說話在外圈。只有兩種大小：「跳」（攝影時是快門）是 --seal，其他全部是 --btn。
+   弧的半徑照按鈕大小算：相鄰兩顆的弦長 = 一顆按鈕 + 10px（--k 是 1 / (2 sin(半個夾角))）。
+   直拿弧往上開，三顆隔 45°；橫拿螢幕矮，隔 40°，大小跟著螢幕高度走、最小 44px。
    搖桿換邊時整組鏡像（從右邊量）。攝影模式同一個位置換成快門和收相機 ───────── */
 body:not(.desk) {
-  --inset: env(safe-area-inset-left);
-  --seal: 68px; --sit: 56px; --cam: 50px;
-  --jx: calc(26px + var(--seal) / 2 + var(--inset));
-  --jy: calc(44px + var(--seal) / 2 + env(safe-area-inset-bottom));
-  --r1: 98px; --r2: 180px;
-  --a-sit: 0deg; --a-cam: 45deg; --a-emo: 90deg; --a-act: 50deg; --a-say: 90deg; --r-say: 172px;
+  --inset: var(--safe-l);
+  --seal: 64px; --btn: 52px; --k: 1.307;
+  --jx: calc(max(16px, var(--inset)) + var(--seal) / 2);
+  --jy: calc(var(--edge-b) + var(--seal) / 2);
+  --r1: calc((var(--btn) + 10px) * var(--k)); --r2: calc(var(--r1) + var(--btn) + 10px);
+  --a-sit: 0deg; --a-cam: 45deg; --a-emo: 90deg; --a-say: 67.5deg;
 }
-body.joy-left:not(.desk) { --inset: env(safe-area-inset-right); }
+body.joy-left:not(.desk) { --inset: var(--safe-r); }
 #jump-btn { --w: var(--seal); }
-#sit-btn { --w: var(--sit); --r: var(--r1); --a: var(--a-sit); }
-#photo-btn { --w: var(--cam); --r: var(--r1); --a: var(--a-cam); }
-#emote { --w: 44px; --r: var(--r1); --a: var(--a-emo); }
-#say-btn { --w: 44px; --r: var(--r-say); --a: var(--a-say); }
-#action-btn { --w: 104px; --h: 68px; --r: var(--r2); --a: var(--a-act); }
-/* 攝影模式坐和表情收掉了，那兩個位置讓給相機的閃光和日期，拇指記得的位置不變 */
-#ph-flash { --w: var(--sit); --r: var(--r1); --a: var(--a-sit); }
+#sit-btn { --w: var(--btn); --r: var(--r1); --a: var(--a-sit); }
+#photo-btn { --w: var(--btn); --r: var(--r1); --a: var(--a-cam); }
+#emote { --w: var(--btn); --r: var(--r1); --a: var(--a-emo); }
+#say-btn { --w: var(--btn); --r: var(--r2); --a: var(--a-say); }
+/* 攝影模式坐和表情收掉了，那兩個位置讓給相機的閃光（沒帶相機時是錄影）和日期，拇指記得的位置不變 */
+#ph-flash, #ph-record { --w: var(--btn); --r: var(--r1); --a: var(--a-sit); }
 #ph-date { --w: 64px; --h: 40px; --r: var(--r1); --a: var(--a-emo); }
 body:not(.desk) #ph-flash { width: var(--w); height: var(--w); }
-body:not(.desk) :is(#jump-btn, #sit-btn, #photo-btn, #say-btn, #emote, #action-btn, #ph-flash, #ph-date) {
+body:not(.desk) :is(#jump-btn, #sit-btn, #photo-btn, #say-btn, #emote, #ph-flash, #ph-record, #ph-date) {
   position: fixed; z-index: 20; margin: 0;
   left: calc(var(--jx) + var(--r, 0px) * cos(var(--a, 0deg)) - var(--w) / 2); right: auto;
   bottom: calc(var(--jy) + var(--r, 0px) * sin(var(--a, 0deg)) - var(--h, var(--w)) / 2);
 }
-body.joy-left:not(.desk) :is(#jump-btn, #sit-btn, #photo-btn, #say-btn, #emote, #action-btn, #ph-flash, #ph-date) {
+body.joy-left:not(.desk) :is(#jump-btn, #sit-btn, #photo-btn, #say-btn, #emote, #ph-flash, #ph-record, #ph-date) {
   left: auto; right: calc(var(--jx) + var(--r, 0px) * cos(var(--a, 0deg)) - var(--w) / 2);
 }
-body:not(.desk) #photo-btn { width: var(--cam); min-width: var(--cam); height: var(--cam); }
-body:not(.desk) #photo-btn svg { width: calc(var(--cam) * .44); height: calc(var(--cam) * .44); }
-body:not(.desk) #action-btn { height: var(--h); transform-origin: 30% 50%; }
-body.joy-left:not(.desk) #action-btn { transform-origin: 70% 50%; }
-body.joy-left:not(.desk) #emote { align-items: flex-end; }
+body:not(.desk) :is(#photo-btn, #say-btn, #emote-btn) { width: var(--btn); min-width: var(--btn); height: var(--btn); }
+body:not(.desk) #photo-btn svg { width: calc(var(--btn) * .44); height: calc(var(--btn) * .44); }
+body:not(.desk) :is(#say-btn, #emote-btn) svg { width: calc(var(--btn) * .42); height: calc(var(--btn) * .42); }
+body:not(.desk) #emote { align-items: center; }
 /* 表情點開時那一排會蓋到弧上其他按鈕，先讓它們退後 */
-body:not(.desk):has(#emote.open) :is(#sit-btn, #photo-btn, #say-btn, #action-btn.show) { opacity: .2; pointer-events: none; }
+body:not(.desk):has(#emote.open) :is(#sit-btn, #photo-btn, #say-btn) { opacity: .2; pointer-events: none; }
 body.flat :is(#photo-btn, #say-btn) { display: none; }
 
-/* 橫拿的手機：螢幕很矮，整組往上抬，弧往內側攤平；表情一排往畫面內側展開 */
+/* 互動鍵：搖桿內側斜上方（45°），拇指從搖桿往裡一滑就到。推搖桿時手指被搖桿抓著，滑過去不會誤按。
+   跟其他次要鍵一樣大，只寫兩個字（完整說法在 aria-label），光暈出現時擴一圈就停 */
+body:not(.desk) #action-btn {
+  --ar: calc(var(--joy) / 2 + var(--btn) / 2 + 10px);
+  left: auto; right: calc(var(--joy-x) + var(--joy) / 2 + var(--ar) * .7071 - var(--btn) / 2);
+  bottom: calc(var(--edge-b) + var(--joy) / 2 + var(--ar) * .7071 - var(--btn) / 2);
+  width: var(--btn); min-width: var(--btn); max-width: none; height: var(--btn); padding: 0; border-radius: 50%;
+}
+body.joy-left:not(.desk) #action-btn { right: auto; left: calc(var(--joy-x) + var(--joy) / 2 + var(--ar) * .7071 - var(--btn) / 2); }
+body:not(.desk) #action-btn :is(.a1, .a2) { display: none; }
+body:not(.desk) #action-btn .a0 { display: block; font-size: calc(var(--btn) * .3); font-weight: 600; letter-spacing: .08em; padding-left: .08em; line-height: 1; }
+body:not(.desk) #action-btn.show::before { animation-iteration-count: 1; }
+
+/* 橫拿的手機：螢幕很矮，按鈕跟著高度縮，弧往內側攤平；表情一排往畫面內側展開 */
 @media (orientation: landscape) and (max-height: 500px) {
   body:not(.desk) {
-    --lift: clamp(30px, 12vh, 60px);
     --joy: clamp(92px, 30vh, 124px);
-    --seal: clamp(50px, 16vh, 66px);
-    --sit: max(44px, var(--seal) * .84);
-    --cam: max(44px, var(--seal) * .74);
-    --edge: max(22px, 4vh);
-    --jx: calc(var(--edge) + var(--seal) / 2 + var(--inset));
-    --jy: calc(var(--lift) + 4vh + var(--seal) / 2 + env(safe-area-inset-bottom));
-    --r1: calc(var(--seal) * 1.5); --r2: calc(var(--seal) * 3.1); --r-say: var(--r2);
-    --a-sit: -8deg; --a-cam: 32deg; --a-emo: 80deg; --a-act: 18deg; --a-say: 60deg;
-  }
-  body.touch #joy {
-    width: var(--joy); height: var(--joy);
-    bottom: calc(var(--lift) + env(safe-area-inset-bottom));
-  }
-  body.touch #joy::before {
-    -webkit-mask: radial-gradient(circle closest-side, transparent 92%, #000 93%);
-    mask: radial-gradient(circle closest-side, transparent 92%, #000 93%);
+    --seal: clamp(52px, 15vh, 60px);
+    --btn: max(44px, 12vh); --k: 1.462;
+    --a-sit: 0deg; --a-cam: 40deg; --a-emo: 80deg; --a-say: 60deg;
   }
   body.touch #joy::after { inset: 26%; }
-  body.touch #joy-knob {
-    width: calc(var(--joy) * .42); height: calc(var(--joy) * .42);
-    margin: calc(var(--joy) * -.21) 0 0 calc(var(--joy) * -.21);
-  }
-  body.touch #swap-btn { bottom: calc(var(--lift) + env(safe-area-inset-bottom)); }
-  #action-btn { --h: calc(var(--seal) + 4px); }
   /* 日期窗是扁長的，弧壓扁後會碰到收起鈕的角，往上轉一點 */
   #ph-date { --a: calc(var(--a-emo) + 8deg); }
 

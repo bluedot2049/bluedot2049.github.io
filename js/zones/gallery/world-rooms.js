@@ -576,10 +576,61 @@ export function furnish(room, R, set, noCat, tidy = false) {
   for (const [entry, b] of entryBuckets) {
     for (const o of fadeable(b, true)) { entry.tall.push(o); room.group.add(o); }
   }
+  // 鏡子、相機桌、擺鐘這些另外蓋的大件（world.js 登記在 room.shadowSpots），地上的影子跟家具合成同一個網格
+  for (const p of room.shadowSpots || []) addShadow(p.x, p.z, p.w, p.d, p.rot);
+  shadows.push(...wallFoot(room));
   if (shadows.length) {
     const sm = new THREE.Mesh(mergeGeometriesSafe(shadows), s.shadowMat);
     room.group.add(sm);
   }
+}
+
+// 牆腳的暗邊：地板貼著牆的那一圈壓暗，房間的角落才有深度，不像紙盒。電腦的環境光遮蔽做的就是這個，這裡建房間時鋪好，手機也看得到。
+// 跟家具影子用同一張圓形漸層貼圖，只取半徑上的一段：貼牆那邊從 FOOT_V 開始（0.5 是正中最暗），往房間裡淡到全透明。
+// 兩面牆在角落疊在一起，角落自然更暗；門口那兩端斜著收掉
+const FOOT = 0.9, FOOT_V = 0.6, FOOT_Y = 0.007;
+function wallFoot(room) {
+  const pos = [], uv = [];
+  // 牆上一段 a→b，n 是朝房間裡的方向；ta、tb：那一端要不要斜著收
+  const strip = (ax, az, bx, bz, nx, nz, ta, tb) => {
+    const len = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / len, uz = (bz - az) / len;
+    const ia = ta ? Math.min(FOOT, len / 2) : 0, ib = tb ? Math.min(FOOT, len / 2) : 0;
+    const p = [
+      [ax, az, FOOT_V], [bx, bz, FOOT_V],
+      [bx + nx * FOOT - ux * ib, bz + nz * FOOT - uz * ib, 1], [ax + nx * FOOT + ux * ia, az + nz * FOOT + uz * ia, 1],
+    ];
+    for (const [i, j, k] of [[0, 1, 2], [0, 2, 3]]) {
+      // 從上往下看要是逆時針，不然單面材質看不到
+      const up = (p[j][0] - p[i][0]) * (p[k][1] - p[i][1]) - (p[j][1] - p[i][1]) * (p[k][0] - p[i][0]) < 0;
+      for (const q of up ? [p[i], p[j], p[k]] : [p[i], p[k], p[j]]) { pos.push(q[0], FOOT_Y, q[1]); uv.push(0.5, q[2]); }
+    }
+  };
+  if (room.type === 'rotunda') {
+    const { r } = room, cz = room.zStart - r;
+    const doors = [room.hasEntry && 0, room.hasEntry && Math.PI * 2, room.hasExit && Math.PI].filter((d) => d !== false);
+    const nearDoor = (th) => doors.some((d) => Math.abs(th - d) < room.gap + 0.05);
+    for (const sp of room.spans) {
+      const n = Math.max(1, Math.ceil(sp.length / 0.3)), th0 = sp.s0, th1 = sp.s0 + sp.length / r;
+      for (let i = 0; i < n; i++) {
+        const a = th0 + ((th1 - th0) * i) / n, b = th0 + ((th1 - th0) * (i + 1)) / n, m = (a + b) / 2;
+        strip(Math.sin(a) * r, cz + Math.cos(a) * r, Math.sin(b) * r, cz + Math.cos(b) * r, -Math.sin(m), -Math.cos(m), i === 0 && nearDoor(a), i === n - 1 && nearDoor(b));
+      }
+    }
+  } else {
+    for (const sp of room.spans) {
+      const a = sp.at(0), b = sp.at(sp.length);
+      const door = (a.nz === -1 && room.hasEntry) || (a.nz === 1 && room.hasExit);
+      if (!door) { strip(a.x, a.z, b.x, b.z, a.nx, a.nz, false, false); continue; }
+      const g0 = sp.at(sp.length / 2 - DOOR_W / 2 - 0.08), g1 = sp.at(sp.length / 2 + DOOR_W / 2 + 0.08);
+      strip(a.x, a.z, g0.x, g0.z, a.nx, a.nz, false, true);
+      strip(g1.x, g1.z, b.x, b.z, a.nx, a.nz, true, false);
+    }
+  }
+  if (!pos.length) return [];
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  return [geo];
 }
 
 export function mergeGeometriesSafe(list) {

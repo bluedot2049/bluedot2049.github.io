@@ -555,7 +555,10 @@ async function start() {
   const actionBtn = document.getElementById('action-btn');
   actionBtn.addEventListener('click', () => player.action());
   const actionLabel = actionBtn.querySelector('.a1');
+  const actionShort = actionBtn.querySelector('.a0');
   const LABELS = { painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來' };
+  // 手機的互動鍵是一顆小圓章，只放兩個字；沒列在這裡的取前兩個字
+  const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信' };
   let nearKey = null;
   function updateAction() {
     const t = player.actionTarget();
@@ -571,6 +574,7 @@ async function start() {
     actionBtn.classList.toggle('show', !!t);
     if (!t) return;
     actionLabel.textContent = (t.kind === 'talk' && t.p.actionLabel) || (t.kind === 'exit' && t.p.label) || LABELS[t.kind];
+    actionShort.textContent = SHORT[actionLabel.textContent] || actionLabel.textContent.slice(0, 2);
     actionBtn.setAttribute('aria-label', actionLabel.textContent);
     document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : t.kind === 'pet' || t.kind === 'talk' ? t.p.name : t.kind === 'exit' ? t.p.title : '';
   }
@@ -929,7 +933,19 @@ async function start() {
   let frame = 0;
   // 某一幀出錯只記一次，迴圈照跑。不然 three.js 不會排下一幀，整個畫面停住、也不再送位置，別人會當你離開了
   let crashed = false;
-  renderer.setAnimationLoop(() => {
+  // 120Hz 的手機每秒畫 120 張，熱了就降頻、解析度被壓低。開場量 30 幀的間隔，100Hz 以上就限在 60（120 → 60）。
+  // 載入時卡頓只會讓間隔變長，所以取偏短的那幾個。跳不跳看離上次跑了多久，不看奇偶：太重本來就只跑 60 時不會再被砍半。
+  // 90Hz 除不成 60，照原樣跑
+  const gaps = [];
+  let lastT = 0, lastRun = 0, cap = false;
+  renderer.setAnimationLoop((t) => {
+    if (coarse && gaps.length < 30) {
+      if (lastT) gaps.push(t - lastT);
+      lastT = t;
+      if (gaps.length === 30) cap = gaps.sort((a, b) => a - b)[5] < 1000 / 100;
+    }
+    if (cap && t - lastRun < 12) return;
+    lastRun = t;
     try {
       tick();
     } catch (e) {

@@ -6,7 +6,7 @@ body.photo #stage::after { display: none; }   /* 暗角改由取景框畫，存�
 body.photo #joy, body.photo #emote { opacity: 1; }
 body.photo-hush .speech { opacity: 0 !important; }
 /* 手機：相機鈕留在原位變成收起（✕），右上角不另放離開鈕；表情讓出鏡頭鈕，退到外圈 */
-body.photo:not(.desk) #emote { --a: 90deg; --r: calc(var(--r2) + 6px); }
+body.photo:not(.desk) #emote { --a: 90deg; --r: calc(var(--r1) * sin(var(--a-cam)) + var(--btn) + 58px); }
 body.photo.desk #photo-btn, body.photo:has(#ph-result:not([hidden])) #photo-btn { display: none; }
 body:not(.desk) #ph-exit { display: none; }
 body.photo-bare #ph-bar, body.photo-bare #ph-exit, body.photo-bare #ph-shoot, body.photo-bare #ph-alt,
@@ -114,15 +114,19 @@ body.desk .ph-chip span { color: var(--muted); }
   left: calc(var(--jx) - 36px); bottom: calc(var(--jy) - 36px);
   display: flex; flex-direction: column; align-items: flex-start; gap: 14px;
 }
+/* 手機的快門跟「跳」一樣大，錄影跟其他次要鍵一樣大 */
+body:not(.desk) #ph-shoot { left: calc(var(--jx) - var(--seal) / 2); bottom: calc(var(--jy) - var(--seal) / 2); }
+body:not(.desk) #ph-shutter { width: var(--seal); height: var(--seal); }
+body:not(.desk) #ph-record { width: var(--btn); height: var(--btn); }
 .ph-keys { display: flex; align-items: center; gap: 14px; }
 body:not(.desk) .ph-keys { gap: 10px; }
-body.joy-left:not(.desk) #ph-shoot { left: auto; right: calc(var(--jx) - 36px); }
+body.joy-left:not(.desk) #ph-shoot { left: auto; right: calc(var(--jx) - var(--seal) / 2); }
 body.joy-left:not(.desk) .ph-keys { flex-direction: row-reverse; }
 body:not(.desk) #ph-lens {
-  position: fixed; left: calc(var(--jx) - 36px);
-  bottom: calc(var(--jy) + var(--r1) * sin(var(--a-cam)) + var(--cam) / 2 + 12px);
+  position: fixed; left: calc(var(--jx) - var(--seal) / 2);
+  bottom: calc(var(--jy) + var(--r1) * sin(var(--a-cam)) + var(--btn) / 2 + 12px);
 }
-body.joy-left:not(.desk) #ph-lens { left: auto; right: calc(var(--jx) - 36px); }
+body.joy-left:not(.desk) #ph-lens { left: auto; right: calc(var(--jx) - var(--seal) / 2); }
 #ph-lens {
   display: flex; gap: 2px; padding: 3px;
   background: var(--panel); border: 1px solid var(--line-soft); border-radius: 999px;
@@ -333,15 +337,15 @@ body.photo-rec #ph-record i { width: 18px; height: 18px; border-radius: 4px; }
 /* 高度尺：手機疊在搖桿上方，電腦在右邊中間。刻度在左，圓點旁邊寫幾公尺 */
 #ph-alt {
   position: fixed; z-index: 20;
-  right: calc(60px + env(safe-area-inset-right)); bottom: calc(172px + env(safe-area-inset-bottom));
+  right: calc(var(--joy-x) + var(--joy) / 2 - 18px); bottom: calc(var(--edge-b) + var(--joy) + 22px);
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   touch-action: none; user-select: none; -webkit-user-select: none;
 }
-body.joy-left:not(.desk) #ph-alt { right: auto; left: calc(60px + env(safe-area-inset-left)); }
+body.joy-left:not(.desk) #ph-alt { right: auto; left: calc(var(--joy-x) + var(--joy) / 2 - 18px); }
 /* 橫拿：搖桿上面放不下，改排在搖桿內側 */
 @media (orientation: landscape) and (max-height: 500px) {
-  body:not(.desk) #ph-alt { bottom: calc(var(--lift) + env(safe-area-inset-bottom)); right: calc(22px + var(--joy) + 64px + env(safe-area-inset-right)); }
-  body.joy-left:not(.desk) #ph-alt { right: auto; left: calc(22px + var(--joy) + 64px + env(safe-area-inset-left)); }
+  body:not(.desk) #ph-alt { bottom: var(--edge-b); right: calc(var(--joy-x) + var(--joy) + 54px); }
+  body.joy-left:not(.desk) #ph-alt { right: auto; left: calc(var(--joy-x) + var(--joy) + 54px); }
   body:not(.desk) .ph-alt-track { height: clamp(90px, 100vh - 200px, 150px); }
 }
 .ph-alt-step {

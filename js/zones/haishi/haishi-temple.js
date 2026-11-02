@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { Kit, rng } from '../../core/props.js';
 import { bucketObjects, glowPoints } from '../../core/scenery.js';
 import { addRoof } from './eaves.js';
-import { AREA, PLASTER, shade } from './haishi-map.js';
+import { AREA, GRAY, PLASTER, shade } from './haishi-map.js';
 import { floorBelow } from './haishi-terrain.js';
 
 export function buildTemple(c) {
@@ -15,14 +15,14 @@ export function buildTemple(c) {
   // 用自己的一串亂數，排在灌木、人家、樹後面才登記擋路的範圍，前面那些照原本的樣子抽
   {
     const TR = rng('haishi-temple'), tk = new Kit(TR), far = farLamps;
-    const BRONZE = '#8a7a58', PILLAR = '#3e2a24', TSTONE = '#5a5862';
+    const BRONZE = '#8a7a58', PILLAR = '#3e2a24', TSTONE = GRAY.wall;
     // 石燈：方座、短柱、一格冷白的火室、小屋頂。遠處的那一點另外記下來，從碼頭看會像星星一樣閃
     const stoneLamp = (x, y, z) => {
       tk.box(0.44, 0.18, 0.44, TSTONE, x, y + 0.09, z);
       tk.cyl(0.08, 0.1, 0.62, TSTONE, x, y + 0.49, z, {}, 6);
       tk.box(0.34, 0.08, 0.34, TSTONE, x, y + 0.84, z);
       tk.box(0.24, 0.22, 0.24, '#a8c8ff', x, y + 0.99, z, { glow: true, color2: '#e0ecff' });
-      tk.cone(0.3, 0.22, '#3a3a42', x, y + 1.21, z);
+      tk.cone(0.3, 0.22, GRAY.foot, x, y + 1.21, z);
       tk.light(x, y + 0.99, z, '#8ab0ff', 0.45);
       far.push({ x, y: y + 1, z, color: '#e4ecff', size: 0.5 });
       obstacles.push({ x, z, hw: 0.25, hd: 0.25 });
@@ -33,11 +33,11 @@ export function buildTemple(c) {
       const y = AREA.summit.y, z = AREA.summit.z0 + 0.35, cx = (AREA.tS1.x0 + AREA.tS1.x1) / 2;
       for (const sx of [-1.25, 1.25]) {
         tk.box(0.5, 0.3, 0.5, TSTONE, cx + sx, y + 0.15, z);
-        tk.box(0.34, 3.1, 0.34, '#625f68', cx + sx, y + 1.7, z, { color2: '#6e6b74' });
+        tk.box(0.34, 3.1, 0.34, GRAY.mid, cx + sx, y + 1.7, z, { color2: GRAY.cap });
         obstacles.push({ x: cx + sx, z, hw: 0.25, hd: 0.25 });
       }
-      tk.box(3.1, 0.26, 0.38, '#625f68', cx, y + 3.3, z);
-      tk.torus(0.62, 0.09, Math.PI * 2, '#6e6b74', cx, y + 4.1, z, {});
+      tk.box(3.1, 0.26, 0.38, GRAY.mid, cx, y + 3.3, z);
+      tk.torus(0.62, 0.09, Math.PI * 2, GRAY.cap, cx, y + 4.1, z, {});
       for (const rz of [0, Math.PI / 2]) tk.add(new THREE.CircleGeometry(0.36, 4), '#9ab0d8', cx, y + 4.1, z, { rz, sx: 0.28, glow: true });
       solid(cx - 1.7, cx + 1.7, z - 0.3, z + 0.3, y + 4.8);
     }
@@ -78,7 +78,7 @@ export function buildTemple(c) {
     // 觀星樓：石埕西頭一座瘦高的樓，三層往上收，底層木構、上兩層白灰牆（霧裡才浮得出來），頂上沒有屋頂，只有一座銅渾天儀。從山下看是廟的記號
     {
       const x = C.x0 + 1.7, z = (C.z0 + C.z1) / 2 - 0.2, y = C.y, ok = new Kit(TR);
-      tk.box(2.6, 2.2, 2.6, TSTONE, x, y + 1.1, z, { color2: '#66646c' });
+      tk.box(2.6, 2.2, 2.6, TSTONE, x, y + 1.1, z, { color2: GRAY.mid });
       let s = 2.1, top = y + 2.2;
       for (let i = 0; i < 3; i++) {
         const th = 2.2 - i * 0.3, wall = i ? PLASTER[3 - i] : '#3e302c';
@@ -116,7 +116,7 @@ export function buildTemple(c) {
         // 後半圈柱子之間一道矮牆
         if (Math.cos(a) < -0.2) {
           const b = ((i + 1.5) / N) * Math.PI * 2, mx = x + (Math.sin(a) + Math.sin(b)) * r / 2, mz = z + (Math.cos(a) + Math.cos(b)) * r / 2;
-          if (Math.cos(b) < -0.2) tk.box(2 * r * Math.sin(Math.PI / N) - 0.3, 1.1, 0.22, '#4a4650', mx, y + 0.55, mz, { ry: -(a + b) / 2 + Math.PI / 2 });
+          if (Math.cos(b) < -0.2) tk.box(2 * r * Math.sin(Math.PI / N) - 0.3, 1.1, 0.22, GRAY.dark, mx, y + 0.55, mz, { ry: -(a + b) / 2 + Math.PI / 2 });
         }
       }
       // 屋頂：外面看是一圈瓦，從殿裡抬頭也看得到瓦底（同一圈再做一份朝裡的）
@@ -129,7 +129,7 @@ export function buildTemple(c) {
       hk.fid = fader.add([[x - r - 1.6, y + 3.2, z - r - 1.6, x + r + 1.6, y + 5, z + r + 1.6]]);
       hk.emit(bucket, 0, 0, 0);
       // 水鏡：一圈石沿，裡面的水另外畫（waterMirror），倒映天井那一塊天
-      tk.add(new THREE.RingGeometry(1.5, 1.75, 32), '#5a5862', x, y + 0.02, z, { rx: -Math.PI / 2, ao: false });
+      tk.add(new THREE.RingGeometry(1.5, 1.75, 32), GRAY.wall, x, y + 0.02, z, { rx: -Math.PI / 2, ao: false });
       obstacles.push({ x, z, hw: 1.2, hd: 1.2 });
       // 門口右手邊一盞燈，殿裡就只有這一盞。方座整個落在殿台上，不伸出台邊
       stoneLamp(x + 2.1, y, H.z1 - 0.3);

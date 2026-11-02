@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { hull } from '../../scene/harbor.js';
 import { addRoof } from './eaves.js';
-import { AREA, DARK, PAPER, SEA, WOOD, shade } from './haishi-map.js';
+import { AREA, DARK, GRAY, PAPER, SEA, WOOD, shade } from './haishi-map.js';
 
 export function buildBoats(c) {
   const { lantern, vessel, R, harborFx, shimmerMore, bob, pick, headingOf, k, obstacles, group, lattice } = c;
@@ -157,7 +157,7 @@ export function buildBoats(c) {
     // 吊桿：石堤靠船那一側一根桅柱，吊臂在船和堤之間來回擺，吊著一個木箱上上下下。船不在就收向南邊停著
     const F = AREA.ferry, mx = F.x1 - 0.55, mz = 15.2, MY = 3.5;
     k.cyl(0.14, 0.18, MY, '#4a3626', mx, MY / 2, mz, {}, 8);
-    k.box(0.6, 0.3, 0.6, '#5a5a60', mx, 0.15, mz);
+    k.box(0.6, 0.3, 0.6, GRAY.wall, mx, 0.15, mz);
     obstacles.push({ x: mx, z: mz, hw: 0.3, hd: 0.3 });
     const boom = vessel((vk) => {
       vk.box(3.4, 0.12, 0.12, '#5a4030', 1.6, 0, 0, { rz: 0.18 });

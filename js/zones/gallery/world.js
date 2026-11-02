@@ -126,6 +126,7 @@ export function buildWorld(scene, gallery) {
       room.group.add(group);
       group.traverse((m) => { if (m.isMesh) sp.entry.tall.push(m); });
       room.obstacles.push({ x, z, hw: 0.55, hd: 0.25, rot });
+      room.shadowSpots = [{ x, z, w: 1.1, d: 0.5, rot }];
       raycastTargets.push(glass);
       mirror = { x, z, n: { x: pt.nx, z: pt.nz } };
       // 鏡子前鋪一條拱形的毯子，站上去金線會亮；毯子是地板，牆淡掉時不跟著淡
@@ -160,6 +161,7 @@ export function buildWorld(scene, gallery) {
       room.group.add(guideSign.group);
       fadeByBoxes(guideSign.group, [[gp.x - 0.6, -0.1, gp.z - 0.6, gp.x + 0.6, 1.6, gp.z + 0.6]]);
       room.obstacles.push({ x: gp.x, z: gp.z, hw: 0.3, hd: 0.22, rot: drot + 0.35 });
+      room.shadowSpots.push({ x: gp.x, z: gp.z, w: 0.6, d: 0.44, rot: drot + 0.35 });
       raycastTargets.push(...guideSign.faces);
 
       // 鏡子右邊是相機桌（camtable.js）：出門前在這裡挑一台帶走。兩塊毯子並排，中間留一條走道
@@ -170,6 +172,7 @@ export function buildWorld(scene, gallery) {
       camTable = buildCamTable(tx, tz, trot);
       room.group.add(camTable.group);
       room.obstacles.push({ x: tx, z: tz, hw: TABLE_W / 2, hd: TABLE_D / 2, rot: trot });
+      room.shadowSpots.push({ x: tx, z: tz, w: TABLE_W, d: TABLE_D, rot: trot });
 
       // 入口那面牆（進門的左手邊）：靠鏡子那頭開窗，夕陽照在鏡子前；靠前門那頭空著，之後貼活動和消息的海報。
       // 空著的這段家具照樣做一次再丟掉，海報掛上去時別處的擺設不會跟著換位置
@@ -210,11 +213,7 @@ export function buildWorld(scene, gallery) {
       clock.group.rotation.y = rot;
       room.group.add(clock.group);
       clock.group.traverse((m) => { if (m.isMesh) sp.entry.tall.push(m); });
-      const sg = new THREE.PlaneGeometry(CLOCK_W * 1.3 + 0.2, CLOCK_D * 1.3 + 0.2);
-      sg.rotateX(-Math.PI / 2);
-      sg.rotateY(rot);
-      sg.translate(x, 0.008, z);
-      room.group.add(new THREE.Mesh(sg, shared().shadowMat));
+      (room.shadowSpots ||= []).push({ x, z, w: CLOCK_W, d: CLOCK_D, rot });
       Object.assign(clock, { x, y: 1.4, z });
       clockSpot = { x, z, hw: CLOCK_W / 2, hd: CLOCK_D / 2, rot };
     }

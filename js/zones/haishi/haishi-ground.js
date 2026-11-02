@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { Kit, rng } from '../../core/props.js';
 import { addRoof } from './eaves.js';
 import { BED, PAVES, paving } from './pave.js';
-import { AREA, AREAS, CARTS, DARK, GOLD, PAVE, RISE, SEA, SHOPS, STONE, smooth } from './haishi-map.js';
+import { AREA, AREAS, CARTS, DARK, GOLD, GRAY, PAVE, RISE, SEA, SHOPS, STONE, smooth } from './haishi-map.js';
 import { areaAt, heightIn, paveOf } from './haishi-terrain.js';
 import { signTexture } from './haishi-houses.js';
 
@@ -40,6 +40,30 @@ export function buildGround(c) {
     }
   };
 
+  // ---------- 港邊的岸壁 ----------
+  // 貼著海的石台，側面泡在潮水裡：整面比上面的擋土牆暗，水線上一圈青苔，有幾段爬高一格，
+  // 水線下幾乎是黑綠的。側面切成一格一格，每格一個顏色，不漸層
+  const WALL = new THREE.Color(GRAY.dark), SLIME = new THREE.Color('#3a6232'), DEEP = new THREE.Color(GRAY.deep);
+  const quayWall = (a, yb, yt, grout) => {
+    const w = a.x1 - a.x0, d = a.z1 - a.z0;
+    const rows = [Math.min(yb, SEA - 0.5), SEA - 0.05, SEA + 0.2, SEA + 0.42, yt];
+    const g = new THREE.BoxGeometry(w, 1, d, Math.ceil(w / 0.8), rows.length - 1, Math.ceil(d / 0.8)).toNonIndexed();
+    const pos = g.attributes.position, nor = g.attributes.normal, col = new Float32Array(pos.count * 3), seam = new THREE.Color(grout);
+    const cx = (a.x0 + a.x1) / 2, cz = (a.z0 + a.z1) / 2;
+    for (let i = 0; i < pos.count; i++) pos.setXYZ(i, cx + pos.getX(i), rows[Math.round((pos.getY(i) + 0.5) * (rows.length - 1))], cz + pos.getZ(i));
+    // 一格是兩個三角形、六個頂點，照格子中心決定顏色，六個頂點塗一樣的
+    for (let i = 0; i < pos.count; i += 6) {
+      let x = 0, y = 0, z = 0;
+      for (let j = i; j < i + 6; j++) { x += pos.getX(j) / 6; y += pos.getY(j) / 6; z += pos.getZ(j) / 6; }
+      // 青苔爬高一格的那幾段：兩個斜的波疊起來，沿著岸壁走一段高一段低
+      const n = 0.5 + 0.5 * Math.sin(x * 3.1 + z * 2.3) * Math.sin(x * 1.1 - z * 1.7 + 2);
+      const c = nor.getY(i) > 0.5 ? seam : y < SEA - 0.05 ? DEEP : y < SEA + 0.2 || (y < SEA + 0.42 && n > 0.45) ? SLIME : WALL;
+      for (let j = i; j < i + 6; j++) c.toArray(col, j * 3);
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    k.add(g, null, 0, 0, 0, { ao: false });
+  };
+
   // ---------- 地面：碼頭、各層石台，側面就是擋土牆 ----------
   // 這些都是地面本身，不壓環境光遮蔽（ao: false），壓暗的是站在上面的東西的腳
   for (const a of AREAS) {
@@ -48,12 +72,15 @@ export function buildGround(c) {
     if (a.y != null) {
       // 石台頂面往下收，上面鋪石板，石板之間露出深色的縫。側面照舊由下往上漸亮，頂面那一片塗縫的顏色
       const st = paveOf(a), yt = a.y - BED;
+      if (a.y === 0) quayWall(a, yb, yt, PAVES[st].grout);
+      else {
       const g = new THREE.BoxGeometry(a.x1 - a.x0, yt - yb, a.z1 - a.z0).toNonIndexed();
       const pos = g.attributes.position, col = new Float32Array(pos.count * 3), c = new THREE.Color();
-      const dark = a.id === 'summit' || a.temple, lo = new THREE.Color(dark ? '#3a3840' : STONE), hi = new THREE.Color(dark ? '#4a4852' : PAVE), seam = new THREE.Color(PAVES[st].grout);
+      const dark = a.id === 'summit' || a.temple, lo = new THREE.Color(dark ? GRAY.foot : STONE), hi = new THREE.Color(dark ? GRAY.dark : PAVE), seam = new THREE.Color(PAVES[st].grout);
       for (let i = 0; i < pos.count; i++) (i >= 12 && i < 18 ? seam : c.copy(lo).lerp(hi, pos.getY(i) / (yt - yb) + 0.5)).toArray(col, i * 3);
       g.setAttribute('color', new THREE.BufferAttribute(col, 3));
       k.add(g, null, (a.x0 + a.x1) / 2, (yt + yb) / 2, (a.z0 + a.z1) / 2, { ao: false });
+      }
       // 燈巷靠房子那一邊留一道排水溝
       k.add(paving(a, st, PR, paveTint, a.street === 'lantern' ? { gutter: 'z0' } : {}), null, 0, 0, 0, { ao: false });
       solid(a.x0, a.x1, a.z0, a.z1, a.y, true);
@@ -108,8 +135,8 @@ export function buildGround(c) {
         // 越往上越稀，偶爾一盞熄了，柱頂只剩一塊暗的石頭
         const flip = SLR() < 0.15, x = ns ? (flip ? a.x1 + 0.12 : a.x0 - 0.12) : p, z = ns ? p : flip ? a.z0 - 0.12 : a.z1 + 0.12;
         const ph = 0.45 + SLR() * 0.2, top = h + 0.5 + ph, out = SLR() < 0.12;
-        k.box(0.18, ph, 0.18, '#5a5862', x, h + 0.5 + ph / 2, z);
-        if (out) k.box(0.14, 0.14, 0.14, '#3e3c46', x, top + 0.07, z);
+        k.box(0.18, ph, 0.18, GRAY.wall, x, h + 0.5 + ph / 2, z);
+        if (out) k.box(0.14, 0.14, 0.14, GRAY.foot, x, top + 0.07, z);
         else {
           k.box(0.14, 0.14, 0.14, '#a8c8ff', x, top + 0.07, z, { glow: true, color2: '#e0ecff' });
           k.light(x, top + 0.07, z, '#8ab0ff', 0.25);
@@ -151,7 +178,7 @@ export function buildGround(c) {
     if (AREAS.some((a) => x > a.x0 - r && x < a.x1 + r && z > a.z0 - r && z < a.z1 + r)) continue;
     if (z > 8.5 && x < 16) continue;   // 港內停船的水面
 
-    k.rock(r, '#4e4a4a', x, y, z, { sy: 0.6, ry, color2: '#6a625c', ao: false });
+    k.rock(r, GRAY.dark, x, y, z, { sy: 0.6, ry, color2: GRAY.mid, ao: false });
   }
   // 西邊三個堆在漁港補出來那塊岸壁的角落，碼頭往西的路空出來
   for (const [x, z, s] of [[-12.25, 9.55, 0.7], [-11.55, 9.45, 0.55], [-12.2, 10.3, 0.5], [6.9, 10.4, 0.65]]) {
@@ -161,8 +188,8 @@ export function buildGround(c) {
 
   // ---------- 欄杆 ----------
   // 碼頭靠海的三邊不圍欄杆，只壓一道深色的邊石，跟兩邊的岸壁一樣。西邊接著漁港補出來的岸壁，前緣一路壓過去
-  for (const [x0, x1] of [[-12.8, -1.2], [1.2, 8]]) k.box(x1 - x0, 0.1, 0.22, '#4a4a50', (x0 + x1) / 2, 0.05, 11.89);
-  k.box(0.22, 0.1, 3, '#4a4a50', 7.89, 0.05, 10.5);
+  for (const [x0, x1] of [[-12.8, -1.2], [1.2, 8]]) k.box(x1 - x0, 0.1, 0.22, GRAY.dark, (x0 + x1) / 2, 0.05, 11.89);
+  k.box(0.22, 0.1, 3, GRAY.dark, 7.89, 0.05, 10.5);
   rail(-2.1, 5.05, -1.45, 5.05, 0); rail(1.45, 5.05, 2.1, 5.05, 0);
 
   // ---------- 牌樓：碼頭石階的頂端，掛著「海市」 ----------

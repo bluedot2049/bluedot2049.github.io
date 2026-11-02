@@ -6,7 +6,7 @@ import { Kit, newBucket } from '../../core/props.js';
 import { bucketObjects, glowPoints } from '../../core/scenery.js';
 import { bump } from '../../scene/harbor.js';
 import { addRoof } from './eaves.js';
-import { AREA, AREAS, DARK, PAPER, PLASTER, SEA, TILES, WOOD, shade } from './haishi-map.js';
+import { AREA, AREAS, DARK, GRAY, PAPER, PLASTER, SEA, TILES, WOOD, shade } from './haishi-map.js';
 import { areaAt, heightIn, terrain } from './haishi-terrain.js';
 
 export function buildHarbor(c) {
@@ -62,7 +62,7 @@ export function buildHarbor(c) {
   // 岸壁：靠海的邊上一道深色的壓邊石，一排繫船柱和燈柱，燈柱之間拉燈籠串。
   // 第三道小棧橋東邊那段岸壁往前補到碼頭前緣（z = 12），那裡的繫船柱和燈柱跟著站到前緣，燈籠串斜斜拉過去
   for (const [x0, x1] of [[-27, -24.2], [-22.8, -19.2], [-17.8, -14.2], [8, 10], [13, 15]]) {
-    k.box(x1 - x0, 0.1, 0.22, '#4a4a50', (x0 + x1) / 2, 0.05, 8.89);
+    k.box(x1 - x0, 0.1, 0.22, GRAY.dark, (x0 + x1) / 2, 0.05, 8.89);
   }
   for (const [x, z] of [[-25.6, 8.78], [-21.2, 8.78], [-16.0, 8.78], [-11.6, 11.78], [9.3, 8.78], [14.2, 8.78]]) bollard(x, z);
   const lampsW = [[-26.4, 8.84], [-20.6, 8.84], [-15.2, 8.84], [-10.4, 11.84]], lampsE = [[8.6, 8.84], [14.6, 8.84]];
@@ -73,7 +73,7 @@ export function buildHarbor(c) {
   // zf 是正面的 z，房子往北長 d。open 的大門開著，裡面亮燈、堆著貨
   const warehouse = (cx, zf, w, d, h, mark, open) => {
     const wk = new Kit(R), zc = zf - d / 2, ground = groundUnder(cx - w / 2, cx + w / 2, zf - d, zf), tile = pick(TILES), wall = pick(PLASTER);
-    wk.box(w + 0.1, 0.7 - ground, d + 0.1, '#5a5a60', cx, (0.3 + ground - 0.4) / 2, zc, { color2: '#74747a' });
+    wk.box(w + 0.1, 0.7 - ground, d + 0.1, GRAY.wall, cx, (0.3 + ground - 0.4) / 2, zc, { color2: GRAY.cap });
     wk.box(w, 1.4, d, '#2e2622', cx, 1.0, zc, { color2: '#3a302a' });
     wk.box(w - 0.04, h - 1.7, d - 0.04, wall, cx, (h + 1.7) / 2, zc, { color2: shade(wall, -0.03) });
     for (const sx of [-1, 1]) wk.box(0.16, h - 0.3, 0.16, DARK, cx + sx * (w / 2 - 0.06), (h + 0.3) / 2, zf - 0.06);
@@ -155,9 +155,9 @@ export function buildHarbor(c) {
   {
     const M = AREA.mole;
     for (let z = M.z0 + 1; z < M.z1 + 1.5; z += 1.1 + R() * 0.4) {
-      k.rock(0.6 + R() * 0.5, pick(['#5a5a60', '#62626a', '#54545a']), M.x0 - 0.5 - R() * 0.5, SEA + 0.1 + R() * 0.35, z, { sy: 0.8, ry: R() * 3, color2: '#7a7a80', ao: false });
+      k.rock(0.6 + R() * 0.5, pick([GRAY.wall, GRAY.mid, GRAY.dark]), M.x0 - 0.5 - R() * 0.5, SEA + 0.1 + R() * 0.35, z, { sy: 0.8, ry: R() * 3, color2: GRAY.cap, ao: false });
     }
-    for (let i = 0; i < 4; i++) k.rock(0.6 + R() * 0.4, '#5a5a60', M.x0 + 0.4 + i * 0.5, SEA + 0.15, M.z1 + 0.6 + R() * 0.4, { sy: 0.8, ry: R() * 3, ao: false });
+    for (let i = 0; i < 4; i++) k.rock(0.6 + R() * 0.4, GRAY.wall, M.x0 + 0.4 + i * 0.5, SEA + 0.15, M.z1 + 0.6 + R() * 0.4, { sy: 0.8, ry: R() * 3, ao: false });
     for (const z of [12, 18]) {
       k.box(0.1, 1.6, 0.1, DARK, M.x1 - 0.12, 0.8, z);
       lantern(k, M.x1 - 0.12, 1.85, z, 0.8);
@@ -218,7 +218,7 @@ export function buildHarbor(c) {
   {
     const P = AREA.shrine, y = P.y, cx = -21.75, cz = P.z0 - 0.75, sk = new Kit(R);
     const ground = groundUnder(cx - 0.9, cx + 0.9, cz - 0.8, cz + 0.8);
-    sk.box(1.9, y + 0.15 - ground, 1.6, '#5a5a60', cx, (y + 0.15 + ground) / 2, cz, { color2: '#74747a' });
+    sk.box(1.9, y + 0.15 - ground, 1.6, GRAY.wall, cx, (y + 0.15 + ground) / 2, cz, { color2: GRAY.cap });
     sk.box(1.2, 1.1, 0.9, '#5a3826', cx, y + 0.7, cz, { color2: '#6a4430' });
     sk.plane(0.7, 0.6, PAPER, cx, y + 0.75, cz + 0.46, { glow: true, color2: '#fff0d0' });
     for (const sx of [-0.62, 0.62]) sk.box(0.1, 1.2, 0.1, '#a8322a', cx + sx, y + 0.75, cz + 0.45);
@@ -232,26 +232,26 @@ export function buildHarbor(c) {
     // 石燈籠
     for (const x of [-23.3, -20.7]) {
       const z = P.z0 + 0.5;
-      k.cyl(0.18, 0.24, 0.12, '#7a7a80', x, y + 0.06, z, {}, 6);
-      k.cyl(0.07, 0.09, 0.6, '#7a7a80', x, y + 0.42, z, {}, 6);
+      k.cyl(0.18, 0.24, 0.12, GRAY.cap, x, y + 0.06, z, {}, 6);
+      k.cyl(0.07, 0.09, 0.6, GRAY.cap, x, y + 0.42, z, {}, 6);
       k.box(0.3, 0.26, 0.3, '#ffd890', x, y + 0.85, z, { glow: true, color2: '#fff0c0' });
-      k.cone(0.3, 0.22, '#6a6a70', x, y + 1.09, z);
+      k.cone(0.3, 0.22, GRAY.curb, x, y + 1.09, z);
       k.light(x, y + 0.85, z, '#ffcf80', 0.5);
       obstacles.push({ x, z, hw: 0.2, hd: 0.2 });
     }
     k.pool(cx, y, P.z0 + 1.4, 2.2, '#ffa060', 0.3);
     // 小星門：立在石階頂，柱子在石階兩邊的矮牆裡面。跟山上星廟的山門同一個樣子的縮小版：
     // 兩根石柱一道石樑，樑上立一個鏤空的石環，環裡一顆四角星。星是暗的石頭，不發光，看得出這條路通到山上
-    const tz0 = P.z1 - 0.3, A = AREA.sW1, mx = (A.x0 + A.x1) / 2, GS = '#5e5c64', GS2 = '#68666e';
+    const tz0 = P.z1 - 0.3, A = AREA.sW1, mx = (A.x0 + A.x1) / 2, GS = GRAY.wall, GS2 = GRAY.curb;
     for (const x of [A.x0 + 0.12, A.x1 - 0.12]) {
-      k.box(0.34, 0.2, 0.34, '#55535a', x, y + 0.1, tz0);
+      k.box(0.34, 0.2, 0.34, GRAY.wall, x, y + 0.1, tz0);
       k.box(0.24, 2.3, 0.24, GS, x, y + 1.15, tz0, { color2: GS2 });
       obstacles.push({ x, z: tz0, hw: 0.14, hd: 0.14 });
     }
     k.box(A.x1 - A.x0 + 0.4, 0.16, 0.26, GS, mx, y + 2.38, tz0, { color2: GS2 });
-    k.box(0.36, 0.1, 0.22, '#55535a', mx, y + 2.51, tz0);
+    k.box(0.36, 0.1, 0.22, GRAY.wall, mx, y + 2.51, tz0);
     k.torus(0.42, 0.07, Math.PI * 2, GS2, mx, y + 2.98, tz0, {});
-    for (const ry of [0, Math.PI]) for (const rz of [0, Math.PI / 2]) k.add(new THREE.CircleGeometry(0.3, 4), '#4a4852', mx, y + 2.98, tz0, { ry, rz, sx: 0.28 });
+    for (const ry of [0, Math.PI]) for (const rz of [0, Math.PI / 2]) k.add(new THREE.CircleGeometry(0.3, 4), GRAY.dark, mx, y + 2.98, tz0, { ry, rz, sx: 0.28 });
     // 樑的兩頭長了一點青苔
     for (const sx of [-1, 1]) k.rock(0.07, '#3a5a3e', mx + sx * (A.x1 - A.x0 + 0.2) / 2, y + 2.48, tz0, { sy: 0.5, ao: false });
   }

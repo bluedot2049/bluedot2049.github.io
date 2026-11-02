@@ -5,6 +5,7 @@
 // 每一區：無頭 Edge 開 ?q=mid&debug&crowd=0，亂數固定成同一串，等載入畫面收掉，記下
 //   頁面錯誤、console.error、載不到的檔案（404）
 //   場景指紋：每種物件幾個、頂點總數、材質種類。同樣的亂數，搬檔前後應該一模一樣
+//   開場那一幀的 draw call 和三角形數（含水面反射），改效能時拿來比
 // 最後在頁面裡把 js/ 底下每一個檔案都 import 一次：沒被這三區載到的模組，路徑寫錯也抓得到
 // 截圖存在 tools/out/smoke-<區域>.png，要看畫面時打開對照
 import http from 'node:http';
@@ -123,7 +124,8 @@ for (const zone of ZONES) {
     })`).catch(() => null);
     if (png) fs.writeFileSync(path.join(OUT, `smoke-${zone}.png`), Buffer.from(png.split(',')[1], 'base64'));
   }
-  report(zone, prints[zone] ? `  頂點 ${prints[zone].verts}` : '');
+  const draw = ok ? await ev(`(({ calls, triangles }) => ({ calls, triangles }))(__g.renderer.info.render)`).catch(() => null) : null;
+  report(zone, (prints[zone] ? `  頂點 ${prints[zone].verts}` : '') + (draw ? `  ${draw.calls} calls  ${(draw.triangles / 1000).toFixed(1)}k tris` : ''));
 }
 
 // 每一個模組都 import 一次（在畫廊頁裡，importmap 已經有了）

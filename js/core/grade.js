@@ -116,10 +116,17 @@ vec3 gradeCurves( vec3 s ) {
 	s = clamp( s, 0.0, 1.0 ) * ${((N - 1) / N).toFixed(10)} + ${(0.5 / N).toFixed(10)};
 	return vec3( texture2D( uGrade.lut, vec2( s.r, 0.5 ) ).r, texture2D( uGrade.lut, vec2( s.g, 0.5 ) ).g, texture2D( uGrade.lut, vec2( s.b, 0.5 ) ).b );
 }
+// 螢幕一個色階只有 1/255，霧和天空的慢漸層會分成一圈一圈。加上不到一格的雜點把圈打散，看起來是平滑的。
+// 只在直接畫上螢幕時加：畫進後製的貼圖是半浮點，沒有分層的問題
+vec3 gradeDither( vec3 o ) {
+	float n = fract( 52.9829189 * fract( dot( gl_FragCoord.xy, vec2( 0.06711056, 0.00583715 ) ) ) );
+	return o + ( n - 0.5 ) / 255.0;
+}
 // 已經是輸出空間的顏色只過曲線：天空球、不吃霧的遠景
 vec3 gradeCurvesOut( vec3 o ) {
-	if ( uGrade.on < 0.5 || uGrade.curves < 0.5 ) return o;
-	if ( gradeSrgbOut() ) return gradeCurves( o );
+	if ( uGrade.on < 0.5 ) return o;
+	if ( gradeSrgbOut() ) return gradeDither( gradeCurves( o ) );
+	if ( uGrade.curves < 0.5 ) return o;
 	return sRGBTransferEOTF( vec4( gradeCurves( sRGBTransferOETF( vec4( o, 1.0 ) ).rgb ), 1.0 ) ).rgb;
 }
 // col 在輸出空間（colorspace_fragment 之後），f 是 gradeFog 算出來的。
@@ -143,7 +150,7 @@ vec3 gradeSurface( vec3 col, float f, vec3 fogLin ) {
 	o = max( ol + ( o - ol ) * uGrade.sat * ( 1.0 + uGrade.vivid * smoothstep( 0.35, 0.8, max( o.r, max( o.g, o.b ) ) ) ), 0.0 );
 	o /= max( 1.0, max( o.r, max( o.g, o.b ) ) );
 	o = gradeCurves( o );
-	return srgbOut ? o : sRGBTransferEOTF( vec4( o, 1.0 ) ).rgb;
+	return srgbOut ? gradeDither( o ) : sRGBTransferEOTF( vec4( o, 1.0 ) ).rgb;
 }
 vec3 gradeSurface( vec3 col, float f ) { return gradeSurface( col, f, uGrade.fogLin ); }
 `;

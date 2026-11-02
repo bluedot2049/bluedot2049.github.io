@@ -161,8 +161,20 @@ export const PLASTER = tinted(['#ece2cc', '#e2d6bc', '#f0e8d8', '#d8cab0', '#e6d
 export const TIMBER = tinted(['#5a3826', '#4a2e20', '#6a4430', '#3e2a20', '#563a2c', '#704a32'], '#4a4e72', 0.6);
 export const TILES = tinted(['#33373f', '#2c3038', '#3a3c46', '#2a2c32', '#2e3a3a', '#6a3428', '#3a4a48'], '#3a7088', 1.4);
 export const NOREN = ['#2a3a6a', '#7a2a2a', '#2a4a3a', '#5a3a6a', '#8a5a2a', '#1e2a4a'];
-// 石頭是偏冷的灰：背光處跟著夜色帶一點藍，燈籠照到的地方才暖起來
-export const WOOD = '#4a3428', DARK = '#2a201c', BEAM = '#3a2a22', STONE = '#68686e', PAVE = '#8c8c90', CREAM = '#efe4c8';
+// 石頭是偏冷的灰：背光處跟著夜色帶一點藍，燈籠照到的地方才暖起來。
+// 海市所有的石頭（地板以外：擋土牆、矮牆、欄杆、石柱、地基、岸邊石頭、星廟）都從這條色梯拿顏色，
+// 同一個色相只差明暗，看起來才是同一種石頭。地板的色庫在 pave.js，gray 那組就是這裡的 floor
+export const GRAY = {
+  deep: '#24252a',    // 水下
+  foot: '#3e3f44',    // 最暗：熄掉的燈石、山頂星廟的石台
+  dark: '#4a4b50',    // 貼海的邊石、岸壁、岸邊石頭的暗面
+  wall: '#5a5b60',    // 地基、石柱身、欄杆的身
+  mid: '#64656a',     // 欄板、門柱、石頭的中間調
+  curb: '#6a6b70',    // 擋土牆、石階矮牆、燈座
+  cap: '#74757a',     // 壓頂、蓋石、亮面
+  floor: '#8a8b90',   // 跟地板一樣亮
+};
+export const WOOD = '#4a3428', DARK = '#2a201c', BEAM = '#3a2a22', STONE = GRAY.curb, PAVE = GRAY.floor, CREAM = '#efe4c8';
 export const LAMP = '#ff4a2a', LAMP_HI = '#ffa060', WARM = '#ffc070', PAPER = '#ffd8a0', GOLD = '#d4a54a';
 // 屋簷下掛的招牌：沒有櫃台的房子也有，夜市整條街都是字
 export const HOUSE_SIGNS = ['湯', '酒', '宿', '茶屋', '麵', '甘味', '飯', '餅', '燒', '團子', '粥', '冰', '豆花', '當'];

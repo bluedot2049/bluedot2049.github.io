@@ -6,7 +6,7 @@ import { Kit, rng } from '../../core/props.js';
 import { Signs, addRoof } from './eaves.js';
 import { yatai } from './yatai.js';
 import { drawText } from '../../core/glyphs.js';
-import { AREA, AREAS, BEAM, CARTS, CREAM, DARK, GOLD, HOUSE_SIGNS, LAMP, NOREN, PAPER, PLASTER, SHOPS, TILES, TIMBER, WOOD, shade } from './haishi-map.js';
+import { AREA, AREAS, BEAM, CARTS, CREAM, DARK, GOLD, GRAY, HOUSE_SIGNS, LAMP, NOREN, PAPER, PLASTER, SHOPS, TILES, TIMBER, WOOD, shade } from './haishi-map.js';
 import { heightIn, terrain } from './haishi-terrain.js';
 
 // 牌樓上的字
@@ -315,7 +315,7 @@ export function houseKit(c) {
   // 塔：方形的樓閣，一層一層往上收，每層翹角的屋簷四角掛燈籠，頂上一根金色的塔剎
   const tower = (x, z, r, y0, h) => {
     const tk = new Kit(R), tile = pick(TILES), ground = groundUnder(x - r, x + r, z - r, z + r);
-    tk.box(2 * r + 0.3, y0 + 0.1 - ground + 0.4, 2 * r + 0.3, '#5a5a60', 0, (y0 + 0.1 + ground - 0.4) / 2, 0, { color2: '#74747a' });
+    tk.box(2 * r + 0.3, y0 + 0.1 - ground + 0.4, 2 * r + 0.3, GRAY.wall, 0, (y0 + 0.1 + ground - 0.4) / 2, 0, { color2: GRAY.cap });
     const n = h > 6 ? 3 : 2, th = h / n;
     let s = 2 * r * 0.92, y = y0 + 0.1;
     for (let i = 0; i < n; i++) {
@@ -718,7 +718,7 @@ export function buildStreets(c) {
     for (let i = 0; i < 7; i++) {
       const a = (i / 7) * Math.PI * 2, x = cx + Math.cos(a) * 3.4, z = cz + Math.sin(a) * 1.9, h = 1.2 + R() * 0.8;
       if (z > cz - 0.3) continue;   // 只立在北側，往海那邊不擋
-      k.box(0.5, h, 0.32, '#5a5862', x, y + h / 2, z, { ry: -a, color2: '#6a6872' });
+      k.box(0.5, h, 0.32, GRAY.wall, x, y + h / 2, z, { ry: -a, color2: GRAY.curb });
       obstacles.push({ x, z, hw: 0.32, hd: 0.32 });
     }
     const lx = S.x1 - 1, lz = S.z0 + 0.6;

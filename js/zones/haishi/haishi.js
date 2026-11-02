@@ -13,7 +13,7 @@ import { bump, makeSkiff, towerPhase } from '../../scene/harbor.js';
 import { tickClock } from './distant.js';
 import { Fader } from '../../core/fade.js';
 import { buildHomeCircle } from '../../scene/homedoor.js';
-import { AREA, AREAS, CARTS, DARK, LAMP, LAMP_HI, MARGIN, PLACES, SEA, SHOPS, shade, smooth, tinted } from './haishi-map.js';
+import { AREA, AREAS, CARTS, DARK, GRAY, LAMP, LAMP_HI, MARGIN, PLACES, SEA, SHOPS, shade, smooth, tinted } from './haishi-map.js';
 import { areaAt, heightIn, terrain } from './haishi-terrain.js';
 import { buildSky } from './haishi-sky.js';
 import { buildStreets, houseKit } from './haishi-houses.js';
@@ -68,7 +68,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   };
   // 欄杆：從 a 到 b，地面高 y。越往上越古老：港邊一帶是竹籬，鎮上是亂石砌的矮牆，星台以上是老石欄，
   // 石望柱頂上蹲著小獸
-  const STONES = ['#6a6870', '#5e5c64', '#74706c', '#62605a'];
+  const STONES = [GRAY.curb, GRAY.wall, GRAY.cap, GRAY.mid];
   const BAMBOO = ['#8a7a4a', '#7a6c44', '#9a8a5a'];
   const OCHRE = tinted(['#d8b888', '#c8a878', '#e0c8a0'], '#a8b4d0', 0.8);
   const LEAF = ['#2e4a3a', '#3a5a3e', '#44583a'];
@@ -106,7 +106,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     //  極少數頭尾換成重點：一座銅的小星儀，或一個盛著水的石缽。
     // 欄板大多素面，少數鏤一個星孔，偶爾缺一塊，板頂長青苔。
     // 裝飾全用自己的亂數（DR）；R 照原本一根柱子抽一次，後面的欄杆、竹籬才不會換樣子
-    const n = Math.max(1, Math.round(len / 1.5)), step = len / n, BODY = '#5a5862';
+    const n = Math.max(1, Math.round(len / 1.5)), step = len / n, BODY = GRAY.wall;
     const side = [uz, -ux], dirs = [side, [-uz, ux], [ux, uz], [-ux, -uz]];
     for (let i = 0; i <= n; i++) {
       // 頭尾那根往裡收半根：立在轉角正中的話，有半根凸出另一邊的台邊，底下是空的。兩邊都圍的轉角，兩根剛好疊成一根
@@ -116,11 +116,11 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       if (end && railDeco.sinceFocus > 8 && DR() < 0.3) tier = 'focus';
       else if (end || --railDeco.gap <= 0) tier = 'beast';
       const old = tier === 'cap' && DR() < 0.08, ph = old ? 0.88 : 1.0, t = y + ph;
-      kk.box(0.24, ph, 0.24, '#6a6870', x, y + ph / 2, z, { ry, color2: '#7a7880' });
+      kk.box(0.24, ph, 0.24, GRAY.curb, x, y + ph / 2, z, { ry, color2: GRAY.cap });
       railDeco.sinceFocus++;
       if (tier === 'focus') {
         railDeco.sinceFocus = 0;
-        kk.box(0.3, 0.08, 0.3, '#6e6c74', x, t + 0.04, z, { ry });
+        kk.box(0.3, 0.08, 0.3, GRAY.cap, x, t + 0.04, z, { ry });
         if (railDeco.focus++ % 2 === 0) {
           // 銅星儀：兩個直立交叉的環、一個斜的環，中間一顆小珠
           kk.cyl(0.03, 0.04, 0.1, BRONZE_S, x, t + 0.13, z, {}, 5);
@@ -150,28 +150,28 @@ export function buildHaishi(scene, { coarse = false } = {}) {
         let kind = old ? 4 : Math.floor(DR() * 4);
         if (!old && kind === railDeco.cap) kind = (kind + 1 + Math.floor(DR() * 3)) % 4;
         railDeco.cap = kind;
-        if (kind === 0) kk.box(0.3, 0.06, 0.3, '#6e6c74', x, t + 0.03, z, { ry });
+        if (kind === 0) kk.box(0.3, 0.06, 0.3, GRAY.cap, x, t + 0.03, z, { ry });
         else if (kind === 1) {
-          kk.cyl(0.05, 0.06, 0.06, '#6a6870', x, t + 0.03, z, {}, 6);
-          kk.ball(0.09, '#6e6c74', x, t + 0.14, z);
+          kk.cyl(0.05, 0.06, 0.06, GRAY.curb, x, t + 0.03, z, {}, 6);
+          kk.ball(0.09, GRAY.cap, x, t + 0.14, z);
         } else if (kind === 2) {
-          kk.box(0.28, 0.05, 0.28, '#6e6c74', x, t + 0.025, z, { ry });
-          kk.add(new THREE.ConeGeometry(0.17, 0.16, 4), '#6a6870', x, t + 0.13, z, { ry: ry + Math.PI / 4 });
-        } else if (kind === 3) kk.rock(0.1, '#6e6c74', x, t + 0.12, z, { sy: 1.5, ry: spin });
+          kk.box(0.28, 0.05, 0.28, GRAY.cap, x, t + 0.025, z, { ry });
+          kk.add(new THREE.ConeGeometry(0.17, 0.16, 4), GRAY.curb, x, t + 0.13, z, { ry: ry + Math.PI / 4 });
+        } else if (kind === 3) kk.rock(0.1, GRAY.cap, x, t + 0.12, z, { sy: 1.5, ry: spin });
         else {
           // 缺角的老柱：矮一截，頂上一塊斜斜的殘石，長了青苔
-          kk.box(0.26, 0.06, 0.24, '#62606a', x, t + 0.01, z, { ry, rz: 0.14 });
+          kk.box(0.26, 0.06, 0.24, GRAY.mid, x, t + 0.01, z, { ry, rz: 0.14 });
           kk.rock(0.07, LEAF[Math.floor(DR() * LEAF.length)], x, t + 0.05, z, { sy: 0.6, ao: false });
         }
       }
       if (i === n) continue;
       const [mx, mz] = at((i + 0.5) * step), panel = DR();
-      if (panel > 0.04) kk.box(step - 0.26, 0.55, 0.14, '#62606a', mx, y + 0.42, mz, { ry, color2: '#72707a' });
+      if (panel > 0.04) kk.box(step - 0.26, 0.55, 0.14, GRAY.mid, mx, y + 0.42, mz, { ry, color2: GRAY.cap });
       if (panel > 0.04 && panel < 0.15) {
         // 星孔：欄板正中鏤一顆四角星，兩面各一片深色
         for (const sd of [1, -1]) kk.add(new THREE.CircleGeometry(0.075, 4), '#2a2a32', mx + side[0] * 0.072 * sd, y + 0.44, mz + side[1] * 0.072 * sd, { ry: ry + (sd > 0 ? Math.PI : 0), sx: 0.7, ao: false });
       }
-      kk.box(step - 0.2, 0.08, 0.2, '#6e6c74', mx, y + 0.74, mz, { ry });
+      kk.box(step - 0.2, 0.08, 0.2, GRAY.cap, mx, y + 0.74, mz, { ry });
       if (DR() < 0.15) {
         const off = (DR() - 0.5) * (step - 0.5);
         kk.rock(0.08, LEAF[Math.floor(DR() * LEAF.length)], mx + off * ux, y + 0.79, mz + off * uz, { sy: 0.55, ao: false });
