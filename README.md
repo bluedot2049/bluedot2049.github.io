@@ -108,6 +108,8 @@ rooms/
   02-nigredo/
   03-rubedo/
 js/  css/  vendor/    程式，平常不用動
+tools/                檢查和產生素材的小工具
+design/               標誌設計稿，網站不用
 ```
 
 ## 換成自己的畫
