@@ -78,8 +78,8 @@ export function addRoof(k, x, y, z, W, D, H, o = {}) {
 }
 
 // ---------- 招牌 ----------
-// 貼圖切成 8×8 格，招牌佔 1×2、1×3（直的）或 2×1、3×1（橫的）
-const CELL = 128, GRID = 8;
+// 貼圖切成 10×10 格，招牌佔 1×2、1×3（直的）或 2×1、3×1（橫的）。8×8 時塞不下，最後幾塊招牌（烤番薯、渡船）沒畫出來
+const CELL = 128, GRID = 10;
 
 export class Signs {
   constructor() {

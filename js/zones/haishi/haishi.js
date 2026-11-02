@@ -22,6 +22,7 @@ import { buildHarbor } from './haishi-harbor.js';
 import { buildBoats } from './haishi-boats.js';
 import { buildPlants } from './haishi-plants.js';
 import { buildTemple } from './haishi-temple.js';
+import { buildLatrine } from './latrine.js';
 export { SHOPS, CARTS } from './haishi-map.js';
 
 export function buildHaishi(scene, { coarse = false } = {}) {
@@ -190,6 +191,9 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   buildBoats({ lantern, vessel, R, harborFx, shimmerMore, bob, pick, headingOf, k, obstacles, group, lattice });
 
   const { inArea } = buildPlants({ k, solids, coarse, R, pick, STONES, BAMBOO });
+
+  // 山路半途的茅房：自己一串亂數，門和月牙的燈每一幀照時間動
+  const latrine = buildLatrine({ bucket, signs, lantern, obstacles, group });
 
   const { meshes } = buildTemple({ k, bucket, fader, group, signs, farLamps, obstacles, solid });
   const { sea, env, sky, field, dome, towerSize, seaFog, far, towerColor, TOWER_RGB } = buildSky({ group, bucket, coarse, shimmerMore, inArea });
@@ -361,6 +365,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       const now = Date.now() / 1000;
       tickClock(now);
       for (const f of harborFx) f(now, dt);
+      latrine(now, dt);
       towerSize.setX(0, 30 * (1 + 1.5 * bump(towerPhase(now), 0.52, 0.07)));
       towerSize.needsUpdate = true;
       // 海平線霧帶照鏡頭高度：碼頭一帶照「海平線霧帶」，往上到星廟換成「高處霧帶」

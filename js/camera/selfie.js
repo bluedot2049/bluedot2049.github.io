@@ -80,7 +80,7 @@ export class Selfie {
     const at = (ph) => this.t - ph;
     switch (this.state) {
       case 'settle':
-        if (this.t >= SETTLE) { this.state = 'rise'; this.t0 = this.t; eye.group.visible = true; }
+        if (this.t >= SETTLE) { this.state = 'rise'; this.t0 = this.t; eye.group.visible = true; this.ambience?.voice('eyeout', 0.4); }
         break;
       case 'rise': {
         // 從鏡面（鏡頭前一點）出來，弧線繞到肩膀旁
@@ -98,16 +98,16 @@ export class Selfie {
       }
       case 'count': {
         this.anchor(eye.group.position);
-        // 瞳孔收三次，每收一次輕輕「喀」一聲
+        // 瞳孔收三次，每收一次棘輪卡一格，一格比一格高
         const n = Math.min(3, Math.floor(at(this.t0) / TICK));
-        if (n > this.ticks) { this.ticks = n; this.ambience?.voice('focus', 0.25); }
+        if (n > this.ticks) { this.ticks = n; this.ambience?.voice('iris', 0.35, 0, [1, 1.12, 1.26][n - 1]); }
         const pulse = 1 + Math.max(0, 0.18 - (at(this.t0) % TICK)) * 1.2;
         eye.setPupil([1, 0.74, 0.52, 0.34][this.ticks] * pulse);
         if (at(this.t0) >= TICK * 3 + 0.25) {
           eye.update(0, cam);
           this.from.copy(eye.group.position);   // 快門之後眼睛就停在這裡，不再跟著晃
+          this.ambience?.voice('blink', 0.5);   // 先出聲再畫：畫照片會卡一下
           this.shot = this.capture();
-          this.ambience?.voice('shutter', 0.5);
           this.flash();
           this.state = 'blink';
           this.t0 = this.t;
@@ -118,7 +118,7 @@ export class Selfie {
         eye.group.position.copy(this.from);
         const k = at(this.t0) / BLINK;
         eye.setOpen(Math.abs(1 - 2 * Math.min(1, k)));
-        if (k >= 1) { this.state = 'back'; this.t0 = this.t; }
+        if (k >= 1) { this.state = 'back'; this.t0 = this.t; this.ambience?.voice('eyein', 0.4); }
         break;
       }
       case 'back': {

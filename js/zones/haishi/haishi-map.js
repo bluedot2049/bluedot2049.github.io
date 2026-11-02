@@ -92,6 +92,9 @@ export const AREAS = [
   { id: 'tHall', x0: -12, x1: 0, z0: -121, z1: -112.5, y: 48, added: true, temple: true },
   // 半山亭東邊削出來的一塊石台：回畫廊的法陣（homedoor.js）。地上刻六芒星，六盞火盆點齊，畫廊的前門從半空蹦出來，背後是海
   { id: 'reditus', x0: -3.6, x1: 7, z0: -101.2, z1: -94.6, y: 42.4, added: true, temple: true },
+  // 第二個轉角平台的西半邊往北岔進山坡一小段，盡頭靠著山是一間茅房（latrine.js），門朝南對著平台。
+  // 不要伸出原本路面的範圍（最西 -31）：尋路和檢查的格子從最西、最北的路面起算，起點一動，窄的路口就量不到了
+  { id: 'latrina', x0: -28, x1: -25.6, z0: -81.6, z1: -78.2, y: 28, added: true, temple: true },
 ];
 for (const a of AREAS) if (a.y == null) a.n = Math.round((a.hi - a.lo) / RISE);
 export const AREA = Object.fromEntries(AREAS.map((a) => [a.id, a]));
@@ -121,6 +124,22 @@ export const PLACES = {
 export const SEMITA = { name: '山路', subtitle: 'Semita' }, TEMPLUM = { name: '星廟', subtitle: 'Templum' };
 for (const a of TEMPLE) PLACES[a.id] = a.id === 'tCourt' || a.id === 'tS7' || a.id === 'tHall' ? TEMPLUM : SEMITA;
 PLACES.reditus = { name: '歸門', subtitle: 'Reditus' };
+PLACES.latrina = { name: '淨房', subtitle: 'Latrina' };
+// 後來才接上的路面：其他路面的欄杆照沒有它們的時候圍，接口那一截蓋進丟掉的零件（haishi-harbor.js）
+export const LATE = new Set(['reditus', 'latrina']);
+
+// 山路上的貓：各有一塊地盤，在幾個點之間走來走去，大多在睡覺。coat 是毛色（animal-models.js 的 CATS），
+// lead 是跟在第幾隻後面的小貓
+export const STRAYS = [
+  { coat: 'ginger', name: '橘貓', spots: [[-29.5, -57], [-21, -60.5], [-25, -56], [-24.3, -52]] },
+  { coat: 'ginger', name: '小橘貓', lead: 0, scale: 0.62 },
+  // 茅房門口那隻：常常坐在門外，像在排隊
+  { coat: 'tuxedo', name: '賓士貓', spots: [[-26.8, -79.4], [-26.8, -79.4], [-24.6, -77.3], [-27, -74], [-25.5, -70.2]] },
+  { coat: 'grey', name: '灰貓', spots: [[-22.5, -87.5], [-17.5, -87.6], [-17, -92.5], [-16.8, -97.7]] },
+  // 山路最暗的那一段只看得到牠的眼睛
+  { coat: 'black', name: '黑貓', spots: [[-6, -97.7], [-12, -97.7], [5.5, -96], [-6, -102.5]] },
+  { coat: 'calico', name: '三花貓', spots: [[-12.5, -108.2], [0.5, -107], [-6, -109.5], [-10, -114]] },
+];
 
 // 店：沿著各層街道靠山的那一側（北邊）。at 是哪一條街，x 決定落在那條街的哪一段，店面開在那一段的北邊上
 // 攤販的樣子和台詞在 vendors.js，用 id 對起來

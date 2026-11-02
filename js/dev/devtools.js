@@ -248,7 +248,9 @@ const INFO = {
   falloff: ['往上變淡', '每往上一公尺霧淡多少：大一點霧只貼著地面和海面', [0, 0.15, 0.001]],
   base: ['霧底高度', '霧最濃的高度（公尺）', [-10, 30, 0.1]],
   start: ['起霧距離', '鏡頭前幾公尺不起霧', [0, 40, 0.5]],
-  maxFog: ['霧最多', '最遠的地方霧蓋掉幾成，1 是全部進霧', [0, 1, 0.01]],
+  maxFog: ['霧最多', '高度霧最多蓋掉幾成，1 是全部進霧', [0, 1, 0.01]],
+  far: ['遠景空氣起點', '幾公尺以外不管高低都罩上一層空氣，收向天邊的顏色；0 是沒有', [0, 300, 1]],
+  farAir: ['遠景空氣最多', '最遠的地方空氣蓋掉幾成：大一點遠山退得更進天色', [0, 1, 0.01]],
   exposure: ['物件曝光', '東西亮幾格（不動霧和天空）：分區時拿來把一塊壓暗或提亮', [-2, 2, 0.02]],
   desat: ['暗處褪色', '暗部和中間調降多少飽和度', [0, 1, 0.01]],
   keep: ['留色亮度', '亮到多少以上留著原本的顏色（燈籠、窗光）', [0.2, 1.2, 0.01]],
@@ -260,7 +262,6 @@ const INFO = {
   shadow: ['暗部色', '最暗的地方抬到這個顏色（不會再是黑的）', null],
   gain: ['亮部色', '最亮的地方壓成這個顏色，白色是不動', null],
 };
-const FOG_KEYS = ['density', 'falloff', 'base', 'start', 'maxFog'];
 const COLOR_KEYS = ['exposure', 'contrast', 'shadow', 'gain', 'desat', 'keep', 'cool', 'sat', 'vivid', 'glow'];
 const TABS = [['l', '亮度', '#dddddd', 'rgba(255,255,255,0.13)'], ['r', '紅', '#ff7777', 'rgba(255,110,110,0.2)'], ['g', '綠', '#66dd66', 'rgba(100,220,100,0.18)'], ['b', '藍', '#77aaff', 'rgba(110,160,255,0.22)']];
 const LINE = () => [[0, 0], [1, 1]];
@@ -943,7 +944,7 @@ function gradeSections(G, { zone, renderer, scene, world, bar, section, onOpen, 
   const S5 = section('fog', '霧', true);
   const linearNote = h('div', 'note', '這一區用線性霧（畫廊）：霧從哪裡開始、到哪裡全白在「光線」的霧起點、霧終點，下面幾項沒有作用');
   S5.body.append(linearNote);
-  for (const k of FOG_KEYS) gradeRow(S5.body, k);
+  for (const k of G.FOG_KEYS) gradeRow(S5.body, k);
 
   // 各區域自己登記的參數（海市的霧色、暖霧、蒸氣、煙、海霧、天空）：跟著分區一起混
   if (TUNE.length) {

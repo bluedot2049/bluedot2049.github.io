@@ -6,7 +6,7 @@ import { Kit, newBucket } from '../../core/props.js';
 import { bucketObjects, glowPoints } from '../../core/scenery.js';
 import { bump } from '../../scene/harbor.js';
 import { addRoof } from './eaves.js';
-import { AREA, AREAS, DARK, GRAY, PAPER, PLASTER, SEA, TILES, WOOD, shade } from './haishi-map.js';
+import { AREA, AREAS, DARK, GRAY, LATE, PAPER, PLASTER, SEA, TILES, WOOD, shade } from './haishi-map.js';
 import { areaAt, heightIn, terrain } from './haishi-terrain.js';
 
 export function buildHarbor(c) {
@@ -266,8 +266,8 @@ export function buildHarbor(c) {
   // ---------- 欄杆：自動圍 ----------
   // 每塊路面的四邊掃一遍：外面接著別的路就不圍，有房子、石階的矮牆擋著也不圍，外面往下掉才圍。
   // 港邊（高度 0）一律不圍。石階兩側本來就有矮牆；坡道切成一小截一小截，每截照那裡的坡面高度，不會一頭浮起來一頭埋進去
-  // 歸門的石台是後來接上半山亭東邊的：其他路面照沒有它的時候圍，接口那一截蓋進丟掉的零件
-  const before = AREAS.filter((a) => a.id !== 'reditus'), areaBefore = (x, z) => before.find((a) => x >= a.x0 && x <= a.x1 && z >= a.z0 && z <= a.z1);
+  // 歸門、茅房的石台是後來才接上的（LATE）：其他路面照沒有它們的時候圍，接口那一截蓋進丟掉的零件
+  const before = AREAS.filter((a) => !LATE.has(a.id)), areaBefore = (x, z) => before.find((a) => x >= a.x0 && x <= a.x1 && z >= a.z0 && z <= a.z1);
   for (const a of AREAS) {
     if (a.lo != null && !a.slope) continue;
     const y = a.y ?? (a.lo + a.hi) / 2;
@@ -277,7 +277,7 @@ export function buildHarbor(c) {
       let start = -1;
       for (let i = 0; i <= n; i++) {
         const t = i / n, x = ax + (bx - ax) * t, z = az + (bz - az) * t, ox = x + nx * 0.3, oz = z + nz * 0.3;
-        const b = (a.id === 'reditus' ? areaAt : areaBefore)(ox, oz), open = b && Math.abs(heightIn(b, ox, oz) - heightIn(a, x, z)) < 0.35;
+        const b = (LATE.has(a.id) ? areaAt : areaBefore)(ox, oz), open = b && Math.abs(heightIn(b, ox, oz) - heightIn(a, x, z)) < 0.35;
         const walled = solids.some((s) => !s.ground && ox > s.x0 && ox < s.x1 && oz > s.z0 && oz < s.z1);
         const below = b ? heightIn(b, ox, oz) : Math.max(SEA, terrain(ox, oz));
         const need = i < n && !open && !walled && below < y - 0.8;
@@ -286,7 +286,7 @@ export function buildHarbor(c) {
           const m = a.slope ? Math.ceil(((t - start) * Math.hypot(bx - ax, bz - az)) / 0.5) : 1;
           for (let j = 0; j < m; j++) {
             const t0 = start + ((t - start) * j) / m, t1 = start + ((t - start) * (j + 1)) / m, [mx, mz] = pt((t0 + t1) / 2);
-            const gone = a.id !== 'reditus' && areaAt(mx + nx * 0.42, mz + nz * 0.42)?.id === 'reditus';
+            const gone = !LATE.has(a.id) && LATE.has(areaAt(mx + nx * 0.42, mz + nz * 0.42)?.id);
             rail(...pt(t0), ...pt(t1), a.slope ? heightIn(a, mx, mz) : y, gone ? new Kit(R) : k);
           }
           start = -1;

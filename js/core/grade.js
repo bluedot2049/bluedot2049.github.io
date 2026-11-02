@@ -10,7 +10,8 @@
 import * as THREE from 'three';
 import { TONES } from './tones.js';
 
-// density：相機高度的霧有多濃；falloff：每往上一公尺變淡多少；base：霧最濃的高度（海面）；start：鏡頭前幾公尺不起霧；maxFog：霧最多蓋掉幾成
+// density：相機高度的霧有多濃；falloff：每往上一公尺變淡多少；base：霧最濃的高度（海面）；start：鏡頭前幾公尺不起霧；maxFog：高度霧最多蓋掉幾成
+// far、farAir：遠景空氣，far 公尺以外不管高低都罩上一層，越遠越接近 farAir，收向天邊的顏色。far 是 0 時沒有
 // exposure：物件先亮幾格（只動東西，不動霧和天空，分區時拿來把一塊壓暗或提亮）
 // desat：暗部和中間調降多少飽和度；keep：亮到多少以上留著原本的顏色（燈籠、窗光）；cool：綠色往藍綠推多少
 // shadow：最暗的地方抬到這個顏色（sRGB），不會再是黑的；gain：最亮的地方壓成這個顏色，白色是不動
@@ -19,21 +20,25 @@ import { TONES } from './tones.js';
 // curves：亮度和紅綠藍四條曲線，每條是 [輸入, 輸出] 的點，0 到 1。紅綠藍先套，亮度最後套在三個色版上
 // tune：各區域自己登記的參數（haze.js 的霧色、霧的濃淡），用登記時的 key 當名字
 // linear：1 是不換高度霧，內建材質照舊用場景的線性霧（光線面板的 near、far），只調顏色（畫廊）。整個區域一個，分區不能改
-export const NUMBERS = ['density', 'falloff', 'base', 'start', 'maxFog', 'exposure', 'desat', 'keep', 'cool', 'sat', 'vivid', 'contrast', 'glow'];
+export const NUMBERS = ['density', 'falloff', 'base', 'start', 'maxFog', 'far', 'farAir', 'exposure', 'desat', 'keep', 'cool', 'sat', 'vivid', 'contrast', 'glow'];
 export const COLORS = ['shadow', 'gain'];
+export const FOG_KEYS = NUMBERS.slice(0, 7);
 export const CHANNELS = ['l', 'r', 'g', 'b'];
 // 沒寫的項目用這組（海市最早調好的樣子）
-const DEFAULTS = { density: 0.016, falloff: 0.04, base: -0.6, start: 6, maxFog: 1, exposure: 0, desat: 0.2, keep: 0.75, cool: 0.9, sat: 1, vivid: 0.6, contrast: 1.6, glow: 1, shadow: '#16151b', gain: '#ffffff' };
+const DEFAULTS = { density: 0.016, falloff: 0.04, base: -0.6, start: 6, maxFog: 1, far: 0, farAir: 0, exposure: 0, desat: 0.2, keep: 0.75, cool: 0.9, sat: 1, vivid: 0.6, contrast: 1.6, glow: 1, shadow: '#16151b', gain: '#ffffff' };
 // 不改畫面的一組：沒有匯出 grade 的區域（畫廊）在 ?debug 時先裝這組，調色面板才打得開。調好按「複製」貼回 zone-*.js 才會上線
 export const NEUTRAL = { linear: 1, density: 0, desat: 0, cool: 0, contrast: 1, vivid: 0, glow: 1, shadow: '#000000' };
 
 // 著色器讀的那一份。fogLin、pivot 是每次畫之前照場景的霧色先算好的（不用每個像素各算一次），curves 是 0 時跳過查曲線
 export const GRADE = {
-  on: 0, linear: 0, density: 0.016, falloff: 0.04, base: -0.6, start: 6, maxFog: 1, exposure: 0, expo: 1,
+  on: 0, linear: 0, density: 0.016, falloff: 0.04, base: -0.6, start: 6, maxFog: 1, far: 0, farAir: 0, exposure: 0, expo: 1,
   desat: 0.2, keep: 0.75, cool: 0.9, sat: 1, vivid: 0.6, contrast: 1.6, glow: 1,
-  shadow: new THREE.Vector3(), gain: new THREE.Vector3(1, 1, 1), fogLin: new THREE.Vector3(), pivot: 0.1, curves: 0,
+  shadow: new THREE.Vector3(), gain: new THREE.Vector3(1, 1, 1), fogLin: new THREE.Vector3(), airLin: new THREE.Vector3(), pivot: 0.1, curves: 0,
   lut: null,
 };
+// 天邊比霧深多少（霧色乘這個數）：遠景空氣收向這個顏色，退進去的遠山才跟天邊同色。
+// 海市的天空球「天邊深淺」用的就是這一個；沒有天空球的區域是 1，天邊就是霧色
+export const HORIZON = { value: 1 };
 
 // 曲線烤成一張 512×1 的半浮點小圖：紅綠藍各自先過自己那條，再過亮度那條，三個色版各查一次就好。
 // 用半浮點存，暗部拉陡的曲線不會因為只有 256 階而出現一圈一圈的色帶
@@ -90,21 +95,32 @@ function hexVec(hex, v = new THREE.Vector3()) {
 // 先調色再混霧，完全進霧的遠山還是等於地平線的顏色，山和天空接的地方不會多一條線。
 // 降飽和照最亮的那個色版算：燈籠、窗光再橘都留著，夜色裡只剩燈是暖的
 // 高度霧照 Íñigo Quílez 的解析解：沿著視線把隨高度指數變淡的濃度積分起來。
+// 遠景空氣另外一層，只看距離：高度霧有上限（maxFog），只靠它的話過了某個距離每樣東西都一樣灰，遠山停在一半的顏色，跟天接的地方一刀切開。
+// 這層讓遠的東西繼續退，越遠越淡，收向天邊的顏色（airLin）。它在對比、飽和之後才罩上去，跟天空一樣只過曲線，退到底的遠山就是天邊的顏色。
 // S 曲線拉在亮度上（不動色相和飽和度），支點是霧色的亮度：比霧暗的壓更暗、比霧亮的推更亮，霧本身不變。
 // 推亮之後超過 1 的，三個色版等比例縮回來，不要各自截斷：不然紅色版先頂到 1，橘紅的燈籠會退成淡粉。
 // 最後的曲線天空球也要過（gradeCurvesOut），完全進霧的東西和天空才會一起變。
 // 霧色一律用場景的霧（uGrade.fogLin，線性），每個材質、每個像素都一樣，所以畫之前在 CPU 先算好，連支點的亮度一起
 // GRADE_VERT 只有霧和發光，頂點著色器也能用；GRADE_GLSL 是完整的，給片段著色器
 export const GRADE_VERT = `
-struct Grade { float on; float linear; float density; float falloff; float base; float start; float maxFog; float expo; float desat; float keep; float cool; float sat; float vivid; float contrast; float glow; vec3 shadow; vec3 gain; vec3 fogLin; float pivot; float curves; sampler2D lut; };
+struct Grade { float on; float linear; float density; float falloff; float base; float start; float maxFog; float far; float farAir; float expo; float desat; float keep; float cool; float sat; float vivid; float contrast; float glow; vec3 shadow; vec3 gain; vec3 fogLin; vec3 airLin; float pivot; float curves; sampler2D lut; };
 uniform Grade uGrade;
-float gradeFog( vec3 world ) {
+float gradeHeightFog( vec3 world ) {
 	vec3 ray = world - cameraPosition;
 	float dist = length( ray );
 	float bdy = uGrade.falloff * ray.y;
 	float slope = abs( bdy ) > 1e-4 ? ( 1.0 - exp( - bdy ) ) / bdy : 1.0;
 	float amount = uGrade.density * exp( - uGrade.falloff * ( cameraPosition.y - uGrade.base ) ) * max( dist - uGrade.start, 0.0 ) * slope;
 	return min( 1.0 - exp( - amount ), uGrade.maxFog );
+}
+float gradeAir( vec3 world ) {
+	if ( uGrade.far <= 0.0 ) return 0.0;
+	return uGrade.farAir * ( 1.0 - exp( - max( length( world - cameraPosition ) - uGrade.far, 0.0 ) / uGrade.far ) );
+}
+// 兩層合起來一共蓋掉幾成：疊上去發光的層、自己混霧的煙和霧用這個（顏色都當成場景的霧）
+float gradeFog( vec3 world ) {
+	float f = gradeHeightFog( world );
+	return f + ( 1.0 - f ) * gradeAir( world );
 }
 // 疊上去發光的層：跟著霧淡掉，再乘 glow。f 一樣是 gradeFog 算出來的
 float gradeLight( float f ) { return uGrade.on > 0.5 ? ( 1.0 - f ) * uGrade.glow : 1.0; }
@@ -129,9 +145,9 @@ vec3 gradeCurvesOut( vec3 o ) {
 	if ( uGrade.curves < 0.5 ) return o;
 	return sRGBTransferEOTF( vec4( gradeCurves( sRGBTransferOETF( vec4( o, 1.0 ) ).rgb ), 1.0 ) ).rgb;
 }
-// col 在輸出空間（colorspace_fragment 之後），f 是 gradeFog 算出來的。
-// fogLin 是要混的霧色（線性），平常就是場景的霧；海面這種要自己的霧色的才傳第三個參數
-vec3 gradeSurface( vec3 col, float f, vec3 fogLin ) {
+// col 在輸出空間（colorspace_fragment 之後），f 是高度霧（gradeHeightFog），air 是遠景空氣（gradeAir）。
+// fogLin 是高度霧要混的顏色（線性），平常就是場景的霧；海面這種要自己的霧色的才傳第三個參數
+vec3 gradeSurface( vec3 col, float f, vec3 fogLin, float air ) {
 	const vec3 LUMA = vec3( 0.2126, 0.7152, 0.0722 );
 	bool srgbOut = gradeSrgbOut();
 	vec3 s = ( srgbOut ? col : sRGBTransferOETF( vec4( col, 1.0 ) ).rgb ) * uGrade.expo;
@@ -149,10 +165,12 @@ vec3 gradeSurface( vec3 col, float f, vec3 fogLin ) {
 	float ol = dot( o, LUMA );
 	o = max( ol + ( o - ol ) * uGrade.sat * ( 1.0 + uGrade.vivid * smoothstep( 0.35, 0.8, max( o.r, max( o.g, o.b ) ) ) ), 0.0 );
 	o /= max( 1.0, max( o.r, max( o.g, o.b ) ) );
+	if ( air > 0.0 ) o = sRGBTransferOETF( vec4( mix( sRGBTransferEOTF( vec4( o, 1.0 ) ).rgb, uGrade.airLin, air ), 1.0 ) ).rgb;
 	o = gradeCurves( o );
 	return srgbOut ? gradeDither( o ) : sRGBTransferEOTF( vec4( o, 1.0 ) ).rgb;
 }
-vec3 gradeSurface( vec3 col, float f ) { return gradeSurface( col, f, uGrade.fogLin ); }
+vec3 gradeSurface( vec3 col, float f, vec3 fogLin ) { return gradeSurface( col, f, fogLin, 0.0 ); }
+vec3 gradeSurface( vec3 col, float f ) { return gradeSurface( col, f, uGrade.fogLin, 0.0 ); }
 `;
 
 // 自己寫的 ShaderMaterial 要調色時：uniforms 合併這組，材質開 fog: true（three.js 才會在有霧的場景裡更新它），
@@ -186,11 +204,11 @@ const PARS_FRAGMENT = `#ifdef USE_FOG
 // 霧在 colorspace 之後才上：直接畫上螢幕時這裡已經是 sRGB，畫進後製的貼圖時還是線性的（gradeSurface 自己會分）
 const FRAGMENT = `#ifdef USE_FOG
 	if ( uGrade.on > 0.5 ) {
-		float gradeF = gradeFog( vFogWorld );
+		float gradeF = gradeHeightFog( vFogWorld ), gradeA = gradeAir( vFogWorld );
 		#ifndef FOG_EXP2
-			if ( uGrade.linear > 0.5 ) gradeF = smoothstep( fogNear, fogFar, vFogDepth );
+			if ( uGrade.linear > 0.5 ) { gradeF = smoothstep( fogNear, fogFar, vFogDepth ); gradeA = 0.0; }
 		#endif
-		gl_FragColor.rgb = gradeSurface( gl_FragColor.rgb, gradeF );
+		gl_FragColor.rgb = gradeSurface( gl_FragColor.rgb, gradeF, uGrade.fogLin, gradeA );
 	} else {
 		#ifdef FOG_EXP2
 			float fogFactor = 1.0 - exp( - fogDensity * fogDensity * vFogDepth * vFogDepth );
@@ -328,12 +346,13 @@ export function gradeAt(dt, x, z) {
 // 改了設定、換了看的模式：下一幀重新混
 export function touch() { dirty = true; }
 
-// 霧色每次畫之前抄一份：場景的霧（線性）和它在 sRGB 裡的亮度（S 曲線的支點）
+// 霧色每次畫之前抄一份：場景的霧（線性）、它在 sRGB 裡的亮度（S 曲線的支點）、天邊的顏色（遠景空氣）
 const oetf = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
 function syncFog(scene) {
   const c = scene.fog?.color;
   if (!c) return;
   GRADE.fogLin.set(c.r, c.g, c.b);
+  GRADE.airLin.copy(GRADE.fogLin).multiplyScalar(HORIZON.value);
   GRADE.pivot = Math.min(0.98, Math.max(0.02, 0.2126 * oetf(c.r) + 0.7152 * oetf(c.g) + 0.0722 * oetf(c.b)));
 }
 
@@ -421,7 +440,7 @@ export function presetText(set = SET) {
   const lines = [];
   if (set.linear) lines.push('linear: 1,');
   if (base.tone) lines.push(`tone: '${base.tone}',`);
-  const isFog = (k) => NUMBERS.indexOf(k) >= 0 && NUMBERS.indexOf(k) < 5;
+  const isFog = (k) => FOG_KEYS.includes(k);
   const fog = Object.entries(nums).filter(([k]) => isFog(k)), rest = Object.entries(nums).filter(([k]) => !isFog(k));
   if (fog.length) lines.push(fog.map(([k, v]) => `${k}: ${lit(v)}`).join(', ') + ',');
   if (rest.length) lines.push(rest.map(([k, v]) => `${k}: ${lit(v)}`).join(', ') + ',');

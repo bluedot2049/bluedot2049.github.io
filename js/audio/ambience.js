@@ -5,6 +5,8 @@
 // 低頻壓掉、音量放輕、起伏放慢，聽起來是貼耳的空氣聲而不是轟轟的風
 import { CHEERS, EMOTE_BURST, EMOTE_HEAR, EMOTE_RATE, EMOTE_VOL, LAND_HEAR, LAND_VOL, MURMUR_DUCK, MURMUR_LAYERS, MURMUR_RMS, MURMUR_VOL, PENTA, SHOES, STEP_BURST, STEP_HEAR, STEP_RATE, STEP_VOL, VOICES, VOICE_LEN, VOICE_RMS, VOICE_VOL, biquad, loopOf, renderMurmur, silentWav } from './ambience-voices.js';
 const GUST_EVERY = 4;   // 每隔幾秒換一次風勢
+// 風聲和草葉聲的總音量。手機喇叭沒有低音，雜訊剛好落在它最響的中高頻，所以手機再壓低
+const HISS_VOL = matchMedia('(pointer: coarse)').matches ? 0.4 : 0.7;
 
 // 背景音樂是唯一要下載的音檔，每個區域一首
 const BGM_VOL = 0.16;      // 室內的音量，當背景就好
@@ -106,10 +108,10 @@ export class Ambience {
 
     // 風：兩級高通把 450Hz 以下整個切乾淨（單級切不乾淨，會留下轟聲），只留柔和的氣流，低通跟著風勢開合
     this.windFilter = filter('lowpass', 1200, 0.5);
-    this.windGain = gain(0.08);
+    this.windGain = gain(0.08 * HISS_VOL);
     noise(0, filter('highpass', 450), filter('highpass', 450), this.windFilter, this.windGain);
     // 草葉：很輕的高頻沙沙聲，風大一點時跟著冒出來
-    this.leafGain = gain(0.01);
+    this.leafGain = gain(0.01 * HISS_VOL);
     noise(2.7, filter('bandpass', 4200, 0.9), this.leafGain);
 
     // 鳥叫走一段短短的回聲，像在空曠的地方
@@ -164,9 +166,9 @@ export class Ambience {
   gust() {
     if (!this.ctx || this.ctx.state !== 'running') return;
     const t = this.ctx.currentTime, g = Math.random(), tc = GUST_EVERY * 0.7;
-    this.windGain.gain.setTargetAtTime(0.04 + g * 0.08, t, tc);
+    this.windGain.gain.setTargetAtTime((0.04 + g * 0.08) * HISS_VOL, t, tc);
     this.windFilter.frequency.setTargetAtTime(1000 + g * 1000, t, tc);
-    this.leafGain.gain.setTargetAtTime(0.01 + g * g * 0.015, t, tc);
+    this.leafGain.gain.setTargetAtTime((0.01 + g * g * 0.015) * HISS_VOL, t, tc);
   }
 
   // 每隔幾秒，隨機一個方向傳來一串鳥叫

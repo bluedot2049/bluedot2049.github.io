@@ -6,7 +6,7 @@ import { rng } from '../../core/props.js';
 import { glowPoints, uTime } from '../../core/scenery.js';
 import { mist, pools, ripples, smoke } from './haze.js';
 import { SHIP_PERIODS, brightStars, fishingFires, horizonShips, meteor, seaGlints, skyLanterns } from './distant.js';
-import { GRADE, GRADE_GLSL, TUNE, gradeCurvesOnly } from '../../core/grade.js';
+import { GRADE, GRADE_GLSL, HORIZON, TUNE, gradeCurvesOnly } from '../../core/grade.js';
 import { AREA, ORIGINAL, SEA } from './haishi-map.js';
 import { TOWN_X0, TOWN_X1, terrain, tz } from './haishi-terrain.js';
 
@@ -19,7 +19,7 @@ export const BAND = new THREE.Vector3(0.55, 0.45, -0.7).normalize();
 // 左手邊（往東）起霧：天邊的霧色往上拉高一段，海的霧帶也從近處就開始，海和天在那裡融成一片
 export const SKY_EDGE_GLSL = `
   uniform vec3 uWarm; uniform float uGlow; uniform float uMist; uniform float uMistWidth; uniform float uHorizon;
-  // 天邊的顏色：場景的霧色再壓深一點。霧本身不動（鎮上的霧照舊），只有天邊和接過去的海平線變深
+  // 天邊的顏色：場景的霧色再壓深一點。霧本身不動（鎮上的霧照舊），只有天邊、接過去的海平線、遠景空氣（grade.js）變深
   vec3 skyLow(vec3 fog) { return fog * uHorizon; }
   float sunUp(vec2 dir, float h) {
     float a = max(0.0, dot(normalize(dir), normalize(vec2(-1.0, 0.35))));
@@ -38,10 +38,11 @@ export const SKY_EDGE_GLSL = `
 // 藍調時刻的天空：地平線和霧同色，往上漸深，西邊貼著海平線一團日出前的暖光，東邊天邊起霧。
 // uStars 越往山上越大：天頂再暗一點，淡淡浮出一條銀河
 export function skyDome(bg) {
+  HORIZON.value = 0.7;
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       uLow: { value: new THREE.Color(bg) }, uTop: { value: new THREE.Color('#34405e') },
-      uWarm: { value: new THREE.Color('#ff9f4a') }, uGlow: { value: 0.28 }, uMist: { value: 0.85 }, uMistWidth: { value: 0.85 }, uHorizon: { value: 0.7 },
+      uWarm: { value: new THREE.Color('#ff9f4a') }, uGlow: { value: 0.28 }, uMist: { value: 0.85 }, uMistWidth: { value: 0.85 }, uHorizon: HORIZON,
       uBand: { value: BAND }, uMilk: { value: new THREE.Color('#4c5288') }, uStars: { value: 0 }, uDeep: { value: 0.82 }, uGrade: { value: GRADE },
     },
     vertexShader: `
@@ -340,10 +341,15 @@ export function buildSky(c) {
   // 遠處再壓暗一點；最遠那一段（海平線前）另外一條霧帶，往天邊的顏色靠。海是被相機最遠的 400 公尺切掉的，切掉那一線就是看到的海平線。
   // 霧帶只在最後幾十公尺，而且越高混得越少：碼頭貼著海面看，海天柔柔地接起來；爬上山往下看，海比天暗，海平線是清楚的一條線，
   // 顏色只在線前面那一小段過渡。uSeaBandNow 是每一幀照鏡頭高度在 CPU 混好的（低處 uSeaBand、高處 uSeaBandHigh），著色器只讀一個數。
-  // 近岸照舊，燈影才浮得起來
+  // 近岸照舊，燈影才浮得起來。
+  // 海自己的霧要換回場景的霧（霧色、霧量都是），同一個距離的海和山腳才吃同一種霧，岸線不會一邊淺一邊深：
+  // 遠景空氣（grade.js 的 far、farAir）越濃的地方越換；鏡頭越高也越換（uSeaMatchNow，跟霧帶一樣每一幀在 CPU 照鏡頭高度算好）——
+  // 從高處往下看，海和岸一起入鏡，深色的海霧貼著淺色的山腳就是一條縫；貼著海面看才需要海自己的深色，燈影浮得起來。
+  // 只換岸邊那一段：到了海平線霧帶前面就換回海自己的深色，高處看海平線照樣是海比天暗的一條線。
+  // 空氣本身海上只罩一部分（uSeaAir）：全罩的話遠海會跟天邊一樣亮，高處看不到海平線那條線
   const seaFog = {
     uSeaFogAmt: { value: 0.8 }, uSeaFogColor: { value: new THREE.Color('#2c4262') },
-    uSeaBand: { value: 1 }, uSeaBandHigh: { value: 0.45 }, uSeaBandNow: { value: 1 }, uSeaBandFrom: { value: 330 }, uSeaDeep: { value: 0.85 },
+    uSeaBand: { value: 1 }, uSeaBandHigh: { value: 0.45 }, uSeaBandNow: { value: 1 }, uSeaBandFrom: { value: 330 }, uSeaDeep: { value: 0.85 }, uSeaAir: { value: 0.4 }, uSeaMatch: { value: 0.6 }, uSeaMatchNow: { value: 0 },
   };
   TUNE.push(
     { label: '海霧量', key: 'seaFog', uniform: seaFog.uSeaFogAmt, kind: [0, 2, 0.01] },
@@ -352,22 +358,26 @@ export function buildSky(c) {
     { label: '高處霧帶', key: 'seaBandHigh', uniform: seaFog.uSeaBandHigh, kind: [0, 1, 0.01] },
     { label: '霧帶起點', key: 'seaBandFrom', uniform: seaFog.uSeaBandFrom, kind: [60, 395, 1] },
     { label: '遠海壓暗', key: 'seaDeep', uniform: seaFog.uSeaDeep, kind: [0.4, 1, 0.01] },
+    { label: '海上空氣', key: 'seaAir', uniform: seaFog.uSeaAir, kind: [0, 1, 0.01] },
+    { label: '高處海霧同岸', key: 'seaMatch', uniform: seaFog.uSeaMatch, kind: [0, 1, 0.01] },
   );
   // 海面和白塔底下的小島共用這一段，小島才跟周圍的海是同一個顏色、同樣退進霧裡
   const seaShade = (sh) => {
     Object.assign(sh.uniforms, seaFog);
-    sh.fragmentShader = 'uniform float uSeaFogAmt; uniform vec3 uSeaFogColor; uniform float uSeaBandNow; uniform float uSeaBandFrom; uniform float uSeaDeep;' + SKY_EDGE_GLSL +
+    sh.fragmentShader = 'uniform float uSeaFogAmt; uniform vec3 uSeaFogColor; uniform float uSeaBandNow; uniform float uSeaBandFrom; uniform float uSeaDeep; uniform float uSeaAir; uniform float uSeaMatchNow;' + SKY_EDGE_GLSL +
       sh.fragmentShader.replace('#include <fog_fragment>', `#ifdef USE_FOG
       if ( uGrade.on > 0.5 ) {
         vec2 seaDir = vFogWorld.xz - cameraPosition.xz;
         float seaD = length( seaDir );
         // 左手邊起霧的那一段：從近處就起霧，一百多公尺外已經差不多是天邊的顏色，海和天在那裡融成一片，也不再壓暗。這一段不跟著高度變
         float mist = mistAt( seaDir );
-        float band = max( uSeaBandNow * smoothstep( uSeaBandFrom, 398.0, vFogDepth ), mist * ( 1.0 - exp( - vFogDepth / 70.0 ) ) ), seaF = min( 1.0, gradeFog( vFogWorld ) * uSeaFogAmt );
+        float air = gradeAir( vFogWorld ), same = max( uGrade.farAir > 0.0 ? air / uGrade.farAir : 0.0, uSeaMatchNow ) * ( 1.0 - smoothstep( uSeaBandFrom - 150.0, uSeaBandFrom, vFogDepth ) );
+        air *= uSeaAir;
+        float band = max( uSeaBandNow * smoothstep( uSeaBandFrom, 398.0, vFogDepth ), mist * ( 1.0 - exp( - vFogDepth / 70.0 ) ) ), seaF = min( 1.0, gradeHeightFog( vFogWorld ) * mix( uSeaFogAmt, 1.0, same ) );
         gl_FragColor.rgb *= mix( 1.0, uSeaDeep, smoothstep( 40.0, 360.0, seaD ) * ( 1.0 - mist ) );
         // 天邊在西邊被日出打亮（跟天空球同一段），霧帶接過去也要帶著，不然那一段海和天還是斷開的；海上也就映出一片暖光
         vec3 edge = sunLit( skyLow( uGrade.fogLin ), sunUp( seaDir, 0.0 ) );
-        gl_FragColor.rgb = gradeSurface( gl_FragColor.rgb, seaF + ( 1.0 - seaF ) * band, mix( uSeaFogColor, edge, band ) );
+        gl_FragColor.rgb = gradeSurface( gl_FragColor.rgb, seaF + ( 1.0 - seaF ) * band, mix( mix( uSeaFogColor, uGrade.fogLin, same ), edge, band ), air );
         // 最後那一段換成天空的算法（只過曲線）：海過的對比和飽和度會把天邊色推亮一點，接的地方多一條細線
         vec3 skyEdge = gradeCurvesOut( gradeSrgbOut() ? sRGBTransferOETF( vec4( edge, 1.0 ) ).rgb : edge );
         gl_FragColor.rgb = mix( gl_FragColor.rgb, skyEdge, smoothstep( 0.35, 1.0, band ) );
@@ -378,6 +388,10 @@ export function buildSky(c) {
   };
   sea.material.onBeforeCompile = seaShade;
   sea.material.customProgramCacheKey = () => 'haishi-sea';
+  sea.onBeforeRender = (r, s, cam) => {
+    const t = Math.min(1, Math.max(0, (cam.position.y - 6) / 24));
+    seaFog.uSeaMatchNow.value = seaFog.uSeaMatch.value * t * t * (3 - 2 * t);
+  };
   sea.rotation.x = -Math.PI / 2;
   sea.position.set(0, SEA, 420);
   group.add(sea);

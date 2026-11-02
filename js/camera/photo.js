@@ -384,6 +384,7 @@ export class PhotoMode {
       }
       el.textContent = '一二三'[n - 1];
       el.hidden = false;
+      this.ambience.voice('tok', 0.3, 0, n === 1 ? 1.33 : 1);
       el.classList.remove('beat');
       void el.offsetWidth;
       el.classList.add('beat');
@@ -1500,6 +1501,8 @@ export class PhotoMode {
     if (!this.active || this.result) return;
     if (!dry && this.waitingBulb()) return this.jammed();
     const fire = !dry && this.fires(), wasLong = dof.long;
+    // 快門聲在畫大圖之前就發：手機畫一張要卡一下，放在後面會比按下去晚。閃光的聲音在 fired()
+    if (!dry && !fire) this.ambience.voice(this.studio ? 'oldshutter' : this.gear ? 'shutter' : 'blink', 0.5);
     const fr = this.frame, r = this.renderer, cam = this.camera;
     const W = window.innerWidth, H = window.innerHeight;
     // 長邊：電腦 3840、手機 2560，不超過顯示卡能畫的大小
@@ -1549,8 +1552,6 @@ export class PhotoMode {
     this.snap();
     this.burned();
     if (fire) this.fired();
-    else if (this.gear) this.ambience.voice('shutter', 0.5);
-    else if (!this.studio) this.ambience.voice('blink', 0.5);
     this.deliver(out);
   }
 
@@ -1732,6 +1733,7 @@ export class PhotoMode {
     const blob = await new Promise((ok) => card.toBlob(ok, 'image/jpeg', 0.92));
     if (!blob || !this.shot || mode !== this.cardMode) return;
     this.showResult(blob, `${mine ? '海市行囊' : '海市明信片'}-${stamp()}.jpg`, false);
+    this.ambience.voice('print', 0.35);
     this.$('#ph-tip').textContent = card.lost.length ? '有一張臉畫得太滿，明信片放不下。要整份收好，到前廳的鏡子前請眼睛拍一張'
       : mine ? '這張留給自己：換手機的時候，打開行囊讀這張明信片，東西就回來了'
       : '按分享，選要寄給誰。朋友掃郵票就能試穿你這一身';

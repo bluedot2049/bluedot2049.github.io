@@ -100,15 +100,61 @@ export const VOICES = {
     hiss(ctx, out, noise, t + 0.055, 0.025, 'bandpass', 2300 * p, 0.8, 2);
     return 0.09;
   },
-  // 畫廊的眼睛眨一下：眼皮闔上軟軟的一聲「噗」，張開時輕輕一抹，中間浮起兩聲玻璃似的微光
+  // ---------- 畫廊的眼睛（photo.js、鏡子前的 selfie.js）：偏機械的細小手感，像換彈匣，不做成生物的聲音 ----------
+  // 眨一下：眼皮滑下來「嚓」，到底一記扎實的「喀」，彈回來再輕輕一扣；尾巴留一絲玻璃光
   blink(ctx, out, t, p, noise) {
-    hiss(ctx, out, noise, t, 0.07, 'lowpass', 1100 * p, 0.55, 0.7);
-    osc(ctx, 'sine', t, 0.09, [[0, 210 * p], [0.09, 115 * p]]).connect(envelope(ctx, t, 0.006, 0.09, 0.4)).connect(out);
-    for (const [dt, f] of [[0.03, 1568], [0.09, 2349]]) {
-      osc(ctx, 'sine', t + dt, 0.6, [[0, f * p], [0.6, f * p * 0.985]]).connect(envelope(ctx, t + dt, 0.01, 0.6, 0.07)).connect(out);
+    air(ctx, out, noise, t, [[0, 2600 * p], [0.05, 5200 * p]], 0.02, 0.06, 0.25, 2.5, 'bandpass');
+    hiss(ctx, out, noise, t + 0.06, 0.012, 'bandpass', 3600 * p, 1.1, 3);
+    osc(ctx, 'sine', t + 0.06, 0.06, [[0, 190 * p], [0.06, 95 * p]]).connect(envelope(ctx, t + 0.06, 0.002, 0.06, 0.45)).connect(out);
+    hiss(ctx, out, noise, t + 0.17, 0.01, 'bandpass', 4600 * p, 0.45, 4);
+    osc(ctx, 'sine', t + 0.07, 0.5, [[0, 2349 * p], [0.5, 2320 * p]]).connect(envelope(ctx, t + 0.07, 0.008, 0.5, 0.035)).connect(out);
+    return 0.6;
+  },
+  // 鏡子前浮出來：一段細細的滑軌聲，眼皮張到底時「喀」地鎖上（RISE 1.3 秒，後六成在張眼）
+  eyeout(ctx, out, t, p, noise) {
+    hiss(ctx, out, noise, t, 0.008, 'bandpass', 4400 * p, 0.3, 4);
+    air(ctx, out, noise, t + 0.45, [[0, 1400 * p], [0.8, 3800 * p]], 0.3, 0.8, 0.12, 3, 'bandpass');
+    hiss(ctx, out, noise, t + 1.27, 0.012, 'bandpass', 3400 * p, 0.7, 3);
+    osc(ctx, 'sine', t + 1.27, 0.05, [[0, 240 * p], [0.05, 130 * p]]).connect(envelope(ctx, t + 1.27, 0.002, 0.05, 0.3)).connect(out);
+    return 1.4;
+  },
+  // 倒數時瞳孔收一格：棘輪滑過兩齒再卡到位；p 一下比一下高，聽得出越收越緊
+  iris(ctx, out, t, p, noise) {
+    for (const dt of [0, 0.018]) hiss(ctx, out, noise, t + dt, 0.006, 'bandpass', 5200 * p, 0.3, 5);
+    hiss(ctx, out, noise, t + 0.04, 0.01, 'bandpass', 3000 * p, 0.8, 3);
+    osc(ctx, 'sine', t + 0.04, 0.035, [[0, 320 * p], [0.035, 200 * p]]).connect(envelope(ctx, t + 0.04, 0.002, 0.035, 0.25)).connect(out);
+    return 0.1;
+  },
+  // 拍完收回去：滑軌往下走，縮到看不見時最後一記悶悶的收好（BACK 1 秒）
+  eyein(ctx, out, t, p, noise) {
+    air(ctx, out, noise, t + 0.05, [[0, 3600 * p], [0.85, 1100 * p]], 0.15, 0.85, 0.1, 3, 'bandpass');
+    osc(ctx, 'sine', t + 0.95, 0.08, [[0, 150 * p], [0.08, 80 * p]]).connect(envelope(ctx, t + 0.95, 0.003, 0.08, 0.35)).connect(out);
+    hiss(ctx, out, noise, t + 0.95, 0.03, 'lowpass', 900 * p, 0.3);
+    return 1.1;
+  },
+  // ---------- 海市照相館（photo.js countdown） ----------
+  // 照相師數「三、二、一」，每數一聲用木頭敲一下「篤」；最後一聲 p 給高一點
+  tok(ctx, out, t, p, noise) {
+    for (const [f, d, g] of [[620, 0.09, 0.6], [1710, 0.035, 0.18]]) {
+      osc(ctx, 'sine', t, d, [[0, f * p], [d, f * p * 0.97]]).connect(envelope(ctx, t, 0.001, d, g)).connect(out);
     }
-    hiss(ctx, out, noise, t + 0.2, 0.06, 'bandpass', 1700 * p, 0.22, 1.2);
-    return 0.7;
+    hiss(ctx, out, noise, t, 0.012, 'bandpass', 2400 * p, 0.5, 2);
+    return 0.12;
+  },
+  // 老相機的快門：捏一下橡皮球「噗」，大鏡頭前的葉片張開一喀、慢一拍闔上一喀，木頭機身跟著悶悶一響。沒有閃光
+  oldshutter(ctx, out, t, p, noise) {
+    air(ctx, out, noise, t, [[0, 500], [0.08, 1300]], 0.02, 0.1, 0.4, 0.8);
+    hiss(ctx, out, noise, t + 0.06, 0.02, 'bandpass', 1900 * p, 1, 2);
+    osc(ctx, 'sine', t + 0.06, 0.09, [[0, 150 * p], [0.09, 85 * p]]).connect(envelope(ctx, t + 0.06, 0.003, 0.09, 0.5)).connect(out);
+    hiss(ctx, out, noise, t + 0.2, 0.025, 'bandpass', 1500 * p, 0.8, 2);
+    return 0.3;
+  },
+  // 明信片印好：紙從機器裡滑出來一抹，接著一記印章蓋下去
+  print(ctx, out, t, p, noise) {
+    air(ctx, out, noise, t, [[0, 2600], [0.3, 4200]], 0.1, 0.32, 0.2, 1.2, 'bandpass');
+    osc(ctx, 'sine', t + 0.45, 0.12, [[0, 125 * p], [0.12, 70 * p]]).connect(envelope(ctx, t + 0.45, 0.003, 0.12, 0.6)).connect(out);
+    hiss(ctx, out, noise, t + 0.45, 0.05, 'lowpass', 800 * p, 0.5);
+    return 0.6;
   },
   // 閃光燈泡：啪一聲很亮的爆，底下一記悶的，最後燈絲燒完嘶嘶的
   flash(ctx, out, t, p, noise) {
