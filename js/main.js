@@ -26,6 +26,7 @@ import { fullscreenButton, keepFullscreen } from './screen.js';
 import { CAMERAS, SOON, TABLE, carried, carry } from './cameras.js';
 import { FlashFx } from './flashfx.js';
 import { installGrade, gradeAt, NEUTRAL } from './grade.js';
+import { Hollow } from './hollow.js';
 
 // 世界分成幾個區域，一次只建一個，用 ?z= 指定，沒有寫就是畫廊。每個區域的內容寫在自己的 zone-*.js，用到才下載。
 // 換區域時整頁重新載入：瀏覽器一定會把上一個區域的記憶體收回去，手機才撐得住。
@@ -214,6 +215,8 @@ async function start() {
   character.onEmote = (c, e) => ambience.cheer(c, e);
   // 角色出來之前先站好的（畫廊的胖頭頭人）
   const { manatee = null, host = null } = Z.residents?.({ scene, world, shadowTex }) ?? {};
+  // 大樹的樹洞：作者和網站消息。沒有大樹的區域什麼都不做
+  const hollow = new Hollow(world.outdoor?.hollow ?? null);
   const ambience = new Ambience();
   // 別人閃燈時，那盞閃光燈移過去亮一下
   const flashFx = new FlashFx(scene, flashLight, camera, ambience);
@@ -302,10 +305,14 @@ async function start() {
       if (!(kind === 'drag' && player.focus?.kind === 'mirror')) ui.hideDress();
       ui.hideHint();
       ui.hideGuide();
+      hollow.close();
     },
     // 門邊的問號立牌：再看一次操作說明
     onGuide() {
       ui.guide(true);
+    },
+    onHollow() {
+      hollow.open();
     },
     onArriveMirror() {
       ui.showDress();
@@ -488,7 +495,7 @@ async function start() {
   const actionBtn = document.getElementById('action-btn');
   actionBtn.addEventListener('click', () => player.action());
   const actionLabel = actionBtn.querySelector('.a1');
-  const LABELS = { painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來' };
+  const LABELS = { painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來' };
   let nearKey = null;
   function updateAction() {
     const t = player.actionTarget();
@@ -813,6 +820,7 @@ async function start() {
     vendors?.update(dt, player, camera);
     passers?.update(dt, player);
     manatee?.update(dt, player.pos.x, player.pos.z, camera);
+    hollow.update(dt, clock.elapsedTime, player.pos, camera);
     flashFx.update(dt);
     if (world.camTable) {
       world.camTable.look(player.focus?.kind === 'cameras' ? player.focus.slot : -1);
@@ -856,6 +864,8 @@ async function start() {
     gradeAt(dt, view.x, view.z);
     if (photo.active) world.update(clock.elapsedTime, photo.pos, photo.fadeTarget(), camera, true);
     else world.update(clock.elapsedTime, player.camPos, player.fadeTarget(), camera);
+    // 牆上的色塊畫：視差跟著鏡頭，站在畫前不動才醒；拍照時醒的程度停著
+    world.updatePaintings?.(camera.position, photo.active ? null : player.pos, player.focus?.kind === 'painting' ? player.focus.p : null);
     frame++;
     const idle = !photo.active && !player.moving && !othersMoving && !fading && !talking && performance.now() - lastInput > 2000;
     if (idle && frame % 2) return;

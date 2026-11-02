@@ -136,12 +136,28 @@ export function buildTree({ k, group, h, x, z, G, heightAt, face, clear = [] }) 
     blocks.push({ x: x + Math.cos(a) * 1.35, z: z + Math.sin(a) * 1.35, hw: 0.3, hd: 0.3 });
   }
 
-  // 樹洞：面向石階那一側，裡頭亮著暖光
+  // 樹洞：面向石階那一側，裡頭亮著暖光。光自己一個網格，亮暗由 hollow.js 調（有沒讀的消息時亮著呼吸，讀過就剩炭火）
+  const hollow = { x: x + Math.cos(fa) * 1.2, y: G + 0.95, z: z + Math.sin(fa) * 1.2, n: { x: Math.cos(fa), z: Math.sin(fa) } };
   {
     const fx = Math.cos(fa), fz = Math.sin(fa), ry = Math.atan2(fx, fz);
     k.ball(0.4, '#1e140e', x + fx * 0.95, G + 0.95, z + fz * 0.95, { sx: 1, sy: 1.6, sz: 0.45, ry });
-    k.ball(0.27, '#ffc870', x + fx * 1.05, G + 0.92, z + fz * 1.05, { sx: 1, sy: 1.6, sz: 0.4, ry, glow: true });
-    k.light(x + fx * 1.15, G + 0.92, z + fz * 1.15, '#ffc870', 1.2);
+    const hk = new Kit(R), hb = newBucket();
+    hk.ball(0.27, '#ffc870', x + fx * 1.05, G + 0.92, z + fz * 1.05, { sx: 1, sy: 1.6, sz: 0.4, ry, glow: true });
+    hk.light(x + fx * 1.15, G + 0.92, z + fz * 1.15, '#ffc870', 1.2);
+    hk.emit(hb, 0, 0, 0);
+    const lamp = h.bucketObjects(hb);
+    for (const o of lamp) {
+      if (!o.isPoints) o.material = o.material.clone();
+      group.add(o);
+    }
+    const ball = lamp.find((o) => !o.isPoints), halo = lamp.find((o) => o.isPoints), size = halo.geometry.attributes.aSize;
+    ball.userData.hollow = true;   // 點樹洞裡的光就打開消息
+    // v：0 是炭火，1 是全亮
+    hollow.glow = (v) => {
+      ball.material.color.setScalar(0.3 + 0.7 * v);
+      size.setX(0, 0.35 + 0.85 * v);
+      size.needsUpdate = true;
+    };
   }
 
   // 五根大枝往外往上撐開，枝頭各頂一團樹冠；半路再分出一根細枝，也頂一小團
@@ -226,6 +242,7 @@ export function buildTree({ k, group, h, x, z, G, heightAt, face, clear = [] }) 
 
   return {
     blocks,
+    hollow,
     // 貓頭鷹停的地方：低枝的枝頭往回一點
     perch: { x: twigEnd.x - fx * 0.15, y: twigEnd.y + 0.05, z: twigEnd.z - fz * 0.15, h: Math.atan2(fx, fz) },
     update(t, cam, target) {

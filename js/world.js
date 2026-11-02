@@ -16,6 +16,8 @@ import { catRoomOf } from './animals.js';
 import { makePathfinder } from './pathgrid.js';
 import { uTime, tag, bucketObjects, glowPoints } from './scenery.js';
 import { RoomFader, ease } from './fade.js';
+import { createMagicPaint, paletteFor, updateMagic, bakeOne } from './magicpaint.js';
+import { mergeGeometries } from '../vendor/BufferGeometryUtils.js';
 
 export const WALL_H = 3.2;
 export const DOOR_W = 2;
@@ -333,15 +335,21 @@ function buildPainting(room, slot, data, index) {
   halo.position.set(0, 0.15, 0.005);
   g.add(halo);
 
+  // 畫框：背板加一圈凸在畫布前面的唇，壓住畫布邊，像窗框（色塊畫的深度從這裡看進去）
   const frameMat = s.frames[data.frame != null ? data.frame % FRAMES.length : index % FRAMES.length];
-  const frame = new THREE.Mesh(new THREE.BoxGeometry(w + 0.14, h + 0.14, 0.06), frameMat);
-  frame.position.z = 0.04;
+  const parts = [new THREE.BoxGeometry(w + 0.14, h + 0.14, 0.06).translate(0, 0, 0.04)];
+  for (const [sx, sy, bw, bh] of [[0, 1, w + 0.14, 0.07], [0, -1, w + 0.14, 0.07], [1, 0, 0.07, h], [-1, 0, 0.07, h]]) {
+    parts.push(new THREE.BoxGeometry(bw, bh, 0.05).translate(sx * (w / 2 + 0.015), sy * (h / 2 + 0.015), 0.1));
+  }
+  const frame = new THREE.Mesh(mergeGeometries(parts, false), frameMat);
   g.add(frame);
 
-  const canvasMat = new THREE.MeshBasicMaterial({ color: 0x3a3028 });
-  const canvas = new THREE.Mesh(new THREE.PlaneGeometry(w, h), canvasMat);
+  // 畫布：會動的色塊畫（magicpaint.js），標題當亂數種子，房間決定顏料
+  const magic = createMagicPaint({ seed: `${room.id}/${data.title || index}`, palette: paletteFor(room.data.subtitle), w, h });
+  const canvas = new THREE.Mesh(new THREE.PlaneGeometry(w, h), magic.material);
   canvas.position.z = 0.075;
   g.add(canvas);
+  magic.mesh = canvas;
 
   // 畫燈
   const arm = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.22), s.brass);
@@ -367,13 +375,12 @@ function buildPainting(room, slot, data, index) {
   g.rotation.y = Math.atan2(pt.nx, pt.nz);
 
   const p = {
-    data, room, group: g, canvasMat, w, h, cy,
+    data, room, group: g, magic, w, h, cy,
     wall: new THREE.Vector3(pt.x, 0, pt.z),
     n: new THREE.Vector3(pt.nx, 0, pt.nz),
     center: new THREE.Vector3(pt.x + pt.nx * 0.08, cy, pt.z + pt.nz * 0.08),
     url: `rooms/${room.id}/${data.image}`,
-    thumbUrl: `rooms/${room.id}/${data.thumb || data.image}`,
-    texture: null, loading: false, entry: slot.span.entry, near: true,
+    entry: slot.span.entry,
   };
   frame.userData.painting = p;
   canvas.userData.painting = p;
@@ -827,34 +834,31 @@ export function buildWorld(scene, gallery) {
   const maxHalf = Math.max(...rooms.map((r) => r.reachW ?? r.halfW)) + 0.5;
   const { findPath } = makePathfinder(walkable, -maxHalf, rooms[rooms.length - 1].zEnd - 0.5, maxHalf, 0.5);
 
-  const loader = new THREE.TextureLoader();
+  // 色塊畫：前後一間以內的要烤好（一幀烤一幅，見 update），站的這間馬上烤；離開兩間以上的丟掉
+  const magic = paintings.map((p) => p.magic);
   let currentRoom = 0;
   function updateTextures(current) {
     for (const p of paintings) {
-      const near = Math.abs(p.room.index - current) <= 1;
-      if (near && !p.texture && !p.loading) {
-        p.loading = true;
-        loader.load(p.thumbUrl, (tex) => {
-          tex.colorSpace = THREE.SRGBColorSpace;
-          tex.anisotropy = 4;
-          p.loading = false;
-          if (Math.abs(p.room.index - currentRoom) > 2) { tex.dispose(); return; }
-          p.texture = tex;
-          p.canvasMat.map = tex;
-          p.canvasMat.color.set(0xffffff);
-          p.canvasMat.needsUpdate = true;
-        }, undefined, () => {
-          p.loading = false;
-          console.warn('畫作圖檔讀取失敗：' + p.thumbUrl);
-        });
-      } else if (Math.abs(p.room.index - current) > 2 && p.texture) {
-        p.texture.dispose();
-        p.texture = null;
-        p.canvasMat.map = null;
-        p.canvasMat.color.set(0x3a3028);
-        p.canvasMat.needsUpdate = true;
-      }
+      const d = Math.abs(p.room.index - current);
+      p.magic.want = d <= 1;
+      if (d === 0) p.magic.bake();
+      else if (d > 2) p.magic.dispose();
     }
+  }
+
+  // 每一幀，鏡頭擺好以後：eye 是鏡頭（算視差），body 是角色腳下（站在畫前不動就醒；拍照時傳 null，醒的程度停著），
+  // focus 是正在看的那幅
+  let stepDt = 0;
+  const lastBody = new THREE.Vector3();
+  let hasBody = false;
+  function updatePaintings(eye, body, focus) {
+    let speed = 0;
+    if (body) {
+      speed = hasBody && stepDt > 0 ? lastBody.distanceTo(body) / stepDt : 0;
+      lastBody.copy(body);
+    }
+    hasBody = !!body;
+    updateMagic(magic, stepDt, eye, body, speed, focus?.magic);
   }
 
   // 遠處的房間整間出現、藏起來時淡進淡出（見 fade.js）。第一次和 snap 時直接切
@@ -973,6 +977,8 @@ export function buildWorld(scene, gallery) {
     uTime.value = t;
     const dt = lastT === null ? 0 : Math.min(0.1, t - lastT);
     lastT = t;
+    stepDt = dt;
+    bakeOne(magic);
     // 算距離用站在目前這間的那個點：平常是角色，拍照時鏡頭自己飛
     const here = roomIndexAt(target.z) === currentRoom ? target : cam;
     roomFader.show(roomWant(currentRoom, here.z), snapNext);
@@ -1018,5 +1024,5 @@ export function buildWorld(scene, gallery) {
   // 搭船去別的區域：棧橋邊繫著的小划船
   const exits = outdoor?.ferry ? [{ ...outdoor.ferry, to: 'haishi', label: '搭船', title: '往海市' }] : [];
 
-  return { rooms, paintings, mirror, camTable, frontDoor, guideSign, clock, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, fadeVariants: (on) => roomFader.all(on) };
+  return { rooms, paintings, mirror, camTable, frontDoor, guideSign, clock, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, updatePaintings, fadeVariants: (on) => roomFader.all(on) };
 }

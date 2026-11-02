@@ -296,7 +296,7 @@ export class Player {
     if (now - (this.hoverT || 0) < 100) return;
     this.hoverT = now;
     const u = this.pick(cx, cy)?.object.userData;
-    this.dom.classList.toggle('hot', !!(u && ((WORKS_OPEN && u.painting) || u.mirror || u.animal || u.guide)));
+    this.dom.classList.toggle('hot', !!(u && ((WORKS_OPEN && u.painting) || u.mirror || u.animal || u.guide || u.hollow)));
   }
 
   tap(cx, cy) {
@@ -309,6 +309,7 @@ export class Player {
     if (hit.object.userData.mirror) return this.goToMirror();
     if (hit.object.userData.animal) return this.goToAnimal(hit.object.userData.animal);
     if (hit.object.userData.guide) return this.events.onGuide?.();
+    if (hit.object.userData.hollow) return this.events.onHollow?.();
     const t =this.world.findWalkable(hit.point.x, hit.point.z, this.pos.x, this.pos.z);
     if (!t) return;
     this.exitFocus();
@@ -761,7 +762,7 @@ export class Player {
     }
   }
 
-  // 動作按鈕現在該做什麼：看畫、照鏡子、挑相機、看說明、坐下、拿點心、摸動物、跟訪客聊天、搭船、吃一口、起來。回傳 { kind, p? } 或 null
+  // 動作按鈕現在該做什麼：看畫、照鏡子、挑相機、看說明、聽樹洞、坐下、拿點心、摸動物、跟訪客聊天、搭船、吃一口、起來。回傳 { kind, p? } 或 null
   actionTarget() {
     const ch = this.character;
     if (this.sitting) {
@@ -798,6 +799,11 @@ export class Player {
       });
       const t = out.table, d = Math.hypot(Math.max(0, Math.abs(x - t.x) - t.hw), Math.max(0, Math.abs(z - t.z) - t.hd));
       if (d < 1.5) list.push({ kind: 'table', d: d + 0.2 });
+      const ho = out.hollow;
+      if (ho) {
+        const dh = Math.hypot(x - ho.x, z - ho.z);
+        if (dh < 2.2) list.push({ kind: 'hollow', d: dh });
+      }
     }
     const an = this.animals?.nearest(x, z);
     if (an) list.push({ kind: 'pet', p: an.a, d: an.d });
@@ -821,6 +827,7 @@ export class Player {
       case 'mirror': this.goToMirror(); break;
       case 'cameras': this.events.onCameras?.(); break;
       case 'guide': this.events.onGuide?.(); break;
+      case 'hollow': this.events.onHollow?.(); break;
       case 'seat': this.goTo(this.planSeat(t.p)); break;
       case 'pet': this.goToAnimal(t.p); break;
       case 'talk': t.p.talkTo(); break;

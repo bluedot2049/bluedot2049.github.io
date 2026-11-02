@@ -462,6 +462,51 @@ body.touch #guide .for-desk, body:not(.touch) #guide .for-touch { display: none;
 }
 @media (prefers-reduced-motion: reduce) { #guide.show, #guide .keys li { animation: none; } }
 
+/* 樹洞：作者銘牌加網站消息。位置、進場跟操作說明卡一樣；消息多了只捲消息那一段 */
+#hollow {
+  position: fixed; left: calc(24px + env(safe-area-inset-left)); top: 50%; z-index: 25;
+  display: none; transform: translateY(-50%); width: 360px; max-height: calc(100% - 48px);
+  background: rgba(16, 11, 9, .94); box-shadow: var(--shadow);
+}
+#hollow.show { display: flex; animation: guide-in .4s ease-out both; }
+/* 銘牌：細金框兩層、四角菱形，上面「開發者」，中間簽名（assets/signature.svg），下面「十三」 */
+#hollow .plate { position: relative; flex: none; padding: 12px 14px; border: 1px solid rgba(232, 184, 106, .45); }
+#hollow .plate::before { content: ""; position: absolute; inset: 3px; border: 1px solid rgba(232, 184, 106, .14); pointer-events: none; }
+#hollow .plate i { position: absolute; width: 5px; height: 5px; background: var(--gold); transform: rotate(45deg); }
+#hollow .plate i:nth-of-type(1) { left: -3px; top: -3px; }
+#hollow .plate i:nth-of-type(2) { right: -3px; top: -3px; }
+#hollow .plate i:nth-of-type(3) { left: -3px; bottom: -3px; }
+#hollow .plate i:nth-of-type(4) { right: -3px; bottom: -3px; }
+#hollow .role { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 11px; letter-spacing: .5em; color: var(--muted); }
+#hollow .role::before, #hollow .role::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(232, 184, 106, .35)); }
+#hollow .role::after { transform: scaleX(-1); }
+#hollow .plate img { display: block; width: 100%; height: auto; margin: 6px 0 2px; }
+#hollow .name { text-align: center; font-size: 20px; letter-spacing: .6em; padding-left: .6em; color: var(--gold-hi); }
+#hollow .news { list-style: none; margin: 0; padding: 0; overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+#hollow .news li { padding: 10px 0; border-top: 1px solid rgba(232, 184, 106, .1); font-size: 12.5px; line-height: 1.75; letter-spacing: .04em; animation: row-in .45s ease-out both; }
+#hollow .news li + li { opacity: .6; }
+#hollow .news .head { display: flex; justify-content: space-between; margin-bottom: 4px; font: 13px/1.4 var(--latin); font-variant-numeric: lining-nums; letter-spacing: .08em; color: var(--gold); }
+#hollow .news .v { color: var(--muted); }
+#hollow .news dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+#hollow .news dt { color: var(--muted); }
+#hollow .news dd { margin: 0; }
+@media (orientation: portrait) {
+  #hollow {
+    left: 16px; right: 16px; top: auto; bottom: calc(16px + env(safe-area-inset-bottom));
+    width: auto; max-width: 420px; max-height: calc(100% - 32px - env(safe-area-inset-bottom)); margin: 0 auto; transform: none;
+  }
+  #hollow.show { animation-name: guide-up; }
+}
+/* 手機橫拿：矮，銘牌縮小 */
+@media (orientation: landscape) and (max-height: 560px) {
+  #hollow { top: 12px; bottom: 12px; transform: none; max-height: none; }
+  #hollow.show { animation-name: guide-up; }
+  #hollow .plate { padding: 6px 10px; }
+  #hollow .plate img { width: 78%; margin: 2px auto 0; }
+  #hollow .name { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { #hollow.show, #hollow .news li { animation: none; } }
+
 /* ───────── 一般按鈕 ───────── */
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -524,6 +569,19 @@ body.desk #more-btn { order: 2; }
   transition: --sheen .4s ease-out, transform .1s;
 }
 #photo-btn svg { stroke-width: 1.6; filter: drop-shadow(0 .7px 0 rgba(255, 240, 205, .65)); }
+/* 帶著相機時收起鈕跟相機的快門同一種舊金（#ph-shutter.gear） */
+body.photo-gear #photo-btn {
+  color: #2e1c0c; border-color: rgba(90, 58, 24, .95);
+  background:
+    radial-gradient(circle, rgba(198, 150, 80, .8) 0 18%, transparent 46%),
+    radial-gradient(circle, transparent 58%, rgba(56, 34, 12, .34) 100%),
+    radial-gradient(circle at 30% 72%, rgba(66, 50, 22, .2), transparent 30%),
+    repeating-conic-gradient(rgba(255, 238, 205, .07) 0 1.2deg, rgba(60, 36, 10, .08) 1.2deg 2.4deg),
+    conic-gradient(from var(--sheen), #c69650, #9d7137 45deg, #bf8f4b 90deg, #d5ae6d 135deg, #bf8f4b 180deg, #986a34 225deg, #c69650 270deg, #dfbe83 315deg, #c69650);
+  box-shadow: 0 0 0 3px rgba(20, 14, 10, .85), 0 0 0 4px rgba(200, 160, 95, .5),
+    inset 0 1px 1px rgba(245, 222, 180, .48), inset 0 -1px 2px rgba(50, 30, 10, .5);
+}
+body.photo-gear #photo-btn svg { filter: drop-shadow(0 .7px 0 rgba(245, 222, 180, .45)); }
 #photo-btn .x, body.photo #photo-btn .cam { display: none; }
 body.photo #photo-btn .x { display: block; }
 #photo-btn:active { transform: scale(.92); }
@@ -1432,18 +1490,19 @@ body.joy-left:not(.desk) #ph-lens { left: auto; right: calc(var(--jx) - 36px); }
 /* 帶著相機時，快門換成相機自己的（cameras.js 的 shutterKnob）。外環都是太陽紋金片，刻著商號、型號、序號。
    燭乙式是海市火記光學的相機，跟照相館一樣整顆金色，中間一顆圓頂金鈕（.cap）；葉片快門（.leaf）留給以後的別台。
    .snap 按一下金鈕壓下彈回、葉片張開又闔上；body.photo-expose 按住就一直壓著、開著，.tick.lit 錶刻一秒亮一格；.locked 換燈泡時卡榫卡進來；.jam 卡住了還硬按 */
-/* 舊金：比畫廊的金快門沉一階，邊緣和凹處積了暗斑（幾塊不規則的淡褐），亮帶也收斂；刮痕畫在 SVG 裡 */
+/* 舊金：介於畫廊的新金和很舊的金之間，沉半階；邊緣和凹處積了暗斑（幾塊不規則的淡褐），亮帶也收斂。
+   帶著相機時，收起鈕（#photo-btn）、日期框也是同一種舊金 */
 #ph-shutter.gear {
   border: 1px solid rgba(90, 58, 24, .95);
   background:
-    radial-gradient(circle, transparent 58%, rgba(56, 34, 12, .42) 100%),
-    radial-gradient(circle at 28% 74%, rgba(66, 50, 22, .26), transparent 26%),
-    radial-gradient(circle at 80% 32%, rgba(66, 50, 22, .2), transparent 22%),
-    radial-gradient(circle at 62% 88%, rgba(66, 50, 22, .18), transparent 18%),
+    radial-gradient(circle, transparent 58%, rgba(56, 34, 12, .34) 100%),
+    radial-gradient(circle at 28% 74%, rgba(66, 50, 22, .2), transparent 26%),
+    radial-gradient(circle at 80% 32%, rgba(66, 50, 22, .16), transparent 22%),
+    radial-gradient(circle at 62% 88%, rgba(66, 50, 22, .14), transparent 18%),
     repeating-conic-gradient(rgba(255, 238, 205, .07) 0 .8deg, rgba(60, 36, 10, .08) .8deg 1.6deg),
     repeating-conic-gradient(from 2deg, rgba(255, 238, 205, .04) 0 4deg, transparent 4deg 9deg, rgba(60, 36, 10, .05) 9deg 13deg, transparent 13deg 17deg),
-    conic-gradient(#b08445, #85602f 45deg, #a67b3f 90deg, #bf9a5e 135deg, #a67b3f 180deg, #80592b 225deg, #b08445 270deg, #c9a66c 315deg, #b08445);
-  box-shadow: inset 0 1px 1px rgba(240, 215, 170, .4), inset 0 -2px 3px rgba(50, 30, 10, .55), 0 2px 8px rgba(0, 0, 0, .5);
+    conic-gradient(#c69650, #9d7137 45deg, #bf8f4b 90deg, #d5ae6d 135deg, #bf8f4b 180deg, #986a34 225deg, #c69650 270deg, #dfbe83 315deg, #c69650);
+  box-shadow: inset 0 1px 1px rgba(245, 222, 180, .48), inset 0 -2px 3px rgba(50, 30, 10, .5), 0 2px 8px rgba(0, 0, 0, .5);
 }
 #ph-shutter.gear::after, #ph-shutter.gear::before { content: none; }
 #ph-shutter.gear svg { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
@@ -1452,8 +1511,6 @@ body.joy-left:not(.desk) #ph-lens { left: auto; right: calc(var(--jx) - 36px); }
 #ph-shutter .dome { fill: url(#sh-dome); }
 #ph-shutter .cap .rim { fill: none; stroke: #d6b67a; stroke-width: .7; opacity: .55; }
 #ph-shutter .cap .shine { fill: #f6e6c0; opacity: .2; }
-#ph-shutter .scr, #ph-date .scr { fill: none; stroke: rgba(255, 236, 196, .24); stroke-width: .28; stroke-linecap: round; }
-#ph-shutter .scr.lo, #ph-date .scr.lo { stroke: rgba(40, 24, 8, .32); }
 #ph-shutter.snap .cap { animation: sh-press .32s ease-in-out; }
 body.photo-expose #ph-shutter.gear .cap { transform: scale(.93); filter: brightness(.86); transition-duration: .18s; }
 #ph-shutter .bezel { fill: #2a1d14; stroke: #8f5e28; stroke-width: .8; }
@@ -1564,20 +1621,20 @@ body.photo-rec #ph-record i { width: 18px; height: 18px; border-radius: 4px; }
 
 /* 日期開關：一塊舊金的銅板開個小窗，窗裡是青銅字模，刻著今天的日期（cameras.js 的 dateKnob）。
    金板跟燭乙式的快門同一種料、一樣用舊了，只是方的：髮絲橫著拉，細紋一種間距，再疊一層很淡的寬紋；光從左上來，左上、右下兩道斜的亮帶收斂著；
-   四角和邊上積了暗斑，刮痕畫在 SVG 裡。
+   四角和邊上積了暗斑。
    不印時開了細縫的鐵蓋滑下來，縫裡透出暗字；.on 拉開印月日，.on.full 印年月日；.burn 是剛拍下去，小窗燒紅再暗回去 */
 #ph-date {
   position: relative; width: 64px; height: 40px; padding: 0; border-radius: 5px; overflow: hidden;
   border: 1px solid rgba(90, 58, 24, .95);
   background:
-    radial-gradient(ellipse at 6% 90%, rgba(66, 50, 22, .32), transparent 34%),
-    radial-gradient(ellipse at 96% 12%, rgba(66, 50, 22, .24), transparent 30%),
-    radial-gradient(ellipse at 70% 100%, rgba(66, 50, 22, .2), transparent 26%),
-    linear-gradient(118deg, transparent 6%, rgba(255, 238, 205, .2) 20%, transparent 34%, transparent 60%, rgba(255, 238, 205, .12) 76%, transparent 90%),
+    radial-gradient(ellipse at 6% 90%, rgba(66, 50, 22, .26), transparent 34%),
+    radial-gradient(ellipse at 96% 12%, rgba(66, 50, 22, .2), transparent 30%),
+    radial-gradient(ellipse at 70% 100%, rgba(66, 50, 22, .16), transparent 26%),
+    linear-gradient(118deg, transparent 6%, rgba(255, 238, 205, .25) 20%, transparent 34%, transparent 60%, rgba(255, 238, 205, .15) 76%, transparent 90%),
     repeating-linear-gradient(0deg, rgba(255, 238, 205, .07) 0 1px, rgba(60, 36, 10, .08) 1px 2px),
     repeating-linear-gradient(0deg, rgba(255, 238, 205, .04) 0 5px, transparent 5px 11px, rgba(60, 36, 10, .05) 11px 16px, transparent 16px 23px),
-    linear-gradient(180deg, #b88d4d, #a27a3e 45%, #84602e);
-  box-shadow: inset 0 1px 1px rgba(240, 215, 170, .4), inset 0 0 5px rgba(50, 30, 10, .4), inset 0 -2px 3px rgba(50, 30, 10, .5), 0 2px 6px rgba(0, 0, 0, .45);
+    linear-gradient(180deg, #cd9f5b, #ba8d4a 45%, #9c7036);
+  box-shadow: inset 0 1px 1px rgba(245, 222, 180, .48), inset 0 0 5px rgba(50, 30, 10, .34), inset 0 -2px 3px rgba(50, 30, 10, .5), 0 2px 6px rgba(0, 0, 0, .45);
   cursor: var(--cur-pointer); transition: transform .1s;
 }
 #ph-date:active { transform: scale(.92); }

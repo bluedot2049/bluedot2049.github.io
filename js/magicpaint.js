@@ -164,29 +164,21 @@ function paint(seed, pal, aspect) {
   addGrain(ctx, t, 0.06);
   ctx.restore();
 
-  // 2：近層，小塊、細長的條，偶爾一個圈
+  // 2：近層，小塊和粗一點的條
   t = tile(2);
   clipTile(ctx, t, 2);
   for (let k = 0, n = 2 + Math.floor(R() * 4); k < n; k++) {
     const kind = R();
     const c = pick(R, [...pal.blocks, ...pal.glow]);
-    if (kind < 0.6) {
+    if (kind < 0.75) {
       const w = (0.08 + R() * 0.22) * ax * 1.3, h = (0.08 + R() * 0.25) * ay * 1.3;
       const u0 = R() * (1 - w), v0 = R() * (1 - h);
       roughRect(ctx, R, t.x(u0), t.y(v0 + h), t.x(u0 + w), t.y(v0), c, 0.8 + R() * 0.15, 4);
-    } else if (kind < 0.75) {
+    } else {
       const tall = R() < 0.5, len = 0.3 + R() * 0.4, th = 0.03 + R() * 0.04;
       const u0 = 0.05 + R() * 0.8, v0 = 0.05 + R() * (0.9 - len);
       if (tall) roughRect(ctx, R, t.x(u0), t.y(v0 + len), t.x(u0 + th * ax), t.y(v0), c, 0.9, 2);
       else roughRect(ctx, R, t.x(v0), t.y(u0 + th * ay), t.x(v0 + len), t.y(u0), c, 0.9, 2);
-    } else {
-      ctx.strokeStyle = shade(c, 1);
-      ctx.globalAlpha = 0.75;
-      ctx.lineWidth = 3 + R() * 4;
-      ctx.beginPath();
-      ctx.ellipse(t.x(0.2 + R() * 0.6), t.y(0.2 + R() * 0.6), t.s * (0.08 + R() * 0.12) * ax, t.s * (0.08 + R() * 0.12) * ay, 0, R() * 6.28, R() * 6.28 + 4 + R() * 2.2);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
     }
   }
   addGrain(ctx, t, 0.06);
@@ -340,15 +332,17 @@ export function bakeOne(list) {
   return false;
 }
 
-// 每一幀：eye 是看的位置（世界座標，算視差），body 是角色腳下（算有沒有站在畫前），speed 公尺／秒
+// 每一幀：eye 是看的位置（世界座標，算視差），body 是角色腳下（算有沒有站在畫前，null 就不動），speed 公尺／秒，
+// focus 是正在看的那幅（站的位置可能偏到旁邊，一樣算在看）
 const _v = new THREE.Vector3();
-export function updateMagic(list, dt, eye, body, speed) {
+export function updateMagic(list, dt, eye, body, speed, focus = null) {
   for (const p of list) {
     if (!p.texture || !p.mesh) continue;
     p.mesh.worldToLocal(p.u.uEye.value.copy(eye));
+    if (!body) continue;
     p.mesh.worldToLocal(_v.copy(body));
-    const front = _v.z > 0.3 && _v.z < NEAR && Math.abs(_v.x) < p.w / 2 + 0.8;
-    if (front && speed < STILL) p.wake = Math.min(1, p.wake + dt / WAKE);
+    const front = p === focus || (_v.z > 0.3 && _v.z < NEAR && Math.abs(_v.x) < p.w / 2 + 0.8);
+    if (front && (speed < STILL || p === focus)) p.wake = Math.min(1, p.wake + dt / WAKE);
     else if (!front) p.wake = Math.max(p.seen ? FLOOR : 0, p.wake - dt / SLEEP);
     if (p.wake >= 1) p.seen = true;
     p.u.uWake.value = p.wake;
