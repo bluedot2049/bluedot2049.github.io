@@ -2,7 +2,7 @@
 
 > **Target Audience**: AI Agents & Technical Collaborators  
 > **Status**: Design agreed with user 2026-11-01 (see §6). Not implemented yet — do not change runtime code without explicit user instruction.  
-> **Related Files**: [`js/avatar/looks.js`](file:///g:/煉金畫廊/js/looks.js), [`js/main.js`](file:///g:/煉金畫廊/js/main.js), [`js/avatar/creator.js`](file:///g:/煉金畫廊/js/creator.js), [`js/npc/vendors.js`](file:///g:/煉金畫廊/js/vendors.js), [`js/camera/photo.js`](file:///g:/煉金畫廊/js/photo.js)
+> **Related Files**: [`js/avatar/looks.js`](file:///g:/煉金畫廊/js/avatar/looks.js), [`js/main.js`](file:///g:/煉金畫廊/js/main.js), [`js/avatar/creator.js`](file:///g:/煉金畫廊/js/avatar/creator.js), [`js/npc/vendors.js`](file:///g:/煉金畫廊/js/npc/vendors.js), [`js/camera/photo.js`](file:///g:/煉金畫廊/js/camera/photo.js)
 
 ---
 
@@ -86,7 +86,7 @@ Users report losing their character customizations (race, clothes, face painting
    - *Cons*: Degrades if user draws at canvas corners or disables symmetry.
 3. **Option F3: Vector Stroke Encoding (~10-20 chars) [NOT RECOMMENDED]**:
    - Record `[x, y, color, brushSize]` path strokes instead of raster grid.
-   - *Fatal Flaw*: Extremely vulnerable to eraser usage and repetitive stroke sketching (data size explodes on heavy scratchwork). Requires architectural rewrite of [`creator.js`](file:///g:/煉金畫廊/js/creator.js).
+   - *Fatal Flaw*: Extremely vulnerable to eraser usage and repetitive stroke sketching (data size explodes on heavy scratchwork). Requires architectural rewrite of [`creator.js`](file:///g:/煉金畫廊/js/avatar/creator.js).
 
 ---
 
@@ -121,7 +121,7 @@ Users report losing their character customizations (race, clothes, face painting
 1. **Automatic Hash Sync**:
    On mirror customization commit (`Creator:onChange`), silently update `history.replaceState(null, '', '#look=' + code)` without page reload.
 2. **Drawer UI Widget**:
-   Add small buttons inside [`creator.js`](file:///g:/煉金畫廊/js/creator.js) drawer:
+   Add small buttons inside [`creator.js`](file:///g:/煉金畫廊/js/avatar/creator.js) drawer:
    - `[ 📋 複製造型碼 ]`: Copies code / share URL to clipboard.
    - `[ 📥 貼上造型碼 ]`: Prompt / modal input to paste and instantly dress up.
 3. **Storage Self-Healing (Migration)**:
@@ -188,7 +188,7 @@ Messaging apps (LINE, IG, Messenger) recompress images and strip metadata; postc
 | Pixel steganography | yes | broken | mostly broken |
 | **Printed QR / seal** | yes | yes | yes |
 
-- Stamp a vermilion seal in a corner of the postcard; it is a QR code with dot / brush-styled modules (keep enough contrast). Draw it with the house style ([`js/core/glyphs.js`](file:///g:/煉金畫廊/js/glyphs.js) for any surrounding marks).
+- Stamp a vermilion seal in a corner of the postcard; it is a QR code with dot / brush-styled modules (keep enough contrast). Draw it with the house style ([`js/core/glyphs.js`](file:///g:/煉金畫廊/js/core/glyphs.js) for any surrounding marks).
 - The QR content is a full URL (`https://…/#look=…` or `#save=…`), so a phone camera scan opens the site directly.
 - In-site "從明信片讀取": pick an image from the album → decode. Try the JPEG COM segment first (exact, also written), fall back to QR.
 - Decoder: jsQR in `vendor/` (~45 KB min), loaded lazily only when the user opens the reader. `BarcodeDetector` is not available on iOS Safari, so it cannot be the only path.

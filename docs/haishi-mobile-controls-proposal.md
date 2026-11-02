@@ -3,10 +3,10 @@
 > **Target Audience**: AI Agents & Technical Collaborators  
 > **Status**: Design Discussion / Specification Draft (Do NOT apply changes to runtime code without explicit user instruction)  
 > **Related Files**:  
-> - [`js/controls/player.js`](file:///g:/煉金畫廊/js/player.js) (Camera controller, input binding, orbit & desiredCamera)  
-> - [`js/zones/haishi/haishi.js`](file:///g:/煉金畫廊/js/haishi.js) (Terrain heightmap, `camClip`, `camFloor`, solids & collision)  
+> - [`js/controls/player.js`](file:///g:/煉金畫廊/js/controls/player.js) (Camera controller, input binding, orbit & desiredCamera)  
+> - [`js/zones/haishi/haishi.js`](file:///g:/煉金畫廊/js/zones/haishi/haishi.js) (Terrain heightmap, `camClip`, `camFloor`, solids & collision)  
 > - [`js/main.js`](file:///g:/煉金畫廊/js/main.js) (Scene initialization, `overview` state & `zoomTo`)  
-> - [`js/controls/joystick.js`](file:///g:/煉金畫廊/js/joystick.js) (Touch virtual joystick handler)  
+> - [`js/controls/joystick.js`](file:///g:/煉金畫廊/js/controls/joystick.js) (Touch virtual joystick handler)  
 > - [`css/style.css`](file:///g:/煉金畫廊/css/style.css) (Touch controls layout, `#joy`, `#stage`)  
 
 ---
@@ -56,7 +56,7 @@ Investigation of the codebase reveals that this issue is not caused by a single 
 - In Haishi (`haishi.js`), the terrain is a mountain slope (`SEA = 0` to `y = 20+`), layered with tiered stone platforms (`AREAS`), retaining walls (`solids` with `b.ground = true`), and outdoor staircases.
 
 #### B. The 11m Camera Sphere Trap in Portrait Mode
-In [`js/controls/player.js:L13`](file:///g:/煉金畫廊/js/player.js#L13):
+In [`js/controls/player.js:L13`](file:///g:/煉金畫廊/js/controls/player.js#L13):
 ```javascript
 const defaultDist = () => (window.innerWidth < window.innerHeight ? 11 : 8.5);
 ```
@@ -65,7 +65,7 @@ const defaultDist = () => (window.innerWidth < window.innerHeight ? 11 : 8.5);
 - **The Conflict**: Haishi's streets and terraces are typically only `4m` to `8m` wide. Behind the character is almost always an uphill terrace or retaining wall rising 2 to 5 meters. An 11-meter sphere behind the character **inevitably intersects the mountain slope**.
 
 #### C. Instantaneous Snapping in `camClip` & `camFloor`
-In [`js/zones/haishi/haishi.js:L1453-L1460`](file:///g:/煉金畫廊/js/haishi.js#L1453-L1460):
+In [`js/zones/haishi/haishi.js:L1453-L1460`](file:///g:/煉金畫廊/js/zones/haishi/haishi.js#L1453-L1460):
 ```javascript
 function camClip(a, b) {
   const n = Math.ceil(a.distanceTo(b) / 0.3);
@@ -76,7 +76,7 @@ function camClip(a, b) {
   return 1;
 }
 ```
-And in [`js/controls/player.js:L529-L534`](file:///g:/煉金畫廊/js/player.js#L529-L534):
+And in [`js/controls/player.js:L529-L534`](file:///g:/煉金畫廊/js/controls/player.js#L529-L534):
 ```javascript
 if (this.world.camClip) {
   const head = this.headPos.set(this.pos.x, this.pos.y + 1.2, this.pos.z), clip = this.world.camClip(head, outPos);
@@ -126,7 +126,7 @@ if (zg) {
   if (Math.abs(zg.dist - this.camDist) < 0.02 && Math.abs(zg.pitch - this.camPitch) < 0.002) this.zoomGoal = null;
 }
 ```
-- **The Conflict**: In [`js/controls/player.js:L169-L176`](file:///g:/煉金畫廊/js/player.js#L169-L176), `orbit(dx, dy)` modifies `this.camPitch` when the player drags the screen.
+- **The Conflict**: In [`js/controls/player.js:L169-L176`](file:///g:/煉金畫廊/js/controls/player.js#L169-L176), `orbit(dx, dy)` modifies `this.camPitch` when the player drags the screen.
 - **However, `orbit()` DOES NOT set `this.zoomGoal = null`!**
 - Even as the user swipes up/down to tilt their view, the `update()` loop forcefully pulls `camPitch` back towards `0.8` on every single animation frame. The user feels as if the game is actively resisting their finger.
 
@@ -135,7 +135,7 @@ if (zg) {
 ### 2.3 Dimension 3: Lack of Directional Trailing (Auto-Follow)
 
 #### A. Independent Yaw Behavior
-In [`js/controls/player.js:L633-L637`](file:///g:/煉金畫廊/js/player.js#L633-L637):
+In [`js/controls/player.js:L633-L637`](file:///g:/煉金畫廊/js/controls/player.js#L633-L637):
 ```javascript
 let want = null;
 if (this.speed > 0.05) want = Math.atan2(mx, mz);
