@@ -356,15 +356,6 @@ async function start() {
         });
       });
     },
-    onDirector(on) {
-      showDirector(on);
-      directorBtn.classList.remove('clap');
-      void directorBtn.offsetWidth;
-      if (on) directorBtn.classList.add('clap');
-      try { localStorage.setItem('director', on ? '1' : '0'); } catch {}
-      ui.hint(on ? '導演運鏡　鏡頭跟著你走' : '自由鏡頭　視角自己轉', 2000);
-      lastInput = performance.now();
-    },
     // 相機桌：走過去先看身上那台原本的位置，沒帶就從最左邊看起
     onCameras() {
       const mine = carried();
@@ -476,17 +467,8 @@ async function start() {
     ui.hint(next ? `帶著${CAMERAS[next].name}出門。按相機鈕拍照` : '放回桌上了。拍照時又是畫廊的眼睛，可以到處飛', 4000);
     showCams(f.slot);
   });
-  // 導演運鏡：預設打開，記住上次的選擇。轉多快每個區域自己定
-  const directorBtn = document.getElementById('director-btn');
-  function showDirector(on) {
-    directorBtn.classList.toggle('on', on);
-    directorBtn.setAttribute('aria-pressed', on);
-  }
-  try { player.director = localStorage.getItem('director') !== '0'; } catch {}
-  player.directorLag = Z.directorLag;
+  try { localStorage.removeItem('director'); } catch {}   // 導演運鏡拿掉了，舊的開關設定清掉
   player.debug = params.has('debug');
-  showDirector(player.director);
-  directorBtn.addEventListener('click', () => player.toggleDirector());
 
   // 手機操作：搖桿走路，靠近畫作或鏡子時出現按鈕
   if (coarse) document.body.classList.add('touch');

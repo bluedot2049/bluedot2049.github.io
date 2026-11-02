@@ -989,7 +989,6 @@ export function buildOutdoor(room, h) {
     },
     table: { x: tableX, z: Z(tableRel), hw: 0.5, hd: tableLen / 2 },
     pavilion: { x: pc.x, z: pc.z, r: PAV.r },
-    landmark: [treeAt.x, G + 5, treeAt.z],   // 從海市搭船回來時，開場遠景對著大樹的樹冠
     hollow: tree.hollow,                     // 大樹的樹洞：作者和網站消息（hollow.js）
     // 貓頭鷹停的地方：大樹的枝幹、石階口兩根燈串柱、棧橋的燈柱、涼亭頂上的金球。y 是站的高度，h 是面向，w 是停在那裡的機會
     perches: [
@@ -1003,9 +1002,6 @@ export function buildOutdoor(room, h) {
     dock: harbor.dock,
     ferry: harbor.ferry,
     door: z0,
-    // 導演運鏡的鏡位範圍（shots.js）：草原到棧橋盡頭一整塊。從陽台算起 12 公尺內不算：
-    // 越肩的鏡頭很低，退在角色後面會落到比草原高的陽台上，被陽台邊擋住；那一段用原本的跟拍，從陽台上方看出去
-    camAreas: [{ id: 'meadow', x0: -MEADOW.rx, x1: MEADOW.rx, z0: Z(JETTY.end), z1: Z(TD + 12), y: G }],
     // 室內 0、走出後門 1，主程式用來切換光線和霧
     outdoorness: (z) => smooth(z0 + 3, z0 - 2, z),
     inMeadow: (z) => z0 - z > TD + SD * 0.6,

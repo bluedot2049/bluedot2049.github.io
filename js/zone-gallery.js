@@ -8,14 +8,11 @@ import { Manatee, TABLE_LINES } from './manatee.js';
 import { Animals } from './animals.js';
 import { Visitors } from './visitors.js';
 import { HORIZON, SUN_DIR } from './outdoor.js';
-import { buildShots } from './shots.js';
 import { StudyNight } from './study.js';
 
 // 背景音樂「星盤夜讀」（study.js，現場合成）：走進「歡迎光臨煉金畫廊」那間才開始放，往後的房間和戶外一路放著。
 // 那間一進門就是落地擺鐘，滴答聲從那裡來
 export const bgm = { src: StudyNight, from: '02-nigredo' };
-// 導演運鏡：房間小，轉得慢一點
-export const directorLag = 1.6;
 
 export function build(scene, { gallery }) {
   return buildWorld(scene, gallery);
@@ -49,31 +46,17 @@ export function crowd({ scene, world, shadowTex, player, camera, ambience, host,
   return { animals, visitors };
 }
 
-// 從海市搭船回來：站在小划船往草原走幾步的地方，面向草原。
-// 鏡頭退到棧橋尾端的海面上、貼著水面低低地看：角色在左下，大樹在右上，小屋在大樹後面遠遠的
-// 角色沿棧橋往草原走，鏡頭照走過的距離換到跟拍（跟海市開場同一套，見 player.startIntro）
+// 從海市搭船回來：站在小划船往草原走幾步的地方，面向草原，鏡頭就在角色背後
 // ?go=房間.畫 是在海市點了清單裡的畫，到了直接站到那幅畫前面
 export function arrive({ player, world, params, ui }) {
-  if (world.outdoor) player.shots = buildShots(world.outdoor.camAreas);
   const ferry = world.exits[0];
   if (params.get('from') === 'haishi' && ferry) {
     player.place(ferry.x, ferry.z + 1.8, 0);
-    const tree = world.outdoor.landmark;
-    player.startIntro({
-      wide: { dist: 10, at: { x: -0.42, y: -0.5 }, mark: tree, markAt: { x: 0.3, y: 0.15 } },
-      tall: { dist: 13, at: { x: -0.1, y: -0.45 }, mark: tree, markAt: { x: 0.12, y: 0.2 } },
-    });
     world.frontDoor?.shut(0, true);
   } else if (world.frontDoor) {
-    // 一般進來：剛跨過前門站在腳踏墊上，腳下是門口灑進來的光。鏡頭在門那面牆外的斜上方往房間裡看（牆自己降下來），
-    // 鏡子、相機桌、往下一間的門洞、門邊的問號立牌都在畫面裡，一進來就知道要往哪走；
-    // 載入畫面收掉以後門在背後闔上（main.js）。角色開始走，鏡頭照走過的距離換回跟拍
-    const d = world.frontDoor, h = d.spawn.heading + Math.PI;
+    // 一般進來：剛跨過前門站在腳踏墊上，腳下是門口灑進來的光，鏡頭在角色背後。載入畫面收掉以後門在背後闔上（main.js）
+    const d = world.frontDoor;
     player.place(d.spawn.x, d.spawn.z, d.spawn.heading);
-    player.startIntro({
-      wide: { dist: 7, at: { x: -0.25, y: -0.3 }, yaw: h, pitch: 0.7 },
-      tall: { dist: 11, at: { x: 0, y: -0.4 }, yaw: h, pitch: 0.95 },
-    });
   }
   const go = params.get('go')?.split('.').map(Number);
   if (go) ui.onGoTo(go[0], go[1]);

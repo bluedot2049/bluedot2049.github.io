@@ -547,14 +547,6 @@ body.photo #photo-btn .x { display: block; }
 @media (hover: hover) {
   #photo-btn:hover { color: #3a2410; --sheen: 18deg; }
 }
-/* 導演運鏡：打開時金框金字、場記板合上；關掉時淡色虛線框、板子張開。不填滿金色，整排只留相機按鈕是金片 */
-#director-btn .stick { transform-box: view-box; transform-origin: 4.5px 10.5px; transform: rotate(-14deg); transition: transform .25s cubic-bezier(.5, 0, .7, 1.4); }
-#director-btn:not(.on) { color: var(--muted); border-style: dashed; }
-#director-btn.on { color: var(--gold-hi); background: rgba(232, 184, 106, .14); border-color: var(--gold); }
-#director-btn.on .stick { transform: rotate(9deg); }
-#director-btn.on .board { fill: rgba(246, 219, 166, .16); }
-#director-btn.clap { animation: clap .35s ease-out; }
-@keyframes clap { 40% { transform: scale(1.12); } }
 #sound-btn.muted .off { display: block; }
 #sound-btn.muted { color: var(--muted); }
 
