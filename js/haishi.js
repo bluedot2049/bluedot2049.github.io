@@ -2478,7 +2478,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   const VR = rng('haishi-ships'), seaAt = (x, z) => z > 34 || terrain(x, z) < SEA - 0.3;
   const lanes = [];
   for (let i = 0; i < (coarse ? 10 : 16); i++) {
-    const odd = i === 0, z = odd ? 236 : 190 + VR() * 58, xa = -220, xb = 220;
+    const odd = i === 0, z = odd ? 226 : 172 + VR() * 60, xa = -220, xb = 220;
     const v = (odd ? 6 : 1.2 + VR() * 1.4) * (VR() < 0.5 ? -1 : 1), run = (xb - xa) / Math.abs(v);
     const ok = SHIP_PERIODS.filter((p) => p >= run * (odd ? 1 : 1.5));
     const period = odd ? 3600 : ok[Math.floor(VR() * Math.min(3, ok.length))] ?? 3600;
@@ -2489,7 +2489,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   const grounds = [];
   for (let i = 0; i < 6; i++) grounds.push({ x: (VR() - 0.5) * 260, z: 60 + VR() * 170, s: 12 + VR() * 30 });
   const fishers = [], orange = new THREE.Color('#ff9a50'), pale = new THREE.Color('#ffe6c4'), white = new THREE.Color('#dfe8ff');
-  for (let tries = 0; fishers.length < (coarse ? 70 : 130) && tries < 3000; tries++) {
+  for (let tries = 0; fishers.length < (coarse ? 58 : 108) && tries < 3000; tries++) {
     let x = (VR() - 0.5) * 360, z = 48 + VR() * 200;
     if (VR() < 0.7) {
       const g = grounds[Math.floor(VR() * grounds.length)];
