@@ -432,60 +432,50 @@ function starField(n) {
 
 // 殿裡的水鏡：一池黑水，倒映天井那一塊天。不用反射相機（那等於整座海市每一幀多畫一次），水自己算：
 // 視線照水面反射上去，穿得過天井的那幾條看到天，其他都落在屋頂底下的暗處。
-// 天井只看得到頭頂三十幾度以內的天，所以載入時把天上真的星星裡、頭頂那一圈的畫成一張小圖，
+// 天井只看得到頭頂三十幾度以內的天，所以載入時把天上真的星星裡、頭頂那一圈的記成一張小圖，
 // 水裡的星跟從天井抬頭看到的是同一批。一次繪製，只算池子佔到的那些像素；離得遠就整池退成黑水
 const CAP = 0.62;   // 小圖涵蓋頭頂多少弧度：天井最斜看得到約 0.55，水面晃動再留一點
+// 小圖不畫光斑（池子把那一小塊天放大七八倍，光斑會糊成一團），一格只記一顆星：
+// 第一張是星在格子裡的位置、亮度、閃的相位，第二張是顏色和像素大小。水裡照像素畫點，放多大都是細細一顆
 function starCap(field, lists, size) {
-  const acc = new Float32Array(size * size * 3), phase = new Uint8Array(size * size), k0 = size / 512, c = new THREE.Color();
-  // 一顆星：照方向投到小圖上（以天頂為中心、離天頂的角度當半徑），畫一團柔邊的點。閃的相位記在 alpha
-  const dot = (dx, dy, dz, b, rad, ph) => {
+  const A = new Uint8Array(size * size * 4), B = new Uint8Array(size * size * 4), c = new THREE.Color();
+  // 一顆星：照方向投到小圖上（以天頂為中心、離天頂的角度當半徑），記進它落的那一格。同一格撞到兩顆，留亮的
+  const put = (dx, dy, dz, b, px, ph) => {
     const len = Math.hypot(dx, dy, dz), th = Math.acos(Math.min(1, dy / len)), h = Math.hypot(dx, dz) || 1;
     if (th > CAP + 0.04) return;
-    const u = (0.5 + (0.5 * th * dx) / (CAP * h)) * size, v = (0.5 + (0.5 * th * dz) / (CAP * h)) * size, rr = rad * k0, n = Math.ceil(rr * 2);
-    for (let j = Math.floor(v) - n; j <= Math.floor(v) + n; j++) for (let i = Math.floor(u) - n; i <= Math.floor(u) + n; i++) {
-      if (i < 0 || j < 0 || i >= size || j >= size) continue;
-      const d2 = ((i + 0.5 - u) ** 2 + (j + 0.5 - v) ** 2) / (rr * rr);
-      if (d2 > 4) continue;
-      const w = Math.exp(-d2 * 1.5) * b, q = j * size + i;
-      acc[q * 3] += c.r * w; acc[q * 3 + 1] += c.g * w; acc[q * 3 + 2] += c.b * w;
-      if (w > 0.15) phase[q] = ph;
-    }
+    const u = (0.5 + (0.5 * th * dx) / (CAP * h)) * size, v = (0.5 + (0.5 * th * dz) / (CAP * h)) * size, i = Math.floor(u), j = Math.floor(v);
+    if (i < 0 || j < 0 || i >= size || j >= size) return;
+    const q = (j * size + i) * 4, bb = Math.max(1, Math.min(255, (b / 3) * 255));
+    if (bb <= A[q + 2]) return;
+    A.set([(u - i) * 255, (v - j) * 255, bb, ((ph % 256) + 256) % 256], q);
+    B.set([c.r * 255, c.g * 255, c.b * 255, Math.min(255, (px / 4) * 255)], q);
   };
-  // 滿天的小星：亮度、大小、閃的快慢照 starField 的算法
+  // 滿天的小星：亮度、大小照 starField 的算法
   const pos = field.geometry.attributes.position, col = field.geometry.attributes.aColor, mag = field.geometry.attributes.aMag;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i), m = mag.getX(i);
     c.setRGB(col.getX(i), col.getY(i), col.getZ(i));
-    dot(x, pos.getY(i), z, 0.38 + 0.62 * m, 0.35 + m * 0.45, ((((x * 0.37 + z * 0.21) / (Math.PI * 2)) % 1) + 1) % 1 * 255);
+    put(x, pos.getY(i), z, 0.38 + 0.62 * m, 0.7 + m * 1.1, ((((x * 0.37 + z * 0.21) / (Math.PI * 2)) % 1) + 1) % 1 * 255);
   }
-  // 亮星、暗一點的那層、一般的光點星：顏色照它們自己的，亮度照 gain
+  // 亮星、暗一點的那層、一般的光點星：顏色照它們自己的，亮度照 gain，大的帶一圈光
   for (const s of lists) {
     c.set(s.color);
-    dot(s.x, s.y, s.z, s.gain ?? 0.6, 0.5 + Math.min(1.1, s.size / 24), (s.x * 7.31 + s.z * 3.17) % 255);
+    put(s.x, s.y, s.z, s.gain ?? 0.6, 0.8 + Math.min(2.2, s.size / 12), s.x * 7.31 + s.z * 3.17);
   }
-  // 舊光：水裡多一層天上已經看不到的淡星，偏冷，密密的一片。自己一串亂數，天上的星不會換位置
-  const OR = rng('haishi-mirror-old-light');
-  for (let i = 0; i < 1600; i++) {
-    const th = Math.sqrt(OR()) * CAP, a = OR() * Math.PI * 2, m = Math.pow(OR(), 2);
-    c.setHSL(0.6 + OR() * 0.05, 0.3, 0.8);
-    dot(Math.sin(th) * Math.cos(a), Math.cos(th), Math.sin(th) * Math.sin(a), 0.18 + 0.4 * m, 0.3 + m * 0.3, OR() * 255);
-  }
-  const data = new Uint8Array(size * size * 4);
-  for (let q = 0; q < size * size; q++) {
-    for (let ch = 0; ch < 3; ch++) data[q * 4 + ch] = Math.min(255, acc[q * 3 + ch] * 255);
-    data[q * 4 + 3] = Math.abs(phase[q]) % 256;
-  }
-  const t = new THREE.DataTexture(data, size, size);
-  t.magFilter = t.minFilter = THREE.LinearFilter;
-  t.needsUpdate = true;
-  return t;
+  return [A, B].map((d) => {
+    const t = new THREE.DataTexture(d, size, size);
+    t.magFilter = t.minFilter = THREE.NearestFilter;
+    t.needsUpdate = true;
+    return t;
+  });
 }
 // o：池子中心 x、y（水面）、z，半徑 r；天井開口的高度 ocY、半徑 ocR。dome、field：天空球和星點，共用它們的參數
 function waterMirror(o, dome, field, lists, size) {
+  const [capA, capB] = starCap(field, lists, size);
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       ...dome.material.uniforms,
-      uCap: { value: starCap(field, lists, size) }, uFade: field.material.uniforms.uFade, uTime,
+      uCapA: { value: capA }, uCapB: { value: capB }, uFade: field.material.uniforms.uFade, uPr: field.material.uniforms.uPr, uTime,
       uC: { value: new THREE.Vector3(o.x, o.y, o.z) }, uR: { value: o.r }, uOcY: { value: o.ocY }, uOcR: { value: o.ocR },
       uRoof: { value: new THREE.Vector3(0.045, 0.06, 0.085) },   // 輸出的顏色直接用，不經過色彩空間轉換；暗藍不用純黑
     },
@@ -498,9 +488,44 @@ function waterMirror(o, dome, field, lists, size) {
       }`,
     fragmentShader: GRADE_GLSL + SKY_EDGE_GLSL + `
       uniform vec3 uLow; uniform vec3 uTop; uniform vec3 uBand; uniform vec3 uMilk; uniform float uStars; uniform float uDeep;
-      uniform sampler2D uCap; uniform float uFade; uniform float uTime;
+      uniform sampler2D uCapA; uniform sampler2D uCapB; uniform float uFade; uniform float uPr; uniform float uTime;
       uniform vec3 uC; uniform float uR; uniform float uOcY; uniform float uOcR; uniform vec3 uRoof;
       varying vec3 vW;
+      vec3 hash3(vec2 p) {
+        vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+        q += dot(q, q.yxz + 33.33);
+        return fract((q.xxy + q.yzz) * q.zyx);
+      }
+      // 真的星：g 是小圖上的格子座標，fw 是一個像素跨幾格。查附近九格，照像素畫點；大顆的多一圈光，光圈不出一格
+      vec3 capStars(vec2 g, float fw) {
+        vec3 acc = vec3(0.0);
+        vec2 id = floor(g);
+        for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+          vec2 c = id + vec2(i, j);
+          vec4 a = texture2D(uCapA, (c + 0.5) / ${size}.0);
+          if (a.b == 0.0) continue;
+          vec4 b = texture2D(uCapB, (c + 0.5) / ${size}.0);
+          float dc = length(g - c - a.rg), r = dc / fw, s = b.a * 4.0 * uPr;
+          float k = exp(-r * r / (s * s)) + 0.25 * smoothstep(1.4, 2.6, b.a * 4.0) * exp(-r / (s * 1.6)) * smoothstep(1.0, 0.5, dc);
+          acc += b.rgb * a.b * 3.0 * k * (0.7 + 0.3 * sin(uTime * 2.2 + a.a * 6.2832));
+        }
+        return acc;
+      }
+      // 舊光：天上已經看不到的淡星，沉在水底下不同深度。u 是那一層的格子座標，一格最多一顆；
+      // px 是星點的像素大小（淺的那層對不到焦，糊成軟軟的一點），一個像素塞好幾格的時候就淡掉，不閃成雜訊
+      vec3 oldLight(vec2 u, float fw, float px, float occ, float seed, vec3 tint) {
+        vec3 acc = vec3(0.0);
+        vec2 id = floor(u), f = u - id;
+        for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+          vec2 c = id + vec2(i, j);
+          vec3 h = hash3(c + seed);
+          if (h.z > occ) continue;
+          vec3 e = hash3(c.yx * 1.7 + seed + 7.0);
+          float m = e.x * e.x * e.x, r = length(f - vec2(i, j) - (0.1 + 0.8 * h.xy)) / fw, s = px * (0.7 + 0.9 * m) * uPr;
+          acc += mix(tint, vec3(1.0, 0.94, 0.86), e.z * e.z * 0.5) * (0.25 + 0.75 * m) * exp(-r * r / (s * s)) * (0.75 + 0.25 * sin(uTime * (0.4 + e.y) + e.y * 40.0));
+        }
+        return acc * smoothstep(0.7, 0.25, fw);
+      }
       void main() {
         vec2 p = vW.xz - uC.xz;
         // 水面輕輕晃；每隔七秒天井滴下一滴，一圈漣漪從落點散開、慢慢平下去
@@ -515,6 +540,12 @@ function waterMirror(o, dome, field, lists, size) {
         // 還是會跟著走動的角度慢慢移；四周照收攏後的線落在天井那一層的位置，越外面越暗，框成一圈
         d = normalize(vec3(d.x * 0.3, max(d.y, 0.05), d.z * 0.3));
         float open = smoothstep(uOcR * 2.4, uOcR * 1.2, length(vW.xz + d.xz * ((uOcY - vW.y) / d.y) - uC.xz));
+        // 星點照像素畫，要先知道一個像素在各層跨多少（導數放在分支外面算）。
+        // 真的星在無限遠，只跟視線走；舊光那幾層的座標是 p / 深度 + 視線，越淺越黏著水面，走動時一層一層錯開
+        float th = acos(clamp(d.y, -1.0, 1.0));
+        vec2 g = (0.5 + 0.5 * (th / ${CAP.toFixed(2)}) * d.xz / max(length(d.xz), 0.0001)) * ${size}.0, T = d.xz / d.y;
+        float fwG = max(length(dFdx(g)), length(dFdy(g)));
+        vec2 px = dFdx(p), py = dFdy(p), tx = dFdx(T), ty = dFdy(T);
         vec3 col = uRoof;
         if (open > 0.0) {
           // 天的顏色跟天空球同一段算法
@@ -528,10 +559,14 @@ function waterMirror(o, dome, field, lists, size) {
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
           vec3 sky = gradeCurvesOut(gl_FragColor.rgb);
-          // 星星跟天上的星點一樣直接疊上去，不過曲線
-          float th = acos(clamp(d.y, -1.0, 1.0));
-          vec4 s = texture2D(uCap, 0.5 + 0.5 * (th / ${CAP.toFixed(2)}) * d.xz / max(length(d.xz), 0.0001));
-          sky += s.rgb * 1.5 * (0.7 + 0.3 * sin(uTime * 2.2 + s.a * 6.2832)) * uFade;
+          // 星星跟天上的星點一樣直接疊上去，不過曲線。舊光四層（手機三層，最深的星塵不畫）：越深越密、越小、越冷
+          vec3 st = capStars(g, fwG) * 1.4;
+          #define LAYER(D, K, PX, OCC, SEED, TINT, GAIN) st += GAIN * oldLight((p / D + T) * K + SEED, K * max(length(px / D + tx), length(py / D + ty)), PX, OCC, SEED, TINT);
+          LAYER(0.9, 2.4, 2.6, 0.35, 17.0, vec3(0.80, 0.84, 0.90), 0.3)
+          LAYER(2.6, 9.0, 1.2, 0.5, 41.0, vec3(0.72, 0.80, 0.92), 0.6)
+          LAYER(8.0, 28.0, 0.8, 0.7, 83.0, vec3(0.60, 0.72, 0.95), 0.55)
+          ${size < 512 ? '' : 'LAYER(20.0, 70.0, 0.6, 0.8, 131.0, vec3(0.55, 0.68, 0.95), 0.4)'}
+          sky += st * uFade;
           col = mix(uRoof, sky * 0.85, open);
         }
         // 靠石沿那一圈暗一點；離得遠整池退成黑水
@@ -2452,7 +2487,9 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   // 底下的小島不是另外一塊：靠塔腳是塔的暗色，往外漸漸變成海的顏色，跟海面用同一套著色，塔像是從海裡長出來的
   const far = new THREE.Group();
   far.position.set(-90, SEA, 260);
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.4, 22, 8), new THREE.MeshBasicMaterial({ color: '#10141f' }));
+  // 塔身也走海面那一段霧：腳下的海混成天色的時候塔一起退掉，從高處遠遠看才不會一根柱子插在天上
+  const shaftMat = new THREE.MeshBasicMaterial({ color: '#10141f' });
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.4, 22, 8), shaftMat);
   shaft.position.y = 11;
   far.add(shaft);
   const isleGeo = new THREE.SphereGeometry(9, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), ip = isleGeo.attributes.position;
@@ -2464,11 +2501,14 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   const isleMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   isleMat.onBeforeCompile = seaShade;
   isleMat.customProgramCacheKey = () => 'haishi-sea';
+  shaftMat.onBeforeCompile = seaShade;
+  shaftMat.customProgramCacheKey = () => 'haishi-sea-tower';
   const isle = new THREE.Mesh(isleGeo, isleMat);
   // 壓得很扁：高出海平線的部分背後是天，不是海，再高就又是一塊
   isle.scale.y = 0.12;
   far.add(isle);
   const towerGlow = glowPoints([{ x: 0, y: 24, z: 0, color: '#bcd8ff', size: 30 }], { sky: true }), towerSize = towerGlow.geometry.attributes.aSize;
+  const towerColor = towerGlow.geometry.attributes.aColor, TOWER_RGB = new THREE.Color('#bcd8ff');
   far.add(towerGlow);
   group.add(far);
 
@@ -2667,6 +2707,10 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       for (const f of harborFx) f(now, dt);
       towerSize.setX(0, 30 * (1 + 1.5 * bump(towerPhase(now), 0.52, 0.07)));
       towerSize.needsUpdate = true;
+      // 塔頂的燈跟塔身一起退：照離塔多遠，用跟海平線霧帶一樣的起點
+      const towerK = 1 - smooth(seaFog.uSeaBandFrom.value, 398, Math.hypot(cam.x - far.position.x, cam.z - far.position.z));
+      towerColor.setXYZ(0, TOWER_RGB.r * towerK, TOWER_RGB.g * towerK, TOWER_RGB.b * towerK);
+      towerColor.needsUpdate = true;
     },
   };
 }

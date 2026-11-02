@@ -136,7 +136,7 @@ export function meteor(uFade) {
 }
 
 // ---------- 海上的船 ----------
-// 遠遠的只看得到燈，船身融在夜色裡；每盞大一點的燈底下拖一條抖動的倒影。
+// 遠遠的只看得到燈，船身融在夜色裡。
 // 位置照真實時間算：uClock 是 Date.now() 在一天裡走到第幾秒，所有玩家同一刻看到的是同一艘船（閃爍各自照 uTime）。
 // 每種週期都能整除一天，所有慢慢的擺動也都是一天轉整數圈，午夜歸零時船不會跳。JS 每一幀只要更新 uClock
 export const uClock = { value: 0 };
@@ -144,7 +144,7 @@ export const tickClock = (now) => { uClock.value = now % 86400; };
 export const SHIP_PERIODS = [600, 720, 900, 1200, 1440, 1800, 2400, 2700, 3600];
 
 const LAMP = '#ff9a50', WINDOW = '#ffb468', MAST = '#ffe2b8', ODD = '#7fe8ff';
-// 船上的燈：[沿著船身往船頭幾公尺, 離水面多高, 顏色, 大小, 亮度, 像不像星星]。大小 0.8 以上的燈才有倒影；
+// 船上的燈：[沿著船身往船頭幾公尺, 離水面多高, 顏色, 大小, 亮度, 像不像星星]。
 // 只有桅頂那一盞像星星，其他是燈籠和艙窗。桅頂不能太高：船身是黑的看不到，燈離其他燈太遠就像飄在天上
 const HULLS = [
   // 大貨船：一排艙窗，船頭船尾各一盞燈籠，主桅頂一盞
@@ -169,39 +169,26 @@ const STAR_GLSL = `
   }
   vec3 starGlow(vec2 q, vec3 c) { return starGlow(q, c, 1.0); }`;
 
-// 燈和倒影共用的後半段：前面的 motion 算出這盞燈在哪（p）、亮多少（a）、雜湊種子（seed）
+// 燈的後半段：前面的 motion 算出這盞燈在哪（p）、亮多少（a）、雜湊種子（seed）。遠處的燈不做倒影
 const LIGHT_VERT = `
-    if (aLamp.y > 0.5) p.y = uSea;
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     float d = length(mv.xyz);
-    // 往鏡頭拉近三公尺，畫面上的位置不變：遠處深度不夠準，倒影會跟海面打架
+    // 往鏡頭拉近三公尺，畫面上的位置不變：遠處深度不夠準，貼著水面的燈會跟海面打架
     mv.xyz *= max(0.1, d - 3.0) / d;
     // 相機只看得到四百公尺，再遠海面就被切掉了，燈會浮在天上：快到之前先淡掉。
     // 中間隔著海上的濕氣：越遠越暗、越灰、往藍偏，小燈先沒進霧裡，遠處就不會一片都是同樣清楚的點
     float haze = smoothstep(80.0, 360.0, d);
     a *= (1.0 - smoothstep(365.0, 392.0, d)) * mix(1.0, 0.32, haze) * mix(1.0, smoothstep(0.35, 0.9, aLamp.x), haze * 0.7);
     a *= 0.88 + 0.12 * sin(uTime * (4.0 + seed) + seed * 7.0);
-    vS = seed;
-    vStar = aLamp.z;
+    vStar = aLamp.y;
     // 每盞燈飽和度不同：有的燒得正橘，有的淡得近乎白；遠的再被霧洗掉一些
     float sat = 1.0 - 0.5 * pow(hash(seed * 3.7 + aLocal.x), 2.0) - 0.22 * haze;
     // 光暈只給亮的燈：本身的亮度（顏色裡乘過的 gain）和大小一起算，遠的再打折。大概是漁火裡最亮的兩成、大船的燈籠稍微一點
     vG = smoothstep(0.9, 1.3, max(aColor.r, max(aColor.g, aColor.b)) * sqrt(aLamp.x) * mix(1.0, 0.75, smoothstep(120.0, 380.0, d)));
-    if (aLamp.y < 0.5) {
-      // 燈：遠處縮到幾個像素就不再縮，小燈暗一點。漁火的光暈比較開，點要放大一點才放得下
-      vC = aColor * a * min(1.0, 0.45 + aLamp.x * 0.5);
-      vC = mix(vec3(dot(vC, vec3(0.3, 0.55, 0.15))) * vec3(0.93, 0.97, 1.06), vC, sat);
-      gl_PointSize = a > 0.003 ? max(aLamp.x * 4.0 * uScale / d, (3.0 + 3.5 * aLamp.x) * uPr) * (1.0 + 0.8 * aLamp.z) : 0.0;
-    } else {
-      // 倒影：浪把燈拉成一條，近的長、遠的短。遠處也留一小截淡淡的，燈才是落在水上，不是掛在天上
-      a *= mix(1.0, 0.75, smoothstep(60.0, 200.0, d));
-      float len = clamp(uScale * 8.0 / pow(d, 0.7), 10.0 * uPr, 64.0 * uPr) * sqrt(aLamp.x);
-      vC = aColor * a;
-      vC = mix(vec3(dot(vC, vec3(0.3, 0.55, 0.15))) * vec3(0.93, 0.97, 1.06), vC, sat);
-      vL = 2.0 * len;
-      vW = (1.0 + 0.6 * aLamp.x) * uPr / vL;
-      gl_PointSize = a > 0.003 ? vL : 0.0;
-    }
+    // 遠處縮到幾個像素就不再縮，小燈暗一點。漁火的光暈比較開，點要放大一點才放得下
+    vC = aColor * a * min(1.0, 0.45 + aLamp.x * 0.5);
+    vC = mix(vec3(dot(vC, vec3(0.3, 0.55, 0.15))) * vec3(0.93, 0.97, 1.06), vC, sat);
+    gl_PointSize = a > 0.003 ? max(aLamp.x * 4.0 * uScale / d, (3.0 + 3.5 * aLamp.x) * uPr) * (1.0 + 0.8 * aLamp.y) : 0.0;
     gl_Position = projectionMatrix * mv;
   }`;
 
@@ -210,57 +197,43 @@ function seaLightMaterial(motion, uFade, sea) {
     uniforms: { uTime, uClock, uFade, uSea: { value: sea }, uScale: { value: 150 * PR() }, uPr: { value: PR() } },
     vertexShader: `
       uniform float uTime; uniform float uClock; uniform float uFade; uniform float uSea; uniform float uScale; uniform float uPr;
-      attribute vec3 aColor; attribute vec3 aLamp; attribute vec4 aA; attribute vec4 aB; attribute vec2 aLocal;
-      varying vec3 vC; varying float vS; varying float vL; varying float vW; varying float vStar; varying float vG;
+      attribute vec3 aColor; attribute vec2 aLamp; attribute vec4 aA; attribute vec4 aB; attribute vec2 aLocal;
+      varying vec3 vC; varying float vStar; varying float vG;
       const float DAY = 6.2831853 / 86400.0;
       float hash(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
       void main() {
-        vL = 0.0; vW = 0.0;
         ${motion}
         ${LIGHT_VERT}`,
     fragmentShader: STAR_GLSL + `
-      uniform float uTime;
-      varying vec3 vC; varying float vS; varying float vL; varying float vW; varying float vStar; varying float vG;
+      varying vec3 vC; varying float vStar; varying float vG;
       void main() {
         vec2 q = gl_PointCoord - 0.5;
-        if (vL == 0.0) {
-          if (vStar > 0.5) {
-            gl_FragColor = vec4(starGlow(q, vC, vG), 1.0);
-            return;
-          }
-          // 中間一顆亮點，亮的燈外面一圈淡淡的光暈
-          float r = length(q) * 2.0;
-          float core = 1.0 - smoothstep(0.2, 0.45, r), halo = pow(max(0.0, 1.0 - r), 2.0) * 0.8 * vG;
-          gl_FragColor = vec4(vC * (core * 1.8 + halo), 1.0);
+        if (vStar > 0.5) {
+          gl_FragColor = vec4(starGlow(q, vC, vG), 1.0);
           return;
         }
-        // 倒影只畫在下半張：上緣是燈正下方的水面，往下越來越淡，一段一段斷開、左右輕輕扭
-        float y = q.y * 2.0;
-        if (y < 0.0) discard;
-        float yp = q.y * vL;
-        float x = q.x + sin(yp * 0.35 + uTime * 2.3 + vS) * vW * 0.8;
-        float bar = 1.0 - smoothstep(vW * 0.5, vW * 1.5, abs(x));
-        float wave = (0.5 + 0.5 * sin(yp * 0.9 - uTime * 2.0 + vS * 3.0)) * (0.5 + 0.5 * sin(yp * 0.37 + uTime * 1.3 + vS));
-        float a = bar * (0.3 + 0.7 * wave) * pow(1.0 - y, 1.5);
-        gl_FragColor = vec4(vC * a, 1.0);
+        // 中間一顆亮點，亮的燈外面一圈淡淡的光暈
+        float r = length(q) * 2.0;
+        float core = 1.0 - smoothstep(0.2, 0.45, r), halo = pow(max(0.0, 1.0 - r), 2.0) * 0.8 * vG;
+        gl_FragColor = vec4(vC * (core * 1.8 + halo), 1.0);
       }`,
     transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending,
   });
 }
 
-// 每盞燈一個點，大一點的燈多一個倒影點；ship 的 a、b 兩組數字交給 motion 去用
+// 每盞燈一個點；ship 的 a、b 兩組數字交給 motion 去用
 function seaLights(ships, hullOf, motion, uFade, sea, starAll = false) {
   const c = new THREE.Color(), rows = [];
   for (const s of ships) {
     for (const [u, h, color, size, gain = 1, star = starAll] of hullOf(s)) {
       c.set(color).multiplyScalar(gain);
-      for (const kind of size >= 0.8 ? [0, 1] : [0]) rows.push({ s, u, h, rgb: c.toArray(), size, kind, star: star ? 1 : 0 });
+      rows.push({ s, u, h, rgb: c.toArray(), size, star: star ? 1 : 0 });
     }
   }
   return points([
     ['position', 3, rows.flatMap(() => [0, 0, 0])],
     ['aColor', 3, rows.flatMap((r) => r.rgb)],
-    ['aLamp', 3, rows.flatMap((r) => [r.size, r.kind, r.star])],
+    ['aLamp', 2, rows.flatMap((r) => [r.size, r.star])],
     ['aA', 4, rows.flatMap((r) => r.s.a)],
     ['aB', 4, rows.flatMap((r) => r.s.b)],
     ['aLocal', 2, rows.flatMap((r) => [r.u, r.h])],
