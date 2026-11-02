@@ -143,6 +143,11 @@ body.flat #stage::after { display: none; }
   background: radial-gradient(circle at 50% 50%, #fff3dc, #ffd9a8 45%, #f4b984);
   transition: opacity .7s .75s;
 }
+/* 歸門（homedoor.js）：走進門裡的光，畫面整片是屋裡的燈色，換頁後到了前廳再退掉。門和字都不畫 */
+#loading.doorway:not(.plain):not(.crossing) { background: radial-gradient(circle at 50% 50%, #fff3dc, #ffd9a8 45%, #f4b984); }
+#loading.doorway:not(.plain):not(.crossing) > * { display: none; }
+#loading.doorway.leaving { animation: doorway .9s cubic-bezier(.5, 0, .3, 1) both; }
+@keyframes doorway { from { opacity: 0; } to { opacity: 1; } }
 /* 推門：告示和字標先收掉，門閂一響門先推開一點、頓一下再整個打開，同時往門口走近，屋裡的光鋪滿畫面 */
 #loading.opening .flood { opacity: 1; }
 .porch { transform-origin: 50% 62%; transition: transform 1.7s cubic-bezier(.5, 0, .2, 1) .15s; }
@@ -593,7 +598,10 @@ body.photo #photo-btn .x { display: block; }
   position: fixed; z-index: 20;
   display: flex; flex-direction: column-reverse; align-items: flex-start; gap: 8px;
   transition: opacity .3s;
+  /* 收起來的那排還佔著位置，容器本身不接觸控，不然手機左邊一整條拖不動鏡頭 */
+  pointer-events: none;
 }
+#emote-btn { pointer-events: auto; }
 #emote.open #emote-btn { border-color: var(--gold); color: var(--gold-hi); }
 #emote-bar {
   display: flex; flex-direction: column-reverse; gap: 6px;
@@ -703,7 +711,7 @@ body.sitting #sit-btn {
 #action-btn .a1 { font-size: 18px; letter-spacing: .3em; padding-left: .3em; font-weight: 600; }
 #action-btn .a2 { font-size: 11px; letter-spacing: .05em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .72; }
 #action-btn .a2:empty { display: none; }
-body.panel-open #joy, body.panel-open #action-btn, body.panel-open #emote, body.panel-open #swap-btn,
+body.panel-open #joy, body.panel-open #action-btn, body.panel-open #emote, body.panel-open #emote-btn, body.panel-open #swap-btn,
 body.panel-open:not(.desk) #photo-btn, body.panel-open:not(.desk) #say-btn { opacity: 0; pointer-events: none; }
 /* 坐著看風景時，其他按鈕退到背景，但還是按得到。相機不淡，坐著也常拍 */
 body.sitting #joy, body.sitting #jump-btn, body.sitting #emote, body.sitting #top-btns, body.sitting #swap-btn, body.sitting:not(.desk) #say-btn { opacity: .3; }
@@ -1861,7 +1869,7 @@ body.desk #chat { bottom: calc(84px + env(safe-area-inset-bottom)); }
 .chat-row .btn { min-height: 40px; padding: 0 16px; letter-spacing: .14em; }
 .chat-row .icon-btn { width: 40px; min-width: 40px; height: 40px; box-shadow: none; }
 /* 打字時：走路、跳、坐、動作、表情先收起來，畫面留給對話框和隊友的記號；上面的按鈕淡一點 */
-body.chatting #joy, body.chatting #swap-btn, body.chatting .seal, body.chatting #action-btn, body.chatting #emote, body.chatting #hint,
+body.chatting #joy, body.chatting #swap-btn, body.chatting .seal, body.chatting #action-btn, body.chatting #emote, body.chatting #emote-btn, body.chatting #hint,
 body.chatting:not(.desk) #photo-btn, body.chatting:not(.desk) #say-btn { opacity: 0 !important; pointer-events: none !important; }
 body.chatting.touch #top-btns { opacity: .35; }
 /* 按了「標記」，等點地面 */

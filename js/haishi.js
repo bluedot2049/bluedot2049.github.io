@@ -18,6 +18,7 @@ import { Fader } from './fade.js';
 import { drawText } from './glyphs.js';
 import { GRADE, GRADE_GLSL, gradeCurvesOnly, TUNE } from './grade.js';
 import { paving, PAVES, BED } from './pave.js';
+import { buildHomeCircle } from './homedoor.js';
 
 const SEA = -0.6;
 const RISE = 0.2;          // 石階每階高度
@@ -106,6 +107,8 @@ const AREAS = [
   { id: 'tCourt', x0: -14, x1: 2, z0: -110.5, z1: -106, y: 46.4, added: true, temple: true },
   { id: 'tS7', x0: -7, x1: -5, z0: -112.5, z1: -110.5, lo: 46.4, hi: 48, dir: 'n', added: true, temple: true },
   { id: 'tHall', x0: -12, x1: 0, z0: -121, z1: -112.5, y: 48, added: true, temple: true },
+  // 半山亭東邊削出來的一塊石台：回畫廊的法陣（homedoor.js）。地上刻六芒星，六盞火盆點齊，畫廊的前門從半空蹦出來，背後是海
+  { id: 'reditus', x0: -3.6, x1: 7, z0: -101.2, z1: -94.6, y: 42.4, added: true, temple: true },
 ];
 for (const a of AREAS) if (a.y == null) a.n = Math.round((a.hi - a.lo) / RISE);
 const AREA = Object.fromEntries(AREAS.map((a) => [a.id, a]));
@@ -134,6 +137,7 @@ const PLACES = {
 // templum 原本是占卜的人在天上劃出來、專門用來看的那一塊天
 const SEMITA = { name: '山路', subtitle: 'Semita' }, TEMPLUM = { name: '星廟', subtitle: 'Templum' };
 for (const a of TEMPLE) PLACES[a.id] = a.id === 'tCourt' || a.id === 'tS7' || a.id === 'tHall' ? TEMPLUM : SEMITA;
+PLACES.reditus = { name: '歸門', subtitle: 'Reditus' };
 
 // 店：沿著各層街道靠山的那一側（北邊）。at 是哪一條街，x 決定落在那條街的哪一段，店面開在那一段的北邊上
 // 攤販的樣子和台詞在 vendors.js，用 id 對起來
@@ -670,27 +674,28 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   const LEAF = ['#2e4a3a', '#3a5a3e', '#44583a'];
   // 石欄柱頂的裝飾自己用一串亂數；railDeco 記著跨段的節奏：離下一隻小獸還有幾根、上一根的收頭、離上一個重點多遠
   const DR = rng('haishi-rail-deco'), BRONZE_S = '#8a7a58', railDeco = { gap: 2, cap: -1, sinceFocus: 6, focus: 0 };
-  const rail = (ax, az, bx, bz, y) => {
+  // kk：後來開了口的那一截照樣蓋進一組丟掉的零件，亂數照抽，後面的欄杆才不會換樣子
+  const rail = (ax, az, bx, bz, y, kk = k) => {
     const len = Math.hypot(bx - ax, bz - az);
     if (len < 0.2) return;
-    rails.push({ ax, az, bx, bz, y });
+    if (kk === k) rails.push({ ax, az, bx, bz, y });
     const ry = -Math.atan2(bz - az, bx - ax), ux = (bx - ax) / len, uz = (bz - az) / len, at = (t) => [ax + ux * t, az + uz * t];
     if (y < 3.5) {
       // 竹籬：竹竿一根一根立著，高矮不齊，兩道橫的綁在上面
       for (let t = 0.1; t < len; t += 0.28 + R() * 0.12) {
         const [x, z] = at(t), h = 0.85 + R() * 0.25;
-        k.cyl(0.035, 0.04, h, pick(BAMBOO), x, y + h / 2, z, {}, 5);
+        kk.cyl(0.035, 0.04, h, pick(BAMBOO), x, y + h / 2, z, {}, 5);
       }
       const [mx, mz] = at(len / 2);
-      for (const hy of [0.35, 0.72]) k.cyl(0.025, 0.025, len, BAMBOO[1], mx, y + hy, mz, { ry, rz: Math.PI / 2 }, 4);
+      for (const hy of [0.35, 0.72]) kk.cyl(0.025, 0.025, len, BAMBOO[1], mx, y + hy, mz, { ry, rz: Math.PI / 2 }, 4);
       return;
     }
     if (y < 13) {
       // 亂石矮牆：大小不一的石塊一塊接一塊，偶爾缺一塊，牆頂長草
       for (let t = 0; t < len - 0.05;) {
         const l = Math.min(len - t, 0.35 + R() * 0.45), [x, z] = at(t + l / 2), h = 0.5 + R() * 0.28, c = pick(STONES);
-        if (R() > 0.06) k.box(l - 0.03, h, 0.34 + R() * 0.08, c, x, y + h / 2, z, { ry: ry + (R() - 0.5) * 0.06, color2: shade(c, 0.05) });
-        if (R() < 0.12) k.rock(0.13, pick(LEAF), x, y + h + 0.04, z, { sy: 0.6, ao: false });
+        if (R() > 0.06) kk.box(l - 0.03, h, 0.34 + R() * 0.08, c, x, y + h / 2, z, { ry: ry + (R() - 0.5) * 0.06, color2: shade(c, 0.05) });
+        if (R() < 0.12) kk.rock(0.13, pick(LEAF), x, y + h + 0.04, z, { sy: 0.6, ao: false });
         t += l;
       }
       return;
@@ -711,65 +716,65 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       if (end && railDeco.sinceFocus > 8 && DR() < 0.3) tier = 'focus';
       else if (end || --railDeco.gap <= 0) tier = 'beast';
       const old = tier === 'cap' && DR() < 0.08, ph = old ? 0.88 : 1.0, t = y + ph;
-      k.box(0.24, ph, 0.24, '#6a6870', x, y + ph / 2, z, { ry, color2: '#7a7880' });
+      kk.box(0.24, ph, 0.24, '#6a6870', x, y + ph / 2, z, { ry, color2: '#7a7880' });
       railDeco.sinceFocus++;
       if (tier === 'focus') {
         railDeco.sinceFocus = 0;
-        k.box(0.3, 0.08, 0.3, '#6e6c74', x, t + 0.04, z, { ry });
+        kk.box(0.3, 0.08, 0.3, '#6e6c74', x, t + 0.04, z, { ry });
         if (railDeco.focus++ % 2 === 0) {
           // 銅星儀：兩個直立交叉的環、一個斜的環，中間一顆小珠
-          k.cyl(0.03, 0.04, 0.1, BRONZE_S, x, t + 0.13, z, {}, 5);
-          k.torus(0.13, 0.016, Math.PI * 2, BRONZE_S, x, t + 0.31, z, { ry: spin });
-          k.torus(0.13, 0.016, Math.PI * 2, BRONZE_S, x, t + 0.31, z, { ry: spin + Math.PI / 2 });
-          k.torus(0.11, 0.014, Math.PI * 2, BRONZE_S, x, t + 0.31, z, { ry: spin, rx: Math.PI / 2 - 0.41 });
-          k.ball(0.035, '#c8b080', x, t + 0.31, z);
+          kk.cyl(0.03, 0.04, 0.1, BRONZE_S, x, t + 0.13, z, {}, 5);
+          kk.torus(0.13, 0.016, Math.PI * 2, BRONZE_S, x, t + 0.31, z, { ry: spin });
+          kk.torus(0.13, 0.016, Math.PI * 2, BRONZE_S, x, t + 0.31, z, { ry: spin + Math.PI / 2 });
+          kk.torus(0.11, 0.014, Math.PI * 2, BRONZE_S, x, t + 0.31, z, { ry: spin, rx: Math.PI / 2 - 0.41 });
+          kk.ball(0.035, '#c8b080', x, t + 0.31, z);
         } else {
           // 石缽：盛著一點水，映著天
-          k.cyl(0.17, 0.12, 0.12, BODY, x, t + 0.14, z, {}, 8);
-          k.add(new THREE.CircleGeometry(0.145, 12), '#3a4a6a', x, t + 0.195, z, { rx: -Math.PI / 2, ao: false });
+          kk.cyl(0.17, 0.12, 0.12, BODY, x, t + 0.14, z, {}, 8);
+          kk.add(new THREE.CircleGeometry(0.145, 12), '#3a4a6a', x, t + 0.195, z, { rx: -Math.PI / 2, ao: false });
         }
       } else if (tier === 'beast') {
         railDeco.gap = 3 + Math.floor(DR() * 3);
         const [dx, dz] = dirs[Math.floor(DR() * dirs.length)], pose = Math.floor(DR() * 4);
         if (pose === 1) {
           // 趴著：身子壓低拉長，頭擱在前面
-          k.rock(0.13, BODY, x, t + 0.06, z, { sy: 0.7, sx: 1.25, ry: -Math.atan2(dz, dx) });
-          k.ball(0.06, BODY, x + dx * 0.16, t + 0.09, z + dz * 0.16);
+          kk.rock(0.13, BODY, x, t + 0.06, z, { sy: 0.7, sx: 1.25, ry: -Math.atan2(dz, dx) });
+          kk.ball(0.06, BODY, x + dx * 0.16, t + 0.09, z + dz * 0.16);
         } else {
           // 蹲著（0）、回頭（2）、仰頭看天（3）
-          k.rock(0.13, BODY, x, t + 0.1, z, { sy: pose === 3 ? 1.4 : 1.25, ry: spin });
+          kk.rock(0.13, BODY, x, t + 0.1, z, { sy: pose === 3 ? 1.4 : 1.25, ry: spin });
           const hx = pose === 2 ? -dz : dx, hz = pose === 2 ? dx : dz, up = pose === 3 ? 0.33 : 0.24, off = pose === 3 ? 0.04 : 0.08;
-          k.ball(0.06, BODY, x + hx * off, t + up, z + hz * off);
+          kk.ball(0.06, BODY, x + hx * off, t + up, z + hz * off);
         }
       } else {
         let kind = old ? 4 : Math.floor(DR() * 4);
         if (!old && kind === railDeco.cap) kind = (kind + 1 + Math.floor(DR() * 3)) % 4;
         railDeco.cap = kind;
-        if (kind === 0) k.box(0.3, 0.06, 0.3, '#6e6c74', x, t + 0.03, z, { ry });
+        if (kind === 0) kk.box(0.3, 0.06, 0.3, '#6e6c74', x, t + 0.03, z, { ry });
         else if (kind === 1) {
-          k.cyl(0.05, 0.06, 0.06, '#6a6870', x, t + 0.03, z, {}, 6);
-          k.ball(0.09, '#6e6c74', x, t + 0.14, z);
+          kk.cyl(0.05, 0.06, 0.06, '#6a6870', x, t + 0.03, z, {}, 6);
+          kk.ball(0.09, '#6e6c74', x, t + 0.14, z);
         } else if (kind === 2) {
-          k.box(0.28, 0.05, 0.28, '#6e6c74', x, t + 0.025, z, { ry });
-          k.add(new THREE.ConeGeometry(0.17, 0.16, 4), '#6a6870', x, t + 0.13, z, { ry: ry + Math.PI / 4 });
-        } else if (kind === 3) k.rock(0.1, '#6e6c74', x, t + 0.12, z, { sy: 1.5, ry: spin });
+          kk.box(0.28, 0.05, 0.28, '#6e6c74', x, t + 0.025, z, { ry });
+          kk.add(new THREE.ConeGeometry(0.17, 0.16, 4), '#6a6870', x, t + 0.13, z, { ry: ry + Math.PI / 4 });
+        } else if (kind === 3) kk.rock(0.1, '#6e6c74', x, t + 0.12, z, { sy: 1.5, ry: spin });
         else {
           // 缺角的老柱：矮一截，頂上一塊斜斜的殘石，長了青苔
-          k.box(0.26, 0.06, 0.24, '#62606a', x, t + 0.01, z, { ry, rz: 0.14 });
-          k.rock(0.07, LEAF[Math.floor(DR() * LEAF.length)], x, t + 0.05, z, { sy: 0.6, ao: false });
+          kk.box(0.26, 0.06, 0.24, '#62606a', x, t + 0.01, z, { ry, rz: 0.14 });
+          kk.rock(0.07, LEAF[Math.floor(DR() * LEAF.length)], x, t + 0.05, z, { sy: 0.6, ao: false });
         }
       }
       if (i === n) continue;
       const [mx, mz] = at((i + 0.5) * step), panel = DR();
-      if (panel > 0.04) k.box(step - 0.26, 0.55, 0.14, '#62606a', mx, y + 0.42, mz, { ry, color2: '#72707a' });
+      if (panel > 0.04) kk.box(step - 0.26, 0.55, 0.14, '#62606a', mx, y + 0.42, mz, { ry, color2: '#72707a' });
       if (panel > 0.04 && panel < 0.15) {
         // 星孔：欄板正中鏤一顆四角星，兩面各一片深色
-        for (const sd of [1, -1]) k.add(new THREE.CircleGeometry(0.075, 4), '#2a2a32', mx + side[0] * 0.072 * sd, y + 0.44, mz + side[1] * 0.072 * sd, { ry: ry + (sd > 0 ? Math.PI : 0), sx: 0.7, ao: false });
+        for (const sd of [1, -1]) kk.add(new THREE.CircleGeometry(0.075, 4), '#2a2a32', mx + side[0] * 0.072 * sd, y + 0.44, mz + side[1] * 0.072 * sd, { ry: ry + (sd > 0 ? Math.PI : 0), sx: 0.7, ao: false });
       }
-      k.box(step - 0.2, 0.08, 0.2, '#6e6c74', mx, y + 0.74, mz, { ry });
+      kk.box(step - 0.2, 0.08, 0.2, '#6e6c74', mx, y + 0.74, mz, { ry });
       if (DR() < 0.15) {
         const off = (DR() - 0.5) * (step - 0.5);
-        k.rock(0.08, LEAF[Math.floor(DR() * LEAF.length)], mx + off * ux, y + 0.79, mz + off * uz, { sy: 0.55, ao: false });
+        kk.rock(0.08, LEAF[Math.floor(DR() * LEAF.length)], mx + off * ux, y + 0.79, mz + off * uz, { sy: 0.55, ao: false });
       }
     }
   };
@@ -1899,6 +1904,8 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   // ---------- 欄杆：自動圍 ----------
   // 每塊路面的四邊掃一遍：外面接著別的路就不圍，有房子、石階的矮牆擋著也不圍，外面往下掉才圍。
   // 港邊（高度 0）一律不圍。石階兩側本來就有矮牆；坡道切成一小截一小截，每截照那裡的坡面高度，不會一頭浮起來一頭埋進去
+  // 歸門的石台是後來接上半山亭東邊的：其他路面照沒有它的時候圍，接口那一截蓋進丟掉的零件
+  const before = AREAS.filter((a) => a.id !== 'reditus'), areaBefore = (x, z) => before.find((a) => x >= a.x0 && x <= a.x1 && z >= a.z0 && z <= a.z1);
   for (const a of AREAS) {
     if (a.lo != null && !a.slope) continue;
     const y = a.y ?? (a.lo + a.hi) / 2;
@@ -1908,15 +1915,17 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       let start = -1;
       for (let i = 0; i <= n; i++) {
         const t = i / n, x = ax + (bx - ax) * t, z = az + (bz - az) * t, ox = x + nx * 0.3, oz = z + nz * 0.3;
-        const b = areaAt(ox, oz), open = b && Math.abs(heightIn(b, ox, oz) - heightIn(a, x, z)) < 0.35;
+        const b = (a.id === 'reditus' ? areaAt : areaBefore)(ox, oz), open = b && Math.abs(heightIn(b, ox, oz) - heightIn(a, x, z)) < 0.35;
         const walled = solids.some((s) => !s.ground && ox > s.x0 && ox < s.x1 && oz > s.z0 && oz < s.z1);
-        const need = i < n && !open && !walled && groundY(ox, oz) < y - 0.8;
+        const below = b ? heightIn(b, ox, oz) : Math.max(SEA, terrain(ox, oz));
+        const need = i < n && !open && !walled && below < y - 0.8;
         if (need && start < 0) start = t;
         if (!need && start >= 0) {
           const m = a.slope ? Math.ceil(((t - start) * Math.hypot(bx - ax, bz - az)) / 0.5) : 1;
           for (let j = 0; j < m; j++) {
             const t0 = start + ((t - start) * j) / m, t1 = start + ((t - start) * (j + 1)) / m, [mx, mz] = pt((t0 + t1) / 2);
-            rail(...pt(t0), ...pt(t1), a.slope ? heightIn(a, mx, mz) : y);
+            const gone = a.id !== 'reditus' && areaAt(mx + nx * 0.42, mz + nz * 0.42)?.id === 'reditus';
+            rail(...pt(t0), ...pt(t1), a.slope ? heightIn(a, mx, mz) : y, gone ? new Kit(R) : k);
           }
           start = -1;
         }
@@ -2554,6 +2563,11 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   boat.position.set(2.15, SEA + 0.36, 27.8);
   group.add(boat);
 
+  // ---------- 歸門：半山亭東邊的石台上，回畫廊的法陣（homedoor.js）。用自己的一串亂數，門口在的時候才放進 exits ----------
+  const exits = [{ x: 0.6, z: 27.9, r: 1.4, to: 'gallery', label: '搭船', title: '渡船', boat: ferry }];
+  const home = buildHomeCircle({ x: 2.2, y: AREA.reditus.y, z: -97.9, R: rng('haishi-reditus'), obstacles, exits });
+  group.add(home.group);
+
   scene.add(group);
 
   // ---------- 碰撞、高度、尋路 ----------
@@ -2648,7 +2662,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     camDistMax: 46,
     // 下船的地方：長棧橋的盡頭，離小船幾步，面向山上的鎮子
     spawn: { x: 0, z: 26.4, heading: Math.PI },
-    exits: [{ x: 0.6, z: 27.9, r: 1.4, to: 'gallery', label: '搭船', title: '渡船', boat: ferry }],
+    exits, home,
     roomIndexAt: () => 0,
     placeAt: (x, z) => {
       const a = areaAt(x, z);

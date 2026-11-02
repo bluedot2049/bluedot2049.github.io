@@ -144,7 +144,7 @@ export class Multiplayer {
     this.shadowTex = shadowTex;
     this.player = player;
     this.cfg = cfg;
-    this.events = events;           // { onCount(n), onReady(), onPet(other, i), onJump(other), onLand(character), onEmote(character, e), onFlash(character), onStudio(m), onParty(m) }
+    this.events = events;           // { onCount(n), onReady(), onPet(other, i), onJump(other), onLand(character), onEmote(character, e), onFlash(character), onStudio(m), onParty(m), onGate(m) }
     this.id = Math.random().toString(36).slice(2, 10);
     this.others = new Map();        // id -> { ch, pos, target, heading, seen, speed }
     this.present = new Set();       // 目前在線上的訪客 id（來自 presence）
@@ -186,6 +186,7 @@ export class Multiplayer {
       .on('broadcast', { event: 'flash' }, ({ payload }) => this.onFlash(payload))
       .on('broadcast', { event: 'studio' }, ({ payload }) => this.onStudio(payload))
       .on('broadcast', { event: 'party' }, ({ payload }) => this.onParty(payload))
+      .on('broadcast', { event: 'gate' }, ({ payload }) => this.onGate(payload))
       .on('presence', { event: 'sync' }, () => {
         const state = ch.presenceState();
         this.present = new Set(Object.keys(state));
@@ -428,6 +429,20 @@ export class Multiplayer {
   onParty(m) {
     if (!m || !isId(m.id) || m.id === this.id || m.t !== 'invite' || !isId(m.pid)) return;
     this.events.onParty?.(m);
+  }
+
+  // 歸門的法陣（homedoor.js）：誰點了哪盞火、誰開了門、晚到的人問現在亮了幾盞
+  gate(msg) {
+    if (!this.active || !this.channel) return;
+    this.channel.send({ type: 'broadcast', event: 'gate', payload: { id: this.id, ...msg } });
+  }
+
+  onGate(m) {
+    if (!m || !isId(m.id) || m.id === this.id) return;
+    if (m.t === 'lamp' && !(Number.isInteger(m.i) && m.i >= 0 && m.i < 12)) return;
+    if (m.t === 'state' && !(Array.isArray(m.l) && m.l.length <= 12 && m.l.every((v) => Number.isFinite(v) && v >= -1 && v <= 600) && ['none', 'closed', 'open'].includes(m.d))) return;
+    if (!['lamp', 'open', 'use', 'ask', 'state'].includes(m.t)) return;
+    this.events.onGate?.(m);
   }
 
   // 回傳畫面上是否還有東西在動，主迴圈用來決定要不要降幀

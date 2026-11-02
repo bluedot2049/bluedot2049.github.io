@@ -2,6 +2,9 @@
 
     python tools/wordmark.py
 
+favicon.png（64）、apple-touch-icon.png（180，四邊多留 20 給 iOS 圓角）、icon-512.png 不會自動更新，
+改了 ICON 要另外從 SVG 輸出。
+
 模組
   bar   直線或折線，一樣粗，平頭
   wing  主橫：右端往上斜切成尖，從毛筆的燕尾簡化來
@@ -166,12 +169,20 @@ def wordmark(paint, defs='', glyphs=GLYPHS, h=BOX, t=T, text='煉金画廊', pad
             f'width="{w + 2 * pad}" height="{h + 2 * pad}"><title>煉金畫廊</title>{defs}{body}</svg>\n')
 
 
-# 小圖示只放「金」，筆畫加粗，縮到 16px 還看得出來
-def icon(pad=14, t=9):
+# 小圖示：「画」的燕尾橫和框，框裡換成煉金術的金 ☉（圓＋菱形點）；筆畫加粗，縮到 16px 還看得出來
+ICON = [
+    wing(4, 94, 8),
+    bar((9, 26), (9, 92), (91, 92), (91, 26)),
+    ring(50, 54, 22),
+    dot(50, 54, 9),
+]
+
+
+def icon(pad=6, t=12):
     s = BOX + 2 * pad
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{-pad} {-pad} {s} {s}" width="{s}" height="{s}">'
             f'{gold()}<rect x="{-pad}" y="{-pad}" width="{s}" height="{s}" fill="#1c130d"/>'
-            f'{glyph(GLYPHS["金"], 0, "url(#g)", t)}</svg>\n')
+            f'{glyph(ICON, 0, "url(#g)", t)}</svg>\n')
 
 
 if __name__ == '__main__':

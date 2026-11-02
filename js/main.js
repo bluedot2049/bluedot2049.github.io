@@ -347,6 +347,7 @@ async function start() {
     },
     // 搭船：先選去哪裡，再跳進碼頭邊的渡船坐好，船夫在船頭現身、燈亮起來，才轉到渡海畫面
     onExit(ex) {
+      if (ex.home) return ex.home.act();
       if (!ex.boat) return travel(ex.to);
       if (player.boarding) return;
       const list = FERRY.map((d) => (d.to === zone ? { ...d, to: null, here: true } : d));
@@ -404,9 +405,10 @@ async function start() {
   player.animals = animals;
   player.visitors = crowd;
 
-  // 渡海：載入畫面換成小船，蓋住畫面後整頁換到另一個區域。from 記住從哪裡來，到了站在對應的碼頭
+  // 渡海：載入畫面換成小船，蓋住畫面後整頁換到另一個區域。from 記住從哪裡來，到了站在對應的碼頭。
+  // 走進歸門（door）：不搭船，門裡的光鋪滿畫面就換頁，到了是前廳的前門（from=door）
   let traveling = false;
-  function travel(to, extra = {}) {
+  function travel(to, extra = {}, door = false) {
     if (traveling) return;
     traveling = true;
     const q = new URLSearchParams(location.search);
@@ -415,6 +417,17 @@ async function start() {
     q.set('from', zone);
     for (const [k, v] of Object.entries(extra)) q.set(k, v);
     const el = document.getElementById('loading');
+    if (door) {
+      q.set('from', 'door');
+      keepFullscreen();
+      for (const a of el.getAnimations({ subtree: true })) a.cancel();
+      el.classList.remove('done', 'first', 'opening', 'landing', 'crossing', 'plain');
+      void el.offsetWidth;
+      el.classList.add('doorway', 'leaving');
+      mp?.sendNow();
+      setTimeout(() => location.replace(`${location.pathname}?${q}`), 1100);
+      return;
+    }
     el.querySelector('.msg').textContent = ZONES[to].crossing;
     el.querySelector('.cine .label span').textContent = ZONES[to].crossing.split('　')[1];
     try { sessionStorage.setItem('crossAt', Date.now()); } catch (e) {}
@@ -514,7 +527,7 @@ async function start() {
   let nearKey = null;
   function updateAction() {
     const t = player.actionTarget();
-    const key = t ? (t.kind === 'painting' || t.kind === 'pet' || t.kind === 'talk' || t.kind === 'exit' ? t.p : t.kind) : null;
+    const key = t ? (t.kind === 'exit' ? `${t.p.title}:${t.p.label}` : t.kind === 'painting' || t.kind === 'pet' || t.kind === 'talk' ? t.p : t.kind) : null;
     const sitting = player.sitCode !== 0;
     if (sitting !== document.body.classList.contains('sitting')) {
       document.body.classList.toggle('sitting', sitting);
@@ -525,7 +538,7 @@ async function start() {
     nearKey = key;
     actionBtn.classList.toggle('show', !!t);
     if (!t) return;
-    actionLabel.textContent = (t.kind === 'talk' && t.p.actionLabel) || LABELS[t.kind];
+    actionLabel.textContent = (t.kind === 'talk' && t.p.actionLabel) || (t.kind === 'exit' && t.p.label) || LABELS[t.kind];
     actionBtn.setAttribute('aria-label', actionLabel.textContent);
     document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : t.kind === 'pet' || t.kind === 'talk' ? t.p.name : t.kind === 'exit' ? t.p.title : '';
   }
@@ -603,6 +616,7 @@ async function start() {
       onEmote: (ch, e) => ambience.cheer(ch, e),
       onStudio: (m) => studio?.onMessage(m),
       onParty: (m) => party?.onInvite(m),
+      onGate: (m) => world.home?.receive(m),
       onFlash: (ch) => flashFx.fire(ch),
     }, look);
     mp.claude = params.get('as') === 'claude';   // 開發時我進站拍照：在場的人看到的是燈籠
@@ -630,6 +644,17 @@ async function start() {
       const i = e.key.length === 1 ? '12345'.indexOf(e.key) : -1;
       if (i >= 0) sendEmote(EMOTES[i]);
     });
+  }
+
+  // 歸門（homedoor.js）：點火、開門的消息送給同一區的人；推開門走進光裡，就回到前廳
+  if (world.home) {
+    const home = world.home;
+    home.send = (m) => mp?.gate(m);
+    home.sound = (kind, vol) => ambience.voice(kind, vol);
+    home.onEnter = () => {
+      player.walkTo(home.x, home.z - 0.45);
+      travel('gallery', {}, true);
+    };
   }
 
   // 後製和著色器預先編譯同時進行；載不到就照原本的畫法
@@ -749,12 +774,13 @@ async function start() {
   // 進門以後：前門在背後闔上，跳出這間房的名字，再跳操作說明卡（已經先動起來的人就不打擾，下次進門再出現）。
   // 搭船回來、直接開海市的，還是底下那行操作提示。不能 await，下面還要開始畫
   entered.then(() => {
-    const byDoor = world.frontDoor && !params.has('from'), at = performance.now();
+    // 從歸門回來的（from=door）也是從前門進來，只是不再跳操作說明
+    const homeDoor = params.get('from') === 'door', byDoor = world.frontDoor && (!params.has('from') || homeDoor), at = performance.now();
     if (byDoor) world.frontDoor.shut(0.15);
     if (byDoor) ui.toast(world.rooms[0].data.name, world.rooms[0].data.subtitle);
     if (params.has('photo')) photo.enter();
-    else if (byDoor) setTimeout(() => { if (lastInput < at) ui.guide(); }, 2600);
-    else setTimeout(() => ui.hint(coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿或點地面走路　拖曳轉視角` : `點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下${zone === 'gallery' ? '　Enter 看畫' : ''}`, 6000));
+    else if (byDoor && !homeDoor) setTimeout(() => { if (lastInput < at) ui.guide(); }, 2600);
+    else if (!homeDoor) setTimeout(() => ui.hint(coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿或點地面走路　拖曳轉視角` : `點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下${zone === 'gallery' ? '　Enter 看畫' : ''}`, 6000));
   });
 
   // 挑相機時鏡頭差不多就在自己頭的高度，帽子、頭上的東西會擋在桌上那台前面：鏡頭飛過去時自己淡掉，離開再淡回來。
@@ -879,6 +905,7 @@ async function start() {
       else host.hush();
     }
     party?.update(dt);
+    world.home?.update(dt, player.pos, mp ? mp.others.values() : [], camera.position);
     if (frame % 30 === 0) checkAway?.();
     const talking = layoutBubbles() > 0;
     if (frame % 6 === 0) updateAction();
@@ -912,7 +939,7 @@ async function start() {
     // 牆上的色塊畫：視差跟著鏡頭，站在畫前不動才醒；拍照時醒的程度停著
     world.updatePaintings?.(camera.position, photo.active ? null : player.pos, player.focus?.kind === 'painting' ? player.focus.p : null);
     frame++;
-    const idle = !photo.active && !player.moving && !othersMoving && !fading && !talking && performance.now() - lastInput > 2000;
+    const idle = !photo.active && !player.moving && !othersMoving && !fading && !talking && !world.home?.busy && performance.now() - lastInput > 2000;
     if (idle && frame % 2) return;
     if (!idle) quality.sample(dt);
     if (stats) renderer.info.reset();

@@ -370,7 +370,7 @@ export class UI {
   loading(text) {
     const el = $('#loading');
     if (text != null) { el.querySelector('.msg').textContent = text; return Promise.resolve(); }
-    if (el.classList.contains('done') || el.classList.contains('plain')) { el.classList.add('done'); return Promise.resolve(); }
+    if (el.classList.contains('done') || el.classList.contains('plain') || el.classList.contains('doorway')) { el.classList.add('done'); return Promise.resolve(); }
     if (!el.classList.contains('crossing')) return this.enterDoor(el);
     return this.landing(el);
   }

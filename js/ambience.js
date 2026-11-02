@@ -133,6 +133,25 @@ const VOICES = {
     src.stop(t + 1.15);
     return 1.15;
   },
+  // 歸門的火盆點著（homedoor.js）：一口氣吸進去「呼」的一聲，底下一記悶的
+  ignite(ctx, out, t, p, noise) {
+    const src = ctx.createBufferSource(), f = biquad(ctx, 'lowpass', 300, 0.9);
+    src.buffer = noise;
+    f.frequency.setValueAtTime(300 * p, t);
+    f.frequency.exponentialRampToValueAtTime(1600 * p, t + 0.12);
+    f.frequency.exponentialRampToValueAtTime(500 * p, t + 0.5);
+    src.connect(f).connect(envelope(ctx, t, 0.06, 0.5, 0.6)).connect(out);
+    src.start(t, Math.random() * 7);
+    src.stop(t + 0.55);
+    osc(ctx, 'sine', t, 0.18, [[0, 80 * p], [0.18, 46 * p]]).connect(envelope(ctx, t, 0.01, 0.18, 0.5)).connect(out);
+    return 0.55;
+  },
+  // 歸門的口袋口：拔軟木塞那樣「啵」一聲
+  pop(ctx, out, t, p, noise) {
+    osc(ctx, 'sine', t, 0.09, [[0, 620 * p], [0.09, 170 * p]]).connect(envelope(ctx, t, 0.003, 0.09, 0.8)).connect(out);
+    hiss(ctx, out, noise, t, 0.025, 'bandpass', 1800 * p, 0.35, 2);
+    return 0.12;
+  },
   // 對到焦：兩聲短短的嗶
   focus(ctx, out, t, p) {
     for (const dt of [0, 0.075]) osc(ctx, 'sine', t + dt, 0.045, [[0, 2700 * p]]).connect(envelope(ctx, t + dt, 0.004, 0.045, 0.3)).connect(out);

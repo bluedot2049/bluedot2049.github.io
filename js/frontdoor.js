@@ -32,24 +32,25 @@ function spillTexture() {
   return t;
 }
 
-export function buildFrontDoor() {
-  const R = rng('frontdoor');
-  const pick = (a) => a[Math.floor(R() * a.length)];
-  const tall = new THREE.Group(), low = new THREE.Group();
+// 門框、門洞、門板。海市法陣叫出來的（homedoor.js）也是這一扇。
+// outside：從屋外看的那一面——門洞改成在門板後面、朝 -z 發屋裡的光，門把裝在外面，門楣下那盞燈不要。
+// leaf 的原點在鉸鏈上，rotation.y 往負的轉就是往裡開（+z）。R 抽的次數兩種都一樣
+export function doorParts(R, { outside = false, ghost = false } = {}) {
   const wood = '#5e3b22', dark = '#3e2716', iron = '#2a2220', brass = '#b08a45';
 
   // 門洞、門框、門楣，地上一條石門檻
-  const k = new Kit(R), fb = newBucket();
-  k.plane(W, H, '#fff0d0', 0, H / 2, 0.012, { glow: true, color2: '#f39a6a' });
+  const k = new Kit(R), fb = newBucket(), frame = new THREE.Group();
+  if (outside) k.plane(W, H, '#fff0d0', 0, H / 2, 0.075, { glow: true, color2: '#f7b47a', ry: Math.PI });
+  else k.plane(W, H, '#fff0d0', 0, H / 2, 0.012, { glow: true, color2: '#f39a6a' });
   for (const x of [-W / 2 - 0.06, W / 2 + 0.06]) k.box(0.12, H + 0.1, 0.16, wood, x, (H + 0.1) / 2, 0.06);
   k.box(W + 0.36, 0.14, 0.2, wood, 0, H + 0.17, 0.07);
   k.box(W + 0.5, 0.05, 0.24, dark, 0, H + 0.265, 0.08);
   k.box(W + 0.1, 0.03, 0.22, '#8a7a68', 0, 0.015, 0.06);
-  k.light(0, H - 0.2, 0.15, '#ffc890', 1.3);
+  if (!outside) k.light(0, H - 0.2, 0.15, '#ffc890', 1.3);
   k.emit(fb, 0, 0, 0);
-  for (const o of bucketObjects(fb, true)) tall.add(o);
+  for (const o of bucketObjects(fb, ghost)) frame.add(o);
 
-  // 門板：直拼木板、兩道鐵條、上方一扇小窗也透著外面的光、銅環門把。本地座標從鉸鏈算起
+  // 門板：直拼木板、兩道鐵條、上方一扇小窗也透著另一邊的光、銅環門把。本地座標從鉸鏈算起
   const lk = new Kit(R), lb = newBucket(), lw = W - 0.02, t = 0.05;
   lk.box(lw, H - 0.03, t, '#6b4329', lw / 2, H / 2, 0);
   for (const f of [0.25, 0.5, 0.75]) lk.box(0.012, H - 0.12, t + 0.006, dark, lw * f, H / 2, 0);
@@ -60,13 +61,22 @@ export function buildFrontDoor() {
   lk.box(0.4, 0.04, t + 0.03, dark, lw / 2, wy - 0.17, 0);
   for (const x of [lw / 2 - 0.18, lw / 2 + 0.18]) lk.box(0.04, 0.38, t + 0.03, dark, x, wy, 0);
   lk.box(0.025, 0.3, t + 0.02, dark, lw / 2, wy, 0);
-  lk.box(0.08, 0.12, 0.012, brass, lw - 0.13, 1.0, t / 2 + 0.006);
-  lk.torus(0.05, 0.008, Math.PI * 2, brass, lw - 0.13, 0.94, t / 2 + 0.02);
+  const hs = outside ? -1 : 1;
+  lk.box(0.08, 0.12, 0.012, brass, lw - 0.13, 1.0, hs * (t / 2 + 0.006));
+  lk.torus(0.05, 0.008, Math.PI * 2, brass, lw - 0.13, 0.94, hs * (t / 2 + 0.02));
   lk.emit(lb, 0, 0, 0);
   const leaf = new THREE.Group();
   leaf.position.set(-W / 2 + 0.01, 0, 0.04);
-  for (const o of bucketObjects(lb, true)) leaf.add(o);
-  tall.add(leaf);
+  for (const o of bucketObjects(lb, ghost)) leaf.add(o);
+  return { frame, leaf, W, H };
+}
+
+export function buildFrontDoor() {
+  const R = rng('frontdoor');
+  const pick = (a) => a[Math.floor(R() * a.length)];
+  const tall = new THREE.Group(), low = new THREE.Group();
+  const { frame, leaf } = doorParts(R, { ghost: true });
+  tall.add(frame, leaf);
 
   // 地上：腳踏墊、從門口灑進來的光
   const gk = new Kit(R), gb = newBucket();
