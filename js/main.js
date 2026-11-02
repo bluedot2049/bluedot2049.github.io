@@ -140,6 +140,8 @@ async function start() {
   }
   document.title = gallery.title || document.title;
   const ui = new UI(gallery);
+  // 渡海的外圈金線：程式和清單下載完、地圖蓋好、著色器編好各畫一段，載完 ui.loading 補滿
+  ui.progress(30);
 
   if (params.has('flat') || !hasWebGL()) {
     ui.buildList(false);
@@ -179,6 +181,7 @@ async function start() {
   const grade = params.get('grade') === '0' ? null : Z.grade || (params.has('debug') ? NEUTRAL : null);
   if (grade) installGrade(grade, scene);
   const world = Z.build(scene, { gallery, coarse, params });
+  ui.progress(55);
 
   // 光線、霧。畫廊有室內和戶外兩組，走出後門時在兩組之間漸變；只有一組的區域兩頭都用它
   const envs = Z.env(world);
@@ -311,7 +314,7 @@ async function start() {
     onGuide() {
       ui.guide(true);
     },
-    onHollow() {
+    onArriveHollow() {
       hollow.open();
     },
     onArriveMirror() {
@@ -413,6 +416,10 @@ async function start() {
     try { sessionStorage.setItem('crossAt', Date.now()); } catch (e) {}
     keepFullscreen();
     el.style.setProperty('--t', '0ms');
+    // 進來時畫滿的金線直接歸零，不要倒著收回去
+    const sea = el.querySelector('.sea');
+    sea.style.transition = 'none';
+    sea.style.removeProperty('--prog');
     el.classList.remove('to-gallery', 'to-haishi', 'done', 'first', 'opening');
     el.classList.add('crossing', `to-${to}`);
     mp?.sendNow();
@@ -429,6 +436,7 @@ async function start() {
     lastInput = performance.now();
   };
   ui.onClose = () => player.exitFocus();
+  hollow.onClose = () => player.exitFocus();
 
   // 相機桌的面板：左右換一台，帶走或放回去；SOON 裡的只看得到名字。一次只能帶一台，換的時候原本那台自己回到桌上
   function showCams(i) {
@@ -672,6 +680,7 @@ async function start() {
   // Windows 的瀏覽器編得特別慢，畫面會凍住一兩秒。
   // 藏起來的房間、戶外、海面先全部打開；海面倒影畫進貼圖時用的是另一組著色器，也一起編
   await precompile(renderer, scene, camera, world);
+  ui.progress(85);
   if (fxJob) {
     fx = await fxJob;
     fx?.render(0);   // 後製的著色器也趁載入畫面先編好

@@ -316,16 +316,16 @@ export class UI {
     if (text != null) { el.querySelector('.msg').textContent = text; return Promise.resolve(); }
     if (el.classList.contains('done') || el.classList.contains('plain')) { el.classList.add('done'); return Promise.resolve(); }
     if (!el.classList.contains('crossing')) return this.enterDoor(el);
-    // 渡海到了：霧散開、對岸亮起來、蜃景消掉，再淡出到遊戲畫面
-    for (const [sel, o] of [['.land', 1], ['.mirage', 0], ['.fog', 0.25]]) {
-      for (const e of el.querySelectorAll(sel)) {
-        const from = getComputedStyle(e).opacity;
-        for (const a of e.getAnimations()) a.cancel();
-        e.animate([{ opacity: from }, { opacity: o }], { duration: 900, easing: 'ease-out', fill: 'forwards' });
-      }
-    }
+    // 渡海到了：外圈金線補滿一圈，再淡出到遊戲畫面
+    this.progress(100);
     setTimeout(() => el.classList.add('done'), 700);
     return Promise.resolve();
+  }
+
+  // 渡海時外圈金線畫到幾成（0～100）。只會往前，不會倒回去
+  progress(p) {
+    const sea = $('#loading .sea');
+    if (p > (+sea.style.getPropertyValue('--prog') || 0)) sea.style.setProperty('--prog', p);
   }
 
   // 門口：來過的人載完直接開門；第一次來的人看完門邊的告示，按「進入」（或 Enter、空白鍵）才開。
