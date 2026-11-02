@@ -8,7 +8,7 @@ $v = Get-Date -Format 'yyyyMMddHHmm'
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 
 # 一個檔案 import 了哪些檔案：static 是開頭的 import / export from，dynamic 是 import('...')
-# 路徑換成從網站根目錄算起，例如 js/world.js、vendor/Water.js；'three' 換成 vendor 裡的檔案
+# 路徑換成從網站根目錄算起，例如 js/zones/gallery/world.js、vendor/Water.js；'three' 換成 vendor 裡的檔案
 $cache = @{}
 function Get-Imports($file) {
   if ($cache.ContainsKey($file)) { return $cache[$file] }
@@ -48,7 +48,7 @@ function Get-Closure($start) {
 $core = Get-Closure 'js/main.js'
 $zones = [ordered]@{}
 foreach ($z in (Get-Imports 'js/main.js').dynamic) {
-  if ($z -notmatch '^js/zone-([\w-]+)\.js$') { continue }
+  if ($z -notmatch '^js/(?:[\w-]+/)*zone-([\w-]+)\.js$') { continue }
   $name = $Matches[1]
   $set = Get-Closure $z
   foreach ($f in @($set)) { foreach ($d in (Get-Imports $f).dynamic) { if ($d -like 'js/*') { $set.UnionWith((Get-Closure $d)) } } }
@@ -61,23 +61,27 @@ $list = { param($set) ($set | Sort-Object { $_ -ne 'vendor/three.module.min.js' 
 $zoneLines = $zones.Keys | ForEach-Object { "        $_`: [" + (& $list $zones[$_]) + "]" }
 $preload = "<script id=`"preload`">`n    (function () {`n      var core = [" + (& $list ($core | Where-Object { $_ -ne 'js/main.js' })) + "];`n      var zones = {`n" + ($zoneLines -join ",`n") + "`n      };`n      var z = new URLSearchParams(location.search).get('z');`n      var all = core.concat(Object.prototype.hasOwnProperty.call(zones, z) ? zones[z] : zones.gallery);`n      for (var i = 0; i < all.length; i++) {`n        var l = document.createElement('link');`n        l.rel = 'modulepreload';`n        l.href = all[i];`n        document.head.appendChild(l);`n      }`n    })();`n  </script>"
 
-# importmap 照舊列出 js 資料夾裡每一個檔案（沒用到的列著也不會被下載），只是順便提醒哪些檔案沒有被用到
+# importmap 照舊列出 js 資料夾裡每一個模組，連子資料夾（沒用到的列著也不會被下載），只是順便提醒哪些檔案沒有被用到
+# js/boot/ 是 index.html 直接用 <script src> 載的一般腳本，不是模組，不列
 $used = New-Object System.Collections.Generic.HashSet[string]
 $used.UnionWith($core)
 foreach ($s in $zones.Values) { $used.UnionWith($s) }
 foreach ($d in (Get-Imports 'js/main.js').dynamic) { if ($d -like 'js/*') { $used.UnionWith((Get-Closure $d)) } }
 $lines = @("      `"three`": `"./vendor/three.module.min.js?v=$v`"")
-foreach ($f in Get-ChildItem (Join-Path $root 'js') -Filter *.js | Sort-Object Name) {
-  $lines += "      `"./js/$($f.Name)`": `"./js/$($f.Name)?v=$v`""
-  if (-not $used.Contains("js/$($f.Name)")) { Write-Host "Not imported anywhere: js/$($f.Name)" -ForegroundColor Yellow }
+$jsDir = Join-Path $root 'js'
+$modules = Get-ChildItem $jsDir -Filter *.js -Recurse | ForEach-Object { 'js/' + $_.FullName.Substring($jsDir.Length + 1).Replace('\', '/') } | Where-Object { $_ -notlike 'js/boot/*' } | Sort-Object
+foreach ($f in $modules) {
+  $lines += "      `"./$f`": `"./$f`?v=$v`""
+  if (-not $used.Contains($f)) { Write-Host "Not imported anywhere: $f" -ForegroundColor Yellow }
 }
 $map = "<script type=`"importmap`">`n    { `"imports`": {`n" + ($lines -join ",`n") + "`n    } }`n  </script>"
 
 $text = [IO.File]::ReadAllText($html, $utf8)
 $text = [regex]::Replace($text, '(?s)<script type="importmap">.*?</script>', { param($m) $map })
 $text = [regex]::Replace($text, '(?s)<script id="preload">.*?</script>', { param($m) $preload })
-$text = [regex]::Replace($text, 'href="css/style\.css(\?v=\d+)?"', "href=`"css/style.css?v=$v`"")
-$text = [regex]::Replace($text, 'src="js/main\.js(\?v=\d+)?"', "src=`"js/main.js?v=$v`"")
+# css 和 index.html 直接載的 js（main.js、boot/ 裡的）每個都蓋版本號
+$text = [regex]::Replace($text, 'href="(css/[\w/-]+\.css)(\?v=\d+)?"', { param($m) "href=`"$($m.Groups[1].Value)?v=$v`"" })
+$text = [regex]::Replace($text, 'src="(js/[\w/-]+\.js)(\?v=\d+)?"', { param($m) "src=`"$($m.Groups[1].Value)?v=$v`"" })
 [IO.File]::WriteAllText($html, $text.Replace("`r`n", "`n"), $utf8)
 Write-Host "Stamped version $v"
 foreach ($k in $zones.Keys) { Write-Host "Preload ${k}: $($core.Count - 1) shared + $($zones[$k].Count) own" }

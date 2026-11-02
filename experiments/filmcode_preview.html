@@ -20,10 +20,10 @@
 <script src="../vendor/qrcode.js"></script>
 <script src="../vendor/jsQR.js"></script>
 <script type="module">
-import { makePostcard, readPostcard } from '../js/postcard.js';
-import { packFace } from '../js/filmcode.js';
-import { presetLook, randomLook, sanitizeLook } from '../js/looks.js';
-import { encodeLook, encodeSave } from '../js/savecode.js';
+import { makePostcard, readPostcard } from '../js/save/postcard.js';
+import { packFace } from '../js/save/filmcode.js';
+import { presetLook, randomLook, sanitizeLook } from '../js/avatar/looks.js';
+import { encodeLook, encodeSave } from '../js/save/savecode.js';
 
 const P = new URLSearchParams(location.search), N = +(P.get('n') || 3);
 const out = [];

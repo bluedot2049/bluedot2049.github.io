@@ -21,8 +21,8 @@
     <div id="dress-paint" hidden></div>
   </aside>
   <script type="module">
-    import { Creator } from '../js/creator.js';
-    import { presetLook, randomLook, putSave, lockKeys } from '../js/looks.js';
+    import { Creator } from '../js/avatar/creator.js';
+    import { presetLook, randomLook, putSave, lockKeys } from '../js/avatar/looks.js';
     const q = new URLSearchParams(location.search);
     // ?fill：衣櫃放兩套、海市的東西拿一半，看衣櫃頁和紅印
     if (q.has('fill')) putSave({ closet: [randomLook(presetLook(1)), randomLook(presetLook(3))], unlocked: lockKeys().filter((_, i) => i % 2) });

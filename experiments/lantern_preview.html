@@ -25,10 +25,10 @@
   </div>
   <script type="module">
     import * as THREE from 'three';
-    import { Lantern } from '../js/lantern.js';
-    import { Character } from '../js/character.js';
-    import { sanitizeLook } from '../js/looks.js';
-    import { shadowTexture } from '../js/textures.js';
+    import { Lantern } from '../js/social/lantern.js';
+    import { Character } from '../js/avatar/character.js';
+    import { sanitizeLook } from '../js/avatar/looks.js';
+    import { shadowTexture } from '../js/core/textures.js';
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));

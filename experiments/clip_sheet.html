@@ -12,8 +12,8 @@
   // ?set=hathair 人的髮型 × 帽子｜face 五官 × 眼鏡｜beard 鬍子 × 脖子｜racehat 種族 × 帽子｜hood 連身頭套 × 髮型和種族｜outerback 外套 × 背上｜outerneck 外套 × 脖子｜cam 相機 × 下身和外套
   // 拍完把整張圖放在 window.sheet（dataURL），#out 出現
   import * as THREE from 'three';
-  import { Character } from '../js/character.js';
-  import { presetLook, OPTIONS, RACES } from '../js/looks.js';
+  import { Character } from '../js/avatar/character.js';
+  import { presetLook, OPTIONS, RACES } from '../js/avatar/looks.js';
 
   const q = new URLSearchParams(location.search), set = q.get('set') || 'hathair';
   const ids = (k) => OPTIONS[k].map(([id]) => id);

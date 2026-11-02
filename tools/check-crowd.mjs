@@ -9,7 +9,7 @@ import { THREE, w, ROOT } from './haishi-env.mjs';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
-const { Passersby, busyAt } = await import(pathToFileURL(path.join(ROOT, 'js/passersby.js')).href);
+const { Passersby, busyAt } = await import(pathToFileURL(path.join(ROOT, 'js/npc/passersby.js')).href);
 const SPOTS = [{ name: '下街', x: -2, y: 6.8, z: -14 }, { name: '碼頭', x: 0, y: 0, z: 8 }, { name: '燈巷', x: -6, y: 9.2, z: -24 }];
 const HOURS = [8, 13, 2, 20];   // 台灣時間
 const WINDOWS = 4, FRAMES = 450, DT = 1 / 30;
@@ -20,7 +20,7 @@ for (const hour of HOURS) {
   const stat = { jumps: 0, pf: 0, nan: 0, frames: 0, bad: 0, close: 0, stack: 0, nearBad: 0, people: 0, sync: 0, syncN: 0, ms: 0, worst: 0 };
   for (const spot of SPOTS) {
     const ps = new Passersby({ scene: new THREE.Scene(), world: w, shadowTex: null });
-    const player = { pos: { x: spot.x, y: spot.y, z: spot.z } };
+    const player = { pos: { x: spot.x, y: spot.y, z: spot.z }, camera: { position: { x: spot.x, y: spot.y + 2, z: spot.z + 4 } } };
     const lastPos = new Map();
     for (let win = 0; win < WINDOWS; win++) {
       lastPos.clear();

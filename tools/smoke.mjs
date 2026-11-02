@@ -96,11 +96,12 @@ for (const zone of ZONES) {
     while (root.parent) root = root.parent;
     root.traverse((o) => {
       kinds[o.type] = (kinds[o.type] || 0) + 1;
-      if (o.geometry?.attributes?.position) verts += o.geometry.attributes.position.count * (o.count || 1);
+      if (o.geometry?.attributes?.position) verts += o.geometry.attributes.position.count * (o.instanceMatrix?.count || 1);
       for (const m of [].concat(o.material || [])) mats[m.type] = (mats[m.type] || 0) + 1;
     });
     const list = [];
-    root.traverse((o) => { if (o.geometry?.attributes?.position) list.push(o.type + ':' + (o.name || o.parent?.name || '') + ':' + o.geometry.attributes.position.count + 'x' + (o.count || 1)); });
+    const skip = (o) => { for (let p = o; p; p = p.parent) if (p.userData.character) return true; return false; };
+    root.traverse((o) => { if (o.geometry?.attributes?.position && !skip(o)) list.push(o.type + ':' + (o.name || o.parent?.name || '') + ':' + o.geometry.attributes.position.count + 'x' + (o.instanceMatrix?.count || 1)); });
     return { kinds, mats, verts, list: list.sort() };
   })()`).catch((e) => (problems.push('指紋 ' + e.message), null)) : null;
   if (ok) {

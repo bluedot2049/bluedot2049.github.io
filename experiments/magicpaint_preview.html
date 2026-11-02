@@ -24,8 +24,8 @@
 <script type="module">
   // 色塊畫測試：一面牆四幅，鏡頭沿牆走，第二、四幅前面停下來看甦醒。?seed=字 換一批構圖
   import * as THREE from 'three';
-  import { uTime } from '../js/scenery.js';
-  import { createMagicPaint, paletteFor, updateMagic, bakeOne, DEPTH_K } from '../js/magicpaint.js';
+  import { uTime } from '../js/core/scenery.js';
+  import { createMagicPaint, paletteFor, updateMagic, bakeOne, DEPTH_K } from '../js/zones/gallery/magicpaint.js';
 
   const q = new URLSearchParams(location.search), salt = q.get('seed') || '';
   const renderer = new THREE.WebGLRenderer({ antialias: true });

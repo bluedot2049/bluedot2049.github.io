@@ -2,7 +2,7 @@
 
 > **Target Audience**: AI Agents & Technical Collaborators  
 > **Status**: Design agreed with user 2026-11-01 (see §6). Not implemented yet — do not change runtime code without explicit user instruction.  
-> **Related Files**: [`js/looks.js`](file:///g:/煉金畫廊/js/looks.js), [`js/main.js`](file:///g:/煉金畫廊/js/main.js), [`js/creator.js`](file:///g:/煉金畫廊/js/creator.js), [`js/vendors.js`](file:///g:/煉金畫廊/js/vendors.js), [`js/photo.js`](file:///g:/煉金畫廊/js/photo.js)
+> **Related Files**: [`js/avatar/looks.js`](file:///g:/煉金畫廊/js/looks.js), [`js/main.js`](file:///g:/煉金畫廊/js/main.js), [`js/avatar/creator.js`](file:///g:/煉金畫廊/js/creator.js), [`js/npc/vendors.js`](file:///g:/煉金畫廊/js/vendors.js), [`js/camera/photo.js`](file:///g:/煉金畫廊/js/photo.js)
 
 ---
 
@@ -188,7 +188,7 @@ Messaging apps (LINE, IG, Messenger) recompress images and strip metadata; postc
 | Pixel steganography | yes | broken | mostly broken |
 | **Printed QR / seal** | yes | yes | yes |
 
-- Stamp a vermilion seal in a corner of the postcard; it is a QR code with dot / brush-styled modules (keep enough contrast). Draw it with the house style ([`js/glyphs.js`](file:///g:/煉金畫廊/js/glyphs.js) for any surrounding marks).
+- Stamp a vermilion seal in a corner of the postcard; it is a QR code with dot / brush-styled modules (keep enough contrast). Draw it with the house style ([`js/core/glyphs.js`](file:///g:/煉金畫廊/js/glyphs.js) for any surrounding marks).
 - The QR content is a full URL (`https://…/#look=…` or `#save=…`), so a phone camera scan opens the site directly.
 - In-site "從明信片讀取": pick an image from the album → decode. Try the JPEG COM segment first (exact, also written), fall back to QR.
 - Decoder: jsQR in `vendor/` (~45 KB min), loaded lazily only when the user opens the reader. `BarcodeDetector` is not available on iOS Safari, so it cannot be the only path.
@@ -200,10 +200,10 @@ Messaging apps (LINE, IG, Messenger) recompress images and strip metadata; postc
 ### 6.6 Execution checklist (replaces §5 when implementing)
 - [x] (done 2026-11-01: `getSave`/`putSave` in looks.js, `GIFTS` gates `need`/`night`/`again` + `Vendor.gate`) Phase 1 (with the new gift rules): `save` object + version, one-time wipe of old possession keys (look / outfit / closet / unlocked), migration + write-back for later versions, `storage.persist()`.
 - [x] Vendor gift tiers (two-player condition not done): barter via `look.hand`, time / revisit / two-player conditions, data in `GIFTS`.
-- [x] (done 2026-11-01, `js/savecode.js`: 1 char per field in looks.js list order, `A…` look / `S…` save, 2-char checksum, `~` separates save parts so it is fragment-safe; face stays decimal RLE; hash handled in `main.js loadLook`; copy/paste on the mirror's 衣櫃 page) Phase 2: save codec (§3 recommendations still apply: bit-packing body + Base64 RLE face), checksum, `#look=` / `#save=` handling, copy/paste UI.
+- [x] (done 2026-11-01, `js/save/savecode.js`: 1 char per field in looks.js list order, `A…` look / `S…` save, 2-char checksum, `~` separates save parts so it is fragment-safe; face stays decimal RLE; hash handled in `main.js loadLook`; copy/paste on the mirror's 衣櫃 page) Phase 2: save codec (§3 recommendations still apply: bit-packing body + Base64 RLE face), checksum, `#look=` / `#save=` handling, copy/paste UI.
 - [x] (done 2026-11-01) Postcard, as built — differs from §6.5 in these ways:
-  - Both QR codes are **postage stamps** (perforated, colored frame, glyph band): 茜紅「海市」+ lantern = `#look=` (寄給朋友); 藍染「行囊」+ moon = `#save=` with closet (寄給自己, 1.5× size). `qrStamp` in `js/postcard.js`; ECC L; modules are joined rounded ink blocks (gaps between dots broke scanning after downscale).
-  - **Drawn faces never go into a QR.** They go on **film-edge strips** around the photo (`js/filmcode.js`): light/dark cells on a dark film base with sprocket holes, colour gradient is decoration only, Reed-Solomon (40%), deflate-raw. 寄給朋友: bottom strip only (current face, omitted if no face). 寄給自己: four strips — bottom = current look, top/left/right = closet 1/2/3 (empty strip when no face). Face too big → strip printed empty, tip tells the player to use 複製碼.
+  - Both QR codes are **postage stamps** (perforated, colored frame, glyph band): 茜紅「海市」+ lantern = `#look=` (寄給朋友); 藍染「行囊」+ moon = `#save=` with closet (寄給自己, 1.5× size). `qrStamp` in `js/save/postcard.js`; ECC L; modules are joined rounded ink blocks (gaps between dots broke scanning after downscale).
+  - **Drawn faces never go into a QR.** They go on **film-edge strips** around the photo (`js/save/filmcode.js`): light/dark cells on a dark film base with sprocket holes, colour gradient is decoration only, Reed-Solomon (40%), deflate-raw. 寄給朋友: bottom strip only (current face, omitted if no face). 寄給自己: four strips — bottom = current look, top/left/right = closet 1/2/3 (empty strip when no face). Face too big → strip printed empty, tip tells the player to use 複製碼.
   - Reader `readPostcard(file)` locates strips from the card's proportions (`guessFilm`), so cropped images / screenshots lose the faces (QR still works). Mirror 衣櫃 page has 從明信片讀取.
   - Measured with jsQR on synthetic cards: everything passes at original size and at 1280 px long edge (LINE); portrait 寄給自己 faces fail at ≤960 px.
 - [ ] Postcard seal (original plan, superseded by the line above): QR rendering in seal style, 寄給朋友 / 寄給自己 modes, COM segment, lazy jsQR reader.
@@ -236,7 +236,7 @@ Candidates that were shown (all readable only by our reader):
 1. **Iris code** — the eye's iris drawn large on the frame: concentric rings cut into light/dark arcs; the pupil plus a gold ring is the finder (circles survive scaling).
 2. **Frame runes** — the arched mirror frame's border carries brush-tick cells (the filmcode engine, restyled), diamond marks at the corners as finders.
 3. **Constellation** — dots on a hidden hex grid inside a round field, three larger guide stars as finders.
-Chosen: iris holds the core, frame runes hold the full save and faces, stars are decoration only. Built in `js/mirrorcard.js`:
+Chosen: iris holds the core, frame runes hold the full save and faces, stars are decoration only. Built in `js/save/mirrorcard.js`:
 - Fixed 1500×2000 card, black ground. Arched mirror window 930×1340 (photo flipped), gold frame band 110 wide, eye 910 wide on top, date plate at the bottom (glyphs.js), stars and four corner constellations in the free black areas.
 - Iris: 11 rings × ~9 px arcs = 1074 cells, RS 30 % → 71 bytes. Holds `encodeSave` without closet, visits or faces (~44 chars).
 - Frame runes: 12 rows × 7.5 px cells along the arch = 6180 cells, RS 30 % → 533 bytes. Holds `[1][len][deflate(full save text)][4 × (len + packFace)]`; faces that do not fit are dropped from closet 3 backwards and reported.
@@ -244,8 +244,8 @@ Chosen: iris holds the core, frame runes hold the full save and faces, stars are
 - Measured (`experiments/mirrorcard_test.html`): everything incl. faces reads back at original JPEG 0.92, LINE 960×1280 q0.8, half size q0.7, 600×800 q0.7, and an iPhone-style 1170×2532 letterboxed image.
 
 ### 7.5 Checklist
-- [x] Remove copy/paste/link buttons from 行囊; keep 從照片讀取 (+ drag/drop, paste on desktop). (`js/creator.js`)
-- [x] Eye model + idle, rise/return animation, pupil countdown, blink shutter, flash. (`js/eye.js`, `js/selfie.js`)
+- [x] Remove copy/paste/link buttons from 行囊; keep 從照片讀取 (+ drag/drop, paste on desktop). (`js/avatar/creator.js`)
+- [x] Eye model + idle, rise/return animation, pupil countdown, blink shutter, flash. (`js/camera/eye.js`, `js/camera/selfie.js`)
 - [x] Selfie render from the mirror camera, flipped, eye placed at shoulder facing the glass; hide UI. Passers-by are **not** hidden yet.
 - [x] Photo layout: arched mirror frame, date plate (glyphs.js), code regions.
 - [x] RS packing generalised in `filmcode.js` (`codeBits` / `codeData`, film edges unchanged); reader tries the mirror card first, then the old postcard path.

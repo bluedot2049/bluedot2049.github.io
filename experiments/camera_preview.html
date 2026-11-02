@@ -25,12 +25,12 @@
   </div>
   <script type="module">
     import * as THREE from 'three';
-    import { Kit, newBucket } from '../js/props.js';
-    import { bucketObjects } from '../js/scenery.js';
-    import { cameraModel } from '../js/cameras.js';
-    import { Character } from '../js/character.js';
-    import { sanitizeLook } from '../js/looks.js';
-    import { shadowTexture } from '../js/textures.js';
+    import { Kit, newBucket } from '../js/core/props.js';
+    import { bucketObjects } from '../js/core/scenery.js';
+    import { cameraModel } from '../js/camera/cameras.js';
+    import { Character } from '../js/avatar/character.js';
+    import { sanitizeLook } from '../js/avatar/looks.js';
+    import { shadowTexture } from '../js/core/textures.js';
 
     const params = new URLSearchParams(location.search);
     const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
