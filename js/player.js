@@ -922,6 +922,11 @@ export class Player {
     this.pos.y = this.world.groundY(x, z);
     this.heading = heading;
     this.camYaw = heading + Math.PI;
+    this.snapCamera();
+  }
+
+  // 鏡頭直接到角色身後該在的地方：換區域抵達、收起相機時用
+  snapCamera() {
     // 越肩構圖直接換成新位置的，不然站著不動時會一直帶著上一個地方的。俯角是使用者的，不動
     const g = this.shotGoal(this.shotHere());
     this.shotSide = g.side;

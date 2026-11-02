@@ -165,16 +165,16 @@ const KNOBS = {
   // 點一下換一段：不印（開了細縫的鐵蓋滑下來，縫裡透出暗暗的字）→ 月日 → 年月日（#ph-date 的 .on、.full）
   die() {
     const now = new Date();
-    const row = (cls, year, h) => {
-      const { w } = dateCuts(dateText(now, year), 0, 0, h, h * 0.21), { d } = dateCuts(dateText(now, year), -w / 2, -h / 2, h, h * 0.21);
+    const row = (cls, year, size) => {
+      const t = (c, dy) => `<text class="${c}" y="${(size * 0.32 + dy).toFixed(2)}" font-size="${size}" font-family="${DATE_FONT}" text-anchor="middle">${dateText(now, year)}</text>`;
       // 刀痕：上緣一道暗影、下緣一道亮邊，中間才是刀口
-      return `<g class="${cls}"><path class="die sh" d="${d}" transform="translate(0 -.45)"/><path class="die lo" d="${d}" transform="translate(0 .6)"/><path class="die" d="${d}"/></g>`;
+      return `<g class="${cls}">${t('die sh', -0.45)}${t('die lo', 0.6)}${t('die', 0)}</g>`;
     };
     return '<svg viewBox="-32 -20 64 40" aria-hidden="true">'
       + '<defs><clipPath id="dt-win"><rect x="-24" y="-10" width="48" height="20" rx="1.5"/></clipPath></defs>'
       + '<g clip-path="url(#dt-win)"><rect class="well" x="-24" y="-10" width="48" height="20"/>'
       + '<g class="glow"><rect x="-24" y="-10" width="48" height="20"/></g>'
-      + row('md', false, 11) + row('ymd', true, 8.6)
+      + row('md', false, 16) + row('ymd', true, 12)
       + '<g class="lid"><path fill-rule="evenodd" d="M-24-10H24V10H-24ZM-20-3.2H20V-1.4H-20ZM-20 1.4H20V3.2H-20Z"/></g></g>'
       + '<rect class="sill" x="-24.5" y="-10.5" width="49" height="21" rx="1.8"/><path class="sill lo" d="M-23 11.2H23"/>'
       + '<circle class="rivet" cx="-28" cy="-15" r="1.3"/><circle class="rivet" cx="28" cy="-15" r="1.3"/>'
@@ -406,46 +406,10 @@ function dateText(d, year) {
   return (year ? two(d.getFullYear()) + '·' : '') + two(d.getMonth() + 1) + '·' + two(d.getDate());
 }
 
-// 日期的數字是刻出來的，不用字型：照雕刻刀的刻法，一筆一刀，下刀細、中間寬、收刀又細；圈分左右兩刀，接口留著尖。
-// 每個字是幾刀，每刀是幾個點（0–1，y 往下）。角度照 y 往下量，0 是右、90 是下
-const arc = (cx, cy, rx, ry, a0, a1, n = 14) => Array.from({ length: n + 1 }, (_, i) => {
-  const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180;
-  return [cx + rx * Math.cos(a), cy + ry * Math.sin(a)];
-});
-const CUTS = {
-  0: [arc(0.5, 0.5, 0.4, 0.48, 280, 80), arc(0.5, 0.5, 0.4, 0.48, -100, 100)],
-  1: [[[0.26, 0.2], [0.56, 0.02]], [[0.56, 0.02], [0.56, 0.98]]],
-  2: [[...arc(0.5, 0.3, 0.37, 0.28, 195, 395), [0.1, 0.98]], [[0.1, 0.98], [0.92, 0.98]]],
-  3: [arc(0.47, 0.27, 0.34, 0.25, 205, 450), arc(0.47, 0.74, 0.39, 0.26, 270, 510)],
-  4: [[[0.7, 0.02], [0.06, 0.7]], [[0.06, 0.7], [0.94, 0.7]], [[0.7, 0.02], [0.7, 0.98]]],
-  5: [[[0.86, 0.02], [0.26, 0.02]], [[0.26, 0.02], [0.2, 0.46]], arc(0.5, 0.68, 0.38, 0.31, 228, 510)],
-  6: [arc(0.57, 0.62, 0.44, 0.6, 288, 176), arc(0.5, 0.72, 0.37, 0.27, 180, 540, 20)],
-  7: [[[0.08, 0.02], [0.92, 0.02]], [[0.92, 0.02], [0.72, 0.36], [0.52, 0.7], [0.42, 0.98]]],
-  8: [arc(0.5, 0.26, 0.3, 0.24, 90, 450, 20), arc(0.5, 0.73, 0.38, 0.26, 270, 630, 20)],
-  9: [arc(0.5, 0.29, 0.37, 0.28, 0, 360, 20), arc(0.43, 0.37, 0.44, 0.6, 4, 104)],
-  '·': [[[0.5, 0.8], [0.5, 0.96]]],
-};
-// 一刀從頭到尾的寬窄：圈下刀收刀不那麼尖，點是一顆飽滿的刀尖，其他照雕刻刀細、寬、細
-const SWELL = {
-  loop: (t) => 0.45 + 0.55 * Math.sin(Math.PI * t),
-  dot: (t) => 0.6 + 1.2 * Math.sin(Math.PI * t) ** 0.5,
-  line: (t) => 0.22 + 0.78 * Math.sin(Math.PI * t) ** 0.6,
-};
-// 整串日期刻成一條路徑：(x, y) 是第一個字的左上角，h 字高，sw 刀口最寬多寬。回傳路徑和總寬
-function dateCuts(text, x, y, h, sw) {
-  const cw = h * 0.58, gap = h * 0.17, dot = h * 0.32;
-  let d = '', cx = x;
-  for (const c of text) {
-    const w = c === '·' ? dot : cw;
-    for (const cut of CUTS[c]) {
-      const pts = cut.map(([u, v]) => ({ x: cx + u * w, y: y + v * h }));
-      const swell = SWELL[c === '·' ? 'dot' : cut.length > 20 ? 'loop' : 'line'];
-      d += ribbonD(pts, (t) => sw * swell(t));
-    }
-    cx += w + gap;
-  }
-  return { d, w: cx - gap - x };
-}
+// 日期的字模用十七世紀英國鉛字 IM Fell DW Pica（index.html 從 Google Fonts 載入），數字高低錯落，像老書裡的頁碼。
+// 照片是畫在 canvas 上的，字型沒到之前畫不出來，所以一開始就先要；連不上就退回系統襯線字
+const DATE_FONT = "'IM Fell DW Pica', serif";
+document.fonts?.load(`20px ${DATE_FONT}`, '0123456789·').catch(() => {});
 
 function numPath(n, x, y, w, h) {
   return NUMS[n].map((s) => 'M' + s.map(([u, v]) => `${(x + u * w).toFixed(2)} ${(y + v * h).toFixed(2)}`).join('L')).join('');
@@ -456,18 +420,20 @@ const INKS = {
   // 燙印：燈泡的熱隔著銅模把日期烙在底片角落，焦糖到赭褐，邊上燒出一圈暈。
   // 字是模子刻的，所以每張都一樣工整；只有銅模壓下去的角度和燒的深淺每張差一點
   burn(ctx, x, y, h, date, year) {
-    const hr = h * 1.3, text = dateText(date, year), probe = dateCuts(text, 0, 0, h, h * 0.2);
-    const cut = new Path2D(dateCuts(text, -hr - h * 0.3 - probe.w, -h, h, h * 0.2).d);
+    const hr = h * 1.3, text = dateText(date, year), tx = -hr - h * 0.3, ty = -h * 0.12;
     const hour = HOURS[Math.floor(((date.getHours() + 1) % 24) / 2)];
     const ink = (edge) => {
-      ctx.fill(cut);
-      if (edge) ctx.stroke(cut);
+      ctx.fillText(text, tx, ty);
+      if (edge) ctx.strokeText(text, tx, ty);
       drawGlyph(ctx, hour, -hr / 2, -h / 2, hr, ctx.strokeStyle, { brush: 0 });
     };
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate((Math.random() - 0.5) * 0.012);
     ctx.lineJoin = 'round';
+    ctx.font = `${h * 1.5}px ${DATE_FONT}`;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'alphabetic';
     // 先燒一圈暈，再壓上字芯
     ctx.globalCompositeOperation = 'screen';
     ctx.globalAlpha = 0.5;

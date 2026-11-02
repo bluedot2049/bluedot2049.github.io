@@ -16,7 +16,7 @@ import { mist, smoke, pools, ripples } from './haze.js';
 import { skyLanterns, seaGlints, meteor, brightStars, horizonShips, fishingFires, tickClock, SHIP_PERIODS } from './distant.js';
 import { Fader } from './fade.js';
 import { drawText } from './glyphs.js';
-import { GRADE, GRADE_GLSL, gradeCurvesOnly } from './grade.js';
+import { GRADE, GRADE_GLSL, gradeCurvesOnly, TUNE } from './grade.js';
 import { paving, PAVES, BED } from './pave.js';
 
 const SEA = -0.6;
@@ -264,11 +264,33 @@ function floorBelow(x, y, z) {
 const paveOf = (a) => a.id === 'summit' || a.temple ? 'summit'
   : { lower: 'cobble', lantern: 'strip', upper: 'patch', specula: 'great' }[a.street] ?? (a.y === 0 ? 'granite' : 'pebble');
 
+// 畫出來的山坡是 2 公尺一格的網格，在削過的山、石台之間的陡坎跟 terrain() 會差到一兩公尺。
+// 放在山坡上的東西照網格的三角形內插，才會踩在看得到的地面上。每個頂點只算一次，生網格也用同一份
+const TG = { x0: -100, x1: 90, z0: 32, z1: -140, s: 2 };
+TG.cols = (TG.x1 - TG.x0) / TG.s + 1;
+TG.rows = (TG.z0 - TG.z1) / TG.s + 1;
+let tgy = null;
+function gridY(i, j) {
+  if (!tgy) {
+    tgy = new Float32Array(TG.cols * TG.rows);
+    for (let r = 0; r < TG.rows; r++) for (let c = 0; c < TG.cols; c++) tgy[r * TG.cols + c] = terrain(TG.x0 + c * TG.s, TG.z0 - r * TG.s);
+  }
+  return tgy[j * TG.cols + i];
+}
+function meshY(x, z) {
+  const fx = (x - TG.x0) / TG.s, fz = (TG.z0 - z) / TG.s, i = Math.floor(fx), j = Math.floor(fz);
+  if (i < 0 || j < 0 || i >= TG.cols - 1 || j >= TG.rows - 1) return terrain(x, z);
+  const u = fx - i, v = fz - j, h0 = gridY(i, j), h1 = gridY(i + 1, j), h2 = gridY(i + 1, j + 1), h3 = gridY(i, j + 1);
+  // 每格沿著 (x, z)–(x + S, z - S) 那條對角線切成兩個三角形，跟 terrainGeometry 一樣
+  return u >= v ? h0 + (h1 - h0) * u + (h2 - h1) * v : h0 + (h2 - h3) * u + (h3 - h0) * v;
+}
+
 function terrainGeometry() {
-  const pos = [], S = 2;
-  for (let x = -100; x < 90; x += S) {
-    for (let z = 32; z > -140; z -= S) {
-      const v = [[x, z], [x + S, z], [x + S, z - S], [x, z - S]].map(([px, pz]) => [px, terrain(px, pz), pz]);
+  const pos = [], S = TG.s;
+  for (let i = 0; i < TG.cols - 1; i++) {
+    for (let j = 0; j < TG.rows - 1; j++) {
+      const x = TG.x0 + i * S, z = TG.z0 - j * S;
+      const v = [[x, z, i, j], [x + S, z, i + 1, j], [x + S, z - S, i + 1, j + 1], [x, z - S, i, j + 1]].map(([px, pz, pi, pj]) => [px, gridY(pi, pj), pz]);
       // 逆時針從上面看才是正面；反過來的話只有從坡底往上看得到，站上遠眺台往下看整片山坡會不見
       pos.push(...v[0], ...v[1], ...v[2], ...v[0], ...v[2], ...v[3]);
     }
@@ -282,13 +304,36 @@ function terrainGeometry() {
 // 銀河那個大圓的法線：帶子從西南的海面斜斜跨過頭頂，落到東北的山後面
 const BAND = new THREE.Vector3(0.55, 0.45, -0.7).normalize();
 
-// 藍調時刻的天空：地平線和霧同色，往上漸深，西邊殘留一點夕陽的暖色。
+// 天邊的日出光和霧：天空球和海平線的霧帶共用同一段，兩邊才接得起來。
+// 右手邊（往西，跟主光同一邊）遠遠透出一點日出前的光：這裡是永夜，光要收著，只是貼著海平線淡淡一團燈籠那種暖橘，外面更淡一圈，
+// 只打亮那一角，往上很快退回夜色，星星照樣亮。光照到的地方先把底下的藍褪成灰再加上去，不是兩色直接混，中間不會出現紫色。
+// 左手邊（往東）起霧：天邊的霧色往上拉高一段，海的霧帶也從近處就開始，海和天在那裡融成一片
+const SKY_EDGE_GLSL = `
+  uniform vec3 uWarm; uniform float uGlow; uniform float uMist; uniform float uMistWidth; uniform float uHorizon;
+  // 天邊的顏色：場景的霧色再壓深一點。霧本身不動（鎮上的霧照舊），只有天邊和接過去的海平線變深
+  vec3 skyLow(vec3 fog) { return fog * uHorizon; }
+  float sunUp(vec2 dir, float h) {
+    float a = max(0.0, dot(normalize(dir), normalize(vec2(-1.0, 0.35))));
+    float core = pow(a, 24.0) * exp(-max(h, 0.0) * 18.0) * 0.5;
+    float wide = pow(a, 6.0) * (1.0 - smoothstep(-0.02, 0.16, h)) * 0.4;
+    return (core + wide) * uGlow;
+  }
+  vec3 sunLit(vec3 c, float w) {
+    vec3 g = mix(c, vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), min(1.0, w * 3.0));
+    return g * (1.0 - 0.4 * min(w, 1.0)) + uWarm * w;
+  }
+  // uMistWidth 越大，融成一片的那一段往兩邊拉得越開
+  float mistAt(vec2 dir) { return pow(max(0.0, dot(normalize(dir), normalize(vec2(1.0, 0.3)))), mix(6.0, 0.8, uMistWidth)) * uMist; }
+`;
+
+// 藍調時刻的天空：地平線和霧同色，往上漸深，西邊貼著海平線一團日出前的暖光，東邊天邊起霧。
 // uStars 越往山上越大：天頂再暗一點，淡淡浮出一條銀河
 function skyDome(bg) {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
-      uLow: { value: new THREE.Color(bg) }, uTop: { value: new THREE.Color('#34405e') }, uWarm: { value: new THREE.Color('#b88a96') },
-      uBand: { value: BAND }, uMilk: { value: new THREE.Color('#4c5288') }, uStars: { value: 0 }, uGrade: { value: GRADE },
+      uLow: { value: new THREE.Color(bg) }, uTop: { value: new THREE.Color('#34405e') },
+      uWarm: { value: new THREE.Color('#ff9f4a') }, uGlow: { value: 0.28 }, uMist: { value: 0.85 }, uMistWidth: { value: 0.85 }, uHorizon: { value: 0.7 },
+      uBand: { value: BAND }, uMilk: { value: new THREE.Color('#4c5288') }, uStars: { value: 0 }, uDeep: { value: 0.82 }, uGrade: { value: GRADE },
     },
     vertexShader: `
       varying vec3 vDir;
@@ -296,20 +341,23 @@ function skyDome(bg) {
         vDir = normalize(position);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }`,
-    fragmentShader: GRADE_GLSL + `
-      uniform vec3 uLow; uniform vec3 uTop; uniform vec3 uWarm; uniform vec3 uBand; uniform vec3 uMilk; uniform float uStars;
+    fragmentShader: GRADE_GLSL + SKY_EDGE_GLSL + `
+      uniform vec3 uLow; uniform vec3 uTop; uniform vec3 uBand; uniform vec3 uMilk; uniform float uStars; uniform float uDeep;
       varying vec3 vDir;
       void main() {
         vec3 d = normalize(vDir);
         float h = d.y;
-        vec3 c = mix(uLow, uTop * (1.0 - 0.2 * uStars), smoothstep(0.0, 0.55, h));
+        // 左手邊起霧的那一段，天邊的霧色往上拉高，跟底下的海融成一片
+        float lift = 1.0 + 3.0 * mistAt(d.xz);
+        vec3 c = mix(skyLow(uLow), uTop * (1.0 - 0.2 * uStars), smoothstep(0.0, 0.55 * lift, h));
+        // 整片天再深一點：天邊那一線不動（要跟霧接起來），稍微往上就開始壓
+        c *= mix(1.0, uDeep, smoothstep(0.0, 0.12 * lift, h));
         // 銀河：沿著大圓的一條光帶，幾道正弦交疊出明暗的雲團，中間一道暗縫
         float b = dot(d, uBand);
         float lump = 0.55 + 0.45 * sin(d.x * 7.0 + sin(d.z * 5.0) * 2.0) * sin(d.z * 9.0 - d.y * 6.0 + 1.3);
         float milk = exp(-b * b * 22.0) * lump * (1.0 - 0.6 * exp(-(b - 0.025) * (b - 0.025) * 900.0));
         c += uMilk * milk * uStars * smoothstep(0.02, 0.35, h);
-        float w = pow(max(0.0, dot(normalize(vDir.xz), normalize(vec2(-1.0, 0.35)))), 3.0) * (1.0 - smoothstep(-0.02, 0.22, h));
-        gl_FragColor = vec4(mix(c, uWarm, w * 0.55), 1.0);
+        gl_FragColor = vec4(sunLit(c, sunUp(d.xz, h)), 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
         gl_FragColor.rgb = gradeCurvesOut(gl_FragColor.rgb);   // 跟完全進霧的山一起過曲線，接起來不會多一條線
@@ -319,6 +367,18 @@ function skyDome(bg) {
   const m = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 12), mat);
   m.renderOrder = -1;
   m.frustumCulled = false;
+  // 天邊跟著場景的霧色走（光線面板的「霧色」），完全進霧的遠山和天才接得起來；往上的顏色登記進調色台
+  m.onBeforeRender = (r, s) => { if (s.fog) mat.uniforms.uLow.value.copy(s.fog.color); };
+  TUNE.push(
+    { label: '天空壓暗', key: 'skyDeep', uniform: mat.uniforms.uDeep, kind: [0.4, 1.2, 0.01] },
+    { label: '天頂色', key: 'skyTop', uniform: mat.uniforms.uTop, kind: 'color' },
+    { label: '日出色', key: 'skyWarm', uniform: mat.uniforms.uWarm, kind: 'color' },
+    { label: '日出亮度', key: 'skyGlow', uniform: mat.uniforms.uGlow, kind: [0, 2, 0.01] },
+    { label: '海天融合', key: 'skyMist', uniform: mat.uniforms.uMist, kind: [0, 1, 0.01] },
+    { label: '融合範圍', key: 'skyMistWidth', uniform: mat.uniforms.uMistWidth, kind: [0, 1, 0.01] },
+    { label: '天邊深淺', key: 'skyHorizon', uniform: mat.uniforms.uHorizon, kind: [0.3, 1.2, 0.01] },
+    { label: '銀河色', key: 'skyMilk', uniform: mat.uniforms.uMilk, kind: 'color' },
+  );
   return m;
 }
 
@@ -368,6 +428,122 @@ function starField(n) {
   const p = new THREE.Points(geo, mat);
   p.frustumCulled = false;
   return p;
+}
+
+// 殿裡的水鏡：一池黑水，倒映天井那一塊天。不用反射相機（那等於整座海市每一幀多畫一次），水自己算：
+// 視線照水面反射上去，穿得過天井的那幾條看到天，其他都落在屋頂底下的暗處。
+// 天井只看得到頭頂三十幾度以內的天，所以載入時把天上真的星星裡、頭頂那一圈的畫成一張小圖，
+// 水裡的星跟從天井抬頭看到的是同一批。一次繪製，只算池子佔到的那些像素；離得遠就整池退成黑水
+const CAP = 0.62;   // 小圖涵蓋頭頂多少弧度：天井最斜看得到約 0.55，水面晃動再留一點
+function starCap(field, lists, size) {
+  const acc = new Float32Array(size * size * 3), phase = new Uint8Array(size * size), k0 = size / 512, c = new THREE.Color();
+  // 一顆星：照方向投到小圖上（以天頂為中心、離天頂的角度當半徑），畫一團柔邊的點。閃的相位記在 alpha
+  const dot = (dx, dy, dz, b, rad, ph) => {
+    const len = Math.hypot(dx, dy, dz), th = Math.acos(Math.min(1, dy / len)), h = Math.hypot(dx, dz) || 1;
+    if (th > CAP + 0.04) return;
+    const u = (0.5 + (0.5 * th * dx) / (CAP * h)) * size, v = (0.5 + (0.5 * th * dz) / (CAP * h)) * size, rr = rad * k0, n = Math.ceil(rr * 2);
+    for (let j = Math.floor(v) - n; j <= Math.floor(v) + n; j++) for (let i = Math.floor(u) - n; i <= Math.floor(u) + n; i++) {
+      if (i < 0 || j < 0 || i >= size || j >= size) continue;
+      const d2 = ((i + 0.5 - u) ** 2 + (j + 0.5 - v) ** 2) / (rr * rr);
+      if (d2 > 4) continue;
+      const w = Math.exp(-d2 * 1.5) * b, q = j * size + i;
+      acc[q * 3] += c.r * w; acc[q * 3 + 1] += c.g * w; acc[q * 3 + 2] += c.b * w;
+      if (w > 0.15) phase[q] = ph;
+    }
+  };
+  // 滿天的小星：亮度、大小、閃的快慢照 starField 的算法
+  const pos = field.geometry.attributes.position, col = field.geometry.attributes.aColor, mag = field.geometry.attributes.aMag;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i), m = mag.getX(i);
+    c.setRGB(col.getX(i), col.getY(i), col.getZ(i));
+    dot(x, pos.getY(i), z, 0.38 + 0.62 * m, 0.35 + m * 0.45, ((((x * 0.37 + z * 0.21) / (Math.PI * 2)) % 1) + 1) % 1 * 255);
+  }
+  // 亮星、暗一點的那層、一般的光點星：顏色照它們自己的，亮度照 gain
+  for (const s of lists) {
+    c.set(s.color);
+    dot(s.x, s.y, s.z, s.gain ?? 0.6, 0.5 + Math.min(1.1, s.size / 24), (s.x * 7.31 + s.z * 3.17) % 255);
+  }
+  // 舊光：水裡多一層天上已經看不到的淡星，偏冷，密密的一片。自己一串亂數，天上的星不會換位置
+  const OR = rng('haishi-mirror-old-light');
+  for (let i = 0; i < 1600; i++) {
+    const th = Math.sqrt(OR()) * CAP, a = OR() * Math.PI * 2, m = Math.pow(OR(), 2);
+    c.setHSL(0.6 + OR() * 0.05, 0.3, 0.8);
+    dot(Math.sin(th) * Math.cos(a), Math.cos(th), Math.sin(th) * Math.sin(a), 0.18 + 0.4 * m, 0.3 + m * 0.3, OR() * 255);
+  }
+  const data = new Uint8Array(size * size * 4);
+  for (let q = 0; q < size * size; q++) {
+    for (let ch = 0; ch < 3; ch++) data[q * 4 + ch] = Math.min(255, acc[q * 3 + ch] * 255);
+    data[q * 4 + 3] = Math.abs(phase[q]) % 256;
+  }
+  const t = new THREE.DataTexture(data, size, size);
+  t.magFilter = t.minFilter = THREE.LinearFilter;
+  t.needsUpdate = true;
+  return t;
+}
+// o：池子中心 x、y（水面）、z，半徑 r；天井開口的高度 ocY、半徑 ocR。dome、field：天空球和星點，共用它們的參數
+function waterMirror(o, dome, field, lists, size) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      ...dome.material.uniforms,
+      uCap: { value: starCap(field, lists, size) }, uFade: field.material.uniforms.uFade, uTime,
+      uC: { value: new THREE.Vector3(o.x, o.y, o.z) }, uR: { value: o.r }, uOcY: { value: o.ocY }, uOcR: { value: o.ocR },
+      uRoof: { value: new THREE.Vector3(0.045, 0.06, 0.085) },   // 輸出的顏色直接用，不經過色彩空間轉換；暗藍不用純黑
+    },
+    vertexShader: `
+      varying vec3 vW;
+      void main() {
+        vec4 w = modelMatrix * vec4(position, 1.0);
+        vW = w.xyz;
+        gl_Position = projectionMatrix * viewMatrix * w;
+      }`,
+    fragmentShader: GRADE_GLSL + SKY_EDGE_GLSL + `
+      uniform vec3 uLow; uniform vec3 uTop; uniform vec3 uBand; uniform vec3 uMilk; uniform float uStars; uniform float uDeep;
+      uniform sampler2D uCap; uniform float uFade; uniform float uTime;
+      uniform vec3 uC; uniform float uR; uniform float uOcY; uniform float uOcR; uniform vec3 uRoof;
+      varying vec3 vW;
+      void main() {
+        vec2 p = vW.xz - uC.xz;
+        // 水面輕輕晃；每隔七秒天井滴下一滴，一圈漣漪從落點散開、慢慢平下去
+        vec2 n = vec2(sin(p.x * 5.0 + uTime * 0.8) * cos(p.y * 4.0 - uTime * 0.6), cos(p.x * 4.5 - uTime * 0.7) * sin(p.y * 5.5 + uTime * 0.9)) * 0.004;
+        float cyc = uTime / 7.0, id = floor(cyc), age = fract(cyc) * 7.0;
+        vec2 q = p - (vec2(fract(sin(id * 12.9898) * 43758.5453), fract(sin(id * 78.233) * 24634.6345)) - 0.5) * 1.4;
+        float dq = length(q), front = age * 0.45;
+        n += q / max(dq, 0.001) * sin((dq - front) * 30.0) * exp(-abs(dq - front) * 8.0) * exp(-age * 0.7) * 0.035;
+        vec3 V = normalize(vW - cameraPosition), d = reflect(V, normalize(vec3(n.x, 1.0, n.y)));
+        // 照實反射的話，站在池邊往下看，反射上去的線都打在屋頂底下，要趴到池子正上方才看得到天井。
+        // 這池水不照實：反射上去的方向往頭頂收攏，從哪個角度看，水裡都是天井正上方那一塊天，
+        // 還是會跟著走動的角度慢慢移；四周照收攏後的線落在天井那一層的位置，越外面越暗，框成一圈
+        d = normalize(vec3(d.x * 0.3, max(d.y, 0.05), d.z * 0.3));
+        float open = smoothstep(uOcR * 2.4, uOcR * 1.2, length(vW.xz + d.xz * ((uOcY - vW.y) / d.y) - uC.xz));
+        vec3 col = uRoof;
+        if (open > 0.0) {
+          // 天的顏色跟天空球同一段算法
+          float h = d.y, lift = 1.0 + 3.0 * mistAt(d.xz);
+          vec3 c = mix(skyLow(uLow), uTop * (1.0 - 0.2 * uStars), smoothstep(0.0, 0.55 * lift, h));
+          c *= mix(1.0, uDeep, smoothstep(0.0, 0.12 * lift, h));
+          float b = dot(d, uBand);
+          float lump = 0.55 + 0.45 * sin(d.x * 7.0 + sin(d.z * 5.0) * 2.0) * sin(d.z * 9.0 - d.y * 6.0 + 1.3);
+          c += uMilk * exp(-b * b * 22.0) * lump * (1.0 - 0.6 * exp(-(b - 0.025) * (b - 0.025) * 900.0)) * uStars * smoothstep(0.02, 0.35, h);
+          gl_FragColor = vec4(sunLit(c, sunUp(d.xz, h)), 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+          vec3 sky = gradeCurvesOut(gl_FragColor.rgb);
+          // 星星跟天上的星點一樣直接疊上去，不過曲線
+          float th = acos(clamp(d.y, -1.0, 1.0));
+          vec4 s = texture2D(uCap, 0.5 + 0.5 * (th / ${CAP.toFixed(2)}) * d.xz / max(length(d.xz), 0.0001));
+          sky += s.rgb * 1.5 * (0.7 + 0.3 * sin(uTime * 2.2 + s.a * 6.2832)) * uFade;
+          col = mix(uRoof, sky * 0.85, open);
+        }
+        // 靠石沿那一圈暗一點；離得遠整池退成黑水
+        col *= 0.6 + 0.4 * smoothstep(uR, uR - 0.15, length(p));
+        col = mix(col, uRoof, smoothstep(12.0, 30.0, distance(cameraPosition, vW)));
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+    fog: false,
+  });
+  const m = new THREE.Mesh(new THREE.CircleGeometry(o.r, 48).rotateX(-Math.PI / 2), mat);
+  m.position.set(o.x, o.y, o.z);
+  return m;
 }
 
 // 牌樓上的字
@@ -452,11 +628,13 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     }
   };
   // 欄杆：從 a 到 b，地面高 y。越往上越古老：港邊一帶是竹籬，鎮上是亂石砌的矮牆，星台以上是老石欄，
-  // 石望柱頂上蹲著小獸；遠眺台的柱子之間再垂一條紅繩，掛著微微發亮的符紙
+  // 石望柱頂上蹲著小獸
   const STONES = ['#6a6870', '#5e5c64', '#74706c', '#62605a'];
   const BAMBOO = ['#8a7a4a', '#7a6c44', '#9a8a5a'];
   const OCHRE = tinted(['#d8b888', '#c8a878', '#e0c8a0'], '#a8b4d0', 0.8);
   const LEAF = ['#2e4a3a', '#3a5a3e', '#44583a'];
+  // 石欄柱頂的裝飾自己用一串亂數；railDeco 記著跨段的節奏：離下一隻小獸還有幾根、上一根的收頭、離上一個重點多遠
+  const DR = rng('haishi-rail-deco'), BRONZE_S = '#8a7a58', railDeco = { gap: 2, cap: -1, sinceFocus: 6, focus: 0 };
   const rail = (ax, az, bx, bz, y) => {
     const len = Math.hypot(bx - ax, bz - az);
     if (len < 0.2) return;
@@ -482,23 +660,82 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       }
       return;
     }
-    // 老石欄：每隔一段一根石望柱，柱頂一隻蹲著的小獸，柱子之間嵌石板
-    const n = Math.max(1, Math.round(len / 1.5)), step = len / n, rope = y > 18;
+    // 老石欄：每隔一段一根石望柱，柱子之間嵌石板。柱頂分三層，不會一路重複同一個樣子：
+    //  大部分柱子只收個頭（平頂、圓珠、寶頂、蓮苞），相鄰兩根不一樣，偶爾一根缺角的老柱；
+    //  一段欄杆的頭尾、再每隔幾根，蹲一隻小獸，姿勢和面向各不相同；
+    //  極少數頭尾換成重點：一座銅的小星儀，或一個盛著水的石缽。
+    // 欄板大多素面，少數鏤一個星孔，偶爾缺一塊，板頂長青苔。
+    // 裝飾全用自己的亂數（DR）；R 照原本一根柱子抽一次，後面的欄杆、竹籬才不會換樣子
+    const n = Math.max(1, Math.round(len / 1.5)), step = len / n, BODY = '#5a5862';
+    const side = [uz, -ux], dirs = [side, [-uz, ux], [ux, uz], [-ux, -uz]];
     for (let i = 0; i <= n; i++) {
-      const [x, z] = at(i * step);
-      k.box(0.24, 1.0, 0.24, '#6a6870', x, y + 0.5, z, { ry, color2: '#7a7880' });
-      k.rock(0.13, '#5a5862', x, y + 1.1, z, { sy: 1.25, ry: R() * 3 });
-      k.ball(0.06, '#5a5862', x + uz * 0.08, y + 1.24, z - ux * 0.08);
-      if (i === n) continue;
-      const [mx, mz] = at((i + 0.5) * step);
-      k.box(step - 0.26, 0.55, 0.14, '#62606a', mx, y + 0.42, mz, { ry, color2: '#72707a' });
-      k.box(step - 0.2, 0.08, 0.2, '#6e6c74', mx, y + 0.74, mz, { ry });
-      if (!rope) continue;
-      for (let j = 0; j < 6; j++) {
-        const [rx, rz] = at(i * step + (step * (j + 0.5)) / 6);
-        k.box(step / 6 + 0.03, 0.03, 0.03, '#a8221a', rx, y + 0.98 - Math.sin(((j + 0.5) / 6) * Math.PI) * 0.2, rz, { ry });
+      // 頭尾那根往裡收半根：立在轉角正中的話，有半根凸出另一邊的台邊，底下是空的。兩邊都圍的轉角，兩根剛好疊成一根
+      const [x, z] = at(Math.min(len - 0.12, Math.max(0.12, i * step)));
+      const spin = R() * 3, end = i === 0 || i === n;
+      let tier = 'cap';
+      if (end && railDeco.sinceFocus > 8 && DR() < 0.3) tier = 'focus';
+      else if (end || --railDeco.gap <= 0) tier = 'beast';
+      const old = tier === 'cap' && DR() < 0.08, ph = old ? 0.88 : 1.0, t = y + ph;
+      k.box(0.24, ph, 0.24, '#6a6870', x, y + ph / 2, z, { ry, color2: '#7a7880' });
+      railDeco.sinceFocus++;
+      if (tier === 'focus') {
+        railDeco.sinceFocus = 0;
+        k.box(0.3, 0.08, 0.3, '#6e6c74', x, t + 0.04, z, { ry });
+        if (railDeco.focus++ % 2 === 0) {
+          // 銅星儀：兩個直立交叉的環、一個斜的環，中間一顆小珠
+          k.cyl(0.03, 0.04, 0.1, BRONZE_S, x, t + 0.13, z, {}, 5);
+          k.torus(0.13, 0.016, Math.PI * 2, BRONZE_S, x, t + 0.31, z, { ry: spin });
+          k.torus(0.13, 0.016, Math.PI * 2, BRONZE_S, x, t + 0.31, z, { ry: spin + Math.PI / 2 });
+          k.torus(0.11, 0.014, Math.PI * 2, BRONZE_S, x, t + 0.31, z, { ry: spin, rx: Math.PI / 2 - 0.41 });
+          k.ball(0.035, '#c8b080', x, t + 0.31, z);
+        } else {
+          // 石缽：盛著一點水，映著天
+          k.cyl(0.17, 0.12, 0.12, BODY, x, t + 0.14, z, {}, 8);
+          k.add(new THREE.CircleGeometry(0.145, 12), '#3a4a6a', x, t + 0.195, z, { rx: -Math.PI / 2, ao: false });
+        }
+      } else if (tier === 'beast') {
+        railDeco.gap = 3 + Math.floor(DR() * 3);
+        const [dx, dz] = dirs[Math.floor(DR() * dirs.length)], pose = Math.floor(DR() * 4);
+        if (pose === 1) {
+          // 趴著：身子壓低拉長，頭擱在前面
+          k.rock(0.13, BODY, x, t + 0.06, z, { sy: 0.7, sx: 1.25, ry: -Math.atan2(dz, dx) });
+          k.ball(0.06, BODY, x + dx * 0.16, t + 0.09, z + dz * 0.16);
+        } else {
+          // 蹲著（0）、回頭（2）、仰頭看天（3）
+          k.rock(0.13, BODY, x, t + 0.1, z, { sy: pose === 3 ? 1.4 : 1.25, ry: spin });
+          const hx = pose === 2 ? -dz : dx, hz = pose === 2 ? dx : dz, up = pose === 3 ? 0.33 : 0.24, off = pose === 3 ? 0.04 : 0.08;
+          k.ball(0.06, BODY, x + hx * off, t + up, z + hz * off);
+        }
+      } else {
+        let kind = old ? 4 : Math.floor(DR() * 4);
+        if (!old && kind === railDeco.cap) kind = (kind + 1 + Math.floor(DR() * 3)) % 4;
+        railDeco.cap = kind;
+        if (kind === 0) k.box(0.3, 0.06, 0.3, '#6e6c74', x, t + 0.03, z, { ry });
+        else if (kind === 1) {
+          k.cyl(0.05, 0.06, 0.06, '#6a6870', x, t + 0.03, z, {}, 6);
+          k.ball(0.09, '#6e6c74', x, t + 0.14, z);
+        } else if (kind === 2) {
+          k.box(0.28, 0.05, 0.28, '#6e6c74', x, t + 0.025, z, { ry });
+          k.add(new THREE.ConeGeometry(0.17, 0.16, 4), '#6a6870', x, t + 0.13, z, { ry: ry + Math.PI / 4 });
+        } else if (kind === 3) k.rock(0.1, '#6e6c74', x, t + 0.12, z, { sy: 1.5, ry: spin });
+        else {
+          // 缺角的老柱：矮一截，頂上一塊斜斜的殘石，長了青苔
+          k.box(0.26, 0.06, 0.24, '#62606a', x, t + 0.01, z, { ry, rz: 0.14 });
+          k.rock(0.07, LEAF[Math.floor(DR() * LEAF.length)], x, t + 0.05, z, { sy: 0.6, ao: false });
+        }
       }
-      for (const side of [0, Math.PI]) k.plane(0.1, 0.26, '#e8d070', mx, y + 0.62, mz, { glow: true, ry: ry + Math.PI / 2 + side, color2: '#fff4b0' });
+      if (i === n) continue;
+      const [mx, mz] = at((i + 0.5) * step), panel = DR();
+      if (panel > 0.04) k.box(step - 0.26, 0.55, 0.14, '#62606a', mx, y + 0.42, mz, { ry, color2: '#72707a' });
+      if (panel > 0.04 && panel < 0.15) {
+        // 星孔：欄板正中鏤一顆四角星，兩面各一片深色
+        for (const sd of [1, -1]) k.add(new THREE.CircleGeometry(0.075, 4), '#2a2a32', mx + side[0] * 0.072 * sd, y + 0.44, mz + side[1] * 0.072 * sd, { ry: ry + (sd > 0 ? Math.PI : 0), sx: 0.7, ao: false });
+      }
+      k.box(step - 0.2, 0.08, 0.2, '#6e6c74', mx, y + 0.74, mz, { ry });
+      if (DR() < 0.15) {
+        const off = (DR() - 0.5) * (step - 0.5);
+        k.rock(0.08, LEAF[Math.floor(DR() * LEAF.length)], mx + off * ux, y + 0.79, mz + off * uz, { sy: 0.55, ao: false });
+      }
     }
   };
 
@@ -943,6 +1180,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   // 每塊石板鋪好後再調一次顏色：整片低低地起伏的斑駁；牆腳、路邊暗一點帶點苔；
   // 店門口常有人站，磨得淺一點；推車底下一攤油漬水漬；港邊濕，暗一點偏藍
   const PR = rng('haishi-pave');   // 鋪路自己用一串亂數，房子不會因為前面多抽了幾次整排換樣子
+  const SLR = rng('haishi-stair-lamps');   // 石階矮牆上的燈也是
   const MOSS = new THREE.Color('#3e5442'), WET = new THREE.Color('#38445a');
   const fronts = SHOPS.map((s) => ({ x: s.x, z: flatAt(s.at, s.x)?.z0 })).filter((s) => s.z != null);
   const edgeAt = (x, z) => {
@@ -1025,22 +1263,38 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       else for (const sz of [a.z0 - 0.12, a.z1 + 0.12]) k.box(tread * 2, top - yb, 0.24, STONE, p, (top + yb) / 2, sz);
     }
     // 上遠眺台的那段石階要暗，只在矮牆上放幾盞冷冷的小燈；上星廟的山路更稀
+    // 間距、哪一邊、高低大小用自己的亂數（SLR）抽，不會一對一對等距排到底
     const dim = a.id === 'sH' || a.temple;
-    for (let s = 0.6; s < len; s += a.temple ? 2.4 : dim ? 3 : 1.5) {
-      const p = along(s);
+    for (let s = 0.6 + SLR() * 0.4; s < len;) {
+      const p = along(s), h = ns ? heightIn(a, 0, p) : heightIn(a, p, 0);
       if (a.temple) {
         // 星廟的山路：矮牆上立一根小石柱，燈點在柱頂，從山下低低地看過來也不會被牆擋住。
-        // 往北爬的立在西邊的牆上，橫著爬的立在靠山下那一邊
-        const x = ns ? a.x0 - 0.12 : p, z = ns ? p : a.z1 + 0.12, h = ns ? heightIn(a, 0, p) : heightIn(a, p, 0);
-        k.box(0.18, 0.55, 0.18, '#5a5862', x, h + 0.78, z);
-        k.box(0.14, 0.14, 0.14, '#a8c8ff', x, h + 1.12, z, { glow: true, color2: '#e0ecff' });
-        k.light(x, h + 1.12, z, '#8ab0ff', 0.25);
-        farLamps.push({ x, y: h + 1.12, z, color: '#e4ecff', size: 0.3 });
+        // 往北爬的大多立在西邊的牆上，橫著爬的大多立在靠山下那一邊，偶爾換到對面。
+        // 越往上越稀，偶爾一盞熄了，柱頂只剩一塊暗的石頭
+        const flip = SLR() < 0.15, x = ns ? (flip ? a.x1 + 0.12 : a.x0 - 0.12) : p, z = ns ? p : flip ? a.z0 - 0.12 : a.z1 + 0.12;
+        const ph = 0.45 + SLR() * 0.2, top = h + 0.5 + ph, out = SLR() < 0.12;
+        k.box(0.18, ph, 0.18, '#5a5862', x, h + 0.5 + ph / 2, z);
+        if (out) k.box(0.14, 0.14, 0.14, '#3e3c46', x, top + 0.07, z);
+        else {
+          k.box(0.14, 0.14, 0.14, '#a8c8ff', x, top + 0.07, z, { glow: true, color2: '#e0ecff' });
+          k.light(x, top + 0.07, z, '#8ab0ff', 0.25);
+          farLamps.push({ x, y: top + 0.07, z, color: '#e4ecff', size: 0.3 });
+        }
+        s += 1.8 + 2.2 * Math.min(1, Math.max(0, (h - 19.2) / 28.8)) + (SLR() - 0.5);
       } else if (dim) {
-        k.cyl(0.04, 0.05, 0.12, '#a8c8ff', a.x0 - 0.12, heightIn(a, 0, p) + 0.62, p, { glow: true });
-        k.light(a.x0 - 0.12, heightIn(a, 0, p) + 0.62, p, '#8ab0ff', 0.2);
-      } else if (ns) for (const sx of [a.x0 - 0.12, a.x1 + 0.12]) lantern(k, sx, heightIn(a, 0, p) + 1.9, p, 0.7);
-      else for (const sz of [a.z0 - 0.12, a.z1 + 0.12]) lantern(k, p, heightIn(a, p, 0) + 1.9, sz, 0.7);
+        k.cyl(0.04, 0.05, 0.12, '#a8c8ff', a.x0 - 0.12, h + 0.62, p, { glow: true });
+        k.light(a.x0 - 0.12, h + 0.62, p, '#8ab0ff', 0.2);
+        s += 3;
+      } else {
+        // 鎮上的石階：兩邊的燈籠各自有沒有、浮多高、多大都不一樣，偶爾夾一盞黃的、白的
+        const walls = ns ? [a.x0 - 0.12, a.x1 + 0.12] : [a.z0 - 0.12, a.z1 + 0.12], has = walls.map(() => SLR() < 0.78);
+        if (!has[0] && !has[1]) has[SLR() < 0.5 ? 0 : 1] = true;
+        walls.forEach((w, j) => {
+          const hy = h + 1.75 + SLR() * 0.3, sc = 0.62 + SLR() * 0.16, [c, hi] = STRING[Math.floor(SLR() * STRING.length)];
+          if (has[j]) ns ? lantern(k, w, hy, p, sc, c, hi) : lantern(k, p, hy, w, sc, c, hi);
+        });
+        s += 1.1 + SLR() * 0.9;
+      }
     }
     // 只拿來擋灌木；鏡頭的地板用一階一階的實際高度（groundY），整段當平頂會把往坡上看的鏡頭推到臉上
     solid(a.x0 - 0.3, a.x1 + 0.3, a.z0 - 0.3, a.z1 + 0.3, a.hi + 0.5);
@@ -1558,7 +1812,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     obstacles.push({ x: bx, z: bz, hw: 0.7, hd: 0.65 });
   }
 
-  // 小祠：漁港上去那個平台，北邊一座小小的祠，前面兩座石燈籠，石階頂上一座紅鳥居
+  // 小祠：漁港上去那個平台，北邊一座小小的祠，前面兩座石燈籠，石階頂上一座小星門
   {
     const P = AREA.shrine, y = P.y, cx = -21.75, cz = P.z0 - 0.75, sk = new Kit(R);
     const ground = groundUnder(cx - 0.9, cx + 0.9, cz - 0.8, cz + 0.8);
@@ -1584,16 +1838,20 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       obstacles.push({ x, z, hw: 0.2, hd: 0.2 });
     }
     k.pool(cx, y, P.z0 + 1.4, 2.2, '#ffa060', 0.3);
-    // 鳥居：立在石階頂，柱子在石階兩邊的矮牆裡面
-    const tz0 = P.z1 - 0.3, red = '#b8322a', A = AREA.sW1;
+    // 小星門：立在石階頂，柱子在石階兩邊的矮牆裡面。跟山上星廟的山門同一個樣子的縮小版：
+    // 兩根石柱一道石樑，樑上立一個鏤空的石環，環裡一顆四角星。星是暗的石頭，不發光，看得出這條路通到山上
+    const tz0 = P.z1 - 0.3, A = AREA.sW1, mx = (A.x0 + A.x1) / 2, GS = '#5e5c64', GS2 = '#68666e';
     for (const x of [A.x0 + 0.12, A.x1 - 0.12]) {
-      k.cyl(0.09, 0.1, 2.4, red, x, y + 1.2, tz0, {}, 8);
-      k.cyl(0.13, 0.13, 0.16, DARK, x, y + 0.08, tz0, {}, 8);
-      obstacles.push({ x, z: tz0, hw: 0.1, hd: 0.1 });
+      k.box(0.34, 0.2, 0.34, '#55535a', x, y + 0.1, tz0);
+      k.box(0.24, 2.3, 0.24, GS, x, y + 1.15, tz0, { color2: GS2 });
+      obstacles.push({ x, z: tz0, hw: 0.14, hd: 0.14 });
     }
-    k.box(A.x1 - A.x0 + 0.1, 0.09, 0.1, red, (A.x0 + A.x1) / 2, y + 2.05, tz0);
-    k.box(A.x1 - A.x0 + 0.7, 0.13, 0.2, red, (A.x0 + A.x1) / 2, y + 2.42, tz0);
-    k.box(A.x1 - A.x0 + 0.9, 0.08, 0.24, DARK, (A.x0 + A.x1) / 2, y + 2.53, tz0);
+    k.box(A.x1 - A.x0 + 0.4, 0.16, 0.26, GS, mx, y + 2.38, tz0, { color2: GS2 });
+    k.box(0.36, 0.1, 0.22, '#55535a', mx, y + 2.51, tz0);
+    k.torus(0.42, 0.07, Math.PI * 2, GS2, mx, y + 2.98, tz0, {});
+    for (const ry of [0, Math.PI]) for (const rz of [0, Math.PI / 2]) k.add(new THREE.CircleGeometry(0.3, 4), '#4a4852', mx, y + 2.98, tz0, { ry, rz, sx: 0.28 });
+    // 樑的兩頭長了一點青苔
+    for (const sx of [-1, 1]) k.rock(0.07, '#3a5a3e', mx + sx * (A.x1 - A.x0 + 0.2) / 2, y + 2.48, tz0, { sy: 0.5, ao: false });
   }
 
   // 往東那段石階的北邊，房子跟著石階一間比一間高（跟西邊那段對稱）
@@ -1836,8 +2094,12 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     for (let i = 0; i < pts.length - 1; i++) {
       const [ax, az] = pts[i], [bx, bz] = pts[i + 1], len = Math.hypot(bx - ax, bz - az), ry = -Math.atan2(bz - az, bx - ax);
       for (let t = 0; t < len; t += 0.6) {
-        const x = ax + ((bx - ax) * t) / len + (R() - 0.5) * 0.15, z = az + ((bz - az) * t) / len + (R() - 0.5) * 0.15, y = terrain(x, z);
-        k.box(0.55, 0.08, 0.4, pick(STONES), x, y + 0.02, z, { ry: ry + (R() - 0.5) * 0.4, ao: false });
+        const x = ax + ((bx - ax) * t) / len + (R() - 0.5) * 0.15, z = az + ((bz - az) * t) / len + (R() - 0.5) * 0.15;
+        // 頂面對齊看得到的地面，底往下伸到四角最低的那一角，坡上不會一頭埋進去一頭翹起來
+        const color = pick(STONES), top = meshY(x, z) + 0.06, a = ry + (R() - 0.5) * 0.4, ca = Math.cos(a), sa = Math.sin(a);
+        let low = top - 0.08;
+        for (const [p, q] of [[0.28, 0.2], [-0.28, 0.2], [0.28, -0.2], [-0.28, -0.2]]) low = Math.min(low, meshY(x + p * ca + q * sa, z - p * sa + q * ca) - 0.03);
+        k.box(0.55, top - low, 0.4, color, x, (top + low) / 2, z, { ry: a, ao: false });
         trails.push([x, z]);
         walked += 0.6;
         if (walked > 7 && R() < 0.3) {
@@ -1855,7 +2117,11 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       if (x > TOWN_X0 - 4 && x < TOWN_X1 + 4 && z > -68) continue;   // 排到鎮子裡就不蓋
       const w = 2.8 + R() * 2.2, d = 2.8 + R() * 0.8, h = 1.8 + R() * 1.4, wall = R() < 0.5 ? pick(PLASTER) : pick(TIMBER);
       let foot = y;
-      for (const [u, v] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) foot = Math.min(foot, hill(x + cx * u * w * 0.5 + dx * v * d * 0.5, z + cz * u * w * 0.5 + dz * v * d * 0.5));
+      // 房子照削之前的山蓋，牆腳再照看得到的地面往下伸：上星廟的路從旁邊削過去的那幾間，一角才不會懸空
+      for (const [u, v] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const px = x + cx * u * w * 0.5 + dx * v * d * 0.5, pz = z + cz * u * w * 0.5 + dz * v * d * 0.5;
+        foot = Math.min(foot, hill(px, pz), meshY(px, pz));
+      }
       foot -= 0.6;
       // 擋到上星廟那條路的一間不蓋，空出來讓路從聚落中間穿過去；亂數一樣照抽
       const hk = TEMPLE.some((a) => x + w / 2 > a.x0 - 0.2 && x - w / 2 < a.x1 + 0.2 && z + d / 2 > a.z0 - 0.2 && z - d / 2 < a.z1 + 0.2) ? new Kit(R) : k;
@@ -1886,7 +2152,10 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     // 聚落背後：一棵老樹，或一座小祠
     const bx = hx - dx * 3.4, bz = hz - dz * 3.4, by = hill(bx, bz);
     if (R() < 0.5) {
-      k.cyl(0.35, 0.55, 3.4, '#3a2a20', bx, by + 1.7, bz, { rz: (R() - 0.5) * 0.3, ao: false }, 6);
+      // 樹幹底往下伸到看得到的地面最低那一角
+      let sink = 0.1;
+      for (let j = 0; j < 6; j++) sink = Math.max(sink, by - meshY(bx + Math.sin((j / 6) * Math.PI * 2) * 0.7, bz + Math.cos((j / 6) * Math.PI * 2) * 0.7) + 0.1);
+      k.cyl(0.35, 0.55, 3.4 + sink, '#3a2a20', bx, by + 1.7 - sink / 2, bz, { rz: (R() - 0.5) * 0.3, ao: false }, 6);
       for (let i = 0; i < 4; i++) k.rock(1.2 + R() * 0.6, pick(['#1e3a30', '#2a4436', '#24402e']), bx + (R() - 0.5) * 2, by + 3.6 + R() * 1.2, bz + (R() - 0.5) * 2, { sy: 0.7, ao: false });
     } else {
       k.box(1.0, 1.4, 0.8, '#5a3826', bx, by + 0.3, bz, { ry: face, ao: false });
@@ -1905,7 +2174,10 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     if (zones.some(([hx, hz, r]) => Math.hypot(x - hx, z - hz) < r) || trails.some(([px, pz]) => Math.abs(px - x) < 1.3 && Math.abs(pz - z) < 1.3)) continue;
     const s = 0.8 + R() * 1.4;
     if (inArea(x, z, 2, TEMPLE) || onShelf(x, z)) continue;   // 亂數抽完才跳過；殿後的平台上也不種
-    k.cone(1.1 * s, 3 * s, '#1a2a2a', x, y + 1.1 * s, z, { color2: '#2e4440', ao: false });
+    // 樹是平底的圓錐：底圈七個角照看得到的地面量，整棵沉到最低那一角，下坡那側的底才不會懸空
+    let base = meshY(x, z) - 0.4 * s;
+    for (let j = 0; j < 7; j++) base = Math.min(base, meshY(x + Math.sin((j / 7) * Math.PI * 2) * 1.1 * s, z + Math.cos((j / 7) * Math.PI * 2) * 1.1 * s) - 0.05);
+    k.cone(1.1 * s, 3 * s, '#1a2a2a', x, base + 1.5 * s, z, { color2: '#2e4440', ao: false });
   }
   k.add(terrainGeometry(), '#24302e', 0, 0, 0, { color2: '#46523e', ao: false });
 
@@ -2027,12 +2299,11 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       hk.torus(r, 0.12, Math.PI * 2, PILLAR, x, y + 3.4, z, { rx: Math.PI / 2 });
       hk.fid = fader.add([[x - r - 1.6, y + 3.2, z - r - 1.6, x + r + 1.6, y + 5, z + r + 1.6]]);
       hk.emit(bucket, 0, 0, 0);
-      // 水鏡：一圈石沿，裡面一池黑水
+      // 水鏡：一圈石沿，裡面的水另外畫（waterMirror），倒映天井那一塊天
       tk.add(new THREE.RingGeometry(1.5, 1.75, 32), '#5a5862', x, y + 0.02, z, { rx: -Math.PI / 2, ao: false });
-      tk.add(new THREE.CircleGeometry(1.5, 32), '#0c1020', x, y + 0.015, z, { rx: -Math.PI / 2, ao: false });
       obstacles.push({ x, z, hw: 1.2, hd: 1.2 });
-      // 門口右手邊一盞燈，殿裡就只有這一盞
-      stoneLamp(x + 2.1, y, z + r + 0.2);
+      // 門口右手邊一盞燈，殿裡就只有這一盞。方座整個落在殿台上，不伸出台邊
+      stoneLamp(x + 2.1, y, H.z1 - 0.3);
     }
     tk.emit(bucket, 0, 0, 0);
     group.add(glowPoints(far, { far: true, gain: 7, dot: 4 }));
@@ -2091,6 +2362,45 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   // ---------- 海和天 ----------
   // 海是暗的藍灰，不是黑的，也不是飽和的深藍：夜色映在水上，燈影才有東西可以浮在上面
   const sea = new THREE.Mesh(new THREE.PlaneGeometry(1400, 900), new THREE.MeshLambertMaterial({ color: '#2b3a52' }));
+  // 海有自己的霧：霧量照樣有，遠處照樣糊開，但混的是比場景的霧深、比較藍的顏色，往夜色裡退，不會被提成灰的。
+  // 遠處再壓暗一點；最遠那一段（海平線前）另外一條霧帶，往天邊的顏色靠。海是被相機最遠的 400 公尺切掉的，
+  // 霧帶照鏡頭的深度算、到切掉那一線剛好混滿，海一路接到天邊的顏色，不會在那裡斷一層。近岸照舊，燈影才浮得起來
+  const seaFog = {
+    uSeaFogAmt: { value: 0.8 }, uSeaFogColor: { value: new THREE.Color('#2c4262') },
+    uSeaBand: { value: 1 }, uSeaBandFrom: { value: 200 }, uSeaDeep: { value: 0.85 },
+  };
+  TUNE.push(
+    { label: '海霧量', key: 'seaFog', uniform: seaFog.uSeaFogAmt, kind: [0, 2, 0.01] },
+    { label: '海霧色', key: 'seaFogColor', uniform: seaFog.uSeaFogColor, kind: 'color' },
+    { label: '海平線霧帶', key: 'seaBand', uniform: seaFog.uSeaBand, kind: [0, 1, 0.01] },
+    { label: '霧帶起點', key: 'seaBandFrom', uniform: seaFog.uSeaBandFrom, kind: [60, 395, 1] },
+    { label: '遠海壓暗', key: 'seaDeep', uniform: seaFog.uSeaDeep, kind: [0.4, 1, 0.01] },
+  );
+  // 海面和白塔底下的小島共用這一段，小島才跟周圍的海是同一個顏色、同樣退進霧裡
+  const seaShade = (sh) => {
+    Object.assign(sh.uniforms, seaFog);
+    sh.fragmentShader = 'uniform float uSeaFogAmt; uniform vec3 uSeaFogColor; uniform float uSeaBand; uniform float uSeaBandFrom; uniform float uSeaDeep;' + SKY_EDGE_GLSL +
+      sh.fragmentShader.replace('#include <fog_fragment>', `#ifdef USE_FOG
+      if ( uGrade.on > 0.5 ) {
+        vec2 seaDir = vFogWorld.xz - cameraPosition.xz;
+        float seaD = length( seaDir );
+        // 左手邊起霧的那一段：從近處就起霧，一百多公尺外已經差不多是天邊的顏色，海和天在那裡融成一片，也不再壓暗
+        float mist = mistAt( seaDir );
+        float band = uSeaBand * max( smoothstep( uSeaBandFrom, 398.0, vFogDepth ), mist * ( 1.0 - exp( - vFogDepth / 70.0 ) ) ), seaF = min( 1.0, gradeFog( vFogWorld ) * uSeaFogAmt );
+        gl_FragColor.rgb *= mix( 1.0, uSeaDeep, smoothstep( 40.0, 360.0, seaD ) * ( 1.0 - mist ) );
+        // 天邊在西邊被日出打亮（跟天空球同一段），霧帶接過去也要帶著，不然那一段海和天還是斷開的；海上也就映出一片暖光
+        vec3 edge = sunLit( skyLow( uGrade.fogLin ), sunUp( seaDir, 0.0 ) );
+        gl_FragColor.rgb = gradeSurface( gl_FragColor.rgb, seaF + ( 1.0 - seaF ) * band, mix( uSeaFogColor, edge, band ) );
+        // 最後那一段換成天空的算法（只過曲線）：海過的對比和飽和度會把天邊色推亮一點，接的地方多一條細線
+        vec3 skyEdge = gradeCurvesOut( gradeSrgbOut() ? sRGBTransferOETF( vec4( edge, 1.0 ) ).rgb : edge );
+        gl_FragColor.rgb = mix( gl_FragColor.rgb, skyEdge, smoothstep( 0.35, 1.0, band ) );
+      } else {
+        ${THREE.ShaderChunk.fog_fragment}
+      }
+      #endif`);
+  };
+  sea.material.onBeforeCompile = seaShade;
+  sea.material.customProgramCacheKey = () => 'haishi-sea';
   sea.rotation.x = -Math.PI / 2;
   sea.position.set(0, SEA, 420);
   group.add(sea);
@@ -2098,6 +2408,8 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   // 月光幾乎是中性的灰，藍色留給空氣（霧和天空）：牆、瓦、石階才是灰的，燈照到的地方才是暖的，不會疊成紫紅
   const env = { bg: 0x4b5574, near: 32, far: 200, sky: 0x8c96b4, ground: 0x5e6270, hi: 1.6, sun: 0xff9a70, si: 0.55, dir: new THREE.Vector3(-6, 5, 8) };
   const sky = new THREE.Group(), dome = skyDome(env.bg), field = starField(coarse ? 2600 : 5200);
+  // 海平線的霧帶跟天空共用日出和起霧的參數，調色台改了兩邊一起變
+  for (const k of ['uWarm', 'uGlow', 'uMist', 'uMistWidth', 'uHorizon']) seaFog[k] = dome.material.uniforms[k];
   sky.add(dome, field, meteor(field.material.uniforms.uFade));
   // 星空跟著角色的高度出來：碼頭和街上燈太亮只看得到一些，爬上遠眺台整片天和銀河才都出來
   let starFade = 0.25;
@@ -2129,15 +2441,32 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   moon.lookAt(0, 0, 0);
   sky.add(moon);
   group.add(sky);
+  // 星廟殿裡的水鏡：池子在殿的正中，天井開在屋頂 4.85 公尺高的地方。月亮不在頭頂，不放進去
+  {
+    const H = AREA.tHall;
+    group.add(waterMirror({ x: (H.x0 + H.x1) / 2, y: H.y + 0.015, z: (H.z0 + H.z1) / 2 + 0.3, r: 1.5, ocY: H.y + 4.85, ocR: 1.5 },
+      dome, field, [...stars.filter((s) => s.size < 10), ...bright, ...dim], coarse ? 256 : 512));
+  }
 
-  // 海的另一邊，畫廊那座白塔：遠遠一根淡淡的影子，塔頂的石頭和畫廊那邊同時亮起
+  // 海的另一邊，畫廊那座白塔：背著海平線的亮天，塔是一根暗的剪影，吃霧退進夜色；塔頂的石頭和畫廊那邊同時亮起。
+  // 底下的小島不是另外一塊：靠塔腳是塔的暗色，往外漸漸變成海的顏色，跟海面用同一套著色，塔像是從海裡長出來的
   const far = new THREE.Group();
   far.position.set(-90, SEA, 260);
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.4, 22, 8), gradeCurvesOnly(new THREE.MeshBasicMaterial({ color: '#8c88a8', fog: false })));
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.4, 22, 8), new THREE.MeshBasicMaterial({ color: '#10141f' }));
   shaft.position.y = 11;
   far.add(shaft);
-  const isle = new THREE.Mesh(new THREE.SphereGeometry(9, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), gradeCurvesOnly(new THREE.MeshBasicMaterial({ color: '#4a4866', fog: false })));
-  isle.scale.y = 0.35;
+  const isleGeo = new THREE.SphereGeometry(9, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), ip = isleGeo.attributes.position;
+  const foot = new THREE.Color('#10141f'), water = new THREE.Color('#2b3a52'), ic = new THREE.Color(), icol = new Float32Array(ip.count * 3);
+  for (let i = 0; i < ip.count; i++) ic.copy(water).lerp(foot, Math.pow(ip.getY(i) / 9, 1.5)).toArray(icol, i * 3);
+  isleGeo.setAttribute('color', new THREE.BufferAttribute(icol, 3));
+  // 法線全部朝上，受光跟海面一樣：邊緣才接得上周圍的海，看得出來的只有往塔腳變暗的那一層
+  for (let i = 0; i < ip.count; i++) isleGeo.attributes.normal.setXYZ(i, 0, 1, 0);
+  const isleMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  isleMat.onBeforeCompile = seaShade;
+  isleMat.customProgramCacheKey = () => 'haishi-sea';
+  const isle = new THREE.Mesh(isleGeo, isleMat);
+  // 壓得很扁：高出海平線的部分背後是天，不是海，再高就又是一塊
+  isle.scale.y = 0.12;
   far.add(isle);
   const towerGlow = glowPoints([{ x: 0, y: 24, z: 0, color: '#bcd8ff', size: 30 }], { sky: true }), towerSize = towerGlow.geometry.attributes.aSize;
   far.add(towerGlow);
@@ -2275,7 +2604,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     camDistMax: 46,
     // 下船的地方：長棧橋的盡頭，離小船幾步，面向山上的鎮子
     spawn: { x: 0, z: 26.4, heading: Math.PI },
-    exits: [{ x: 0.6, z: 27.9, r: 1.4, to: 'gallery', label: '搭船', title: '回畫廊', boat: ferry }],
+    exits: [{ x: 0.6, z: 27.9, r: 1.4, to: 'gallery', label: '搭船', title: '渡船', boat: ferry }],
     roomIndexAt: () => 0,
     placeAt: (x, z) => {
       const a = areaAt(x, z);

@@ -847,9 +847,9 @@ function gradeSections(G, { zone, renderer, scene, world, bar, section, onOpen, 
   S5.body.append(linearNote);
   for (const k of FOG_KEYS) gradeRow(S5.body, k);
 
-  // 各區域自己登記的參數（海市的霧色、暖霧、蒸氣、煙）：跟著分區一起混
+  // 各區域自己登記的參數（海市的霧色、暖霧、蒸氣、煙、海霧、天空）：跟著分區一起混
   if (TUNE.length) {
-    const S6 = section('tune', '這一區的霧和煙', true);
+    const S6 = section('tune', '這一區的霧、煙、海、天', true);
     const hex = (c) => '#' + c.getHexString();
     const tuneGet = (t) => {
       const v = G.resolved(cur).tune[t.key];

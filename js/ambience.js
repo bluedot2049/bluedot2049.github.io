@@ -377,33 +377,50 @@ const CHEERS = {
 // 音高照海市的配樂（assets/audio/haishi.m4a）：曲子在 C 小調、B♭ 大調、F 大調、G 小調之間換，
 // 每一段都站得住的只有 B♭ C D F G，人聲只用這五個音，落在低低的音域。
 // 一句話大多停在同一個音，偶爾往旁邊挪一格，句尾往下收：聽起來是遠遠的人在講話，不是一群人在唱歌。
-// 進海市時用 OfflineAudioContext 先算好一段，之後循環播，手機不用一直開著幾百個振盪器
-const MURMUR_LEN = 12, MURMUR_XF = 1.5;   // 一段幾秒、頭尾交疊幾秒，接起來聽不出縫
+// 進海市時用 OfflineAudioContext 先算好幾段，之後循環播，手機不用一直開著幾百個振盪器。
+// 聲音分遠近兩層：
+// 遠的是一片，拆成三段長度不同的循環，人越多疊越多段：人少聽得出句子之間的空檔，人多才連成一片。
+// 三段長度沒有公倍數，疊起來很久才會對到同一拍，聽不出在重複。
+// 近的是兩個單獨的嗓子，跟著最近在講話的路人走，人從身邊經過時聲音跟著他移，背景那一片不動
+const MURMUR_XF = 1.5;                   // 每段頭尾交疊幾秒，接起來聽不出縫
 const MURMUR_SR = 22050;                 // 人聲用不到高頻，取樣率減半省記憶體
-const MURMUR_TALKERS = 10;               // 這一段裡有幾個人在講話
+const MURMUR_LAYERS = [[11.3, 4], [8.9, 5], [7.1, 6]];   // 遠的三段：[一段幾秒, 幾個人]，第一段有人就開，後兩段人多才疊上去
 const MURMUR_VOL = 0.22;
 const MURMUR_DUCK = 0.35;                // 人最多的時候，背景音樂壓低幾成
-const MURMUR_RMS = 0.12;                 // 算好之後整段調到這個響度
+const MURMUR_RMS = 0.07;                 // 每段調到這個響度，三段全開跟一段 0.12 差不多大
+const VOICE_LEN = 8.3;                   // 近處兩個嗓子共用一段，左聲道一個、右聲道一個
+const VOICE_RMS = 0.1, VOICE_VOL = 0.3;
 const MURMUR_NOTES = [87.31, 98, 116.54, 130.81, 146.83, 174.61];   // F2 G2 B♭2 C3 D3 F3
 const VOWELS = [[700, 1200], [400, 2000], [300, 800], [500, 1500], [350, 2300], [600, 1000]];
 
-function renderMurmur() {
+// 算一段 len 秒、talkers 個人在講話的聲音（多算 MURMUR_XF 秒給頭尾交疊）。
+// solo：每個人各佔一個聲道（第二個嗓子高一點），給近處的人用；不然每個人隨機放在左右，是遠遠的一片
+function renderMurmur(len, talkers, solo = false) {
   const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   if (!OAC) return Promise.resolve(null);
-  const total = MURMUR_LEN + MURMUR_XF, ctx = new OAC(2, Math.ceil(total * MURMUR_SR), MURMUR_SR);
+  const total = len + MURMUR_XF, ctx = new OAC(2, Math.ceil(total * MURMUR_SR), MURMUR_SR);
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
   const breath = ctx.createBuffer(1, MURMUR_SR * 2, MURMUR_SR), bd = breath.getChannelData(0);
   for (let i = 0; i < bd.length; i++) bd[i] = Math.random() * 2 - 1;
-  for (let v = 0; v < MURMUR_TALKERS; v++) {
+  const merge = solo ? ctx.createChannelMerger(2) : null;
+  merge?.connect(ctx.destination);
+  for (let v = 0; v < talkers; v++) {
     // 大多是低的四個音，四個人裡有一個高一點、小聲一點
-    const high = Math.random() < 0.25, root = high ? 4 + Math.floor(Math.random() * 2) : Math.floor(Math.random() * 4);
+    const high = solo ? v === 1 : Math.random() < 0.25, root = high ? 4 + Math.floor(Math.random() * 2) : Math.floor(Math.random() * 4);
     const tune = 2 ** ((Math.random() - 0.5) / 24);   // 每個人的嗓子差一點點，前後 25 音分，還聽得出在調上，不會疊成整齊的和弦
-    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain();
-    if (pan.pan) pan.pan.value = Math.random() - 0.5;
-    pan.connect(ctx.destination);
+    let pan;
+    if (solo) {
+      pan = ctx.createGain();
+      pan.connect(merge, 0, v);
+    } else {
+      // 遠的人左右拉開，聽起來是四周都有人，沒有特定方向
+      pan = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain();
+      if (pan.pan) pan.pan.value = (Math.random() - 0.5) * 1.8;
+      pan.connect(ctx.destination);
+    }
     // 一句三到七個音節，句子之間停久一點
     for (let t = Math.random() * 4; t < total;) {
-      const n = 3 + Math.floor(Math.random() * 5), peak = (0.15 + Math.random() * 0.08) * (high ? 0.7 : 1);
+      const n = 3 + Math.floor(Math.random() * 5), peak = (0.15 + Math.random() * 0.08) * (high && !solo ? 0.7 : 1);
       let deg = root;
       for (let i = 0; i < n && t < total; i++) {
         const d = 0.14 + Math.random() * 0.16, last = i === n - 1;
@@ -439,6 +456,23 @@ function renderMurmur() {
     ctx.oncomplete = (e) => done(e.renderedBuffer);
     ctx.startRendering();
   });
+}
+
+// 算好的一段頭尾交疊接成可以循環的 len 秒，調到 rms 的響度。each：每個聲道各自調（一個聲道一個人）
+function loopOf(ctx, raw, len, rms, each = false) {
+  const L = Math.floor(len * MURMUR_SR), F = Math.floor(MURMUR_XF * MURMUR_SR);
+  const buf = ctx.createBuffer(2, L, MURMUR_SR), sums = [0, 0];
+  for (let ch = 0; ch < 2; ch++) {
+    const x = raw.getChannelData(ch), y = buf.getChannelData(ch);
+    for (let i = 0; i < L; i++) y[i] = i < F ? x[i] * Math.sqrt(i / F) + x[L + i] * Math.sqrt(1 - i / F) : x[i];
+    for (let i = 0; i < L; i++) sums[ch] += y[i] * y[i];
+  }
+  for (let ch = 0; ch < 2; ch++) {
+    const s = each ? sums[ch] / L : (sums[0] + sums[1]) / (2 * L), scale = rms / Math.max(1e-4, Math.sqrt(s));
+    const y = buf.getChannelData(ch);
+    for (let i = 0; i < L; i++) y[i] *= scale;
+  }
+  return buf;
 }
 
 // 0.1 秒的無聲 WAV（8kHz、8 位元、單聲道）。長度不能是零，Safari 會當成壞檔不播
@@ -703,9 +737,10 @@ export class Ambience {
     this.played(CHEERS[e](ctx, this.out(EMOTE_VOL * h.k, h.pan), ctx.currentTime + 0.01, p, this.noise));
   }
 
-  // 人潮聲：amount 是附近有多少人（照距離加權），near 是最近那個人有多近（0 到 1），
-  // (dx, dz) 是人多的那一邊。人越多越大聲、背景音樂壓低一點；人越近聲音越亮
-  murmur(amount, near, dx, dz) {
+  // 人潮聲：amount 是附近有多少人（照距離加權），near 是最近那個人有多近（0 到 1），(dx, dz) 是人多的那一邊。
+  // voices 是最近在講話的幾個人 { key, dx, dz, d, k, rate }，k 是聽得到幾成（0 到 1），rate 是他嗓子的高低。
+  // 人越多遠的那一片疊越多段、背景音樂壓低一點；近處的人各自從他站的方向出聲
+  murmur(amount, near, dx, dz, voices = []) {
     const ctx = this.ctx;
     if (!ctx) return;
     if (!this.murmurGain) {
@@ -713,12 +748,16 @@ export class Ambience {
       return;
     }
     const t = ctx.currentTime;
-    if (t - (this.murmurAt ?? 0) < 0.2) return;   // 一秒調五次就夠，不用每一幀排一次
+    if (t - (this.murmurAt ?? 0) < 0.1) return;   // 一秒調十次就夠，不用每一幀排一次
     this.murmurAt = t;
-    const level = 1 - Math.exp(-amount / 3);
-    this.murmurGain.gain.setTargetAtTime(MURMUR_VOL * level, t, 0.8);
-    this.murmurFilter.frequency.setTargetAtTime(400 + 1100 * near * near, t, 0.5);
-    this.murmurPan?.pan.setTargetAtTime(this.panOf(dx, dz, 1) * Math.min(1, Math.hypot(dx, dz)) * 0.7, t, 0.8);
+    const level = 1 - Math.exp(-amount / 3), clamp = (x) => Math.max(0, Math.min(1, x));
+    const on = [Math.min(1, level * 3), clamp((level - 0.25) / 0.35), clamp((level - 0.55) / 0.35)];
+    this.murmurLayers.forEach((g, i) => g.gain.setTargetAtTime(on[i], t, 1.5));
+    // 段數已經會跟著人數加，總音量只照開根號加，人少時不會太小聲、人多時跟以前差不多大
+    this.murmurGain.gain.setTargetAtTime(MURMUR_VOL * Math.sqrt(level), t, 0.8);
+    this.murmurFilter.frequency.setTargetAtTime(380 + 300 * level + 300 * near * near, t, 0.5);
+    this.murmurPan?.pan.setTargetAtTime(this.panOf(dx, dz, 1) * Math.min(1, Math.hypot(dx, dz)) * 0.35, t, 0.8);
+    this.talk(voices, t);
     const duck = MURMUR_DUCK * level;
     if (Math.abs(duck - this.duck) > 0.03) {
       this.duck = duck;
@@ -726,37 +765,85 @@ export class Ambience {
     }
   }
 
-  // 算好一段人聲，頭尾交疊接成可以循環的一段，調好響度後開始播（一開始是零音量）
-  buildMurmur() {
+  // 近處的嗓子分給最近在講話的人：還在的照他現在的位置調，走開的淡掉，淡完才讓給新來的人
+  talk(voices, t) {
+    const slots = this.voiceSlots;
+    for (const s of slots) {
+      const v = s.key && voices.find((x) => x.key === s.key);
+      if (v) s.v = v;
+      else if (s.key) {
+        s.key = s.v = null;
+        s.free = t + 0.6;
+        s.gain.gain.setTargetAtTime(0, t, 0.15);
+      }
+    }
+    for (const v of voices) {
+      if (slots.some((s) => s.key === v.key)) continue;
+      const s = slots.find((x) => !x.key && t >= x.free);
+      if (!s) break;
+      s.key = v.key;
+      s.v = v;
+      s.src.playbackRate.setValueAtTime(v.rate, t);   // 淡完才換人，這時候換高低聽不出來
+    }
+    for (const s of slots) {
+      if (!s.v) continue;
+      const { k, dx, dz, d } = s.v;
+      s.gain.gain.setTargetAtTime(VOICE_VOL * k, t, 0.15);
+      s.filter.frequency.setTargetAtTime(500 + 1500 * k * k, t, 0.15);
+      s.pan?.pan.setTargetAtTime(this.panOf(dx, dz, d), t, 0.1);
+    }
+  }
+
+  // 先接好遠近兩層的出口，再一段一段算：一次只算一段，手機記憶體不會一下子用太多；第一段算好就先出聲
+  async buildMurmur() {
     this.murmurBuilding = true;
-    renderMurmur().then((raw) => {
+    const ctx = this.ctx;
+    this.murmurFilter = biquad(ctx, 'lowpass', 450, 0.5);
+    this.murmurGain = ctx.createGain();
+    this.murmurGain.gain.value = 0;
+    this.murmurPan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    let n = this.murmurFilter.connect(this.murmurGain);
+    if (this.murmurPan) n = n.connect(this.murmurPan);
+    n.connect(this.sfx);
+    this.murmurLayers = [];
+    this.voiceSlots = [];
+    this.apply();
+    try {
+      for (const [len, talkers] of MURMUR_LAYERS) {
+        const raw = await renderMurmur(len, talkers);
+        if (!raw) return;
+        const g = ctx.createGain();
+        g.gain.value = 0;
+        g.connect(this.murmurFilter);
+        this.loopSource(loopOf(ctx, raw, len, MURMUR_RMS)).connect(g);
+        this.murmurLayers.push(g);
+      }
+      // 近處的兩個嗓子：同一段的左右聲道各是一個人，每個嗓子自己一條音量、濾波、左右
+      const raw = await renderMurmur(VOICE_LEN, 2, true);
       if (!raw) return;
-      const ctx = this.ctx, L = Math.floor(MURMUR_LEN * MURMUR_SR), F = Math.floor(MURMUR_XF * MURMUR_SR);
-      const buf = ctx.createBuffer(2, L, MURMUR_SR);
-      let sum = 0;
+      const buf = loopOf(ctx, raw, VOICE_LEN, VOICE_RMS, true);
       for (let ch = 0; ch < 2; ch++) {
-        const x = raw.getChannelData(ch), y = buf.getChannelData(ch);
-        for (let i = 0; i < L; i++) y[i] = i < F ? x[i] * Math.sqrt(i / F) + x[L + i] * Math.sqrt(1 - i / F) : x[i];
-        for (let i = 0; i < L; i++) sum += y[i] * y[i];
+        const src = this.loopSource(buf), split = ctx.createChannelSplitter(2);
+        const filter = biquad(ctx, 'lowpass', 800, 0.5), gain = ctx.createGain();
+        const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+        gain.gain.value = 0;
+        src.connect(split);
+        split.connect(filter, ch);
+        let m = filter.connect(gain);
+        if (pan) m = m.connect(pan);
+        m.connect(this.sfx);
+        this.voiceSlots.push({ src, gain, filter, pan, key: null, v: null, free: 0 });
       }
-      const scale = MURMUR_RMS / Math.max(1e-4, Math.sqrt(sum / (2 * L)));
-      for (let ch = 0; ch < 2; ch++) {
-        const y = buf.getChannelData(ch);
-        for (let i = 0; i < L; i++) y[i] *= scale;
-      }
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      src.loop = true;
-      this.murmurFilter = biquad(ctx, 'lowpass', 450, 0.5);
-      this.murmurGain = ctx.createGain();
-      this.murmurGain.gain.value = 0;
-      this.murmurPan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
-      let n = src.connect(this.murmurFilter).connect(this.murmurGain);
-      if (this.murmurPan) n = n.connect(this.murmurPan);
-      n.connect(this.sfx);
-      src.start(0, Math.random() * MURMUR_LEN);
-      this.apply();
-    }).catch(() => {});
+    } catch {}
+  }
+
+  // 一段循環的聲音，從隨機的位置開始播，幾段之間不會同步
+  loopSource(buf) {
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    src.start(0, Math.random() * buf.duration);
+    return src;
   }
 
   // 一個短聲音的出口：音量、左右，接到 sfx

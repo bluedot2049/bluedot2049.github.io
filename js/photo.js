@@ -325,6 +325,7 @@ export class PhotoMode {
     this.camera.near = 0.1;
     this.camera.updateProjectionMatrix();
     this.player.paused = false;
+    this.player.snapCamera();   // 拿著相機時人可能走遠了，跟拍鏡頭還停在拿起相機的地方
     this.world.setCurrentRoom(this.player.room, true);   // 鏡頭一下子跳回角色身邊，房間也直接切
     this.ui.hideHint();
     left?.();

@@ -29,6 +29,7 @@ const BLOCK_ALPHA = 0.3, BLOCK_SPEED = 4, BLOCK_HOLD = 0.3;
 const BLOCK_R = 0.8, BLOCK_CAM = 1.5;   // 離視線多近算擋住、離鏡頭多近算貼著
 const OWLS = 2;                      // 夜貓子：不管幾點都在外面晃，每一站停很久，最冷清的時候街上也不會空掉
 const MURMUR_R = 22;                 // 人潮聲算多遠以內的人
+const VOICE_R = 9, VOICES = 2;       // 多近的路人聽得到他單獨講話、最多幾個（ambience.js 有兩個嗓子）
 const PLAN_MS = 3;                   // 每一幀花在排行程上的時間（毫秒），超過就留到下一幀；至少排一趟。剛進來時不會一下子卡住
 
 // 台灣時間每個整點的人潮（0 到 1），中間直線接起來。跟一般夜市反過來，最冷清的時候也留幾個人
@@ -517,6 +518,7 @@ export class Passersby {
     if (this.hidden) {
       for (const e of this.pool) { e.key = null; e.ch.group.visible = false; }
       this.bodies.count = this.heads.count = 0;
+      if (this.hum) this.ambience?.murmur(...this.hum);   // 人藏起來了，近處的嗓子跟著停；遠的那一片照舊
       return;
     }
     const now = Date.now() / 1000, world = this.world, P = player.pos;
@@ -542,8 +544,10 @@ export class Passersby {
     this.separate(people);
     for (const q of people) this.settle(q, dt, P);
     this.last = people;   // 量測工具用
-    // 人潮聲：附近的人越多越大聲，上下樓層的人算遠一點；最近的那個越近聲音越亮，左右偏向人多的那一邊
+    // 人潮聲：附近的人越多越大聲，上下樓層的人算遠一點；最近的那個越近聲音越亮，左右偏向人多的那一邊。
+    // 兩人同行的、停在攤位前的人在講話，最近的兩個各給一個單獨的嗓子，嗓子高低跟著他的編號走
     let amount = 0, closest = 0, sx = 0, sz = 0;
+    const voices = [];
     for (const q of people) {
       const d = Math.hypot(q.d, (q.y - P.y) * 2);
       if (d >= MURMUR_R) continue;
@@ -551,8 +555,13 @@ export class Passersby {
       amount += w;
       closest = Math.max(closest, w);
       if (q.d > 0.5) { sx += ((q.x - P.x) / q.d) * w; sz += ((q.z - P.z) / q.d) * w; }
+      if (d < VOICE_R && (q.plan.people.length > 1 || !q.walking)) {
+        voices.push({ key: q.key, dx: q.fx - P.x, dz: q.fz - P.z, d: q.d, k: (1 - d / VOICE_R) ** 1.5 * q.alpha, rate: 2 ** (q.jit / 0.35 / 24), far: d });
+      }
     }
-    this.ambience?.murmur(amount, closest, amount ? sx / amount : 0, amount ? sz / amount : 0);
+    if (voices.length > VOICES) voices.sort((a, b) => a.far - b.far).length = VOICES;
+    this.hum = [amount, closest, amount ? sx / amount : 0, amount ? sz / amount : 0];
+    this.ambience?.murmur(...this.hum, voices);
     // 近的先分到完整的角色
     const near = people.filter((q) => q.near).sort((a, b) => a.d - b.d).slice(0, this.pool.length);
     const keep = new Set(near.map((q) => q.key));

@@ -157,14 +157,17 @@ const HULLS = [
 // 不太對勁的那艘：青色的燈，開得比別人快，一個小時才經過一次
 const ODD_HULL = [[-2, 1.6, ODD, 0.9], [1, 1.6, ODD, 0.9], [3, 2, ODD, 0.9], [0, 5, '#c8f6ff', 0.8]];
 
-// 星星的樣子：很小很亮的芯、散得很開的光暈，夠亮的有一點點十字光芒。漁火、桅頂燈、天上那幾顆亮星共用
+// 星星的樣子：很小很亮的芯、散得很開的光暈，夠亮的有一點點十字光芒。漁火、桅頂燈、天上那幾顆亮星共用。
+// g 是有幾分光暈：海上暗的漁火是 0，只剩一顆收得緊的小點，亮的才暈開
 const STAR_GLSL = `
-  vec3 starGlow(vec2 q, vec3 c) {
+  vec3 starGlow(vec2 q, vec3 c, float g) {
     float r = length(q) * 2.0;
     float core = 1.0 - smoothstep(0.04, 0.16, r), halo = pow(max(0.0, 1.0 - r), 3.0) * 0.9;
     float spike = (exp(-abs(q.y) * 60.0) + exp(-abs(q.x) * 60.0)) * max(0.0, 1.0 - r) * smoothstep(0.6, 1.2, length(c)) * 0.35;
-    return c * (core * 2.2 + halo + spike);
-  }`;
+    float bead = 1.0 - smoothstep(0.1, 0.3, r);
+    return c * (core * 2.2 + mix(bead * 0.9, halo + spike, g));
+  }
+  vec3 starGlow(vec2 q, vec3 c) { return starGlow(q, c, 1.0); }`;
 
 // 燈和倒影共用的後半段：前面的 motion 算出這盞燈在哪（p）、亮多少（a）、雜湊種子（seed）
 const LIGHT_VERT = `
@@ -178,12 +181,15 @@ const LIGHT_VERT = `
     a *= 0.88 + 0.12 * sin(uTime * (4.0 + seed) + seed * 7.0);
     vS = seed;
     vStar = aLamp.z;
+    // 光暈只給亮的燈：本身的亮度（顏色裡乘過的 gain）和大小一起算，遠的再打折。大概是漁火裡最亮的兩成、大船的燈籠稍微一點
+    vG = smoothstep(0.9, 1.3, max(aColor.r, max(aColor.g, aColor.b)) * sqrt(aLamp.x) * mix(1.0, 0.75, smoothstep(120.0, 380.0, d)));
     if (aLamp.y < 0.5) {
       // 燈：遠處縮到幾個像素就不再縮，小燈暗一點。漁火的光暈比較開，點要放大一點才放得下
       vC = aColor * a * min(1.0, 0.45 + aLamp.x * 0.5);
       gl_PointSize = a > 0.003 ? max(aLamp.x * 4.0 * uScale / d, (3.0 + 3.5 * aLamp.x) * uPr) * (1.0 + 0.8 * aLamp.z) : 0.0;
     } else {
-      // 倒影：浪把燈拉成一條，近的長、遠的短，但不會短到看不見
+      // 倒影：浪把燈拉成一條，近的長、遠的短。遠處只剩燈點就好，七十公尺開始淡，一百四十公尺以外不畫
+      a *= 1.0 - smoothstep(70.0, 140.0, d);
       float len = clamp(uScale * 8.0 / pow(d, 0.7), 12.0 * uPr, 64.0 * uPr) * sqrt(aLamp.x);
       vC = aColor * a;
       vL = 2.0 * len;
@@ -199,7 +205,7 @@ function seaLightMaterial(motion, uFade, sea) {
     vertexShader: `
       uniform float uTime; uniform float uClock; uniform float uFade; uniform float uSea; uniform float uScale; uniform float uPr;
       attribute vec3 aColor; attribute vec3 aLamp; attribute vec4 aA; attribute vec4 aB; attribute vec2 aLocal;
-      varying vec3 vC; varying float vS; varying float vL; varying float vW; varying float vStar;
+      varying vec3 vC; varying float vS; varying float vL; varying float vW; varying float vStar; varying float vG;
       const float DAY = 6.2831853 / 86400.0;
       float hash(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
       void main() {
@@ -208,17 +214,17 @@ function seaLightMaterial(motion, uFade, sea) {
         ${LIGHT_VERT}`,
     fragmentShader: STAR_GLSL + `
       uniform float uTime;
-      varying vec3 vC; varying float vS; varying float vL; varying float vW; varying float vStar;
+      varying vec3 vC; varying float vS; varying float vL; varying float vW; varying float vStar; varying float vG;
       void main() {
         vec2 q = gl_PointCoord - 0.5;
         if (vL == 0.0) {
           if (vStar > 0.5) {
-            gl_FragColor = vec4(starGlow(q, vC), 1.0);
+            gl_FragColor = vec4(starGlow(q, vC, vG), 1.0);
             return;
           }
-          // 中間一顆亮點，外面一圈淡淡的光暈
+          // 中間一顆亮點，亮的燈外面一圈淡淡的光暈
           float r = length(q) * 2.0;
-          float core = 1.0 - smoothstep(0.2, 0.45, r), halo = pow(max(0.0, 1.0 - r), 2.0) * 0.8;
+          float core = 1.0 - smoothstep(0.2, 0.45, r), halo = pow(max(0.0, 1.0 - r), 2.0) * 0.8 * vG;
           gl_FragColor = vec4(vC * (core * 1.8 + halo), 1.0);
           return;
         }

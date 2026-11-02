@@ -11,6 +11,9 @@ import { sanitizeLook, lookKey, presetLook, lookFromOutfit, toOutfit, ROBES } fr
 const SEND_MOVING = 200;    // 走動時每 0.2 秒送一次位置
 const SEND_IDLE = 8000;     // 站著不動時偶爾報一次，確認還在
 const STALE = 20000;        // 這麼久沒消息就當作離開
+// 掛機的人（切到別的分頁、縮小視窗、手機回桌面，或很久沒動）：畫面停了不會再報位置，
+// 只要在線名單上還在就留著，頭上冒 ZZZ；名單上沒了（關掉網頁、斷線）照樣馬上走。這麼久都沒回來才放掉
+const AWAY_STALE = 60 * 60000;
 const MAX_SHOWN = 10;       // 只畫最近的幾位，手機才跑得動
 const MAX_TRACKED = 30;     // 最多同時追蹤幾位，防止有人灌假身分拖垮大家的手機
 const MAX_UNVERIFIED = 5;   // 在線名單還沒認可的新面孔，同時最多放行幾位（名單同步要幾秒）
@@ -70,6 +73,54 @@ function cameraIn(metas) {
 // 在線名單裡有沒有帶「這是 Claude」的標記（c: 1）。只有開發時我自己進站才會帶
 const claudeIn = (metas) => Array.isArray(metas) && metas.some((m) => m?.c === 1);
 
+// 掛機頭上的 Z：毛筆三筆，橫、斜撇、橫，起筆重收筆輕
+let zTex = null;
+function zTexture() {
+  if (zTex) return zTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.strokeStyle = '#eef2ff';
+  g.lineCap = g.lineJoin = 'round';
+  const stroke = (pts, w0, w1) => {
+    for (let i = 0; i < pts.length - 1; i++) {
+      g.lineWidth = w0 + (w1 - w0) * (i / (pts.length - 2 || 1));
+      g.beginPath();
+      g.moveTo(...pts[i]);
+      g.lineTo(...pts[i + 1]);
+      g.stroke();
+    }
+  };
+  stroke([[17, 16], [32, 14], [47, 15]], 7, 4.5);
+  stroke([[47, 15], [33, 31], [18, 48]], 6, 5);
+  stroke([[18, 48], [33, 47], [49, 49]], 7, 3.5);
+  zTex = new THREE.CanvasTexture(c);
+  zTex.colorSpace = THREE.SRGBColorSpace;
+  return zTex;
+}
+
+// 三個 Z 由小到大往右上飄、淡掉，一直循環；三個錯開三分之一拍，一冒出來就是三個都在
+const Z_LOOP = 3.2;
+function makeZzz() {
+  const group = new THREE.Group(), zs = [];
+  for (let i = 0; i < 3; i++) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: zTexture(), transparent: true, depthWrite: false, opacity: 0 }));
+    group.add(s);
+    zs.push(s);
+  }
+  return { group, zs, t: 0 };
+}
+function tickZzz(z, dt) {
+  z.t += dt;
+  z.zs.forEach((s, i) => {
+    const t = ((z.t / Z_LOOP) + i / 3) % 1;
+    s.position.set(0.06 + 0.22 * t, 0.05 + 0.4 * t, 0);
+    const sc = 0.1 + 0.12 * t;
+    s.scale.set(sc, sc, sc);
+    s.material.opacity = Math.min(1, t * 6) * (1 - t) ** 1.3 * 0.85;
+  });
+}
+
 const emojiTextures = new Map();
 function emojiTexture(e) {
   if (!emojiTextures.has(e)) {
@@ -112,11 +163,13 @@ export class Multiplayer {
     this.lastPet = 0;
     this.lastTrack = -Infinity;
     this.only = null;               // 照相館拍照中：只畫入鏡的人（id 的 Set）
+    this.away = false;              // 自己掛機中（main 每幀照分頁看不看得到、多久沒動設定）
   }
 
   async connect() {
     await loadScript('vendor/supabase.js');
-    this.client = window.supabase.createClient(this.cfg.url, this.cfg.key, { auth: { persistSession: false } });
+    // 心跳交給 worker：切到背景時瀏覽器把計時器節流到一分鐘一次，伺服器會當成斷線，在線名單上的人就不見了
+    this.client = window.supabase.createClient(this.cfg.url, this.cfg.key, { auth: { persistSession: false }, realtime: { worker: true } });
     this.join();
   }
 
@@ -196,6 +249,14 @@ export class Multiplayer {
     }, RETRY);
   }
 
+  // 掛機和回來都馬上送：切到背景時畫面已經停了，等不到下一幀，直接在這裡送出去
+  setAway(v) {
+    if (v === this.away) return;
+    this.away = v;
+    this.sendNow();
+    if (this.active && this.channel) this.send(performance.now());
+  }
+
   // 坐下、拿點心這類狀態改變時，下一幀就送，不等節流
   sendNow() {
     this.last = null;
@@ -205,11 +266,11 @@ export class Multiplayer {
   send(now) {
     const p = this.player;
     // s：0 沒坐、-1 坐在地上、i + 1 坐在第 i 個座位；f：手上的點心
-    // a：舉相機的拿法 + 1（0 是沒舉，5 是沒帶相機在比取景框），q：抬頭的角度，取到 0.05 才不會一直送
+    // a：舉相機的拿法 + 1（0 是沒舉，5 是沒帶相機在比取景框），q：抬頭的角度，取到 0.05 才不會一直送；w：1 是掛機中
     const aim = p.camAim;
-    const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room, s: p.sitCode, f: p.character.foodCode, a: aim ? aim.grip + 1 : 0, q: aim ? Math.round(aim.pitch * 20) / 20 : 0 };
+    const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room, s: p.sitCode, f: p.character.foodCode, a: aim ? aim.grip + 1 : 0, q: aim ? Math.round(aim.pitch * 20) / 20 : 0, w: this.away ? 1 : 0 };
     const l = this.last;
-    const changed = !l || Math.abs(st.x - l.x) > 0.02 || Math.abs(st.z - l.z) > 0.02 || Math.abs(wrapAngle(st.h - l.h)) > 0.05 || st.r !== l.r || st.s !== l.s || st.f !== l.f || st.a !== l.a || st.q !== l.q;
+    const changed = !l || Math.abs(st.x - l.x) > 0.02 || Math.abs(st.z - l.z) > 0.02 || Math.abs(wrapAngle(st.h - l.h)) > 0.05 || st.r !== l.r || st.s !== l.s || st.f !== l.f || st.a !== l.a || st.q !== l.q || st.w !== l.w;
     if (now - this.lastSent < (changed ? SEND_MOVING : SEND_IDLE)) return;
     this.channel.send({ type: 'broadcast', event: 'pos', payload: { id: this.id, ...st } });
     this.last = st;
@@ -226,6 +287,7 @@ export class Multiplayer {
     m.f = isFood(m.f) ? m.f : 0;
     m.a = Number.isInteger(m.a) && m.a >= 0 && m.a <= 5 ? m.a : 0;
     m.q = isNum(m.q, 2) ? m.q : 0;
+    m.w = m.w === 1 ? 1 : 0;
     let o = this.others.get(m.id);
     if (!o) {
       if (this.others.size >= MAX_TRACKED) return;
@@ -246,6 +308,7 @@ export class Multiplayer {
   remove(id) {
     const o = this.others.get(id);
     if (!o) return;
+    if (o.zzz) o.zzz.zs.forEach((s) => s.material.dispose());
     this.scene.remove(o.ch.group);
     o.ch.dispose();
     this.others.delete(id);
@@ -375,7 +438,7 @@ export class Multiplayer {
 
     const near = [];
     for (const [id, o] of this.others) {
-      if (now - o.seen > STALE) { this.remove(id); continue; }
+      if (now - o.seen > (o.target.w && this.present.has(id) ? AWAY_STALE : STALE)) { this.remove(id); continue; }
       if (!o.verified) {
         if (this.present.has(id)) o.verified = true;
         else if (now - o.born > UNVERIFIED_TTL) { this.remove(id); continue; }
@@ -408,6 +471,13 @@ export class Multiplayer {
       g.rotation.y = o.heading;
       o.ch.update(dt, t.s ? 0 : o.speed);
       if (o.speed > 0.05 || o.ch.busy) moving = true;
+      // 掛機：頭上冒 ZZZ。換成燈籠或換了樣子，角色會重做，Z 跟著搬過去
+      if (t.w) {
+        o.zzz ??= makeZzz();
+        if (o.zzz.group.parent !== g) g.add(o.zzz.group);
+        o.zzz.group.position.y = (o.ch.dims?.topY ?? 1.6) + 0.02;
+        tickZzz(o.zzz, dt);
+      } else if (o.zzz?.group.parent) o.zzz.group.removeFromParent();
     });
 
     for (const f of this.fx) {

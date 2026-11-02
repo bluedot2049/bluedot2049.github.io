@@ -39,6 +39,7 @@ export class UI {
     this.sheet = $('#sheet');
     this.dress = $('#dress');
     this.cams = $('#cams');
+    this.ferry = $('#ferry');
     this.toastEl = $('#toast');
     this.list = $('#list');
     this.onGoTo = null;
@@ -68,6 +69,7 @@ export class UI {
     $('#sheet-close').addEventListener('click', () => { this.hidePainting(); this.onClose?.(); });
     $('#dress-close').addEventListener('click', () => { this.hideDress(); this.onClose?.(); });
     $('#cams-close').addEventListener('click', () => { this.hideCams(); this.onClose?.(); });
+    $('#ferry-close').addEventListener('click', () => this.hideFerry());
     $('#sheet-thumb').addEventListener('click', () => this.openViewer($('#sheet-img').src));
     $('#viewer-close').addEventListener('click', () => this.closeViewer());
     $('#guide .enter').addEventListener('click', () => this.hideGuide());
@@ -103,7 +105,7 @@ export class UI {
 
   // 目前打開的抽屜，主程式用它的高度挪畫面
   get panel() {
-    return [this.sheet, this.dress, this.cams].find((el) => el.classList.contains('open')) || null;
+    return [this.sheet, this.dress, this.cams, this.ferry].find((el) => el.classList.contains('open')) || null;
   }
 
   // 佔掉一邊畫面的那個面板：電腦版的相機桌是浮在相機底下的銘牌，不算
@@ -135,6 +137,27 @@ export class UI {
   hideCams() {
     if (!this.cams.classList.contains('open')) return;
     this.cams.classList.remove('open');
+    this.onSheet?.(false);
+  }
+
+  // 渡船：list = [{ to, name, note }]，to 是 null 的不能選（所在的地方、還沒開船的），note 寫在右邊。選了就呼叫 onPick(to)
+  showFerry(list, onPick) {
+    const ul = $('#ferry-list');
+    ul.innerHTML = list.map((d, i) => `<li><button class="btn${d.to ? ' primary' : ' disabled'}" data-i="${i}"${d.to ? '' : ' disabled'}>`
+      + `${esc(d.name)}<small>${esc(d.note || '')}</small></button></li>`).join('');
+    ul.onclick = (e) => {
+      const b = e.target.closest('button[data-i]');
+      const d = b && list[b.dataset.i];
+      if (d?.to) onPick(d.to);
+    };
+    if (this.ferry.classList.contains('open')) return;
+    this.ferry.classList.add('open');
+    this.onSheet?.(true);
+  }
+
+  hideFerry() {
+    if (!this.ferry.classList.contains('open')) return;
+    this.ferry.classList.remove('open');
     this.onSheet?.(false);
   }
 

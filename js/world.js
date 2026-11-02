@@ -1022,7 +1022,7 @@ export function buildWorld(scene, gallery) {
   }
 
   // 搭船去別的區域：棧橋邊繫著的小划船
-  const exits = outdoor?.ferry ? [{ ...outdoor.ferry, to: 'haishi', label: '搭船', title: '往海市' }] : [];
+  const exits = outdoor?.ferry ? [{ ...outdoor.ferry, to: 'haishi', label: '搭船', title: '渡船' }] : [];
 
   return { rooms, paintings, mirror, camTable, frontDoor, guideSign, clock, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, updatePaintings, fadeVariants: (on) => roomFader.all(on) };
 }

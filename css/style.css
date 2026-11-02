@@ -1121,6 +1121,12 @@ body.desk #cams .close svg { width: 16px; height: 16px; }
 body.desk #cams .cams-info { padding-right: 18px; }
 body.desk #cams .cams-foot { margin-top: 14px; }
 
+/* 渡船：搭船時選去哪裡。一個地方一列，所在的地方和還沒開船的灰掉 */
+#ferry-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+#ferry-list .btn { width: 100%; justify-content: space-between; letter-spacing: .3em; }
+#ferry-list .btn small { font-size: 12px; letter-spacing: .15em; color: var(--muted); }
+#ferry-list .btn.primary small { color: inherit; opacity: .7; }
+
 .sheet-head { display: flex; gap: 16px; align-items: center; padding-right: 44px; }
 /* 縮圖：鍍金畫框 */
 #sheet-thumb {
@@ -1793,6 +1799,14 @@ body.photo #mates { display: none; }
   font-size: 12px; line-height: 22px; letter-spacing: .12em; color: var(--text);
   background: var(--panel-soft); border: 1px solid var(--line-soft); border-radius: 999px;
 }
+/* 掛機中的隊友：記號右上冒一個小 z，慢慢浮起再淡掉 */
+.mate.zzz { opacity: .7; }
+.mate.zzz i::after {
+  content: "z"; position: absolute; left: 100%; bottom: 60%; margin-left: 2px;
+  font: italic 600 11px/1 Georgia, serif; color: #eef2ff; text-shadow: 0 0 3px rgba(28, 19, 13, .9);
+  animation: mate-zzz 2.4s ease-in-out infinite;
+}
+@keyframes mate-zzz { 0% { transform: translate(0, 2px); opacity: .3; } 50% { opacity: 1; } 100% { transform: translate(3px, -4px); opacity: .3; } }
 .mate.ask i { animation: mate-ask 1.2s ease-in-out infinite; }
 @keyframes mate-ask { 50% { transform: scale(1.6); } }
 

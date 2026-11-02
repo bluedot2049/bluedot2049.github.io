@@ -18,6 +18,9 @@ const BEAT_MOVING = 1500;    // 走動時多久報一次自己在哪
 const BEAT_IDLE = 5000;
 const AWAY = 12000;          // 隊友這麼久沒消息，記號先變淡（多半正在渡海）
 const GONE = 45000;          // 這麼久沒消息就當作離隊了
+// 隊友掛機（切走分頁、手機回桌面）：在同一區、在線名單上還在就一直留著；在別區的看不到名單，
+// 背景裡瀏覽器一分鐘才讓它報一次，等久一點。手機整個凍住的話一次也報不了，這麼久才放掉
+const GONE_AWAY = 10 * 60000;
 const LONELY = 45000;        // 隊伍只剩自己這麼久就散了
 const SAY_MAX = 60;          // 一句最多幾個字
 const SAY_GAP = 1200;        // 自己送話的最短間隔
@@ -126,6 +129,9 @@ export class Party {
     this.mine = null;               // 自己頭上的對話框
     this.log = [];
     this.view = { bottom: window.innerHeight, floor: Infinity };   // 看得到的範圍，每幀在 update 更新
+    this.away = false;
+    // 切到背景時畫面停了，update 不會跑：另外每十秒報一次（瀏覽器會再放慢），別區的隊友才知道還在
+    setInterval(() => { if (document.hidden && this.state) this.beat(); }, BEAT_IDLE * 2);
 
     const $ = (q) => document.querySelector(q);
     this.btn = $('#party-btn');
@@ -230,7 +236,25 @@ export class Party {
   beat() {
     const p = this.player.pos;
     this.lastBeat = performance.now();
-    this.send('hi', { s: this.mp.id, j: this.state.j, zn: this.zone, x: +p.x.toFixed(2), z: +p.z.toFixed(2) });
+    this.send('hi', { s: this.mp.id, j: this.state.j, zn: this.zone, x: +p.x.toFixed(2), z: +p.z.toFixed(2), w: this.away ? 1 : 0 });
+  }
+
+  // 掛機和回來都馬上跟隊伍說（main 跟 mp.setAway 一起呼叫）
+  setAway(v) {
+    if (v === this.away) return;
+    this.away = v;
+    if (this.state) this.beat();
+  }
+
+  // 隊友是不是走了。同一區、在線名單上還在就算在：掛著也一樣，關掉網頁名單上馬上就沒了，
+  // 那時再等一般的時間（可能正在渡海）。別區的照多久沒消息算，掛機的等久一點
+  gone(o, now) {
+    if (o.zn === this.zone && o.s && this.mp.present.has(o.s)) {
+      o.held = now;
+      return false;
+    }
+    if (o.held && o.zn === this.zone) return now - Math.max(o.seen, o.held) > GONE;
+    return now - o.seen > (o.w ? GONE_AWAY : GONE);
   }
 
   // 全隊照入隊先後排，自己也在裡面；顏色照這個順序分
@@ -256,7 +280,7 @@ export class Party {
       o = { m: p.m, heard: 0, el: null, bubble: null };
       this.mates.set(p.m, o);
     }
-    Object.assign(o, { s: p.s, j: p.j, zn: p.zn, x: p.x, z: p.z, seen: performance.now() });
+    Object.assign(o, { s: p.s, j: p.j, zn: p.zn, x: p.x, z: p.z, w: p.w === 1 ? 1 : 0, seen: performance.now() });
     if (!fresh) return;
     // 隊伍滿了，自己是最後進來的那個就退出
     if (this.roster().findIndex((r) => r.m === this.state.me) >= MAX) {
@@ -398,7 +422,8 @@ export class Party {
     if (on) {
       const who = this.roster().map((r) => {
         const o = this.mates.get(r.m), mine = r.m === this.state.me;
-        const where = mine ? '自己' : o.zn !== this.zone ? `在${ZONE_NAMES[o.zn]}` : performance.now() - o.seen > AWAY ? '走遠了' : '在這裡';
+        const here = mine ? '' : o.zn !== this.zone ? `在${ZONE_NAMES[o.zn]}` : performance.now() - o.seen > AWAY && !o.w ? '走遠了' : '在這裡';
+        const where = mine ? '自己' : o.w ? `${here}・暫離` : here;
         return `<span class="mate-chip" style="--pc:${this.colorOf(r.m)}"><i></i>${where}</span>`;
       }).join('');
       html = `<p>同行的人</p><div class="party-who">${who}</div>
@@ -659,7 +684,7 @@ export class Party {
     if (this.pending) this.updateAsk();
     if (!this.state) return;
     if (now - this.lastBeat > (this.player.moving ? BEAT_MOVING : BEAT_IDLE)) this.beat();
-    for (const [m, o] of this.mates) if (now - o.seen > GONE) {
+    for (const [m, o] of this.mates) if (this.gone(o, now)) {
       this.drop(m);
       this.ui.hint('有人離開了隊伍', 3000);
     }
@@ -682,7 +707,9 @@ export class Party {
     for (const o of this.mates.values()) {
       const color = this.colorOf(o.m);
       o.el = this.pin(o.el, color);
-      o.el.classList.toggle('away', now - o.seen > AWAY);
+      // 掛機的不會一直報位置，不算走遠，記號旁邊冒一個 z
+      o.el.classList.toggle('away', now - o.seen > AWAY && !o.w);
+      o.el.classList.toggle('zzz', !!o.w);
       if (o.zn !== this.zone) {
         // 左上角排下來，對話框冒在名牌上面
         const x = 40, y = 132 + far++ * 34;

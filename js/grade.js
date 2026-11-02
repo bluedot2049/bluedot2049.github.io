@@ -122,8 +122,9 @@ vec3 gradeCurvesOut( vec3 o ) {
 	if ( gradeSrgbOut() ) return gradeCurves( o );
 	return sRGBTransferEOTF( vec4( gradeCurves( sRGBTransferOETF( vec4( o, 1.0 ) ).rgb ), 1.0 ) ).rgb;
 }
-// col 在輸出空間（colorspace_fragment 之後），f 是 gradeFog 算出來的
-vec3 gradeSurface( vec3 col, float f ) {
+// col 在輸出空間（colorspace_fragment 之後），f 是 gradeFog 算出來的。
+// fogLin 是要混的霧色（線性），平常就是場景的霧；海面這種要自己的霧色的才傳第三個參數
+vec3 gradeSurface( vec3 col, float f, vec3 fogLin ) {
 	const vec3 LUMA = vec3( 0.2126, 0.7152, 0.0722 );
 	bool srgbOut = gradeSrgbOut();
 	vec3 s = ( srgbOut ? col : sRGBTransferOETF( vec4( col, 1.0 ) ).rgb ) * uGrade.expo;
@@ -132,7 +133,7 @@ vec3 gradeSurface( vec3 col, float f ) {
 	float bright = max( s.r, max( s.g, s.b ) );
 	s = mix( s, vec3( dot( s, LUMA ) ), uGrade.desat * ( 1.0 - smoothstep( uGrade.keep - 0.2, uGrade.keep + 0.2, bright ) ) );
 	s = uGrade.shadow + s * ( uGrade.gain - uGrade.shadow );
-	vec3 c = mix( sRGBTransferEOTF( vec4( max( s, 0.0 ), 1.0 ) ).rgb, uGrade.fogLin, f );
+	vec3 c = mix( sRGBTransferEOTF( vec4( max( s, 0.0 ), 1.0 ) ).rgb, fogLin, f );
 	vec3 o = sRGBTransferOETF( vec4( c, 1.0 ) ).rgb;
 	float pivot = uGrade.pivot;
 	float l = dot( o, LUMA );
@@ -144,6 +145,7 @@ vec3 gradeSurface( vec3 col, float f ) {
 	o = gradeCurves( o );
 	return srgbOut ? o : sRGBTransferEOTF( vec4( o, 1.0 ) ).rgb;
 }
+vec3 gradeSurface( vec3 col, float f ) { return gradeSurface( col, f, uGrade.fogLin ); }
 `;
 
 // 自己寫的 ShaderMaterial 要調色時：uniforms 合併這組，材質開 fog: true（three.js 才會在有霧的場景裡更新它），

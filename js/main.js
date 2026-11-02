@@ -35,6 +35,8 @@ const ZONES = {
   gallery: { crossing: '渡海　回畫廊', load: () => import('./zone-gallery.js') },
   haishi: { crossing: '渡海　往海市', load: () => import('./zone-haishi.js') },
 };
+// 渡船能去的地方，每個渡口都照這個順序列；to 是 null 的還沒開船（沙漠還沒取名，先這樣叫）
+const FERRY = [{ to: 'gallery', name: '畫廊' }, { to: 'haishi', name: '海市' }, { to: null, name: '沙漠', note: '還沒開船' }];
 
 async function loadJSON(url) {
   const res = await fetch(url, { cache: 'no-cache' });
@@ -228,6 +230,7 @@ async function start() {
   let camSwipeHinted = false;
   let mp = null;
   let party = null;   // 組隊同行（party.js），有連線才有
+  let checkAway = null;   // 看自己是不是掛機中，有連線才有
   let studio = null;   // 海市信差站的照相館（studio.js），畫廊沒有
   let place = null;   // 戶外現在在哪裡：null 是陽台，否則是草原或棧橋盡頭的地名
   let sitHinted = false;
@@ -304,6 +307,7 @@ async function start() {
       lastInput = performance.now();
       ui.hidePainting();
       ui.hideCams();
+      ui.hideFerry();
       // 照鏡子時拖曳、縮放是在轉著看自己，面板留著
       if (!(kind === 'drag' && player.focus?.kind === 'mirror')) ui.hideDress();
       ui.hideHint();
@@ -339,13 +343,17 @@ async function start() {
       mp?.pet(a.index);
       lastInput = performance.now();
     },
-    // 搭船：先跳進碼頭邊的渡船坐好，船夫在船頭現身、燈亮起來，再轉到渡海畫面
+    // 搭船：先選去哪裡，再跳進碼頭邊的渡船坐好，船夫在船頭現身、燈亮起來，才轉到渡海畫面
     onExit(ex) {
       if (!ex.boat) return travel(ex.to);
       if (player.boarding) return;
-      player.board(ex.boat, () => {
-        ex.boat.board();
-        setTimeout(() => travel(ex.to), 1100);
+      const list = FERRY.map((d) => (d.to === zone ? { ...d, to: null, note: '這裡' } : d));
+      ui.showFerry(list, (to) => {
+        ui.hideFerry();
+        player.board(ex.boat, () => {
+          ex.boat.board();
+          setTimeout(() => travel(to), 1100);
+        });
       });
     },
     onDirector(on) {
@@ -607,6 +615,16 @@ async function start() {
       busy: () => photo.active || !!ui.panel || player.boarding,
     });
     mp.connect().then(() => party.resume()).catch((e) => console.warn('多人連線失敗：', e));
+    // 掛機：分頁看不到，或五分鐘沒碰任何東西，別人看到的自己頭上冒 ZZZ。切走時畫面馬上停，所以切的當下就先說
+    let lastActive = performance.now();
+    const awake = () => { lastActive = performance.now(); };
+    for (const ev of ['pointerdown', 'keydown', 'wheel']) window.addEventListener(ev, awake, { passive: true, capture: true });
+    checkAway = () => {
+      const v = document.hidden || performance.now() - lastActive > 5 * 60000;
+      mp.setAway(v);
+      party.setAway(v);
+    };
+    document.addEventListener('visibilitychange', () => { awake(); checkAway(); });
     if (visitors) visitors.mp = mp;
     // 電腦：數字鍵 1–5 送表情
     window.addEventListener('keydown', (e) => {
@@ -844,6 +862,7 @@ async function start() {
       else host.hush();
     }
     party?.update(dt);
+    if (frame % 30 === 0) checkAway?.();
     const talking = layoutBubbles() > 0;
     if (frame % 6 === 0) updateAction();
     // 攝影模式時，光線、聲音、牆跟著鏡頭走
