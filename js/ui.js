@@ -106,6 +106,12 @@ export class UI {
     return [this.sheet, this.dress, this.cams].find((el) => el.classList.contains('open')) || null;
   }
 
+  // 佔掉一邊畫面的那個面板：電腦版的相機桌是浮在相機底下的銘牌，不算
+  get docked() {
+    const p = this.panel;
+    return p === this.cams && document.body.classList.contains('desk') ? null : p;
+  }
+
   // 相機桌：v = { i, n, cam, ready, carried, other }。cam 是 null 的位置還沒有相機；ready 是 false 的擺著看、拿不走
   showCams(v) {
     const c = v.cam, ok = !!c && v.ready;

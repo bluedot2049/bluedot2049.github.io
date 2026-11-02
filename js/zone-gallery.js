@@ -9,9 +9,11 @@ import { Animals } from './animals.js';
 import { Visitors } from './visitors.js';
 import { HORIZON, SUN_DIR } from './outdoor.js';
 import { buildShots } from './shots.js';
+import { StudyNight } from './study.js';
 
-// 背景音樂：走進「歡迎光臨煉金畫廊」那間才開始放，往後的房間和戶外一路放著
-export const bgm = { src: 'assets/audio/gallery.m4a', from: '02-nigredo' };
+// 背景音樂「星盤夜讀」（study.js，現場合成）：走進「歡迎光臨煉金畫廊」那間才開始放，往後的房間和戶外一路放著。
+// 那間一進門就是落地擺鐘，滴答聲從那裡來
+export const bgm = { src: StudyNight, from: '02-nigredo' };
 // 導演運鏡：房間小，轉得慢一點
 export const directorLag = 1.6;
 
@@ -40,6 +42,7 @@ export function residents({ scene, world, shadowTex }) {
 
 // 動物和不定期搭船來看畫的冒險者
 export function crowd({ scene, world, shadowTex, player, camera, ambience, host, params }) {
+  ambience.clock = world.clock;
   const animals = new Animals({ world, shadowTex, player, camera, ambience });
   const visitors = new Visitors({ scene, world, shadowTex, player, camera, host, animals, force: params.get('visit') });
   animals.visitors = visitors;

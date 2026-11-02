@@ -494,10 +494,15 @@ body.touch #guide .for-desk, body:not(.touch) #guide .for-touch { display: none;
   #top-btns { gap: 5px; right: calc(10px + env(safe-area-inset-right)); }
   #top-btns .icon-btn.round { width: 40px; min-width: 40px; height: 40px; }
 }
-/* 「⋯」：按一下整排收進來，畫面乾淨；再按一下展開。收著時行囊有東西沒存，印泥亮在「⋯」上 */
-#top-btns > * { transition: opacity .25s, transform .25s, border-color .2s, color .2s, background .2s; }
-body.tidy #top-btns > :not(#more-btn) { opacity: 0; transform: translateX(14px) scale(.7); pointer-events: none; }
-body.desk.tidy #top-btns > :not(#more-btn) { display: none; }
+/* 「⋯」：按一下整排收進來，畫面乾淨；再按一下展開。收著時行囊有東西沒存，印泥亮在「⋯」上。
+   相機、表情、在線人數不收；手機上收掉的按鈕寬度一起縮成零，人數才會靠到「⋯」旁邊 */
+#top-btns > * { transition: opacity .25s, transform .25s, width .25s, min-width .25s, margin .25s, border-color .2s, color .2s, background .2s; }
+body.tidy #top-btns > :not(#more-btn, #photo-btn, #emote, #online) { opacity: 0; transform: translateX(14px) scale(.7); pointer-events: none; }
+body.tidy:not(.desk) #top-btns > :not(#more-btn, #online) { width: 0; min-width: 0; padding: 0; margin-left: -8px; border-width: 0; overflow: hidden; }
+body.desk.tidy #top-btns > :not(#more-btn, #photo-btn, #emote, #online) { display: none; }
+@media (orientation: portrait) and (max-width: 400px) {
+  body.tidy:not(.desk) #top-btns > :not(#more-btn, #online) { margin-left: -5px; }
+}
 body.tidy #more-btn { color: var(--muted); border-style: dashed; }
 #more-btn { position: relative; }
 #more-btn .ink { display: none; }
@@ -704,12 +709,16 @@ body.joy-left:not(.desk) { --inset: env(safe-area-inset-right); }
 #emote { --w: 44px; --r: var(--r1); --a: var(--a-emo); }
 #say-btn { --w: 44px; --r: var(--r-say); --a: var(--a-say); }
 #action-btn { --w: 104px; --h: 68px; --r: var(--r2); --a: var(--a-act); }
-body:not(.desk) :is(#jump-btn, #sit-btn, #photo-btn, #say-btn, #emote, #action-btn) {
+/* 攝影模式坐和表情收掉了，那兩個位置讓給相機的閃光和日期，拇指記得的位置不變 */
+#ph-flash { --w: var(--sit); --r: var(--r1); --a: var(--a-sit); }
+#ph-date { --w: 64px; --h: 40px; --r: var(--r1); --a: var(--a-emo); }
+body:not(.desk) #ph-flash { width: var(--w); height: var(--w); }
+body:not(.desk) :is(#jump-btn, #sit-btn, #photo-btn, #say-btn, #emote, #action-btn, #ph-flash, #ph-date) {
   position: fixed; z-index: 20; margin: 0;
   left: calc(var(--jx) + var(--r, 0px) * cos(var(--a, 0deg)) - var(--w) / 2); right: auto;
   bottom: calc(var(--jy) + var(--r, 0px) * sin(var(--a, 0deg)) - var(--h, var(--w)) / 2);
 }
-body.joy-left:not(.desk) :is(#jump-btn, #sit-btn, #photo-btn, #say-btn, #emote, #action-btn) {
+body.joy-left:not(.desk) :is(#jump-btn, #sit-btn, #photo-btn, #say-btn, #emote, #action-btn, #ph-flash, #ph-date) {
   left: auto; right: calc(var(--jx) + var(--r, 0px) * cos(var(--a, 0deg)) - var(--w) / 2);
 }
 body:not(.desk) #photo-btn { width: var(--cam); min-width: var(--cam); height: var(--cam); }
@@ -750,6 +759,8 @@ body.flat :is(#photo-btn, #say-btn) { display: none; }
   }
   body.touch #swap-btn { bottom: calc(var(--lift) + env(safe-area-inset-bottom)); }
   #action-btn { --h: calc(var(--seal) + 4px); }
+  /* 日期窗是扁長的，弧壓扁後會碰到收起鈕的角，往上轉一點 */
+  #ph-date { --a: calc(var(--a-emo) + 8deg); }
 
   body:not(.desk) #emote { flex-direction: row; align-items: center; gap: 6px; }
   body.joy-left:not(.desk) #emote { flex-direction: row-reverse; align-items: center; }
@@ -1075,6 +1086,23 @@ body.desk .pack-acts small { font-size: 11.5px; }
 #cams-dots { display: flex; gap: 9px; padding-left: 4px; }
 #cams-dots i { width: 6px; height: 6px; transform: rotate(45deg); background: var(--line); }
 #cams-dots i.on { background: var(--gold); }
+/* 電腦版：不貼右邊，一張小銘牌浮在那台相機底下，換一台時跟著鏡頭滑過去。位置由 main.js 每幀投影（--cx、--cy） */
+body.desk #cams.panel {
+  left: var(--cx, 50%); top: var(--cy, 60%); right: auto; bottom: auto;
+  width: 320px; max-height: none; overflow: visible;
+  padding: 18px 16px 16px; border: 1px solid var(--line-soft); border-radius: 4px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .5);
+  transform: translate(-50%, 8px); opacity: 0; visibility: hidden;
+  transition: opacity .25s, transform .25s, visibility 0s .25s;
+}
+body.desk #cams.panel.open { transform: translate(-50%, 0); opacity: 1; visibility: visible; transition: opacity .25s, transform .25s; }
+body.desk #cams::before { right: 0; bottom: auto; width: auto; height: 1px; }
+body.desk #cams::after { left: 50%; top: -4px; margin: 0 0 0 -3.5px; }
+body.desk #cams .list-title { display: none; }
+body.desk #cams .close { top: 6px; right: 6px; width: 32px; min-width: 32px; height: 32px; }
+body.desk #cams .close svg { width: 16px; height: 16px; }
+body.desk #cams .cams-info { padding-right: 18px; }
+body.desk #cams .cams-foot { margin-top: 14px; }
 
 .sheet-head { display: flex; gap: 16px; align-items: center; padding-right: 44px; }
 /* 縮圖：鍍金畫框 */
@@ -1242,14 +1270,6 @@ body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #emote, body.phot
 #ph-frame > div { position: absolute; inset: 0; }
 #ph-frame .vig { background: radial-gradient(ellipse 75% 70% at 50% 50%, rgba(20, 10, 4, 0) 55%, rgba(20, 10, 4, var(--vig, .32)) 100%); }
 #ph-frame .grain { background-size: 128px 128px; mix-blend-mode: overlay; opacity: 0; }
-#ph-frame .grid { display: none; }
-#ph-frame.grid .grid {
-  display: block;
-  --g: rgba(255, 244, 225, .38);
-  background:
-    linear-gradient(to right, transparent calc(100% / 3 - .5px), var(--g) 0 calc(100% / 3 + .5px), transparent 0 calc(200% / 3 - .5px), var(--g) 0 calc(200% / 3 + .5px), transparent 0),
-    linear-gradient(to bottom, transparent calc(100% / 3 - .5px), var(--g) 0 calc(100% / 3 + .5px), transparent 0 calc(200% / 3 - .5px), var(--g) 0 calc(200% / 3 + .5px), transparent 0);
-}
 #ph-frame .sig { position: absolute; width: auto; opacity: .82; }
 #ph-frame::after { content: ""; position: absolute; inset: 0; background: #fff; opacity: 0; }
 #ph-frame.flash::after { animation: ph-flash .4s ease-out; }
@@ -1319,7 +1339,7 @@ body:not(.desk) #ph-bar { right: calc(14px + env(safe-area-inset-right)); }
 body.desk .ph-chip span { color: var(--muted); }
 @media (hover: hover) { .ph-chip:hover { border-color: var(--gold); } }
 
-/* 點開比例、色調、運鏡、顯示時跳出的一排選項 */
+/* 點開比例、運鏡、顯示時跳出的一排選項 */
 #ph-menu {
   position: fixed; z-index: 21;
   display: flex; flex-wrap: wrap; gap: 4px;
@@ -1357,7 +1377,7 @@ body.desk .ph-chip span { color: var(--muted); }
 }
 #ph-zoom.show { opacity: 1; }
 
-/* 快門和錄影：手機在「跳」的位置（拇指弧的圓心），閃光、日期、錄影往內排；
+/* 快門和錄影：手機在「跳」的位置（拇指弧的圓心），錄影往內排，相機的閃光、日期坐在弧上（見拇指弧那段）；
    鏡頭鈕在相機鈕（攝影時是收起）上面。搖桿換邊時整組跟著鏡像 */
 #ph-shoot {
   position: fixed; z-index: 20;
@@ -1409,32 +1429,42 @@ body.joy-left:not(.desk) #ph-lens { left: auto; right: calc(var(--jx) - 36px); }
   transition: inset .2s;
 }
 #ph-shutter:active { transform: scale(.92); }
-/* 帶著相機時，快門換成相機自己的（cameras.js 的 shutterKnob）。閃光燈泡相機是灰鋼外環的葉片快門：
-   .snap 按一下張開又闔上；body.photo-expose 按住就一直開著，.tick.lit 錶刻一秒亮一格；.locked 換燈泡時卡榫卡進來；.jam 卡住了還硬按 */
+/* 帶著相機時，快門換成相機自己的（cameras.js 的 shutterKnob）。外環都是太陽紋金片，刻著商號、型號、序號。
+   燭乙式是海市火記光學的相機，跟照相館一樣整顆金色，中間一顆圓頂金鈕（.cap）；葉片快門（.leaf）留給以後的別台。
+   .snap 按一下金鈕壓下彈回、葉片張開又闔上；body.photo-expose 按住就一直壓著、開著，.tick.lit 錶刻一秒亮一格；.locked 換燈泡時卡榫卡進來；.jam 卡住了還硬按 */
 #ph-shutter.gear {
-  border: 1px solid #45484d;
+  border: 1px solid rgba(120, 78, 32, .9);
   background:
-    repeating-radial-gradient(circle, rgba(255, 255, 255, .07) 0 1px, rgba(0, 0, 0, .05) 1px 2px),
-    conic-gradient(from 15deg, #8e9297, #cfd2d6 10%, #7d8186 22%, #b9bcc0 35%, #85898e 48%, #d3d6d9 60%, #7f8388 73%, #bfc2c6 86%, #8e9297);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .55), inset 0 -2px 3px rgba(0, 0, 0, .35), 0 2px 8px rgba(0, 0, 0, .5);
+    radial-gradient(circle, transparent 62%, rgba(90, 52, 18, .22) 100%),
+    repeating-conic-gradient(rgba(255, 244, 220, .08) 0 .8deg, rgba(80, 45, 12, .07) .8deg 1.6deg),
+    repeating-conic-gradient(from 2deg, rgba(255, 244, 220, .05) 0 4deg, transparent 4deg 9deg, rgba(80, 45, 12, .05) 9deg 13deg, transparent 13deg 17deg),
+    conic-gradient(#dba85c, #b5813f 45deg, #d9a457 90deg, #ebc27d 135deg, #d9a457 180deg, #b07c3e 225deg, #dba85c 270deg, #f4d59a 315deg, #dba85c);
+  box-shadow: inset 0 1px 1px rgba(255, 240, 210, .55), inset 0 -2px 3px rgba(80, 45, 12, .45), 0 2px 8px rgba(0, 0, 0, .5);
 }
 #ph-shutter.gear::after, #ph-shutter.gear::before { content: none; }
 #ph-shutter.gear svg { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
-#ph-shutter .bezel { fill: #1d1f22; stroke: #5a5e63; stroke-width: .8; }
-#ph-shutter .glass { fill: #26333a; }
-#ph-shutter .glint { fill: #9fb8c4; opacity: .25; }
+#ph-shutter .groove { fill: #5a3a18; stroke: #3a2410; stroke-width: .6; }
+#ph-shutter .cap { transition: transform .12s ease-out, filter .12s; }
+#ph-shutter .dome { fill: url(#sh-dome); }
+#ph-shutter .cap .rim { fill: none; stroke: #f4d59a; stroke-width: .7; opacity: .7; }
+#ph-shutter .cap .shine { fill: #fff6dc; opacity: .35; }
+#ph-shutter.snap .cap { animation: sh-press .32s ease-in-out; }
+body.photo-expose #ph-shutter.gear .cap { transform: scale(.93); filter: brightness(.86); transition-duration: .18s; }
+#ph-shutter .bezel { fill: #2a1d14; stroke: #8f5e28; stroke-width: .8; }
+#ph-shutter .glass { fill: #241c1a; }
+#ph-shutter .glint { fill: #f4d695; opacity: .18; }
 #ph-shutter .leaf { transform: translateY(3.5px); transition: transform .12s ease-in; }
-#ph-shutter .leaf .edge { fill: none; stroke: #9a9fa6; stroke-width: .5; }
-#ph-shutter .lip { fill: none; stroke: #a3a7ad; stroke-width: .8; }
-#ph-shutter .glyph { fill: #34373b; }
-#ph-shutter .code { fill: none; stroke: #34373b; stroke-width: .55; }
-#ph-shutter .glyph.lo { fill: rgba(255, 255, 255, .6); }
-#ph-shutter .code.lo { stroke: rgba(255, 255, 255, .6); }
-#ph-shutter .tick { stroke: #4a4d52; stroke-width: 1.3; stroke-linecap: round; transition: stroke .4s; }
+#ph-shutter .leaf .edge { fill: none; stroke: #d9a85a; stroke-width: .5; }
+#ph-shutter .lip { fill: none; stroke: #ebc27d; stroke-width: .8; }
+#ph-shutter .glyph { fill: #3a2410; }
+#ph-shutter .code { fill: none; stroke: #3a2410; stroke-width: .55; }
+#ph-shutter .glyph.lo { fill: rgba(255, 240, 205, .65); }
+#ph-shutter .code.lo { stroke: rgba(255, 240, 205, .65); }
+#ph-shutter .tick { stroke: #7a5226; stroke-width: 1.3; stroke-linecap: round; transition: stroke .4s; }
 #ph-shutter .tick.lit { stroke: #ffb35a; filter: drop-shadow(0 0 1.4px #ff8a3c); transition-duration: .1s; }
 #ph-shutter .latch { transition: transform .18s cubic-bezier(.3, .8, .3, 1); }
-#ph-shutter .latch rect { fill: #6a6e74; stroke: #2e3135; stroke-width: .5; }
-#ph-shutter .latch circle { fill: #2e3135; transition: fill .2s; }
+#ph-shutter .latch rect { fill: #b5813f; stroke: #5a3a18; stroke-width: .5; }
+#ph-shutter .latch circle { fill: #3a2410; transition: fill .2s; }
 #ph-shutter.locked .latch { transform: translateX(-8px); }
 #ph-shutter.locked .latch circle { fill: #b8582a; }
 #ph-shutter.locked:active { transform: none; }
@@ -1442,7 +1472,41 @@ body.joy-left:not(.desk) #ph-lens { left: auto; right: calc(var(--jx) - 36px); }
 body.photo-expose #ph-shutter.gear .leaf { transform: translateY(-15px); transition-duration: .18s; }
 #ph-shutter.gear.jam { animation: sh-jam .26s ease-in-out; }
 @keyframes sh-snap { 0% { transform: translateY(3.5px); } 30%, 55% { transform: translateY(-15px); } 100% { transform: translateY(3.5px); } }
+@keyframes sh-press { 0% { transform: none; filter: none; } 30%, 55% { transform: scale(.93); filter: brightness(.86); } 100% { transform: none; filter: none; } }
 @keyframes sh-jam { 0%, 100% { transform: none; } 25% { transform: rotate(-4deg); } 75% { transform: rotate(4deg); } }
+/* 畫廊的眼睛（cameras.js 的 eyeShutter）：前廳掛布上那個圖騰，黑底金色細線。
+   眼珠跟著游標轉（--lx、--ly）；滑過時睜大一點；按住瞳孔先收；.blink 拍下時瞳孔縮到最小、眼眶上下壓扁眨一下，再慢慢放開。
+   虹膜用 --open 裁成眼縫的形狀，跟眼眶一起開闔 */
+#ph-shutter.eye {
+  --lx: 0; --ly: 0; --lid: 1; --open: ellipse(32.5% 12.2% at 50% 50%);
+  border: 1px solid rgba(201, 164, 106, .3);
+  background: radial-gradient(circle at 50% 45%, #1a1520, #0b0910 70%);
+  box-shadow: 0 0 12px rgba(232, 184, 106, .16), inset 0 1px 1px rgba(255, 230, 190, .1), inset 0 -2px 3px rgba(0, 0, 0, .6);
+}
+#ph-shutter.eye::after, #ph-shutter.eye::before { content: none; }
+#ph-shutter.eye svg { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+#ph-shutter .ey { position: absolute; inset: 0; clip-path: var(--open); transition: clip-path .25s ease-out; }
+#ph-shutter .look { transform: translate(calc(var(--lx) * 1px), calc(var(--ly) * 1px)); transition: transform .35s ease-out; }
+#ph-shutter .disc { fill: rgba(236, 197, 126, .2); }
+#ph-shutter .arcs { fill: none; stroke: #ecc57e; stroke-width: .4; stroke-linecap: round; }
+#ph-shutter .rim { fill: none; stroke: #ecc57e; stroke-width: .5; }
+#ph-shutter .pupil { transform-box: fill-box; transform-origin: center; transition: transform .2s; }
+#ph-shutter .pupil circle { fill: rgba(236, 197, 126, .45); stroke: #f4d695; stroke-width: .9; }
+#ph-shutter.eye .glint { fill: #0b0910; opacity: 1; }
+#ph-shutter .rays { fill: url(#ey-ray); opacity: .85; }
+#ph-shutter .gold { fill: url(#ey-gold); }
+#ph-shutter .lids { transform: scaleY(var(--lid)); transition: transform .25s ease-out; }
+#ph-shutter .white { fill: rgba(236, 197, 126, .1); }
+#ph-shutter.eye:active .pupil { transform: scale(.62); }
+#ph-shutter.blink .ey { animation: ey-blink .5s ease-in-out; }
+#ph-shutter.blink .lids { animation: ey-lids .5s ease-in-out; }
+#ph-shutter.blink .pupil { animation: ey-pupil 1s ease-out; }
+@media (hover: hover) {
+  #ph-shutter.eye:hover { --lid: 1.14; --open: ellipse(32.5% 13.9% at 50% 50%); }
+}
+@keyframes ey-blink { 0%, 12% { clip-path: var(--open); } 34%, 46% { clip-path: ellipse(32.5% 0% at 50% 50%); } 100% { clip-path: var(--open); } }
+@keyframes ey-lids { 0%, 12% { transform: scaleY(var(--lid)); } 34%, 46% { transform: scaleY(.04); } 100% { transform: scaleY(var(--lid)); } }
+@keyframes ey-pupil { 0% { transform: scale(.62); } 12%, 50% { transform: scale(.34); } 100% { transform: scale(1); } }
 #ph-record {
   display: flex; align-items: center; justify-content: center;
   width: 54px; height: 54px; padding: 0; border-radius: 50%;
@@ -1455,7 +1519,8 @@ body.photo-rec #ph-record { border-color: #c4452d; }
 body.photo-rec #ph-record i { width: 18px; height: 18px; border-radius: 4px; }
 
 /* 閃光開關：長成相機的零件，不跟其他金線按鈕一樣。圖是 cameras.js 的 flashKnob 畫的；
-   .on 扇子展開、燈泡亮著，.swap 是剛閃過、換燈泡（--swap 秒），邊上一圈走完就換好了。手機在快門右邊，電腦在左邊 */
+   .on 扇子展開、燈泡亮著，.swap 是剛閃過、換燈泡（--swap 秒），邊上一圈走完就換好了。
+   手機排在拇指弧上「坐」的位置（日期在「表情」的位置），電腦在快門左邊 */
 #ph-flash {
   position: relative; width: 56px; height: 56px; padding: 0; border-radius: 50%; overflow: hidden;
   background: radial-gradient(circle at 40% 32%, #4a3528, #2a1d15 72%);
@@ -1491,10 +1556,10 @@ body.photo-rec #ph-record i { width: 18px; height: 18px; border-radius: 4px; }
 @keyframes ph-puff { from { opacity: .8; transform: scale(.6); } to { opacity: 0; transform: translate(6px, -16px) scale(2.2); } }
 @keyframes ph-ring { to { stroke-dashoffset: 0; } }
 
-/* 日期開關：一塊銅板開個小窗，窗裡是刻反字的日期銅模（cameras.js 的 dateKnob）。
-   關著時鐵蓋滑下來遮住，.on 拉開；.burn 是剛拍下去，小窗燒紅再暗回去 */
+/* 日期開關：一塊銅板開個小窗，窗裡是今天的日期，正字（cameras.js 的 dateKnob）。
+   不印時開了細縫的鐵蓋滑下來，縫裡透出暗字；.on 拉開印月日，.on.full 印年月日；.burn 是剛拍下去，小窗燒紅再暗回去 */
 #ph-date {
-  position: relative; width: 52px; height: 38px; padding: 0; border-radius: 5px; overflow: hidden;
+  position: relative; width: 64px; height: 40px; padding: 0; border-radius: 5px; overflow: hidden;
   background: #2a1d15; border: 0; box-shadow: 0 2px 6px rgba(0, 0, 0, .45);
   cursor: var(--cur-pointer); transition: transform .1s;
 }
@@ -1503,17 +1568,18 @@ body.photo-rec #ph-record i { width: 18px; height: 18px; border-radius: 4px; }
 #ph-date .plate { fill: #8a6a34; stroke: #c9a24a; stroke-width: .8; }
 #ph-date .rivet { fill: #c9a24a; stroke: #5a4320; stroke-width: .4; }
 #ph-date .well { fill: #1c130e; }
-#ph-date .die { fill: none; stroke: #6b4a30; stroke-width: 1.2; stroke-linecap: butt; stroke-linejoin: miter; transition: stroke .3s; }
-#ph-date.on .die { stroke: #c27a44; }
+#ph-date .die { fill: none; stroke: #8a5e3a; stroke-width: 1.2; stroke-linecap: butt; stroke-linejoin: miter; transition: stroke .3s; }
+#ph-date.on .die { stroke: #e0965a; }
+#ph-date .ymd, #ph-date.full .md { display: none; }
+#ph-date.full .ymd { display: inline; }
 #ph-date .glow rect { fill: #ff8a3c; opacity: 0; }
 #ph-date.burn .glow rect { animation: ph-burn 1.4s ease-out both; }
 #ph-date.burn .die { animation: ph-burn-die 1.4s ease-out both; }
 #ph-date .lid { transition: transform .3s cubic-bezier(.3, .8, .3, 1); }
-#ph-date .lid rect { fill: #4d4a48; }
-#ph-date .lid path { stroke: #2c2a29; stroke-width: .8; }
-#ph-date.on .lid { transform: translateY(-19px); }
+#ph-date .lid path { fill: #4d4a48; }
+#ph-date.on .lid { transform: translateY(-21px); }
 @keyframes ph-burn { 0% { opacity: .85; } 100% { opacity: 0; } }
-@keyframes ph-burn-die { 0% { stroke: #ffe2b0; } 100% { stroke: #c27a44; } }
+@keyframes ph-burn-die { 0% { stroke: #ffe2b0; } 100% { stroke: #e0965a; } }
 
 /* 高度尺：手機疊在搖桿上方，電腦在右邊中間。刻度在左，圓點旁邊寫幾公尺 */
 #ph-alt {
@@ -1566,7 +1632,7 @@ body.desk #ph-chips { flex-wrap: wrap; justify-content: center; overflow: visibl
 body.desk #ph-shoot { left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom)); align-items: center; }
 body.desk .ph-keys { position: relative; }
 body.desk #ph-flash { position: absolute; right: calc(100% + 18px); top: calc(50% - 28px); }
-body.desk #ph-date { position: absolute; right: calc(100% + 86px); top: calc(50% - 19px); }
+body.desk #ph-date { position: absolute; right: calc(100% + 86px); top: calc(50% - 20px); }
 body.desk #ph-rec { top: calc(18px + env(safe-area-inset-top)); }
 body.desk #ph-alt { right: calc(70px + env(safe-area-inset-right)); bottom: auto; top: 50%; transform: translateY(-50%); }
 body.desk .ph-alt-track { height: 240px; }

@@ -93,7 +93,8 @@ export class Studio {
     this.mp?.sendNow();
     if (this.mp) this.mp.only = new Set(s.ids);
     if (this.passers) this.passers.hidden = true;
-    const cam = { ...this.camera(spot, n), host: s.host };
+    // mark：照片角落蓋的記號（marks.js 的名字），景點可以自己指定，沒寫就是海市的印
+    const cam = { ...this.camera(spot, n), host: s.host, mark: spot.mark };
     if (this.photo.active) this.photo.setStudio(cam);
     else this.photo.enter({ postcard: true, studio: cam });
     if (first) this.fade(false);

@@ -18,8 +18,8 @@ export const longTan = (mm) => 18 / mm;
 // aspect：照片長寬比（橫拿），直拿就倒過來。
 // flash：閃光燈；bulb：閃一次要換一顆燈泡，換好之前不能拍；knob：快門旁那顆閃光開關長什麼樣（KNOBS）。hold：按住快門不放就一直曝光（B 快門），放開時才閃
 // develop：沖出來的樣子，跟 photo.js 的色調同一種寫法；halo：亮的地方暈開一點
-// date：照片角落的日期印記；knob：快門旁那個開關長什麼樣（KNOBS），ink：印記怎麼上到照片（INKS）。同一家工坊的相機用同一種
-// sig：false 是照片上不落畫廊的款，只留相機自己的印記
+// date：照片角落的日期印記，開關點一下換一段：不印、月日、年月日；knob：快門旁那個開關長什麼樣（KNOBS），ink：印記怎麼上到照片（INKS）。同一家工坊的相機用同一種
+// mark：照片角落蓋哪個記號（marks.js 的名字）；沒寫就不蓋，只留相機自己的印記
 // make：哪家工坊做的。mark 是商號（用海市的字刻），model 型號、serial 序號（用蘇州碼子的數字刻）；shutter：快門鈕長什麼樣（SHUTTERS）
 export const CAMERAS = {
   bulb: {
@@ -28,8 +28,8 @@ export const CAMERAS = {
     maker: '海市火記光學製造',
     focal: 27, prime: true, fstop: 1.4, bokeh: 4, focus: 'tap', aspect: 3 / 2,
     flash: { color: 0xfff1dc, power: 2.6, bulb: 1.6, knob: 'fan' },
-    date: { knob: 'die', ink: 'burn' }, sig: false,
-    make: { mark: '火', model: 1, serial: [0, 4, 1, 7] }, shutter: 'leaf',
+    date: { knob: 'die', ink: 'burn' },
+    make: { mark: '火', model: 1, serial: [0, 4, 1, 7] }, shutter: 'gold',
     hold: true,
     develop: { filter: 'sepia(.16) saturate(.92) contrast(1.08) brightness(1.02)', vig: 0.62, grain: 0.07, halo: 0.16 },
   },
@@ -160,23 +160,29 @@ const KNOBS = {
       + '<circle class="puff" cx="3" cy="-6" r="5"/>'
       + '<circle class="ring" r="27.6" pathLength="100" transform="rotate(-90)"/></svg>';
   },
-  // 銅模：小窗裡是刻反字的日期銅模，關著時一片鐵蓋滑下來遮住。拍下去那一下，小窗燒紅再暗回去（#ph-date）
+  // 銅模：小窗裡是今天的日期，正字，跟燙上照片的一模一樣，一看就知道是日期。
+  // 點一下換一段：不印（開了細縫的鐵蓋滑下來，縫裡透出暗暗的字）→ 月日 → 年月日（#ph-date 的 .on、.full）。拍下去那一下，小窗燒紅再暗回去
   die() {
-    const d = dateDigits(new Date()).slice(2);   // 窗子小，只放月日
-    let x = 0;
-    const paths = d.map((n) => {
-      const p = n < 0 ? '' : numPath(n, x, -5, 6.4, 9);
-      x += n < 0 ? 3.4 : 6.4;
-      return p;
-    }).join('');
-    return '<svg viewBox="-26 -19 52 38" aria-hidden="true">'
-      + '<rect class="well" x="-17" y="-9" width="34" height="18" rx="1.5"/>'
-      + `<g class="glow"><rect x="-17" y="-9" width="34" height="18"/></g>`
-      + `<path class="die" transform="translate(${x / 2} 0) scale(-1 1)" d="${paths}"/>`
-      + '<g class="lid"><rect x="-17" y="-9" width="34" height="18"/><path d="M-15-4H15M-15 0H15M-15 4H15"/></g>'
-      + '<path class="plate" fill-rule="evenodd" d="M-26-19H26V19H-26ZM-17-9V9H17V-9Z"/>'
-      + '<circle class="rivet" cx="-21.5" cy="-14" r="1.3"/><circle class="rivet" cx="21.5" cy="-14" r="1.3"/>'
-      + '<circle class="rivet" cx="-21.5" cy="14" r="1.3"/><circle class="rivet" cx="21.5" cy="14" r="1.3"/></svg>';
+    const d = dateDigits(new Date()), cw = 4.4, gap = 1.5, dot = 2.8, h = 8.4;
+    const row = (cls, dg) => {
+      let w = -gap;
+      for (const n of dg) w += n < 0 ? dot : cw + gap;
+      let x = -w / 2;
+      const p = dg.map((n) => {
+        const s = n < 0 ? `M${f2(x + dot / 2 - gap / 2)} 2.2V3.4` : numPath(n, x, -h / 2, cw, h);
+        x += n < 0 ? dot : cw + gap;
+        return s;
+      }).join('');
+      return `<path class="die ${cls}" d="${p}"/>`;
+    };
+    return '<svg viewBox="-32 -20 64 40" aria-hidden="true">'
+      + '<rect class="well" x="-24" y="-10" width="48" height="20" rx="1.5"/>'
+      + '<g class="glow"><rect x="-24" y="-10" width="48" height="20"/></g>'
+      + row('md', d.slice(3)) + row('ymd', d)
+      + '<g class="lid"><path fill-rule="evenodd" d="M-24-10H24V10H-24ZM-20-3.2H20V-1.4H-20ZM-20 1.4H20V3.2H-20Z"/></g>'
+      + '<path class="plate" fill-rule="evenodd" d="M-32-20H32V20H-32ZM-24-10V10H24V-10Z"/>'
+      + '<circle class="rivet" cx="-28" cy="-15" r="1.3"/><circle class="rivet" cx="28" cy="-15" r="1.3"/>'
+      + '<circle class="rivet" cx="-28" cy="15" r="1.3"/><circle class="rivet" cx="28" cy="15" r="1.3"/></svg>';
   },
 };
 
@@ -184,38 +190,53 @@ export const flashKnob = (id) => KNOBS[CAMERAS[id]?.flash?.knob]?.() || '';
 export const dateKnob = (id) => KNOBS[CAMERAS[id]?.date?.knob]?.() || '';
 
 // 快門鈕的樣子：帶著相機時換掉畫廊的金色快門。動作寫在 style.css 的 #ph-shutter.gear
+// 外環每種都一樣：太陽紋金片刻著商號、型號、序號，錶刻一秒亮一格（ticks 格，就是長曝光最長幾秒）；燈泡還在換時卡榫卡進來，按不下去
+function shutterRing(g, ticks) {
+  const tick = Array.from({ length: ticks }, (_, i) => `<path class="tick" transform="rotate(${(i + 0.5) * 360 / ticks})" d="M0-31V-34.4"/>`).join('');
+  const m = g.make, glyph = strokes(m.mark).map((st) => 'M' + st.poly.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L') + 'Z').join('');
+  // 型號、一個點、序號，排在下緣
+  const nums = [m.model, -1, ...m.serial], cw = 2.2, gap = 0.9, dot = 1.6;
+  let w = 0;
+  for (const n of nums) w += n < 0 ? dot : cw + gap;
+  let x = -w / 2;
+  const code = nums.map((n) => {
+    const d = n < 0 ? `M${(x + dot / 2 - gap / 2).toFixed(2)} 29.6v.5` : numPath(n, x, 26.6, cw, 3.6);
+    x += n < 0 ? dot : cw + gap;
+    return d;
+  }).join('');
+  // 刻痕：底下錯開一點的亮邊，像刻進金屬裡
+  const engrave = (cls, d, dy) => `<path class="${cls} lo" d="${d}" transform="translate(0 ${dy})"/><path class="${cls}" d="${d}"/>`;
+  return `<g class="mark"><g transform="translate(-4.6 -34.2) scale(.092)">${engrave('glyph', glyph, 6)}</g></g>`
+    + engrave('code', code, 0.45)
+    + tick
+    + '<g transform="rotate(18)"><g class="latch"><rect x="23" y="-2.6" width="9" height="5.2" rx="1.2"/><circle cx="29.6" cy="0" r="1"/></g></g>';
+}
+
 const SHUTTERS = {
-  // 葉片快門：灰鋼外環刻著商號、型號、序號，中間六片葉片平常闔著。
-  // 按一下葉片張開一瞬又闔上；按住就一直開著，外環的錶刻一秒亮一格（ticks 格，就是長曝光最長幾秒）；燈泡還在換時卡榫卡進來，按不下去
+  // 金鈕：燭乙式。海市的相機整顆都是金的，中間一顆圓頂的金鈕，四周一圈溝。
+  // 按一下金鈕壓下去又彈回來；按住就一直壓著
+  gold(g, ticks) {
+    return '<svg viewBox="-36 -36 72 72" aria-hidden="true">'
+      + '<defs><radialGradient id="sh-dome" cx=".42" cy=".38" r=".7" fx=".32" fy=".28">'
+      + '<stop offset="0" stop-color="#fbe6b4"/><stop offset=".35" stop-color="#e3b469"/><stop offset=".75" stop-color="#c08a43"/><stop offset="1" stop-color="#8f5e28"/></radialGradient></defs>'
+      + '<circle class="groove" r="23.4"/>'
+      + '<g class="cap"><circle class="dome" r="21.6"/><circle class="rim" r="21.6"/><ellipse class="shine" cx="-7" cy="-8.5" rx="6.5" ry="3.6" transform="rotate(-38 -7 -8.5)"/></g>'
+      + shutterRing(g, ticks) + '</svg>';
+  },
+  // 葉片快門：中間六片青銅葉片平常闔著，按一下張開一瞬又闔上；按住就一直開著。
+  // 還沒有相機用它，留給以後的別台
   leaf(g, ticks) {
     // 六片葉片深淺各差一點，每片壓著下一片，闔著時疊成風車。
     // 一圈疊回來最後一片要壓在第一片上，所以最先畫的那片（rotate 300）在右上那一角再畫一次蓋上去
-    const shade = ['#4b5058', '#3b4047', '#555a62', '#41464d', '#4f545c', '#383c43'];
+    const shade = ['#6b4a24', '#57391b', '#77532b', '#60421f', '#704d27', '#52361a'];
     const leaf = (i) => `<g transform="rotate(${i * 60})"><g class="leaf"><path fill="${shade[i]}" d="M-14 0Q6 -6 30 0V-30H-14Z"/><path class="edge" d="M-1.6 -2.5Q13.2 -4.2 30 0"/></g></g>`;
     const leaves = [5, 4, 3, 2, 1, 0].map(leaf).join('') + `<g clip-path="url(#sh-q)">${leaf(5)}</g>`;
-    const tick = Array.from({ length: ticks }, (_, i) => `<path class="tick" transform="rotate(${(i + 0.5) * 360 / ticks})" d="M0-31V-34.4"/>`).join('');
-    const m = g.make, glyph = strokes(m.mark).map((st) => 'M' + st.poly.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L') + 'Z').join('');
-    // 型號、一個點、序號，排在下緣
-    const nums = [m.model, -1, ...m.serial], cw = 2.2, gap = 0.9, dot = 1.6;
-    let w = 0;
-    for (const n of nums) w += n < 0 ? dot : cw + gap;
-    let x = -w / 2;
-    const code = nums.map((n) => {
-      const d = n < 0 ? `M${(x + dot / 2 - gap / 2).toFixed(2)} 29.6v.5` : numPath(n, x, 26.6, cw, 3.6);
-      x += n < 0 ? dot : cw + gap;
-      return d;
-    }).join('');
-    // 刻痕：底下錯開一點的亮邊，像刻進金屬裡
-    const engrave = (cls, d, dy) => `<path class="${cls} lo" d="${d}" transform="translate(0 ${dy})"/><path class="${cls}" d="${d}"/>`;
     return '<svg viewBox="-36 -36 72 72" aria-hidden="true">'
       + '<defs><clipPath id="sh-ap"><circle r="22"/></clipPath><clipPath id="sh-q"><rect width="40" height="40" y="-40"/></clipPath></defs>'
       + '<circle class="bezel" r="23.6"/>'
       + `<g clip-path="url(#sh-ap)"><circle class="glass" r="22"/><circle class="glint" cx="-6" cy="-7" r="5"/>${leaves}</g>`
       + '<circle class="lip" r="22.4"/>'
-      + `<g class="mark"><g transform="translate(-4.6 -34.2) scale(.092)">${engrave('glyph', glyph, 6)}</g></g>`
-      + engrave('code', code, 0.45)
-      + tick
-      + '<g transform="rotate(18)"><g class="latch"><rect x="23" y="-2.6" width="9" height="5.2" rx="1.2"/><circle cx="29.6" cy="0" r="1"/></g></g></svg>';
+      + shutterRing(g, ticks) + '</svg>';
   },
 };
 
@@ -223,6 +244,142 @@ export const shutterKnob = (id, ticks) => {
   const g = CAMERAS[id];
   return SHUTTERS[g?.shutter]?.(g, ticks) || '';
 };
+
+// ───────── 畫廊的眼睛的快門 ─────────
+// 跟前廳相機桌後面那塊掛布（camtable.js）同一個圖騰：黑底上全是金色細線，外圈一圈長短交錯的細光芒，
+// 中間杏仁形的眼眶（上粗下細，眼角收成細線）、眼尾一對羊角捲草、虹膜一圈圈斷開的細弧、瞳孔金圈。
+// 存檔照片上的眼紋（mirrorcard.js）是讀檔用的碼，這裡不仿它。
+// 三層：.ey 是虹膜，用眼縫的形狀裁著，眼珠跟游標轉；.lids 是眼眶，眨眼時上下壓扁；捲草和光芒不動（style.css 的 #ph-shutter.eye）
+
+const f2 = (v) => v.toFixed(2);
+
+// 一條粗細會變的線（camtable.js、mirrorcard.js 的 ribbon），畫成 SVG 路徑
+function ribbonD(pts, width, side = 0) {
+  const a = [], b = [];
+  pts.forEach((p, i) => {
+    const o = pts[Math.max(0, i - 1)], q = pts[Math.min(pts.length - 1, i + 1)];
+    const d = Math.hypot(q.x - o.x, q.y - o.y) || 1, nx = -(q.y - o.y) / d, ny = (q.x - o.x) / d;
+    const w = width(i / (pts.length - 1)), lo = side ? 0 : -w / 2, hi = side ? w * side : w / 2;
+    a.push(`${f2(p.x + nx * lo)} ${f2(p.y + ny * lo)}`);
+    b.push(`${f2(p.x + nx * hi)} ${f2(p.y + ny * hi)}`);
+  });
+  return `M${a.join('L')}L${b.reverse().join('L')}Z`;
+}
+
+// 捲草：從眼角出發，先往反方向輕輕一沉（dip），再越走越彎捲成小渦（同 camtable.js 的 scrollPts）
+function scrollPts(x0, y0, a, len, curl, dip = 0) {
+  const n = 40, step = len / n, pts = [{ x: x0, y: y0 }];
+  let px = x0, py = y0;
+  for (let i = 0; i < n; i++) {
+    const t = i / n;
+    a += curl * (0.23 * t * t - dip * (1 - t) ** 3) * (64 / n);
+    px += Math.cos(a) * step * (1 - t * 0.55);
+    py += Math.sin(a) * step * (1 - t * 0.55);
+    pts.push({ x: px, y: py });
+  }
+  return pts;
+}
+
+// 捲草頭細、前段鼓起來、捲進去前收細，尾端一顆圓珠
+function flourishD(pts, thin, fat) {
+  const e = pts[pts.length - 1], r = thin + fat * 0.5;
+  return ribbonD(pts, (t) => thin + fat * Math.sin(Math.PI * Math.min(1, t / 0.68)) ** 1.3)
+    + `M${f2(e.x - r)} ${f2(e.y)}a${f2(r)} ${f2(r)} 0 1 0 ${f2(r * 2)} 0a${f2(r)} ${f2(r)} 0 1 0 ${f2(-r * 2)} 0Z`;
+}
+
+// 眼皮的線：眼角離中心 W，sd = -1 上、1 下，從左眼角走到右眼角（跟掛布、鏡中照片的眼眶同一條三次曲線）
+function lidPts(W, sd) {
+  const C = 0.7, Hh = W * 0.5;
+  return Array.from({ length: 41 }, (_, i) => {
+    const t = i / 40, u = 1 - t;
+    return { x: W * (-u * u * u + 3 * C * t * u * (t - u) + t * t * t), y: sd * 3 * t * u * Hh };
+  });
+}
+const pts = (p) => p.map((q) => `${f2(q.x)} ${f2(q.y)}`).join('L');
+
+export function eyeShutter() {
+  // 眼睛的比例照掛布：眼角離中心 W，虹膜、瞳孔、捲草都照 W / 455 縮
+  const W = 24, k = W / 455, IR = 165 * k, P0 = 62 * k;
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const lid = (sd) => lidPts(W, sd);
+
+  // 光芒：一根長、一根短、一根中、一根短，尖端淡掉（淡掉靠 ey-ray 的放射漸層）
+  let rays = '';
+  for (let i = 0; i < 64; i++) {
+    const a = (i / 64) * Math.PI * 2, r0 = 30.5, L = 35.5 * [1, 0.92, 0.96, 0.92][i % 4], w = i % 2 ? 0.55 : 0.85;
+    const cs = Math.cos(a), sn = Math.sin(a);
+    rays += `M${f2(cs * r0 - (sn * w) / 2)} ${f2(sn * r0 + (cs * w) / 2)}L${f2(cs * L)} ${f2(sn * L)}L${f2(cs * r0 + (sn * w) / 2)} ${f2(sn * r0 - (cs * w) / 2)}Z`;
+  }
+  // 虹膜：四圈斷開的細弧
+  let arcs = '';
+  for (let ring = 0; ring < 4; ring++) {
+    const r = P0 + 0.5 + (ring + 0.5) * ((IR - P0 - 0.9) / 4);
+    for (let a = 0; a < Math.PI * 2; ) {
+      const len = 0.25 + rnd() * 0.6;
+      if (rnd() < 0.7) arcs += `M${f2(Math.cos(a) * r)} ${f2(Math.sin(a) * r)}A${f2(r)} ${f2(r)} 0 0 1 ${f2(Math.cos(a + len) * r)} ${f2(Math.sin(a + len) * r)}`;
+      a += len + 0.13;
+    }
+  }
+  // 眼眶：上眼皮中間最粗、下眼皮細一點，只往外長；眼尾上面一條長的往上捲，下面一條短的往下捲
+  const lids = ribbonD(lid(-1), (t) => 0.35 + 1.5 * Math.sin(Math.PI * t) ** 1.6, -1)
+    + ribbonD(lid(1), (t) => 0.35 + 0.75 * Math.sin(Math.PI * t) ** 1.6, 1);
+  let horns = '';
+  for (const sd of [-1, 1]) {
+    const cx = sd * W, a = sd < 0 ? Math.PI : 0;
+    // 按鈕小，捲草比掛布上長一點、粗一點，才看得出羊角
+    horns += flourishD(scrollPts(cx, 0, a - sd * 0.15, 260 * k, -sd * 1.15, 0.035), 0.35, 1.5)
+      + flourishD(scrollPts(cx, 0, a + sd * 0.38, 145 * k, sd * 1.1), 0.35, 1);
+  }
+  const svg = (cls, body) => `<svg class="${cls}" viewBox="-36 -36 72 72" aria-hidden="true">${body}</svg>`;
+  return '<span class="ey">' + svg('iris', '<defs>'
+      + '<linearGradient id="ey-gold" gradientUnits="userSpaceOnUse" x1="-30" y1="-30" x2="30" y2="30"><stop offset="0" stop-color="#f4d695"/><stop offset=".35" stop-color="#d9a85a"/><stop offset=".55" stop-color="#ecc57e"/><stop offset="1" stop-color="#c08a40"/></linearGradient>'
+      + '<radialGradient id="ey-ray" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="35"><stop offset=".8" stop-color="#ecc57e"/><stop offset="1" stop-color="#ecc57e" stop-opacity=".1"/></radialGradient></defs>'
+      + `<g class="look"><circle class="disc" r="${f2(IR)}"/><path class="arcs" d="${arcs}"/><circle class="rim" r="${f2(IR)}"/>`
+      + `<g class="pupil"><circle r="${f2(P0)}"/><ellipse class="glint" cx="${f2(-P0 * 0.32)}" cy="${f2(-P0 * 0.36)}" rx="${f2(P0 * 0.24)}" ry="${f2(P0 * 0.15)}" transform="rotate(-40 ${f2(-P0 * 0.32)} ${f2(-P0 * 0.36)})"/></g></g>`)
+    + '</span>'
+    + svg('tot', `<path class="rays" d="${rays}"/>`
+      + `<g class="lids"><path class="white" d="M${pts(lid(-1))}L${pts(lid(1).reverse())}Z"/><path class="gold" d="${lids}"/></g>`
+      + `<path class="gold" d="${horns}"/>`);
+}
+
+// 畫廊的眼睛的落款（登記在 marks.js）：一顆簡化的小黑眼——鏡子前那顆 3D 黑眼（eye.js）的樣子：
+// 藍紫炭色的眼縫、金眼眶上粗下細、金圈虹膜、黑瞳孔金邊、左上一點亮光。不畫捲草和虹膜細紋，縮到很小也看得清
+export function eyeMark() {
+  const c = document.createElement('canvas');
+  c.width = 240;
+  c.height = 116;
+  const g = c.getContext('2d'), W = 106, IR = 33, P0 = 13, gold = '#e3bb76';
+  g.translate(120, 58);
+  const slit = new Path2D(`M${pts(lidPts(W, -1))}L${pts(lidPts(W, 1).reverse())}Z`);
+  g.fillStyle = '#2a2638';
+  g.fill(slit);
+  g.save();
+  g.clip(slit);
+  g.fillStyle = 'rgba(236,197,126,.24)';
+  g.beginPath();
+  g.arc(0, 0, IR, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = gold;
+  g.lineWidth = 4;
+  g.stroke();
+  g.restore();
+  g.fillStyle = '#0e0b14';
+  g.strokeStyle = gold;
+  g.lineWidth = 4.5;
+  g.beginPath();
+  g.arc(0, 0, P0, 0, Math.PI * 2);
+  g.fill();
+  g.stroke();
+  g.fillStyle = '#fff4e0';
+  g.beginPath();
+  g.arc(-IR * 0.36, -IR * 0.38, 4.5, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = gold;
+  g.fill(new Path2D(ribbonD(lidPts(W, -1), (t) => 2 + 9 * Math.sin(Math.PI * t) ** 1.6, -1)));
+  g.fill(new Path2D(ribbonD(lidPts(W, 1), (t) => 2 + 4.5 * Math.sin(Math.PI * t) ** 1.6, 1)));
+  return c;
+}
 
 // ───────── 日期印記 ─────────
 
@@ -258,8 +415,8 @@ function numPath(n, x, y, w, h) {
 const INKS = {
   // 燙印：燈泡的熱隔著銅模把日期烙在底片角落，焦糖到赭褐，邊上燒出一圈暈。
   // 字是模子刻的，所以每張都一樣工整；只有銅模壓下去的角度和燒的深淺每張差一點
-  burn(ctx, x, y, h, date) {
-    const dg = dateDigits(date), cw = h * 0.5, gap = h * 0.22, dot = h * 0.36, hr = h * 1.3;
+  burn(ctx, x, y, h, date, year) {
+    const dg = dateDigits(date).slice(year ? 0 : 3), cw = h * 0.5, gap = h * 0.22, dot = h * 0.36, hr = h * 1.3;
     let w = hr + gap * 2;
     for (const n of dg) w += n < 0 ? dot : cw + gap;
     const hour = HOURS[Math.floor(((date.getHours() + 1) % 24) / 2)];
@@ -298,7 +455,7 @@ const INKS = {
   },
 };
 
-// 把這台相機的日期印記畫上照片
-export function drawDate(id, ctx, x, y, h) {
-  INKS[CAMERAS[id]?.date?.ink]?.(ctx, x, y, h, new Date());
+// 把這台相機的日期印記畫上照片；year：年月日都印，不然只印月日
+export function drawDate(id, ctx, x, y, h, year) {
+  INKS[CAMERAS[id]?.date?.ink]?.(ctx, x, y, h, new Date(), year);
 }

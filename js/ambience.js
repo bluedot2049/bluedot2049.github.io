@@ -66,6 +66,16 @@ const VOICES = {
     hiss(ctx, out, noise, t + 0.055, 0.025, 'bandpass', 2300 * p, 0.8, 2);
     return 0.09;
   },
+  // 畫廊的眼睛眨一下：眼皮闔上軟軟的一聲「噗」，張開時輕輕一抹，中間浮起兩聲玻璃似的微光
+  blink(ctx, out, t, p, noise) {
+    hiss(ctx, out, noise, t, 0.07, 'lowpass', 1100 * p, 0.55, 0.7);
+    osc(ctx, 'sine', t, 0.09, [[0, 210 * p], [0.09, 115 * p]]).connect(envelope(ctx, t, 0.006, 0.09, 0.4)).connect(out);
+    for (const [dt, f] of [[0.03, 1568], [0.09, 2349]]) {
+      osc(ctx, 'sine', t + dt, 0.6, [[0, f * p], [0.6, f * p * 0.985]]).connect(envelope(ctx, t + dt, 0.01, 0.6, 0.07)).connect(out);
+    }
+    hiss(ctx, out, noise, t + 0.2, 0.06, 'bandpass', 1700 * p, 0.22, 1.2);
+    return 0.7;
+  },
   // 閃光燈泡：啪一聲很亮的爆，底下一記悶的，最後燈絲燒完嘶嘶的
   flash(ctx, out, t, p, noise) {
     hiss(ctx, out, noise, t, 0.07, 'highpass', 1400, 1.4);
@@ -449,7 +459,7 @@ export class Ambience {
     this.level = 0;          // 0 室內、1 戶外
     this.voiceUntil = 0;     // 動物叫聲播到什麼時候（performance.now），播完才能暫停音訊
     this.hold = false;       // 錄影中不暫停音訊
-    this.bgmSrc = null;      // 背景音樂的網址，還沒點過畫面就先記著
+    this.bgmSrc = null;      // 背景音樂的網址（或現場合成的曲子），還沒點過畫面就先記著
     this.bgm = null;
     this.stepGate = {};
     this.emoteGate = {};
@@ -570,10 +580,20 @@ export class Ambience {
 
   // 用 <audio> 邊下載邊播，再接進 AudioContext 調音量（iOS 不理 audio.volume）。
   // 不用 decodeAudioData：四分鐘的立體聲整首解開要將近 100 MB 記憶體，手機撐不住。
-  // 走 sfx 那條：靜音和錄影都跟著動物叫聲一起處理
+  // 走 sfx 那條：靜音和錄影都跟著動物叫聲一起處理。
+  // src 也可以是現場合成的曲子（study.js 的 StudyNight）：不用下載，跟 <audio> 一樣有 paused、play()、pause()
   startMusic() {
-    if (this.bgm || navigator.connection?.saveData) return;   // 手機開了省流量就不抓
-    const ctx = this.ctx, a = document.createElement('audio');
+    if (this.bgm) return;
+    const ctx = this.ctx;
+    if (typeof this.bgmSrc === 'function') {
+      this.bgmGain = ctx.createGain();
+      this.bgmGain.gain.value = 0;
+      this.bgmGain.connect(this.sfx);
+      this.bgm = new this.bgmSrc(ctx, this.bgmGain, this);
+      return;
+    }
+    if (navigator.connection?.saveData) return;   // 手機開了省流量就不抓
+    const a = document.createElement('audio');
     a.loop = true;
     a.setAttribute('playsinline', '');
     a.src = this.bgmSrc;

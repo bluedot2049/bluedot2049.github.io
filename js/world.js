@@ -10,6 +10,7 @@ import { buildMirror } from './mirror.js';
 import { buildCamTable, TABLE_W, TABLE_D } from './camtable.js';
 import { buildFrontDoor } from './frontdoor.js';
 import { buildGuideSign } from './guidesign.js';
+import { buildClock, CLOCK_W, CLOCK_D } from './clock.js';
 import { buildOutdoor, OUTDOOR_ROOM } from './outdoor.js';
 import { catRoomOf } from './animals.js';
 import { makePathfinder } from './pathgrid.js';
@@ -619,7 +620,7 @@ function stringLights(room, R, bucket) {
 
 export function buildWorld(scene, gallery) {
   const rooms = [], paintings = [], entries = [], raycastTargets = [];
-  let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null;
+  let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null, clock = null;
   let z = 0;
 
   // gallery.json 的 outdoor 為 true 時，最後一間房後面接陽台和草原
@@ -746,7 +747,29 @@ export function buildWorld(scene, gallery) {
       paintings.push(p);
     });
 
+    // 第一條走廊一進門的左手邊是落地擺鐘（clock.js）：背景音樂從這間開始放，滴答聲從這裡來。
+    // 那一段牆的家具照樣做一次再丟掉，亂數才對得上；擋路的方塊等家具擺完才加，房間中間的雜物也不會跟著換位置
+    let clockSpot = null;
+    if (room.type === 'corridor' && !clock) {
+      const sp = room.spans[0], s0 = 0.8, pt = sp.at(s0), rot = Math.atan2(pt.nx, pt.nz);
+      sp.clear = [[s0 - CLOCK_W / 2 - 0.15, s0 + CLOCK_W / 2 + 0.15]];
+      const x = pt.x + pt.nx * (CLOCK_D / 2 + 0.04), z = pt.z + pt.nz * (CLOCK_D / 2 + 0.04);
+      clock = buildClock();
+      clock.group.position.set(x, 0, z);
+      clock.group.rotation.y = rot;
+      room.group.add(clock.group);
+      clock.group.traverse((m) => { if (m.isMesh) sp.entry.tall.push(m); });
+      const sg = new THREE.PlaneGeometry(CLOCK_W * 1.3 + 0.2, CLOCK_D * 1.3 + 0.2);
+      sg.rotateX(-Math.PI / 2);
+      sg.rotateY(rot);
+      sg.translate(x, 0.008, z);
+      room.group.add(new THREE.Mesh(sg, shared().shadowMat));
+      Object.assign(clock, { x, y: 1.4, z });
+      clockSpot = { x, z, hw: CLOCK_W / 2, hd: CLOCK_D / 2, rot };
+    }
+
     furnish(room, rng(room.id + (room.data.seed || '')), SETS[room.propSet], room === catRoom, room.index === 0 && !!camTable);
+    if (clockSpot) room.obstacles.push(clockSpot);
     room.group.add(dust(room));
     scene.add(room.group);
   }
@@ -956,6 +979,7 @@ export function buildWorld(scene, gallery) {
     snapNext = false;
     roomFader.update(dt);
     frontDoor?.update(dt);
+    clock?.update();
     if (outdoor) {
       const out = currentRoom === rooms.length - 1;
       // 房子外殼只在人走出去、鏡頭也在屋外時出現，不然會擋住室內。
@@ -994,5 +1018,5 @@ export function buildWorld(scene, gallery) {
   // 搭船去別的區域：棧橋邊繫著的小划船
   const exits = outdoor?.ferry ? [{ ...outdoor.ferry, to: 'haishi', label: '搭船', title: '往海市' }] : [];
 
-  return { rooms, paintings, mirror, camTable, frontDoor, guideSign, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, fadeVariants: (on) => roomFader.all(on) };
+  return { rooms, paintings, mirror, camTable, frontDoor, guideSign, clock, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, fadeVariants: (on) => roomFader.all(on) };
 }

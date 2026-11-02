@@ -428,6 +428,17 @@ async function start() {
     const id = TABLE[i], mine = carried();
     ui.showCams({ i, n: TABLE.length, cam: CAMERAS[id] || SOON[id] || null, ready: !!CAMERAS[id], carried: !!id && mine === id, other: !!mine });
   }
+  // 電腦版的銘牌每幀跟著那台相機：投影台座前緣，銘牌放在它底下，不出畫面、不壓到下方那排按鈕
+  const camsAt = new THREE.Vector3();
+  function placeCams() {
+    const t = world.camTable, w = t.slots[player.focus.slot].world, el = ui.cams;
+    camsAt.set(w.x + t.n.x * 0.14, w.y, w.z + t.n.z * 0.14).project(camera);
+    const W = window.innerWidth, H = window.innerHeight, hw = el.offsetWidth / 2;
+    const x = THREE.MathUtils.clamp(((camsAt.x + 1) / 2) * W, hw + 16, W - hw - 16);
+    const y = THREE.MathUtils.clamp(((1 - camsAt.y) / 2) * H + 22, 16, H - el.offsetHeight - 96);
+    el.style.setProperty('--cx', `${x.toFixed(1)}px`);
+    el.style.setProperty('--cy', `${y.toFixed(1)}px`);
+  }
   document.getElementById('cams-prev').addEventListener('click', () => player.events.onCamStep(-1));
   document.getElementById('cams-next').addEventListener('click', () => player.events.onCamStep(1));
   document.getElementById('cams-take').addEventListener('click', () => {
@@ -509,15 +520,17 @@ async function start() {
   soundBtn.hidden = false;
   soundBtn.addEventListener('click', () => { ambience.setMuted(!ambience.muted); soundLabel(); });
 
-  // 作品或換裝面板打開時挪動畫面中心，畫和角色才不會被擋住：側欄往左，底部抽屜往上
+  // 作品或換裝面板打開時挪動畫面中心，畫和角色才不會被擋住：側欄往左，底部抽屜往上。
+  // 電腦版挑相機：相機往上挪一點，底下留給銘牌
   function applyViewOffset() {
-    const w = window.innerWidth, h = window.innerHeight, panel = ui.panel, pw = panelW();
-    if (!panel) camera.clearViewOffset();
+    const w = window.innerWidth, h = window.innerHeight, panel = ui.docked, pw = panelW();
+    if (!panel && ui.panel) camera.setViewOffset(w, h, 0, Math.round(h * 0.1), w, h);
+    else if (!panel) camera.clearViewOffset();
     else if (pw) camera.setViewOffset(w, h, pw / 2, 0, w, h);
     else camera.setViewOffset(w, h, 0, Math.round(panel.offsetHeight / 2), w, h);
   }
   ui.onSheet = (open) => {
-    document.body.classList.toggle('panel-open', !!ui.panel);
+    document.body.classList.toggle('panel-open', !!ui.docked);
     applyViewOffset();
     lastInput = performance.now();
   };
@@ -804,6 +817,7 @@ async function start() {
     if (world.camTable) {
       world.camTable.look(player.focus?.kind === 'cameras' ? player.focus.slot : -1);
       world.camTable.update(dt);
+      if (ui.panel === ui.cams && !ui.docked && player.focus?.kind === 'cameras') placeCams();
     }
     const othersMoving = mp ? mp.update(dt, performance.now()) : false;
     const fading = updateMirrorFade(dt);
