@@ -555,6 +555,16 @@ async function start() {
   soundBtn.hidden = false;
   soundBtn.addEventListener('click', () => { ambience.setMuted(!ambience.muted); soundLabel(); });
 
+  // 越肩視角開關，player.js 記住上次的選擇；F 鍵切換時按鈕也跟著變
+  const shoulderBtn = document.getElementById('shoulder-btn');
+  const shoulderLabel = (on) => {
+    shoulderBtn.classList.toggle('on', on);
+    shoulderBtn.setAttribute('aria-pressed', on);
+  };
+  shoulderLabel(player.shoulder);
+  player.onShoulder = shoulderLabel;
+  shoulderBtn.addEventListener('click', () => { player.setShoulder(!player.shoulder); shoulderBtn.blur(); });
+
   // 作品或換裝面板打開時挪動畫面中心，畫和角色才不會被擋住：側欄往左，底部抽屜往上。
   // 電腦版挑相機：相機往上挪一點，底下留給銘牌
   function applyViewOffset() {

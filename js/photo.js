@@ -308,7 +308,7 @@ export class PhotoMode {
     this.renderer.domElement.style.filter = '';
     this.character.group.visible = true;
     this.player.marker.visible = true;
-    this.camera.fov = 50;
+    this.camera.fov = this.player.baseFov();
     this.camera.near = 0.1;
     this.camera.updateProjectionMatrix();
     this.player.paused = false;

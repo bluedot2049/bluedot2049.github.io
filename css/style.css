@@ -581,6 +581,7 @@ body.photo #photo-btn .x { display: block; }
 }
 #sound-btn.muted .off { display: block; }
 #sound-btn.muted { color: var(--muted); }
+#shoulder-btn.on { border-color: var(--gold); color: var(--gold-hi); }
 
 /* 在線人數：一顆微亮的金點 */
 #online {

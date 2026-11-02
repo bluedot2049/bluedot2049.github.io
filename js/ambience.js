@@ -59,6 +59,48 @@ function hiss(ctx, out, noise, t, dur, type, freq, peak, Q = 1) {
   src.stop(t + dur + 0.02);
 }
 
+// 歸門的聲音放在一個大空間裡：乾的直接出去，另一份經過殘響，尾巴越後面越悶，像山上空曠的地方
+const halls = new WeakMap();
+function hall(ctx, out, wet) {
+  let ir = halls.get(ctx);
+  if (!ir) {
+    const len = Math.floor(ctx.sampleRate * 3.2);
+    ir = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = ir.getChannelData(c);
+      let lp = 0;
+      for (let i = 0; i < len; i++) {
+        const u = i / len;
+        lp += (Math.random() * 2 - 1 - lp) * (0.9 - 0.8 * u);
+        d[i] = lp * (1 - u) ** 2.6;
+      }
+    }
+    halls.set(ctx, ir);
+  }
+  const input = ctx.createGain(), conv = ctx.createConvolver(), w = ctx.createGain();
+  conv.buffer = ir;
+  w.gain.value = wet;
+  input.connect(out);
+  input.connect(conv).connect(w).connect(out);
+  return input;
+}
+
+// 一段濾過的雜訊，濾波器照 pts（[[秒, 頻率], ...]）移動；attack 慢的就是一口氣湧上來
+function air(ctx, out, noise, t, pts, attack, dur, peak, Q = 0.7, type = 'lowpass') {
+  const src = ctx.createBufferSource(), f = biquad(ctx, type, pts[0][1], Q);
+  src.buffer = noise;
+  f.frequency.setValueAtTime(pts[0][1], t);
+  for (const [dt, fr] of pts.slice(1)) f.frequency.exponentialRampToValueAtTime(fr, t + dt);
+  src.connect(f).connect(envelope(ctx, t, attack, dur, peak)).connect(out);
+  src.start(t, Math.random() * 7);
+  src.stop(t + dur + 0.02);
+}
+
+// 很低的一記，只聽得到壓力、聽不出音高
+function sub(ctx, out, t, freq, attack, dur, peak) {
+  osc(ctx, 'sine', t, dur, [[0, freq], [dur, freq * 0.8]]).connect(envelope(ctx, t, attack, dur, peak)).connect(out);
+}
+
 const VOICES = {
   // 相機（cameras.js）：葉片快門喀嚓兩下
   shutter(ctx, out, t, p, noise) {
@@ -133,24 +175,91 @@ const VOICES = {
     src.stop(t + 1.15);
     return 1.15;
   },
-  // 歸門的火盆點著（homedoor.js）：一口氣吸進去「呼」的一聲，底下一記悶的
+  // ---------- 歸門（homedoor.js）：往電影音效靠，不用有音高滑動的聲音，靠低頻、空氣聲和山上空曠的殘響 ----------
+  // 火盆點著：火舌捲起來那一口氣，底下一記很低的悶響，之後炭裂開幾聲細細的劈啪
   ignite(ctx, out, t, p, noise) {
-    const src = ctx.createBufferSource(), f = biquad(ctx, 'lowpass', 300, 0.9);
-    src.buffer = noise;
-    f.frequency.setValueAtTime(300 * p, t);
-    f.frequency.exponentialRampToValueAtTime(1600 * p, t + 0.12);
-    f.frequency.exponentialRampToValueAtTime(500 * p, t + 0.5);
-    src.connect(f).connect(envelope(ctx, t, 0.06, 0.5, 0.6)).connect(out);
-    src.start(t, Math.random() * 7);
-    src.stop(t + 0.55);
-    osc(ctx, 'sine', t, 0.18, [[0, 80 * p], [0.18, 46 * p]]).connect(envelope(ctx, t, 0.01, 0.18, 0.5)).connect(out);
-    return 0.55;
+    const o = hall(ctx, out, 0.35);
+    air(ctx, o, noise, t, [[0, 220], [0.14, 1300], [0.9, 380]], 0.1, 0.95, 0.55, 0.7);
+    sub(ctx, o, t, 48 * p, 0.05, 0.5, 0.4);
+    for (let i = 0; i < 6; i++) hiss(ctx, o, noise, t + 0.18 + Math.random() * 0.9, 0.008, 'bandpass', 2600 + Math.random() * 2600, 0.12 + Math.random() * 0.12, 3);
+    return 3;
   },
-  // 歸門的口袋口：拔軟木塞那樣「啵」一聲
-  pop(ctx, out, t, p, noise) {
-    osc(ctx, 'sine', t, 0.09, [[0, 620 * p], [0.09, 170 * p]]).connect(envelope(ctx, t, 0.003, 0.09, 0.8)).connect(out);
-    hiss(ctx, out, noise, t, 0.025, 'bandpass', 1800 * p, 0.35, 2);
-    return 0.12;
+  // 六芒星連完、外圈亮起來：兩個低音慢慢湧上來，差一點點的那根互相拍出顫動，底下的氣壓一路往上推
+  swell(ctx, out, t, p, noise) {
+    const o = hall(ctx, out, 0.5), dur = 2.3;
+    for (const [f, g] of [[55, 0.3], [82.4, 0.16], [110, 0.07], [110.7, 0.07]]) {
+      const v = ctx.createGain();
+      v.gain.setValueAtTime(0.0001, t);
+      v.gain.exponentialRampToValueAtTime(g, t + dur * 0.85);
+      v.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc(ctx, 'sine', t, dur, [[0, f * p]]).connect(v).connect(o);
+    }
+    air(ctx, o, noise, t, [[0, 140], [dur, 900]], dur * 0.85, dur, 0.22, 0.7);
+    return dur + 3;
+  },
+  // 口袋口撐開：倒過來放的那種風聲，越吸越緊，在門彈出來的那一刻剛好斷掉
+  rift(ctx, out, t, p, noise) {
+    const o = hall(ctx, out, 0.45), dur = 1.12;
+    air(ctx, o, noise, t, [[0, 300], [dur, 2600]], dur, dur + 0.01, 0.45, 1.6, 'bandpass');
+    const v = ctx.createGain();
+    v.gain.setValueAtTime(0.0001, t);
+    v.gain.exponentialRampToValueAtTime(0.35, t + dur);
+    v.gain.linearRampToValueAtTime(0, t + dur + 0.02);
+    osc(ctx, 'sine', t, dur, [[0, 34 * p], [dur, 58 * p]]).connect(v).connect(o);
+    return dur + 3;
+  },
+  // 門衝出來：一大團空氣被推開的悶聲，拖一條很長的尾巴
+  breach(ctx, out, t, p, noise) {
+    const o = hall(ctx, out, 0.65);
+    air(ctx, o, noise, t, [[0, 1100], [0.3, 260]], 0.006, 0.4, 0.5, 0.7);
+    sub(ctx, o, t, 44 * p, 0.004, 0.7, 0.4);
+    return 3.5;
+  },
+  // 門落地：整扇實木門壓在石頭上，木頭的胸腔共鳴，揚起一點灰
+  land(ctx, out, t, p, noise) {
+    const o = hall(ctx, out, 0.4);
+    sub(ctx, o, t, 52 * p, 0.003, 0.4, 0.45);
+    hiss(ctx, o, noise, t, 0.22, 'bandpass', 190 * p, 0.55, 1.2);
+    hiss(ctx, o, noise, t, 0.016, 'bandpass', 1300 * p, 0.35, 2);
+    air(ctx, o, noise, t + 0.02, [[0, 600], [0.7, 250]], 0.05, 0.75, 0.16, 0.7);
+    return 3;
+  },
+  // 推開歸門：鐵門閂厚厚地一聲，再來是門軸慢慢磨出來的低吟（雜訊裡共振出來的，不是電子音）
+  unlatch(ctx, out, t, p, noise) {
+    const o = hall(ctx, out, 0.35);
+    hiss(ctx, o, noise, t, 0.025, 'bandpass', 1900 * p, 1.6, 4);
+    hiss(ctx, o, noise, t + 0.07, 0.04, 'bandpass', 900 * p, 1.3, 3);
+    const src = ctx.createBufferSource(), f = biquad(ctx, 'bandpass', 260 * p, 14);
+    src.buffer = noise;
+    f.frequency.setValueAtTime(260 * p, t + 0.25);
+    f.frequency.linearRampToValueAtTime(330 * p, t + 0.7);
+    f.frequency.linearRampToValueAtTime(240 * p, t + 1.5);
+    src.connect(f).connect(envelope(ctx, t + 0.25, 0.25, 1.3, 3.5)).connect(o);
+    src.start(t + 0.25, Math.random() * 7);
+    src.stop(t + 1.6);
+    return 4;
+  },
+  // 門裡的光照出來：屋裡溫溫的空氣湧出來，底下一層很淡的和聲，高處一點點閃
+  spill(ctx, out, t, p, noise) {
+    const o = hall(ctx, out, 0.55), dur = 3.2;
+    air(ctx, o, noise, t, [[0, 300], [1.2, 700], [dur, 400]], 1.1, dur, 0.3, 0.6);
+    for (const f of [220, 277.2, 329.6, 440]) {
+      const v = ctx.createGain(), lp = biquad(ctx, 'lowpass', 700, 0.5);
+      v.gain.setValueAtTime(0.0001, t);
+      v.gain.exponentialRampToValueAtTime(0.025, t + 1.3);
+      v.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc(ctx, 'triangle', t, dur, [[0, f * p]]).connect(lp).connect(v).connect(o);
+    }
+    air(ctx, o, noise, t + 0.3, [[0, 7000]], 0.9, dur - 0.3, 0.035, 1.5, 'bandpass');
+    return dur + 3;
+  },
+  // 門收回去：倒吸一口氣，越吸越尖，最後一聲很輕的空氣合上
+  vanish(ctx, out, t, p, noise) {
+    const o = hall(ctx, out, 0.55), dur = 0.82;
+    air(ctx, o, noise, t + 0.1, [[0, 2400], [dur - 0.1, 500]], dur - 0.1, dur - 0.08, 0.35, 1.4, 'bandpass');
+    air(ctx, o, noise, t + dur, [[0, 700], [0.2, 200]], 0.004, 0.25, 0.45, 0.7);
+    sub(ctx, o, t + dur, 40 * p, 0.004, 0.4, 0.4);
+    return dur + 3;
   },
   // 對到焦：兩聲短短的嗶
   focus(ctx, out, t, p) {

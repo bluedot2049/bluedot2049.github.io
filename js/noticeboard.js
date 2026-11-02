@@ -99,8 +99,8 @@ function leafGeo(len) {
 // 一顆花苞：花萼＋五片花瓣，花瓣繞著花苞的軸張開或闔上；花心一顆小珠，開了才露出來
 function buildBud(phase) {
   const group = new THREE.Group();
-  const mat = new THREE.MeshLambertMaterial({ color: BUD, emissive: GLOW, emissiveIntensity: 0, side: THREE.DoubleSide });
-  const calyx = new THREE.Mesh(new THREE.ConeGeometry(0.009, 0.018, 6), new THREE.MeshLambertMaterial({ color: LEAVES[0] }));
+  const mat = new THREE.MeshLambertMaterial({ color: BUD, emissive: GLOW, emissiveIntensity: 0, side: THREE.DoubleSide, transparent: true });
+  const calyx = new THREE.Mesh(new THREE.ConeGeometry(0.009, 0.018, 6), new THREE.MeshLambertMaterial({ color: LEAVES[0], transparent: true }));
   calyx.rotation.x = Math.PI;
   calyx.position.y = 0.004;
   group.add(calyx);
@@ -117,7 +117,7 @@ function buildBud(phase) {
     group.add(pivot);
     petals.push(m);
   }
-  const heart = new THREE.Mesh(new THREE.IcosahedronGeometry(0.006, 1), new THREE.MeshLambertMaterial({ color: GLOW, emissive: GLOW, emissiveIntensity: 1 }));
+  const heart = new THREE.Mesh(new THREE.IcosahedronGeometry(0.006, 1), new THREE.MeshLambertMaterial({ color: GLOW, emissive: GLOW, emissiveIntensity: 1, transparent: true }));
   heart.position.y = 0.012;
   group.add(heart);
   return { group, mat, petals, heart, phase, want: 0, open: 0 };
@@ -186,17 +186,18 @@ export function buildNoticeBoard(wx = 3.1) {
     const top = n.h / 2 - 0.022, c = Math.cos(n.rz), s = Math.sin(n.rz);
     k.cyl(0.012, 0.012, 0.008, BRASS, cx + n.x - top * s, cy + n.y + top * c, face + 0.006 + i * 0.002, { rx: Math.PI / 2 }, 8);
   });
+  // 牆淡掉時佈告欄跟著變半透明，材質要各用各的、開 transparent，不能改到共用的那份
   const b = newBucket();
   k.emit(b, 0, 0, 0);
-  for (const o of bucketObjects(b)) group.add(o);
+  for (const o of bucketObjects(b, true)) group.add(o);
   const vine = buildVine(wx), vb = newBucket();
   vine.k.emit(vb, 0, 0, 0);
-  for (const o of bucketObjects(vb)) group.add(o);
+  for (const o of bucketObjects(vb, true)) group.add(o);
   for (const bud of vine.buds) group.add(bud.group);
 
   // 便條本身：一張一個平面，後釘的蓋在前面的上面一點點
   NOTES.forEach((n, i) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(n.w, n.h), new THREE.MeshLambertMaterial({ map: noteTexture(n) }));
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(n.w, n.h), new THREE.MeshLambertMaterial({ map: noteTexture(n), transparent: true }));
     m.position.set(cx + n.x, cy + n.y, face + i * 0.002);
     m.rotation.z = n.rz;
     group.add(m);

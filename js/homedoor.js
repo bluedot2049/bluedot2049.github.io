@@ -343,7 +343,7 @@ export function buildHomeCircle({ x, y, z, R, obstacles, exits, shape = 'hexagra
   const lit = new Array(N).fill(0);           // 點著的時刻（秒，本機的時鐘），0 是沒點
   const fireV = new Array(N).fill(0);          // 火現在多大
   const fill = new Array(L + 2).fill(0), amp = new Array(L + 2).fill(0);
-  let clock = 0, state = 'none', st = 0, full = 0, lean = 0, ang = 0, shutFrom = 0, lastUse = -1e9, lastNear = 0, asked = -1e9, lastState = -1e9, dying = -1;
+  let swelled = false, clock = 0, state = 'none', st = 0, full = 0, lean = 0, ang = 0, shutFrom = 0, lastUse = -1e9, lastNear = 0, asked = -1e9, lastState = -1e9, dying = -1;
   const exit = { x, z: z - 0.95, r: 1.35, to: 'gallery', label: '開門', title: '歸門', home: null };
   const near = (px, pz) => Math.hypot(px - x, pz - (z - 0.9)) < NEAR;
 
@@ -379,7 +379,7 @@ export function buildHomeCircle({ x, y, z, R, obstacles, exits, shape = 'hexagra
     if (lit[i] || !canLight()) return false;
     lit[i] = Math.max(1e-3, clock - age);
     if (age > LIGHT_T) fireV[i] = 1;
-    if (!quiet) play('ignite', 0.5);
+    if (!quiet) play('ignite', 0.4);
     return true;
   };
   // 門直接立好（晚到的人、漏掉訊息的人）：火全點著、刻線全亮
@@ -401,7 +401,7 @@ export function buildHomeCircle({ x, y, z, R, obstacles, exits, shape = 'hexagra
     if (state === 'closed') {
       setState('opening');
       lastUse = clock;
-      play('latch', 0.6);
+      play('unlatch', 0.7);
       api.send?.({ t: 'open' });
     } else if (state === 'open') {
       lastUse = clock;
@@ -415,7 +415,7 @@ export function buildHomeCircle({ x, y, z, R, obstacles, exits, shape = 'hexagra
     else if (m.t === 'open' || m.t === 'use') {
       lastUse = clock;
       if (state === 'none' || state === 'pop' || state === 'go') stand('closed');
-      if (state === 'closed') { setState('opening'); play('latch', 0.4); }
+      if (state === 'closed') { setState('opening'); play('unlatch', 0.5); }
       else if (state === 'closing') { setState('opening'); st = OPEN_T * 0.3; }
     } else if (m.t === 'ask') {
       // 有東西亮著才回；大家同時回太吵，晚一點回，別人先回了就不回
@@ -522,6 +522,8 @@ export function buildHomeCircle({ x, y, z, R, obstacles, exits, shape = 'hexagra
       else if (fill[s] > 0) { amp[s] = Math.max(0, amp[s] - dt / FADE_T); if (amp[s] === 0) fill[s] = 0; }
     });
     const ringOn = dying < 0 && allLit() && fill.slice(0, L).every((f) => f >= 1);
+    if (ringOn && !swelled && state === 'none') play('swell', 0.7);
+    swelled = ringOn;
     for (const s of [L, L + 1]) {
       if (ringOn) { fill[s] = Math.min(1, fill[s] + dt / (FILL_T * 1.3)); amp[s] = Math.min(1, amp[s] + dt * 3); }
       else if (fill[s] > 0) { amp[s] = Math.max(0, amp[s] - dt / FADE_T); if (amp[s] === 0) fill[s] = 0; }
@@ -530,31 +532,31 @@ export function buildHomeCircle({ x, y, z, R, obstacles, exits, shape = 'hexagra
 
     // 門
     if (state === 'none' && ringOn && fill[L] >= 1) {
-      if (st > POP_DELAY) { setState('pop'); mouth.visible = true; play('pop', 0.35); }
+      if (st > POP_DELAY) { setState('pop'); mouth.visible = true; play('rift', 0.6); }
     } else if (state === 'none') st = 0;
     let anyone = near(me.x, me.z);
     for (const o of others) { const p = o.pos || o; if (near(p.x, p.z)) anyone = true; }
     if (anyone) lastNear = clock;
     if (state === 'pop') {
       popFrame(st);
-      if (st > 1.45 && st - dt <= 1.45) { lean = 1; play('doorshut', 0.5); }
-      if (st > 1.15 && st - dt <= 1.15) play('pop', 0.55);
+      if (st > 1.45 && st - dt <= 1.45) { lean = 1; play('land', 0.7); }
+      if (st > 1.15 && st - dt <= 1.15) play('breach', 0.7);
       if (st >= POP_T) { popFrame(POP_T + 1); setState('closed'); lastUse = clock; }
     } else if (state === 'closed') {
       if (clock - lastUse > WAIT && clock - lastNear > IDLE) { shutFrom = 0; setState('closing'); }
     } else if (state === 'opening') {
       // 跟載入畫面推門同一個節奏：先推開一點、頓一下，再整個打開
       const u = clamp01(st / OPEN_T);
+      if (st > OPEN_T * 0.3 && st - dt <= OPEN_T * 0.3) play('spill', 0.7);   // 頓完那一下、門整個打開，屋裡的空氣湧出來
       ang = u < 0.2 ? OPEN * 0.3 * ease(u / 0.2) : u < 0.3 ? OPEN * 0.3 : OPEN * lerp(0.3, 1, ease((u - 0.3) / 0.7));
       if (u >= 1) setState('open');
     } else if (state === 'open') {
       if (clock - lastUse > IDLE && clock - lastNear > IDLE) { shutFrom = ang; setState('closing'); }
     } else if (state === 'closing') {
       ang = shutFrom * (1 - ease(clamp01(st / SHUT_T)));
-      if (st >= SHUT_T) { if (shutFrom) play('doorshut', 0.45); ang = 0; setState('go'); }
+      if (st >= SHUT_T) { if (shutFrom) play('land', 0.4); ang = 0; setState('go'); play('vanish', 0.6); }
     } else if (state === 'go') {
       goFrame(st);
-      if (st > 0.8 && st - dt <= 0.8) play('pop', 0.45);
       if (st >= GO_T) { goFrame(GO_T + 1); setState('none'); dying = 0; }
     }
     leaf.rotation.y = -ang;
