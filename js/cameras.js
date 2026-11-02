@@ -160,34 +160,45 @@ const KNOBS = {
       + '<circle class="puff" cx="3" cy="-6" r="5"/>'
       + '<circle class="ring" r="27.6" pathLength="100" transform="rotate(-90)"/></svg>';
   },
-  // 銅模：小窗裡是今天的日期，正字，跟燙上照片的一模一樣，一看就知道是日期。
-  // 點一下換一段：不印（開了細縫的鐵蓋滑下來，縫裡透出暗暗的字）→ 月日 → 年月日（#ph-date 的 .on、.full）。拍下去那一下，小窗燒紅再暗回去
-  die() {
-    const d = dateDigits(new Date()), cw = 4.4, gap = 1.5, dot = 2.8, h = 8.4;
-    const row = (cls, dg) => {
-      let w = -gap;
-      for (const n of dg) w += n < 0 ? dot : cw + gap;
-      let x = -w / 2;
-      const p = dg.map((n) => {
-        const s = n < 0 ? `M${f2(x + dot / 2 - gap / 2)} 2.2V3.4` : numPath(n, x, -h / 2, cw, h);
-        x += n < 0 ? dot : cw + gap;
-        return s;
-      }).join('');
-      return `<path class="die ${cls}" d="${p}"/>`;
+  // 銅模：舊金的銅板（#ph-date 的底）開一個小窗，窗裡是一塊青銅字模，刻著今天的日期，跟燙上照片的一模一樣，一看就知道是日期。
+  // 字是刻進去的：刀痕底下錯開一道亮邊。開著時刀痕裡是燒熱的銅色，拍下去那一下小窗燒紅再暗回去。
+  // 點一下換一段：不印（開了細縫的鐵蓋滑下來，縫裡透出暗暗的字）→ 月日 → 年月日（#ph-date 的 .on、.full）
+  die(g) {
+    const now = new Date();
+    const row = (cls, year, h) => {
+      const { w } = dateCuts(dateText(now, year), 0, 0, h, h * 0.21), { d } = dateCuts(dateText(now, year), -w / 2, -h / 2, h, h * 0.21);
+      // 刀痕：上緣一道暗影、下緣一道亮邊，中間才是刀口
+      return `<g class="${cls}"><path class="die sh" d="${d}" transform="translate(0 -.45)"/><path class="die lo" d="${d}" transform="translate(0 .6)"/><path class="die" d="${d}"/></g>`;
     };
     return '<svg viewBox="-32 -20 64 40" aria-hidden="true">'
-      + '<rect class="well" x="-24" y="-10" width="48" height="20" rx="1.5"/>'
+      + scratches(g, 1, 16, (r) => [(r() - 0.5) * 62, (r() - 0.5) * 38])
+      + '<defs><clipPath id="dt-win"><rect x="-24" y="-10" width="48" height="20" rx="1.5"/></clipPath></defs>'
+      + '<g clip-path="url(#dt-win)"><rect class="well" x="-24" y="-10" width="48" height="20"/>'
       + '<g class="glow"><rect x="-24" y="-10" width="48" height="20"/></g>'
-      + row('md', d.slice(3)) + row('ymd', d)
-      + '<g class="lid"><path fill-rule="evenodd" d="M-24-10H24V10H-24ZM-20-3.2H20V-1.4H-20ZM-20 1.4H20V3.2H-20Z"/></g>'
-      + '<path class="plate" fill-rule="evenodd" d="M-32-20H32V20H-32ZM-24-10V10H24V-10Z"/>'
+      + row('md', false, 11) + row('ymd', true, 8.6)
+      + '<g class="lid"><path fill-rule="evenodd" d="M-24-10H24V10H-24ZM-20-3.2H20V-1.4H-20ZM-20 1.4H20V3.2H-20Z"/></g></g>'
+      + '<rect class="sill" x="-24.5" y="-10.5" width="49" height="21" rx="1.8"/><path class="sill lo" d="M-23 11.2H23"/>'
       + '<circle class="rivet" cx="-28" cy="-15" r="1.3"/><circle class="rivet" cx="28" cy="-15" r="1.3"/>'
       + '<circle class="rivet" cx="-28" cy="15" r="1.3"/><circle class="rivet" cx="28" cy="15" r="1.3"/></svg>';
   },
 };
 
 export const flashKnob = (id) => KNOBS[CAMERAS[id]?.flash?.knob]?.() || '';
-export const dateKnob = (id) => KNOBS[CAMERAS[id]?.date?.knob]?.() || '';
+export const dateKnob = (id) => KNOBS[CAMERAS[id]?.date?.knob]?.(CAMERAS[id]) || '';
+
+// 刮痕：用久的金件上一道道細刮痕，方向亂、長短不一，每道是一條亮的、底下錯開一條暗的。
+// 照相機序號當種子，同一台相機每次打開都是同一副刮痕；part 分開快門、日期框各自的一副。place(r) 給一個落點
+function scratches(g, part, n, place) {
+  let s = (g.make.serial.reduce((a, v) => a * 10 + v, 0) * 131 + part * 7919) % 2147483646 + 1;
+  const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  let d = '';
+  for (let i = 0; i < n; i++) {
+    const [x, y] = place(r), a = r() * Math.PI, len = 3 + r() ** 2 * 15, bend = (r() - 0.5) * len * 0.3;
+    const dx = Math.cos(a) * len / 2, dy = Math.sin(a) * len / 2;
+    d += `M${f2(x - dx)} ${f2(y - dy)}Q${f2(x - Math.sin(a) * bend)} ${f2(y + Math.cos(a) * bend)} ${f2(x + dx)} ${f2(y + dy)}`;
+  }
+  return `<path class="scr lo" d="${d}" transform="translate(.3 .35)"/><path class="scr" d="${d}"/>`;
+}
 
 // 快門鈕的樣子：帶著相機時換掉畫廊的金色快門。動作寫在 style.css 的 #ph-shutter.gear
 // 外環每種都一樣：太陽紋金片刻著商號、型號、序號，錶刻一秒亮一格（ticks 格，就是長曝光最長幾秒）；燈泡還在換時卡榫卡進來，按不下去
@@ -213,14 +224,20 @@ function shutterRing(g, ticks) {
 }
 
 const SHUTTERS = {
-  // 金鈕：燭乙式。海市的相機整顆都是金的，中間一顆圓頂的金鈕，四周一圈溝。
-  // 按一下金鈕壓下去又彈回來；按住就一直壓著
+  // 金鈕：燭乙式。海市的相機整顆都是金的，用舊了：顏色沉下來，溝裡積了暗斑，外環和金鈕上都有刮痕。
+  // 中間一顆圓頂的金鈕，四周一圈溝。按一下金鈕壓下去又彈回來；按住就一直壓著
   gold(g, ticks) {
+    const ring = (r) => { const a = r() * Math.PI * 2, d = 24 + r() * 11; return [Math.cos(a) * d, Math.sin(a) * d]; };
+    const cap = (r) => { const a = r() * Math.PI * 2, d = r() * 17; return [Math.cos(a) * d, Math.sin(a) * d]; };
     return '<svg viewBox="-36 -36 72 72" aria-hidden="true">'
       + '<defs><radialGradient id="sh-dome" cx=".42" cy=".38" r=".7" fx=".32" fy=".28">'
-      + '<stop offset="0" stop-color="#fbe6b4"/><stop offset=".35" stop-color="#e3b469"/><stop offset=".75" stop-color="#c08a43"/><stop offset="1" stop-color="#8f5e28"/></radialGradient></defs>'
+      + '<stop offset="0" stop-color="#e2c48a"/><stop offset=".35" stop-color="#b98f4e"/><stop offset=".75" stop-color="#93693a"/><stop offset="1" stop-color="#5e3f1c"/></radialGradient>'
+      + '<clipPath id="sh-in"><circle r="35.5"/></clipPath><clipPath id="sh-cap"><circle r="21.4"/></clipPath></defs>'
+      + `<g clip-path="url(#sh-in)">${scratches(g, 2, 18, ring)}</g>`
       + '<circle class="groove" r="23.4"/>'
-      + '<g class="cap"><circle class="dome" r="21.6"/><circle class="rim" r="21.6"/><ellipse class="shine" cx="-7" cy="-8.5" rx="6.5" ry="3.6" transform="rotate(-38 -7 -8.5)"/></g>'
+      + '<g class="cap"><circle class="dome" r="21.6"/><circle class="rim" r="21.6"/>'
+      + `<g clip-path="url(#sh-cap)">${scratches(g, 3, 7, cap)}</g>`
+      + '<ellipse class="shine" cx="-7" cy="-8.5" rx="6.5" ry="3.6" transform="rotate(-38 -7 -8.5)"/></g>'
       + shutterRing(g, ticks) + '</svg>';
   },
   // 葉片快門：中間六片青銅葉片平常闔著，按一下張開一瞬又闔上；按住就一直開著。
@@ -383,7 +400,7 @@ export function eyeMark() {
 
 // ───────── 日期印記 ─────────
 
-// 數字照蘇州碼子的道理寫：一到三是直筆疊起來，四交叉，五是一豎頂上打個圈，六到八是一豎底下墊一到三道橫，九是一折一撇，零是一圈。
+// 快門外環的型號、序號照蘇州碼子的道理寫（日期是給人看的，用阿拉伯數字）：一到三是直筆疊起來，四交叉，五是一豎頂上打個圈，六到八是一豎底下墊一到三道橫，九是一折一撇，零是一圈。
 // 每個數字是幾筆，每筆是幾個點（0–1，y 往下）。是刻在銅模上的字：直的直、橫的平，圈是正圓
 const ring = (cx, cy, r) => Array.from({ length: 17 }, (_, i) => [cx + r * Math.sin(i * Math.PI / 8), cy - r * Math.cos(i * Math.PI / 8)]);
 const NUMS = [
@@ -401,10 +418,51 @@ const NUMS = [
 // 十二時辰，子時從晚上 11 點起。字用海市的毛筆記號寫（glyphs.js），讀不出是哪個字，但看得出是一個時辰
 const HOURS = '子丑寅卯辰巳午未申酉戌亥';
 
-// 年月日拆成數字，中間的 -1 是分隔的點：'26·11·02 → [2,6,-1,1,1,-1,0,2]
-function dateDigits(d) {
-  const two = (n) => [Math.floor(n / 10) % 10, n % 10];
-  return [...two(d.getFullYear()), -1, ...two(d.getMonth() + 1), -1, ...two(d.getDate())];
+// 日期的字：26·11·02，只印月日就是 11·02
+function dateText(d, year) {
+  const two = (n) => String(n % 100).padStart(2, '0');
+  return (year ? two(d.getFullYear()) + '·' : '') + two(d.getMonth() + 1) + '·' + two(d.getDate());
+}
+
+// 日期的數字是刻出來的，不用字型：照雕刻刀的刻法，一筆一刀，下刀細、中間寬、收刀又細；圈分左右兩刀，接口留著尖。
+// 每個字是幾刀，每刀是幾個點（0–1，y 往下）。角度照 y 往下量，0 是右、90 是下
+const arc = (cx, cy, rx, ry, a0, a1, n = 14) => Array.from({ length: n + 1 }, (_, i) => {
+  const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180;
+  return [cx + rx * Math.cos(a), cy + ry * Math.sin(a)];
+});
+const CUTS = {
+  0: [arc(0.5, 0.5, 0.4, 0.48, 280, 80), arc(0.5, 0.5, 0.4, 0.48, -100, 100)],
+  1: [[[0.26, 0.2], [0.56, 0.02]], [[0.56, 0.02], [0.56, 0.98]]],
+  2: [[...arc(0.5, 0.3, 0.37, 0.28, 195, 395), [0.1, 0.98]], [[0.1, 0.98], [0.92, 0.98]]],
+  3: [arc(0.47, 0.27, 0.34, 0.25, 205, 450), arc(0.47, 0.74, 0.39, 0.26, 270, 510)],
+  4: [[[0.7, 0.02], [0.06, 0.7]], [[0.06, 0.7], [0.94, 0.7]], [[0.7, 0.02], [0.7, 0.98]]],
+  5: [[[0.86, 0.02], [0.26, 0.02]], [[0.26, 0.02], [0.2, 0.46]], arc(0.5, 0.68, 0.38, 0.31, 228, 510)],
+  6: [arc(0.57, 0.62, 0.44, 0.6, 288, 176), arc(0.5, 0.72, 0.37, 0.27, 180, 540, 20)],
+  7: [[[0.08, 0.02], [0.92, 0.02]], [[0.92, 0.02], [0.72, 0.36], [0.52, 0.7], [0.42, 0.98]]],
+  8: [arc(0.5, 0.26, 0.3, 0.24, 90, 450, 20), arc(0.5, 0.73, 0.38, 0.26, 270, 630, 20)],
+  9: [arc(0.5, 0.29, 0.37, 0.28, 0, 360, 20), arc(0.43, 0.37, 0.44, 0.6, 4, 104)],
+  '·': [[[0.5, 0.7], [0.5, 0.96]]],
+};
+// 一刀從頭到尾的寬窄：圈下刀收刀不那麼尖，點是一顆飽滿的刀尖，其他照雕刻刀細、寬、細
+const SWELL = {
+  loop: (t) => 0.45 + 0.55 * Math.sin(Math.PI * t),
+  dot: (t) => 0.3 + 1.1 * Math.sin(Math.PI * t),
+  line: (t) => 0.22 + 0.78 * Math.sin(Math.PI * t) ** 0.6,
+};
+// 整串日期刻成一條路徑：(x, y) 是第一個字的左上角，h 字高，sw 刀口最寬多寬。回傳路徑和總寬
+function dateCuts(text, x, y, h, sw) {
+  const cw = h * 0.58, gap = h * 0.17, dot = h * 0.32;
+  let d = '', cx = x;
+  for (const c of text) {
+    const w = c === '·' ? dot : cw;
+    for (const cut of CUTS[c]) {
+      const pts = cut.map(([u, v]) => ({ x: cx + u * w, y: y + v * h }));
+      const swell = SWELL[c === '·' ? 'dot' : cut.length > 20 ? 'loop' : 'line'];
+      d += ribbonD(pts, (t) => sw * swell(t));
+    }
+    cx += w + gap;
+  }
+  return { d, w: cx - gap - x };
 }
 
 function numPath(n, x, y, w, h) {
@@ -416,41 +474,31 @@ const INKS = {
   // 燙印：燈泡的熱隔著銅模把日期烙在底片角落，焦糖到赭褐，邊上燒出一圈暈。
   // 字是模子刻的，所以每張都一樣工整；只有銅模壓下去的角度和燒的深淺每張差一點
   burn(ctx, x, y, h, date, year) {
-    const dg = dateDigits(date).slice(year ? 0 : 3), cw = h * 0.5, gap = h * 0.22, dot = h * 0.36, hr = h * 1.3;
-    let w = hr + gap * 2;
-    for (const n of dg) w += n < 0 ? dot : cw + gap;
+    const hr = h * 1.3, text = dateText(date, year), probe = dateCuts(text, 0, 0, h, h * 0.2);
+    const cut = new Path2D(dateCuts(text, -hr - h * 0.3 - probe.w, -h, h, h * 0.2).d);
     const hour = HOURS[Math.floor(((date.getHours() + 1) % 24) / 2)];
-    const ink = () => {
-      let cx = -w;
-      for (const n of dg) {
-        if (n < 0) ctx.fillRect(cx + dot / 2 - ctx.lineWidth / 2, -h * 0.1 - ctx.lineWidth, ctx.lineWidth, ctx.lineWidth);
-        else for (const s of NUMS[n]) {
-          ctx.beginPath();
-          s.forEach(([u, v], i) => ctx[i ? 'lineTo' : 'moveTo'](cx + u * cw, -h + v * h));
-          ctx.stroke();
-        }
-        cx += n < 0 ? dot : cw + gap;
-      }
+    const ink = (edge) => {
+      ctx.fill(cut);
+      if (edge) ctx.stroke(cut);
       drawGlyph(ctx, hour, -hr / 2, -h / 2, hr, ctx.strokeStyle, { brush: 0 });
     };
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate((Math.random() - 0.5) * 0.012);
-    ctx.lineCap = 'butt';
-    ctx.lineJoin = 'miter';
+    ctx.lineJoin = 'round';
     // 先燒一圈暈，再壓上字芯
     ctx.globalCompositeOperation = 'screen';
     ctx.globalAlpha = 0.5;
     if ('filter' in ctx) ctx.filter = `blur(${Math.max(1, h * 0.12)}px)`;
-    ctx.lineWidth = h * 0.2;
+    ctx.lineWidth = h * 0.1;
     ctx.strokeStyle = ctx.fillStyle = '#ff8a3c';
-    ink();
+    ink(true);
     ctx.filter = 'none';
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 0.72 + Math.random() * 0.2;
     ctx.lineWidth = h * 0.1;
     ctx.strokeStyle = ctx.fillStyle = '#b8582a';
-    ink();
+    ink(false);
     ctx.restore();
   },
 };
