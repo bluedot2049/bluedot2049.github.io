@@ -243,64 +243,91 @@ body.flat #stage::after { display: none; }
   .door .leaf, .door .pane, .lamp, .notice * { animation: none; }
   .porch { transition: none; }
 }
-/* ───────── 渡海：墨黑底、畫面中間一個圓，裡面全是按鈕那種金色細線 ─────────
-   坐在船上往前看，海平線上是海市外海的燈塔；兩個方向都是同一個畫面，只有底下的字不同。
-   不浮現：第一幀就全在。循環的 delay = --t（負的、已經過了多久）+ 自己的相位 --p（負的），
-   換頁之後從斷掉的地方接著跑，週期互質，不會對齊同一拍。進度只看外圈金線（ui.progress） */
-@property --prog { syntax: "<number>"; inherits: true; initial-value: 0; }
+/* ───────── 渡海：船頭切水 ─────────
+   電影的取景：天鵝頸從下緣伸進來，頭頂在海平線那條光上；燈在畫面外，只漏一點光。海平線是門縫，透出目的地的光。
+   橫式是寬銀幕細縫，上下黑邊是門板，字在下面的黑邊裡像字幕；直式是左邊一條直的畫面，右邊黑塊是門板，印著像畫旁邊的註解。
+   跟門口同一套：等的時候門板很慢退開一點、畫面很慢推近；到了（ui.landing）靠岸一震，門板先拉開一點、停半拍，再整個打開，光鋪滿。
+   不浮現：第一幀就全在。循環的 delay = --t（負的、已經過了多久）+ 自己的相位，換頁之後從斷掉的地方接著跑。
+   效能：會動的全是 div 圖層，只動 transform 和 opacity，主執行緒在編著色器時也照跑。cq 單位照整個畫面算 */
 #loading { --t: 0ms; }
-#loading.crossing { background: var(--ink); }
+#loading.crossing { background: var(--ink); container-type: size; }
 #loading.crossing .sigil, #loading.crossing .brand { display: none; }
-.sea { display: none; position: relative; width: min(64vmin, 420px); aspect-ratio: 1; --prog: 0; transition: --prog .8s ease-out; }
-#loading.crossing .sea { display: block; }
-/* 外圈的金線照載入進度畫長。用 HTML 圓框加錐形遮罩：SVG 的虛線遇到 non-scaling-stroke 會改用螢幕像素算長度，大尺寸會斷 */
-.sea::after {
-  content: ""; position: absolute; inset: 1.5%; border: 1px solid var(--gold); border-radius: 50%;
-  -webkit-mask: conic-gradient(#000 calc(var(--prog) * 1%), transparent 0); mask: conic-gradient(#000 calc(var(--prog) * 1%), transparent 0);
+.cine { display: none; position: absolute; inset: 0; overflow: hidden;
+  --bh: min(calc(100cqw / 2.8), 46cqh);     /* 細縫多高：比 2.39 還扁 */
+  --gap: calc(50cqh - var(--bh) / 2);        /* 每條黑邊多高 */
+  /* 舞台座標：海平線、光最亮的地方、燈塔、畫面外那盞燈的光、水面碎光從哪裡冒出來 */
+  --hy: 42%; --gx: 50%; --tx: 70%; --th: 9%; --lx: 16%; --ly: -30%; --ls: 40%; --rx: 50%; --ry: 84%; --halh: 60%; --ripw: .5cqw; }
+#loading.crossing .cine { display: block; }
+/* 目的地的光：門縫、光暈、船舷的反光、最後鋪滿的顏色 */
+#loading.to-gallery .cine { --door: #ffe8c8; --door2: #f2a682; --halo: rgba(242, 160, 120, .4); --rim: #c98a6c; --light: radial-gradient(circle at 50% 50%, #fff3dc, #ffd9a8 45%, #f4b984); }
+#loading.to-haishi .cine { --door: #e2edf8; --door2: #86a4d4; --halo: rgba(120, 150, 210, .38); --rim: #8ea4cc; --light: radial-gradient(circle at 50% 50%, #eef4fa, #b4c8e6 45%, #7088b4); }
+/* 細縫外面也有畫面（天往上、海往下延伸），只是被門板蓋著；門板拉開就看得到更多。裡面的舞台固定 3.6:1，像 cover 一樣蓋滿 */
+.cine .band { position: absolute; left: 0; right: 0; top: var(--gap); height: var(--bh); container-type: size; }
+.cine .stage { position: absolute; left: 50%; top: 50%; width: max(100cqw, 360cqh); aspect-ratio: 3.6; translate: -50% -50%; container-type: size;
+  transform-origin: var(--gx) var(--hy); animation: cine-push 24s cubic-bezier(.3, 0, .6, 1) var(--t) forwards; }
+.cine .stage > * { position: absolute; }
+.cine .sky { left: -100%; right: -100%; top: -300%; bottom: calc(100% - var(--hy)); background: linear-gradient(#141829 55%, #1d2135 80%, #2e2e48 93%, #4c4462); }
+.cine .sea { left: -100%; right: -100%; top: var(--hy); bottom: -300%; background: linear-gradient(#2a2c44, #1f2234 6%, #161926 25%, #12151f); }
+.cine .halo { left: calc(var(--gx) - 45%); width: 90%; top: calc(var(--hy) - var(--halh) / 2); height: var(--halh); background: radial-gradient(closest-side, var(--halo), transparent); animation: cine-breathe 7.3s ease-in-out calc(var(--t) - 2.4s) infinite; }
+/* 門縫：橢圓漸層，上下左右都是軟邊，撐開的時候才不會是一條硬邊的色帶。載入時 16 秒慢慢寬一點，跟門板的 ajar 一樣不會開大 */
+.cine .slit { left: -100%; right: -100%; top: calc(var(--hy) - 2px); height: 4px; background: radial-gradient(ellipse 22% 50% at calc(33.3% + var(--gx) / 3) 50%, var(--door), var(--door2) 45%, transparent);
+  animation: cine-crack 16s cubic-bezier(.15, .55, .3, 1) var(--t) forwards; }
+/* 水上的光路：縫的光往船這邊鋪過來 */
+.cine .road { left: 0; right: 0; top: var(--hy); bottom: 0; opacity: .2; background: linear-gradient(var(--door2), transparent 80%);
+  clip-path: polygon(calc(var(--gx) - 2%) 0, calc(var(--gx) + 2%) 0, calc(var(--gx) + 14%) 100%, calc(var(--gx) - 14%) 100%); animation: cine-road 4.1s ease-in-out calc(var(--t) - 1.7s) infinite alternate; }
+/* 燈塔：海市外海那座，全世界都看得到。剪影不動，燈每六秒閃兩下 */
+.cine .tower { left: var(--tx); top: calc(var(--hy) - var(--th) * .93); height: var(--th); aspect-ratio: 10 / 18; translate: -50% 0; }
+.cine .tower svg { display: block; width: 100%; height: 100%; }
+.cine .beacon { left: var(--tx); top: calc(var(--hy) - var(--th) * .78); height: calc(var(--th) * 1.8); aspect-ratio: 1; translate: -50% -50%; background: radial-gradient(closest-side, #f4f7fa, rgba(220, 232, 244, .5) 18%, transparent); animation: beacon 6s linear calc(var(--t) - 4.2s) infinite; }
+/* 水面的碎光：從船頭兩邊冒出來往外流、拉長。每條相位都不一樣；往哪裡流寫在 HTML，--dx/--dy 是橫式、--pdx/--pdy 是直式 */
+.cine .rip { left: var(--rx); top: var(--ry); width: var(--ripw); height: 1.5px; border-radius: 1px; background: var(--door); opacity: 0; --kx: var(--dx); --ky: var(--dy);
+  animation: cine-rip var(--d, 5s) cubic-bezier(.55, 0, .9, .6) calc(var(--t) + var(--p)) infinite; }
+.cine .fg { inset: 0; width: 100%; height: 100%; overflow: visible; }
+.cine .fg.tall { display: none; }
+.cine .glow { left: var(--lx); top: var(--ly); width: var(--ls); aspect-ratio: 1; translate: -50% -50%; background: radial-gradient(closest-side, rgba(240, 246, 250, .55), var(--halo) 32%, transparent); animation: flicker 3.7s linear calc(var(--t) - 1.3s) infinite; }
+/* 底片顆粒：一張靜態雜訊，每隔一下跳個位置，不即時算 */
+.cine .grain { inset: -50%; opacity: .07; pointer-events: none; animation: cine-grain .5s steps(1) infinite;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1.4 -.3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"); }
+/* 橫式的門板：上下黑邊；字幕在下面那條裡 */
+.cine .lid { position: absolute; left: 0; right: 0; height: calc(var(--gap) + 2px); background: var(--ink); z-index: 2; }
+.cine .lid.top { top: 0; animation: cine-lid-up 16s cubic-bezier(.15, .55, .3, 1) var(--t) forwards; }
+.cine .lid.bot { bottom: 0; animation: cine-lid-down 16s cubic-bezier(.15, .55, .3, 1) var(--t) forwards; }
+#loading.crossing .msg { position: absolute; left: 0; right: 0; top: calc(50% + min(calc(100cqw / 2.8), 46cqh) / 2 + min(5cqh, 28px)); z-index: 3; margin: 0; text-align: center; color: rgba(232, 220, 200, .55); font-size: 13px; }
+/* 直式的門板：右邊一塊黑，上面是像畫旁邊的註解 */
+.cine .wing { display: none; position: absolute; top: 0; bottom: 0; right: 0; width: 40cqw; z-index: 2; background: var(--ink); animation: cine-wing 16s cubic-bezier(.15, .55, .3, 1) var(--t) forwards; }
+.cine .label { position: absolute; left: 13%; right: 10%; bottom: 10cqh; color: rgba(232, 220, 200, .78); }
+.cine .label b { display: block; font-weight: normal; font-size: 21px; letter-spacing: .3em; color: rgba(240, 228, 208, .9); }
+.cine .label i { display: block; width: 22px; height: 1px; margin: 14px 0 12px; background: var(--gold-lo); opacity: .7; }
+.cine .label span { display: block; font-size: 13px; letter-spacing: .2em; line-height: 1.9; }
+.cine .label small { display: block; margin-top: 6px; font-size: 11px; letter-spacing: .1em; color: rgba(232, 220, 200, .42); line-height: 1.8; }
+/* 到了：光鋪滿（ui.landing 加 landing），字先收掉 */
+.cine .light { position: absolute; inset: 0; z-index: 4; background: var(--light); opacity: 0; transition: opacity .7s 1.2s; pointer-events: none; }
+#loading.landing .cine .light { opacity: 1; }
+#loading.landing .msg, #loading.landing .cine .label { opacity: 0; transition: opacity .35s; }
+/* 直式：整個畫面是舞台（1:2），船頭擺在左邊那條的中間；右邊黑塊蓋住剩下的 */
+@container (orientation: portrait) {
+  .cine { --bh: 100cqh; --gap: 0px; --hy: 41%; --gx: 29%; --tx: 47%; --th: 2.4%; --lx: -4%; --ly: -6%; --ls: 90%; --rx: 29%; --ry: 77%; --halh: 22%; --ripw: 1.4cqw; }
+  .cine .stage { left: 0; width: max(100cqw, 50cqh); aspect-ratio: .5; translate: 0 -50%; }
+  .cine .fg.wide, .cine .lid, #loading.crossing .msg { display: none; }
+  .cine .fg.tall, .cine .wing { display: block; }
+  .cine .rip { --kx: var(--pdx); --ky: var(--pdy); }
 }
-#loading.crossing .msg { margin-top: 26px; color: rgba(232, 220, 200, .55); font-size: 14px; }
-.disc { display: block; width: 100%; height: 100%; overflow: visible; }
-.disc * { vector-effect: non-scaling-stroke; }
-.disc .ln { fill: none; stroke: var(--gold); stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; }
-.disc .lo { stroke: var(--gold-lo); }
-.disc .faint { opacity: .45; }
-.disc .occ { fill: var(--ink); stroke: none; }
-.disc .wick { fill: var(--gold-hi); }
-.disc .head { fill: var(--ink); stroke: var(--gold); stroke-width: 1; }
-.disc .gunwale { stroke-width: 1.4; }
-/* 外圈底下一圈點線，金線畫在它上面 */
-.disc .ring-dots { fill: none; stroke: var(--gold-lo); stroke-width: 1; stroke-dasharray: .6 2.2; opacity: .7; }
-
-/* 海市外海的燈塔：跟 haishi.js 防波堤盡頭那座同一個樣子，每六秒閃兩下 */
-.disc .beacon { fill: var(--gold-hi); animation-name: beacon; animation-duration: 6s; animation-timing-function: linear; }
-.disc .beacon-glow { animation-name: beacon-glow; animation-duration: 6s; animation-timing-function: linear; }
-.disc .beacon-refl { opacity: .55; }
-
-.disc .loop { animation-delay: calc(var(--t) + var(--p, 0s)); animation-iteration-count: infinite; }
-.disc .bob { transform-box: view-box; transform-origin: 100px 200px; animation-name: bob; animation-duration: 5.3s; animation-timing-function: ease-in-out; }
-.disc .glow { animation-name: flicker; animation-duration: 3.7s; animation-timing-function: linear; }
-.disc .wick { animation-name: flicker; animation-duration: 2.9s; animation-timing-function: linear; }
-.disc .shimmer { transform-box: view-box; transform-origin: 100px 104px; animation-name: shimmer; animation-duration: 3.1s; animation-timing-function: ease-in-out; animation-direction: alternate; }
-.disc .fog { fill: none; stroke: var(--gold-lo); stroke-width: 1; opacity: .4; animation-name: fog; animation-timing-function: linear; }
-.disc .fog.f1 { stroke-dasharray: 34 22 12 40 26 38; animation-duration: 41s; }
-.disc .fog.f2 { stroke-dasharray: 18 46 30 28 10 40; animation-duration: 29s; animation-direction: reverse; }
-/* 水面的波紋：從海平線冒出來，一邊往兩旁散開、一邊拉長，流出圓外。只動 transform 和 opacity */
-.disc .wake { stroke: var(--gold-lo); stroke-width: 1; stroke-linecap: round; transform-box: view-box; transform-origin: 0 0; opacity: 0;
-  animation-name: wake; animation-duration: var(--d, 5s); animation-timing-function: cubic-bezier(.55, 0, .9, .6); }
-
-@keyframes bob { 0%, 100% { transform: none; } 33% { transform: translateY(.4px) rotate(.45deg); } 70% { transform: translateY(-.3px) rotate(-.55deg); } }
+@keyframes cine-push { from { transform: scale(1); } to { transform: scale(1.05); } }
+@keyframes cine-crack { from { transform: scaleY(1); } to { transform: scaleY(2.4); } }
+@keyframes cine-lid-up { to { transform: translateY(-2.5cqh); } }
+@keyframes cine-lid-down { to { transform: translateY(2.5cqh); } }
+@keyframes cine-wing { to { transform: translateX(3cqw); } }
+@keyframes cine-breathe { 0%, 100% { opacity: .75; } 50% { opacity: 1; } }
+@keyframes cine-road { from { opacity: .14; } to { opacity: .26; } }
+@keyframes cine-rip {
+  0% { transform: translate(0, 0) scaleX(.3); opacity: 0; }
+  20% { opacity: .5; }
+  100% { transform: translate(calc(var(--kx) * 1cqw), calc(var(--ky) * 1cqh)) scaleX(5); opacity: 0; }
+}
+@keyframes cine-grain { 0% { transform: translate(0, 0); } 25% { transform: translate(-7%, 4%); } 50% { transform: translate(5%, -6%); } 75% { transform: translate(-3%, -2%); } }
 @keyframes flicker { 0%, 100% { opacity: 1; } 18% { opacity: .82; } 22% { opacity: .95; } 61% { opacity: .86; } 70% { opacity: 1; } }
-@keyframes beacon { 0%, 3% { opacity: .35; } 5% { opacity: 1; } 7%, 13% { opacity: .35; } 15% { opacity: 1; } 17%, 100% { opacity: .35; } }
-@keyframes beacon-glow { 0%, 3% { opacity: 0; } 5% { opacity: 1; } 7%, 13% { opacity: 0; } 15% { opacity: 1; } 17%, 100% { opacity: 0; } }
-@keyframes shimmer { from { transform: scaleY(.84); } to { transform: scaleY(1.1); } }
-/* 虛線一個週期 172（每組 dasharray 加起來都是 172），走完剛好接回原點 */
-@keyframes fog { to { stroke-dashoffset: -172; } }
-@keyframes wake {
-  0% { transform: translate(calc(var(--x) * 1px), 105px) scaleX(.25); opacity: 0; }
-  20% { opacity: .9; }
-  100% { transform: translate(calc((var(--x) + var(--dx)) * 1px), 200px) scaleX(3); opacity: 0; }
-}
-@media (prefers-reduced-motion: reduce) { .disc .loop { animation: none; } .disc .wake { opacity: .5; } }
+@keyframes beacon { 0%, 3% { opacity: .15; } 5% { opacity: 1; } 7%, 13% { opacity: .15; } 15% { opacity: 1; } 17%, 100% { opacity: .15; } }
+@media (prefers-reduced-motion: reduce) { .cine * { animation: none !important; } }
 #loading .msg {
   margin-top: 10px; padding-left: .4em;
   color: var(--muted); letter-spacing: .4em; font-size: 12px;

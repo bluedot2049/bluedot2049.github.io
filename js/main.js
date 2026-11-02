@@ -147,8 +147,6 @@ async function start() {
   }
   document.title = gallery.title || document.title;
   const ui = new UI(gallery);
-  // 渡海的外圈金線：程式和清單下載完、地圖蓋好、著色器編好各畫一段，載完 ui.loading 補滿
-  ui.progress(30);
 
   if (params.has('flat') || !hasWebGL()) {
     ui.buildList(false);
@@ -188,7 +186,6 @@ async function start() {
   const grade = params.get('grade') === '0' ? null : Z.grade || (params.has('debug') ? NEUTRAL : null);
   if (grade) installGrade(grade, scene);
   const world = Z.build(scene, { gallery, coarse, params });
-  ui.progress(55);
 
   // 光線、霧。畫廊有室內和戶外兩組，走出後門時在兩組之間漸變；只有一組的區域兩頭都用它
   const envs = Z.env(world);
@@ -358,6 +355,7 @@ async function start() {
         ui.hideFerry();
         player.board(ex.boat, () => {
           ex.boat.board();
+          ambience.voice('push', 0.5);
           setTimeout(() => travel(to), 1100);
         });
       });
@@ -418,14 +416,14 @@ async function start() {
     for (const [k, v] of Object.entries(extra)) q.set(k, v);
     const el = document.getElementById('loading');
     el.querySelector('.msg').textContent = ZONES[to].crossing;
+    el.querySelector('.cine .label span').textContent = ZONES[to].crossing.split('　')[1];
     try { sessionStorage.setItem('crossAt', Date.now()); } catch (e) {}
     keepFullscreen();
     el.style.setProperty('--t', '0ms');
-    // 進來時畫滿的金線直接歸零，不要倒著收回去
-    const sea = el.querySelector('.sea');
-    sea.style.transition = 'none';
-    sea.style.removeProperty('--prog');
-    el.classList.remove('to-gallery', 'to-haishi', 'done', 'first', 'opening');
+    // 搭船來的時候門板開過、光鋪滿過：那些動畫拿掉，渡海的畫面先關掉再打開，CSS 的動畫才會從頭跑
+    for (const a of el.getAnimations({ subtree: true })) a.cancel();
+    el.classList.remove('to-gallery', 'to-haishi', 'done', 'first', 'opening', 'landing', 'crossing');
+    void el.offsetWidth;
     el.classList.add('crossing', `to-${to}`);
     mp?.sendNow();
     setTimeout(() => location.replace(`${location.pathname}?${q}`), 850);
@@ -699,7 +697,6 @@ async function start() {
   // Windows 的瀏覽器編得特別慢，畫面會凍住一兩秒。
   // 藏起來的房間、戶外、海面先全部打開；海面倒影畫進貼圖時用的是另一組著色器，也一起編
   await precompile(renderer, scene, camera, world);
-  ui.progress(85);
   if (fxJob) {
     fx = await fxJob;
     fx?.render(0);   // 後製的著色器也趁載入畫面先編好
@@ -741,6 +738,12 @@ async function start() {
   // 推門的那一刻門閂響；門在背後靠上時悶的一聲
   ui.onDoorOpen = () => ambience.voice('latch', 0.55);
   if (world.frontDoor) world.frontDoor.onClose = () => ambience.voice('doorshut', 0.4);
+  // 渡海到了：船靠岸的聲音。這時候已經換頁、還沒點過畫面，瀏覽器肯讓聲音出來才放（Chrome、Edge 剛在同一個網站按過「搭船」會肯），
+  // 不肯的話不排進去，免得等到第一次點畫面才突然響
+  ui.onMoor = () => {
+    ambience.start();
+    if (ambience.ctx?.state === 'running') ambience.voice('moor', 0.6);
+  };
   const entered = ui.loading(null);
   fullscreenButton(coarse);
   // 進門以後：前門在背後闔上，跳出這間房的名字，再跳操作說明卡（已經先動起來的人就不打擾，下次進門再出現）。

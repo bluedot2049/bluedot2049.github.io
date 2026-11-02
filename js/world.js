@@ -10,6 +10,7 @@ import { buildMirror, buildMirrorRug } from './mirror.js';
 import { buildCamTable, TABLE_W, TABLE_D } from './camtable.js';
 import { buildFrontDoor } from './frontdoor.js';
 import { buildGuideSign } from './guidesign.js';
+import { buildNoticeBoard } from './noticeboard.js';
 import { buildClock, CLOCK_W, CLOCK_D } from './clock.js';
 import { buildOutdoor, OUTDOOR_ROOM } from './outdoor.js';
 import { catRoomOf } from './animals.js';
@@ -635,7 +636,7 @@ function stringLights(room, R, bucket) {
 
 export function buildWorld(scene, gallery) {
   const rooms = [], paintings = [], entries = [], raycastTargets = [];
-  let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null, clock = null, mirrorTick = null;
+  let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null, noticeBoard = null, clock = null, mirrorTick = null;
   let z = 0;
 
   // gallery.json 的 outdoor 為 true 時，最後一間房後面接陽台和草原
@@ -760,6 +761,13 @@ export function buildWorld(scene, gallery) {
       const front = boxSpan(room, 'front');
       room.window = { sp: front, s: 2.4 };
       front.clear = [[4.0, front.length]];
+      // 空位上掛佈告欄（noticeboard.js），窗邊長過來的藤纏在靠窗那個上角
+      const bs = 5.5, bp = front.at(bs);
+      noticeBoard = buildNoticeBoard(bs - room.window.s);
+      noticeBoard.group.position.set(bp.x + bp.nx * 0.01, 0, bp.z + bp.nz * 0.01);
+      noticeBoard.group.rotation.y = Math.atan2(bp.nx, bp.nz);
+      room.group.add(noticeBoard.group);
+      noticeBoard.group.traverse((m) => { if (m.isMesh) front.entry.tall.push(m); });
     }
 
     const slots = slotsFor(room);
@@ -1006,6 +1014,7 @@ export function buildWorld(scene, gallery) {
     snapNext = false;
     roomFader.update(dt);
     frontDoor?.update(dt);
+    noticeBoard?.update(dt);
     clock?.update();
     mirrorTick?.(dt, target);
     if (outdoor) {
@@ -1046,5 +1055,5 @@ export function buildWorld(scene, gallery) {
   // 搭船去別的區域：棧橋邊繫著的小划船
   const exits = outdoor?.ferry ? [{ ...outdoor.ferry, to: 'haishi', label: '搭船', title: '渡船' }] : [];
 
-  return { rooms, paintings, mirror, camTable, frontDoor, guideSign, clock, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, updatePaintings, fadeVariants: (on) => roomFader.all(on) };
+  return { rooms, paintings, mirror, camTable, frontDoor, guideSign, noticeBoard, clock, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, updatePaintings, fadeVariants: (on) => roomFader.all(on) };
 }
