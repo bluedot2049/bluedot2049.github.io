@@ -377,20 +377,19 @@ export class UI {
   }
 
   // 渡海到了：跟推門同一個節奏。船靠岸一震（onMoor 放聲音），門板先拉開一點、停半拍，再整個打開；
-  // 海平線那條縫跟著撐開，畫面往前推近，目的地的光鋪滿，再淡出到遊戲畫面。
+  // 照片往前推近（直式同時回到正中央），目的地的光鋪滿，再淡出到遊戲畫面。
   // 橫式的門板是上下黑邊，直式是右邊的黑塊。動畫都接在 CSS 正在跑的那一格後面，不會跳
   landing(el) {
     return new Promise((resolve) => {
       this.onMoor?.();
-      const c = el.querySelector('.cine'), band = c.querySelector('.band'), stage = c.querySelector('.stage');
-      const slit = c.querySelector('.slit'), tall = c.clientHeight > c.clientWidth;
+      const c = el.querySelector('.cine'), stage = c.querySelector('.stage'), tall = c.clientHeight > c.clientWidth;
       // 從 CSS 動畫目前的樣子接手：先記下來，再把 CSS 的停掉
       const take = (node) => {
         const from = getComputedStyle(node).transform;
         for (const a of node.getAnimations()) a.cancel();
         return from;
       };
-      band.animate([
+      c.animate([
         { transform: 'none', easing: 'ease-out' },
         { transform: tall ? 'translateY(-.5%)' : 'translateY(-1.2%)', offset: 0.14 },
         { transform: tall ? 'translateY(.25%)' : 'translateY(.6%)', offset: 0.4 },
@@ -405,10 +404,7 @@ export class UI {
           { transform: `translate${axis}(${dir * 101}%)` },
         ], { duration: 1700, delay: 250, fill: 'forwards' });
       }
-      slit.animate([{ transform: take(slit) }, { transform: 'scaleY(8)', offset: 0.3 }, { transform: tall ? 'scaleY(900)' : 'scaleY(300)' }],
-        { duration: 1600, delay: 500, easing: 'cubic-bezier(.5, 0, .3, 1)', fill: 'forwards' });
-      c.querySelector('.halo').animate([{ transform: 'none' }, { transform: 'scaleY(3)' }], { duration: 1500, delay: 600, easing: 'ease-in', fill: 'forwards' });
-      stage.animate([{ transform: take(stage) }, { transform: 'scale(1.4)' }], { duration: 1800, delay: 400, easing: 'cubic-bezier(.5, 0, .2, 1)', fill: 'forwards' });
+      stage.animate([{ transform: take(stage) }, { transform: 'translateX(0) scale(1.3)' }], { duration: 1800, delay: 400, easing: 'cubic-bezier(.5, 0, .2, 1)', fill: 'forwards' });
       el.classList.add('landing');
       setTimeout(() => { el.classList.add('done'); resolve(); }, 1900);
     });

@@ -35,13 +35,16 @@ import { bindDeskKeys } from './deskkeys.js';
 const ZONES = {
   gallery: { crossing: '渡海　回畫廊', load: () => import('./zone-gallery.js') },
   haishi: { crossing: '渡海　往海市', load: () => import('./zone-haishi.js') },
+  // 灰模型階段，渡船還沒開過去，只能用 ?z=shenlou 進來
+  shenlou: { crossing: '渡海　往蜃樓', load: () => import('./zone-shenlou.js') },
 };
-// 渡船能去的地方，每個渡口都照這個順序一張一張卡；to 是 null 的還沒有航線（沙漠還沒取名，先這樣叫）。
+// 渡船能去的地方，每個渡口都照這個順序一張一張卡；to 是 null 的還沒有航線。
+// dev 是還在蓋的區域：一般人看到「還不能搭」，網址有 ?debug（調色模式）時才開得到
 // desc 是卡片上的一兩句，tags 只寫到了那裡已經能做的事
 const FERRY = [
   { to: 'gallery', name: '畫廊', desc: '山坡上的老屋，掛著作品。', tags: ['看畫', '照鏡子', '挑相機', '樹洞'] },
   { to: 'haishi', name: '海市', desc: '海上的夜市。', tags: ['照相館', '攤販'] },
-  { to: null, name: '沙漠', desc: '影子之城', tags: ['還沒有航線'] },
+  { to: null, dev: 'shenlou', name: '蜃樓', desc: '影子之城', tags: ['還沒有航線'] },
 ];
 
 async function loadJSON(url) {
@@ -198,7 +201,7 @@ async function start() {
   // 沒匯出的區域在 ?debug 時裝一組不改畫面的（NEUTRAL），調色面板一樣打得開
   const grade = params.get('grade') === '0' ? null : Z.grade || (params.has('debug') ? NEUTRAL : null);
   if (grade) installGrade(grade, scene);
-  const world = Z.build(scene, { gallery, coarse, params });
+  const world = Z.build(scene, { gallery, coarse, params, renderer });
 
   // 光線、霧。畫廊有室內和戶外兩組，走出後門時在兩組之間漸變；只有一組的區域兩頭都用它
   const envs = Z.env(world);
@@ -363,10 +366,15 @@ async function start() {
       if (ex.home) return ex.home.act();
       if (!ex.boat) return travel(ex.to);
       if (player.boarding) return;
-      const list = FERRY.map((d) => (d.to === zone ? { ...d, to: null, here: true } : d));
+      const list = FERRY.map((d) => {
+        if ((d.to || d.dev) === zone) return { ...d, to: null, here: true };
+        if (d.dev && params.has('debug')) return { ...d, to: d.dev, tags: ['調色模式才開得到'] };
+        return d;
+      });
       ferryBoat = ex.boat;
       ui.showFerry(list, (to) => {
         ui.hideFerry();
+        fetchCrossing(to);
         player.board(ex.boat, () => {
           ex.boat.board();
           ambience.voice('push', 0.5);
@@ -405,7 +413,7 @@ async function start() {
       const r = world.rooms[i].data;
       ui.toast(r.name, r.subtitle);
       place = null;
-      if (i >= world.rooms.findIndex((room) => room.id === bgm.from)) ambience.music(bgm.src);
+      if (bgm && i >= world.rooms.findIndex((room) => room.id === bgm.from)) ambience.music(bgm.src);
     },
   });
   scene.add(player.marker);
@@ -420,6 +428,10 @@ async function start() {
 
   // 渡海：載入畫面換成小船，蓋住畫面後整頁換到另一個區域。from 記住從哪裡來，到了站在對應的碼頭。
   // 走進歸門（door）：不搭船，門裡的光鋪滿畫面就換頁，到了是前廳的前門（from=door）
+  // 渡海那張目的地的照片：一選好去哪裡就先下載（index.html 的 crossing.picture，跟下一頁挑的是同一張），
+  // 上船、船夫現身這一兩秒抓好，換頁後通常直接從快取拿。留著參照，下載到一半不會被丟掉
+  let crossingPic = null;
+  const fetchCrossing = (to) => { crossingPic ??= window.crossing?.picture(to); };
   let traveling = false;
   function travel(to, extra = {}, door = false) {
     if (traveling) return;
@@ -443,12 +455,18 @@ async function start() {
     }
     el.querySelector('.msg').textContent = ZONES[to].crossing;
     el.querySelector('.cine .label span').textContent = ZONES[to].crossing.split('　')[1];
+    el.querySelector('.cine .label small').textContent = window.crossing?.note(to) ?? '';
+    fetchCrossing(to);
     try { sessionStorage.setItem('crossAt', Date.now()); } catch (e) {}
     keepFullscreen();
     el.style.setProperty('--t', '0ms');
-    // 搭船來的時候門板開過、光鋪滿過：那些動畫拿掉，渡海的畫面先關掉再打開，CSS 的動畫才會從頭跑
+    // 搭船來的時候門板開過、光鋪滿過、照片淡入過：那些動畫和照片拿掉，渡海的畫面先關掉再打開，CSS 的動畫才會從頭跑。
+    // 出發這一頁只有墨色和字，照片留給下一頁淡入
     for (const a of el.getAnimations({ subtree: true })) a.cancel();
-    el.classList.remove('to-gallery', 'to-haishi', 'done', 'first', 'opening', 'landing', 'crossing');
+    const cine = el.querySelector('.cine');
+    cine.classList.remove('shown');
+    cine.querySelector('.push').replaceChildren();
+    el.classList.remove('to-gallery', 'to-haishi', 'to-shenlou', 'done', 'first', 'opening', 'landing', 'crossing');
     void el.offsetWidth;
     el.classList.add('crossing', `to-${to}`);
     mp?.sendNow();
@@ -562,6 +580,15 @@ async function start() {
     return b.contains('panel-open') || b.contains('chatting') || !document.getElementById('pack-card').hidden
       || !!document.querySelector('#list.open, #guide.show, #hollow.show, #cams.open, #ferry.open') || !!document.activeElement?.closest?.('input, textarea');
   };
+  // 第一次鎖住滑鼠時提一下怎麼點按鈕
+  let lockTold = false;
+  document.addEventListener('pointerlockchange', () => {
+    if (!player.locked || lockTold) return;
+    lockTold = true;
+    ui.toast('按住 Alt 叫出游標', 'Esc 暫停選單');
+  });
+  // 中鍵標記地點：同行時才有
+  player.onPing = (x, y) => party?.markAt(x, y);
 
   // 聲音開關：戶外的風聲和動物叫聲共用，室內也有貓，所以一直都在
   const soundBtn = document.getElementById('sound-btn');
@@ -575,15 +602,6 @@ async function start() {
   soundBtn.hidden = false;
   soundBtn.addEventListener('click', () => { ambience.setMuted(!ambience.muted); soundLabel(); });
 
-  // 第一次鎖住滑鼠時提一下怎麼點按鈕
-  let lockTold = false;
-  document.addEventListener('pointerlockchange', () => {
-    if (!player.locked || lockTold) return;
-    lockTold = true;
-    ui.toast('按住 Alt 叫出游標', 'Esc 暫停選單');
-  });
-  // 中鍵標記地點：同行時才有
-  player.onPing = (x, y) => party?.markAt(x, y);
   // 越肩視角開關，player.js 記住上次的選擇；F 鍵切換時按鈕也跟著變
   const shoulderBtn = document.getElementById('shoulder-btn');
   const shoulderLabel = (on) => {
@@ -729,6 +747,8 @@ async function start() {
     onFlash: () => mp?.flash(),
     resizeFX: (w, h) => fx?.setSize(w, h),
   });
+  // 電腦的快捷鍵、Q 表情輪、Esc 暫停選單（表情要連上線才送得出去）
+  bindDeskKeys({ player, ui, photo, emotes: EMOTES, emote: (e) => mp && sendEmote(e) });
   const selfie = new Selfie({
     renderer, scene, camera, player, character, ambience, render: draw,
     resizeFX: (w, h) => fx?.setSize(w, h),
@@ -742,8 +762,6 @@ async function start() {
   document.getElementById('photo-btn').addEventListener('click', () => photo.toggle());
   if (world.studios) {
     studio = new Studio({ world, player, photo, passers });
-  // 電腦的快捷鍵、Q 表情輪、Esc 暫停選單（表情要連上線才送得出去）
-  bindDeskKeys({ player, ui, photo, emotes: EMOTES, emote: (e) => mp && sendEmote(e) });
     studio.mp = mp;
     // ?studio=0：直接到第 0 個景（測試構圖用）
     if (params.has('studio')) setTimeout(() => studio.begin(+params.get('studio') || 0), 1500);
