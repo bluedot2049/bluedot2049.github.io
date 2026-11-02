@@ -105,6 +105,34 @@ const VOICES = {
     hiss(ctx, out, noise, t, 0.06, 'lowpass', 700, 0.7);
     return 0.25;
   },
+  // 渡船靠岸：船頭碰上碼頭的悶響、木頭敲一下，接著水被擠回來拍兩下船身
+  moor(ctx, out, t, p, noise) {
+    osc(ctx, 'sine', t, 0.32, [[0, 96 * p], [0.3, 44 * p]]).connect(envelope(ctx, t, 0.006, 0.32, 0.9)).connect(out);
+    hiss(ctx, out, noise, t, 0.05, 'bandpass', 520 * p, 0.8, 2.5);
+    hiss(ctx, out, noise, t + 0.09, 0.03, 'bandpass', 760 * p, 0.3, 3);
+    for (const [dt, dur, f, g] of [[0.12, 0.5, 900, 0.32], [0.62, 0.42, 700, 0.2]]) {
+      const src = ctx.createBufferSource();
+      src.buffer = noise;
+      src.connect(biquad(ctx, 'lowpass', f * p, 0.7)).connect(envelope(ctx, t + dt, dur * 0.4, dur, g)).connect(out);
+      src.start(t + dt, Math.random() * 7);
+      src.stop(t + dt + dur + 0.02);
+    }
+    return 1.1;
+  },
+  // 渡船離岸：竹篙撐一下嘎的一聲，水從船底滑過去
+  push(ctx, out, t, p, noise) {
+    const o = osc(ctx, 'sawtooth', t, 0.35, [[0, 150 * p], [0.2, 132 * p], [0.35, 118 * p]]);
+    o.connect(biquad(ctx, 'bandpass', 700, 5)).connect(envelope(ctx, t, 0.05, 0.35, 0.08)).connect(out);
+    const src = ctx.createBufferSource(), f = biquad(ctx, 'lowpass', 500, 0.8);
+    src.buffer = noise;
+    f.frequency.setValueAtTime(500 * p, t + 0.1);
+    f.frequency.linearRampToValueAtTime(1400 * p, t + 0.6);
+    f.frequency.linearRampToValueAtTime(600 * p, t + 1.1);
+    src.connect(f).connect(envelope(ctx, t + 0.1, 0.35, 1.0, 0.35)).connect(out);
+    src.start(t + 0.1, Math.random() * 7);
+    src.stop(t + 1.15);
+    return 1.15;
+  },
   // 對到焦：兩聲短短的嗶
   focus(ctx, out, t, p) {
     for (const dt of [0, 0.075]) osc(ctx, 'sine', t + dt, 0.045, [[0, 2700 * p]]).connect(envelope(ctx, t + dt, 0.004, 0.045, 0.3)).connect(out);
