@@ -2398,30 +2398,33 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   // 海是暗的藍灰，不是黑的，也不是飽和的深藍：夜色映在水上，燈影才有東西可以浮在上面
   const sea = new THREE.Mesh(new THREE.PlaneGeometry(1400, 900), new THREE.MeshLambertMaterial({ color: '#2b3a52' }));
   // 海有自己的霧：霧量照樣有，遠處照樣糊開，但混的是比場景的霧深、比較藍的顏色，往夜色裡退，不會被提成灰的。
-  // 遠處再壓暗一點；最遠那一段（海平線前）另外一條霧帶，往天邊的顏色靠。海是被相機最遠的 400 公尺切掉的，
-  // 霧帶照鏡頭的深度算、到切掉那一線剛好混滿，海一路接到天邊的顏色，不會在那裡斷一層。近岸照舊，燈影才浮得起來
+  // 遠處再壓暗一點；最遠那一段（海平線前）另外一條霧帶，往天邊的顏色靠。海是被相機最遠的 400 公尺切掉的，切掉那一線就是看到的海平線。
+  // 霧帶只在最後幾十公尺，而且越高混得越少：碼頭貼著海面看，海天柔柔地接起來；爬上山往下看，海比天暗，海平線是清楚的一條線，
+  // 顏色只在線前面那一小段過渡。uSeaBandNow 是每一幀照鏡頭高度在 CPU 混好的（低處 uSeaBand、高處 uSeaBandHigh），著色器只讀一個數。
+  // 近岸照舊，燈影才浮得起來
   const seaFog = {
     uSeaFogAmt: { value: 0.8 }, uSeaFogColor: { value: new THREE.Color('#2c4262') },
-    uSeaBand: { value: 1 }, uSeaBandFrom: { value: 200 }, uSeaDeep: { value: 0.85 },
+    uSeaBand: { value: 1 }, uSeaBandHigh: { value: 0.45 }, uSeaBandNow: { value: 1 }, uSeaBandFrom: { value: 330 }, uSeaDeep: { value: 0.85 },
   };
   TUNE.push(
     { label: '海霧量', key: 'seaFog', uniform: seaFog.uSeaFogAmt, kind: [0, 2, 0.01] },
     { label: '海霧色', key: 'seaFogColor', uniform: seaFog.uSeaFogColor, kind: 'color' },
     { label: '海平線霧帶', key: 'seaBand', uniform: seaFog.uSeaBand, kind: [0, 1, 0.01] },
+    { label: '高處霧帶', key: 'seaBandHigh', uniform: seaFog.uSeaBandHigh, kind: [0, 1, 0.01] },
     { label: '霧帶起點', key: 'seaBandFrom', uniform: seaFog.uSeaBandFrom, kind: [60, 395, 1] },
     { label: '遠海壓暗', key: 'seaDeep', uniform: seaFog.uSeaDeep, kind: [0.4, 1, 0.01] },
   );
   // 海面和白塔底下的小島共用這一段，小島才跟周圍的海是同一個顏色、同樣退進霧裡
   const seaShade = (sh) => {
     Object.assign(sh.uniforms, seaFog);
-    sh.fragmentShader = 'uniform float uSeaFogAmt; uniform vec3 uSeaFogColor; uniform float uSeaBand; uniform float uSeaBandFrom; uniform float uSeaDeep;' + SKY_EDGE_GLSL +
+    sh.fragmentShader = 'uniform float uSeaFogAmt; uniform vec3 uSeaFogColor; uniform float uSeaBandNow; uniform float uSeaBandFrom; uniform float uSeaDeep;' + SKY_EDGE_GLSL +
       sh.fragmentShader.replace('#include <fog_fragment>', `#ifdef USE_FOG
       if ( uGrade.on > 0.5 ) {
         vec2 seaDir = vFogWorld.xz - cameraPosition.xz;
         float seaD = length( seaDir );
-        // 左手邊起霧的那一段：從近處就起霧，一百多公尺外已經差不多是天邊的顏色，海和天在那裡融成一片，也不再壓暗
+        // 左手邊起霧的那一段：從近處就起霧，一百多公尺外已經差不多是天邊的顏色，海和天在那裡融成一片，也不再壓暗。這一段不跟著高度變
         float mist = mistAt( seaDir );
-        float band = uSeaBand * max( smoothstep( uSeaBandFrom, 398.0, vFogDepth ), mist * ( 1.0 - exp( - vFogDepth / 70.0 ) ) ), seaF = min( 1.0, gradeFog( vFogWorld ) * uSeaFogAmt );
+        float band = max( uSeaBandNow * smoothstep( uSeaBandFrom, 398.0, vFogDepth ), mist * ( 1.0 - exp( - vFogDepth / 70.0 ) ) ), seaF = min( 1.0, gradeFog( vFogWorld ) * uSeaFogAmt );
         gl_FragColor.rgb *= mix( 1.0, uSeaDeep, smoothstep( 40.0, 360.0, seaD ) * ( 1.0 - mist ) );
         // 天邊在西邊被日出打亮（跟天空球同一段），霧帶接過去也要帶著，不然那一段海和天還是斷開的；海上也就映出一片暖光
         vec3 edge = sunLit( skyLow( uGrade.fogLin ), sunUp( seaDir, 0.0 ) );
@@ -2707,8 +2710,11 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       for (const f of harborFx) f(now, dt);
       towerSize.setX(0, 30 * (1 + 1.5 * bump(towerPhase(now), 0.52, 0.07)));
       towerSize.needsUpdate = true;
-      // 塔頂的燈跟塔身一起退：照離塔多遠，用跟海平線霧帶一樣的起點
-      const towerK = 1 - smooth(seaFog.uSeaBandFrom.value, 398, Math.hypot(cam.x - far.position.x, cam.z - far.position.z));
+      // 海平線霧帶照鏡頭高度：碼頭一帶照「海平線霧帶」，往上到星廟換成「高處霧帶」
+      const band = seaFog.uSeaBand.value + (seaFog.uSeaBandHigh.value - seaFog.uSeaBand.value) * smooth(6, 45, cam.y);
+      seaFog.uSeaBandNow.value = band;
+      // 塔頂的燈跟塔身一起退：照離塔多遠，用跟海平線霧帶一樣的起點和濃淡
+      const towerK = 1 - band * smooth(seaFog.uSeaBandFrom.value, 398, Math.hypot(cam.x - far.position.x, cam.z - far.position.z));
       towerColor.setXYZ(0, TOWER_RGB.r * towerK, TOWER_RGB.g * towerK, TOWER_RGB.b * towerK);
       towerColor.needsUpdate = true;
     },
