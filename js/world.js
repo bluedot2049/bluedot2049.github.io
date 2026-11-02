@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import * as TX from './textures.js';
 import { PROPS, SETS, Kit, rng, newBucket, weightedPick, buildWindow } from './props.js';
-import { buildMirror } from './mirror.js';
+import { buildMirror, buildMirrorRug } from './mirror.js';
 import { buildCamTable, TABLE_W, TABLE_D } from './camtable.js';
 import { buildFrontDoor } from './frontdoor.js';
 import { buildGuideSign } from './guidesign.js';
@@ -415,7 +415,7 @@ function hitObstacle(list, x, z, pad) {
   return false;
 }
 
-// noCat：黑貓住的房間，不再擺睡著的貓；tidy：前廳有相機桌，中間不擺雜物
+// noCat：黑貓住的房間，不再擺睡著的貓；tidy：前廳有相機桌，中間不擺雜物、不鋪地毯
 function furnish(room, R, set, noCat, tidy = false) {
   const s = shared();
   const roomBucket = newBucket();
@@ -442,13 +442,19 @@ function furnish(room, R, set, noCat, tidy = false) {
     addShadow(x, z, def.w, def.d, rot);
   };
 
-  // 窗戶：挑一段夠長、靠外牆的空位
-  const outer = room.spans.filter((sp) => sp.entry.outerRoom === room.index);
-  const winCandidates = [];
-  for (const sp of outer) for (const [a, b] of freeIntervals(sp)) if (b - a > 2.0) winCandidates.push([sp, a, b]);
-  if (winCandidates.length) {
-    const [sp, a, b] = winCandidates[Math.floor(R() * winCandidates.length)];
-    const sMid = a + 1.0 + R() * (b - a - 2.0);
+  // 窗戶：挑一段夠長、靠外牆的空位（前廳的窗戶位置是排好的，見 buildWorld）
+  let win = room.window;
+  if (!win) {
+    const outer = room.spans.filter((sp) => sp.entry.outerRoom === room.index);
+    const winCandidates = [];
+    for (const sp of outer) for (const [a, b] of freeIntervals(sp)) if (b - a > 2.0) winCandidates.push([sp, a, b]);
+    if (winCandidates.length) {
+      const [sp, a, b] = winCandidates[Math.floor(R() * winCandidates.length)];
+      win = { sp, s: a + 1.0 + R() * (b - a - 2.0) };
+    }
+  }
+  if (win) {
+    const { sp, s: sMid } = win;
     const pt = sp.at(sMid), rot = Math.atan2(pt.nx, pt.nz);
     const k = new Kit(R);
     buildWindow(k);
@@ -524,16 +530,18 @@ function furnish(room, R, set, noCat, tidy = false) {
     placed++;
   }
 
-  // 地毯
-  const [rugBase, rugAccent] = RUGS[room.propSet] || RUGS.studio;
-  let rugGeo;
-  if (room.type === 'rotunda') rugGeo = new THREE.CircleGeometry(2.4, 32);
-  else if (room.type === 'hall') rugGeo = new THREE.PlaneGeometry(3.4, 4.4);
-  else rugGeo = new THREE.PlaneGeometry(1.6, room.d - 2.5);
-  const rug = new THREE.Mesh(rugGeo, new THREE.MeshLambertMaterial({ map: TX.rugTexture(rugBase, rugAccent, room.type === 'rotunda'), transparent: room.type === 'rotunda' }));
-  rug.rotation.x = -Math.PI / 2;
-  rug.position.set(room.center.x, 0.006, room.center.z);
-  room.group.add(tag(rug, 'floor'));
+  // 地毯（前廳不鋪中間這塊：地毯鋪在鏡子前和相機桌前，見 mirror.js、camtable.js）
+  if (!tidy) {
+    const [rugBase, rugAccent] = RUGS[room.propSet] || RUGS.studio;
+    let rugGeo;
+    if (room.type === 'rotunda') rugGeo = new THREE.CircleGeometry(2.4, 32);
+    else if (room.type === 'hall') rugGeo = new THREE.PlaneGeometry(3.4, 4.4);
+    else rugGeo = new THREE.PlaneGeometry(1.6, room.d - 2.5);
+    const rug = new THREE.Mesh(rugGeo, new THREE.MeshLambertMaterial({ map: TX.rugTexture(rugBase, rugAccent, room.type === 'rotunda'), transparent: room.type === 'rotunda' }));
+    rug.rotation.x = -Math.PI / 2;
+    rug.position.set(room.center.x, 0.006, room.center.z);
+    room.group.add(tag(rug, 'floor'));
+  }
 
   // 工作室地上的顏料點和紙張
   if (room.propSet === 'studio') {
@@ -695,9 +703,10 @@ export function buildWorld(scene, gallery) {
       }
     }
 
-    // 第一間房入口那面牆留給換裝鏡（圓廳沒有平的入口牆，就不放）
+    // 第一間房（圓廳沒有平的入口牆，就不放）：從前門進來面對左牆，左邊換裝鏡、右邊相機桌，
+    // 出門前要做的兩件事一進門就看到，角色站在兩個中間；右手邊是往裡走的門
     if (room.index === 0 && room.frontEntry) {
-      const sp = boxSpan(room, 'front'), s0 = Math.max(1.0, room.w / 2 - 1.4);
+      const sp = room.spans[0], s0 = 1.5;
       sp.occ.push([s0 - 0.9, s0 + 0.9]);
       const pt = sp.at(s0), rot = Math.atan2(pt.nx, pt.nz);
       const { group, glass, update: tick } = buildMirror();
@@ -709,7 +718,12 @@ export function buildWorld(scene, gallery) {
       room.obstacles.push({ x, z, hw: 0.55, hd: 0.25, rot });
       raycastTargets.push(glass);
       mirror = { x, z, n: { x: pt.nx, z: pt.nz } };
-      mirrorTick = tick;
+      // 鏡子前鋪一條拱形的毯子，站上去金線會亮；毯子是地板，牆淡掉時不跟著淡
+      const rug = buildMirrorRug();
+      rug.mesh.position.set(x, 0.006, z);
+      rug.mesh.rotation.y = rot;
+      room.group.add(tag(rug.mesh, 'floor'));
+      mirrorTick = (dt, who) => { tick(dt, who); rug.update(dt, who); };
 
       // 右牆靠前是前門（frontdoor.js）：進來的那道門，門外是黃昏的光，不能開
       const right = room.spans[1], sd = 2.0;
@@ -732,14 +746,20 @@ export function buildWorld(scene, gallery) {
       room.obstacles.push({ x: gp.x, z: gp.z, hw: 0.3, hd: 0.22, rot: drot + 0.35 });
       raycastTargets.push(...guideSign.faces);
 
-      // 左牆中間是相機桌（camtable.js）：出門前在這裡挑一台帶走
-      const side = room.spans[0], sc = room.d / 2;
-      side.occ.push([sc - TABLE_W / 2 - 0.15, sc + TABLE_W / 2 + 0.15]);
-      const sp2 = side.at(sc), trot = Math.atan2(sp2.nx, sp2.nz);
+      // 鏡子右邊是相機桌（camtable.js）：出門前在這裡挑一台帶走。兩塊毯子並排，中間留一條走道
+      const sc = 4.4;
+      sp.occ.push([sc - TABLE_W / 2 - 0.15, sc + TABLE_W / 2 + 0.15]);
+      const sp2 = sp.at(sc), trot = Math.atan2(sp2.nx, sp2.nz);
       const tx = sp2.x + sp2.nx * (TABLE_D / 2 + 0.06), tz = sp2.z + sp2.nz * (TABLE_D / 2 + 0.06);
       camTable = buildCamTable(tx, tz, trot);
       room.group.add(camTable.group);
       room.obstacles.push({ x: tx, z: tz, hw: TABLE_W / 2, hd: TABLE_D / 2, rot: trot });
+
+      // 入口那面牆（進門的左手邊）：靠鏡子那頭開窗，夕陽照在鏡子前；靠前門那頭空著，之後貼活動和消息的海報。
+      // 空著的這段家具照樣做一次再丟掉，海報掛上去時別處的擺設不會跟著換位置
+      const front = boxSpan(room, 'front');
+      room.window = { sp: front, s: 2.4 };
+      front.clear = [[4.0, front.length]];
     }
 
     const slots = slotsFor(room);

@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>渡海預覽・電影取景</title>
+<style>
+  /* 渡海・電影感取景三選一。畫面收成一條寬銀幕細縫，上下黑邊就是門板；縫裡只取一角，長焦、局部。
+     一：燈和手。二：船頭切水。三：袍子的一角（光從袍子和竹竿中間透過來）。
+     門的邏輯不變：等的時候黑邊很慢退開一點、畫面很慢推近；靠岸一震，黑邊先拉開一點、停半拍，再整個打開，海平線撐開，光鋪滿。
+     效能：會動的全是 div 圖層，只動 transform 和 opacity */
+  :root { --gold: #e8b86a; --gold-hi: #f6dba6; --gold-lo: #a9763a; --muted: #b5a084; --ink: #110f14; }
+  body { margin: 0; background: #241a13; color: #e8dcc8; font: 13px "Noto Serif TC", serif; }
+  .ctl { position: sticky; top: 0; z-index: 9; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px; background: #1c130d; border-bottom: 1px solid rgba(232,184,106,.2); }
+  .ctl button { font: inherit; color: var(--gold-hi); background: none; border: 1px solid var(--gold-lo); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+  .ctl button.on { border-color: var(--gold); background: rgba(232,184,106,.14); }
+  .ctl .note { color: var(--muted); }
+  section { padding: 22px 16px 8px; }
+  section h2 { margin: 0 0 12px; font-size: 15px; font-weight: normal; color: var(--gold-hi); letter-spacing: .1em; }
+  section h2 small { margin-left: 12px; color: var(--muted); font-size: 12px; letter-spacing: 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+  .frame { position: relative; container-type: size; overflow: hidden; outline: 1px solid rgba(232,184,106,.15); }
+  .frame.wide { width: 960px; height: 540px; }
+  .frame.portrait { width: 300px; height: 584px; }
+
+  /* ───── 下面這段是要搬進 style.css 的（正式版 #loading 加 container-type: size） ───── */
+  .cine { position: absolute; inset: 0; overflow: hidden; background: var(--ink); --t: 0ms;
+    --bh: min(calc(100cqw / 2.8), 46cqh);     /* 細縫多高：橫式比 2.39 還扁 */
+    --gap: calc(50cqh - var(--bh) / 2); }      /* 每條黑邊多高 */
+  @container (orientation: portrait) { .cine { --bh: min(50cqw, 46cqh); } }
+  .cine.to-gallery { --door: #ffe8c8; --door2: #f2a682; --halo: rgba(242, 160, 120, .4); --rim: #c98a6c; --flood: radial-gradient(circle at 50% 50%, #fff3dc, #ffd9a8 45%, #f4b984); }
+  .cine.to-haishi { --door: #e2edf8; --door2: #86a4d4; --halo: rgba(120, 150, 210, .38); --rim: #8ea4cc; --flood: radial-gradient(circle at 50% 50%, #eef4fa, #b4c8e6 45%, #7088b4); }
+
+  /* 細縫：裡面的舞台固定 3.6:1，像 object-fit: cover 一樣蓋滿，手機直式切掉兩邊 */
+  /* 細縫外面也有畫面（天往上、海往下延伸），只是被黑邊蓋著；門板拉開就看得到更多 */
+  .cine .band { position: absolute; left: 0; right: 0; top: var(--gap); height: var(--bh); container-type: size; }
+  .cine .stage { position: absolute; left: 50%; top: 50%; width: max(100cqw, 360cqh); aspect-ratio: 3.6; translate: -50% -50%; container-type: size;
+    transform-origin: var(--gx) var(--hy); animation: push 24s cubic-bezier(.3, 0, .6, 1) var(--t) forwards; }
+  .cine .stage > * { position: absolute; }
+  .cine .sky { left: 0; right: 0; top: -300%; bottom: calc(100% - var(--hy)); background: linear-gradient(#141829 55%, #1d2135 80%, #2e2e48 93%, #4c4462); }
+  .cine .sea { left: 0; right: 0; top: var(--hy); bottom: -300%; background: linear-gradient(#2a2c44, #1f2234 6%, #161926 25%, #12151f); }
+  .cine .halo { left: calc(var(--gx) - 45%); width: 90%; top: calc(var(--hy) - 30%); height: 60%; background: radial-gradient(closest-side, var(--halo), transparent); animation: breathe 7.3s ease-in-out calc(var(--t) - 2.4s) infinite; }
+  .cine .slit { left: 0; right: 0; top: calc(var(--hy) - 1px); height: 2px; background: linear-gradient(90deg, transparent, var(--door2) calc(var(--gx) - 30%), var(--door) var(--gx), var(--door2) calc(var(--gx) + 30%), transparent); animation: crack 16s cubic-bezier(.15, .55, .3, 1) var(--t) forwards; }
+  .cine .road { left: 0; right: 0; top: var(--hy); bottom: 0; opacity: .2; background: linear-gradient(var(--door2), transparent 80%);
+    clip-path: polygon(calc(var(--gx) - 2%) 0, calc(var(--gx) + 2%) 0, calc(var(--gx) + 14%) 100%, calc(var(--gx) - 14%) 100%); animation: road 4.1s ease-in-out calc(var(--t) - 1.7s) infinite alternate; }
+  .cine .tower { left: var(--tx); top: calc(var(--hy) - 8.4%); height: 9%; aspect-ratio: 10 / 18; translate: -50% 0; }
+  .cine .tower svg { display: block; width: 100%; height: 100%; }
+  .cine .beacon { left: var(--tx); top: calc(var(--hy) - 7%); height: 16%; aspect-ratio: 1; translate: -50% -50%; background: radial-gradient(closest-side, #f4f7fa, rgba(220, 232, 244, .5) 18%, transparent); animation: beacon 6s linear calc(var(--t) - 4.2s) infinite; }
+  .cine .rip { left: var(--rx); top: var(--ry); width: .5cqw; height: 1.5px; border-radius: 1px; background: var(--door); opacity: 0;
+    animation: rip var(--d, 5s) cubic-bezier(.55, 0, .9, .6) calc(var(--t) + var(--p)) infinite; }
+  .cine .fg { inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .cine .glow { left: var(--lx); top: var(--ly); width: var(--ls); aspect-ratio: 1; translate: -50% -50%; background: radial-gradient(closest-side, rgba(240, 246, 250, .55), var(--halo) 32%, transparent); animation: flicker 3.7s linear calc(var(--t) - 1.3s) infinite; }
+  .cine .refl { left: var(--lx); top: calc(var(--hy) + 2%); width: .5%; height: 40%; translate: -50% 0; transform-origin: 50% 0;
+    background: repeating-linear-gradient(var(--door) 0 3px, transparent 3px 7px); opacity: .45; animation: shimmer 3.1s ease-in-out calc(var(--t) - 1.9s) infinite alternate; }
+  /* 底片顆粒：一張靜態雜訊，每隔一下跳個位置，不即時算 */
+  .cine .grain { inset: -50%; opacity: .07; pointer-events: none; animation: grain .5s steps(1) infinite;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1.4 -.3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"); }
+  .no-grain .grain { display: none; }
+  /* 黑邊：門板。等的時候很慢退開一點 */
+  .cine .lid { position: absolute; left: 0; right: 0; height: calc(var(--gap) + 2px); background: var(--ink); z-index: 2; }
+  .cine .lid.top { top: 0; animation: lid-up 16s cubic-bezier(.15, .55, .3, 1) var(--t) forwards; }
+  .cine .lid.bot { bottom: 0; animation: lid-down 16s cubic-bezier(.15, .55, .3, 1) var(--t) forwards; }
+  .cine .sub { position: absolute; left: 0; right: 0; top: 50%; z-index: 3; margin-top: calc(var(--bh) / 2 + min(5cqh, 28px)); text-align: center; padding-left: .4em; letter-spacing: .4em; color: rgba(232, 220, 200, .55); font-size: 13px; }
+  .cine .flood { position: absolute; inset: 0; z-index: 4; background: var(--flood); opacity: 0; transition: opacity .7s 1.2s; pointer-events: none; }
+  .cine.opening .flood { opacity: 1; }
+  .cine.opening .sub { opacity: 0; transition: opacity .35s; }
+
+  @keyframes push { from { transform: scale(1); } to { transform: scale(1.05); } }
+  @keyframes crack { from { transform: scaleY(1); } to { transform: scaleY(2.4); } }
+  @keyframes lid-up { to { transform: translateY(-2.5cqh); } }
+  @keyframes lid-down { to { transform: translateY(2.5cqh); } }
+  @keyframes breathe { 0%, 100% { opacity: .75; } 50% { opacity: 1; } }
+  @keyframes road { from { opacity: .14; } to { opacity: .26; } }
+  @keyframes shimmer { from { transform: scaleY(.84); } to { transform: scaleY(1.1); } }
+  @keyframes rip {
+    0% { transform: translate(0, 0) scaleX(.3); opacity: 0; }
+    20% { opacity: .5; }
+    100% { transform: translate(calc(var(--dx) * 1cqw), calc(var(--dy) * 1cqh)) scaleX(5); opacity: 0; }
+  }
+  @keyframes flicker { 0%, 100% { opacity: 1; } 18% { opacity: .8; } 22% { opacity: .95; } 61% { opacity: .85; } 70% { opacity: 1; } }
+  @keyframes beacon { 0%, 3% { opacity: .15; } 5% { opacity: 1; } 7%, 13% { opacity: .15; } 15% { opacity: 1; } 17%, 100% { opacity: .15; } }
+  @keyframes grain { 0% { transform: translate(0, 0); } 25% { transform: translate(-7%, 4%); } 50% { transform: translate(5%, -6%); } 75% { transform: translate(-3%, -2%); } }
+  @media (prefers-reduced-motion: reduce) { .cine * { animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="ctl">
+  <button data-to="haishi" class="on">往海市</button>
+  <button data-to="gallery">回畫廊</button>
+  <button id="restart">重新開頁</button>
+  <button id="push">搭船（出發的聲音）</button>
+  <button id="arrive">到了（靠岸、開門）</button>
+  <button id="grain" class="on">底片顆粒</button>
+  <button id="jank">主執行緒卡 3 秒</button>
+  <span class="note">推近和黑邊退開很慢，看久一點才感覺得到</span>
+</div>
+
+<section data-shot="lamp"><h2>一　燈和手<small>伸出去的手、竹竿頂上掛著冷白的燈，後面一條海平線。看不到要去的地方，只看得到帶路的光</small></h2><div class="row"><div class="frame wide"></div><div class="frame portrait"></div></div></section>
+<section data-shot="prow"><h2>二　船頭切水<small>天鵝頸從下緣伸進來，頭剛好頂在海平線的光上；水往兩邊滑開。燈在畫面外，左上方漏一點光</small></h2><div class="row"><div class="frame wide"></div><div class="frame portrait"></div></div></section>
+<section data-shot="robe"><h2>三　袍子的一角<small>前景是沒對焦的黑袍邊，袍子和竹竿中間留一道縫，海平線的光從那裡透出來。燈在畫面上面，切掉了</small></h2><div class="row"><div class="frame wide"></div><div class="frame portrait"></div></div></section>
+
+<template id="shared">
+  <div class="cine to-haishi" aria-hidden="true">
+    <div class="band"><div class="stage">
+      <div class="sky"></div>
+      <div class="sea"></div>
+      <div class="halo"></div>
+      <div class="road"></div>
+      <div class="slit"></div>
+      <div class="tower"><svg viewBox="0 0 10 18"><path fill="#262638" d="M0 18Q2 16.6 5 16.7Q8 16.6 10 18ZM3.2 17L3.9 6.4H6.1L6.8 17ZM3 6.4H7V5.6H3ZM3.9 5.6V3.9H6.1V5.6ZM3.4 3.9L5 1.6L6.6 3.9Z"/></svg></div>
+      <div class="beacon"></div>
+      <i class="rip" style="--p:-.4s"></i><i class="rip" style="--p:-2.9s;--d:5.6s"></i><i class="rip" style="--p:-4.1s;--d:6.1s"></i><i class="rip" style="--p:-1.6s;--d:5.3s"></i>
+      <i class="rip" style="--p:-1.1s;--d:5.4s"></i><i class="rip" style="--p:-3.8s"></i><i class="rip" style="--p:-2.2s;--d:6.3s"></i><i class="rip" style="--p:-4.6s;--d:5.8s"></i>
+      <!--FG-->
+      <div class="grain"></div>
+    </div></div>
+    <div class="lid top"></div><div class="lid bot"></div>
+    <div class="sub">渡海　往海市</div>
+    <div class="flood"></div>
+  </div>
+</template>
+
+<!-- 前景：viewBox 360×100 跟舞台一樣比例；--hy 海平線、--gx 光最亮的地方、--tx 燈塔、--lx/--ly/--ls 燈的光暈 -->
+<template id="lamp">
+  <div style="--hy:64%;--gx:47%;--tx:30%;--lx:56.4%;--ly:24%;--ls:15%"></div>
+  <div class="refl"></div>
+  <svg class="fg" viewBox="0 0 360 100" preserveAspectRatio="none">
+    <!-- 竹竿頂端彎成鉤，燈籠掛在鉤上 -->
+    <path fill="none" stroke="#1d1a24" stroke-width="1.7" stroke-linecap="round" d="M214 400V15Q214 8 208.5 8Q203 8 203 13V17.6"/>
+    <path fill="none" stroke="var(--rim)" stroke-width=".35" opacity=".7" d="M214.8 400V16Q214.8 9 210 7.6"/>
+    <!-- 燈籠：尖頂、往下收的燈罩、小底座 -->
+    <path fill="#1d1a24" d="M198.6 19.4L203 16.6L207.4 19.4ZM200.2 29.2H205.8L205.2 31H200.8Z"/>
+    <path fill="#e6eef4" d="M199.6 19.8H206.4L205.6 28.8Q203 29.8 200.4 28.8Z"/>
+    <!-- 握竿的手和袖子：手臂從右邊伸進來，袖口寬、下襬垂著；上緣迎光 -->
+    <path fill="#17151d" d="M219 49.6C250 46 300 42 420 36V58C380 60 340 64 304 70C284 74 266 79 252 78C240 77 230 71 222 66Z"/>
+    <path fill="none" stroke="var(--rim)" stroke-width=".7" opacity=".8" d="M219 49.6C250 46 300 42 420 36"/>
+    <path fill="#221d22" d="M210.6 52.2Q210.2 48.8 215.6 48.4L222.6 49.6Q224.6 57 222.6 64.4L215.6 65Q210.4 64.6 210.6 61.4Z"/>
+    <path fill="none" stroke="#120f15" stroke-width=".45" opacity=".8" d="M211 56.4H218.6M211.2 60.2H218.8"/>
+    <path fill="none" stroke="var(--rim)" stroke-width=".4" opacity=".6" d="M210.6 52.2Q210.2 48.8 215.6 48.4"/>
+  </svg>
+  <div class="glow"></div>
+</template>
+
+<template id="prow">
+  <div style="--hy:42%;--gx:52%;--tx:72%;--lx:16%;--ly:-30%;--ls:40%;--rx:50%;--ry:84%"></div>
+  <svg class="fg" viewBox="0 0 360 100" preserveAspectRatio="none">
+    <!-- 船舷從下面兩角往船頭收 -->
+    <path fill="#241b20" d="M-916 400L176 80.6H184L1276 400Z"/>
+    <path fill="none" stroke="var(--rim)" stroke-width=".7" d="M-916 400L176 80.6M1276 400L184 80.6"/>
+    <!-- 天鵝頸：頭頂在海平線的光上 -->
+    <path fill="none" stroke="#1b1519" stroke-width="3.4" stroke-linecap="round" d="M180 82C185.4 70 184.2 57 179.2 49.4C176.4 45.2 177.4 40.4 181.4 38.6"/>
+    <path fill="none" stroke="var(--rim)" stroke-width=".5" d="M182.8 74C184.6 66 184 58.6 181.2 52.4"/>
+    <circle fill="#1b1519" cx="182.4" cy="37.8" r="2.3"/>
+    <path fill="none" stroke="#1b1519" stroke-width="1.2" stroke-linecap="round" d="M184 36.6L187 34.6"/>
+  </svg>
+  <div class="glow"></div>
+</template>
+
+<template id="robe">
+  <div style="--hy:58%;--gx:36.4%;--tx:73%;--lx:40%;--ly:-36%;--ls:36%;--rx:40%;--ry:60%"></div>
+  <svg class="fg" viewBox="0 0 360 100" preserveAspectRatio="none">
+    <!-- 竹竿：也沒對焦，邊緣用幾道淡的粗線假裝糊掉；靠燈那邊亮一道 -->
+    <path stroke="#15131b" stroke-width="9" opacity=".18" d="M147 -300V400"/>
+    <path stroke="#15131b" stroke-width="5" opacity=".4" d="M147 -300V400"/>
+    <path stroke="#15131b" stroke-width="2.8" d="M147 -300V400"/>
+    <path stroke="var(--rim)" stroke-width="1.6" opacity=".22" d="M148.8 -300V60"/>
+    <!-- 黑袍的邊：大大一塊壓在左邊，邊緣糊開 -->
+    <defs><linearGradient id="soft" gradientUnits="userSpaceOnUse" x1="97" y1="51.8" x2="115" y2="48.2"><stop offset="0" stop-color="#131119"/><stop offset=".5" stop-color="#131119" stop-opacity=".55"/><stop offset="1" stop-color="#131119" stop-opacity="0"/></linearGradient></defs>
+    <path fill="#131119" d="M-400 -300H84L88 -4C96 20 102 50 108 104L116 400H-400Z"/>
+    <path fill="url(#soft)" d="M84 -300H100L104 -4C112 20 118 50 124 104L132 400H116L108 104C102 50 96 20 88 -4Z"/>
+  </svg>
+  <div class="glow"></div>
+</template>
+
+<script type="module">
+  import { Ambience } from '../js/ambience.js';
+  const amb = new Ambience();
+
+  // 每種取景的水面碎光往哪裡流
+  const RIPS = {
+    lamp: { rx: '56%', ry: '67%', d: [[-9, 30], [7, 34], [-14, 26], [12, 30], [-5, 34], [4, 28], [-18, 22], [16, 24]] },
+    prow: { d: [[-38, 14], [36, 12], [-26, 16], [28, 16], [-44, 10], [42, 10], [-20, 14], [18, 14]] },
+    robe: { d: [[24, 38], [40, 30], [12, 40], [56, 34], [30, 42], [-6, 40], [48, 26], [18, 36]] },
+  };
+  let to = 'haishi', uid = 0;
+  function build() {
+    for (const sec of document.querySelectorAll('section')) {
+      const shot = sec.dataset.shot, fg = document.getElementById(shot).innerHTML;
+      sec.querySelectorAll('.frame').forEach((fr) => {
+        fr.querySelector('.cine')?.remove();
+        const tpl = document.createElement('template'), k = ++uid;
+        tpl.innerHTML = document.getElementById('shared').innerHTML.replace('<!--FG-->', fg.replaceAll('"soft"', `"soft${k}"`).replaceAll('#soft)', `#soft${k})`));
+        const s = tpl.content.firstElementChild;
+        const vars = s.querySelector('[style^="--hy"]');
+        s.style.cssText = vars.getAttribute('style');
+        vars.remove();
+        if (RIPS[shot].rx) { s.style.setProperty('--rx', RIPS[shot].rx); s.style.setProperty('--ry', RIPS[shot].ry); }
+        s.querySelectorAll('.rip').forEach((r, i) => { r.style.setProperty('--dx', RIPS[shot].d[i][0]); r.style.setProperty('--dy', RIPS[shot].d[i][1]); });
+        s.className = 'cine to-' + to;
+        s.querySelector('.sub').textContent = to === 'haishi' ? '渡海　往海市' : '渡海　回畫廊';
+        fr.appendChild(s);
+      });
+    }
+  }
+
+  // 到了：畫面一震（靠岸），黑邊先拉開一點、停半拍，再整個打開；海平線同時撐開，往前推近，光鋪滿
+  function arrive(c) {
+    const band = c.querySelector('.band'), stage = c.querySelector('.stage'), slit = c.querySelector('.slit'), halo = c.querySelector('.halo');
+    band.animate([
+      { transform: 'none', easing: 'ease-out' },
+      { transform: 'translateY(-1.2%)', offset: 0.14 },
+      { transform: 'translateY(.6%)', offset: 0.4 },
+      { transform: 'none' },
+    ], { duration: 800 });
+    for (const [lid, dir] of [[c.querySelector('.lid.top'), -1], [c.querySelector('.lid.bot'), 1]]) {
+      const from = getComputedStyle(lid).transform;
+      for (const a of lid.getAnimations()) a.cancel();
+      lid.animate([
+        { transform: from, easing: 'ease-out' },
+        { transform: `translateY(${dir * 30}%)`, offset: 0.22 },
+        { transform: `translateY(${dir * 30}%)`, offset: 0.34, easing: 'cubic-bezier(.5, 0, .3, 1)' },
+        { transform: `translateY(${dir * 101}%)` },
+      ], { duration: 1700, delay: 250, fill: 'forwards' });
+    }
+    const s0 = getComputedStyle(slit).transform;
+    for (const a of slit.getAnimations()) a.cancel();
+    slit.animate([{ transform: s0 }, { transform: 'scaleY(8)', offset: 0.3 }, { transform: 'scaleY(300)' }], { duration: 1600, delay: 500, easing: 'cubic-bezier(.5, 0, .3, 1)', fill: 'forwards' });
+    halo.animate([{ transform: 'none' }, { transform: 'scaleY(3)' }], { duration: 1500, delay: 600, easing: 'ease-in', fill: 'forwards' });
+    const p0 = getComputedStyle(stage).transform;
+    for (const a of stage.getAnimations()) a.cancel();
+    stage.animate([{ transform: p0 }, { transform: 'scale(1.4)' }], { duration: 1800, delay: 400, easing: 'cubic-bezier(.5, 0, .2, 1)', fill: 'forwards' });
+    c.classList.add('opening');
+  }
+
+  for (const b of document.querySelectorAll('[data-to]')) b.onclick = () => {
+    to = b.dataset.to; for (const o of document.querySelectorAll('[data-to]')) o.classList.toggle('on', o === b); build();
+  };
+  document.getElementById('restart').onclick = build;
+  document.getElementById('push').onclick = () => amb.voice('push', 0.6);
+  document.getElementById('arrive').onclick = () => {
+    amb.voice('moor', 0.6);
+    for (const c of document.querySelectorAll('.cine')) arrive(c);
+    setTimeout(build, 3400);
+  };
+  document.getElementById('grain').onclick = (e) => { e.target.classList.toggle('on', !document.body.classList.toggle('no-grain')); };
+  document.getElementById('jank').onclick = () => { const end = performance.now() + 3000; while (performance.now() < end); };
+  build();
+</script>
+</body>
+</html>

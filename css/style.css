@@ -1742,10 +1742,14 @@ body.selfie > :not(#stage):not(#selfie) { visibility: hidden; }
   background: rgba(11, 9, 16, .95);
 }
 #selfie.done .selfie-result { display: flex; }
+.selfie-card { position: relative; }
 .selfie-result img {
-  display: block; max-width: 100%; max-height: calc(100vh - 180px); max-height: calc(100dvh - 180px); object-fit: contain;
+  display: block; max-width: calc(100vw - 32px); max-height: calc(100vh - 180px); max-height: calc(100dvh - 180px); object-fit: contain;
   -webkit-touch-callout: default; -webkit-user-select: auto; user-select: auto;
 }
+/* 照片剛出來時疊在最上面一條，畫眼睛睜開；睜完就藏起來（selfie.js） */
+.selfie-lids { position: absolute; left: 0; top: 0; width: 100%; pointer-events: none; }
+.selfie-lids[hidden] { display: none; }
 .selfie-tip { max-width: 34em; margin: 0; font-size: 12px; line-height: 1.7; letter-spacing: .1em; color: var(--muted); text-align: center; }
 .selfie-tip:empty { display: none; }
 

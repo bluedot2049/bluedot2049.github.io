@@ -218,3 +218,118 @@ export function buildMirror() {
 
   return { group: g, glass, update };
 }
+
+// 鏡子前的地毯：鏡子的拱倒在地上，直邊靠牆、拱朝房間，一路鋪到照鏡子時站的地方（手機站得比較遠，也要踩得到）。
+// 跟鏡面同一個藍紫炭色，星星沉在毯子裡；邊上兩道黃銅線，拱上幾道刻痕，跟鏡框上的一樣。
+// 金線和星平常是暗的；人站上來，從裡面慢慢亮起、輕輕呼吸（魔法印泥：時候到了，可以請眼睛拍了）。
+// 原點放在鏡子的位置，面向本地 +z
+// 寬度讓過相機桌前的毯子（兩塊在前廳左牆前並排，中間留一條走道）
+const RUG_W = 1.2, RUG_L = 4.1, RUG_Z0 = 0.1, RUG_PPM = 256;
+
+function rugTextures() {
+  const W = Math.round(RUG_W * RUG_PPM), H = Math.round(RUG_L * RUG_PPM), R = W / 2;
+  const canvas = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; };
+  const col = canvas(), glow = canvas();
+  const g = col.getContext('2d'), e = glow.getContext('2d');
+  let seed = 23;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  // 圖的上緣是拱（離鏡子最遠），下緣靠牆。d 是往內縮幾個像素
+  const outline = (ctx, d) => {
+    ctx.beginPath();
+    ctx.moveTo(d, H - d);
+    ctx.lineTo(d, R);
+    ctx.arc(R, R, R - d, Math.PI, 0);
+    ctx.lineTo(W - d, H - d);
+    ctx.closePath();
+  };
+  // 毯子：拱那頭亮一點點，靠牆沉下去；一層很淡的橫紋像織線
+  const base = g.createLinearGradient(0, 0, 0, H);
+  base.addColorStop(0, '#2e2a3c');
+  base.addColorStop(1, '#232030');
+  g.fillStyle = base;
+  g.fillRect(0, 0, W, H);
+  for (let y = 0; y < H; y += 2) {
+    g.fillStyle = `rgba(${rnd() < 0.5 ? '200, 195, 230' : '8, 6, 14'}, ${0.02 + rnd() * 0.03})`;
+    g.fillRect(0, y, W, 1);
+  }
+  e.fillStyle = '#000';
+  e.fillRect(0, 0, W, H);
+
+  // 星：照像素畫細點，大多很暗、少數亮。沿一條斜斜的星河聚集，不平均撒
+  for (let i = 0; i < 260; i++) {
+    let x, y;
+    if (i < 150) {
+      const t = rnd(), off = (rnd() + rnd() + rnd() - 1.5) * W * 0.22;
+      x = W * (0.2 + 0.6 * t) + off;
+      y = H * (0.95 - 0.85 * t) + off * 0.5;
+    } else { x = rnd() * W; y = rnd() * H; }
+    const bright = rnd() < 0.08, a = bright ? 0.9 : 0.15 + rnd() * 0.3, s = bright ? 2.2 : 1 + rnd() * 0.6;
+    const c = rnd() < 0.5 ? '242, 235, 224' : '204, 214, 242';
+    for (const ctx of [g, e]) {
+      ctx.fillStyle = `rgba(${c}, ${ctx === g ? a * 0.7 : a})`;
+      ctx.fillRect(x - s / 2, y - s / 2, s, s);
+    }
+  }
+
+  // 黃銅：兩道邊線，拱上一排刻痕（角度、長短照鏡框的 MARKS，放大一倍）
+  const brass = (ctx) => {
+    const gr = ctx.createLinearGradient(0, 0, W, H * 0.4);
+    gr.addColorStop(0, '#d2ad62');
+    gr.addColorStop(0.5, '#a8823f');
+    gr.addColorStop(1, '#c39a52');
+    ctx.strokeStyle = gr;
+    for (const [d, w] of [[14, 6], [24, 2]]) {
+      ctx.lineWidth = w;
+      outline(ctx, d);
+      ctx.stroke();
+    }
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    for (const [deg, len] of MARKS) {
+      const a = (deg * Math.PI) / 180, r0 = R - 34, r1 = r0 - len * 2 * RUG_PPM;
+      ctx.beginPath();
+      ctx.moveTo(R + r0 * Math.cos(a), R - r0 * Math.sin(a));
+      ctx.lineTo(R + r1 * Math.cos(a), R - r1 * Math.sin(a));
+      ctx.stroke();
+    }
+  };
+  brass(g);
+  brass(e);
+
+  const tex = (cv) => {
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 8;
+    return t;
+  };
+  return { map: tex(col), emissiveMap: tex(glow) };
+}
+
+export function buildMirrorRug() {
+  const r = RUG_W / 2, y0 = -RUG_Z0, y1 = -(RUG_Z0 + RUG_L);
+  const s = new THREE.Shape();
+  s.moveTo(-r, y0);
+  s.lineTo(r, y0);
+  s.lineTo(r, y1 + r);
+  s.absarc(0, y1 + r, r, 0, -Math.PI, true);
+  s.lineTo(-r, y0);
+  const geo = new THREE.ShapeGeometry(s, 16);
+  const uv = geo.attributes.uv, pos = geo.attributes.position;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) / RUG_W + 0.5, (-pos.getY(i) - RUG_Z0) / RUG_L);
+  geo.rotateX(-Math.PI / 2);
+  const tex = rugTextures();
+  const m = new THREE.MeshLambertMaterial({ map: tex.map, emissive: '#ffffff', emissiveMap: tex.emissiveMap, emissiveIntensity: 0 });
+  const mesh = new THREE.Mesh(geo, m);
+
+  // who：角色站在哪裡（世界座標）。站在毯子上就慢慢亮起來，離開慢慢暗回去
+  let on = 0, t = 0;
+  function update(dt, who) {
+    t += dt;
+    const dx = who.x - mesh.position.x, dz = who.z - mesh.position.z, ry = mesh.rotation.y, c = Math.cos(ry), sn = Math.sin(ry);
+    const lx = dx * c - dz * sn, lz = dx * sn + dz * c;
+    const inside = Math.abs(lx) < r + 0.15 && lz > RUG_Z0 - 0.15 && lz < RUG_Z0 + RUG_L + 0.15;
+    on += ((inside ? 1 : 0) - on) * (1 - Math.exp(-dt * (inside ? 0.9 : 0.6)));
+    m.emissiveIntensity = on * (0.5 + 0.15 * Math.sin(t * 1.3));
+  }
+  return { mesh, update };
+}

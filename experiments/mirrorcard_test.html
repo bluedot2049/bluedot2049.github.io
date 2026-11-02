@@ -11,14 +11,21 @@
 </style>
 </head>
 <body>
-  <img id="card" alt="">
-  <pre id="out">running…</pre>
+  <div style="position: relative; align-self: flex-start;">
+    <img id="card" alt="">
+    <canvas id="lids" style="position: absolute; left: 0; top: 0; width: 100%; pointer-events: none;"></canvas>
+  </div>
+  <div>
+    <p><label>日期字距 <input id="track" type="range" min="0" max="0.6" step="0.01"> <span id="tv"></span></label></p>
+    <p><button id="open">重播睜眼</button></p>
+    <pre id="out">running…</pre>
+  </div>
   <script type="module">
     // 鏡中照片：用一個小場景拍角色和眼睛，做成照片，再壓 JPEG、縮小，看存檔讀不讀得回來
     import * as THREE from 'three';
     import { Character } from '../js/character.js';
     import { Eye } from '../js/eye.js';
-    import { makeMirrorCard, readMirrorCard, PHOTO_W, PHOTO_H, capacity } from '../js/mirrorcard.js';
+    import { makeMirrorCard, readMirrorCard, drawLids, PHOTO_W, PHOTO_H, CARD_W, LID_STRIP, DATE_TRACK, capacity } from '../js/mirrorcard.js';
     import { presetLook, randomLook, putSave, getSave, lockKeys, encodeFace, GIFTS } from '../js/looks.js';
 
     const log = (s) => { out.textContent = (out.textContent === 'running…' ? '' : out.textContent) + s + '\n'; };
@@ -68,6 +75,39 @@
       const okFaces = m.faces.map((f, i) => (f ? encodeFace(f) === ([save.look, ...save.closet][i]?.face || '') : 'none'));
       log(`${name} (${cv.width}×${cv.height}, ${Math.round(blob.size / 1024)} KB): look ${okLook} unlocks ${okUn} full ${m.full} closet ${okCloset} visits ${same(m.save.visits, save.visits)} faces ${JSON.stringify(okFaces)}`);
     }
+    // 舊版照片（?old=網址）也要讀得回來
+    const old = new URLSearchParams(location.search).get('old');
+    if (old) {
+      const m = await readMirrorCard(await (await fetch(old)).blob());
+      log(`舊版照片: ${m ? `讀到 full ${m.full} closet ${m.save.closet.length} visits ${same(m.save.visits, save.visits)} faces ${m.faces.map((f) => !!f)}` : '讀不到'}`);
+    }
+
+    // 字距：拖了就重畫（不印存檔，快一點）
+    const track = document.getElementById('track'), tv = document.getElementById('tv');
+    track.value = DATE_TRACK;
+    tv.textContent = DATE_TRACK;
+    let last = canvas;
+    track.oninput = async () => {
+      tv.textContent = track.value;
+      const r = await makeMirrorCard(photo, { date: new Date(2026, 10, 1), track: +track.value });
+      last = r.canvas;
+      document.getElementById('card').src = r.canvas.toDataURL('image/jpeg', 0.9);
+    };
+    // 睜眼：跟 selfie.js 一樣，閉著停一下再睜開
+    const lids = document.getElementById('lids');
+    lids.width = CARD_W;
+    lids.height = LID_STRIP;
+    const play = () => {
+      const g = lids.getContext('2d'), t0 = performance.now();
+      const step = (now) => {
+        const t = (now - t0) / 1000, k = Math.min(1, Math.max(0, (t - 0.5) / 1.3)), e = k * k * (3 - 2 * k);
+        drawLids(g, last, e);
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    };
+    document.getElementById('open').onclick = play;
+    window.__lids = (k) => drawLids(lids.getContext('2d'), last, k);
     log('done');
   </script>
 </body>

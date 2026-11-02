@@ -5,11 +5,13 @@
 // 拍好做成鏡中的照片（mirrorcard.js），可以選印不印存檔。拍照時把介面藏起來，蓋一層透明的擋住點擊
 import * as THREE from 'three';
 import { Eye } from './eye.js';
-import { makeMirrorCard, PHOTO_W, PHOTO_H } from './mirrorcard.js';
+import { makeMirrorCard, drawLids, PHOTO_W, PHOTO_H, CARD_W, LID_STRIP } from './mirrorcard.js';
 import { getSave } from './looks.js';
 import { markPacked } from './pack.js';
 
 const SETTLE = 0.7, RISE = 1.3, TICK = 0.8, BLINK = 0.24, BACK = 1.0;
+// 照片出來時，上面的大眼睛先閉著停一下，再睜開
+const LID_HOLD = 0.5, LID_OPEN = 1.3;
 const ease = (t) => t * t * (3 - 2 * t);
 const stamp = () => {
   const d = new Date(), p = (n) => String(n).padStart(2, '0');
@@ -22,6 +24,10 @@ export class Selfie {
     this.state = null;
     this.el = document.getElementById('selfie');
     this.img = this.el.querySelector('img');
+    this.lids = this.el.querySelector('.selfie-lids');
+    this.lids.width = CARD_W;
+    this.lids.height = LID_STRIP;
+    this.lids.hidden = true;
     this.tip = this.el.querySelector('.selfie-tip');
     this.el.addEventListener('click', (e) => {
       const b = e.target.closest('button');
@@ -177,11 +183,29 @@ export class Selfie {
     const name = `${this.withCode ? '鏡中存檔' : '鏡中'}-${stamp()}.jpg`;
     this.result = { blob, url: URL.createObjectURL(blob), name };
     this.img.src = this.result.url;
+    this.openEye(canvas);
     const which = ['身上這套', '衣櫃第一套', '衣櫃第二套', '衣櫃第三套'];
     this.tip.textContent = !this.withCode ? '這張只是照片，沒有印存檔'
       : lost.length ? `這張就是你的存檔。${lost.map((i) => which[i]).join('、')}畫的臉太滿，鏡框放不下，其他都印上了`
       : '這張圖就是你的存檔。下載收好、別壓縮，換手機時打開行囊讀這張，東西就回來了';
     this.el.classList.add('done');
+  }
+
+  // 世界裡拱頂那顆眼是閉著的，照片上才睜開：疊一條畫布在照片最上面，閉著停一下再睜開，睜完藏起來露出底下的照片
+  openEye(card) {
+    const g = this.lids.getContext('2d'), result = this.result;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    drawLids(g, card, 0);
+    this.lids.hidden = false;
+    const t0 = performance.now();
+    const step = (now) => {
+      if (this.result !== result) return;
+      const k = Math.min(1, Math.max(0, ((now - t0) / 1000 - LID_HOLD) / LID_OPEN));
+      drawLids(g, card, ease(k));
+      if (k < 1) requestAnimationFrame(step);
+      else this.lids.hidden = true;
+    };
+    requestAnimationFrame(step);
   }
 
   // 存成圖片檔，原圖不經壓縮，存檔才讀得回來。印了存檔的，行囊的封蠟就熄了
@@ -201,6 +225,7 @@ export class Selfie {
     if (this.result) URL.revokeObjectURL(this.result.url);
     this.result = null;
     this.shot = null;
+    this.lids.hidden = true;
     this.img.removeAttribute('src');
     this.el.classList.remove('done');
     this.state = null;

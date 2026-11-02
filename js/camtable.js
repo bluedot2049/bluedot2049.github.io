@@ -4,10 +4,11 @@
 // 還沒做出來的位置只有木座和一張空白的小立卡。帶走的那台不在桌上，木座空著。
 // 挑的時候看著的那台會稍微浮起來、轉向鏡頭。面向本地 +z（房間裡），桌子沿著本地 x 擺。
 // 桌子後面的牆上掛一塊酒紅布，繡著一圈金色細光芒、卷草框著一顆眼睛，下襬流蘇；開場遠遠就看得到這裡是拿相機的地方。
+// 桌前地上一條同色的長毯，每個木座正前方繡一格，拿得走的那幾格亮著。
 import * as THREE from 'three';
 import { Kit, newBucket } from './props.js';
-import { bucketObjects } from './scenery.js';
-import { TABLE, cameraModel } from './cameras.js';
+import { bucketObjects, tag } from './scenery.js';
+import { TABLE, SOON, cameraModel } from './cameras.js';
 
 export const TABLE_W = 2.4, TABLE_D = 0.66;
 const H = 0.74;            // 桌面高度
@@ -19,6 +20,12 @@ const WOOD = '#7a4e2e', DARK = '#4e3020', CLOTH = '#5e2a32', HEM = '#c9a24a', PA
 const BAN_W = 1.8, BAN_SIDE = 1.55, BAN_V = 0.24, BAN_TOP = 3.03;
 const FRINGE = 0.07, PPM = 640;   // 下襬細流蘇的長度；貼圖每公尺幾個像素
 const WINE = '#5e2a32';
+// 桌前的長毯：寬、從哪裡鋪到哪裡（本地 z，桌子底下壓一截，蓋到挑相機時站的地方；旁邊並排的是鏡子前的毯子）；貼圖每公尺幾個像素
+const RUG_W = 2.9, RUG_Z0 = -0.15, RUG_Z1 = 1.25, RUG_PPM = 256;
+// 地上的格子：方框邊長、方框上緣離桌子中心多遠；整張貼片連同框外那把光芒的寬和深
+const CELL = 0.34, CELL_Z = 0.43, CELL_OW = 0.7, CELL_OD = 0.62, CELL_PPM = 320;
+// 格子的金線：暗著是乾掉的赭色，亮起來從裡面透出金光
+const INK = '#7a4f2e', GLOW = '#ffc266';
 
 // 一條粗細會變的線，像沾水筆畫的：pts 是線走過的點，width(t) 是 t（0 到 1）處的寬。跟 mirrorcard.js 的眼睛同一套畫法
 function ribbon(g, pts, width, side = 0) {
@@ -303,6 +310,85 @@ function tassel(k, x, y, z) {
   k.cyl(0.033, 0.033, 0.006, '#e0bd6e', x, y - 0.2, z, {}, 12);
 }
 
+// 桌前長毯的貼圖：跟桌巾同一塊酒紅，沿邊兩道金線，中間夾一排小菱形。圖的上緣壓在桌子底下，暗一點
+function rugTexture() {
+  const W = Math.round(RUG_W * RUG_PPM), H = Math.round((RUG_Z1 - RUG_Z0) * RUG_PPM);
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d');
+  let seed = 31;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const cloth = g.createLinearGradient(0, 0, 0, H);
+  cloth.addColorStop(0, '#451d25');
+  cloth.addColorStop(0.35, WINE);
+  cloth.addColorStop(1, '#62303a');
+  g.fillStyle = cloth;
+  g.fillRect(0, 0, W, H);
+  for (let x = 0; x < W; x += 2) {
+    g.fillStyle = `rgba(${rnd() < 0.5 ? '255, 220, 220' : '30, 5, 10'}, ${0.02 + rnd() * 0.03})`;
+    g.fillRect(x, 0, 1, H);
+  }
+  const gr = g.createLinearGradient(0, 0, W, H);
+  gr.addColorStop(0, '#e6c27e');
+  gr.addColorStop(0.5, '#c4924a');
+  gr.addColorStop(1, '#dcb06a');
+  g.strokeStyle = g.fillStyle = gr;
+  for (const [m, w] of [[12, 5], [30, 2]]) {
+    g.lineWidth = w;
+    g.strokeRect(m, m, W - m * 2, H - m * 2);
+  }
+  const dia = (x, y) => { g.beginPath(); g.moveTo(x, y - 4); g.lineTo(x + 4, y); g.lineTo(x, y + 4); g.lineTo(x - 4, y); g.fill(); };
+  for (let x = 40; x < W - 30; x += 22) { dia(x, 21); dia(x, H - 21); }
+  for (let y = 40; y < H - 30; y += 22) { dia(21, y); dia(W - 21, y); }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+// 地上那一格的形狀（白色是金線，當 alphaMap 用）：雙線方框；有相機的位置框裡一圈鏡頭、中間一顆點，
+// 框外朝房間散出一把細光芒，長短交錯、往外淡掉（掛布那圈光芒的小一號）。空位置只有框，裡面一圈虛線
+function cellShape(full) {
+  const W = Math.round(CELL_OW * CELL_PPM), H = Math.round(CELL_OD * CELL_PPM), S = CELL * CELL_PPM;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d'), x0 = (W - S) / 2, y0 = 4, cx = W / 2, cy = y0 + S / 2;
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, W, H);
+  g.strokeStyle = g.fillStyle = '#fff';
+  g.lineWidth = 7;
+  g.strokeRect(x0, y0, S, S);
+  g.lineWidth = 3;
+  if (!full) g.setLineDash([10, 8]);
+  g.strokeRect(x0 + 9, y0 + 9, S - 18, S - 18);
+  g.setLineDash([]);
+  if (!full) return new THREE.CanvasTexture(c);
+  g.lineWidth = 5;
+  g.beginPath();
+  g.arc(cx, cy, S * 0.2, 0, Math.PI * 2);
+  g.stroke();
+  g.beginPath();
+  g.arc(cx, cy, S * 0.05, 0, Math.PI * 2);
+  g.fill();
+  const r0 = S * 0.12, N = 9;
+  for (let i = 0; i < N; i++) {
+    const a = Math.PI / 2 + ((i - (N - 1) / 2) / (N - 1)) * Math.PI * 0.62, L = (H - S - y0 - 8) * [1, 0.7, 0.85, 0.7][i % 4];
+    const cs = Math.cos(a), sn = Math.sin(a), bx = cx, by = y0 + S + 6, w = i % 2 ? 7 : 11;
+    const grd = g.createLinearGradient(bx + cs * r0, by + sn * r0, bx + cs * (r0 + L), by + sn * (r0 + L));
+    grd.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    grd.addColorStop(1, 'rgba(255, 255, 255, 0.05)');
+    g.fillStyle = grd;
+    g.beginPath();
+    g.moveTo(bx + cs * r0 - sn * w / 2, by + sn * r0 + cs * w / 2);
+    g.lineTo(bx + cs * (r0 + L), by + sn * (r0 + L));
+    g.lineTo(bx + cs * r0 + sn * w / 2, by + sn * r0 - cs * w / 2);
+    g.fill();
+  }
+  return new THREE.CanvasTexture(c);
+}
+
 export function buildCamTable(x, z, rot) {
   const group = new THREE.Group();
   group.position.set(x, 0, z);
@@ -375,7 +461,26 @@ export function buildCamTable(x, z, rot) {
     sl.holder = holder;
   }
 
-  let looking = -1;
+  // 桌前的長毯，每個位置正前方的地上一格。格子是魔法印泥：桌上這台拿得走，那格就亮著、慢慢呼吸；
+  // 帶走了、還沒開放（晷）、空位置都是暗的
+  const rugGeo = new THREE.PlaneGeometry(RUG_W, RUG_Z1 - RUG_Z0);
+  rugGeo.rotateX(-Math.PI / 2);
+  const rug = new THREE.Mesh(rugGeo, new THREE.MeshLambertMaterial({ map: rugTexture() }));
+  rug.position.set(0, 0.006, (RUG_Z0 + RUG_Z1) / 2);
+  group.add(tag(rug, 'floor'));
+  const cellGeo = new THREE.PlaneGeometry(CELL_OW, CELL_OD);
+  cellGeo.rotateX(-Math.PI / 2);
+  for (const sl of slots) {
+    sl.ink = new THREE.MeshLambertMaterial({
+      color: INK, alphaMap: cellShape(!!sl.id), emissive: GLOW, emissiveIntensity: 0,
+      transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+    });
+    const cell = new THREE.Mesh(cellGeo, sl.ink);
+    cell.position.set(sl.local.x, 0.007, CELL_Z - 4 / CELL_PPM + CELL_OD / 2);
+    group.add(cell);
+  }
+
+  let looking = -1, carried = null, t = 0, first = true;
   return {
     group, x, z, rot,
     n: { x: Math.sin(rot), z: Math.cos(rot) },
@@ -384,14 +489,20 @@ export function buildCamTable(x, z, rot) {
     slots,
     // 帶走的那台不擺在桌上
     setCarried(id) {
+      carried = id;
       for (const sl of slots) if (sl.holder) sl.holder.visible = sl.id !== id;
     },
     // 正在看哪一個位置；-1 是沒在挑
     look(i) { looking = i; },
     update(dt) {
       const a = 1 - Math.exp(-dt * 6);
+      t += dt;
       for (let i = 0; i < slots.length; i++) {
         const sl = slots[i];
+        const lit = sl.id && !SOON[sl.id] && sl.id !== carried;
+        // 第一幀就是該有的樣子，之後換相機才慢慢亮、慢慢暗
+        sl.glow = first ? +!!lit : sl.glow + ((lit ? 1 : 0) - sl.glow) * (1 - Math.exp(-dt * (lit ? 0.9 : 0.6)));
+        sl.ink.emissiveIntensity = sl.glow * (0.85 + 0.2 * Math.sin(t * 1.3 + i * 1.7));
         if (!sl.holder) continue;
         const want = i === looking ? 1 : 0;
         if (Math.abs(want - sl.lift) < 1e-4) continue;
@@ -400,6 +511,7 @@ export function buildCamTable(x, z, rot) {
         sl.holder.rotation.y = sl.base * (1 - sl.lift);
         sl.holder.rotation.x = -sl.lift * 0.18;
       }
+      first = false;
     },
   };
 }
