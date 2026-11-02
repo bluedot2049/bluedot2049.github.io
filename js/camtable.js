@@ -21,7 +21,7 @@ const FRINGE = 0.07, PPM = 640;   // 下襬細流蘇的長度；貼圖每公尺�
 const WINE = '#5e2a32';
 
 // 一條粗細會變的線，像沾水筆畫的：pts 是線走過的點，width(t) 是 t（0 到 1）處的寬。跟 mirrorcard.js 的眼睛同一套畫法
-export function ribbon(g, pts, width, side = 0) {
+function ribbon(g, pts, width, side = 0) {
   const a = [], b = [];
   pts.forEach((p, i) => {
     const o = pts[Math.max(0, i - 1)], q = pts[Math.min(pts.length - 1, i + 1)];
@@ -38,7 +38,7 @@ export function ribbon(g, pts, width, side = 0) {
 }
 
 // 捲草：從起點出發，先往反方向輕輕一沉（dip），再越走越彎捲成小渦，尾端一顆圓珠
-export function scrollPts(x0, y0, a, len, curl, dip = 0) {
+function scrollPts(x0, y0, a, len, curl, dip = 0) {
   const n = 64, step = len / n, pts = [{ x: x0, y: y0 }];
   let px = x0, py = y0;
   for (let i = 0; i < n; i++) {
@@ -50,7 +50,7 @@ export function scrollPts(x0, y0, a, len, curl, dip = 0) {
   }
   return pts;
 }
-export function flourish(g, pts, thin, fat) {
+function flourish(g, pts, thin, fat) {
   ribbon(g, pts, (t) => thin + fat * Math.sin(Math.PI * Math.min(1, t / 0.68)) ** 1.3);
   const e = pts[pts.length - 1];
   g.beginPath();
