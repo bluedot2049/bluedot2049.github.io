@@ -858,6 +858,11 @@ export class Character {
 
     if (this.act) this.pose(dt, Math.max(w, sk));
     this.aimPose(dt);
+    // 越肩東張西望（player.gaze，同行的人由 multiplayer 填）：頭慢慢轉過去。路人自己管頭，不設 gaze
+    if (this.gaze != null) {
+      this.headYaw = (this.headYaw ?? 0) + (this.gaze - (this.headYaw ?? 0)) * Math.min(1, dt * 6);
+      this.head.rotation.y = this.headYaw;
+    }
     // 手上的東西抵銷手臂的轉動，不管手怎麼擺都直立
     const A = this.armL.rotation;
     this.handG.rotation.set(-A.x, -A.y, -A.z);

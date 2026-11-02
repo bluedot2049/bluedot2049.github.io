@@ -268,10 +268,11 @@ export class Multiplayer {
     const p = this.player;
     // s：0 沒坐、-1 坐在地上、i + 1 坐在第 i 個座位；f：手上的點心
     // a：舉相機的拿法 + 1（0 是沒舉，5 是沒帶相機在比取景框），q：抬頭的角度，取到 0.05 才不會一直送；w：1 是掛機中
+    // l：越肩東張西望時頭轉的角度，取到 0.1
     const aim = p.camAim;
-    const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room, s: p.sitCode, f: p.character.foodCode, a: aim ? aim.grip + 1 : 0, q: aim ? Math.round(aim.pitch * 20) / 20 : 0, w: this.away ? 1 : 0 };
+    const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room, s: p.sitCode, f: p.character.foodCode, a: aim ? aim.grip + 1 : 0, q: aim ? Math.round(aim.pitch * 20) / 20 : 0, w: this.away ? 1 : 0, l: Math.round((p.gaze || 0) * 10) / 10 };
     const l = this.last;
-    const changed = !l || Math.abs(st.x - l.x) > 0.02 || Math.abs(st.z - l.z) > 0.02 || Math.abs(wrapAngle(st.h - l.h)) > 0.05 || st.r !== l.r || st.s !== l.s || st.f !== l.f || st.a !== l.a || st.q !== l.q || st.w !== l.w;
+    const changed = !l || Math.abs(st.x - l.x) > 0.02 || Math.abs(st.z - l.z) > 0.02 || Math.abs(wrapAngle(st.h - l.h)) > 0.05 || st.r !== l.r || st.s !== l.s || st.f !== l.f || st.a !== l.a || st.q !== l.q || st.w !== l.w || st.l !== l.l;
     if (now - this.lastSent < (changed ? SEND_MOVING : SEND_IDLE)) return;
     this.channel.send({ type: 'broadcast', event: 'pos', payload: { id: this.id, ...st } });
     this.last = st;
@@ -289,6 +290,7 @@ export class Multiplayer {
     m.a = Number.isInteger(m.a) && m.a >= 0 && m.a <= 5 ? m.a : 0;
     m.q = isNum(m.q, 2) ? m.q : 0;
     m.w = m.w === 1 ? 1 : 0;
+    m.l = isNum(m.l, 1.3) ? m.l : 0;
     let o = this.others.get(m.id);
     if (!o) {
       if (this.others.size >= MAX_TRACKED) return;
@@ -482,6 +484,7 @@ export class Multiplayer {
       if (t.s) o.ch.lift = seat ? seat.lift : 0.02;
       if (t.f !== o.ch.foodCode) o.ch.setFoodCode(t.f);
       o.ch.setAim?.(t.a ? { grip: t.a - 1, pitch: t.q } : null);
+      o.ch.gaze = t.l || 0;
       g.position.copy(o.pos);
       g.rotation.y = o.heading;
       o.ch.update(dt, t.s ? 0 : o.speed);

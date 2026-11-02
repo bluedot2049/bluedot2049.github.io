@@ -34,8 +34,12 @@ function cross(p, q, b) {
 const inside = (p, b, pad) => p.x > b[0] - pad && p.x < b[3] + pad && p.y > b[1] - pad && p.y < b[4] + pad && p.z > b[2] - pad && p.z < b[5] + pad;
 
 export class Fader {
-  constructor() {
+  // gate：畫廊的家具用。網點平常不編進去，有一組在淡才打開（discard 的代價見 RoomFader 的說明）
+  constructor(gate = false) {
     this.units = [null];   // 0 號是不會淡的東西
+    this.gate = gate;
+    this.mats = [];
+    this.on = false;
   }
 
   // boxes：這一組佔的範圍，可以好幾塊；objs：跟著一起藏的獨立物件（牌樓的匾）。回傳的編號給 Kit 的 fid
@@ -71,10 +75,24 @@ export class Fader {
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFade = texture2D(uFadeTex, vec2((aFid + 0.5) / uFadeN, 0.5)).r;');
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', '#include <common>\nvarying float vFade;')
-        .replace('void main() {', `void main() {\nif (vFade < 0.996 && vFade <= ${DITHER}) discard;`);
+        .replace('void main() {', `void main() {\n${this.gate ? '#ifdef PROP_FADE\n' : ''}if (vFade < 0.996 && vFade <= ${DITHER}) discard;${this.gate ? '\n#endif' : ''}`);
     };
-    m.customProgramCacheKey = () => 'haishi-fade';
+    m.customProgramCacheKey = () => (this.gate ? 'prop-fade' : 'haishi-fade');
+    if (this.gate) this.mats.push(m);
     return m;
+  }
+
+  // gate 的材質打開或關掉網點
+  turn(on) {
+    if (this.on === on) return;
+    this.on = on;
+    for (const m of this.mats) {
+      const d = { ...m.defines };
+      if (on) d.PROP_FADE = '';
+      else delete d.PROP_FADE;
+      m.defines = d;
+      m.needsUpdate = true;
+    }
   }
 
   // cam：鏡頭位置；eyes：要看得到的點；off：拍照時全部照原樣，拍到什麼就是什麼
@@ -99,6 +117,7 @@ export class Fader {
       this.show(i, u);
     }
     if (dirty) this.tex.needsUpdate = true;
+    if (this.gate) this.turn(this.units.some((u) => u && u.a < 1));
   }
 
   show(i, u) {

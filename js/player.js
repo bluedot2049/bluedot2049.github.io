@@ -25,7 +25,11 @@ const defaultDist = () => (window.innerWidth < window.innerHeight ? 12 : 9.5);
 
 // 越肩：肩膀高度、遠近範圍、俯仰（往下拉過 SH_LOW 鏡頭不再降，改成抬頭）、鍵盤搖桿轉身的速度（弧度／秒）、倒退走的速度
 const SH_UP = 1.15, SH_DIST = [1.4, 6], SH_PITCH = [-1.3, 1.2], SH_PITCH_DEFAULT = 0.12, SH_LOW = -0.2;
-const SH_TURN = 2.2, SH_BACK = 0.55;
+const SH_TURN = 1.9, SH_BACK = 0.55;
+// 越肩的阻尼（秒）：轉身起步和停下、鏡頭角度追視線、被山坡擋住時退回去的快慢
+const SH_TURN_EASE = 0.15, SH_ANGLE_T = 0.16, SH_POS_T = 0.06, SH_REACH_IN = 15, SH_REACH_OUT = 2.5;
+// 東張西望時頭最多轉幾度；鏡頭繞到比 SH_GAZE_BACK 還後面（看著自己的臉），頭轉回正前方
+const SH_GAZE = 1.2, SH_GAZE_BACK = 1.9;
 const shDefaultDist = () => (window.innerWidth < window.innerHeight ? 2.9 : 2.4);
 // 稍微廣角：橫拿垂直 60°；直拿照水平 44° 換算，上下最多 84°，免得畫面上下兩端拉長
 function shoulderFov() {
@@ -74,8 +78,21 @@ export class Player {
     this.shDist = shDefaultDist();
     this.shPitch = SH_PITCH_DEFAULT;
     this.lookHold = 0;              // 越肩照路線走時鏡頭會轉到角色背後；剛拖過就先別轉
+    this.freeLook = false;          // 越肩時右鍵拖曳：只轉鏡頭，身體不跟；一走路或按左右鍵就轉回視線方向
+    this.turnVel = 0;               // 鍵盤搖桿轉身的角速度，起步和停下都有緩衝
+    this.sh = { yaw: 0, pitch: SH_PITCH_DEFAULT, reach: null, dt: 0 };   // 鏡頭實際的角度，帶阻尼追 camYaw、shPitch
+    this.shVel = {};
     this.easeT = 0;                 // 剛切換越肩，鏡頭慢慢滑過去
     this.onShoulder = null;         // 主程式更新按鈕
+    // 過圖是整頁重新載入：遠近記在這個分頁裡，下一張圖接著用（各區域能拉多遠不一樣，照這裡的範圍再夾一次）
+    try {
+      const v = JSON.parse(sessionStorage.getItem('camDist') || 'null');
+      if (Number.isFinite(v?.free)) this.camDist = THREE.MathUtils.clamp(v.free, DIST_MIN, this.distMax);
+      if (Number.isFinite(v?.sh)) this.shDist = THREE.MathUtils.clamp(v.sh, ...SH_DIST);
+    } catch {}
+    addEventListener('pagehide', () => {
+      try { sessionStorage.setItem('camDist', JSON.stringify({ free: this.camDist, sh: this.shDist })); } catch {}
+    });
     camera.fov = this.baseFov();
     camera.updateProjectionMatrix();
     this.debug = false;             // ?debug：V 鍵印出鏡頭位置
@@ -123,7 +140,7 @@ export class Player {
     el.addEventListener('pointerdown', (e) => {
       if (this.paused) return;
       // 右鍵按下就直接當成拖曳轉鏡頭，不會觸發走路
-      pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, drag: e.button === 2, mouse: e.pointerType === 'mouse' });
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, drag: e.button === 2, right: e.button === 2, mouse: e.pointerType === 'mouse' });
       el.setPointerCapture(e.pointerId);
       chord(e);
       if (pts.size === 2) {
@@ -153,7 +170,7 @@ export class Player {
         // 觸控看畫時，左右滑是切換作品，不轉鏡頭；挑相機時是換一台
         p.swipe = (this.focus?.kind === 'painting' || this.focus?.kind === 'cameras') && !p.mouse && Math.abs(e.clientX - p.sx) > Math.abs(e.clientY - p.sy);
       }
-      if (p.drag && !multi && !p.swipe) this.orbit(dx, dy, p.mouse);
+      if (p.drag && !multi && !p.swipe) this.orbit(dx, dy, p.mouse, p.right);
       el.classList.toggle('dragging', p.drag && p.mouse);
     });
     const up = (e) => {
@@ -211,7 +228,7 @@ export class Player {
     window.addEventListener('blur', () => { this.keys.clear(); this.mouseRun = false; });
   }
 
-  orbit(dx, dy, mouse = false) {
+  orbit(dx, dy, mouse = false, right = false) {
     if (this.focus?.orb) return this.mirrorOrbit(dx, dy, mouse);
     this.exitView();
     const k = (mouse ? 9 : 5.5) / Math.max(this.dom.clientWidth, this.dom.clientHeight);
@@ -220,6 +237,7 @@ export class Player {
     if (this.shoulder) {
       this.shPitch = THREE.MathUtils.clamp(this.shPitch + dy * k * s, ...SH_PITCH);
       this.lookHold = 1.2;
+      this.freeLook = right;
     } else this.camPitch = THREE.MathUtils.clamp(this.camPitch + dy * k * s, PITCH_MIN, PITCH_MAX);
     this.events.onInput('drag');
   }
@@ -227,6 +245,11 @@ export class Player {
   setShoulder(on) {
     this.shoulder = on;
     this.easeT = 0.45;
+    this.freeLook = false;
+    this.sh.yaw = this.camYaw;
+    this.sh.pitch = this.shPitch;
+    this.sh.reach = null;
+    this.shVel = {};
     try { localStorage.setItem('shoulder', on ? '1' : '0'); } catch {}
     this.onShoulder?.(on);
   }
@@ -706,6 +729,11 @@ export class Player {
 
   // 鏡頭直接到角色身後該在的地方：換區域抵達、收起相機時用
   snapCamera() {
+    this.sh.yaw = this.camYaw;
+    this.sh.pitch = this.shPitch;
+    this.sh.reach = null;
+    this.shVel = {};
+    this.turnVel = 0;
     this.desiredCamera(this.camPos, this.camLook);
     this.posVel = {};
     this.lookVel = {};
@@ -800,15 +828,16 @@ export class Player {
   shoulderCamera(outPos, outLook) {
     const port = this.camera.aspect < 1;
     const tanV = Math.tan(THREE.MathUtils.degToRad(this.baseFov() / 2)), tanH = tanV * this.camera.aspect;
-    const d = this.shDist, p = this.shPitch;
-    const fx = -Math.sin(this.camYaw), fz = -Math.cos(this.camYaw);
+    const d = this.shDist, p = this.sh.pitch;
+    const fx = -Math.sin(this.sh.yaw), fz = -Math.cos(this.sh.yaw);
     const side = Math.min(1.2, (port ? 0.12 : 0.3) * d * tanH);
     const piv = this.headPos.set(this.pos.x - fz * side, this.pos.y + SH_UP, this.pos.z + fx * side);
     const e = Math.max(p, SH_LOW), ce = Math.cos(e);
     outPos.set(piv.x - fx * ce * d, piv.y + Math.sin(e) * d, piv.z - fz * ce * d);
-    // 背後是山坡或石台：越肩不往上抬，往肩膀收近
-    const clip = this.world.camClip ? this.world.camClip(piv, outPos) : 1;
-    if (clip < 1) outPos.lerpVectors(piv, outPos, Math.max(clip, 0.25));
+    // 背後是山坡或石台：越肩不往上抬，往肩膀收近。收近要快才不會穿進坡裡，退回去慢慢來，免得一抽一抽
+    const reach = Math.max(this.world.camClip ? this.world.camClip(piv, outPos) : 1, 0.25), r0 = this.sh.reach;
+    this.sh.reach = r0 == null ? reach : r0 + (reach - r0) * Math.min(1, this.sh.dt * (reach < r0 ? SH_REACH_IN : SH_REACH_OUT));
+    if (this.sh.reach < 1) outPos.lerpVectors(piv, outPos, this.sh.reach);
     outPos.y = Math.max(outPos.y, this.world.camFloor(outPos.x, outPos.z) + 0.3);
     // 視線往上偏一點，肩膀落在畫面中線下方；往下拉過 SH_LOW 的部分換成抬頭
     const v = THREE.MathUtils.clamp(p - Math.atan((port ? 0.36 : 0.1) * tanV), -ZENITH, ZENITH), cv = Math.cos(v);
@@ -850,12 +879,16 @@ export class Player {
     // 越肩：左右是轉身不是橫著走，鏡頭一直在背後，看出去就是前進的方向。往後是倒退著走，慢一點
     let back = 1;
     if (this.shoulder && !this.boarding) {
-      const tx = jm > 0.15 && Math.abs(ms) < 0.15 ? 0 : ms;
+      // 搖桿推一點點轉得很慢，推到底才全速；轉速起步和停下都有緩衝，不會一下子甩過去
+      const tx = jm > 0.15 ? (Math.abs(ms) < 0.15 ? 0 : ms * Math.abs(ms)) : ms;
       if (tx) {
         this.exitView();
-        this.camYaw -= tx * SH_TURN * dt;
+        this.freeLook = false;
         if (this.path.length) this.stop();
       }
+      this.turnVel += (-tx * SH_TURN - this.turnVel) * (1 - Math.exp(-dt / SH_TURN_EASE));
+      if (Math.abs(this.turnVel) < 1e-3) this.turnVel = 0;
+      this.camYaw += this.turnVel * dt;
       mag = jm > 0.15 ? Math.min(1, Math.max(0, Math.abs(mf) - 0.15) / 0.75) : fwd ? 1 : 0;
       ms = 0;
       if (mf < 0) back = SH_BACK;
@@ -863,6 +896,7 @@ export class Player {
     const manual = mag > 0 && !this.boarding;
 
     if (manual) {
+      this.freeLook = false;
       this.stop();
       this.exitFocus();
     }
@@ -920,27 +954,39 @@ export class Player {
     // 角色轉向：走路時面向前進方向，看畫或照鏡子時面向它
     // 越肩時身體跟著視線轉（倒退走也是面向前方）；照路線走去看畫時反過來，鏡頭慢慢轉到角色背後
     let want = null;
-    if (this.shoulder && !this.focus && !this.boarding && !this.path.length) want = this.camYaw - Math.PI;
+    if (this.shoulder && !this.freeLook && !this.focus && !this.boarding && !this.path.length) want = this.camYaw - Math.PI;
     else if (this.speed > 0.05) want = Math.atan2(mx, mz);
     else if (this.focus) want = Math.atan2(-this.focus.n.x, -this.focus.n.z);
     if (want !== null) this.heading += wrapAngle(want - this.heading) * Math.min(1, dt * 10);
     this.lookHold = Math.max(0, this.lookHold - dt);
-    if (this.shoulder && this.path.length && this.speed > 0.05 && !this.lookHold) this.camYaw += wrapAngle(this.heading + Math.PI - this.camYaw) * Math.min(1, dt * 4);
+    if (this.shoulder && this.path.length && this.speed > 0.05 && !this.lookHold && !this.freeLook) this.camYaw += wrapAngle(this.heading + Math.PI - this.camYaw) * Math.min(1, dt * 4);
 
     const ch = this.character;
     if (this.focus?.kind === 'pet' && !ch.act) this.exitFocus();   // 摸完了
     ch.group.position.copy(this.pos);
     ch.group.rotation.y = this.heading;
+    // 越肩東張西望時頭先轉過去，再過去只轉鏡頭；鏡頭繞到前面看自己時頭轉回正前方。同行的人也看得到（multiplayer 送 l）
+    const rel = wrapAngle(this.camYaw - Math.PI - this.heading);
+    this.gaze = this.shoulder && (!this.focus || this.focus.kind === 'seat') && !this.boarding && Math.abs(rel) < SH_GAZE_BACK ? THREE.MathUtils.clamp(rel, -SH_GAZE, SH_GAZE) : 0;
+    ch.gaze = this.gaze;
     ch.update(dt, this.speed);
 
     let settling = false;
     if (!this.paused) {
       if (this.easeOrb(dt)) settling = true;
+      // 越肩：先讓角度帶著阻尼追上視線，位置再照角度算；不直接追位置，轉身時鏡頭才會繞著角色轉，不會從中間切過去
+      if (this.shoulder) {
+        const sh = this.sh;
+        sh.dt = dt;
+        damp(sh, 'yaw', sh.yaw + wrapAngle(this.camYaw - sh.yaw), this.shVel, SH_ANGLE_T, dt);
+        damp(sh, 'pitch', this.shPitch, this.shVel, SH_ANGLE_T, dt);
+        if (Math.abs(wrapAngle(this.camYaw - sh.yaw)) + Math.abs(this.shPitch - sh.pitch) > 1e-4) settling = true;
+      }
       const dPos = new THREE.Vector3(), dLook = new THREE.Vector3();
       this.desiredCamera(dPos, dLook);
       // 剛走到鏡前慢慢滑進取景；開始自己轉以後角度已經有緩動，鏡頭跟緊一點，不然繞圈時會從角色身上切過去
       // 越肩離得近，跟緊一點；剛切換越肩時慢慢滑過去
-      let T = this.focus?.orb?.touched ? FOLLOW_T : this.focus?.camPos ? VIEW_T : this.shoulder ? 0.1 : FOLLOW_T;
+      let T = this.focus?.orb?.touched ? FOLLOW_T : this.focus?.camPos ? VIEW_T : this.shoulder ? SH_POS_T : FOLLOW_T;
       if (this.easeT > 0) { this.easeT -= dt; T = Math.max(T, 0.3); }
       const fov = this.baseFov();
       if (this.camera.fov !== fov) {

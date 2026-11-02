@@ -123,6 +123,15 @@ async function precompile(renderer, scene, camera, world) {
       compile();
       world.fadeVariants(false);
     }
+    // 家具的網點：只開家具、家具和房間一起開，兩種都先編好
+    if (world.propVariants) {
+      world.propVariants(true);
+      compile();
+      world.fadeVariants?.(true);
+      compile();
+      world.fadeVariants?.(false);
+      world.propVariants(false);
+    }
   } catch (e) {
     console.warn('預先編譯著色器失敗：', e);
   } finally {

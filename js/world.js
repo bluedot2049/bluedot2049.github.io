@@ -16,7 +16,7 @@ import { buildOutdoor, OUTDOOR_ROOM } from './outdoor.js';
 import { catRoomOf } from './animals.js';
 import { makePathfinder } from './pathgrid.js';
 import { uTime, tag, bucketObjects, glowPoints } from './scenery.js';
-import { RoomFader, ease } from './fade.js';
+import { RoomFader, Fader, ease } from './fade.js';
 import { createMagicPaint, paletteFor, updateMagic, bakeOne } from './magicpaint.js';
 import { mergeGeometries } from '../vendor/BufferGeometryUtils.js';
 
@@ -417,6 +417,16 @@ function hitObstacle(list, x, z, pad) {
 }
 
 // noCat：黑貓住的房間，不再擺睡著的貓；tidy：前廳有相機桌，中間不擺雜物、不鋪地毯
+// 家具擋在鏡頭和角色之間（越肩時最常碰到）就用網點淡掉。每件家具一個編號，buildWorld 建家具前才建
+let propFader = null;
+
+// 家具佔的範圍：轉過的長方形外框，從地面到家具頂
+function propBox(x, z, rot, def) {
+  const c = Math.abs(Math.cos(rot)), s = Math.abs(Math.sin(rot));
+  const hx = (c * def.w + s * def.d) / 2, hz = (s * def.w + c * def.d) / 2;
+  return [x - hx, 0, z - hz, x + hx, def.h ?? 1.5, z + hz];
+}
+
 function furnish(room, R, set, noCat, tidy = false) {
   const s = shared();
   const roomBucket = newBucket();
@@ -438,6 +448,7 @@ function furnish(room, R, set, noCat, tidy = false) {
   const place = (name, x, z, rot, entry) => {
     const def = PROPS[name], k = new Kit(R);
     def.build(k);
+    if (propFader) k.fid = propFader.add([propBox(x, z, rot, def)]);
     k.emit(bucketFor(entry, def.tall), x, z, rot);
     obstacles.push({ x, z, hw: def.w / 2, hd: def.d / 2, rot });
     addShadow(x, z, def.w, def.d, rot);
@@ -563,9 +574,18 @@ function furnish(room, R, set, noCat, tidy = false) {
   // 燈串
   stringLights(room, R, roomBucket);
 
-  for (const o of bucketObjects(roomBucket)) room.group.add(o);
+  // 合併前每個零件補上家具編號，合併後的材質加上網點
+  const fadeable = (b, ...args) => {
+    if (!propFader) return bucketObjects(b, ...args);
+    propFader.tag(b.lit);
+    propFader.tag(b.glow);
+    const list = bucketObjects(b, ...args);
+    for (const o of list) if (o.isMesh) o.material = propFader.patch(o.material);
+    return list;
+  };
+  for (const o of fadeable(roomBucket)) room.group.add(o);
   for (const [entry, b] of entryBuckets) {
-    for (const o of bucketObjects(b, true)) { entry.tall.push(o); room.group.add(o); }
+    for (const o of fadeable(b, true)) { entry.tall.push(o); room.group.add(o); }
   }
   if (shadows.length) {
     const sm = new THREE.Mesh(mergeGeometriesSafe(shadows), s.shadowMat);
@@ -638,6 +658,27 @@ export function buildWorld(scene, gallery) {
   const rooms = [], paintings = [], entries = [], raycastTargets = [];
   let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null, noticeBoard = null, clock = null, mirrorTick = null;
   let z = 0;
+  propFader = new Fader(true);
+
+  // 不是家具清單擺的東西（門邊的花、問號立牌）也會擋住越肩的鏡頭：給世界座標的範圍 [x0, y0, z0, x1, y1, z1]，
+  // 範圍裡的頂點算那一組，外面的不淡（門口的腳踏墊跟花在同一塊網格裡）
+  function fadeByBoxes(root, boxes) {
+    const units = boxes.map((b) => [propFader.add([b]), b]), p = new THREE.Vector3();
+    root.updateWorldMatrix(true, true);
+    root.traverse((o) => {
+      if (!o.isMesh || Array.isArray(o.material)) return;
+      const pos = o.geometry.attributes.position, fid = new Float32Array(pos.count);
+      let any = false;
+      for (let i = 0; i < pos.count; i++) {
+        p.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+        const u = units.find(([, b]) => p.x >= b[0] && p.x <= b[3] && p.y >= b[1] && p.y <= b[4] && p.z >= b[2] && p.z <= b[5]);
+        if (u) { fid[i] = u[0]; any = true; }
+      }
+      if (!any) return;
+      o.geometry.setAttribute('aFid', new THREE.BufferAttribute(fid, 1));
+      o.material = propFader.patch(o.material);
+    });
+  }
 
   // gallery.json 的 outdoor 為 true 時，最後一間房後面接陽台和草原
   const list = gallery.outdoor ? [...gallery.rooms, OUTDOOR_ROOM] : gallery.rooms;
@@ -739,11 +780,17 @@ export function buildWorld(scene, gallery) {
       }
       door.tall.traverse((m) => { if (m.isMesh || m.isPoints) right.entry.tall.push(m); });
       for (const o of door.obstacles) room.obstacles.push({ ...toWorld(o), hw: o.hw, hd: o.hd, rot: drot });
+      // 門邊的花瓶和花叢：花莖往外斜，範圍放寬一點；從腳踏墊上面一點算起
+      fadeByBoxes(door.low, door.obstacles.map((o) => {
+        const c = toWorld(o), r = Math.max(o.hw, o.hd) + 0.35;
+        return [c.x - r, 0.02, c.z - r, c.x + r, 1.7, c.z + r];
+      }));
       frontDoor = { ...door, spawn: { ...toWorld(door.spawn), heading: drot }, mark: [dp.x, 1.2, dp.z] };
       // 門的花瓶那側再過去一點是問號立牌（guidesign.js）：兩面朝著房間和門那面牆，微微轉向門口
       const gp = toWorld({ x: -1.6, z: 0.55 });
       guideSign = buildGuideSign(gp.x, gp.z, drot + 0.35);
       room.group.add(guideSign.group);
+      fadeByBoxes(guideSign.group, [[gp.x - 0.6, -0.1, gp.z - 0.6, gp.x + 0.6, 1.6, gp.z + 0.6]]);
       room.obstacles.push({ x: gp.x, z: gp.z, hw: 0.3, hd: 0.22, rot: drot + 0.35 });
       raycastTargets.push(...guideSign.faces);
 
@@ -809,6 +856,7 @@ export function buildWorld(scene, gallery) {
     room.group.add(dust(room));
     scene.add(room.group);
   }
+  propFader.build();
 
   for (const room of rooms) {
     room.group.traverse((o) => { if (o.userData.kind || o.userData.painting) raycastTargets.push(o); });
@@ -1002,7 +1050,19 @@ export function buildWorld(scene, gallery) {
     return frustum.setFromProjectionMatrix(viewProj).intersectsBox(outdoor.seaBox);
   }
 
-  function update(t, cam, target, view) {
+  // 家具要讓開的視線：角色的頭，還有畫面正中央走到跟角色一樣深的那一點（越肩時角色偏左，中間到右邊是要看的風景）
+  const eyes = [new THREE.Vector3(), new THREE.Vector3()], viewDir = new THREE.Vector3();
+  function propEyes(cam, target, view) {
+    eyes[0].set(target.x, target.y + 1.1, target.z);
+    view.getWorldDirection(viewDir);
+    const depth = (target.x - cam.x) * viewDir.x + (target.y + 1.1 - cam.y) * viewDir.y + (target.z - cam.z) * viewDir.z;
+    if (depth <= 0.5) return eyes.slice(0, 1);
+    eyes[1].copy(cam).addScaledVector(viewDir, depth);
+    return eyes;
+  }
+
+  // still：拍照中，家具照原樣，拍到什麼就是什麼
+  function update(t, cam, target, view, still = false) {
     uTime.value = t;
     const dt = lastT === null ? 0 : Math.min(0.1, t - lastT);
     lastT = t;
@@ -1039,6 +1099,7 @@ export function buildWorld(scene, gallery) {
       outdoor.water.visible = seaOn;
       if (seaOn) outdoor.water.material.uniforms.time.value = t * 0.5;
     }
+    propFader.update(dt, cam, still ? [] : propEyes(cam, target, view), still);
     for (const e of entries) {
       if (shouldFade(e, cam, target)) e.hold = WALL_HOLD;
       else e.hold -= dt;
@@ -1055,5 +1116,5 @@ export function buildWorld(scene, gallery) {
   // 搭船去別的區域：棧橋邊繫著的小划船
   const exits = outdoor?.ferry ? [{ ...outdoor.ferry, to: 'haishi', label: '搭船', title: '渡船' }] : [];
 
-  return { rooms, paintings, mirror, camTable, frontDoor, guideSign, noticeBoard, clock, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, updatePaintings, fadeVariants: (on) => roomFader.all(on) };
+  return { rooms, paintings, mirror, camTable, frontDoor, guideSign, noticeBoard, clock, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, updatePaintings, fadeVariants: (on) => roomFader.all(on), propVariants: (on) => propFader.turn(on) };
 }
