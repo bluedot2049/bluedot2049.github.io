@@ -28,4 +28,5 @@ Object.assign(globalThis, {
 
 export const THREE = await import('three');
 const { buildHaishi } = await import(pathToFileURL(path.join(ROOT, 'js/zones/haishi/haishi.js')).href);
-export const w = buildHaishi(new THREE.Scene());
+export const scene = new THREE.Scene();
+export const w = buildHaishi(scene);

@@ -66,8 +66,13 @@ await send('Runtime.enable');
 await send('Page.enable');
 await send('Network.enable');
 await send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
-// 亂數固定：每次重新整理都從同一個種子開始
-await send('Page.addScriptToEvaluateOnNewDocument', { source: `(() => { let s = 12345; Math.random = () => ((s = (s * 1103515245 + 12345) >>> 0) / 4294967296); })();` });
+// 亂數固定：每次重新整理都從同一個種子開始。時鐘也從同一刻（台灣時間 11/1 晚上八點）開始走：訪客、船照真實時間排班，每次才會一樣
+await send('Page.addScriptToEvaluateOnNewDocument', { source: `(() => {
+  let s = 12345; Math.random = () => ((s = (s * 1103515245 + 12345) >>> 0) / 4294967296);
+  const RD = Date, T0 = RD.UTC(2026, 10, 1, 12), P0 = performance.now(), now = () => T0 + (performance.now() - P0);
+  class D extends RD { constructor(...a) { super(...(a.length ? a : [now()])); } static now() { return now(); } }
+  globalThis.Date = D;
+})();` });
 
 const prints = {};
 let bad = 0;
