@@ -1,0 +1,242 @@
+/* © 2026 bluedot2049《煉金畫廊》。未經授權禁止重製、改作或用於 AI 訓練，詳見 LICENSE。 */
+/* 載入畫面的法陣、門口告示（黃昏前門）、渡海過場的空拍照和進度條。 */
+/* ───────── 載入畫面：圓、方、三角三層法陣各自慢轉 ───────── */
+#loading {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--bg);
+  transition: opacity .8s, visibility 0s;
+}
+/* 淡出後整個藏起來，霧和水波不在玩的時候一直重畫 */
+#loading.done { opacity: 0; pointer-events: none; visibility: hidden; transition: opacity .8s, visibility 0s .8s; }
+.sigil { width: 112px; height: 112px; overflow: visible; }
+.sigil * { fill: none; stroke: var(--gold); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.sigil g { transform-origin: 60px 60px; }
+.sigil .ring-a { animation: spin 40s linear infinite; opacity: .55; }
+.sigil .ring-b { animation: spin 24s linear infinite reverse; opacity: .7; }
+.sigil .ring-c { animation: spin 14s linear infinite; }
+.sigil .core { fill: var(--gold-hi); stroke: none; transform-origin: 60px 60px; animation: breathe 2.4s ease-in-out infinite; }
+#loading .brand { margin-top: 30px; width: 190px; height: auto; }
+
+/* ───────── 門口：黃昏裡畫廊的前門 ─────────
+   牆面背光，左邊帶一點晚霞的粉，門和門邊的燈把牆照暖。--dh 是門框的高，寬照門框的比例（150 × 230 公分）。
+   字標掛在門的上方像招牌；載入中慢慢開出一條縫，載完往裡整個打開，屋裡的光鋪滿畫面（ui.enterDoor） */
+#loading { --dh: min(44vh, 320px); }
+#loading:not(.plain):not(.crossing) {
+  background:
+    radial-gradient(ellipse 34% 40% at 50% 48%, rgba(255, 186, 120, .14), transparent 70%),
+    linear-gradient(100deg, rgba(240, 156, 140, .12), transparent 45%),
+    linear-gradient(#251b22, #3e2d35 45%, #4a353b);
+}
+#loading:not(.plain) .sigil, #loading.plain .gate, #loading.plain .flood, #loading.crossing .gate, #loading.crossing .flood { display: none; }
+#loading:not(.plain):not(.crossing) .brand { order: -1; margin: 0 0 26px; width: 170px; }
+#loading.first .msg { display: none; }
+.gate { display: flex; flex-direction: column; align-items: center; gap: 28px; }
+.porch { position: relative; }
+.door { position: relative; height: var(--dh); width: calc(var(--dh) * 150 / 230); }
+/* 地面：門檻以下一路鋪到畫面外 */
+.door::after {
+  content: ""; position: absolute; z-index: -1; top: 100%; left: -100vw; right: -100vw; height: 100vh;
+  background: linear-gradient(#2e2226, #1c1517 30%); border-top: 1px solid rgba(232, 184, 106, .12);
+}
+.door .jamb { position: absolute; inset: 0; width: 100%; height: 100%; }
+.door .inside, .door .leaf { position: absolute; left: 16.667%; top: 8.26%; width: 66.667%; height: 91.3%; }
+.door .inside { background: radial-gradient(ellipse 80% 70% at 50% 72%, #ffe9c4, #f4b77a 60%, #c9784e); }
+/* 門板：鉸鏈在右邊，往屋裡開。載入時慢慢開出一條縫，一直不會開大，載完再整個推開 */
+.door .leaf { transform-origin: right center; animation: ajar 16s cubic-bezier(.15, .55, .3, 1) forwards; }
+.door .leaf svg { display: block; width: 100%; height: 100%; }
+.door .pane { fill: #ffd9a0; animation: flicker 3.7s linear infinite; }
+@keyframes ajar { from { transform: perspective(600px) rotateY(0deg); } to { transform: perspective(600px) rotateY(-14deg); } }
+/* 門邊的壁燈 */
+.lamp {
+  position: absolute; left: calc(100% + var(--dh) * .07); top: 24%;
+  width: calc(var(--dh) * .045); height: calc(var(--dh) * .07); border-radius: 2px; background: #ffd890;
+  box-shadow: 0 0 calc(var(--dh) * .06) calc(var(--dh) * .02) rgba(255, 200, 120, .45), 0 0 calc(var(--dh) * .4) rgba(255, 180, 110, .22);
+  animation: flicker 4.3s linear infinite;
+}
+.lamp::before { content: ""; position: absolute; left: -25%; right: -25%; top: -18%; height: 18%; background: #241c1b; }
+.flood {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at 50% 50%, #fff3dc, #ffd9a8 45%, #f4b984);
+  transition: opacity .7s .75s;
+}
+/* 歸門（homedoor.js）：走進門裡的光，畫面整片是屋裡的燈色，換頁後到了前廳再退掉。門和字都不畫 */
+#loading.doorway:not(.plain):not(.crossing) { background: radial-gradient(circle at 50% 50%, #fff3dc, #ffd9a8 45%, #f4b984); }
+#loading.doorway:not(.plain):not(.crossing) > * { display: none; }
+#loading.doorway.leaving { animation: doorway .9s cubic-bezier(.5, 0, .3, 1) both; }
+@keyframes doorway { from { opacity: 0; } to { opacity: 1; } }
+/* 推門：告示和字標先收掉，門閂一響門先推開一點、頓一下再整個打開，同時往門口走近，屋裡的光鋪滿畫面 */
+#loading.opening .flood { opacity: 1; }
+.porch { transform-origin: 50% 62%; transition: transform 1.7s cubic-bezier(.5, 0, .2, 1) .15s; }
+#loading.opening .porch { transform: scale(1.35); }
+#loading.opening .lamp { filter: brightness(1.4); }
+#loading.opening .notice, #loading.opening .brand, #loading.opening .mark { opacity: 0; transform: translateY(6px); transition: opacity .35s, transform .35s; }
+
+/* 第一次來：門旁邊貼一張告示。直角、細線、字靠左，像一張說明卡。色票拉開、清單一行一行浮上來；讀完按鈕亮起來變成「進入」。
+   版面分兩種（見下面的 media）：橫式左門右欄，直式字標、門、告示由上往下，告示貼底 */
+#loading.first .brand { display: none; }
+.side .mark { display: block; width: 180px; height: auto; }
+.notice {
+  width: 340px; max-width: 100%; padding: 20px 22px 18px;
+  display: flex; flex-direction: column; gap: 12px;
+  background: rgba(16, 11, 9, .86); border: 1px solid rgba(232, 184, 106, .2); border-radius: 2px;
+}
+.notice p { margin: 0; }
+.notice .lead { font-size: 15px; letter-spacing: .2em; color: var(--text); }
+.notice .lead .en { letter-spacing: .04em; }
+.notice .sub { margin-top: -6px; font-size: 12.5px; letter-spacing: .12em; color: var(--muted); }
+.notice .swatch { display: flex; height: 3px; transform-origin: left; animation: swatch-in .9s cubic-bezier(.3, .7, .3, 1) .15s both; }
+.notice .swatch i { background: var(--c); }
+/* 載入進度（index.html 的 loadbar）：整條色票先淡淡地在那裡，填到的地方換成實色。
+   填滿那一塊是外框往左退、裡面的色票往右補回來，兩個都只動 transform，主執行緒卡住也照樣在走 */
+.loadbar { position: relative; height: 3px; overflow: hidden; }
+.loadbar .ghost, .loadbar .fill > div { position: absolute; inset: 0; display: flex; }
+.loadbar .ghost { opacity: .26; }
+.loadbar .fill { position: absolute; inset: 0; overflow: hidden; transform: translateX(-100%); }
+.loadbar .fill > div { transform: translateX(100%); }
+.loadbar.sub { display: none; }
+.notice .tasks { list-style: none; margin: 0; padding: 0; }
+.notice .tasks li {
+  display: grid; grid-template-columns: 18px 1fr 9px; align-items: center; gap: 12px; padding: 11px 0;
+  border-bottom: 1px solid rgba(232, 184, 106, .1); font-size: 13.5px; letter-spacing: .06em; color: var(--text);
+  animation: row-in .45s ease-out both;
+}
+.notice .tasks li:nth-child(1) { animation-delay: .2s; }
+.notice .tasks li:nth-child(2) { animation-delay: .3s; }
+.notice .tasks li:nth-child(3) { animation-delay: .4s; }
+.notice .tasks svg { width: 18px; height: 18px; fill: none; stroke: var(--gold); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
+.notice .tasks i { width: 9px; height: 9px; border: 1px solid var(--gold-lo); }
+.notice .enter { width: 100%; min-height: 42px; margin-top: 4px; gap: 12px; border-radius: 2px; letter-spacing: .5em; }
+.notice .enter:disabled { color: var(--muted); border-color: rgba(232, 184, 106, .2); cursor: var(--cur-default); }
+.notice .enter.primary { box-shadow: none; animation: ready .6s ease-out; }
+.notice .enter kbd { padding: 0 5px; font: 11px/1.5 var(--latin); letter-spacing: .04em; border: 1px solid rgba(42, 26, 12, .35); border-radius: 2px; opacity: .6; }
+.notice .enter:disabled kbd { display: none; }
+@media (pointer: coarse) { .notice .enter kbd { display: none; } }
+/* 讀取靈魂相片：按鈕底下一行小字，不跟「進入」搶 */
+.notice .soul {
+  align-self: center; margin-top: -2px; padding: 4px 8px;
+  font: inherit; font-size: 12px; letter-spacing: .2em; color: var(--muted);
+  background: none; border: 0; border-bottom: 1px solid rgba(232, 184, 106, .25); cursor: var(--cur-pointer);
+}
+.notice .soul[hidden] { display: none; }
+@media (hover: hover) { .notice .soul:hover { color: var(--gold-hi); border-color: var(--gold); } }
+@keyframes swatch-in { from { transform: scaleX(0); } }
+@keyframes row-in { from { opacity: 0; transform: translateX(-4px); } }
+@keyframes ready { from { filter: brightness(1.25); } }
+/* 橫式（電腦、手機橫拿）：左邊門，右邊一欄字標和告示。兩邊的底對齊，告示跟門站在同一條地平線上。
+   門照螢幕高度放大，大螢幕上不會縮成中間一小塊 */
+@media (orientation: landscape) {
+  #loading.first { --dh: clamp(220px, 58vh, 460px); }
+  #loading.first .gate { flex-direction: row; align-items: flex-end; gap: clamp(40px, 7vw, 120px); }
+  #loading.first .side { display: flex; flex-direction: column; gap: 22px; }
+}
+/* 大螢幕：告示跟著放大，字不會比門小一截 */
+@media (orientation: landscape) and (min-width: 1300px) and (min-height: 820px) {
+  .side .mark { width: 220px; }
+  .notice { width: 400px; padding: 26px 28px 22px; gap: 14px; }
+  .notice .lead { font-size: 18px; }
+  .notice .sub { font-size: 14px; }
+  .notice .tasks li { grid-template-columns: 20px 1fr 10px; padding: 14px 0; font-size: 15.5px; }
+  .notice .tasks svg { width: 20px; height: 20px; }
+  .notice .tasks i { width: 10px; height: 10px; }
+  .notice .enter { min-height: 50px; font-size: 16px; }
+}
+@media (orientation: landscape) and (max-height: 560px) {
+  /* 門的高度也看寬度：門、間距、告示要排得下，門不會貼到螢幕邊 */
+  #loading.first { --dh: min(calc(100vh - 72px), calc((100vw - 430px) * 1.53)); --dh: min(calc(100dvh - 72px), calc((100vw - 430px) * 1.53)); }
+  #loading.first .side .mark { display: none; }
+  .notice { padding: 12px 16px 10px; gap: 8px; }
+  .notice .sub { display: none; }
+  .notice .tasks li { padding: 7px 0; }
+  .notice .enter { min-height: 38px; margin-top: 2px; }
+}
+/* 直式（手機）：由下往上疊：告示貼著畫面下緣（按鈕在拇指按得到的地方），門站在告示上面的地上，字標掛在門上。
+   告示和字標的高度固定，門拿剩下的高度，多出來的空間留在最上面當牆；很矮的螢幕（瀏覽器的列很高）就收掉字標 */
+@media (orientation: portrait) {
+  #loading.first { --dh: clamp(96px, calc(100vh - 440px), 300px); --dh: clamp(96px, calc(100dvh - 440px), 300px); }
+  #loading.first .gate {
+    position: absolute; inset: 0; display: grid; grid-template-rows: 1fr auto auto auto; grid-template-columns: minmax(0, 1fr); justify-items: center; row-gap: 18px;
+    padding: calc(env(safe-area-inset-top) + 22px) 16px calc(env(safe-area-inset-bottom) + 16px);
+  }
+  #loading.first .side { display: contents; }
+  #loading.first .side .mark { grid-row: 2; width: 150px; }
+  #loading.first .porch { grid-row: 3; }
+  #loading.first .notice { grid-row: 4; width: 420px; }
+}
+@media (orientation: portrait) and (max-height: 600px) {
+  #loading.first { --dh: clamp(96px, calc(100vh - 380px), 300px); --dh: clamp(96px, calc(100dvh - 380px), 300px); }
+  #loading.first .side .mark { display: none; }
+  .notice { padding: 14px 18px 12px; gap: 10px; }
+  .notice .tasks li { padding: 8px 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .door .leaf, .door .pane, .lamp, .notice * { animation: none; }
+  .porch { transition: none; }
+}
+/* ───────── 渡海：目的地的空拍 ─────────
+   照片是用遊戲自己拍的（tools/aerial.mjs、assets/aerial/），像旅遊照：要去的地方從高處看一眼。
+   第一幀是墨色加一行字幕（直式是右邊的註解），像電影的字卡。照片整張解碼好才從墨色淡入，同時開始很慢地推近（index.html 底下那段）。
+   跟門口同一套：橫式上下黑邊、直式右邊黑塊是門板；等的時候門板很慢退開一點；到了（ui.landing）靠岸一震，門板先拉開一點、停半拍，再整個打開，光鋪滿。
+   門板的動畫接著換頁前斷掉的地方跑（--t，負的、已經過了多久）。
+   效能：會動的都只動 transform 和 opacity，主執行緒在蓋場景、編著色器時也照跑。cq 單位照整個畫面算 */
+#loading { --t: 0ms; }
+#loading.crossing { background: var(--ink); container-type: size; }
+#loading.crossing .sigil, #loading.crossing .brand { display: none; }
+.cine { display: none; position: absolute; inset: 0; overflow: hidden;
+  --bh: min(calc(100cqw / 2.8), 46cqh);     /* 中間露出來那條多高：比 2.39 還扁 */
+  --gap: calc(50cqh - var(--bh) / 2);        /* 每條黑邊多高 */
+  --px: .5; }                                /* 直式：照片的主體在橫向哪裡（0～1），決定先往左推多少 */
+#loading.crossing .cine { display: block; }
+/* 最後鋪滿的光：目的地的顏色 */
+#loading.to-gallery .cine { --light: radial-gradient(circle at 50% 50%, #fff3dc, #ffd9a8 45%, #f4b984); }
+#loading.to-shenlou .cine { --light: radial-gradient(circle at 50% 50%, #fff4e0, #f0cfa0 45%, #d9a777); }
+#loading.to-haishi .cine { --light: radial-gradient(circle at 50% 50%, #eef4fa, #b4c8e6 45%, #7088b4); }
+/* 照片蓋滿整個畫面，門板蓋住上下（直式是右邊），拉開就看得到更多 */
+.cine .stage { position: absolute; inset: 0; }
+.cine .push { position: absolute; inset: 0; }
+.cine img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; }
+.cine.shown img { animation: cine-in 1.4s cubic-bezier(.4, 0, .6, 1) forwards; }
+.cine.shown .push { animation: cine-push 22s cubic-bezier(.25, 0, .6, 1) forwards; }
+/* 底片顆粒：一張靜態雜訊，每隔一下跳個位置，不即時算。跟照片一起淡入，先出現的話墨色上看得出中間那條比門板亮 */
+.cine .grain { position: absolute; inset: -50%; opacity: 0; transition: opacity 1.4s; pointer-events: none; animation: cine-grain .5s steps(1) infinite;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1.4 -.3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"); }
+.cine.shown .grain { opacity: .06; }
+/* 橫式的門板：上下黑邊；字幕在下面那條裡 */
+.cine .lid { position: absolute; left: 0; right: 0; height: calc(var(--gap) + 2px); background: var(--ink); z-index: 2; }
+.cine .lid.top { top: 0; animation: cine-lid-up 16s cubic-bezier(.15, .55, .3, 1) var(--t) forwards; }
+.cine .lid.bot { bottom: 0; animation: cine-lid-down 16s cubic-bezier(.15, .55, .3, 1) var(--t) forwards; }
+#loading.crossing .msg { position: absolute; left: 0; right: 0; top: calc(50% + min(calc(100cqw / 2.8), 46cqh) / 2 + min(5cqh, 28px)); z-index: 3; margin: 0; text-align: center; color: rgba(232, 220, 200, .55); font-size: 13px; }
+#loading.crossing .loadbar.sub { display: block; position: absolute; left: calc(50% - 66px); width: 132px; top: calc(50% + min(calc(100cqw / 2.8), 46cqh) / 2 + min(5cqh, 28px) + 30px); z-index: 3; }
+/* 直式的門板：右邊一塊黑，上面是像畫旁邊的註解 */
+.cine .wing { display: none; position: absolute; top: 0; bottom: 0; right: 0; width: 40cqw; z-index: 2; background: var(--ink); animation: cine-wing 16s cubic-bezier(.15, .55, .3, 1) var(--t) forwards; }
+.cine .label { position: absolute; left: 13%; right: 10%; bottom: 10cqh; color: rgba(232, 220, 200, .78); }
+.cine .label b { display: block; font-weight: normal; font-size: 21px; letter-spacing: .3em; color: rgba(240, 228, 208, .9); }
+.cine .label .loadbar { margin: 14px 0 12px; }
+.cine .label span { display: block; font-size: 13px; letter-spacing: .2em; line-height: 1.9; }
+.cine .label small { display: block; margin-top: 6px; font-size: 11px; letter-spacing: .1em; color: rgba(232, 220, 200, .42); line-height: 1.8; }
+/* 到了：光鋪滿（ui.landing 加 landing），字先收掉 */
+.cine .light { position: absolute; inset: 0; z-index: 4; background: var(--light); opacity: 0; transition: opacity .7s 1.2s; pointer-events: none; }
+#loading.landing .cine .light { opacity: 1; }
+/* 進度條先補滿（ui.loading 叫 loadbar.mark('ready')），再跟字一起收掉 */
+#loading.landing .msg, #loading.landing .loadbar.sub, #loading.landing .cine .label { opacity: 0; transition: opacity .35s .25s; }
+/* 直式：照片往左偏，主體落在左邊那條（0～60%）的中間，右邊空出來的地方在門板後面；到了門板推開時再回到正中央 */
+@container (orientation: portrait) {
+  .cine { --bh: 100cqh; --gap: 0px; }
+  .cine .stage { transform: translateX(calc(min(0, .3 - var(--px)) * 100cqw)); }
+  .cine .lid, #loading.crossing .msg, #loading.crossing .loadbar.sub { display: none; }
+  .cine .wing { display: block; }
+}
+@keyframes cine-in { to { opacity: 1; } }
+@keyframes cine-push { from { transform: scale(1); } to { transform: scale(1.07); } }
+@keyframes cine-lid-up { to { transform: translateY(-2.5cqh); } }
+@keyframes cine-lid-down { to { transform: translateY(2.5cqh); } }
+@keyframes cine-wing { to { transform: translateX(3cqw); } }
+@keyframes cine-grain { 0% { transform: translate(0, 0); } 25% { transform: translate(-7%, 4%); } 50% { transform: translate(5%, -6%); } 75% { transform: translate(-3%, -2%); } }
+@keyframes flicker { 0%, 100% { opacity: 1; } 18% { opacity: .82; } 22% { opacity: .95; } 61% { opacity: .86; } 70% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .cine *, .cine.shown img { animation-duration: 1ms !important; } .cine .grain { animation: none !important; } }
+#loading .msg {
+  margin-top: 10px; padding-left: .4em;
+  color: var(--muted); letter-spacing: .4em; font-size: 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes breathe { 50% { transform: scale(1.8); opacity: .5; } }

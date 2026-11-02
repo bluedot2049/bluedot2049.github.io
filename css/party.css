@@ -1,0 +1,108 @@
+/* © 2026 bluedot2049《煉金畫廊》。未經授權禁止重製、改作或用於 AI 訓練，詳見 LICENSE。 */
+/* 組隊同行（party.js）：邀請、隊伍名單、頭上的話、標記。 */
+/* ───────── 組隊同行（js/party.js） ───────── */
+/* 同行按鈕：組了隊外圈變金，右下角排出全隊的顏色；等人答應時虛線框 */
+#party-btn { position: relative; }
+#party-btn.on, #party-btn.open { border-color: var(--gold); color: var(--gold-hi); }
+#party-btn.wait { border-style: dashed; color: var(--gold-hi); }
+#party-btn .dots { position: absolute; right: -2px; bottom: -3px; display: flex; gap: 2px; margin: 0 !important; }
+#party-btn .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--pc); box-shadow: 0 0 0 1.5px rgba(20, 14, 10, .9); }
+#party-card .studio-row { flex-wrap: wrap; }
+#party-card .btn { padding: 0 16px; letter-spacing: .14em; }
+.party-who { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: center; }
+.mate-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; letter-spacing: .08em; color: var(--muted); }
+.mate-chip i { width: 9px; height: 9px; border-radius: 50%; background: var(--pc); box-shadow: 0 0 6px var(--pc); }
+body.desk #party-card, body.desk #party-invite { bottom: calc(84px + env(safe-area-inset-bottom)); }
+
+/* 隊友的記號：頭上一顆小燈；跑出畫面時在邊上指方向；在別的區域時左上角掛名牌。位置由 party.js 用 transform 擺 */
+#mates { position: fixed; inset: 0; z-index: 8; pointer-events: none; overflow: hidden; }
+body.photo #mates { display: none; }
+.mate { position: absolute; left: 0; top: 0; transition: opacity .4s; will-change: transform; }
+.mate[hidden] { display: none; }
+.mate.away { opacity: .45; }
+.mate i {
+  position: absolute; left: -5px; top: -5px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--pc); box-shadow: 0 0 0 1.5px rgba(28, 19, 13, .75), 0 0 10px var(--pc);
+}
+.mate b { display: none; position: absolute; left: -17px; top: -17px; width: 34px; height: 34px; }
+.mate span { display: none; }
+.mate[data-mode="edge"] i { left: -8px; top: -8px; width: 16px; height: 16px; box-shadow: 0 0 0 2px rgba(28, 19, 13, .8), 0 0 0 3px var(--pc), 0 0 14px var(--pc); }
+.mate[data-mode="edge"] b { display: block; }
+.mate[data-mode="edge"] b::after {
+  content: ""; position: absolute; right: 0; top: 50%; margin-top: -6px;
+  border: 6px solid transparent; border-left: 8px solid var(--pc); border-right: 0;
+  filter: drop-shadow(0 0 3px rgba(28, 19, 13, .8));
+}
+.mate.mark i { border-radius: 2px; transform: rotate(45deg) scale(.85); }
+.mate[data-mode="far"] span {
+  display: block; position: absolute; left: 12px; top: -11px; height: 22px; padding: 0 10px; white-space: nowrap;
+  font-size: 12px; line-height: 22px; letter-spacing: .12em; color: var(--text);
+  background: var(--panel-soft); border: 1px solid var(--line-soft); border-radius: 999px;
+}
+/* 掛機中的隊友：記號右上冒一個小 z，慢慢浮起再淡掉 */
+.mate.zzz { opacity: .7; }
+.mate.zzz i::after {
+  content: "z"; position: absolute; left: 100%; bottom: 60%; margin-left: 2px;
+  font: italic 600 11px/1 Georgia, serif; color: #eef2ff; text-shadow: 0 0 3px rgba(28, 19, 13, .9);
+  animation: mate-zzz 2.4s ease-in-out infinite;
+}
+@keyframes mate-zzz { 0% { transform: translate(0, 2px); opacity: .3; } 50% { opacity: 1; } 100% { transform: translate(3px, -4px); opacity: .3; } }
+.mate.ask i { animation: mate-ask 1.2s ease-in-out infinite; }
+@keyframes mate-ask { 50% { transform: scale(1.6); } }
+
+/* 隊友說的話：跟一般對話框一樣，前面一顆隊伍顏色的小點 */
+.speech.party-say .pc { display: inline-block; width: 8px; height: 8px; margin: 0 7px 2px 0; border-radius: 50%; background: var(--pc); vertical-align: middle; box-shadow: 0 0 0 1px rgba(26, 18, 12, .5); }
+
+/* 打字框：手機貼在鍵盤上緣（--kb 是鍵盤高度），電腦在下方按鈕列上面。上面列出剛剛說的幾句 */
+#chat {
+  position: fixed; left: 50%; bottom: calc(var(--kb, 0px) + 12px + env(safe-area-inset-bottom)); z-index: 46;
+  transform: translateX(-50%); width: min(520px, calc(100vw - 24px));
+  display: flex; flex-direction: column; gap: 8px;
+}
+#chat[hidden] { display: none; }
+body.desk #chat { bottom: calc(84px + env(safe-area-inset-bottom)); }
+#chat-log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+#chat-log li {
+  max-width: 100%; padding: 4px 12px; border-radius: 12px;
+  font-size: 13px; line-height: 1.5; letter-spacing: .06em; color: var(--text); overflow-wrap: anywhere;
+  background: rgba(20, 14, 10, .72);
+}
+#chat-log li i { display: inline-block; width: 7px; height: 7px; margin: 0 7px 1px 0; border-radius: 50%; background: var(--pc); vertical-align: middle; }
+.chat-row {
+  display: flex; gap: 8px; align-items: center; padding: 6px;
+  background: rgba(20, 14, 10, .92); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--shadow);
+}
+#chat-input {
+  flex: 1; min-width: 0; height: 40px; padding: 0 14px;
+  font: inherit; font-size: 16px; letter-spacing: .04em; color: var(--text);
+  background: transparent; border: 0; outline: none;
+}
+#chat-input::placeholder { color: var(--muted); }
+.chat-row .btn { min-height: 40px; padding: 0 16px; letter-spacing: .14em; }
+.chat-row .icon-btn { width: 40px; min-width: 40px; height: 40px; box-shadow: none; }
+/* 打字時：走路、跳、坐、動作、表情先收起來，畫面留給對話框和隊友的記號；上面的按鈕淡一點 */
+body.chatting #joy, body.chatting #swap-btn, body.chatting .seal, body.chatting #action-btn, body.chatting #emote, body.chatting #emote-btn, body.chatting #hint,
+body.chatting:not(.desk) #photo-btn, body.chatting:not(.desk) #say-btn { opacity: 0 !important; pointer-events: none !important; }
+body.chatting.touch #top-btns { opacity: .35; }
+/* 按了「標記」，等點地面 */
+body.party-arming #stage canvas { cursor: crosshair; }
+/* 常用的話：一排小籤，點了直接送出。放不下就左右滑 */
+.chat-quick { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 0; }
+.chat-quick::-webkit-scrollbar { display: none; }
+.chat-quick .btn {
+  flex: 0 0 auto; min-height: 34px; padding: 0 14px;
+  font-size: 13px; letter-spacing: .1em; white-space: nowrap;
+  background: rgba(20, 14, 10, .88); border-color: var(--line-soft);
+}
+/* 手機橫拿：畫面本來就矮。打字框開著時上面的按鈕整排收起，剛剛的話只留最後兩句；
+   鍵盤出來時只剩打字那一行，話看頭上的對話框 */
+@media (orientation: landscape) and (max-height: 500px) {
+  body.chatting.touch #top-btns { display: none; }
+  body.touch #chat-log li:nth-last-child(n+3) { display: none; }
+  body.typing #chat-log, body.typing .chat-quick { display: none; }
+  body.touch #chat { gap: 6px; bottom: calc(var(--kb, 0px) + 8px + env(safe-area-inset-bottom)); }
+  body.touch .chat-row { padding: 3px; }
+  body.touch #chat-input { height: 36px; }
+  body.touch .chat-row .btn, body.touch .chat-row .icon-btn { min-height: 36px; height: 36px; }
+  body.touch .chat-row .icon-btn { width: 36px; min-width: 36px; }
+}

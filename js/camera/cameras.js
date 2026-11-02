@@ -50,7 +50,7 @@ export const carried = () => (CAMERAS[getSave().camera] ? getSave().camera : nul
 export const carry = (id) => putSave({ camera: CAMERAS[id] ? id : null });
 
 const BODY = '#3b2a20', TRIM = '#a0a6ae', GLASS = '#5c7884', SILVER = '#dcd6c8', DARK = '#1e1c1e';
-// 舊金：跟介面上燭乙式的快門、日期框同一種（style.css 的舊金），沉半階
+// 舊金：跟介面上燭乙式的快門、日期框同一種（css/photo.css 的舊金），沉半階
 const OLD = '#b8904c', OLDHI = '#d2ad6a', WELL = '#2c2118';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
@@ -164,7 +164,7 @@ export function strapModel(k, y0, z0) {
   for (const x of [-0.07, 0.07]) rod(k, [x, y0 + 0.09, z0 + 0.02], [x * 1.2, y0 + 0.36, z0 - 0.06], 0.006, DARK, { seg: 4 });
 }
 
-// 閃光開關的樣子，每台相機各一種，畫成 SVG 放在快門旁邊。開、關、閃過、換燈泡的動作寫在 style.css 的 #ph-flash
+// 閃光開關的樣子，每台相機各一種，畫成 SVG 放在快門旁邊。開、關、閃過、換燈泡的動作寫在 css/photo.css 的 #ph-flash
 const KNOBS = {
   // 摺扇反光罩：開著是一圈銀扇、中間一顆燈泡，關掉就上下收成一根。閃過的燈泡燒成霧白，退下去，新的一顆推上來，邊上一圈走完就換好了
   fan() {
@@ -205,7 +205,7 @@ const KNOBS = {
 export const flashKnob = (id) => KNOBS[CAMERAS[id]?.flash?.knob]?.() || '';
 export const dateKnob = (id) => KNOBS[CAMERAS[id]?.date?.knob]?.() || '';
 
-// 快門鈕的樣子：帶著相機時換掉畫廊的金色快門。動作寫在 style.css 的 #ph-shutter.gear
+// 快門鈕的樣子：帶著相機時換掉畫廊的金色快門。動作寫在 css/photo.css 的 #ph-shutter.gear
 // 外環每種都一樣：太陽紋金片刻著商號、型號、序號，錶刻一秒亮一格（ticks 格，就是長曝光最長幾秒）；燈泡還在換時卡榫卡進來，按不下去
 function shutterRing(g, ticks) {
   const tick = Array.from({ length: ticks }, (_, i) => `<path class="tick" transform="rotate(${(i + 0.5) * 360 / ticks})" d="M0-31V-34.4"/>`).join('');
@@ -268,7 +268,7 @@ export const shutterKnob = (id, ticks) => {
 // 跟前廳相機桌後面那塊掛布（camtable.js）同一個圖騰：黑底上全是金色細線，外圈一圈長短交錯的細光芒，
 // 中間杏仁形的眼眶（上粗下細，眼角收成細線）、眼尾一對羊角捲草、虹膜一圈圈斷開的細弧、瞳孔金圈。
 // 存檔照片上的眼紋（mirrorcard.js）是讀檔用的碼，這裡不仿它。
-// 三層：.ey 是虹膜，用眼縫的形狀裁著，眼珠跟游標轉；.lids 是眼眶，眨眼時上下壓扁；捲草和光芒不動（style.css 的 #ph-shutter.eye）
+// 三層：.ey 是虹膜，用眼縫的形狀裁著，眼珠跟游標轉；.lids 是眼眶，眨眼時上下壓扁；捲草和光芒不動（css/photo.css 的 #ph-shutter.eye）
 
 const f2 = (v) => v.toFixed(2);
 
