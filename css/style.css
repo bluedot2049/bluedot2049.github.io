@@ -1084,17 +1084,17 @@ body.desk .pack-acts small { font-size: 11.5px; }
 /* 相機桌：左右換一台，像銘牌一樣寫名字、規格、哪裡做的，下面是帶走的鈕 */
 .cams-pick { display: flex; align-items: center; gap: 6px; margin: 0 -8px; }
 .cams-info { flex: 1; min-width: 0; }
-#cams-name { margin: 0 0 10px; font-size: 20px; font-weight: 600; letter-spacing: .1em; color: var(--text); }
+#cams-name, #ferry-name { margin: 0 0 10px; font-size: 20px; font-weight: 600; letter-spacing: .1em; color: var(--text); }
 #cams-maker { margin: 12px 0 0; font-size: 12px; letter-spacing: .2em; color: var(--muted); }
-#cams-maker:empty, #cams-spec:empty { display: none; }
-#cams-spec { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-#cams-spec li { font-size: 12px; letter-spacing: .12em; color: var(--muted); border: 1px solid var(--line-soft); border-radius: 999px; padding: 3px 10px; }
+#cams-maker:empty, #cams-spec:empty, #ferry-tags:empty { display: none; }
+#cams-spec, #ferry-tags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+#cams-spec li, #ferry-tags li { font-size: 12px; letter-spacing: .12em; color: var(--muted); border: 1px solid var(--line-soft); border-radius: 999px; padding: 3px 10px; }
 .cams-step { flex: 0 0 auto; width: 34px; height: 64px; padding: 0; font: 28px/1 var(--latin); color: var(--gold); background: transparent; border: 0; cursor: var(--cur-pointer); }
 .cams-step:disabled { opacity: .2; cursor: var(--cur-default); }
 .cams-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; }
-#cams-dots { display: flex; gap: 9px; padding-left: 4px; }
-#cams-dots i { width: 6px; height: 6px; transform: rotate(45deg); background: var(--line); }
-#cams-dots i.on { background: var(--gold); }
+#cams-dots, #ferry-dots { display: flex; gap: 9px; padding-left: 4px; }
+#cams-dots i, #ferry-dots i { width: 6px; height: 6px; transform: rotate(45deg); background: var(--line); }
+#cams-dots i.on, #ferry-dots i.on { background: var(--gold); }
 /* 電腦版：不貼右邊，一張小銘牌浮在那台相機底下，換一台時跟著鏡頭滑過去。位置由 main.js 每幀投影（--cx、--cy） */
 body.desk #cams.panel {
   left: var(--cx, 50%); top: var(--cy, 60%); right: auto; bottom: auto;
@@ -1113,11 +1113,25 @@ body.desk #cams .close svg { width: 16px; height: 16px; }
 body.desk #cams .cams-info { padding-right: 18px; }
 body.desk #cams .cams-foot { margin-top: 14px; }
 
-/* 渡船：搭船時選去哪裡。一個地方一列，所在的地方和還沒開船的灰掉 */
-#ferry-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-#ferry-list .btn { width: 100%; justify-content: space-between; letter-spacing: .3em; }
-#ferry-list .btn small { font-size: 12px; letter-spacing: .15em; color: var(--muted); }
-#ferry-list .btn.primary small { color: inherit; opacity: .7; }
+/* 渡船：跟相機桌同一種小卡，左右換一個地方，寫名字、一兩句簡述、那裡能做什麼，下面是上船的鈕 */
+#ferry-desc { margin: 0 0 12px; font-size: 14px; line-height: 1.7; letter-spacing: .08em; color: var(--text); opacity: .85; }
+/* 電腦版：一張小卡浮在渡船上方，位置由 main.js 每幀投影（--cx、--cy 是卡片底邊中間） */
+body.desk #ferry.panel {
+  left: var(--cx, 50%); top: var(--cy, 50%); right: auto; bottom: auto;
+  width: 320px; max-height: none; overflow: visible;
+  padding: 18px 16px 16px; border: 1px solid var(--line-soft); border-radius: 4px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .5);
+  transform: translate(-50%, calc(-100% - 8px)); opacity: 0; visibility: hidden;
+  transition: opacity .25s, transform .25s, visibility 0s .25s;
+}
+body.desk #ferry.panel.open { transform: translate(-50%, -100%); opacity: 1; visibility: visible; transition: opacity .25s, transform .25s; }
+body.desk #ferry::before { right: 0; bottom: auto; width: auto; height: 1px; }
+body.desk #ferry::after { left: 50%; top: -4px; margin: 0 0 0 -3.5px; }
+body.desk #ferry .list-title { display: none; }
+body.desk #ferry .close { top: 6px; right: 6px; width: 32px; min-width: 32px; height: 32px; }
+body.desk #ferry .close svg { width: 16px; height: 16px; }
+body.desk #ferry .cams-info { padding-right: 18px; }
+body.desk #ferry .cams-foot { margin-top: 14px; }
 
 .sheet-head { display: flex; gap: 16px; align-items: center; padding-right: 44px; }
 /* 縮圖：鍍金畫框 */
@@ -1277,7 +1291,7 @@ body.photo-hush .speech { opacity: 0 !important; }
 body.photo:not(.desk) #emote { --a: 90deg; --r: calc(var(--r2) + 6px); }
 body.photo.desk #photo-btn, body.photo:has(#ph-result:not([hidden])) #photo-btn { display: none; }
 body:not(.desk) #ph-exit { display: none; }
-body.photo-bare #ph-bar, body.photo-bare #ph-menu, body.photo-bare #ph-exit, body.photo-bare #ph-shoot, body.photo-bare #ph-alt,
+body.photo-bare #ph-bar, body.photo-bare #ph-exit, body.photo-bare #ph-shoot, body.photo-bare #ph-alt,
 body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #emote, body.photo-bare #hint, body.photo-bare #photo-btn { display: none !important; }
 
 #ph-frame { position: fixed; z-index: 12; pointer-events: none; }
@@ -1348,28 +1362,11 @@ body:not(.desk) #ph-bar { right: calc(14px + env(safe-area-inset-right)); }
 .ph-chip b { font-weight: 600; color: var(--gold-hi); }
 .ph-chip:active { background: rgba(60, 40, 26, 0.95); }
 .ph-chip.off { opacity: .4; pointer-events: none; }
-.ph-chip.open { border-color: var(--gold); }
-/* 手機放不下，只寫名稱；選了什麼看畫面或點開選單 */
-.ph-chip b:empty, body:not(.desk) .ph-chip b { display: none; }
+/* 點一下換下一個，所以要看得到現在選的；手機放不下名稱，只寫選項 */
+.ph-chip b:empty { display: none; }
+body:not(.desk) .ph-chip span { display: none; }
 body.desk .ph-chip span { color: var(--muted); }
 @media (hover: hover) { .ph-chip:hover { border-color: var(--gold); } }
-
-/* 點開比例、運鏡、顯示時跳出的一排選項 */
-#ph-menu {
-  position: fixed; z-index: 21;
-  display: flex; flex-wrap: wrap; gap: 4px;
-  max-width: min(420px, calc(100vw - 24px)); padding: 6px;
-  background: var(--panel); border: 1px solid var(--line-soft); border-radius: 18px;
-}
-#ph-menu[hidden] { display: none; }
-#ph-menu button {
-  height: 34px; padding: 0 13px; border-radius: 999px;
-  color: var(--text); background: none; border: 1px solid transparent;
-  font-size: 13px; letter-spacing: .08em; cursor: var(--cur-pointer);
-}
-#ph-menu button.on { color: var(--gold-hi); border-color: var(--gold); }
-#ph-menu.toggles button:not(.on) { color: var(--muted); }
-#ph-menu p { flex-basis: 100%; margin: 2px 8px 4px; font-size: 12px; letter-spacing: .08em; color: var(--muted); }
 
 #ph-exit { position: fixed; z-index: 20; top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right)); }
 

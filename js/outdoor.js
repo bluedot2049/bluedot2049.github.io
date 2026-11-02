@@ -1448,25 +1448,10 @@ function snowPeak(mz) {
   return geo;
 }
 
-// 古石圈：山頂上一圈高高的立石，有的歪了，有一塊倒在地上。遠遠看只是山脊上一排細細的齒
-// 遠山只是一圈直立的帶子，石頭得沿著帶子的上緣排，才會站在山頂上；石圈前後的深度壓扁到一公尺內
-function stoneRing(k, crest, mz) {
-  const R = rng('stones'), { hs, step, d } = crest, haze = new THREE.Color(HORIZON);
-  const top = (u) => { const j = Math.floor(u), f = u - j, n = hs.length - 1; return hs[Math.max(0, Math.min(n, j))] * (1 - f) + hs[Math.max(0, Math.min(n, j + 1))] * f; };
-  for (let s = 0; s < 9; s++) {
-    const th = (s / 9) * Math.PI * 2 + R() * 0.2, off = Math.sin(th) * 7, dd = d + Math.cos(th) * 0.8;
-    const u = crest.i + off / d / step, a = u * step, y = SEA_LEVEL + top(u), hgt = 3 + R() * 1.6;
-    const x = Math.cos(a) * dd, z = mz + Math.sin(a) * dd, c = new THREE.Color(R() < 0.5 ? '#4a3e58' : '#564866').lerp(haze, 0.4);
-    if (s === 5) k.box(1.4, 0.8, hgt, c, x, y + 0.1, z, { ry: -a + 0.6, ao: false });
-    else k.box(1.4, hgt + 1.5, 0.8, c, x, y + hgt / 2 - 0.75, z, { ry: -a + Math.PI / 2, rz: (R() - 0.5) * 0.3, ao: false });
-  }
-}
-
 // 遠山和雲：不受霧影響，自己帶空氣感的顏色
 function buildFar(mz, R) {
   const k = new Kit(R), { geo: ridgeGeo, crest } = ridges(mz);
   k.lit.push(ridgeGeo, snowPeak(mz));
-  if (crest) stoneRing(k, crest, mz);
   for (let i = 0; i < 14; i++) {
     const a = R() * Math.PI * 2, dist = 120 + R() * 60, y = 30 + R() * 30;
     const cx = Math.cos(a) * dist, cz = mz + Math.sin(a) * dist;

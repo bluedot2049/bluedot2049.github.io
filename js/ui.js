@@ -70,6 +70,22 @@ export class UI {
     $('#dress-close').addEventListener('click', () => { this.hideDress(); this.onClose?.(); });
     $('#cams-close').addEventListener('click', () => { this.hideCams(); this.onClose?.(); });
     $('#ferry-close').addEventListener('click', () => this.hideFerry());
+    $('#ferry-prev').addEventListener('click', () => this.ferryStep(-1));
+    $('#ferry-next').addEventListener('click', () => this.ferryStep(1));
+    $('#ferry-go').addEventListener('click', () => {
+      const d = this.ferryList?.[this.ferryI];
+      if (d?.to) this.ferryPick(d.to);
+    });
+    // 手機在卡片上左右滑也能換一個地方
+    let sx = null, sy = 0;
+    this.ferry.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') { sx = e.clientX; sy = e.clientY; } });
+    this.ferry.addEventListener('pointerup', (e) => {
+      if (sx === null) return;
+      const dx = e.clientX - sx, dy = e.clientY - sy;
+      sx = null;
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) this.ferryStep(dx < 0 ? 1 : -1);
+    });
+    this.ferry.addEventListener('pointercancel', () => { sx = null; });
     $('#sheet-thumb').addEventListener('click', () => this.openViewer($('#sheet-img').src));
     $('#viewer-close').addEventListener('click', () => this.closeViewer());
     $('#guide .enter').addEventListener('click', () => this.hideGuide());
@@ -108,10 +124,10 @@ export class UI {
     return [this.sheet, this.dress, this.cams, this.ferry].find((el) => el.classList.contains('open')) || null;
   }
 
-  // 佔掉一邊畫面的那個面板：電腦版的相機桌是浮在相機底下的銘牌，不算
+  // 佔掉一邊畫面的那個面板：電腦版的相機桌是浮在相機底下的銘牌、渡船是浮在船上的小卡，不算
   get docked() {
     const p = this.panel;
-    return p === this.cams && document.body.classList.contains('desk') ? null : p;
+    return (p === this.cams || p === this.ferry) && document.body.classList.contains('desk') ? null : p;
   }
 
   // 相機桌：v = { i, n, cam, ready, carried, other }。cam 是 null 的位置還沒有相機；ready 是 false 的擺著看、拿不走
@@ -140,19 +156,36 @@ export class UI {
     this.onSheet?.(false);
   }
 
-  // 渡船：list = [{ to, name, note }]，to 是 null 的不能選（所在的地方、還沒開船的），note 寫在右邊。選了就呼叫 onPick(to)
+  // 渡船：list = [{ to, name, desc, tags, here }]，一個地方一張卡，左右換。to 是 null 的不能選（所在的地方、還沒有航線的）。
+  // 從第一個去得了的地方看起，選了就呼叫 onPick(to)
   showFerry(list, onPick) {
-    const ul = $('#ferry-list');
-    ul.innerHTML = list.map((d, i) => `<li><button class="btn${d.to ? ' primary' : ' disabled'}" data-i="${i}"${d.to ? '' : ' disabled'}>`
-      + `${esc(d.name)}<small>${esc(d.note || '')}</small></button></li>`).join('');
-    ul.onclick = (e) => {
-      const b = e.target.closest('button[data-i]');
-      const d = b && list[b.dataset.i];
-      if (d?.to) onPick(d.to);
-    };
+    this.ferryList = list;
+    this.ferryPick = onPick;
+    this.ferryCard(Math.max(0, list.findIndex((d) => d.to)));
     if (this.ferry.classList.contains('open')) return;
     this.ferry.classList.add('open');
     this.onSheet?.(true);
+  }
+
+  ferryCard(i) {
+    const list = this.ferryList, d = list[i];
+    this.ferryI = i;
+    $('#ferry-name').textContent = d.name;
+    $('#ferry-desc').textContent = d.desc || '';
+    $('#ferry-tags').innerHTML = (d.tags || []).map((t) => `<li>${esc(t)}</li>`).join('');
+    $('#ferry-dots').innerHTML = list.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('');
+    const go = $('#ferry-go');
+    go.textContent = d.to ? '上船' : d.here ? '這裡' : '還不能搭';
+    go.disabled = !d.to;
+    go.classList.toggle('primary', !!d.to);
+    go.classList.toggle('disabled', !d.to);
+    $('#ferry-prev').disabled = i === 0;
+    $('#ferry-next').disabled = i === list.length - 1;
+  }
+
+  ferryStep(dir) {
+    const i = this.ferryI + dir;
+    if (this.ferryList && i >= 0 && i < this.ferryList.length) this.ferryCard(i);
   }
 
   hideFerry() {

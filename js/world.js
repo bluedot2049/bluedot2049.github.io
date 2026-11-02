@@ -627,7 +627,7 @@ function stringLights(room, R, bucket) {
 
 export function buildWorld(scene, gallery) {
   const rooms = [], paintings = [], entries = [], raycastTargets = [];
-  let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null, clock = null;
+  let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null, clock = null, mirrorTick = null;
   let z = 0;
 
   // gallery.json 的 outdoor 為 true 時，最後一間房後面接陽台和草原
@@ -700,7 +700,7 @@ export function buildWorld(scene, gallery) {
       const sp = boxSpan(room, 'front'), s0 = Math.max(1.0, room.w / 2 - 1.4);
       sp.occ.push([s0 - 0.9, s0 + 0.9]);
       const pt = sp.at(s0), rot = Math.atan2(pt.nx, pt.nz);
-      const { group, glass } = buildMirror();
+      const { group, glass, update: tick } = buildMirror();
       const x = pt.x + pt.nx * 0.2, z = pt.z + pt.nz * 0.2;
       group.position.set(x, 0, z);
       group.rotation.y = rot;
@@ -709,6 +709,7 @@ export function buildWorld(scene, gallery) {
       room.obstacles.push({ x, z, hw: 0.55, hd: 0.25, rot });
       raycastTargets.push(glass);
       mirror = { x, z, n: { x: pt.nx, z: pt.nz } };
+      mirrorTick = tick;
 
       // 右牆靠前是前門（frontdoor.js）：進來的那道門，門外是黃昏的光，不能開
       const right = room.spans[1], sd = 2.0;
@@ -986,6 +987,7 @@ export function buildWorld(scene, gallery) {
     roomFader.update(dt);
     frontDoor?.update(dt);
     clock?.update();
+    mirrorTick?.(dt, target);
     if (outdoor) {
       const out = currentRoom === rooms.length - 1;
       // 房子外殼只在人走出去、鏡頭也在屋外時出現，不然會擋住室內。

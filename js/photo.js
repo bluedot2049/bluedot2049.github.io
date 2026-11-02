@@ -89,17 +89,6 @@ function noiseTile() {
   return c;
 }
 
-function roundRect(ctx, x, y, w, h, r) {
-  r = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-
 // 錄影格式：能錄 mp4 就錄 mp4（IG、LINE 都收），不行才用 webm
 // avc1.64002a 是 High@4.2，1080p60 剛好裝得下；寫太低的等級有些顯卡的硬體編碼器會讓分頁直接當掉（STATUS_BREAKPOINT）。
 // 當掉的話 JS 接不到，所以錄 mp4 前記 'rec'、錄完擦掉；下次打開還在，就表示上次錄到一半當了，這台以後都錄 webm
@@ -137,7 +126,6 @@ export class PhotoMode {
     this.aimYaw = 0; this.aimPitch = 0;
     this.fov = 50;                          // 要變到的視角；cur 是目前的，平滑追著 fov
     this.cur = 50;
-    this.menu = null;                       // 打開中的選單
     this.keys = new Set();
     this.joy = { x: 0, y: 0 };
     this.lift = 0;                          // 按住高度尺兩端的升、降
@@ -170,7 +158,7 @@ export class PhotoMode {
     this.v2 = new THREE.Vector2();
     const s = this.load();
     this.aspect = s.aspect; this.move = 0;
-    this.self = s.self; this.talk = s.talk; this.sig = s.sig; this.pose = s.pose;
+    this.self = true; this.sig = true; this.pose = s.pose;
     this.markH = 1.1;                       // 落款多高（落款基準大小的幾倍），跟著記號換（marks.js）
     this.$ = (q) => document.querySelector(q);
     this.bindUI();
@@ -178,7 +166,7 @@ export class PhotoMode {
   }
 
   load() {
-    const d = { aspect: 0, self: true, talk: true, sig: true, pose: 0 };
+    const d = { aspect: 0, pose: 0 };
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
       if (s && typeof s === 'object') {
@@ -191,8 +179,8 @@ export class PhotoMode {
   }
 
   save() {
-    const { aspect, self, talk, sig, pose } = this;
-    try { localStorage.setItem(KEY, JSON.stringify({ aspect, self, talk, sig, pose })); } catch {}
+    const { aspect, pose } = this;
+    try { localStorage.setItem(KEY, JSON.stringify({ aspect, pose })); } catch {}
     if (this.gear) this.saveGear();
   }
 
@@ -298,7 +286,6 @@ export class PhotoMode {
     this.pressing = null;
     this.cancelExposure();
     this.closeResult();
-    this.closeMenu();
     this.active = false;
     this.gear = null;
     this.eyeCam = null;
@@ -388,7 +375,7 @@ export class PhotoMode {
   // ───────── 介面 ─────────
 
   bindUI() {
-    // 每個鈕點開是一排選項；「顯示」是幾個開關，可以連著點，點選單外面才收
+    // 每個鈕點一下換下一個選項，到底了回第一個；有 note 的換的時候在下面提一句
     // lock：錄影中不能換（比例會改掉影片大小，運鏡錄到一半換會跳）
     // gear：false 只在畫廊的眼睛出現，true 只在帶著相機時出現；沒寫的兩邊都有。閃光不在這裡，是快門旁邊的開關
     // swap：身上有相機才出現，選項是那台相機的名字和畫廊的眼睛（refresh 時填）
@@ -400,36 +387,13 @@ export class PhotoMode {
       { k: 'grip', label: '拿法', gear: true, opts: GRIPS, get: () => this.grip, set: (i) => { this.grip = i; }, note: '自拍是把手伸長，從前面拍自己' },
       { k: 'turn', label: '方向', gear: true, opts: ['橫拿', '直拿'], get: () => this.upright, set: (i) => { this.upright = i; } },
       { k: 'pose', label: '相機', carry: true, opts: ['掛著', '舉起來'], get: () => this.pose, set: (i) => { this.pose = i; }, note: '舉起來是朝自己面對的方向拍' },
-      { k: 'show', label: '顯示', toggles: [['self', '自己入鏡'], ['talk', '對話框'], ['sig', '落款']] },
     ];
     chips.innerHTML = this.chips.map((c) => `<button class="ph-chip" data-k="${c.k}"><span>${c.label}</span><b></b></button>`).join('');
     for (const c of this.chips) {
       c.el = chips.querySelector(`[data-k="${c.k}"]`);
       c.b = c.el.querySelector('b');
-      c.el.addEventListener('click', () => (this.menu === c ? this.closeMenu() : this.openMenu(c)));
+      c.el.addEventListener('click', () => this.nextOpt(c));
     }
-    const menu = this.$('#ph-menu');
-    menu.addEventListener('click', (e) => {
-      const btn = e.target.closest('button'), c = this.menu;
-      if (!btn || !c) return;
-      if (btn.dataset.t) {
-        const k = btn.dataset.t;
-        this[k] = !this[k];
-        btn.classList.toggle('on', this[k]);
-      } else {
-        c.set(+btn.dataset.i);
-        this.closeMenu();
-      }
-      this.save();
-      this.refresh();
-    });
-    // 點選單以外的地方就收起來；點在畫面上的那一下不算收按鈕
-    document.addEventListener('pointerdown', (e) => {
-      this.swallowTap = false;
-      if (!this.menu || menu.contains(e.target) || this.menu.el.contains(e.target)) return;
-      this.closeMenu();
-      this.swallowTap = true;
-    }, true);
 
     const lensBar = this.$('#ph-lens');
     lensBar.innerHTML = LENSES.map(([label], i) => `<button data-i="${i}">${label}</button>`).join('');
@@ -504,7 +468,7 @@ export class PhotoMode {
     const seen = g ? this.grip === 3 : this.self;
     this.character.group.visible = seen;
     this.player.marker.visible = seen && !g;
-    document.body.classList.toggle('photo-hush', !this.talk);
+    document.body.classList.add('photo-hush');   // 對話框拍不進照片，取景時也藏起來
     const fr = this.$('#ph-frame');
     fr.classList.toggle('masked', this.ratio() > 0);
     fr.style.setProperty('--vig', look.vig);
@@ -551,32 +515,15 @@ export class PhotoMode {
   }
 
   showControls(on) {
-    if (!on) this.closeMenu();
     document.body.classList.toggle('photo-bare', !on);
   }
 
-  // 選單開在按鈕旁邊：按鈕在畫面下半就往上開，不然往下開
-  openMenu(c) {
+  nextOpt(c) {
     if (c.lock && this.rec) return;
-    const m = this.$('#ph-menu');
-    this.menu = c;
-    m.classList.toggle('toggles', !!c.toggles);
-    m.innerHTML = c.toggles
-      ? c.toggles.filter(([k]) => !((this.gear && k === 'self') || (k === 'sig' && !this.markId()))).map(([k, label]) => `<button data-t="${k}" class="${this[k] ? 'on' : ''}">${label}</button>`).join('')
-      : c.opts.map((label, i) => `<button data-i="${i}" class="${i === c.get() ? 'on' : ''}">${label}</button>`).join('') + (c.note ? `<p>${c.note}</p>` : '');
-    m.hidden = false;
-    const r = c.el.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight;
-    const left = Math.max(12, Math.min(r.left, W - m.offsetWidth - 12));
-    const below = r.top < H / 2;
-    Object.assign(m.style, { left: left + 'px', top: below ? r.bottom + 8 + 'px' : '', bottom: below ? '' : H - r.top + 8 + 'px' });
-    for (const x of this.chips) x.el.classList.toggle('open', x === c);
-  }
-
-  closeMenu() {
-    if (!this.menu) return;
-    this.menu = null;
-    this.$('#ph-menu').hidden = true;
-    for (const x of this.chips) x.el.classList.remove('open');
+    c.set((c.get() + 1) % c.opts.length);
+    if (c.note) this.ui.hint(c.note, 2500);
+    this.save();
+    this.refresh();
   }
 
   // 高度尺：拖軌道直接到想要的高度，點刻度跳到常用的高度，按住兩端慢慢升降（電腦也可以按 E / Q）
@@ -648,7 +595,7 @@ export class PhotoMode {
     el.addEventListener('pointerdown', (e) => {
       if (!this.active) return;
       el.setPointerCapture(e.pointerId);
-      pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, drag: false, mouse: e.pointerType === 'mouse', quiet: this.swallowTap });
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, drag: false, mouse: e.pointerType === 'mouse' });
       if (pts.size === 2) {
         const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
         // 推鏡時記下開始時離畫面中央多遠，手指張開多少就靠近多少；定焦鏡頭不能變焦
@@ -686,7 +633,7 @@ export class PhotoMode {
       const p = pts.get(e.pointerId);
       if (!p) return;
       pts.delete(e.pointerId);
-      if (this.active && e.type === 'pointerup' && !p.drag && !p.quiet && !multi && !this.result) {
+      if (this.active && e.type === 'pointerup' && !p.drag && !multi && !this.result) {
         if (this.gear) this.focusAt(e.clientX, e.clientY);
         else this.tap(e.clientX, e.clientY);
       }
@@ -713,7 +660,7 @@ export class PhotoMode {
         if (e.key === 'Escape') this.closeResult();
         return;
       }
-      if (e.key === 'Escape') return this.menu ? this.closeMenu() : this.exit();
+      if (e.key === 'Escape') return this.exit();
       if (e.key === ' ') {
         e.preventDefault();
         if (!e.repeat) this.holdable() ? this.shutterDown() : this.press();
@@ -1106,7 +1053,6 @@ export class PhotoMode {
       ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
       ctx.restore();
     }
-    if (this.talk) this.drawBubbles(ctx, k);
     if (look.vig > 0) {
       ctx.save();
       ctx.translate(W / 2, H / 2);
@@ -1151,55 +1097,6 @@ export class PhotoMode {
     ctx.globalAlpha = 0.82;
     ctx.drawImage(img, W - this.sigSize * 1.3 * k - w, H - this.sigSize * 1.1 * k - h, w, h);
     ctx.restore();
-  }
-
-  // 對話框：照 DOM 上每個字的位置畫，換行和字距都跟畫面一樣
-  drawBubbles(ctx, k) {
-    const fr = this.frame;
-    const map = (x, y) => [(x - fr.x) * k, (y - fr.y) * k];
-    for (const el of document.querySelectorAll('.speech.show')) {
-      if (el.style.visibility === 'hidden') continue;
-      const cs = getComputedStyle(el), op = parseFloat(cs.opacity);
-      if (!(op > 0.02)) continue;
-      const r = el.getBoundingClientRect();
-      if (r.right < fr.x || r.left > fr.x + fr.w || r.bottom < fr.y - 20 || r.top > fr.y + fr.h) continue;
-      const s = r.width / el.offsetWidth;   // 跳出來的動畫中途是縮小的
-      const [x, y] = map(r.left, r.top), w = r.width * k, h = r.height * k, u = s * k;
-      ctx.save();
-      ctx.globalAlpha = op;
-      roundRect(ctx, x, y, w, h, 18 * u);
-      ctx.fillStyle = cs.backgroundColor;
-      ctx.fill();
-      ctx.lineWidth = u;
-      ctx.strokeStyle = cs.borderTopColor;
-      ctx.stroke();
-      const cx = x + w / 2;
-      ctx.beginPath();
-      ctx.moveTo(cx - 8 * u, y + h - 0.5 * u); ctx.lineTo(cx + 8 * u, y + h - 0.5 * u); ctx.lineTo(cx, y + h + 11 * u);
-      ctx.fillStyle = cs.borderTopColor;
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(cx - 7 * u, y + h - 1.5 * u); ctx.lineTo(cx + 7 * u, y + h - 1.5 * u); ctx.lineTo(cx, y + h + 9 * u);
-      ctx.fillStyle = cs.backgroundColor;
-      ctx.fill();
-      ctx.font = `${cs.fontWeight} ${parseFloat(cs.fontSize) * u}px ${cs.fontFamily}`;
-      ctx.fillStyle = cs.color;
-      ctx.textBaseline = 'middle';
-      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), range = document.createRange();
-      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-        const text = n.data;
-        for (let i = 0; i < text.length; i++) {
-          if (text[i] === ' ' || text[i] === '\n') continue;
-          range.setStart(n, i);
-          range.setEnd(n, i + 1);
-          const cr = range.getBoundingClientRect();
-          if (!cr.width) continue;
-          const [tx, ty] = map(cr.left, cr.top + cr.height / 2);
-          ctx.fillText(text[i], tx, ty);
-        }
-      }
-      ctx.restore();
-    }
   }
 
   // ───────── 拍照 ─────────
@@ -1639,7 +1536,6 @@ export class PhotoMode {
       if (blob.size && this.active) this.showResult(blob, `煉金畫廊-${stamp()}.${type === 'video/mp4' ? 'mp4' : 'webm'}`, true);
     };
     mr.start(1000);
-    this.closeMenu();
     this.aimPivot();
     this.rec ={ mr, canvas: c, ctx: c.getContext('2d'), k, start: performance.now(), shift: 0 };
     document.body.classList.add('photo-rec');

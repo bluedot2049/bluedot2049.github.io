@@ -35,8 +35,13 @@ const ZONES = {
   gallery: { crossing: '渡海　回畫廊', load: () => import('./zone-gallery.js') },
   haishi: { crossing: '渡海　往海市', load: () => import('./zone-haishi.js') },
 };
-// 渡船能去的地方，每個渡口都照這個順序列；to 是 null 的還沒開船（沙漠還沒取名，先這樣叫）
-const FERRY = [{ to: 'gallery', name: '畫廊' }, { to: 'haishi', name: '海市' }, { to: null, name: '沙漠', note: '還沒開船' }];
+// 渡船能去的地方，每個渡口都照這個順序一張一張卡；to 是 null 的還沒有航線（沙漠還沒取名，先這樣叫）。
+// desc 是卡片上的一兩句，tags 只寫到了那裡已經能做的事
+const FERRY = [
+  { to: 'gallery', name: '畫廊', desc: '山坡上的老屋，掛著作品。', tags: ['看畫', '照鏡子', '挑相機', '樹洞'] },
+  { to: 'haishi', name: '海市', desc: '海上的夜市。', tags: ['照相館', '攤販'] },
+  { to: null, name: '沙漠', desc: '影子之城', tags: ['還沒有航線'] },
+];
 
 async function loadJSON(url) {
   const res = await fetch(url, { cache: 'no-cache' });
@@ -347,7 +352,8 @@ async function start() {
     onExit(ex) {
       if (!ex.boat) return travel(ex.to);
       if (player.boarding) return;
-      const list = FERRY.map((d) => (d.to === zone ? { ...d, to: null, note: '這裡' } : d));
+      const list = FERRY.map((d) => (d.to === zone ? { ...d, to: null, here: true } : d));
+      ferryBoat = ex.boat;
       ui.showFerry(list, (to) => {
         ui.hideFerry();
         player.board(ex.boat, () => {
@@ -453,6 +459,19 @@ async function start() {
     el.style.setProperty('--cx', `${x.toFixed(1)}px`);
     el.style.setProperty('--cy', `${y.toFixed(1)}px`);
   }
+  // 電腦版的渡船卡浮在船上方：投影船艙上方一點，卡片底邊對著那裡，不出畫面。船在鏡頭後面就放畫面中間
+  let ferryBoat = null;
+  const ferryAt = new THREE.Vector3();
+  function placeFerry() {
+    const s = ferryBoat.seat(), el = ui.ferry;
+    ferryAt.set(s.x, s.y + 1.2, s.z).project(camera);
+    if (ferryAt.z > 1) ferryAt.set(0, -0.2, 0);
+    const W = window.innerWidth, H = window.innerHeight, hw = el.offsetWidth / 2;
+    const x = THREE.MathUtils.clamp(((ferryAt.x + 1) / 2) * W, hw + 16, W - hw - 16);
+    const y = THREE.MathUtils.clamp(((1 - ferryAt.y) / 2) * H, el.offsetHeight + 16, H - 96);
+    el.style.setProperty('--cx', `${x.toFixed(1)}px`);
+    el.style.setProperty('--cy', `${y.toFixed(1)}px`);
+  }
   document.getElementById('cams-prev').addEventListener('click', () => player.events.onCamStep(-1));
   document.getElementById('cams-next').addEventListener('click', () => player.events.onCamStep(1));
   document.getElementById('cams-take').addEventListener('click', () => {
@@ -529,7 +548,7 @@ async function start() {
   // 電腦版挑相機：相機往上挪一點，底下留給銘牌
   function applyViewOffset() {
     const w = window.innerWidth, h = window.innerHeight, panel = ui.docked, pw = panelW();
-    if (!panel && ui.panel) camera.setViewOffset(w, h, 0, Math.round(h * 0.1), w, h);
+    if (!panel && ui.panel === ui.cams) camera.setViewOffset(w, h, 0, Math.round(h * 0.1), w, h);
     else if (!panel) camera.clearViewOffset();
     else if (pw) camera.setViewOffset(w, h, pw / 2, 0, w, h);
     else camera.setViewOffset(w, h, 0, Math.round(panel.offsetHeight / 2), w, h);
@@ -728,12 +747,23 @@ async function start() {
   // 搭船回來、直接開海市的，還是底下那行操作提示。不能 await，下面還要開始畫
   entered.then(() => {
     const byDoor = world.frontDoor && !params.has('from'), at = performance.now();
-    world.frontDoor?.shut(0.15);
+    if (byDoor) world.frontDoor.shut(0.15);
     if (byDoor) ui.toast(world.rooms[0].data.name, world.rooms[0].data.subtitle);
     if (params.has('photo')) photo.enter();
     else if (byDoor) setTimeout(() => { if (lastInput < at) ui.guide(); }, 2600);
     else setTimeout(() => ui.hint(coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿或點地面走路　拖曳轉視角` : `點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下${zone === 'gallery' ? '　Enter 看畫' : ''}`, 6000));
   });
+
+  // 挑相機時鏡頭差不多就在自己頭的高度，帽子、頭上的東西會擋在桌上那台前面：鏡頭飛過去時自己淡掉，離開再淡回來。
+  // 攝影模式自己決定看不看得到自己，那時只管透明度
+  let selfGhost = 1;
+  function updateSelfGhost(dt) {
+    const to = player.focus?.kind === 'cameras' ? 0 : 1;
+    if (selfGhost === to) return;
+    selfGhost = to > selfGhost ? Math.min(1, selfGhost + dt * 4) : Math.max(0, selfGhost - dt * 4);
+    character.setGhost(selfGhost);
+    if (!photo.active) character.group.visible = selfGhost > 0;
+  }
 
   // 照鏡子時：太靠近玩家或擋在鏡頭與玩家之間的訪客與其他玩家淡成半透明
   let mirrorFading = false;
@@ -821,6 +851,7 @@ async function start() {
     player.update(dt);
     photo.update(dt);
     selfie.update(dt);
+    updateSelfGhost(dt);
     // 鏡頭這一幀已經擺好：先算好矩陣，後面對話框、隊友記號照這一幀的鏡頭投影。
     // 不然要等畫的時候才更新，所有頭上的東西都慢一幀，鏡頭一動就抖
     camera.updateMatrixWorld();
@@ -836,6 +867,7 @@ async function start() {
       world.camTable.update(dt);
       if (ui.panel === ui.cams && !ui.docked && player.focus?.kind === 'cameras') placeCams();
     }
+    if (ui.panel === ui.ferry && !ui.docked && ferryBoat) placeFerry();
     const othersMoving = mp ? mp.update(dt, performance.now()) : false;
     const fading = updateMirrorFade(dt);
     if (host) {

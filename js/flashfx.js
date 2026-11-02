@@ -34,11 +34,11 @@ export class FlashFx {
     });
   }
 
-  // ch 是閃燈那個人的角色：燈泡在相機的左上方（cameraModel 的座標）
+  // ch 是閃燈那個人的角色：燈泡在相機左手邊的上方（cameraModel 的座標）
   fire(ch) {
     ch.camG.updateWorldMatrix(true, false);
-    this.pos.set(-0.1, 0.2, 0.04).applyMatrix4(ch.camG.matrixWorld);
-    this.at.set(-0.1, 0.2, 0.04 + 0.35 / ch.camG.getWorldScale(new THREE.Vector3()).z).applyMatrix4(ch.camG.matrixWorld);
+    this.pos.set(0.1, 0.2, 0.024).applyMatrix4(ch.camG.matrixWorld);
+    this.at.set(0.1, 0.2, 0.024 + 0.35 / ch.camG.getWorldScale(new THREE.Vector3()).z).applyMatrix4(ch.camG.matrixWorld);
     this.t = 0;
     for (const p of this.puffs) p.position.copy(this.pos);
     const cam = this.camera, to = this.pos.clone().sub(cam.position), d = to.length();
