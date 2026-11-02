@@ -106,7 +106,13 @@ for (const zone of ZONES) {
     });
     const list = [];
     const skip = (o) => { for (let p = o; p; p = p.parent) if (p.userData.character) return true; return false; };
-    root.traverse((o) => { if (o.geometry?.attributes?.position && !skip(o)) list.push(o.type + ':' + (o.name || o.parent?.name || '') + ':' + o.geometry.attributes.position.count + 'x' + (o.instanceMatrix?.count || 1)); });
+    root.traverse((o) => { if (o.geometry?.attributes?.position && !skip(o)) {
+      // 頂點座標的校驗和：形狀、擺的位置（合併過的網格）有一點不同就會變。粒子（煙、光點）每幀在動，不算
+      const a = o.geometry.attributes.position.array;
+      let sum = 0;
+      if (!o.isPoints) for (let i = 0; i < a.length; i++) sum += a[i] * ((i % 7) + 1);
+      list.push(o.type + ':' + (o.name || o.parent?.name || '') + ':' + o.geometry.attributes.position.count + 'x' + (o.instanceMatrix?.count || 1) + ':' + sum.toFixed(2));
+    } });
     return { kinds, mats, verts, list: list.sort() };
   })()`).catch((e) => (problems.push('指紋 ' + e.message), null)) : null;
   if (ok) {
