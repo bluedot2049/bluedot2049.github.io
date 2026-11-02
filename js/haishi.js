@@ -2460,14 +2460,15 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   const moonDir = new THREE.Vector3(0.5, 0.42, -1).normalize().multiplyScalar(270);
   stars.push({ ...moonDir, color: '#fff4dc', size: 70 });
   sky.add(glowPoints(stars, { sky: true }));
-  // 其中十幾顆特別亮，跟海上的漁火一個樣子，慢慢閃（另外一串亂數，上面的星星位置不變）
+  // 其中十幾顆特別亮，慢慢閃（另外一串亂數，上面的星星位置不變）。
+  // 亮度照真的星空排：大多只是稍微亮一點，真的很亮的只有一兩顆，不會十幾顆一樣大
   const BR = rng('haishi-bright-stars'), bright = [];
   for (let i = 0; i < 14; i++) {
-    const a = BR() * Math.PI * 2, e = 0.18 + Math.pow(BR(), 0.8) * 1.1, m = BR();
-    bright.push({ x: Math.cos(a) * Math.cos(e) * 280, y: Math.sin(e) * 280, z: Math.sin(a) * Math.cos(e) * 280, color: ['#dfe8ff', '#fff2dc', '#ffd2a8'][Math.floor(BR() * 3)], size: 20 + m * 16, gain: 1.4 + m * 1.2 });
+    const a = BR() * Math.PI * 2, e = 0.18 + Math.pow(BR(), 0.8) * 1.1, m = Math.pow(BR(), 2.5);
+    bright.push({ x: Math.cos(a) * Math.cos(e) * 280, y: Math.sin(e) * 280, z: Math.sin(a) * Math.cos(e) * 280, color: ['#dfe8ff', '#fff2dc', '#ffd2a8'][Math.floor(BR() * 3)], size: 14 + m * 16, gain: 0.9 + m * 1.9 });
   }
   sky.add(brightStars(bright, field.material.uniforms.uFade, BR));
-  // 再一層暗一點的：數量多一些，不夠亮所以沒有光芒，但一閃一閃比較明顯
+  // 再一層暗一點的：數量多一些，一閃一閃比較明顯
   const dim = [];
   for (let i = 0; i < (coarse ? 40 : 70); i++) {
     const a = BR() * Math.PI * 2, e = 0.12 + Math.pow(BR(), 0.8) * 1.3, m = BR();

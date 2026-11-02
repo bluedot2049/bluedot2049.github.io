@@ -157,7 +157,7 @@ const HULLS = [
 // 不太對勁的那艘：青色的燈，開得比別人快，一個小時才經過一次
 const ODD_HULL = [[-2, 1.6, ODD, 0.9], [1, 1.6, ODD, 0.9], [3, 2, ODD, 0.9], [0, 3.5, '#c8f6ff', 0.8]];
 
-// 星星的樣子：很小很亮的芯、散得很開的光暈，夠亮的有一點點十字光芒。漁火、桅頂燈、天上那幾顆亮星共用。
+// 星星的樣子：很小很亮的芯、散得很開的光暈，夠亮的有一點點十字光芒。漁火、桅頂燈共用（天上的星另外畫，見 brightStars）。
 // g 是有幾分光暈：海上暗的漁火是 0，只剩一顆收得緊的小點，亮的才暈開
 const STAR_GLSL = `
   vec3 starGlow(vec2 q, vec3 c, float g) {
@@ -240,8 +240,10 @@ function seaLights(ships, hullOf, motion, uFade, sea, starAll = false) {
   ], seaLightMaterial(motion, uFade, sea));
 }
 
-// 天上挑出來的星星：跟漁火一個樣子。掛在天空球上，跟著 uFade 爬高才亮起來。
+// 天上挑出來的星星：掛在天空球上，跟著 uFade 爬高才亮起來。
 // 分兩層：少數特別亮、慢慢閃；多一些暗的，閃得快、閃得深（depth 是暗下去多少，speed 是快慢）。
+// 樣子不跟漁火共用：漁火的十字光芒放在天上太像貼紙。這裡只有一顆一兩個像素的芯，外面一圈很淡、沒有邊的光；
+// 越近天邊隔的空氣越厚，暗一點、偏暖、閃得兇，頭頂的穩一點
 // list 每顆 { x, y, z, color, size（像素）, gain（亮度）}
 export function brightStars(list, uFade, R, { depth = 0.6, speed = 1 } = {}) {
   const c = new THREE.Color();
@@ -254,18 +256,27 @@ export function brightStars(list, uFade, R, { depth = 0.6, speed = 1 } = {}) {
     vertexShader: `
       uniform float uTime; uniform float uFade; uniform float uPr; uniform float uDepth; uniform float uSpeed;
       attribute vec3 aColor; attribute vec2 aSeed;
-      varying vec3 vC;
+      varying vec3 vC; varying float vS; varying float vB;
       void main() {
         float s = aSeed.y, t = uTime * uSpeed;
+        float el = smoothstep(0.05, 0.6, normalize(position).y);
         float w = sin(t * (0.8 + fract(s * 7.3)) + s * 3.0) * sin(t * (0.33 + fract(s * 3.1) * 0.4) + s);
-        float tw = 1.0 - uDepth * (0.5 - 0.5 * w);
-        vC = aColor * tw * (0.3 + 0.7 * clamp((uFade - 0.25) / 0.75, 0.0, 1.0));
-        gl_PointSize = aSeed.x * uPr;
+        float tw = 1.0 - min(0.95, uDepth * mix(1.35, 0.7, el)) * (0.5 - 0.5 * w);
+        vB = max(aColor.r, max(aColor.g, aColor.b));
+        vC = aColor * mix(vec3(0.62, 0.52, 0.42), vec3(1.0), el) * tw * (0.3 + 0.7 * clamp((uFade - 0.25) / 0.75, 0.0, 1.0));
+        gl_PointSize = vS = aSeed.x * uPr;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }`,
-    fragmentShader: STAR_GLSL + `
-      varying vec3 vC;
-      void main() { gl_FragColor = vec4(starGlow(gl_PointCoord - 0.5, vC), 1.0); }`,
+    fragmentShader: `
+      uniform float uPr;
+      varying vec3 vC; varying float vS; varying float vB;
+      void main() {
+        vec2 q = gl_PointCoord - 0.5;
+        float r = length(q) * 2.0, px = length(q) * vS, k = uPr * (0.8 + 0.45 * min(vB, 2.5));
+        float core = exp(-px * px / (k * k));
+        float halo = exp(-r * 3.5) * pow(max(0.0, 1.0 - r), 2.0) * 0.5;
+        gl_FragColor = vec4(vC * (core * 2.2 + halo), 1.0);
+      }`,
     transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending,
   }));
 }
