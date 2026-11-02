@@ -50,7 +50,7 @@ export function crowd({ scene, world, shadowTex, player, camera, ambience, host,
 // ?go=房間.畫 是在海市點了清單裡的畫，到了直接站到那幅畫前面
 export function arrive({ player, world, params, ui }) {
   const ferry = world.exits[0];
-  if (params.get('from') === 'haishi' && ferry) {
+  if ((params.get('from') === 'haishi' || params.get('from') === 'shenlou') && ferry) {
     player.place(ferry.x, ferry.z + 1.8, 0);
     world.frontDoor?.shut(0, true);
   } else if (world.frontDoor) {
