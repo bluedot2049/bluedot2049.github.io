@@ -154,6 +154,9 @@ async function start() {
     document.querySelector('#loading .msg').textContent = '載入失敗：' + e.message;
     return;
   }
+  // 載入進度（index.html 的 loadbar）：區域載好、場景蓋好、著色器編好各過一關，收掉載入畫面時補滿。
+  // 後面接著是一大段同步的程式，await 讓出一幀，條的動畫先交給合成器才不會停住
+  await window.loadbar?.mark('zone');
   document.title = gallery.title || document.title;
   const ui = new UI(gallery);
 
@@ -552,6 +555,13 @@ async function start() {
     document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : t.kind === 'pet' || t.kind === 'talk' ? t.p.name : t.kind === 'exit' ? t.p.title : '';
   }
 
+  // 越肩鎖住滑鼠時，作品面板、清單、行囊、說明卡、樹洞、打字框打開就把游標還回來
+  player.cursorWanted = () => {
+    const b = document.body.classList;
+    return b.contains('panel-open') || b.contains('chatting') || !document.getElementById('pack-card').hidden
+      || !!document.querySelector('#list.open, #guide.show, #hollow.show') || !!document.activeElement?.closest?.('input, textarea');
+  };
+
   // 聲音開關：戶外的風聲和動物叫聲共用，室內也有貓，所以一直都在
   const soundBtn = document.getElementById('sound-btn');
   const soundLabel = () => {
@@ -740,6 +750,7 @@ async function start() {
   // 趁載入畫面先把所有著色器編好。不然第一次走出後門要一口氣編幾十個，
   // Windows 的瀏覽器編得特別慢，畫面會凍住一兩秒。
   // 藏起來的房間、戶外、海面先全部打開；海面倒影畫進貼圖時用的是另一組著色器，也一起編
+  await window.loadbar?.mark('built');
   await precompile(renderer, scene, camera, world);
   if (fxJob) {
     fx = await fxJob;
@@ -756,7 +767,8 @@ async function start() {
     renderer.setRenderTarget(null);
     rt?.dispose();
   }
-  const stats = params.has('debug') ? debugStats(renderer, quality) : null;
+  window.loadbar?.mark('compiled');
+  const stats =params.has('debug') ? debugStats(renderer, quality) : null;
   // 改地圖、調色用的小工具：?ref= 疊參考圖，?debug 開右邊的調色台（調色、分區、光線、參考圖，見 devtools.js）
   if (params.has('debug') || params.has('ref')) {
     import('./devtools.js').then(({ refOverlay, gradeDock }) => {

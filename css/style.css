@@ -170,6 +170,14 @@ body.flat #stage::after { display: none; }
 .notice .sub { margin-top: -6px; font-size: 12.5px; letter-spacing: .12em; color: var(--muted); }
 .notice .swatch { display: flex; height: 3px; transform-origin: left; animation: swatch-in .9s cubic-bezier(.3, .7, .3, 1) .15s both; }
 .notice .swatch i { background: var(--c); }
+/* 載入進度（index.html 的 loadbar）：整條色票先淡淡地在那裡，填到的地方換成實色。
+   填滿那一塊是外框往左退、裡面的色票往右補回來，兩個都只動 transform，主執行緒卡住也照樣在走 */
+.loadbar { position: relative; height: 3px; overflow: hidden; }
+.loadbar .ghost, .loadbar .fill > div { position: absolute; inset: 0; display: flex; }
+.loadbar .ghost { opacity: .26; }
+.loadbar .fill { position: absolute; inset: 0; overflow: hidden; transform: translateX(-100%); }
+.loadbar .fill > div { transform: translateX(100%); }
+.loadbar.sub { display: none; }
 .notice .tasks { list-style: none; margin: 0; padding: 0; }
 .notice .tasks li {
   display: grid; grid-template-columns: 18px 1fr 9px; align-items: center; gap: 12px; padding: 11px 0;
@@ -298,22 +306,24 @@ body.flat #stage::after { display: none; }
 .cine .lid.top { top: 0; animation: cine-lid-up 16s cubic-bezier(.15, .55, .3, 1) var(--t) forwards; }
 .cine .lid.bot { bottom: 0; animation: cine-lid-down 16s cubic-bezier(.15, .55, .3, 1) var(--t) forwards; }
 #loading.crossing .msg { position: absolute; left: 0; right: 0; top: calc(50% + min(calc(100cqw / 2.8), 46cqh) / 2 + min(5cqh, 28px)); z-index: 3; margin: 0; text-align: center; color: rgba(232, 220, 200, .55); font-size: 13px; }
+#loading.crossing .loadbar.sub { display: block; position: absolute; left: calc(50% - 66px); width: 132px; top: calc(50% + min(calc(100cqw / 2.8), 46cqh) / 2 + min(5cqh, 28px) + 30px); z-index: 3; }
 /* 直式的門板：右邊一塊黑，上面是像畫旁邊的註解 */
 .cine .wing { display: none; position: absolute; top: 0; bottom: 0; right: 0; width: 40cqw; z-index: 2; background: var(--ink); animation: cine-wing 16s cubic-bezier(.15, .55, .3, 1) var(--t) forwards; }
 .cine .label { position: absolute; left: 13%; right: 10%; bottom: 10cqh; color: rgba(232, 220, 200, .78); }
 .cine .label b { display: block; font-weight: normal; font-size: 21px; letter-spacing: .3em; color: rgba(240, 228, 208, .9); }
-.cine .label i { display: block; width: 22px; height: 1px; margin: 14px 0 12px; background: var(--gold-lo); opacity: .7; }
+.cine .label .loadbar { margin: 14px 0 12px; }
 .cine .label span { display: block; font-size: 13px; letter-spacing: .2em; line-height: 1.9; }
 .cine .label small { display: block; margin-top: 6px; font-size: 11px; letter-spacing: .1em; color: rgba(232, 220, 200, .42); line-height: 1.8; }
 /* 到了：光鋪滿（ui.landing 加 landing），字先收掉 */
 .cine .light { position: absolute; inset: 0; z-index: 4; background: var(--light); opacity: 0; transition: opacity .7s 1.2s; pointer-events: none; }
 #loading.landing .cine .light { opacity: 1; }
-#loading.landing .msg, #loading.landing .cine .label { opacity: 0; transition: opacity .35s; }
+/* 進度條先補滿（ui.loading 叫 loadbar.mark('ready')），再跟字一起收掉 */
+#loading.landing .msg, #loading.landing .loadbar.sub, #loading.landing .cine .label { opacity: 0; transition: opacity .35s .25s; }
 /* 直式：整個畫面是舞台（1:2），船頭擺在左邊那條的中間；右邊黑塊蓋住剩下的 */
 @container (orientation: portrait) {
   .cine { --bh: 100cqh; --gap: 0px; --hy: 41%; --gx: 29%; --tx: 47%; --th: 2.4%; --lx: -4%; --ly: -6%; --ls: 90%; --rx: 29%; --ry: 77%; --halh: 22%; --ripw: 1.4cqw; }
   .cine .stage { left: 0; width: max(100cqw, 50cqh); aspect-ratio: .5; translate: 0 -50%; }
-  .cine .fg.wide, .cine .lid, #loading.crossing .msg { display: none; }
+  .cine .fg.wide, .cine .lid, #loading.crossing .msg, #loading.crossing .loadbar.sub { display: none; }
   .cine .fg.tall, .cine .wing { display: block; }
   .cine .rip { --kx: var(--pdx); --ky: var(--pdy); }
 }
@@ -582,6 +592,12 @@ body.photo #photo-btn .x { display: block; }
 #sound-btn.muted .off { display: block; }
 #sound-btn.muted { color: var(--muted); }
 #shoulder-btn.on { border-color: var(--gold); color: var(--gold-hi); }
+/* 越肩鎖住滑鼠時的準心：一顆小金點，對到畫、鏡子、動物時外面亮一圈金線 */
+#reticle { position: fixed; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: var(--gold-hi); box-shadow: 0 0 0 1px rgba(20, 14, 10, .45); pointer-events: none; opacity: 0; transition: opacity .2s; z-index: 4; }
+#reticle::after { content: ''; position: absolute; left: 50%; top: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; border: 1px solid var(--gold); opacity: 0; transform: scale(.5); transition: opacity .2s, transform .25s; }
+body.locked #reticle { opacity: .85; }
+body.locked.aim-hot #reticle::after { opacity: .9; transform: scale(1); }
+body.photo #reticle { display: none; }
 
 /* 在線人數：一顆微亮的金點 */
 #online {

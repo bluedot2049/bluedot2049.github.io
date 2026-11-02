@@ -87,7 +87,9 @@ await send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
 for (const { zone, shot } of picked) {
   const [w, h] = shot.size;
   await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: SCALE, mobile: false });
-  await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/?z=${zone}&q=mid&debug&crowd=0` });
+  // 當成從另一區搭船過來：不會停在第一次來的門口等人按「進入」；畫廊會在碼頭上岸，戶外才是打開的、光線和霧也是戶外那組
+  const from = zone === 'gallery' ? 'haishi' : 'gallery';
+  await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/?z=${zone}&q=mid&debug&crowd=0&from=${from}` });
   for (let i = 0; i < 240; i++) {
     await sleep(250);
     if (await ev(`!!window.__g && document.getElementById('loading')?.classList.contains('done')`).catch(() => false)) break;
@@ -98,7 +100,9 @@ for (const { zone, shot } of picked) {
     g.quality.set(${SCALE});
     g.quality.pause(1e9);
     g.player.character.group.visible = false;
-    g.player.fadeTarget = () => null;
+    // 海市的房子擋在鏡頭和目標之間會淡掉，給 null 全部照原樣；畫廊的牆、樹、碑文要一個目標點，給看的那一點（都在戶外，牆不會降）
+    const look = new cam.position.constructor(...s.look);
+    g.player.fadeTarget = () => (${JSON.stringify(zone)} === 'gallery' ? look : null);
     g.player.update = () => {
       cam.fov = s.fov;
       cam.position.set(...s.pos);
