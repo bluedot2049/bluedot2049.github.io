@@ -604,6 +604,7 @@ async function start() {
 
   // 越肩視角開關，player.js 記住上次的選擇；F 鍵切換時按鈕也跟著變
   const shoulderBtn = document.getElementById('shoulder-btn');
+  shoulderBtn.hidden = !player.shoulderOk;
   const shoulderLabel = (on) => {
     shoulderBtn.classList.toggle('on', on);
     shoulderBtn.setAttribute('aria-pressed', on);

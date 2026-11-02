@@ -85,7 +85,8 @@ export class Player {
     this.camDist = defaultDist();
     this.distMax = world.camDistMax ?? DIST_MAX;   // 海市可以拉得比較遠，看得到整座山城
     this.shoulder = false;          // 越肩；遠近和俯仰跟一般跟拍分開記
-    try { this.shoulder = localStorage.getItem('shoulder') === '1'; } catch {}
+    this.shoulderOk = !matchMedia('(pointer: coarse)').matches;   // 越肩先只給電腦，手機之後再做
+    try { this.shoulder = this.shoulderOk && localStorage.getItem('shoulder') === '1'; } catch {}
     document.body.classList.toggle('shoulder', this.shoulder);
     this.shDist = shDefaultDist();
     this.shPitch = SH_PITCH_DEFAULT;
@@ -429,6 +430,7 @@ export class Player {
   }
 
   setShoulder(on) {
+    on = on && this.shoulderOk;
     this.shoulder = on;
     document.body.classList.toggle('shoulder', on);   // 操作說明換成越肩那一張
     if (on && matchMedia('(pointer: fine)').matches) this.lock();   // 按 F 或點按鈕的當下就鎖，不用再點一下畫面

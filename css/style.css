@@ -596,6 +596,8 @@ body.photo #reticle { display: none; }
 #pause .set { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; letter-spacing: .08em; color: var(--text); }
 #pause .set input[type=range] { width: 160px; accent-color: var(--gold); }
 #pause .set input[type=checkbox] { accent-color: var(--gold); }
+#pause .saves b { font-weight: normal; color: var(--muted); }
+#pause .saves .btn { min-height: 30px; padding: 0 12px; font-size: 12.5px; letter-spacing: .08em; }
 #pause .keys { list-style: none; margin: 0; padding: 0; }
 #pause .keys li { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid rgba(232, 184, 106, .1); font-size: 12.5px; letter-spacing: .06em; color: var(--muted); }
 #pause .keys li > span:last-child { display: flex; gap: 4px; }

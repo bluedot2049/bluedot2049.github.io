@@ -5,6 +5,8 @@
 // Esc 放開滑鼠時跳出暫停選單：繼續、各個功能、滑鼠靈敏度和上下反轉、按鍵一覽。
 // （V 越肩、E 互動、中鍵標記在 player.js；P 攝影、F 閃光在 photo.js；T 說話、G 標記在 party.js；1–5 表情在 main.js）
 
+import { photoSaves, saveState, settleFolder } from './photosave.js';
+
 const typing = (e) => !!e.target.closest?.('#dress, input:not([type=checkbox]):not([type=range]), textarea');
 const HOTKEYS = { b: 'pack-btn', o: 'party-btn', h: 'more-btn' };
 const WHEEL_R = 92, WHEEL_DEAD = 26;
@@ -87,8 +89,22 @@ export function bindDeskKeys({ player, ui, photo, emotes, emote }) {
     // 按鈕列上沒出現的功能（還沒連線的同行、還沒開放的作品清單），選單裡也不放
     for (const b of menu.querySelectorAll('.acts [data-act$="-btn"]')) b.hidden = !!$(b.dataset.act)?.hidden;
     menu.querySelector('[data-act="sound-btn"] span').textContent = $('sound-btn').classList.contains('muted') ? '開啟聲音' : '靜音';
+    saves();
     menu.classList.add('show');
   };
+  // 照片資料夾那一列：還沒挑、還沒允許、有幾張等著寫進去
+  const saveRow = menu.querySelector('.saves');
+  const saves = async () => {
+    const st = await saveState();
+    saveRow.hidden = !st;
+    if (!st) return;
+    const n = st.waiting ? `（${st.waiting} 張）` : '';
+    saveRow.querySelector('b').textContent = st.folder ?? '還沒選';
+    const btn = saveRow.querySelector('button');
+    btn.textContent = !st.folder ? `選資料夾${n}` : !st.ok ? `允許寫入${n}` : '換資料夾';
+    btn.dataset.save = st.folder && st.ok ? 'change' : '';
+  };
+  photoSaves.onChange = () => { if (menu.classList.contains('show')) saves(); };
   // 玩家自己按 Esc 放開的才跳；程式為了面板放開的不跳
   document.addEventListener('pointerlockchange', () => {
     if (player.locked) hide();
@@ -97,6 +113,7 @@ export function bindDeskKeys({ player, ui, photo, emotes, emote }) {
   menu.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
+    if (b.dataset.save !== undefined) return void settleFolder(b.dataset.save === 'change');
     hide();
     if (b.dataset.act === 'resume') return player.lock();
     if (b.dataset.act === 'guide') ui.guide(true);
