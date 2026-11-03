@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { rod } from '../avatar/heads.js';
 import { getSave, putSave } from '../avatar/looks.js';
 import { drawGlyph, strokes } from '../core/glyphs.js';
+import { punch } from '../core/icode.js';
 
 // 等效全片幅的焦距換成視角：照片長邊對應底片的 36mm
 export const longTan = (mm) => 18 / mm;
@@ -26,7 +27,7 @@ export const longTan = (mm) => 18 / mm;
 // make：哪家工坊做的。mark 是商號（用海市的字刻），model 型號、serial 序號（用蘇州碼子的數字刻）；shutter：快門鈕長什麼樣（SHUTTERS）
 export const CAMERAS = {
   bulb: {
-    name: '燭乙式',
+    name: '燭火乙式',
     spec: ['可開關閃光燈', '27mm 定焦鏡', '數位式'],
     maker: '海市火記光學製造',
     focal: 27, prime: true, fstop: 1.4, bokeh: 4, focus: 'tap', aspect: 3 / 2,
@@ -44,14 +45,14 @@ export const CAMERAS = {
 export const TABLE = ['bulb', 'gui', 'wang'];
 
 // 擺在桌上、還拿不走的：只有模型和名字，面板寫名字，按鈕是灰的
-export const SOON = { gui: { name: '晷', rattle: 'sand' }, wang: { name: '望', rattle: 'whir' } };
+export const SOON = { gui: { name: '日晷III', rattle: 'sand' }, wang: { name: '望', rattle: 'whir' } };
 
 // 帶在身上的相機，記在存檔裡
 export const carried = () => (CAMERAS[getSave().camera] ? getSave().camera : null);
 export const carry = (id) => putSave({ camera: CAMERAS[id] ? id : null });
 
 const BODY = '#3b2a20', TRIM = '#a0a6ae', GLASS = '#5c7884', SILVER = '#dcd6c8', DARK = '#1e1c1e';
-// 舊金：跟介面上燭乙式的快門、日期框同一種（css/photo.css 的舊金），沉半階
+// 舊金：跟介面上燭火乙式的快門、日期框同一種（css/photo.css 的舊金），沉半階
 const OLD = '#b8904c', OLDHI = '#d2ad6a', WELL = '#2c2118';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
@@ -75,7 +76,7 @@ export function cameraModel(k, id) {
   else if (id === 'wangbox') wangModel(k);
 }
 
-// 燭乙式：皮革方盒、銀灰上蓋。快門在右手邊（-x），觀景窗和閃光傘在左手邊（+x）。
+// 燭火乙式：皮革方盒、銀灰上蓋。快門在右手邊（-x），觀景窗和閃光傘在左手邊（+x）。
 // 介面上有的零件也長在機身上：舊金圓頂快門、銀白摺扇反光罩、機背的舊金日期框
 function bulbModel(k) {
   k.box(0.15, 0.1, 0.09, BODY, 0, 0.05, 0);
@@ -103,7 +104,7 @@ function bulbModel(k) {
   k.ball(0.016, '#f6f1e2', fx, fy, fz + 0.012);
 }
 
-// 沙漠工坊「晷」：躺著的觀星儀。古銅偏金的機身左右不對稱，右頭一隻疊影窗，中間伸出短胖的變形鏡筒，頂上一面日晷盤裝著圓盤底片。
+// 沙漠工坊「日晷III」：躺著的觀星儀。III 是蜃樓那座城的記號。古銅偏金的機身左右不對稱，右頭一隻疊影窗，中間伸出短胖的變形鏡筒，頂上一面日晷盤裝著圓盤底片。
 // 快門在左邊矮的那階（拍照的人的右手邊），發條鑰匙在高的那頭
 const BRZ = '#8f6d3c', WORN = '#6b502c', GILT = '#c09a4e', DBRZ = '#4a3720', DIAL = '#b08e4c',
   CLOTH = '#34374a', LENS = '#3a5058', SAND = '#c9a66e', PALE = '#a9bcbc', VIAL = '#f3b457', HOLE = '#22190f';
@@ -133,10 +134,10 @@ function guiModel(k) {
   k.cyl(0.029, 0.027, 0.022, DBRZ, 0, yc, z0 + 0.081, { ...face, sx: 1.3 }, 12);
   k.cyl(0.0295, 0.0295, 0.003, GILT, 0, yc, z0 + 0.0915, { ...face, sx: 1.3 }, 12);
   k.cyl(0.0235, 0.0235, 0.002, LENS, 0, yc, z0 + 0.0935, { ...face, sx: 1.3 }, 12);
-  // 打孔銘牌，四個孔，在左邊矮的那階正面
+  // 打孔銘牌：I 碼的 III（城），在左邊矮的那階正面
   const px = -0.062, py = 0.034;
   k.box(0.03, 0.011, 0.002, GILT, px, py, front + 0.001);
-  for (const [x, y] of [[-0.009, 0.0025], [-0.003, -0.0025], [0.003, 0.0025], [0.009, -0.0025]]) k.box(0.002, 0.002, 0.001, HOLE, px + x, py + y, front + 0.0025);
+  punch(k, '#', { x: px, y: py, z: front + 0.0025, h: 0.008, w: 0.0022, gap: 0.0043, depth: 0.001, color: HOLE });
   // 日晷盤：一面盤，只有影子落的那一格是暗的，晷針平貼盤面指著它
   const top = H + 0.016, dx = 0.012, sa = 7.5 * Math.PI / 4;
   k.cyl(0.047, 0.047, 0.012, DBRZ, dx, H + 0.006, 0, {}, 16);
@@ -341,7 +342,7 @@ function shutterRing(g, ticks) {
 }
 
 const SHUTTERS = {
-  // 金鈕：燭乙式。海市的相機整顆都是金的，用了一陣子：顏色沉半階，溝裡積了暗斑；
+  // 金鈕：燭火乙式。海市的相機整顆都是金的，用了一陣子：顏色沉半階，溝裡積了暗斑；
   // 金鈕中間拇指常按的地方磨得亮一點。按一下金鈕壓下去又彈回來；按住就一直壓著
   gold(g, ticks) {
     return '<svg viewBox="-36 -36 72 72" aria-hidden="true">'

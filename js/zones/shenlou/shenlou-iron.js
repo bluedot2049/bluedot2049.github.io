@@ -6,8 +6,11 @@
 // 座標跟 shenlou.js 一樣：x 往東、z 往南，井的中心是原點。房子、牆、塔的零件寫在它們自己的座標裡（本地 -x 朝井、+x 朝外）
 import * as THREE from 'three';
 import { Kit, rng, mergeBucket } from '../../core/props.js';
+import { punch, slits } from '../../core/icode.js';
+import { streak } from './shenlou-houses.js';
 
-const IRON = '#6a5f58', IRON_DK = '#4b4248', STEEL = '#8e877c', RUST = '#8e5032', RUST_LT = '#ad6c3f',
+// 鏽比鐵多：新撿來的才是鐵灰，放久了的都長了一層橘紅
+const IRON = '#6a5f58', IRON_DK = '#4b4248', STEEL = '#8e877c', RUST = '#9a5230', RUST_LT = '#bd6d3a', RUST_DK = '#743f2a',
   BRONZE = '#8f6d3c', VERD = '#6f8c79', GILT = '#c09a4e', CANVAS = '#c8b28c', HOLE = '#3a3040',
   WATER = '#4f6f78', BELT = '#3f3537', VIAL = '#f3b457';
 const PI = Math.PI;
@@ -71,25 +74,39 @@ function groundPipe(k, terrain, x0, z0, x1, z1, r, c) {
   }
 }
 
-// 補在牆上的一塊鐵皮：(x, y, z) 是牆面上的中心，nx、nz 是牆面朝外的方向（±1 或 0）。下半截鏽紅、上半截鐵灰，上下兩條接縫壓條，上面那條一排鉚釘
-function patch(k, x, y, z, w, h, nx, nz, R) {
-  const c = R() < 0.55 ? RUST : RUST_LT, c2 = R() < 0.6 ? STEEL : IRON;
+// 補在牆上的一塊鐵皮：(x, y, z) 是牆面上的中心，nx、nz 是牆面朝外的方向（±1 或 0）。多半整片鏽透，上下兩條接縫壓條，上面那條一排鉚釘；
+// wall 是牆的顏色，鐵皮底下往下流一兩道鏽水
+function patch(k, x, y, z, w, h, nx, nz, R, wall) {
+  const c = R() < 0.5 ? RUST : R() < 0.6 ? RUST_LT : RUST_DK, c2 = R() < 0.35 ? STEEL : R() < 0.5 ? IRON : RUST_LT;
   const ax = nx !== 0, t = 0.05;
   k.box(ax ? t : w, h, ax ? w : t, c, x + (nx * t) / 2, y, z + (nz * t) / 2, { color2: c2 });
   for (const yy of [y - h / 2 + 0.05, y + h / 2 - 0.05]) k.box(ax ? 0.09 : w + 0.04, 0.07, ax ? w + 0.04 : 0.09, IRON_DK, x + nx * 0.045, yy, z + nz * 0.045);
-  for (let s = -w / 2 + 0.18; s < w / 2 - 0.1; s += 0.36) k.box(0.06, 0.06, 0.06, STEEL, x + nx * 0.1 + (ax ? 0 : s), y + h / 2 - 0.05, z + nz * 0.1 + (ax ? s : 0));
+  for (let s = -w / 2 + 0.2; s < w / 2 - 0.1; s += 0.5) k.box(0.06, 0.06, 0.06, R() < 0.5 ? STEEL : RUST_DK, x + nx * 0.1 + (ax ? 0 : s), y + h / 2 - 0.05, z + nz * 0.1 + (ax ? s : 0));
+  if (!wall) return;
+  const bottom = y - h / 2;
+  for (let i = 0, n = 1 + Math.floor(R() * 2); i < n && bottom > 0.5; i++) {
+    const s = (R() - 0.5) * (w - 0.2);
+    streak(k, x + (ax ? 0 : s), bottom, z + (ax ? s : 0), Math.min(bottom - 0.1, 0.4 + R() * 1.2), 0.07 + R() * 0.08, nx, nz, wall);
+  }
 }
 
-// 打孔的鐵牌：兩排小洞，沙漠的字是打出來的（還不是真的字，先點出樣子）。牌面朝本地 +z 轉 ry
-function punched(k, x, y, z, w, h, ry, R) {
-  k.box(w, h, 0.05, STEEL, x, y, z, { ry, color2: IRON });
-  const c = Math.cos(ry), s = Math.sin(ry);
-  for (let row = 0; row < 2; row++) {
-    for (let u = -w / 2 + 0.15; u < w / 2 - 0.1; u += 0.13) {
-      if (R() < 0.45) continue;
-      k.box(0.07, 0.07, 0.07, HOLE, x + c * u, y + (row - 0.5) * h * 0.4, z - s * u, { ry });
-    }
-  }
+// 打孔的鐵牌：I 碼（core/icode.js）打一行字。牌子的中心在 (x, y, z)，h 是全縫的高度，牌面朝本地 +z 轉 ry
+function punched(k, x, y, z, text, h, ry) {
+  const w = h * 0.16, gap = w * 1.1, space = w * 2.6, { width } = slits(text, w, gap, space);
+  k.box(width + h * 0.7, h * 1.5, 0.05, STEEL, x, y, z, { ry, color2: RUST });
+  punch(k, text, { x: x + Math.sin(ry) * 0.03, y, z: z + Math.cos(ry) * 0.03, h, w, gap, space, ry, depth: 0.03, color: HOLE });
+}
+
+// 工字鋼：撿來的鋼樑，斷面是 I。直的柱子（翼板沿本地 x）、沿 z 橫放的樑（正面看是上下兩條翼板、中間凹進去的腹板）
+function ibeamPost(k, x, y0, y1, z, s, c, c2) {
+  const h = y1 - y0, t = s * 0.18, o = { color2: c2 };
+  for (const sz of [-1, 1]) k.box(s, h, t, c, x, y0 + h / 2, z + sz * (s / 2 - t / 2), o);
+  k.box(s * 0.24, h, s - 2 * t, c, x, y0 + h / 2, z, o);
+}
+function ibeamZ(k, x, y, z0, z1, s, c) {
+  const L = z1 - z0, t = s * 0.18, zc = (z0 + z1) / 2;
+  for (const sy of [-1, 1]) k.box(s, t, L, c, x, y + sy * (s / 2 - t / 2), zc);
+  k.box(s * 0.24, s - 2 * t, L, RUST_DK, x, y, zc);
 }
 
 // 齒輪（不轉的）：先在 XY 平面上做，軸朝 z，再照 o 的角度轉
@@ -237,17 +254,16 @@ function roofSpot(rects, avoid, r, R) {
 }
 
 // ---------- 主體 ----------
-// lanes、laneHit、houses 從 shenlou.js 來；擋路的方塊直接加進 obstacles
-export function makeIron({ obstacles, lanes, laneHit, houses, terrain, TOWN_R, WELL, SHAFT, COURT_IN, RING_TOP, WATER_Y, CAP_Y }) {
+// lanes、houses 從 shenlou.js 來（lanes 的 text 是城門鐵牌上打的字）；擋路的方塊直接加進 obstacles
+export function makeIron({ obstacles, lanes, houses, terrain, TOWN_R, WELL, SHAFT, COURT_IN, RING_TOP, WATER_Y, CAP_Y }) {
   const spin = [], anchors = [];
   const deg = PI / 180;
   const block = (o) => obstacles.push(o);
-  // 這一點離哪棟房子太近（不算自己那棟）
+  // 這一點在不在哪棟房子的範圍裡（梯形照寬的那頭算）
   const inHouse = (h, x, z, pad) => {
     const dx = x - h.x, dz = z - h.z, c = Math.cos(-h.th), s = Math.sin(-h.th);
     return Math.abs(dx * c - dz * s) < h.w / 2 + pad && Math.abs(dx * s + dz * c) < h.d / 2 + pad;
   };
-  const nearHouse = (x, z, pad, self) => houses.some((h) => h !== self && inHouse(h, x, z, pad));
 
   // 一根桿子頂著風車：桿子在房子座標裡，葉片記世界座標另外轉
   function windmill(k, f, x, y, z, hgt, R) {
@@ -270,45 +286,54 @@ export function makeIron({ obstacles, lanes, laneHit, houses, terrain, TOWN_R, W
   }
 
   return {
-    // 房子：門框、遮陽鐵皮、補丁、排水管、閥箱、屋頂設備、牆邊的廢鐵。info 是 shenlou.js 蓋房子時量好的尺寸
+    // 房子：門框（工字鋼門楣）、遮陽鐵皮、補丁、鏽水、排水管、閥箱、屋頂設備。info 是 shenlou-houses.js 蓋房子時量好的尺寸。
+    // 房子是梯形：-x 那面（朝井）半寬 d0/2、+x 那面 d1/2，兩側的牆是斜的，補丁照斜的牆面貼
     house(k, h, info, i) {
-      const R = rng('shenlou:iron:house:' + i), W = h.w / 2, D = h.d / 2, f = frame(h.x, h.z, -h.th);
-      const { door, ht } = info;
-      h.top = Math.max(info.top, info.wind ? ht + info.wind.th + 0.2 : 0, info.dome ? ht + info.dome : 0);
-      if (R() < 0.7) {
-        const top = 1.05 + door.h / 2, zz = door.z, hw = door.w / 2 + 0.09;
-        for (const s of [-1, 1]) k.box(0.2, top + 0.12, 0.16, IRON_DK, -W - 0.06, (top + 0.12) / 2, zz + s * hw);
-        k.box(0.24, 0.24, door.w + 0.42, IRON, -W - 0.08, top + 0.12, zz);
+      const R = rng('shenlou:iron:house:' + i), W = h.w / 2, D0 = h.d0 / 2, D1 = h.d1 / 2, D = Math.min(D0, D1), f = frame(h.x, h.z, -h.th);
+      const { door, ht, c: wall } = info;
+      h.top = info.top;
+      if (door.iron) {
+        const top = door.h, zz = door.z, hw = door.w / 2 + 0.09;
+        for (const s of [-1, 1]) k.box(0.2, top + 0.12, 0.16, IRON_DK, -W - 0.06, (top + 0.12) / 2, zz + s * hw, { color2: RUST });
+        ibeamZ(k, -W - 0.1, top + 0.14, zz - hw - 0.14, zz + hw + 0.14, 0.24, R() < 0.6 ? RUST : IRON);
         k.box(0.6, 0.04, door.w + 0.3, IRON, -W - 0.3, 0.02, zz);
+        for (const s of [-1, 1]) if (R() < 0.6) streak(k, -W, top + 0.02, zz + s * (hw + 0.06), 0.5 + R(), 0.08, -1, 0, wall);
         if (R() < 0.45) {
           const ow = door.w + 1;
-          k.box(1.2, 0.05, ow, R() < 0.5 ? STEEL : RUST, -W - 0.55, top + 0.62, zz, { rz: 0.22 });
+          k.box(1.2, 0.05, ow, R() < 0.35 ? STEEL : RUST, -W - 0.55, top + 0.62, zz, { rz: 0.22, color2: RUST_DK });
           for (const s of [-1, 1]) bar(k, [-W - 0.02, top + 0.05, zz + s * (ow / 2 - 0.12)], [-W - 1.05, top + 0.45, zz + s * (ow / 2 - 0.12)], 0.06, IRON_DK);
         }
       }
-      // 補丁：側面或背面，避開門
-      const n = R() < 0.25 ? 0 : 1 + Math.floor(R() * 2.4);
+      // 補丁：兩側斜的牆（在牆自己的座標裡蓋，再轉到牆的角度）、背面
+      const side = new Kit(R), into = { lit: k.lit, glow: k.glow, glows: [], puffs: [], pools: [] };
+      const n = R() < 0.12 ? 0 : 1 + Math.floor(R() * 2.6);
       for (let j = 0; j < n; j++) {
-        const side = Math.floor(R() * 3);
-        const pw = 0.9 + R() * 1.4, ph = 0.9 + R() * Math.max(0.2, Math.min(1.8, ht - 1.6));
+        const where = Math.floor(R() * 3);
+        const pw = 0.9 + R() * 1.3, ph = 0.9 + R() * Math.max(0.2, Math.min(1.8, ht - 1.6));
         const py = 0.25 + ph / 2 + R() * Math.max(0, ht - ph - 0.7);
-        if (side < 2) {
-          const s = side ? 1 : -1;
-          patch(k, (R() - 0.5) * Math.max(0, h.w - pw - 0.4), py, s * D, pw, ph, 0, s, R);
-        } else patch(k, W, py, (R() - 0.5) * Math.max(0, h.d - pw - 0.4), pw, ph, 1, 0, R);
+        if (where < 2) {
+          // 側牆上半截開了 I 窗（info.sideLow 是最低那組窗的底），補丁只貼在窗底下
+          const s = where ? 1 : -1, az = s * D0, bz = s * D1, L = Math.hypot(2 * W, bz - az), room = info.sideLow - 0.5;
+          if (L < pw + 1 || room < 0.8) continue;
+          const t = 0.5 + (R() - 0.5) * (1 - (pw + 0.9) / L), sh = Math.min(ph, room);
+          side.lit.length = 0;
+          patch(side, 0, 0.25 + sh / 2 + R() * Math.max(0, room - sh), 0, pw, sh, 0, s, R, wall);
+          side.emit(into, -W + 2 * W * t, az + (bz - az) * t, -Math.atan2(bz - az, 2 * W));
+        } else if (2 * D1 > pw + 1) patch(k, W, py, (R() - 0.5) * (2 * D1 - pw - 0.9), pw, ph, 1, 0, R, wall);
       }
-      // 排水管：屋頂沿著背面的牆角下來，底下一個彎頭
+      // 排水管：背面牆上靠角落，從屋頂接下來，底下一個彎頭；管箍底下流鏽水
       if (R() < 0.45) {
-        const s = R() < 0.5 ? 1 : -1, px = W - 0.35, pz = s * (D + 0.12);
-        rod(k, [px, 0.35, pz], [px, ht + 0.25, pz], 0.08, IRON);
-        rod(k, [px, ht + 0.25, pz], [px, ht + 0.25, s * (D - 0.3)], 0.08, IRON);
+        const s = R() < 0.5 ? 1 : -1, px = W + 0.12, pz = s * (D1 - 0.55);
+        rod(k, [px, 0.35, pz], [px, ht + 0.3, pz], 0.08, R() < 0.5 ? IRON : RUST);
+        rod(k, [px, ht + 0.3, pz], [W - 0.35, ht + 0.3, pz], 0.08, IRON);
         rod(k, [px, 0.35, pz], [px + 0.4, 0.1, pz], 0.08, RUST);
         for (let y = 1.2; y < ht; y += 1.6) k.box(0.22, 0.06, 0.22, IRON_DK, px, y, pz);
+        streak(k, W, ht + 0.2, pz - s * 0.2, 0.8 + R() * 1.2, 0.09, 1, 0, wall);
       }
       // 門邊的閥箱
       if (R() < 0.3) {
         const vz = door.z + (door.z > 0 ? -1 : 1) * (door.w / 2 + 0.6);
-        if (Math.abs(vz) < D - 0.35) {
+        if (Math.abs(vz) < D0 - 0.35) {
           k.box(0.3, 0.6, 0.5, IRON, -W - 0.15, 1.5, vz, { color2: RUST });
           k.cyl(0.17, 0.17, 0.04, BRONZE, -W - 0.33, 1.55, vz, { rz: PI / 2 }, 8);
           rod(k, [-W - 0.12, 1.2, vz], [-W - 0.12, 0.05, vz], 0.06, IRON_DK);
@@ -317,24 +342,27 @@ export function makeIron({ obstacles, lanes, laneHit, houses, terrain, TOWN_R, W
       // 圓頂：頂上一個鐵通風帽，底下一圈鐵箍
       if (info.dome) {
         if (R() < 0.35) {
-          k.cyl(0.16, 0.16, 0.5, IRON, 0, ht + info.dome + 0.15, 0, {}, 6);
-          k.cone(0.34, 0.24, RUST, 0, ht + info.dome + 0.5, 0);
+          k.cyl(0.16, 0.16, 0.5, IRON, 0.5, ht + info.dome * 0.8 + 0.15, 0, {}, 6);
+          k.cone(0.34, 0.24, RUST, 0.5, ht + info.dome * 0.8 + 0.5, 0);
         }
-        if (R() < 0.3) k.cyl(info.dome + 0.05, info.dome + 0.05, 0.14, IRON_DK, 0, ht + 0.07, 0, {}, 10);
+        if (R() < 0.3) k.cyl(info.dome + 0.05, info.dome + 0.05, 0.14, R() < 0.5 ? RUST : IRON_DK, 0, ht + 0.07, 0, {}, 12);
       }
       // 捕風塔：有的塔頂後來裝了一具風車
-      if (info.wind && R() < 0.35) windmill(k, f, info.wind.tx, ht + info.wind.th + 0.15, info.wind.tz, 1.4 + R() * 0.6, R);
+      if (info.winds.length && R() < 0.35) {
+        const w = info.winds[0];
+        windmill(k, f, w.tx, w.top, w.tz, 1.4 + R() * 0.6, R);
+      }
 
       // 屋頂設備：疊上去那一層的頂上優先，再來是主屋頂
       const rects = [], avoid = [];
       if (info.up) {
         const u = info.up, r = { x0: u.ux - u.uw / 2, x1: u.ux + u.uw / 2, z0: u.uz - u.ud / 2, z1: u.uz + u.ud / 2 };
-        rects.push({ ...r, y: ht + u.uh, up: true });
+        rects.push({ ...r, y: u.y + u.uh, up: true });
         avoid.push({ ...r, up: true });
       }
-      rects.push({ x0: -W, x1: W, z0: -D, z1: D, y: ht + (info.parapet ? 0.4 : 0) });
+      rects.push({ x0: -W + 0.2, x1: W - 0.2, z0: -D + 0.2, z1: D - 0.2, y: info.rb });
       if (info.dome) avoid.push({ x: 0, z: 0, r: info.dome + 0.25 });
-      if (info.wind) avoid.push({ x: info.wind.tx, z: info.wind.tz, r: 1.1 });
+      for (const w of info.winds) avoid.push({ x: w.tx, z: w.tz, r: w.s * 0.75 + 0.3 });
       const kinds = ['condenser', 'condenser', 'condenser', 'windmill', 'windmill', 'mast', 'mast', 'mast', 'tank', 'tank', 'dish', 'junk', 'junk'];
       const count = R() < 0.78 ? (R() < 0.35 ? 2 : 1) : 0;
       for (let j = 0; j < count; j++) {
@@ -351,37 +379,31 @@ export function makeIron({ obstacles, lanes, laneHit, houses, terrain, TOWN_R, W
         else junk(k, x, y, z, R);
         avoid.push({ x, z, r: r + 0.2 });
       }
-      // 牆邊的一小堆廢鐵：不擋巷子、不貼到隔壁
-      if (R() < 0.3) {
-        const s = R() < 0.5 ? 1 : -1, jx = (R() - 0.3) * (h.w - 1.4), jz = s * (D + 0.5);
-        const [wx, , wz] = f.p(jx, 0, jz);
-        if (!laneHit(wx, wz, 1) && !nearHouse(wx, wz, 1.7, h)) {
-          junk(k, jx, 0, jz, R);
-          block(f.box(jx, jz, 0.55, 0.5));
-        }
-      }
     },
 
     // 城牆一段：牆外腳一排鐵皮護裙（沙磨得最兇的地方，撿來的板子高高低低一片接一片）、牆裡偶爾補一塊、頂上一條長管
     // 牆外上半截不補：背光時一塊塊鐵皮看起來像黑窗戶。牆腳的沙是地形本身，見 shenlou.js 的 wallDrift
-    wall(kk, i, len) {
+    // wall 是牆身的顏色，牆裡的補丁底下流鏽水；長管的管箍也一道一道往下流
+    wall(kk, i, len, wall) {
       const R = rng('shenlou:iron:wall:' + i);
-      if (R() < 0.4) {
+      if (R() < 0.6) {
         for (let z = -len / 2 + 0.2 + R() * 0.8; z < len / 2 - 1;) {
           const w = 1 + R() * 0.8, h = 1.1 + R() * 0.8;
           patch(kk, 0.8, 0.1 + h / 2, z + w / 2, w, h, 1, 0, R);
           z += w + (R() < 0.3 ? 0.4 + R() * 0.8 : -0.1);
         }
       }
-      if (R() < 0.2) patch(kk, -0.65, 3.4 + R() * 1.2, (R() - 0.5) * (len - 2.6), 1 + R() * 1.2, 1 + R(), -1, 0, R);
+      if (R() < 0.35) patch(kk, -0.65, 3.4 + R() * 1.2, (R() - 0.5) * (len - 2.6), 1 + R() * 1.2, 1 + R(), -1, 0, R, wall);
       if ((i >= 4 && i <= 10) || (i >= 26 && i <= 33)) {
         rod(kk, [-0.8, 5.5, -len / 2 - 0.02], [-0.8, 5.5, len / 2 + 0.02], 0.12, i % 3 ? IRON : RUST);
         kk.box(0.3, 0.08, 0.1, IRON_DK, -0.72, 5.36, 0);
+        streak(kk, -0.65, 5.3, (R() - 0.5) * 0.6, 1 + R() * 1.6, 0.1, -1, 0, wall);
       }
     },
 
-    // 塔：外面一個鐵陽台、頂上天線
-    tower(kt, i, x, z, th, w, ht, domed) {
+    // 塔：外面一個鐵陽台、頂上天線。南門那兩座細塔（gate）什麼都不加，從碼頭看才是乾淨的 III
+    tower(kt, i, x, z, th, w, ht, domed, gate) {
+      if (gate) return;
       const R = rng('shenlou:iron:tower:' + i), f = frame(x, z, -th);
       if (R() < 0.45) {
         const y = ht - 2.4;
@@ -565,7 +587,7 @@ export function makeIron({ obstacles, lanes, laneHit, houses, terrain, TOWN_R, W
         block(f.box(16.6, tz, 1.3, 1.3));
       }
 
-      // ---------- 城門：南門一座鐵閘（閘門吊在上面），其他城門一個鐵框掛打孔牌 ----------
+      // ---------- 城門：南門一座鐵閘（閘門吊在上面），頂上立一塊 III（城的名字）；其他城門一個鐵框掛打孔牌，打的是 lanes 的 text ----------
       for (const l of lanes) {
         const a = l.a * deg, gx = Math.cos(a) * (TOWN_R + 2.3), gz = Math.sin(a) * (TOWN_R + 2.3), f = frame(gx, gz, -a);
         const g = new Kit(rng('shenlou:iron:gate:' + l.a)), hw = l.hw + 0.35, H = l.id === 'arcade' ? 8.2 : 6.6;
@@ -587,19 +609,30 @@ export function makeIron({ obstacles, lanes, laneHit, houses, terrain, TOWN_R, W
           gear(g, 0.45, 6.4, -hw - 0.1, 0.85, 14, 0.18, BRONZE, { ry: PI / 2 });
           for (let y = 3; y < H - 0.5; y += 0.28) g.box(0.06, 0.2, 0.06, IRON_DK, 0.6, y, hw + 0.5);
           g.box(0.6, 1.1, 0.6, IRON_DK, 0.6, 2.4, hw + 0.5, { color2: RUST });
-          punched(g, 0.42, H - 0.05, 0, 2.4, 0.5, PI / 2, g.R);
+          for (const s of [-1, 1]) bar(g, [0.42, H + 0.4, s * 0.32], [0.42, H + 0.8, s * 0.32], 0.08, IRON_DK);
+          punched(g, 0.45, H + 1.15, 0, l.text, 0.6, PI / 2);
         } else {
           const w = Math.min(2, hw * 1.5);
           for (const s of [-1, 1]) bar(g, [0.42, H - 0.45, s * w * 0.35], [0.42, H - 0.72, s * w * 0.35], 0.03, IRON_DK);
-          punched(g, 0.42, H - 0.95, 0, w, 0.45, PI / 2, g.R);
+          punched(g, 0.42, H - 0.95, 0, l.text, 0.3, PI / 2);
         }
         g.emit(bucket, gx, gz, -a);
       }
 
-      // ---------- 碼頭：柱頭包鐵、吊桿吊著一箱貨、入口一根信號桿頂著風車、堆的貨 ----------
+      // ---------- 碼頭：工字鋼的樁、北頭一道牌坊（I 碼打 PORTUS）、吊桿吊著一箱貨、入口一根信號桿頂著風車、堆的貨 ----------
       {
         const d = DOCK, y = d.y;
-        for (let z = d.z0 + 0.5; z < d.z1; z += 2.5) for (const x of [d.x0 + 0.3, d.x1 - 0.3]) k.box(0.38, 0.08, 0.38, IRON, x, 1.04, z);
+        for (let z = d.z0 + 0.5; z < d.z1; z += 2.5) for (const x of [d.x0 + 0.3, d.x1 - 0.3]) ibeamPost(k, x, -0.3, 1.25, z, 0.3, RUST, IRON);
+        // 牌坊：兩根工字鋼撐一根橫樑，底下吊一塊打孔鐵牌，朝下船的人（南）
+        const sz = d.z0 - 0.3;
+        for (const s of [-1, 1]) {
+          ibeamPost(k, s * 1.55, 0, 3, sz, 0.26, IRON, RUST);
+          block({ x: s * 1.55, z: sz, hw: 0.2, hd: 0.2, a: 0 });
+          bar(k, [s * 0.75, 2.86, sz], [s * 0.75, 2.62, sz], 0.03, IRON_DK);
+        }
+        for (const sy of [-1, 1]) k.box(3.5, 0.05, 0.26, RUST, 0, 3.05 + sy * 0.105, sz);
+        k.box(3.5, 0.16, 0.06, RUST_DK, 0, 3.05, sz);
+        punched(k, 0, 2.38, sz + 0.03, 'PORTUS', 0.26, 0);
         k.box(1.4, 0.03, 1, RUST, -1.1, y + 0.02, 58.2, { ry: 0.2 });
         k.box(1, 0.03, 1.3, IRON, 0.9, y + 0.02, 62.4, { ry: -0.15 });
         // 吊桿：立在碼頭東邊的沙上（不擋從碼頭看城門），臂往南伸到船頭上面，垂一條鋼索吊著一箱貨，後面一塊配重

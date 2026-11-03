@@ -191,14 +191,14 @@ export const VOICES = {
     hiss(ctx, out, noise, t + 0.3, 0.04, 'bandpass', 700 * p, 0.6, 1.5);
     return 0.5;
   },
-  // 燭乙式浮起來：反光罩裡的燈泡碰到玻璃罩，叮兩下，第二下比較輕
+  // 燭火乙式浮起來：反光罩裡的燈泡碰到玻璃罩，叮兩下，第二下比較輕
   tink(ctx, out, t, p) {
     for (const [dt, g] of [[0, 0.16], [0.11, 0.07]]) {
       for (const f of [4200, 6900]) osc(ctx, 'sine', t + dt, 0.18, [[0, f * p]]).connect(envelope(ctx, t + dt, 0.001, 0.18, g * (f > 5000 ? 0.4 : 1))).connect(out);
     }
     return 0.35;
   },
-  // 晷浮起來：機身裡的細沙往一邊流過去，沙沙一陣，越流越細
+  // 日晷III浮起來：機身裡的細沙往一邊流過去，沙沙一陣，越流越細
   sand(ctx, out, t, p, noise) {
     air(ctx, out, noise, t, [[0, 5200 * p], [0.7, 3400 * p]], 0.12, 0.8, 0.5, 1.4, 'bandpass');
     for (let i = 0; i < 9; i++) hiss(ctx, out, noise, t + 0.05 + Math.random() * 0.6, 0.006, 'bandpass', 5000 + Math.random() * 3000, 0.3 + Math.random() * 0.3, 4);

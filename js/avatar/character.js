@@ -4,6 +4,7 @@
 // 身體、頭、帽子、手、腳各自合併成一個網格，換外觀時整個重建。自己畫的臉是一片貼在臉上的貼圖。
 import * as THREE from 'three';
 import { Kit, mergeBucket } from '../core/props.js';
+import { sunShadow } from '../core/scenery.js';
 import { HEADS, rod } from './heads.js';
 import { HAT_COLORS, HAIR_COLORS, SKINS, CLOTH, FACE, FACE_INK, raceOf, sizes, sanitizeLook, lookKey, decodeFace } from './looks.js';
 import { strapModel, cameraModel } from '../camera/cameras.js';
@@ -859,6 +860,20 @@ export class Character {
     // 影子留在地面，越高越小
     this.shadow.position.y = 0.012 - up;
     this.shadow.scale.setScalar((1 - Math.min(0.4, this.jumpY * 0.5)) * this.shadowS);
+    // 蜃樓的太陽把影子拉長（scenery.js 的 sunShadow）：順著太陽倒下去的一長條。影子掛在角色底下，方向要轉成角色自己的座標
+    const sun = sunShadow, gp = this.group.position;
+    if (sun.len > 0 && (!sun.open || sun.open(gp.x, gp.z))) {
+      const yaw = this.group.rotation.y, c = Math.cos(yaw), s = Math.sin(yaw);
+      const lx = sun.sx * c - sun.sz * s, lz = sun.sx * s + sun.sz * c, j = 1 - Math.min(0.4, this.jumpY * 0.5);
+      const L = Math.min(9, sun.len * this.dims.crownY) * j + 0.4;
+      this.shadow.rotation.z = Math.atan2(-lz, lx);
+      this.shadow.scale.set(L / 0.9, 0.62 * this.shadowS * j, 1);
+      this.shadow.position.x = lx * (L / 2 - 0.25);
+      this.shadow.position.z = lz * (L / 2 - 0.25);
+    } else if (this.shadow.position.x || this.shadow.position.z) {
+      this.shadow.rotation.z = 0;
+      this.shadow.position.x = this.shadow.position.z = 0;
+    }
 
     if (this.act) this.pose(dt, Math.max(w, sk));
     this.aimPose(dt);

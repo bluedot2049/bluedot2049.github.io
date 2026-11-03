@@ -164,7 +164,7 @@ body.joy-left:not(.desk) #ph-lens { left: auto; right: calc(var(--jx) - var(--se
 }
 #ph-shutter:active { transform: scale(.92); }
 /* 帶著相機時，快門換成相機自己的（cameras.js 的 shutterKnob）。外環都是太陽紋金片，刻著商號、型號、序號。
-   燭乙式是海市火記光學的相機，跟照相館一樣整顆金色，中間一顆圓頂金鈕（.cap）；葉片快門（.leaf）留給以後的別台。
+   燭火乙式是海市火記光學的相機，跟照相館一樣整顆金色，中間一顆圓頂金鈕（.cap）；葉片快門（.leaf）留給以後的別台。
    .snap 按一下金鈕壓下彈回、葉片張開又闔上；body.photo-expose 按住就一直壓著、開著，.tick.lit 錶刻一秒亮一格；.locked 換燈泡時卡榫卡進來；.jam 卡住了還硬按 */
 /* 舊金：介於畫廊的新金和很舊的金之間，沉半階；邊緣和凹處積了暗斑（幾塊不規則的淡褐），亮帶也收斂。
    帶著相機時，收起鈕（#photo-btn）、日期框也是同一種舊金 */
@@ -319,7 +319,7 @@ body.joy-left:not(.desk) #ph-look { left: auto; right: calc(var(--jx) + var(--r)
 @keyframes ph-ring { to { stroke-dashoffset: 0; } }
 
 /* 日期開關：一塊舊金的銅板開個小窗，窗裡是青銅字模，刻著今天的日期（cameras.js 的 dateKnob）。
-   金板跟燭乙式的快門同一種料、一樣用舊了，只是方的：髮絲橫著拉，細紋一種間距，再疊一層很淡的寬紋；光從左上來，左上、右下兩道斜的亮帶收斂著；
+   金板跟燭火乙式的快門同一種料、一樣用舊了，只是方的：髮絲橫著拉，細紋一種間距，再疊一層很淡的寬紋；光從左上來，左上、右下兩道斜的亮帶收斂著；
    四角和邊上積了暗斑。
    不印時開了細縫的鐵蓋滑下來，縫裡透出暗字；.on 拉開印月日，.on.full 印年月日；.burn 是剛拍下去，小窗燒紅再暗回去 */
 #ph-date {

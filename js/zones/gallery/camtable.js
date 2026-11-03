@@ -462,7 +462,7 @@ export function buildCamTable(x, z, rot) {
   }
 
   // 桌前的長毯，每個位置正前方的地上一格。格子是魔法印泥：桌上這台拿得走，那格就亮著、慢慢呼吸；
-  // 帶走了、還沒開放（晷）、空位置都是暗的
+  // 帶走了、還沒開放（日晷III）、空位置都是暗的
   const rugGeo = new THREE.PlaneGeometry(RUG_W, RUG_Z1 - RUG_Z0);
   rugGeo.rotateX(-Math.PI / 2);
   const rug = new THREE.Mesh(rugGeo, new THREE.MeshLambertMaterial({ map: rugTexture() }));
