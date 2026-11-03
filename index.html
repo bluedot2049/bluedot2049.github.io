@@ -515,7 +515,20 @@
     </div>
     <p class="words"><span>作者的話</span>帶朋友來拍照的地方</p>
     <ul class="news"></ul>
-    <button class="btn enter primary" type="button"><span>確認</span><kbd>Enter</kbd></button>
+    <!-- 留話給作者（hollow.js）：按「留話」才換成這一頁，投進去的寄到作者信箱 -->
+    <form class="letter" hidden>
+      <input class="who" maxlength="30" placeholder="署名（可不填）" autocomplete="off" aria-label="署名">
+      <textarea class="body" maxlength="500" rows="5" placeholder="想跟作者說的話" aria-label="想跟作者說的話"></textarea>
+      <div class="pic">
+        <label class="btn"><input type="file" accept="image/*" hidden><span>附一張圖</span></label>
+        <img alt="" hidden><button class="drop" type="button" aria-label="拿掉這張圖" hidden>×</button>
+      </div>
+      <p class="note" aria-live="polite"></p>
+    </form>
+    <div class="foot">
+      <button class="btn write" type="button" hidden><span>留話</span></button>
+      <button class="btn enter primary" type="button"><span>確認</span><kbd>Enter</kbd></button>
+    </div>
   </div>
 
   <!-- 上排：同行、設定、清單、行囊，最右邊「⋯」整排收合。電腦版 ui.js 把相機、表情、說話也排進來 -->

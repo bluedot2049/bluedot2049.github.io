@@ -153,6 +153,30 @@ body.shoulder #guide .for-free, body:not(.shoulder) #guide .for-shoulder { displ
 #hollow .news dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
 #hollow .news dt { color: var(--muted); }
 #hollow .news dd { margin: 0; }
+/* 底下按鈕：「留話」窄、確認撐滿；寫字的時候換成「返回」「投進樹洞」 */
+#hollow .foot { flex: none; display: flex; gap: 8px; }
+#hollow .foot .write { flex: none; min-height: 42px; margin-top: 4px; padding: 0 16px; letter-spacing: .3em; }
+#hollow .foot .enter { flex: 1; width: auto; }
+#hollow.writing .news { display: none; }
+#hollow.writing .foot .enter kbd { display: none; }
+/* 留話：署名一行、內文框、附圖；字用 16px，iPhone 點進去才不會整頁放大 */
+#hollow .letter { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+#hollow .letter[hidden] { display: none; }
+#hollow .letter input, #hollow .letter textarea {
+  width: 100%; padding: 8px 10px; font: inherit; font-size: 16px; line-height: 1.6; letter-spacing: .04em; color: var(--text);
+  background: rgba(0, 0, 0, .25); border: 1px solid rgba(232, 184, 106, .2); border-radius: 2px; outline: none;
+}
+#hollow .letter textarea { resize: none; min-height: 6.5em; }
+#hollow .letter input:focus, #hollow .letter textarea:focus { border-color: rgba(232, 184, 106, .5); }
+#hollow .letter ::placeholder { color: var(--muted); }
+#hollow .pic { display: flex; align-items: center; gap: 10px; }
+#hollow .pic .btn { min-height: 32px; padding: 0 12px; font-size: 12.5px; letter-spacing: .14em; }
+#hollow .pic img { width: 44px; height: 44px; object-fit: cover; border: 1px solid rgba(232, 184, 106, .3); }
+#hollow .pic .drop { padding: 4px 8px; font-size: 16px; color: var(--muted); background: none; border: 0; cursor: var(--cur-pointer); }
+#hollow .note { min-height: 1.4em; font-size: 12px; letter-spacing: .1em; color: var(--muted); }
+/* 手機鍵盤打開（hollow.js 量 visualViewport 給 --kb）：卡片置中在鍵盤上面那一塊，銘牌和作者的話先收起來 */
+#hollow.kb { top: calc((100% - var(--kb)) / 2); max-height: calc(100% - var(--kb) - 16px); }
+#hollow.kb .plate, #hollow.kb .words { display: none; }
 /* 手機橫拿：矮，銘牌縮小、卡片高度貼著畫面 */
 @media (orientation: landscape) and (max-height: 560px) {
   #hollow { top: calc(50% - 28px); max-height: calc(100% - 88px); gap: 8px; padding: 12px 16px 10px; }
