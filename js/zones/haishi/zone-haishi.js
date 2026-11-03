@@ -17,6 +17,27 @@ export const bgm = { src: 'assets/audio/haishi.m4a', from: 'haishi' };
 // far、farAir：一百公尺外再罩一層遠景空氣，遠山越遠越退進天邊的顏色，海和山腳也吃同一層
 export const grade = { tone: '海市03', far: 100, farAir: 0.6 };
 
+// 白獸（beast.js）可能出現的地方，place 是登報時的地名
+export const beast = {
+  spots: [
+    { x: -4.5, z: 7.6, place: '碼頭' },
+    { x: -17, z: 7, place: '漁港' },
+    { x: 11.5, z: 14, place: '渡船口' },
+    { x: -2.5, z: -3, place: '牌樓' },
+    { x: -1, z: -16, place: '下街' },
+    { x: -3.25, z: -10.45, place: '下街眺台' },
+    { x: -10, z: -24.3, place: '燈巷' },
+    { x: 8, z: -23.2, place: '燈巷' },
+    { x: -7, z: -34.75, place: '工坊街' },
+    { x: 11.25, z: -33.1, place: '工坊街' },
+    { x: -12.5, z: -45, place: '星台' },
+    { x: 0, z: -44.5, place: '星台' },
+    { x: -25, z: -58.5, place: '遠眺台' },
+    { x: -6, z: -109.5, place: '星廟' },
+    { x: -21.5, z: -3, place: '小祠' },
+  ],
+};
+
 export function build(scene, { coarse }) {
   return buildHaishi(scene, { coarse });
 }

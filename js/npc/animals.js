@@ -9,7 +9,10 @@
 import * as THREE from 'three';
 import { rng } from '../core/props.js';
 import { ANIMAL_LAYER } from '../core/scenery.js';
+import { beastSight } from './beast.js';
 import { CATS, CHICKENS, COWS, DUCKS, LIT, NO_LOOK, POSES, SPECIES, buildRig, catModel, chickenModel, cowModel, dogModel, duckModel, geo, hash, marmotModel, model, owlModel, pickAct, smooth, wrapAngle } from './animal-models.js';
+
+const _beast = new THREE.Vector3();
 export { LIT, GLOW, geo, hash, wrapAngle } from './animal-models.js';
 
 class Animal {
@@ -391,9 +394,11 @@ class Animal {
     } else this.actW = Math.min(1, this.actW + dt * 1.5);
     const k = this.react?.kind;
     this.happy += ((k === 'petted' || k === 'greet' || k === 'hop' ? 1 : 0) - this.happy) * Math.min(1, dt * 3);
-    // 人靠近時轉頭看
+    // 人靠近時轉頭看；白獸（beast.js）出現時看牠那裡
     let look = 0;
-    if (pd < sp.lookR && this.walk < 0.5 && !NO_LOOK.has(this.act)) {
+    if (!NO_LOOK.has(this.act) && beastSight(_beast, this.pos.x, this.pos.z)) {
+      look = Math.max(-sp.lookMax, Math.min(sp.lookMax, wrapAngle(Math.atan2(_beast.x - this.pos.x, _beast.z - this.pos.z) - this.heading)));
+    } else if (pd < sp.lookR && this.walk < 0.5 && !NO_LOOK.has(this.act)) {
       look = Math.max(-sp.lookMax, Math.min(sp.lookMax, wrapAngle(Math.atan2(P.pos.x - this.pos.x, P.pos.z - this.pos.z) - this.heading)));
     }
     this.look += (look - this.look) * Math.min(1, dt * 3);
@@ -503,8 +508,10 @@ class Owl extends Animal {
       if (this.actW <= 0) { this.actW = 0; this.act = want; }
     } else this.actW = Math.min(1, this.actW + dt * 1.2);
 
-    // 頭一頓一頓地轉向人，轉到背後也可以
-    if (!this.fly && pd < sp.lookR && this.act !== 'doze' && this.act !== 'preen') {
+    // 頭一頓一頓地轉向人，轉到背後也可以；白獸出現時轉向牠那裡
+    if (!this.fly && beastSight(_beast, x, z)) {
+      this.lookGoal = Math.max(-sp.lookMax, Math.min(sp.lookMax, wrapAngle(Math.atan2(_beast.x - x, _beast.z - z) - this.heading)));
+    } else if (!this.fly && pd < sp.lookR && this.act !== 'doze' && this.act !== 'preen') {
       const g = Math.max(-sp.lookMax, Math.min(sp.lookMax, wrapAngle(Math.atan2(P.pos.x - x, P.pos.z - z) - this.heading)));
       if (Math.abs(g - this.lookGoal) > 0.3) this.lookGoal = g;
     } else if (this.act === 'look' && !this.fly) {

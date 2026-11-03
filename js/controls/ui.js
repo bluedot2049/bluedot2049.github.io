@@ -7,8 +7,40 @@ const $ = (s) => document.querySelector(s);
 // 作品還沒上架：清單按鈕藏起來，場中的畫掛著但不能點、不能看。上架後改回 true
 export const WORKS_OPEN = false;
 
-// 面板做成側欄時的寬度（電腦、手機橫拿），底部抽屜回傳 0。寬度寫在 CSS 的 --panel-w
-export const panelW = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panel-w')) || 0;
+// 介面大小（docs 的介面原則）：電腦上的按鈕、卡片、面板跟著視窗高度放大，1080 高是 1；矮的視窗不縮小，字不會比原本的小。
+// 暫停選單的「介面大小」再乘上去，記在 uiSize。手機一律是 1，手機的大小在 hud.css 照畫面算。算好寫進 CSS 的 --ui（base.css）
+const SIZE_MIN = 0.8, SIZE_MAX = 1.5;
+let sizePick = 1, scale = 1;
+try { sizePick = Math.min(SIZE_MAX, Math.max(SIZE_MIN, +localStorage.getItem('uiSize') || 1)); } catch {}
+export const uiScale = () => scale;
+export const uiSize = () => sizePick;
+
+// 面板做成側欄時佔掉的畫面寬度（電腦、手機橫拿），底部抽屜回傳 0。寬度寫在 CSS 的 --panel-w，電腦上再放大成 --ui 倍
+export const panelW = () => (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panel-w')) || 0) * scale;
+
+// 停靠線（docs 的介面原則）：電腦寬螢幕的側欄不貼螢幕右緣，停在畫面中間 16:9 那一塊的右緣，滑鼠不用移那麼遠。
+// 回傳停靠線離螢幕右緣多遠；右邊剩不到 200px 就照樣貼邊，免得露出一條細縫。CSS 讀 --dock-r
+export const dockR = () => {
+  if (!document.body.classList.contains('desk') || !panelW()) return 0;
+  const gap = (window.innerWidth - window.innerHeight * 16 / 9) / 2;
+  return gap >= 200 ? Math.round(gap) : 0;
+};
+
+// 視窗大小或介面大小變了：先算放大倍數，再算停靠線（側欄多寬要看倍數）
+function fitUi() {
+  scale = document.body.classList.contains('desk') ? Math.round(Math.min(1.6, Math.max(1, window.innerHeight / 1080)) * sizePick * 100) / 100 : 1;
+  const r = dockR(), root = document.documentElement.style;
+  root.setProperty('--ui', scale);
+  root.setProperty('--dock-r', `${r}px`);
+  document.body.classList.toggle('dock-in', r > 0);
+}
+
+// 暫停選單拉「介面大小」：存起來，發一次 resize 讓鏡頭、行囊、按鈕照新的大小重排
+export function setUiSize(k) {
+  sizePick = Math.min(SIZE_MAX, Math.max(SIZE_MIN, k));
+  try { localStorage.setItem('uiSize', sizePick); } catch {}
+  dispatchEvent(new Event('resize'));
+}
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -74,6 +106,8 @@ export class UI {
     if (!matchMedia('(pointer: coarse)').matches) {
       document.body.classList.add('desk');
       $('#top-btns').prepend($('#emote'), $('#photo-btn'), $('#pack-btn'), $('#party-btn'), $('#say-btn'));
+      fitUi();
+      addEventListener('resize', fitUi);
     }
     // 「⋯」：整排收起來讓畫面乾淨，再按一下展開。記住上次的選擇
     const more = $('#more-btn');

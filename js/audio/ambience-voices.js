@@ -93,6 +93,15 @@ export function sub(ctx, out, t, freq, attack, dur, peak) {
   osc(ctx, 'sine', t, dur, [[0, freq], [dur, freq * 0.8]]).connect(envelope(ctx, t, attack, dur, peak)).connect(out);
 }
 
+// 敲一下的鈴：馬上到頂，照指數慢慢消失（envelope 會在頂上停一段，鈴不會）
+export function ring(ctx, out, t, f, peak, dur) {
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  osc(ctx, 'sine', t, dur, [[0, f]]).connect(g).connect(out);
+}
+
 export const VOICES = {
   // 相機（cameras.js）：葉片快門喀嚓兩下
   shutter(ctx, out, t, p, noise) {
@@ -339,6 +348,34 @@ export const VOICES = {
     air(ctx, o, noise, t + dur, [[0, 700], [0.2, 200]], 0.004, 0.25, 0.45, 0.7);
     sub(ctx, o, t + dur, 40 * p, 0.004, 0.4, 0.4);
     return dur + 3;
+  },
+  // ---------- 白獸（beast.js） ----------
+  // 前兆的鈴：遠遠一聲玻璃似的小鈴，幾個不成倍數的泛音，掛在很大的空間裡，尾巴拖很長
+  omen(ctx, out, t, p) {
+    const o = hall(ctx, out, 0.7);
+    for (const [m, g, d] of [[1, 0.2, 3.4], [1.004, 0.1, 3], [2.76, 0.07, 1.6], [5.4, 0.035, 0.7], [8.93, 0.015, 0.35]]) ring(ctx, o, t, 1175 * p * m, g, d);
+    return 6;
+  },
+  // 現身：一個很輕的和弦慢慢湧上來，上面撒幾顆亮晶晶的高音，底下一口氣吸進來
+  beast(ctx, out, t, p, noise) {
+    const o = hall(ctx, out, 0.6), dur = 3.6;
+    for (const f of [440, 554.4, 659.3, 987.8]) {
+      const v = ctx.createGain();
+      v.gain.setValueAtTime(0.0001, t);
+      v.gain.exponentialRampToValueAtTime(0.045, t + 0.7);
+      v.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc(ctx, 'sine', t, dur, [[0, f * p]]).connect(v).connect(o);
+    }
+    air(ctx, o, noise, t, [[0, 1800], [0.8, 5200]], 0.6, 1.2, 0.08, 1.5, 'bandpass');
+    for (let i = 0; i < 7; i++) ring(ctx, o, t + 0.3 + i * 0.22 + Math.random() * 0.1, [1760, 2217, 2637, 3520][i % 4] * p, 0.035, 0.6);
+    return dur + 4;
+  },
+  // 起跳：一陣往上捲的風，接著一串往下灑的細鈴，像光散掉
+  leap(ctx, out, t, p, noise) {
+    const o = hall(ctx, out, 0.6);
+    air(ctx, o, noise, t, [[0, 500], [0.55, 3200]], 0.35, 0.6, 0.18, 1.2, 'bandpass');
+    [3136, 2637, 2349, 1976, 1760, 1319].forEach((f, i) => ring(ctx, o, t + 0.45 + i * 0.09, f * p, 0.04, 0.9));
+    return 5;
   },
   // 對到焦：兩聲短短的嗶
   focus(ctx, out, t, p) {

@@ -10,7 +10,7 @@ import { decodeLook, decodeSave, tryOn, hasProgress, restoreSave } from './save/
 import { Creator } from './avatar/creator.js';
 import { Pack } from './save/pack.js';
 import { layoutBubbles } from './core/bubbles.js';
-import { UI, panelW } from './controls/ui.js';
+import { UI, panelW, uiScale } from './controls/ui.js';
 import { bindJoystick } from './controls/joystick.js';
 import { Multiplayer, EMOTES } from './social/multiplayer.js';
 import * as TX from './core/textures.js';
@@ -31,6 +31,7 @@ import { FlashFx } from './camera/flashfx.js';
 import { installGrade, gradeAt, NEUTRAL } from './core/grade.js';
 import { Hollow } from './zones/gallery/hollow.js';
 import { bindDeskKeys } from './controls/deskkeys.js';
+import { Beast } from './npc/beast.js';
 
 // 世界分成幾個區域，一次只建一個，用 ?z= 指定，沒有寫就是畫廊。每個區域的內容寫在自己的 zone-*.js，用到才下載。
 // 換區域時整頁重新載入：瀏覽器一定會把上一個區域的記憶體收回去，手機才撐得住。
@@ -261,7 +262,7 @@ async function start() {
 
   // 捏角色：每改一下就套到角色身上、存起來、告訴別人，鏡頭照目前那一頁取景
   let dressView = 'face';
-  const visH = () => (panelW() || !ui.panel ? 1 : 1 - ui.panel.offsetHeight / window.innerHeight);
+  const visH = () => (panelW() || !ui.panel ? 1 : 1 - (ui.panel.offsetHeight * uiScale()) / window.innerHeight);
   const frameMirror = () => player.frameMirror(dressView, visH());
   const wear = (L) => {
     look = L;
@@ -446,6 +447,8 @@ async function start() {
     if (m) attention.add((push) => m.group.visible && push(k, (o) => m.group.visible && !!o.copy(m.group.position).setY(m.group.position.y + 0.95), 'person', 1.1));
   }
   for (const src of Z.attention?.({ world, player }) ?? []) attention.add(src);
+  // 白獸（beast.js）：很久才出現一次，同一區的人同時看到。拍到的照片快門當下評分，拿去海市星台的報社登報
+  const beast = new Beast({ scene, world, zone, where: FERRY.find((d) => d.to === zone)?.name ?? '', ambience, attention, spots: Z.beast?.spots, params });
   // 動物叫了一聲：轉頭看牠
   if (animals) animals.onSay = (a, d) => d < 10 && attention.notice(`a${a.index}`, (o) => a.shown && !!a.rig.head.getWorldPosition(o), { kind: 'animal', dur: 1.2 + Math.random() * 1.2 });
   // 別人做了什麼（揮手、跳、閃光、說話）：在附近就轉頭看他一下
@@ -523,16 +526,17 @@ async function start() {
     const id = TABLE[i], mine = carried();
     ui.showCams({ i, n: TABLE.length, cam: CAMERAS[id] || SOON[id] || null, ready: !!CAMERAS[id], carried: !!id && mine === id, other: !!mine });
   }
-  // 電腦版的銘牌每幀跟著那台相機：投影台座前緣，銘牌放在它底下，不出畫面、不壓到下方那排按鈕
+  // 電腦版的銘牌每幀跟著那台相機：投影台座前緣，銘牌放在它底下，不出畫面、不壓到下方那排按鈕。
+  // 卡片放大過（--ui）：量到的寬高乘上倍數才是畫面上的大小，寫回 --cx、--cy 時除回去
   const camsAt = new THREE.Vector3();
   function placeCams() {
     const t = world.camTable, w = t.slots[player.focus.slot].world, el = ui.cams;
     camsAt.set(w.x + t.n.x * 0.14, w.y, w.z + t.n.z * 0.14).project(camera);
-    const W = window.innerWidth, H = window.innerHeight, hw = el.offsetWidth / 2;
+    const W = window.innerWidth, H = window.innerHeight, z = uiScale(), hw = (el.offsetWidth * z) / 2;
     const x = THREE.MathUtils.clamp(((camsAt.x + 1) / 2) * W, hw + 16, W - hw - 16);
-    const y = THREE.MathUtils.clamp(((1 - camsAt.y) / 2) * H + 22, 16, H - el.offsetHeight - 96);
-    el.style.setProperty('--cx', `${x.toFixed(1)}px`);
-    el.style.setProperty('--cy', `${y.toFixed(1)}px`);
+    const y = THREE.MathUtils.clamp(((1 - camsAt.y) / 2) * H + 22, 16, H - (el.offsetHeight + 96) * z);
+    el.style.setProperty('--cx', `${(x / z).toFixed(1)}px`);
+    el.style.setProperty('--cy', `${(y / z).toFixed(1)}px`);
   }
   // 電腦版的渡船卡浮在船上方：投影船艙上方一點，卡片底邊對著那裡，不出畫面。船在鏡頭後面就放畫面中間
   let ferryBoat = null;
@@ -541,11 +545,11 @@ async function start() {
     const s = ferryBoat.seat(), el = ui.ferry;
     ferryAt.set(s.x, s.y + 1.2, s.z).project(camera);
     if (ferryAt.z > 1) ferryAt.set(0, -0.2, 0);
-    const W = window.innerWidth, H = window.innerHeight, hw = el.offsetWidth / 2;
+    const W = window.innerWidth, H = window.innerHeight, z = uiScale(), hw = (el.offsetWidth * z) / 2;
     const x = THREE.MathUtils.clamp(((ferryAt.x + 1) / 2) * W, hw + 16, W - hw - 16);
-    const y = THREE.MathUtils.clamp(((1 - ferryAt.y) / 2) * H, el.offsetHeight + 16, H - 96);
-    el.style.setProperty('--cx', `${x.toFixed(1)}px`);
-    el.style.setProperty('--cy', `${y.toFixed(1)}px`);
+    const y = THREE.MathUtils.clamp(((1 - ferryAt.y) / 2) * H, el.offsetHeight * z + 16, H - 96 * z);
+    el.style.setProperty('--cx', `${(x / z).toFixed(1)}px`);
+    el.style.setProperty('--cy', `${(y / z).toFixed(1)}px`);
   }
   document.getElementById('cams-prev').addEventListener('click', () => player.events.onCamStep(-1));
   document.getElementById('cams-next').addEventListener('click', () => player.events.onCamStep(1));
@@ -662,7 +666,7 @@ async function start() {
     if (!panel && ui.panel === ui.cams) camera.setViewOffset(w, h, 0, Math.round(h * 0.1), w, h);
     else if (!panel) camera.clearViewOffset();
     else if (pw) camera.setViewOffset(w, h, pw / 2, 0, w, h);
-    else camera.setViewOffset(w, h, 0, Math.round(panel.offsetHeight / 2), w, h);
+    else camera.setViewOffset(w, h, 0, Math.round((panel.offsetHeight * uiScale()) / 2), w, h);
   }
   ui.onSheet = (open) => {
     document.body.classList.toggle('panel-open', !!ui.docked);
@@ -805,6 +809,7 @@ async function start() {
     onFlash: () => mp?.flash(),
     resizeFX: (w, h) => fx?.setSize(w, h),
   });
+  photo.beast = beast;
   // 電腦的快捷鍵、Q 表情輪、Esc 暫停選單（表情要連上線才送得出去）
   bindDeskKeys({ player, ui, photo, pack, emotes: EMOTES, emote: (e) => mp && sendEmote(e) });
   const selfie = new Selfie({
@@ -834,7 +839,7 @@ async function start() {
     if (params.has('studio')) setTimeout(() => studio.begin(+params.get('studio') || 0), 1500);
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, passers, quality, host, photo, studio };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, passers, quality, host, photo, studio, beast };
   const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass, dofPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
@@ -1024,6 +1029,7 @@ async function start() {
     // 鏡頭這一幀已經擺好：先算好矩陣，後面對話框、隊友記號照這一幀的鏡頭投影。
     // 不然要等畫的時候才更新，所有頭上的東西都慢一幀，鏡頭一動就抖
     camera.updateMatrixWorld();
+    beast.update(dt, camera, player.pos);
     animals?.update(dt);
     visitors?.update(dt);
     vendors?.update(dt, player, camera);
@@ -1079,7 +1085,7 @@ async function start() {
     // 牆上的色塊畫：視差跟著鏡頭，站在畫前不動才醒；拍照時醒的程度停著
     world.updatePaintings?.(camera.position, photo.active ? null : player.pos, player.focus?.kind === 'painting' ? player.focus.p : null);
     frame++;
-    const idle = !photo.active && !player.moving && !othersMoving && !fading && !talking && !world.home?.busy && performance.now() - lastInput > 2000;
+    const idle = !photo.active && !player.moving && !othersMoving && !fading && !talking && !world.home?.busy && !beast.busy && performance.now() - lastInput > 2000;
     if (idle && frame % 2) return;
     if (!idle) quality.sample(dt);
     if (stats) renderer.info.reset();

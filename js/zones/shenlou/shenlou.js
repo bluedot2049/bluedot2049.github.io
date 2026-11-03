@@ -178,11 +178,23 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
   });
   // 鐵件另外一條亂數，不會動到房子本身
   const iron = makeIron({ obstacles, lanes: LANES, houses, terrain, TOWN_R, WELL, SHAFT, COURT_IN, WATER_Y, CAP_Y, under, fader: fade });
-  // 水管和店面也各自一條亂數；店面先挑好開在哪幾間
-  const water = makeWater({ obstacles, gaps, towers: TOWERS, FLOOR_B: WATER_Y + 0.15, COURT_IN });
-  const shopKit = makeShops({ obstacles, towers: TOWERS, anchors: [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([a, b]) => ({ x: a * ANCHOR, z: b * ANCHOR })), keep: [{ x: 17.5, z: 3.5, r: 5 }] });
+  // 日晷之城的節奏：每一圈照方位排，三間一組，中間那間高一層、頂三支捕風塔（shenlou-houses.js）。
+  // 屋頂的集露器全城只放六具，外圈每隔六十度左右挑一間不高、不開店的
+  const ringOf = (band) => houses.filter((h) => h.band === band).sort((p, q) => ((p.th % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) - ((q.th % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI));
+  for (const band of [0, 1]) ringOf(band).forEach((h, k) => { h.tall = k % 3 === 1; });
+  // 水管、水口和店面各自一條亂數；水口先排好，店面讓開水口
+  const anchors = [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([a, b]) => ({ x: a * ANCHOR, z: b * ANCHOR, r: 1.5 }));
+  const GRILLE_LIGHT = { x: 17.5, z: 3.5, r: 5 };   // 影牆的光落在地上那片
+  const water = makeWater({ obstacles, lanes: LANES, gaps, AR, towers: TOWERS, avoid: [...anchors, GRILLE_LIGHT], houses, FLOOR_B: WATER_Y + 0.15, COURT_IN });
+  const shopKit = makeShops({ obstacles, towers: TOWERS, anchors, keep: [GRILLE_LIGHT, ...water.fountains.map((f) => ({ x: f.x, z: f.z, r: 2.6 }))] });
   const shops = shopKit.shops;
   shopKit.pick(houses);
+  const outer = ringOf(1).filter((h) => !h.tall && !h.shop && !h.flank.includes('arcade'));
+  for (let j = 0; j < 6; j++) {
+    const want = ((j + 0.5) / 6) * 2 * Math.PI, gap = (h) => Math.abs((((h.th - want) % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI);
+    const h = outer.reduce((b, v) => (gap(v) < gap(b) ? v : b));
+    if (gap(h) < 0.35) h.dew = true;
+  }
   const RH = rng('shenlou:houses:build');
   for (const [i, h] of houses.entries()) {
     const k = new Kit(RH);
@@ -190,7 +202,7 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
     const c = Math.cos(h.th), s = Math.sin(h.th), v = info.vial;
     lamps.glows.push({ x: h.x + c * v.x - s * v.z, y: v.y, z: h.z + s * v.x + c * v.z, color: VIAL, size: 0.9 });
     iron.house(k, h, info, i);
-    water.house(k, h, info, i);
+    water.house(k, h, info);
     const awning = shopKit.house(k, h, info, i);
     // 擋住鏡頭的範圍：房子本身，開店的再加布棚那一塊（櫃台矮，不算）
     k.fid = fade([{ x: h.x, z: h.z, a: -h.th, hw: h.w / 2 + 0.1, hd: h.d / 2 + 0.1, y0: 0, y1: info.rb + 0.6 }, ...(awning ? [awning] : [])]);
@@ -228,7 +240,9 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
       // 南門兩座：細高的方塔，平頂一塊蓋板，頂上每面一組大的 III。從碼頭看，兩座塔的頂和中間的晷針一樣高
       const gate = i < 2, ht = gate ? 11.2 : 8 + RT() * 5, w = gate ? 2.6 : 3.4 + RT() * 1.2;
       kt.add(softPrism(rectXZ(w + 0.4, w + 0.4), 3, 0.32, 0.2, 1), SANDSTONE, 0, 0, 0);
-      const domed = !gate && RT() < 0.5;
+      // 圓頂留給神聖的房子，城牆的塔一律平頂（頂上一節打 III 縫的小塔）
+      RT();
+      const domed = false;
       kt.add(softPrism(rectXZ(w, w), ht - 3, 0.34, domed ? 0.25 : 0), EARTH, 0, 3, 0);
       for (let yy = 4.6; yy < ht - (gate ? 3 : 1.4); yy += 2.6) iii(kt, w, yy, 0.8, 0.12);
       if (gate) {
@@ -664,6 +678,7 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
     wreck: { name: '擱淺的沙船', subtitle: 'Navis' },
     gear: { name: '半埋的齒輪', subtitle: 'Rota' },
     dew: { name: '集露田', subtitle: 'Ros' },
+    midden: { name: '廢鐵堆', subtitle: 'Purgamenta' },
     alchemy: { name: '煉金坊', subtitle: 'Laboratorium' },
     // 井圈公寓：下樓梯時報一次，走進各個廳和小房再報；廊道上不報
     insula: { name: '井圈公寓', subtitle: 'Insula' },

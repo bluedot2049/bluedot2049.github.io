@@ -12,6 +12,7 @@ import { decodeSave, decodeLook, tryOn, codeFrom, hasProgress, restoreSave } fro
 import { readPostcard } from './postcard.js';
 import { readMirrorCard } from './mirrorcard.js';
 import { encodeFace, getSave } from '../avatar/looks.js';
+import { dockR, panelW, uiScale } from '../controls/ui.js';
 import { album, canPick, canShare, discard, folderName, hourMark, KINDS, LABS, labOk, loadAlbum, pickFolder, putBack, saveChosen, saveTip, shareChosen, toLab, visible } from '../camera/album.js';
 
 const ICONS = {
@@ -150,7 +151,8 @@ export class Pack {
     return document.body.classList.contains('desk');
   }
 
-  // 電腦：上次拖到哪就放哪、拉多大就多大，第一次放左上（角色在中間，鏡子面板在右邊）。手機：掛在按鈕底下
+  // 電腦：上次拖到哪就放哪、拉多大就多大；沒拖過放在角色右邊、上下置中，滑鼠不用移去角落。
+  // 拖過的位置記成離畫面中心多遠，換螢幕、拉視窗以後還在中間附近。手機：掛在按鈕底下
   place() {
     const c = this.card, W = window.innerWidth, H = window.innerHeight;
     if (this.floating) {
@@ -159,8 +161,15 @@ export class Pack {
       if (Number.isFinite(s?.w) && Number.isFinite(s?.h)) this.sizeTo(s.w, s.h);
       let p = null;
       try { p = JSON.parse(localStorage.getItem('packAt')); } catch {}
-      const x = Number.isFinite(p?.x) ? p.x : 24, y = Number.isFinite(p?.y) ? p.y : 24;
-      this.moveTo(x, y);
+      if (Number.isFinite(p?.dx) && Number.isFinite(p?.dy)) this.moveTo(W / 2 + p.dx, H / 2 + p.dy);
+      else if (Number.isFinite(p?.x) && Number.isFinite(p?.y)) this.moveTo(p.x, p.y);   // 舊的存法：左上角在哪
+      else {
+        // 作品或換裝側欄開著：貼在側欄左邊靠上，跟它放一起。照鏡子時角色佔滿中間、臉在中段，矮的螢幕角色和側欄中間又放不下整張卡，
+        // 置中會蓋到臉。沒開：放在角色右邊、上下置中
+        const pw = document.body.classList.contains('panel-open') ? panelW() : 0, z = uiScale();
+        const x = pw ? W - dockR() - pw - 16 - c.offsetWidth * z : W / 2 + H * 0.1;
+        this.moveTo(x, pw ? 24 : (H - c.offsetHeight * z) / 2);
+      }
       return;
     }
     Object.assign(c.style, { width: '', height: '' });
@@ -170,21 +179,21 @@ export class Pack {
     Object.assign(c.style, { left: left + 'px', top: Math.min(r.bottom + 10, H - c.offsetHeight - 12) + 'px' });
   }
 
-  // 拉到畫面外面的拉回來，至少整張看得到
+  // 拉到畫面外面的拉回來，至少整張看得到。x、y 是畫面上的 px；卡片放大過（--ui），寫進 style 的 px 會再被乘一次，所以除回去
   moveTo(x, y) {
-    const c = this.card;
-    x = Math.max(8, Math.min(x, window.innerWidth - c.offsetWidth - 8));
-    y = Math.max(8, Math.min(y, window.innerHeight - c.offsetHeight - 8));
-    Object.assign(c.style, { left: x + 'px', top: y + 'px' });
+    const c = this.card, z = uiScale();
+    x = Math.max(8, Math.min(x, window.innerWidth - c.offsetWidth * z - 8));
+    y = Math.max(8, Math.min(y, window.innerHeight - c.offsetHeight * z - 8));
+    Object.assign(c.style, { left: x / z + 'px', top: y / z + 'px' });
     return { x, y };
   }
 
-  // 大小不超過畫面
+  // 大小不超過畫面。w、h 也是畫面上的 px（packSize 一直這樣記）：自己拉過的大小不跟著介面放大
   sizeTo(w, h) {
-    const c = this.card;
-    w = Math.round(Math.max(MIN_W, Math.min(w, window.innerWidth - 16)));
-    h = Math.round(Math.max(MIN_H, Math.min(h, window.innerHeight - 16)));
-    Object.assign(c.style, { width: w + 'px', height: h + 'px' });
+    const c = this.card, z = uiScale();
+    w = Math.round(Math.max(MIN_W * z, Math.min(w, window.innerWidth - 16)));
+    h = Math.round(Math.max(MIN_H * z, Math.min(h, window.innerHeight - 16)));
+    Object.assign(c.style, { width: w / z + 'px', height: h / z + 'px' });
     c.classList.add('sized');
     return { w, h };
   }
@@ -224,7 +233,8 @@ export class Pack {
       c.removeEventListener('pointerup', up);
       c.removeEventListener('pointercancel', up);
       c.classList.remove('dragging');
-      try { localStorage.setItem('packAt', JSON.stringify(at)); } catch {}
+      const off = { dx: Math.round(at.x - window.innerWidth / 2), dy: Math.round(at.y - window.innerHeight / 2) };
+      try { localStorage.setItem('packAt', JSON.stringify(off)); } catch {}
     };
     c.addEventListener('pointermove', move);
     c.addEventListener('pointerup', up);

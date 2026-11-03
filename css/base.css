@@ -32,6 +32,15 @@
 @media (min-width: 900px) { :root { --panel-w: 400px; } }
 @media (orientation: landscape) and (max-height: 500px) { :root { --panel-w: 320px; } }
 
+/* 介面大小（docs 的介面原則）：電腦上的按鈕、卡片、面板跟著視窗高度一起放大。--ui 由 ui.js 的 uiScale 算：1080 高是 1，矮的不縮小，暫停選單可以再調。
+   放大的元素裡 vw、vh 也會跟著放大，要寫成 calc(…vh / var(--ui, 1))；程式擺位置的 px 要除以 uiScale()。手機一律是 1 */
+:root { --ui: 1; }
+body.desk :is(#top-btns, #action-btn, #hint, #toast, #wheel, .snapsave,
+  #pack-card, #cams, #ferry, .studio-card, #chat, #pause, #guide, #hollow, #sheet, #dress,
+  #ph-bar, #ph-shoot, #ph-alt, #ph-exit, #ph-rec, #ph-zoom,
+  #viewer-close, #album-view .av-close, #album-view .av-step, #album-view .av-bar,
+  #ph-result > :not(#ph-media), #press .press-card, #press .press-acts, #list) { zoom: var(--ui); }
+
 /* manipulation：點兩下不會放大整頁（iOS 不理 viewport 的禁止縮放） */
 * { box-sizing: border-box; touch-action: manipulation; }
 [hidden] { display: none !important; }

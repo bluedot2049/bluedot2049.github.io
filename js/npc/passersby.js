@@ -12,7 +12,9 @@ import * as THREE from 'three';
 import { Character } from '../avatar/character.js';
 import { sanitizeLook, presetLook, RACES, SLIDERS, CLOTH, SKINS } from '../avatar/looks.js';
 import { glowPoints } from '../core/scenery.js';
+import { beastSight } from './beast.js';
 
+const _b = new THREE.Vector3();
 const SLOTS = 110, SLOTS_LOW = 60;   // 最多幾組人
 const POOL = 18, POOL_LOW = 10;      // 完整的角色最多幾個
 const TRIP = 300;                    // 每組人每五分鐘出門一趟
@@ -713,10 +715,12 @@ export class Passersby {
       const bites = Math.floor((q.tt - q.plan.foodT) / 4);
       ch.setFoodCode(q.tt < q.plan.foodT || bites >= 3 ? 0 : q.plan.foodKind * 10 + bites);
     }
-    // 轉頭：玩家走到面前，偶爾看一眼就轉回去；兩個人一起走的，不時轉頭看旁邊那個
+    // 轉頭：玩家走到面前，偶爾看一眼就轉回去；兩個人一起走的，不時轉頭看旁邊那個。白獸（beast.js）出現時都轉過去看牠
     let want = 0;
     const toP = Math.atan2(P.x - at.x, P.z - at.z), front = Math.abs(wrap(toP - ch.group.rotation.y)) < 1.0;
-    if (st.glanceT > 0) {
+    if (beastSight(_b, at.x, at.z)) {
+      want = wrap(Math.atan2(_b.x - at.x, _b.z - at.z) - ch.group.rotation.y);
+    } else if (st.glanceT > 0) {
       st.glanceT -= dt;
       want = wrap(toP - ch.group.rotation.y);
     } else if (q.d < 2.5 && front && now > st.nextGlance) {

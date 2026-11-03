@@ -403,7 +403,7 @@ body.joy-left:not(.desk) #ph-alt { right: auto; left: calc(var(--joy-x) + var(--
 }
 
 /* 電腦：選項排在下方中間，快門在最下面 */
-body.desk #ph-bar { top: auto; left: 50%; right: auto; bottom: calc(154px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: calc(100vw - 32px); }
+body.desk #ph-bar { top: auto; left: 50%; right: auto; bottom: calc(154px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: calc(100vw / var(--ui, 1) - 32px); }
 body.desk #ph-chips { flex-wrap: wrap; justify-content: center; overflow: visible; }
 body.desk #ph-shoot { left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom)); align-items: center; }
 body.desk .ph-keys { position: relative; }
@@ -437,7 +437,7 @@ body.photo-quick.photo-gear #ph-grip {
 /* 照相館（studio.js） */
 .studio-card {
   position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 45;
-  width: min(360px, calc(100vw - 32px)); padding: 16px; display: flex; flex-direction: column; gap: 12px;
+  width: min(360px, calc(100vw / var(--ui, 1) - 32px)); padding: 16px; display: flex; flex-direction: column; gap: 12px;
   background: rgba(20, 14, 10, .92); border: 1px solid var(--line); border-radius: 14px; color: var(--text);
 }
 .studio-card[hidden] { display: none; }
@@ -473,7 +473,7 @@ body.photo-guest #ph-shutter { visibility: hidden; }
 #ph-result[hidden] { display: none; }
 #ph-media { display: flex; justify-content: center; min-height: 0; max-width: 100%; }
 #ph-media img, #ph-media video {
-  display: block; max-width: 100%; max-height: calc(100vh - 170px); max-height: calc(100dvh - 170px);
+  display: block; max-width: 100%; max-height: calc(100vh - 170px * var(--ui, 1)); max-height: calc(100dvh - 170px * var(--ui, 1));
   object-fit: contain; border: 1px solid var(--line-soft); background: #000;
   -webkit-touch-callout: default; -webkit-user-select: auto; user-select: auto;
 }

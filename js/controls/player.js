@@ -7,7 +7,7 @@
 // 右鍵按住舉相機、左鍵快門（photo.js 接 onAim、onShutter、onPausedLook），像射擊遊戲的開鏡。
 // 鎖著時點不到按鈕：按住 Alt 暫時叫出游標，放開鎖回去；面板自己打開時放開，關掉後一走路就鎖回去（按鈕的快捷鍵在 main.js）。
 import * as THREE from 'three';
-import { panelW, WORKS_OPEN } from './ui.js';
+import { dockR, panelW, WORKS_OPEN } from './ui.js';
 
 const SPEED = 2.6;
 const DRAG_THRESHOLD = 8;
@@ -550,9 +550,10 @@ export class Player {
   }
 
   // 依螢幕比例算出看畫的鏡頭距離，以及角色站的位置（盡量站在鏡頭後面，不擋畫）
+  // 寬螢幕的側欄停在停靠線，畫要放進停靠線左邊那一塊（中間 16:9 扣掉側欄），不是整個畫面扣掉側欄
   planFocus(p) {
     const W = window.innerWidth, H = window.innerHeight, pw = panelW();
-    const visW = pw ? (W - pw) / W : 1, visH = pw ? 1 : 0.58;
+    const visW = pw ? (W - 2 * dockR() - pw) / W : 1, visH = pw ? 1 : 0.58;
     const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
     const fd = Math.max(1.6, (p.h * 1.6) / 2 / (tanV * visH), (p.w * 1.4) / 2 / (tanV * (W / H) * visW));
     const n = p.n, t = new THREE.Vector3(-n.z, 0, n.x);

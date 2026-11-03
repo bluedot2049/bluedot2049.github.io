@@ -2,7 +2,7 @@
 /* 遊戲中的介面：房間名稱、對話框、一般按鈕、在線人數、表情、搖桿、跳坐印章、動作徽章、手機拇指弧、電腦版下方那排。 */
 /* ───────── 房間名稱：金字，兩側細線 ───────── */
 #toast {
-  position: fixed; left: 0; right: 0; top: calc(13vh + env(safe-area-inset-top));
+  position: fixed; left: 0; right: 0; top: calc(13vh / var(--ui, 1) + env(safe-area-inset-top));
   display: flex; flex-direction: column; align-items: center;
   pointer-events: none; z-index: 10;
   opacity: 0;
@@ -55,7 +55,7 @@
   position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   display: flex; align-items: center; gap: 10px;
-  max-width: calc(100vw - 32px);
+  max-width: calc(100vw / var(--ui, 1) - 32px);
   padding: 10px 18px;
   background: var(--panel); border: 1px solid var(--line-soft); border-radius: 999px;
   box-shadow: var(--shadow);
@@ -96,7 +96,7 @@
 body.touch #guide .for-desk, body:not(.touch) #guide .for-touch { display: none; }
 body.shoulder #guide .for-free, body:not(.shoulder) #guide .for-shoulder { display: none; }
 /* 越肩那張比較長：行距收一點，矮的螢幕可以捲 */
-#guide { max-height: calc(100vh - 24px); overflow-y: auto; }
+#guide { max-height: calc(100vh / var(--ui, 1) - 24px); overflow-y: auto; }
 #guide .for-shoulder li { padding: 6px 0; }
 #guide .again { font-size: 12.5px; letter-spacing: .08em; color: var(--muted); }
 /* 「下次不用顯示」：跟門口告示待辦後面的方框同一款，勾了填金色 */
@@ -289,7 +289,7 @@ body.photo #reticle { display: none; }
 #wheel i { position: absolute; width: 50px; height: 50px; margin: -25px 0 0 -25px; display: grid; place-items: center; font-style: normal; font-size: 26px; border-radius: 50%; border: 1px solid transparent; transition: transform .15s, border-color .15s, background .15s; }
 #wheel i.on { transform: scale(1.25); border-color: var(--gold); background: rgba(232, 184, 106, .12); }
 /* 暫停選單：跟操作說明同一種卡，放在畫面中間 */
-#pause { position: fixed; left: 50%; top: 50%; z-index: 27; display: none; width: 380px; transform: translate(-50%, -50%); background: rgba(16, 11, 9, .94); box-shadow: var(--shadow); }
+#pause { position: fixed; left: 50%; top: 50%; z-index: 27; display: none; width: 380px; max-height: calc(100vh / var(--ui, 1) - 24px); overflow-y: auto; transform: translate(-50%, -50%); background: rgba(16, 11, 9, .94); box-shadow: var(--shadow); }
 #pause.show { display: flex; animation: pause-in .25s ease-out both; }
 @keyframes pause-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 6px)); } }
 #pause .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -298,6 +298,8 @@ body.photo #reticle { display: none; }
 #pause .set { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; letter-spacing: .08em; color: var(--text); }
 #pause .set input[type=range] { width: 160px; accent-color: var(--gold); }
 #pause .set input[type=checkbox] { accent-color: var(--gold); }
+/* 介面大小：100% 是照視窗高度自動放大的大小 */
+#pause .size b { margin-left: 8px; font-weight: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
 #pause .saves b { font-weight: normal; color: var(--muted); }
 #pause .saves .btn { min-height: 30px; padding: 0 12px; font-size: 12.5px; letter-spacing: .08em; }
 #pause .keys { list-style: none; margin: 0; padding: 0; }
@@ -570,5 +572,5 @@ body.desk.shoulder #action-btn::after {
 }
 /* 右側面板打開時，按鈕列移到剩下畫面的中間，不被面板蓋住 */
 @media (min-width: 900px) {
-  body.desk.panel-open #top-btns, body.desk.panel-open #action-btn { left: calc((100vw - var(--panel-w)) / 2); }
+  body.desk.panel-open #top-btns, body.desk.panel-open #action-btn { left: calc((100vw / var(--ui, 1) - var(--panel-w)) / 2); }
 }

@@ -24,9 +24,10 @@ export const canShare = android && 'canShare' in navigator;
 export const KINDS = { video: '錄影', mirror: '鏡中', 'mirror-save': '存檔', postcard: '明信片', 'postcard-save': '存檔' };
 const LATEST = new Set(['mirror-save', 'postcard-save']);
 export const labOk = (it) => it.state === 'shot' && !it.kind;
-// 奇物：拍到白鹿這類東西，快門當下算好的結果記在照片上（rare：{ kind, grade, zone, place }）。
-// 報社（pressdesk.js）只收這種，同一張只登一次（pressed 是登出來那份報紙的 id）
-export const pressOk = (it) => !!it.rare && it.pressed == null && visible(it) && !it.kind;
+// 奇物：拍到白獸這類東西，快門當下算好的結果記在照片上（rare：{ kind, grade, zone, where, place }，見 beast.js 的 judge）。
+// 報社（pressdesk.js）只收這種，同一張只登一次（pressed 是登出來那份報紙的 id）；畫廊的眼睛拍的沒有相機的落款，不收
+export const rareShot = (it) => !!it.rare && it.pressed == null && visible(it) && !it.kind;
+export const pressOk = (it) => rareShot(it) && it.cam !== 'eye';
 let items = [], dir = null, ready = null, persisted = false;
 
 // 沖洗師傅：每一位一種固定的色彩風格。filter 先套，tint 一層一層用混合模式疊上去，最後顆粒和暗角
@@ -100,7 +101,8 @@ export async function addPhoto(blob, { name, cam, quiet = false, ...more }) {
     navigator.storage?.persist?.().catch(() => {});   // 請瀏覽器別自己清掉
   }
   changed();
-  if (!quiet) flash(it.film ? null : it.poster ?? blob, it.film ? `${hourMark(it.t)}・收進底片` : `收進相簿・${items.filter((x) => x.state !== 'lab').length} 張`);
+  const n = `${items.filter((x) => x.state !== 'lab').length} 張`;
+  if (!quiet) flash(it.film ? null : it.poster ?? blob, it.film ? `${hourMark(it.t)}・收進底片` : it.rare ? `拍到白獸・收進相簿 ${n}` : `收進相簿・${n}`);
   return it;
 }
 

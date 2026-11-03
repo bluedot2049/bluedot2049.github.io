@@ -20,6 +20,23 @@ export function build(scene, { gallery }) {
   return buildWorld(scene, gallery);
 }
 
+// 白獸（beast.js）可能出現的地方：place 是登報時的地名（不用房間的名字），room 是第幾間（那間藏起來時牠也藏起來，戶外是最後一間）
+export const beast = {
+  spots: [
+    { x: -0.8, z: -3.4, place: '前廳', room: 0 },
+    { x: 0, z: -15, place: '長廊', room: 1 },
+    { x: 1.8, z: -24.5, place: '展廳', room: 2 },
+    { x: 4, z: -34.4, place: '陽台', room: 3 },
+    { x: -6, z: -47, place: '原野', room: 3 },
+    { x: 9, z: -56.5, place: '原野', room: 3 },
+    { x: -11, z: -58, place: '原野', room: 3 },
+    { x: 1, z: -50, place: '大樹下', room: 3 },
+    { x: -27, z: -38, place: '山坡小徑', room: 3 },
+    { x: -35.5, z: -57, place: '涼亭', room: 3 },
+    { x: 9, z: -70, place: '渡口', room: 3 },
+  ],
+};
+
 // 室內和戶外的光線、霧。走出後門時在兩組之間漸變
 export function env() {
   return [

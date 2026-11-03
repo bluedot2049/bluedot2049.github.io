@@ -3,7 +3,7 @@
 // 報社的櫃台和看報：星台的編輯收稿（相簿裡拍到奇物的照片）、簽筆名、當場印好（press.js），報紙收在這台瀏覽器；下街眺台的報童那裡翻出來看、存下、分享。
 // 報紙不放相簿：相簿存下就拿出去了，報紙要一直留著（報童那疊最上面是你的、以後的鹿譜也要看）。
 // 投稿的照片留在相簿，只記上登在哪一份（album.js 的 pressed），同一張不登第二次
-import { album, amend, canShare, keepFile, loadAlbum, pressOk, saveTip, shareFile, visible } from '../camera/album.js';
+import { album, amend, canShare, keepFile, loadAlbum, pressOk, rareShot, saveTip, shareFile, visible } from '../camera/album.js';
 import { makePaper, pressReady, cleanPen, PRESS } from './press.js';
 import { portrait } from '../avatar/thumbs.js';
 import { getSave, sanitizeLook } from '../avatar/looks.js';
@@ -92,12 +92,12 @@ function img(blob, alt = '') {
 
 // ───────── 投稿 ─────────
 
-// 編輯按「投稿」：相簿裡沒有拍到奇物的就回傳 false，讓編輯自己講話。
+// 編輯按「投稿」：相簿裡沒有拍到奇物的就回傳 false，拍到了可是全是畫廊的眼睛拍的回傳 'eye'，讓編輯自己講話。
 // 有的話打開稿紙，印好了回傳那份報紙，取消回傳 null
 export async function submit() {
   await Promise.all([loadAlbum(), loadPapers()]);
   const ok = album().filter(pressOk);
-  if (!ok.length) return false;
+  if (!ok.length) return album().some(rareShot) ? 'eye' : false;
   return new Promise((done) => {
     state = { done, ok, pick: ok[ok.length - 1] };
     show(`<div class="press-card">
@@ -195,14 +195,14 @@ async function onClick(e) {
   } else if (act === 'share' && p) shareFile(p.blob, fileName(p.t));
 }
 
-// ?debug：還沒有白鹿之前先拿相簿最新的一張假裝拍到，__press.fake(等級 0–3, 地名)
+// ?debug：拿相簿最新的一張假裝拍到白獸，__press.fake(等級 0–3, 地名)。等白獸出現要等很久，叫牠出來用 __beast.summon()
 if (new URLSearchParams(location.search).has('debug')) {
   window.__press = {
     async fake(grade = 2, place = '') {
       await loadAlbum();
-      const it = [...album()].reverse().find((x) => visible(x) && !x.kind);
-      if (!it) return '相簿裡沒有照片';
-      await amend(it, { rare: { kind: 'deer', grade, zone: 'haishi', where: '海市', place }, pressed: null });
+      const it = [...album()].reverse().find((x) => visible(x) && !x.kind && x.cam !== 'eye');
+      if (!it) return '相簿裡沒有帶相機拍的照片';
+      await amend(it, { rare: { kind: 'beast', grade, zone: 'haishi', where: '海市', place }, pressed: null });
       return it.name;
     },
     read: readPaper,

@@ -2,7 +2,7 @@
 //   node tools/smoke.mjs                 三個區域＋experiments 的預覽頁
 //   node tools/smoke.mjs --save base     指紋存成 tools/out/smoke-base.json
 //   node tools/smoke.mjs --diff base     跟存好的指紋比對，場景有任何不同就列出來
-// 每一區：無頭 Edge 開 ?q=mid&debug&crowd=0，亂數固定成同一串，等載入畫面收掉，記下
+// 每一區：無頭 Edge 開 ?q=mid&debug&crowd=0&beast=0（白獸不排，畫面才固定），亂數固定成同一串，等載入畫面收掉，記下
 //   頁面錯誤、console.error、載不到的檔案（404）
 //   場景指紋：每種物件幾個、頂點總數、材質種類。同樣的亂數，搬檔前後應該一模一樣
 //   開場那一幀的 draw call 和三角形數（含水面反射），改效能時拿來比
@@ -88,7 +88,7 @@ for (const zone of ZONES) {
   // 測試用的瀏覽器每次都是新的：清掉存檔，大家都從第一次來開始
   await send('Network.clearBrowserCookies');
   await ev(`try { localStorage.clear(); } catch (e) {}`).catch(() => {});
-  await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/?z=${zone}&q=mid&debug&crowd=0&from=${zone === 'gallery' ? 'haishi' : 'gallery'}` });
+  await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/?z=${zone}&q=mid&debug&crowd=0&beast=0&from=${zone === 'gallery' ? 'haishi' : 'gallery'}` });
   let ok = false;
   for (let i = 0; i < 240 && !ok; i++) {
     await sleep(250);

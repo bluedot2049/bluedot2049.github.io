@@ -56,7 +56,7 @@ body.photo #mates { display: none; }
 /* 打字框：手機貼在鍵盤上緣（--kb 是鍵盤高度），電腦在下方按鈕列上面。上面列出剛剛說的幾句 */
 #chat {
   position: fixed; left: 50%; bottom: calc(var(--kb, 0px) + 12px + env(safe-area-inset-bottom)); z-index: 46;
-  transform: translateX(-50%); width: min(520px, calc(100vw - 24px));
+  transform: translateX(-50%); width: min(520px, calc(100vw / var(--ui, 1) - 24px));
   display: flex; flex-direction: column; gap: 8px;
 }
 #chat[hidden] { display: none; }

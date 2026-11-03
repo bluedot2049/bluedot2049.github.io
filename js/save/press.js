@@ -14,7 +14,8 @@ const SERIF = '"Noto Serif TC", "Songti TC", "PMingLiU", serif', LATIN = '"Cormo
 const font = (px, w = 700) => `${w} ${px}px ${SERIF}`;
 
 // 拍到的是什麼、在哪裡：標題照版面大小挑一句。where 是區域名（海市），place 是那裡的地名（燈巷），可以沒有
-const RARE = { deer: { name: '白鹿', glow: '一身白光' } };
+const RARE = { beast: { name: '白獸', glow: '一身白光' } };
+RARE.deer = RARE.beast;   // 改名以前測試印過的
 const HEADS = [
   // 角落
   [(r, at) => `讀者來照　${at}見${r.name}`, (r, at) => `${at}有人拍到${r.name}`],
@@ -36,7 +37,7 @@ const NEWS = ['燈巷新到一批紙燈籠', '漁港今夜大潮', '工坊街木
   '玻璃爐火七日未熄', '畫廊來信　鏡子擦乾淨了', '昨夜流星三顆', '海圖店新到南方星圖', '裁縫徵求舊布', '遠眺台石欄修好了', '包子攤改早上開'];
 const ADS = [['火記光學', '燭火乙式'], ['海市暗房', '洗照片'], ['信差站', '明信片'], ['燈籠師傅', '紙要糊三層']];
 // 內文用的字：丟進 glyphs.js 都變成海市的字
-const BODY = '海市白鹿光夜燈巷星潮人船港山廟風雨月橋石街茶火紙門窗看見來去今昨時刻旅者行走拍照鏡影水雲聲遠近上下東西南北一二三';
+const BODY = '海市白獸光夜燈巷星潮人船港山廟風雨月橋石街茶火紙門窗看見來去今昨時刻旅者行走拍照鏡影水雲聲遠近上下東西南北一二三';
 
 // 跟著報紙的時間抽，同一份報紙每次排出來一樣
 function seeded(t) {
@@ -260,7 +261,7 @@ export function makePaper({ photo, face = null, pen = '', rare, t = Date.now() }
   c.width = W;
   c.height = H;
   const g = c.getContext('2d'), R = seeded(t), grade = Math.max(0, Math.min(3, rare.grade | 0));
-  const what = RARE[rare.kind] || RARE.deer, at = (rare.where || '') + (rare.place || '');
+  const what = RARE[rare.kind] || RARE.beast, at = (rare.where || '') + (rare.place || '');
   const head = HEADS[grade][Math.floor(R() * 2)](what, at), sub = SUBS[grade][Math.floor(R() * 2)];
   const news = [...NEWS].sort(() => R() - 0.5), ads = [...ADS].sort(() => R() - 0.5);
   pen = cleanPen(pen);

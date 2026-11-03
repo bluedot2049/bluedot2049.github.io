@@ -154,6 +154,7 @@ export class PhotoMode {
     this.noise = noiseTile();
     this.frame = { x: 0, y: 0, w: 1, h: 1 };
     this.result = null;                     // 剛拍好的 { blob, url, name, video }
+    this.beast = null;                      // 白獸（beast.js）：main.js 接上，快門時評分
     this.gear = null;                       // 帶著的相機（cameras.js）；null 是畫廊的眼睛，鏡頭自由飛
     this.eyeCam = null;                     // 帶著相機卻選了畫廊的眼睛：身上那台的 id，照得到自己帶著它
     this.grip = 1;                          // 拿法：GRIPS 的第幾個
@@ -1542,6 +1543,7 @@ export class PhotoMode {
     const e = this.expo;
     if (!e) return;
     const r = this.renderer, ep = this.expoPass(), fire = this.fires();
+    const rare = this.postcard ? null : this.rareShot(fire);   // 長曝光照放開快門那一刻算
     if (fire) {
       this.light(true);
       this.render(0);
@@ -1577,7 +1579,7 @@ export class PhotoMode {
     this.burned();
     if (fire) this.fired();
     else this.ambience.voice('shutter', 0.5);
-    this.deliver(shot);
+    this.deliver(shot, rare);
   }
 
   flash() {
@@ -1593,6 +1595,8 @@ export class PhotoMode {
     if (!this.active || this.result) return;
     if (!dry && this.waitingBulb()) return this.jammed();
     const fire = !dry && this.fires(), wasLong = dof.long;
+    // 拍到白獸了沒：趁鏡頭和畫布還是平常的樣子先算（下面畫大圖時都會換掉）
+    const rare = dry || this.postcard ? null : this.rareShot(fire);
     // 快門聲在畫大圖之前就發：手機畫一張要卡一下，放在後面會比按下去晚。閃光的聲音在 fired()
     if (!dry && !fire) this.ambience.voice(this.studio ? 'oldshutter' : this.gear ? 'shutter' : 'blink', 0.5);
     const fr = this.frame, r = this.renderer, cam = this.camera;
@@ -1644,11 +1648,27 @@ export class PhotoMode {
     this.snap();
     this.burned();
     if (fire) this.fired();
-    this.deliver(out);
+    this.deliver(out, rare);
   }
 
-  // 拍好的畫布：從信差站來的做成明信片，不然存成 JPG 收進相簿，不跳視窗，左下角閃一下
-  deliver(out) {
+  // 白獸（beast.js 的 judge）：鏡頭先套上取景框那一塊，照那一塊算拍得好不好，算完放回去。沒拍到是 null
+  rareShot(fire) {
+    const b = this.beast;
+    if (!b?.ev) return null;
+    const fr = this.frame, cam = this.camera;
+    cam.setViewOffset(window.innerWidth, window.innerHeight, fr.x, fr.y, fr.w, fr.h);
+    try {
+      return b.judge(this.renderer, cam, fr.w / fr.h, { fire, focus: this.gear && dof.on ? { d: this.focusD, k: dof.k, max: dof.max } : null, character: this.character });
+    } catch (e) {
+      console.warn('白獸評分失敗：', e);
+      return null;
+    } finally {
+      cam.clearViewOffset();
+    }
+  }
+
+  // 拍好的畫布：從信差站來的做成明信片，不然存成 JPG 收進相簿，不跳視窗，左下角閃一下。rare：拍到白獸（rareShot）
+  deliver(out, rare = null) {
     if (this.postcard) {
       this.ui.hint('照相師沖洗中…', 30000);
       this.shot = out;
@@ -1657,7 +1677,7 @@ export class PhotoMode {
       return;
     }
     const cam = this.gear?.id || 'eye';
-    out.toBlob((blob) => { if (blob) addPhoto(blob, { name: `煉金畫廊-${stamp()}.jpg`, cam }); }, 'image/jpeg', 0.92);
+    out.toBlob((blob) => { if (blob) addPhoto(blob, { name: `煉金畫廊-${stamp()}.jpg`, cam, ...(rare && { rare }) }); }, 'image/jpeg', 0.92);
   }
 
   // 魚眼照片：彎的時候中間會放大 fo / fs 倍，原圖先畫成那麼大中間才不會糊。

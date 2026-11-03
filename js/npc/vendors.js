@@ -13,6 +13,7 @@ import { bend } from '../core/lens.js';
 import { HOST_NAME } from './names.js';
 import { atLab, collect, LABS } from '../camera/album.js';
 import { latest, readPaper, submit } from '../save/pressdesk.js';
+import { beastSight } from './beast.js';
 
 const SAY_TIME = 3800, GREET_DIST = 3.2, TALK_DIST = 2.4, SHOW_DIST = 22, SHOW_DY = 3.5;
 // 視線：多遠以內的路人會被看、頭和身子最多離櫃台正面多少（弧度）、每次看多久（秒）、沒在說話時看玩家的機會
@@ -111,7 +112,9 @@ export const VENDORS = {
   press: {
     press: 'desk', name: '星潮報編輯', race: 'goat', look: { hat: 'none', glasses: 'round', top: 'shirt', topC: 16, bottom: 'pants', botC: 1, outer: 'vest', outC: 1, neck: 'bowtie', neckC: 2, back: 'none' },
     greet: ['有稿子嗎', '有新聞要給我嗎'],
-    lines: ['這張很好看 可是不是新聞', '我們只登沒人看過的東西', '拍到稀奇的再拿來', '最近大家都在講白鹿 拍到的話拿來', '風景照我這裡太多了', '稀奇的東西 一下就不見了 手要快', '晚上稿子少 我在校對'],
+    lines: ['這張很好看 可是不是新聞', '我們只登沒人看過的東西', '拍到稀奇的再拿來', '最近大家都在講白獸 拍到的話拿來', '風景照我這裡太多了', '稀奇的東西 一下就不見了 手要快', '晚上稿子少 我在校對', '聽到鈴聲 就往有光的地方跑'],
+    // 拍到了，可是是畫廊的眼睛拍的（album.js 的 pressOk）
+    unsigned: ['拍是拍到了 可是沒有相機的落款', '要帶相機去拍 畫廊前廳的桌上有'],
     // 印好了照版面講一句：角落、半版、頭版、號外
     printed: [['角落還有一格 擠一下', '先登小小的 下次拍清楚一點'], ['給你半版', '拍得不錯 半版'], ['頭版 就是這張', '今天的頭版是你的'], ['號外 快去敲鐘', '加印 全部加印']],
   },
@@ -204,6 +207,13 @@ class Vendor {
   // 換一個看的：說話時看著玩家；平常多半看附近走過的路人，偶爾看玩家，沒人就看前面偏一點
   pickLook(d, px, py, pz, talking, people) {
     this.lookT = LOOK_TIME[0] + Math.random() * (LOOK_TIME[1] - LOOK_TIME[0]);
+    // 白獸（beast.js）的前兆和現身：誰都轉過去看那裡，說話也一樣
+    if (beastSight(_p, this.pos.x, this.pos.z)) {
+      this.lookYou = false;
+      this.lookAt = (o) => beastSight(o, this.pos.x, this.pos.z);
+      this.lookT = 1.5;
+      return;
+    }
     const you = (o) => !!o.set(px, py + 1.3, pz);
     this.lookYou = talking || (d < 6 && Math.random() < LOOK_YOU);
     if (this.lookYou) { this.lookAt = you; return; }
@@ -257,6 +267,7 @@ class Vendor {
     if (press === 'desk') {
       submit().then((p) => {
         if (p === false) this.say(this.next());
+        else if (p === 'eye') this.say(pick(this.spec.unsigned));
         else if (p) this.say(pick(this.spec.printed[p.rare.grade | 0] || this.spec.printed[0]));
       });
       return;
