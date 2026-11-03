@@ -12,8 +12,8 @@ import { bindPress, latest } from '../../save/pressdesk.js';
 import { buildRain } from './rain.js';
 import { RainSound } from './rain-sound.js';
 
-// 一上岸就放
-export const bgm = { src: 'assets/audio/haishi.m4a', from: 'haishi' };
+// 一上岸就放。rest：播完停幾秒（最少、最多）再從頭放，中間只剩海、人潮和雨
+export const bgm = { src: 'assets/audio/haishi.m4a', from: 'haishi', rest: [40, 120] };
 
 // 海市的高度霧和調色（grade.js）：鎮子和山坡從近處就開始往夜色裡退。?debug 時右上角可以即時調，「複製」貼回這裡
 // 色調「海市藍夜01」（tones.js）裡的 far、farAir：一百公尺外再罩一層遠景空氣，遠山越遠越退進天邊的顏色，海和山腳也吃同一層

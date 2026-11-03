@@ -53,7 +53,7 @@ export class Ambience {
         if (this.keepAlive.paused) this.keepAlive.play().catch(() => {});
       } catch {}
       // iOS 只讓手勢裡的 play() 生效，背景音樂沒播起來就趁這次再試
-      if (this.bgm?.paused && !this.muted && !this.gone) this.apply();
+      if (this.bgm?.paused && !this.bgmResting && !this.muted && !this.gone) this.apply();
       if (ctx.state === 'running') return;
       // 室內安靜時是故意暫停的，不用叫醒
       if (this.quiet && performance.now() > this.voiceUntil) return;
@@ -153,10 +153,12 @@ export class Ambience {
     this.apply();
   }
 
-  // 背景音樂從這裡開始放，之後一直放到離開這個區域
-  music(src) {
+  // 背景音樂從這裡開始放，之後一直放到離開這個區域。
+  // rest = [最少, 最多] 秒：音檔播完不馬上重來，停一段再從頭放（沒給就無縫循環）
+  music(src, rest) {
     if (this.bgmSrc) return;
     this.bgmSrc = src;
+    this.bgmRest = rest;
     if (this.ctx) {
       this.startMusic();
       this.apply();
@@ -179,9 +181,21 @@ export class Ambience {
     }
     if (navigator.connection?.saveData) return;   // 手機開了省流量就不抓
     const a = document.createElement('audio');
-    a.loop = true;
+    a.loop = !this.bgmRest;
     a.setAttribute('playsinline', '');
     a.src = this.bgmSrc;
+    if (this.bgmRest) {
+      // 播完這段時間 apply() 看到 paused 也不叫它起來；時間到再交給 apply()，靜音或切走中就等回來再放
+      a.addEventListener('ended', () => {
+        const [lo, hi] = this.bgmRest;
+        this.bgmResting = true;
+        this.restTimer = setTimeout(() => {
+          this.bgmResting = false;
+          a.currentTime = 0;
+          this.apply();
+        }, (lo + Math.random() * (hi - lo)) * 1000);
+      });
+    }
     this.bgm = a;
     this.bgmGain = ctx.createGain();
     this.bgmGain.gain.value = 0;
@@ -450,7 +464,7 @@ export class Ambience {
         g.cancelScheduledValues(t);
         g.setValueAtTime(0, t);
       } else {
-        if (a.paused) {
+        if (a.paused && !this.bgmResting) {
           a.play().catch(() => {});
           this.bgmFadeUntil = t + BGM_FADE;
         }

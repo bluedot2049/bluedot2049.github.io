@@ -65,7 +65,7 @@ function ahead(pts, px, pz, s) {
   return { x: e.x, z: e.z, i: pts.length - 2, t: 1, end: true };
 }
 
-// 煙的貼圖：中間亮、往外淡掉，跟 eye.js 的煙同一種
+// 煙的貼圖：中間亮、往外淡掉
 function puffTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 64;
@@ -660,7 +660,7 @@ export class Guide {
       if (!this.wake.length) {
         const tex = puffTexture();
         for (let i = 0; i < WAKE; i++) {
-          const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0x6a5a8a, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+          const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0x6a5a8a, transparent: true, opacity: 0, depthWrite: false, blending: THREE.NormalBlending }));
           s.visible = false;
           s.userData.age = WAKE_LIFE;
           this.scene.add(s);

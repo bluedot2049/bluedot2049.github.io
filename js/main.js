@@ -428,7 +428,7 @@ async function start() {
       const r = world.rooms[i].data;
       ui.toast(r.name, r.subtitle);
       place = null;
-      if (bgm && i >= world.rooms.findIndex((room) => room.id === bgm.from)) ambience.music(bgm.src);
+      if (bgm && i >= world.rooms.findIndex((room) => room.id === bgm.from)) ambience.music(bgm.src, bgm.rest);
     },
   });
   scene.add(player.marker);
@@ -842,6 +842,13 @@ async function start() {
   attention.ownLens = () => photo.lensInfo();
   attention.ownLock = () => photo.lookOn || !!photo.counting;
   if (mp) mp.lens = () => { const L = photo.lensInfo(); return L && !L.studio ? L : null; };
+  // 胖頭人被拍：自己的相機、畫廊的眼睛、別人的鏡頭對著他，臉都打碼；鏡子自拍沒有鏡頭資料，眼睛在拍就算
+  for (const m of [manatee, host]) {
+    if (!m) continue;
+    m.lenses = () => { const L = photo.lensInfo(), all = mp ? mp.lenses() : []; return L && !L.studio ? [L, ...all] : all; };
+    m.forced = () => selfie.active;
+    m.clip = world.camClip;
+  }
   // 有鏡頭剛對到自己：從那個方向傳來一點聲音，手上的相機是對焦的嗶，畫廊的眼睛是瞳孔收的棘輪聲
   attention.onSeen = (L, d) => {
     const dx = L.pos.x - player.pos.x, dz = L.pos.z - player.pos.z;
@@ -868,7 +875,7 @@ async function start() {
     guide.isMate = (id) => !!party && [...party.mates.values()].some((o) => o.s === id);
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, passers, quality, host, photo, studio, beast, guide };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, passers, quality, host, manatee, photo, studio, beast, guide };
   const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass, dofPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
