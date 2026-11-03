@@ -369,6 +369,29 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
   };
   const sunDisc = disc('#fff2d6', 16), moonDisc = disc('#dfe4f4', 10);
 
+  // 天空：一顆跟著鏡頭的大球，地平線是霧的顏色（遠處沙丘融進去），往上漸漸變藍；太陽那一側的地平線暖一點
+  const skyGeo = new THREE.SphereGeometry(370, 32, 16), skyCol = new Float32Array(skyGeo.attributes.position.count * 3);
+  skyGeo.setAttribute('color', new THREE.BufferAttribute(skyCol, 3));
+  const dome = new THREE.Mesh(skyGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+  dome.renderOrder = -1;
+  dome.frustumCulled = false;
+  group.add(dome);
+  const ZENITH = new THREE.Color('#7fa3d1'), GLOW = new THREE.Color('#f3c792'), _sc = new THREE.Color(), _sv = new THREE.Vector3();
+  let domeKey = '';
+  function paintSky(horizon, toSun) {
+    const key = horizon.getHexString() + toSun.x.toFixed(3) + toSun.z.toFixed(3);
+    if (key === domeKey) return;
+    domeKey = key;
+    const pos = skyGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      _sv.fromBufferAttribute(pos, i).normalize();
+      const up = Math.max(0, _sv.y), glow = Math.max(0, _sv.x * toSun.x + _sv.z * toSun.z) ** 3 * (1 - smooth(0, 0.35, up));
+      _sc.copy(horizon).lerp(GLOW, glow * 0.6).lerp(ZENITH, smooth(0.02, 0.6, up));
+      skyCol.set([_sc.r, _sc.g, _sc.b], i * 3);
+    }
+    skyGeo.attributes.color.needsUpdate = true;
+  }
+
   scene.add(group);
 
   // ---------- 碰撞、高度、尋路 ----------
@@ -461,8 +484,16 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
     { x: 0.18, bg: '#e8a88c', sky: '#f0b9a0', ground: '#a8737a', hi: 1.15, light: '#ffb07a', si: 1.3, near: 80, far: 360 },
     { x: 0.75, bg: '#cfe2e4', sky: '#dfeef0', ground: '#c9a678', hi: 1.5, light: '#fff3dc', si: 1.6, near: 90, far: 380 },
   ].map((s) => ({ ...s, bg: new THREE.Color(s.bg), sky: new THREE.Color(s.sky), ground: new THREE.Color(s.ground), light: new THREE.Color(s.light) }));
+  // 先固定在下午、影子拉長的那一段：太陽仰角約 27 度，從西邊偏南照過來。網址有 ?hour= 時才照時間走（之後再處理一天的變化）
+  // 陽光暖、天光偏藍：照到的一面是杏金，背光的一面帶一點藍紫，影子才看得出形狀
+  const FIXED = !params.has('hour');
+  const AFTER = { p: 0.88, bg: new THREE.Color('#e8d0ac'), sky: new THREE.Color('#8ea8de'), ground: new THREE.Color('#ab917f'), light: new THREE.Color('#ffe1b4'), hi: 1.2, si: 2.6, near: 110, far: 420 };
   const sunDir = new THREE.Vector3(), moonDir = new THREE.Vector3();
   function sky(h) {
+    if (FIXED) {
+      path(AFTER.p, sunDir);
+      return { day: true, x: Math.sin(Math.PI * AFTER.p), p: AFTER.p, dir: sunDir, ...AFTER };
+    }
     const t = (((h - 3) % 12) + 12) % 12, day = t < 6, p = (day ? t : t - 6) / 6;
     path(p, day ? sunDir : moonDir);
     const x = (day ? 1 : -1) * Math.sin(Math.PI * p);
@@ -585,6 +616,9 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
       }
       sunDisc.visible = s.day && s.x > -0.02;
       moonDisc.visible = !s.day;
+      dome.position.copy(cam);
+      _sv.set(s.dir.x, 0, s.dir.z).normalize();
+      paintSky(s.bg, { x: _sv.x, z: _sv.z });
       sunDisc.position.copy(cam).addScaledVector(sunDir, 300);
       moonDisc.position.copy(cam).addScaledVector(moonDir, 300);
       if (glow) glow.visible = s.x < 0.12;
