@@ -8,13 +8,18 @@ import * as THREE from 'three';
 import { Kit, rng, mergeBucket } from '../../core/props.js';
 import { PROFILE, radiusAt } from '../../npc/manatee.js';
 
-const SKIN = '#91abb0', INK = '#2a2722', TONGUE = '#d98a85', BLUSH = '#e8a59c';
+const SKIN = '#91abb0', INK = '#2a2722', TONGUE = '#d98a85', BLUSH = '#e8a59c', MOUTH = '#5b2b2b';
 const DEPTH = 0.76;                     // 豆子前後壓扁
-const SEG = 12;                         // 身體一圈切幾刀
+const SEG = 16;                         // 身體一圈切幾刀（平滑著色，16 刀看起來就是圓的）
 const NECK = 0.78;                      // 衣服的領口：再上去是頭，臉在正面上半
 const FACE = { y: 1.0, h: 0.42, w: 0.56 };
-const COLS = 4, ROWS = 2, CW = 320, CH = 256;   // 臉的圖集：4 欄 2 列，一格 320×256
-const SIT = 0.2;                        // 坐下時整隻往上抬多少（坐在長椅上，腿藏在椅面裡）
+// 臉的圖集：8 張臉 × 4 個表情（平常、閉眼、說話、笑），一欄一張臉、一列一個表情。原稿一格 320×256，桌機縮成 3/4、手機 1/2
+const FACES = 8, BLINK = 1, TALK = 2, HAPPY = 3, COLS = 8, ROWS = 4, CW0 = 320, CH0 = 256;
+// 坐下時椅面多高：沒寫的是食堂長椅，別的椅子在 plan 裡寫 seat。豆子的底是很淺的圓錐，離最低點 0.02 那一圈貼在椅面上，不浮也不陷
+const SEAT = 0.33, BOTTOM = 0.14;
+// 關節：手（鰭）掛在肩膀、腳掛在屁股，著色器繞這兩點轉；上半身繞腰彎，越上面彎越多，頭跟著轉。數字是 x 正那邊，另一邊鏡過去
+const SHOULDER = [0.4, 0.82], HIP = [0.15, 0.2, 0.03], WAIST = 0.5;
+const REST = 0.16;                      // 手平常往外張一點，才不會插進肚子
 
 // ---------- 身體和衣服 ----------
 const v2 = (r, y) => new THREE.Vector2(r, y);
@@ -43,10 +48,22 @@ function onFront(k, geo, c, x, y, d = 0.022, o = {}) {
 }
 const flat = (w, h) => new THREE.BoxGeometry(w, h, 0.008);
 const disc = (r) => new THREE.CylinderGeometry(r, r, 0.008, 10).rotateX(Math.PI / 2);
-// 短手、短胖腿：低面數的圓塊就好，一大群一起畫
+// 手是海牛的鰭：一截袖子，下面扁扁的鰭垂到腰下（不畫指甲）。腳是短胖的圓塊。
+// 手腳各自標上 part（1、2 是 x 負、正那邊的手，3、4 是腳），著色器才知道繞哪個關節轉
 function limbs(k, arm, leg) {
-  for (const s of [-1, 1]) k.add(new THREE.IcosahedronGeometry(0.1, 0), arm, s * 0.37, 0.68, 0.03, { sx: 0.72, sy: 1.45, sz: 0.72, rz: s * 0.3 });
-  for (const s of [-1, 1]) k.add(new THREE.IcosahedronGeometry(0.12, 0), leg, s * 0.15, 0.1, 0.03, { sy: 0.85, sz: 1.1 });
+  for (const s of [-1, 1]) {
+    const x = s * SHOULDER[0];
+    part(k, s < 0 ? 1 : 2, () => {
+      k.add(new THREE.CapsuleGeometry(0.07, 0.16, 2, 6), arm, x, SHOULDER[1] - 0.13, 0);
+      k.add(new THREE.IcosahedronGeometry(0.1, 1), SKIN, x, 0.47, 0.01, { sx: 0.5, sy: 1.25, sz: 0.85 });
+    });
+    part(k, s < 0 ? 3 : 4, () => k.add(new THREE.IcosahedronGeometry(0.12, 1), leg, s * HIP[0], 0.1, HIP[2], { sy: 0.85, sz: 1.1 }));
+  }
+}
+function part(k, id, fn) {
+  const i0 = k.lit.length;
+  fn();
+  for (let i = i0; i < k.lit.length; i++) k.lit[i].userData.part = id;
 }
 function collar(k, c) {
   for (const s of [-1, 1]) onFront(k, flat(0.1, 0.05), c, s * 0.075, NECK - 0.025, 0.03, { rz: -s * 0.55 });
@@ -170,7 +187,7 @@ const OUTFITS = {
 
 // 手上拿的：餐盤（碗、湯、海草小菜、杯子）、購物紙袋。原點在東西底部中間
 function trayModel(k) {
-  k.box(0.38, 0.022, 0.27, '#b9bec4', 0, 0.011, 0);
+  k.box(0.5, 0.022, 0.28, '#b9bec4', 0, 0.011, 0);
   k.cyl(0.075, 0.055, 0.06, '#f3f0e8', -0.08, 0.052, 0.02, {}, 10);
   k.cyl(0.066, 0.066, 0.006, '#d9984a', -0.08, 0.078, 0.02, {}, 10);
   k.cyl(0.07, 0.07, 0.012, '#f3f0e8', 0.08, 0.028, -0.04, {}, 10);
@@ -185,55 +202,124 @@ function bagModel(k) {
 function geometry(fn) {
   const k = new Kit(null);
   fn(k);
+  for (const g of k.lit) g.setAttribute('aPart', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count).fill(g.userData.part || 0), 1));
   return mergeBucket(k.lit, true);
 }
 
+// 著色器裡擺姿勢：每隻每幀給幾個角度——aArms 兩隻手的前後甩、往外張，aBody 上半身的前後彎、左右歪、轉頭，aLegs 兩隻腳的前後。
+// 手腳繞關節轉，上半身繞腰彎（越上面彎越多，臉那片照同樣的算法跟著彎）。一套打扮還是一次畫完
+const f3 = (v) => v.toFixed(3);
+const POSE = (limbs) => `
+${limbs ? 'attribute float aPart;\nattribute vec4 aArms;\nattribute vec2 aLegs;' : ''}
+attribute vec3 aBody;
+mat3 jhRx(float a) { float c = cos(a), s = sin(a); return mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c); }
+mat3 jhRy(float a) { float c = cos(a), s = sin(a); return mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c); }
+mat3 jhRz(float a) { float c = cos(a), s = sin(a); return mat3(c, s, 0.0, -s, c, 0.0, 0.0, 0.0, 1.0); }
+vec3 jhP;
+void jhPose(vec3 p, inout vec3 n) {
+  float wy = p.y;
+${limbs ? `  if (aPart > 2.5) {
+    float s = aPart < 3.5 ? -1.0 : 1.0;
+    vec3 piv = vec3(s * ${f3(HIP[0])}, ${f3(HIP[1])}, ${f3(HIP[2])});
+    mat3 m = jhRx(-(s < 0.0 ? aLegs.x : aLegs.y));
+    jhP = piv + m * (p - piv);
+    n = m * n;
+    return;
+  }
+  if (aPart > 0.5) {
+    float s = aPart < 1.5 ? -1.0 : 1.0;
+    vec2 a = s < 0.0 ? aArms.xy : aArms.zw;
+    vec3 piv = vec3(s * ${f3(SHOULDER[0])}, ${f3(SHOULDER[1])}, 0.0);
+    mat3 m = jhRx(-a.x) * jhRz(s * a.y);
+    p = piv + m * (p - piv);
+    n = m * n;
+    wy = ${f3(SHOULDER[1])};
+  }` : ''}
+  float w = smoothstep(0.45, 1.1, wy);
+  mat3 b = jhRy(aBody.z * w) * jhRx(aBody.x * w) * jhRz(aBody.y * w);
+  vec3 o = vec3(0.0, ${f3(WAIST)}, 0.0);
+  jhP = o + b * (p - o);
+  n = b * n;
+}`;
+function posed(mat, key, limbs, more = () => {}) {
+  mat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>\n${POSE(limbs)}`)
+      .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\njhPose(position, objectNormal);')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed = jhP;');
+    more(sh);
+  };
+  mat.customProgramCacheKey = () => key;
+}
+// 每一隻的角度放在 InstancedMesh 的實例屬性裡，每幀改完標 needsUpdate
+function poseAttrs(geo, n, limbs) {
+  const at = (name, size) => {
+    const a = new THREE.InstancedBufferAttribute(new Float32Array(n * size), size);
+    a.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute(name, a);
+    return a;
+  };
+  return limbs ? { arms: at('aArms', 4), body: at('aBody', 3), legs: at('aLegs', 2) } : { body: at('aBody', 3) };
+}
+
 // ---------- 臉 ----------
-// 照原本那張的筆觸：兩顆小眼睛、兩個鼻孔、像 ω 的兩瓣嘴、左右鬍鬚、中間垂一點舌頭。每格的位置、大小、表情有點不同
-function faceAtlas() {
-  const c = document.createElement('canvas');
-  c.width = CW * COLS;
-  c.height = CH * ROWS;
+// 照原本那張的筆觸：兩顆小眼睛、兩個鼻孔、像 ω 的兩瓣嘴、左右鬍鬚、中間垂一點舌頭。每張臉的位置、大小、表情有點不同。
+// 每張臉畫四個表情：亂數只在畫第一個時抽，其他三個照同一串數字重播，所以是同一張臉換表情
+function faceAtlas(coarse) {
+  const sc = coarse ? 0.5 : 0.75, c = document.createElement('canvas');
+  c.width = CW0 * sc * COLS;
+  c.height = CH0 * sc * ROWS;
   const ctx = c.getContext('2d');
   const R = rng('jinghai:faces');
-  for (let i = 0; i < COLS * ROWS; i++) drawFace(ctx, (i % COLS) * CW, Math.floor(i / COLS) * CH, R, i);
+  for (let i = 0; i < FACES; i++) {
+    const seq = [];
+    for (let e = 0; e < ROWS; e++) {
+      let n = 0;
+      const draw = e ? () => seq[n++] : () => { const v = R(); seq.push(v); return v; };
+      drawFace(ctx, i * CW0 * sc, e * CH0 * sc, sc, draw, i, e);
+    }
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   return tex;
 }
-function drawFace(ctx, ox, oy, R, i) {
+function drawFace(ctx, ox, oy, sc, R, i, e) {
   const j = (a) => (R() - 0.5) * a;
   ctx.save();
   ctx.translate(ox, oy);
+  ctx.scale(sc, sc);
   ctx.strokeStyle = INK;
   ctx.fillStyle = INK;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  const cx = CW / 2 + j(6);
-  // 臉紅：一半的有，淡淡兩團
-  if (i % 2 === 1) {
+  const cx = CW0 / 2 + j(6);
+  // 臉紅：一半的有，淡淡兩團；笑的時候每張都有
+  if (i % 2 === 1 || e === HAPPY) {
+    const jb = i % 2 === 1 ? j : () => 0;
     ctx.fillStyle = BLUSH;
     ctx.globalAlpha = 0.55;
     for (const s of [-1, 1]) {
       ctx.beginPath();
-      ctx.ellipse(cx + s * (78 + j(8)), 104 + j(8), 15, 9, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx + s * (78 + jb(8)), 104 + jb(8), 15, 9, 0, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
     ctx.fillStyle = INK;
   }
-  // 眼睛：小黑點，偶爾一隻高一點；有兩格是笑瞇的弧、一格是睏睏的橫線
+  // 眼睛：小黑點，偶爾一隻高一點；有兩張是笑瞇的弧、一張是睏睏的橫線。閉眼是往下彎的弧，笑的時候都瞇起來
   const gap = 44 + R() * 20, ey = 54 + j(10), tilt = j(14), er = 9.5 + R() * 3;
-  const mood = i === 5 || i === 2 ? 'happy' : i === 7 ? 'sleepy' : 'dot';
+  const mood = e === BLINK ? 'shut' : e === HAPPY || i === 5 || i === 2 ? 'happy' : i === 7 ? 'sleepy' : 'dot';
+  const lid = i === 7 ? [j(4), j(4)] : [0, 0];
   ctx.lineWidth = 9;
-  for (const s of [-1, 1]) {
+  [-1, 1].forEach((s, k) => {
     const x = cx + s * gap, y = ey + s * tilt * 0.5;
     ctx.beginPath();
     if (mood === 'dot') { ctx.arc(x, y, er, 0, Math.PI * 2); ctx.fill(); }
     else if (mood === 'happy') { ctx.arc(x, y + 6, 11, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); }
-    else { ctx.moveTo(x - 11, y + 2); ctx.lineTo(x + 11, y + 2 + j(4)); ctx.stroke(); }
-  }
+    else if (mood === 'shut') { ctx.arc(x, y - 4, 11, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke(); }
+    else { ctx.moveTo(x - 11, y + 2); ctx.lineTo(x + 11, y + 2 + lid[k]); ctx.stroke(); }
+  });
   // 鼻孔
   const ny = 116 + j(8), ng = 12 + R() * 5;
   for (const s of [-1, 1]) {
@@ -251,12 +337,27 @@ function drawFace(ctx, ox, oy, R, i) {
   ctx.quadraticCurveTo(cx + 8, by - 8, cx + bw * 0.5, by - 2 + j(4));
   ctx.bezierCurveTo(cx + bw + 30, by + 4, cx + ow + 10, by - 30 + j(8), cx + ow + j(6), oy0 + j(8));
   ctx.stroke();
-  // 舌頭：大多垂一點，有的大、有的歪一邊，兩格沒有
+  // 舌頭：大多垂一點，有的大、有的歪一邊，兩張沒有。說話的時候嘴張開，舌頭縮在裡面
   const tongue = i === 3 || i === 6 ? 0 : 0.7 + R() * 0.6;
-  if (tongue) {
-    const tx = cx + (i === 4 ? 10 : j(6)), ty = notch + 22 * tongue + 6;
+  const tx = tongue ? cx + (i === 4 ? 10 : j(6)) : 0, tr = tongue ? j(0.3) : 0;
+  if (e === TALK) {
     ctx.beginPath();
-    ctx.ellipse(tx, ty, 14 * tongue + 3, 17 * tongue + 3, j(0.3), 0, Math.PI * 2);
+    ctx.ellipse(cx, notch + 17, 16, 18, 0, 0, Math.PI * 2);
+    ctx.fillStyle = MOUTH;
+    ctx.fill();
+    ctx.lineWidth = 8;
+    ctx.stroke();
+    if (tongue) {
+      ctx.beginPath();
+      ctx.ellipse(cx, notch + 27, 10, 7, 0, 0, Math.PI * 2);
+      ctx.fillStyle = TONGUE;
+      ctx.fill();
+    }
+    ctx.fillStyle = INK;
+  } else if (tongue) {
+    const ty = notch + 22 * tongue + 6;
+    ctx.beginPath();
+    ctx.ellipse(tx, ty, 14 * tongue + 3, 17 * tongue + 3, tr, 0, Math.PI * 2);
     ctx.fillStyle = TONGUE;
     ctx.fill();
     ctx.lineWidth = 8;
@@ -339,6 +440,7 @@ function at(tl, t, out, hint = 0) {
   if (s.wait) {
     out.x = s.p[0]; out.y = s.p[1]; out.z = s.p[2];
     out.move = false; out.ride = false; out.sit = !!s.sit; out.face = s.face ?? null;
+    out.since = t - s.t0; out.left = s.t0 + s.dur - t;
     return out;
   }
   const f = Math.min(1, Math.max(0, (t - s.t0) / s.dur));
@@ -388,6 +490,120 @@ const wrap = (a) => {
   return a;
 };
 
+// ---------- 姿勢 ----------
+// 都只看時間和時間表算（第一幀就在動作中間），算出來的是目標，update 再平順地跟過去。Q 依序是：
+// x 負那隻手的前後甩、往外張，x 正那隻手的前後甩、往外張（正的是往前、往外），上半身前後彎、左右歪、轉頭，兩隻腳前後，整隻壓扁多少；
+// Q.expr 是臉用哪個表情
+const Q = new Array(10).fill(0);
+Q.expr = 0;
+const ease = (x) => x * x * (3 - 2 * x);
+const frac = (x) => x - Math.floor(x);
+const clamp = (x, a) => Math.max(-a, Math.min(a, x));
+// glance 東張西望要轉頭的角度；near 玩家多近（0 遠、1 貼著），look 玩家在這隻的哪個方向
+function pose(a, s, act, carry, glance, near, look, t) {
+  const ph = t + a.seed;
+  let lsw = 0.12, lra = REST, rsw = 0.12, rra = REST, pitch = 0, tilt = 0, yaw = glance, legL = 0, legR = 0, sq = 0, talk = false, happy = false;
+  if (s.move) {
+    // 走路：腳一前一後，手跟同一邊的腳反著甩，每一步落地壓扁一點
+    const w = Math.sin(a.step * Math.PI);
+    legL = w * 0.45;
+    legR = -w * 0.45;
+    lsw = 0.1 - w * a.swing;
+    rsw = 0.1 + w * a.swing;
+    pitch = 0.05;
+    sq = (1 - Math.abs(w)) * 0.03;
+  } else if (s.ride) {
+    // 搭手扶梯：一隻手搭扶手，東看西看
+    rsw = 0.35;
+    rra = 0.55;
+    yaw = Math.sin(ph * 0.4) * 0.35;
+  } else if (s.sit) {
+    legL = legR = 1.35;
+    if (act === 'eat') {
+      // 一手舀到嘴邊、嚼一嚼；偶爾轉向旁邊講幾句，講話的時候不吃
+      const chat = Math.sin(t * 0.13 + a.seed * 5) > 0.75;
+      const u = frac((t + a.seed * 3) / a.eatT);
+      const lift = chat ? 0 : u < 0.22 ? ease(u / 0.22) : u < 0.32 ? 1 : u < 0.5 ? 1 - ease((u - 0.32) / 0.18) : 0;
+      rsw = 0.9 + lift * 1.2;
+      rra = -0.1 - lift * 0.35;
+      lsw = 0.95;
+      lra = 0;
+      pitch = 0.08 - lift * 0.04;
+      if (chat) {
+        yaw = (frac(a.seed) < 0.5 ? -1 : 1) * 0.55;
+        talk = Math.sin(t * 9 + a.seed) * Math.sin(t * 3.1) > 0.05;
+      } else if (u > 0.3 && u < 0.75) talk = Math.sin(t * 20 + a.seed) > 0.2;
+    } else if (act === 'type') {
+      // 控制室：兩手敲操作台，一陣一陣的；停下來就抬頭看大螢幕
+      lsw = rsw = 1.0;
+      lra = rra = -0.12;
+      pitch = 0.1;
+      if (Math.sin(ph * 0.45) > -0.2) {
+        lsw += Math.sin(t * 11 + a.seed) * 0.07;
+        rsw += Math.sin(t * 11 + a.seed + 1.9) * 0.07;
+      } else pitch = -0.08;
+    } else {
+      lsw = rsw = 0.55;
+      lra = rra = -0.15;
+    }
+  } else if (a.still) {
+    if (act === 'guard') {
+      // 手背在後面，前後輕輕晃
+      lsw = rsw = -0.45;
+      lra = rra = -0.35;
+      pitch = Math.sin(ph * 0.8) * 0.03;
+    } else if (act === 'cook') {
+      lsw = 0.9 + Math.sin(ph * 4.5) * 0.18;
+      rsw = 0.9 + Math.sin(ph * 4.5 + 2.1) * 0.18;
+      lra = rra = -0.15;
+      pitch = 0.07;
+    } else if (act === 'counter') {
+      lsw = rsw = 0.75;
+      lra = rra = -0.2;
+      pitch = 0.04;
+    } else if (act === 'gaze') {
+      // 抬頭看，手背在後面；偶爾指一下
+      pitch = -0.28;
+      lsw = rsw = -0.35;
+      lra = rra = -0.3;
+      if (frac((t + a.seed * 13) / a.fidT) < 0.15) { rsw = 2.5; rra = 0.15; pitch = -0.32; }
+    } else {
+      // 兩隻鰭在肚子前面握著，重心左右換；偶爾抓抓肚子
+      lsw = rsw = 0.45;
+      lra = rra = -0.42;
+      tilt = Math.sin(ph * 0.55) * 0.04;
+      if (frac((t + a.seed * 13) / a.fidT) < 0.1) { rsw = 0.7 + Math.sin(t * 14) * 0.12; rra = -0.5; }
+    }
+    // 站著的偶爾跟人講幾句，邊講邊比
+    if (act !== 'gaze' && Math.sin(t * 0.17 + a.seed * 5) > 0.6) {
+      talk = Math.sin(t * 9 + a.seed) * Math.sin(t * 3.3 + a.seed) > 0.05;
+      rsw += 0.3 * Math.max(0, Math.sin(t * 2.3 + a.seed));
+    }
+  } else {
+    // 半路停下：停的那一下往前晃再站穩，要走之前先往後縮一下
+    const settle = s.since < 0.8 ? Math.sin((s.since / 0.8) * Math.PI) : 0, go = s.left < 0.45 ? 1 - s.left / 0.45 : 0;
+    pitch = settle * 0.12 - go * 0.07;
+    lsw += settle * 0.25;
+    rsw += settle * 0.25;
+    sq = go * 0.04;
+  }
+  // 端餐盤：兩隻鰭往前托著；提紙袋：那一邊的手垂著
+  if (carry === 'tray') { lsw = rsw = 1.0; lra = rra = -0.28; }
+  else if (carry === 'bag') { rsw = 0.05 + (s.move ? Math.sin(a.step * Math.PI) * 0.08 : 0); rra = 0.1; }
+  // 玩家靠近：轉頭看；站著的第一次走近時揮揮手、笑一下，之後一陣子不再揮
+  if (near > 0 && Math.abs(look) < 2.2) {
+    yaw = clamp(look, s.move ? 0.5 : 0.8) * Math.min(1, near * 2);
+    if (a.still && !s.sit && near > 0.3 && t - a.waved > 25) a.waved = t;
+  }
+  if (t - a.waved < 1.8) { rra = 2.45 + Math.sin(t * 12) * 0.25; rsw = 0.3; }
+  if (t - a.waved < 2.8) happy = true;
+  const blink = frac((t + a.seed * 7.3) / a.blinkT) * a.blinkT < 0.13;
+  Q[0] = lsw; Q[1] = lra; Q[2] = rsw; Q[3] = rra;
+  Q[4] = pitch; Q[5] = tilt; Q[6] = yaw;
+  Q[7] = legL; Q[8] = legR; Q[9] = sq;
+  Q.expr = happy ? HAPPY : blink ? BLINK : talk ? TALK : 0;
+}
+
 // plan 是區域給的：loops（繞圈的路線）、canteen（隊伍和座位）、still（坐著、站著不走的）。
 // 每一隻的打扮從 plan 的 outfits 裡抽；coarse（手機）時坐著的和樓上的少一點
 // 人潮聲：多遠以內的海牛人算進來、整體比海市小幾成；近處坐著、站著的最多兩隻有自己的嗓子
@@ -401,11 +617,17 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
   const add = (a) => {
     a.scale = (a.kid ? 0.64 : 0.94 + R() * 0.12) * (a.size || 1);
     a.tint = 0.94 + R() * 0.08;
-    a.cell = Math.floor(R() * COLS * ROWS);
+    a.cell = Math.floor(R() * FACES);
     a.seed = R() * 100;
     a.voice = 0.8 + R() * 0.16;   // 嗓子低一點
     a.heading = a.face ?? 0;
     a.hint = 0;
+    // 各自的脾氣：甩手多大、多久眨一次眼、吃一口多久、多久動一下（從 seed 推，不多抽亂數，打扮和臉照舊）
+    a.swing = 0.3 + frac(a.seed * 7.13) * 0.25;
+    a.blinkT = 2.6 + frac(a.seed * 5.31) * 3;
+    a.eatT = 4.5 + frac(a.seed * 3.77) * 2;
+    a.fidT = 9 + frac(a.seed * 2.93) * 6;
+    a.waved = -99;
     agents.push(a);
   };
   for (const L of plan.loops) {
@@ -426,9 +648,11 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
     add({ still: s, outfit: s.outfit || pick(s.outfits), face: s.face, kid: s.kid, size: s.size });
   }
 
-  // 每一種打扮一個 InstancedMesh
+  // 每一種打扮一個 InstancedMesh；身體是平滑著色，手腳和上半身的角度在著色器裡擺
   const group = new THREE.Group();
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  posed(mat, 'jinghai-manatee', true);
+  const things = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });   // 餐盤、紙袋
   const byOutfit = new Map();
   for (const a of agents) {
     if (!byOutfit.has(a.outfit)) byOutfit.set(a.outfit, []);
@@ -437,25 +661,27 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
   const bodies = new Map();
   const tmpC = new THREE.Color();
   for (const [name, list] of byOutfit) {
-    const m = new THREE.InstancedMesh(geometry(OUTFITS[name]), mat, list.length);
+    const geo = geometry(OUTFITS[name]);
+    const m = new THREE.InstancedMesh(geo, mat, list.length);
+    m.userData.pose = poseAttrs(geo, list.length, true);
     m.frustumCulled = false;
     m.receiveShadow = true;
     list.forEach((a, i) => m.setColorAt(i, tmpC.setScalar(a.tint)));
     bodies.set(name, m);
     group.add(m);
   }
-  // 臉：全部一個，每隻從圖集抽一格（aCell），著色器裡把貼圖座標移過去
+  // 臉：全部一個，每隻從圖集抽一格（aCell：哪張臉、哪個表情），著色器裡把貼圖座標移過去；跟著上半身彎
   const fgeo = faceGeo();
-  const cells = new Float32Array(agents.length * 2);
-  agents.forEach((a, i) => cells.set([a.cell % COLS, ROWS - 1 - Math.floor(a.cell / COLS)], i * 2));
-  fgeo.setAttribute('aCell', new THREE.InstancedBufferAttribute(cells, 2));
-  const fmat = new THREE.MeshLambertMaterial({ map: faceAtlas(), alphaTest: 0.3, polygonOffset: true, polygonOffsetFactor: -2 });
-  fmat.onBeforeCompile = (sh) => {
+  const cells = new THREE.InstancedBufferAttribute(new Float32Array(agents.length * 2), 2);
+  cells.setUsage(THREE.DynamicDrawUsage);
+  fgeo.setAttribute('aCell', cells);
+  const facePose = poseAttrs(fgeo, agents.length, false);
+  const fmat = new THREE.MeshLambertMaterial({ map: faceAtlas(coarse), alphaTest: 0.3, polygonOffset: true, polygonOffsetFactor: -2 });
+  posed(fmat, 'jinghai-face', false, (sh) => {
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec2 aCell;')
       .replace('#include <uv_vertex>', `#include <uv_vertex>\nvMapUv = (vMapUv + aCell) / vec2(${COLS}.0, ${ROWS}.0);`);
-  };
-  fmat.customProgramCacheKey = () => 'jinghai-face';
+  });
   const faces = new THREE.InstancedMesh(fgeo, fmat, agents.length);
   faces.frustumCulled = false;
   faces.receiveShadow = true;
@@ -469,7 +695,7 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
   const holders = (kind, fn) => {
     const list = agents.filter((a) => (kind === 'tray' ? a.tl?.segs.some((s) => s.carry) || a.still?.tray : a.carry === 'bag'));
     if (!list.length) return null;
-    const m = new THREE.InstancedMesh(geometry(fn), mat, list.length);
+    const m = new THREE.InstancedMesh(geometry(fn), things, list.length);
     m.frustumCulled = false;
     list.forEach((a, i) => { a[kind] = i; });
     group.add(m);
@@ -489,22 +715,26 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
       if (this.hidden) return;
       time += dt;
       const P = player?.pos, hum = P && ambience && indoorness ? { amount: 0, closest: 0, sx: 0, sz: 0, voices: [] } : null;
+      const K = 1 - Math.exp(-dt * 14);
       for (let i = 0; i < agents.length; i++) {
         const a = agents[i];
-        let lean = 0, roll = 0, bob = 0, breath = Math.sin(time * 2 + a.seed) * 0.012, carry = null, target;
+        let lean = 0, roll = 0, bob = 0, breath = Math.sin(time * 2 + a.seed) * 0.012, carry = null, target, act = null, glance = 0;
         if (a.still) {
           const st = a.still;
           s.x = st.p[0]; s.y = st.p[1]; s.z = st.p[2];
-          // 站櫃台的沿著櫃台左右挪一挪，偶爾轉頭看旁邊
+          // 站櫃台的沿著櫃台左右挪一挪；東張西望一半轉身、一半轉頭
           if (st.sway) {
             const w = Math.sin(time * 0.35 + a.seed) * st.sway;
             s.x += Math.cos(st.face) * w;
             s.z -= Math.sin(st.face) * w;
           }
-          target = st.face + Math.sin(time * 0.23 + a.seed) * (st.look ?? 0.25);
+          glance = Math.sin(time * 0.23 + a.seed) * (st.look ?? 0.25);
+          target = st.face + glance * 0.5;
           s.sit = st.sit;
           if (st.tray) carry = 'table';
           s.move = false;
+          s.ride = false;
+          act = st.act || (st.tray ? 'eat' : 'idle');
         } else {
           const tl = a.tl, t = (((time + a.offset) % tl.T) + tl.T) % tl.T;
           at(tl, t, s, a.hint);
@@ -516,11 +746,21 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
             roll = Math.sin(a.step * Math.PI) * 0.07;
             bob = Math.abs(Math.sin(a.step * Math.PI)) * 0.035;
           }
+          if (s.sit) act = carry === 'table' ? 'eat' : 'idle';
         }
         if (s.sit) { lean = -0.07; breath *= 0.7; }
+        // 轉彎時身體往裡傾
+        const turn = wrap(target - a.heading);
+        if (s.move) roll -= Math.max(-0.5, Math.min(0.5, turn)) * 0.15;
         // 第一幀直接面向該面向的地方，不要開場才轉過去
-        if (a.init) a.heading += wrap(target - a.heading) * Math.min(1, dt * (s.move ? 6 : 3));
+        if (a.init) a.heading += turn * Math.min(1, dt * (s.move ? 6 : 3));
         else { a.heading = target; a.init = true; }
+        // 玩家在同一層、靠近的時候：轉頭看（背後的不看）
+        let near = 0, look = 0;
+        if (P && Math.abs(s.y - P.y) < 2) {
+          const dx = P.x - s.x, dz = P.z - s.z, d = Math.hypot(dx, dz);
+          if (d < 4.5) { near = 1 - d / 4.5; look = wrap(Math.atan2(dx, dz) - a.heading); }
+        }
         if (hum) {
           const dx = s.x - P.x, dz = s.z - P.z, dh = Math.hypot(dx, dz), d = Math.hypot(dh, (s.y - P.y) * 2);
           if (d < MURMUR_R) {
@@ -531,11 +771,24 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
             if (d < VOICE_R && !s.move && !s.ride) hum.voices.push({ key: i, dx, dz, d: dh, k: (1 - d / VOICE_R) ** 1.5 * 0.6, rate: a.voice, far: d });
           }
         }
-        const y = s.y + bob + (s.sit ? SIT : 0);
+        pose(a, s, act, carry, glance * 0.5, near, look, time);
+        // 角度平順地跟過去；第一幀直接擺好
+        const g = a.pose || (a.pose = Q.slice());
+        for (let k = 0; k < g.length; k++) g[k] += (Q[k] - g[k]) * (a.posed ? K : 1);
+        a.posed = true;
+        const pm = bodies.get(a.outfit).userData.pose;
+        pm.arms.array.set([g[0], g[1], g[2], g[3]], a.slot * 4);
+        pm.body.array.set([g[4], g[5], g[6]], a.slot * 3);
+        pm.legs.array.set([g[7], g[8]], a.slot * 2);
+        facePose.body.array.set([g[4], g[5], g[6]], i * 3);
+        cells.array[i * 2] = a.cell;
+        cells.array[i * 2 + 1] = ROWS - 1 - Q.expr;
+
+        const sq = g[9], y = s.y + bob + (s.sit ? (a.still?.seat ?? SEAT) - BOTTOM * a.scale : 0);
         p.set(s.x, y, s.z);
         e.set(lean, a.heading, roll);
         q.setFromEuler(e);
-        sc.set(a.scale, a.scale * (1 + breath), a.scale);
+        sc.set(a.scale * (1 + sq * 0.5), a.scale * (1 + breath - sq), a.scale * (1 + sq * 0.5));
         m4.compose(p, q, sc);
         bodies.get(a.outfit).setMatrixAt(a.slot, m4);
         faces.setMatrixAt(i, m4);
@@ -546,12 +799,13 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
         shadows.setMatrixAt(i, m4);
         if (a.tray !== undefined) {
           if (carry === 'tray') {
+            // 兩隻鰭往前托著
             p.set(s.x, s.y + bob, s.z);
             e.set(0, a.heading, 0);
             q.setFromEuler(e);
             sc.setScalar(a.scale);
             held.compose(p, q, sc);
-            off.makeTranslation(0, 0.5, radiusAt(0.5) * DEPTH + 0.16);
+            off.makeTranslation(0, 0.6, 0.42);
             trays.setMatrixAt(a.tray, m4.multiplyMatrices(held, off));
           } else if (carry === 'table') {
             // 坐著吃：餐盤放在面前的桌上
@@ -578,8 +832,13 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
         for (const v of hum.voices) v.k *= k / QUIET;
         ambience.murmur(a * k, hum.closest * k, a ? hum.sx / a : 0, a ? hum.sz / a : 0, k > 0.01 ? hum.voices : []);
       }
-      for (const m of bodies.values()) m.instanceMatrix.needsUpdate = true;
+      for (const m of bodies.values()) {
+        m.instanceMatrix.needsUpdate = true;
+        for (const at of Object.values(m.userData.pose)) at.needsUpdate = true;
+      }
       faces.instanceMatrix.needsUpdate = true;
+      facePose.body.needsUpdate = true;
+      cells.needsUpdate = true;
       shadows.instanceMatrix.needsUpdate = true;
       if (trays) trays.instanceMatrix.needsUpdate = true;
       if (bags) bags.instanceMatrix.needsUpdate = true;

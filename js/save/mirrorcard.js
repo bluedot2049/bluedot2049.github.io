@@ -7,7 +7,8 @@
 //   眼紋：虹膜一圈圈切成亮暗的弧，放最要緊的「身上這套 + 拿到的東西」，格子大，最好讀
 //   鏡框符文：拱形鏡框邊上刻滿短痕，放完整存檔（含衣櫃、各攤日子）和畫的臉
 // 鏡框讀壞了，眼紋還能救回身上這套和拿到的東西。錯誤更正和亂數打散用 filmcode.js 的 codeBits / codeData。
-// 讀的時候照圖的大小反推版面（原圖、等比例縮小都行）；裁過的、截圖截到別的東西就讀不到
+// 讀的時候先照圖的大小反推版面（原圖、等比例縮小、上下或左右多了黑邊）；對不上就當截圖，在圖裡找虹膜、對鏡框的邊（locate）。
+// 卡片本身被裁掉一塊就讀不到
 import { codeBits, codeData, codeCapacity, packFace, unpackFace } from './filmcode.js';
 import { encodeSave, decodeSave } from './savecode.js';
 import { decodeFace } from '../avatar/looks.js';
@@ -602,6 +603,159 @@ function fits(W, H) {
   return out;
 }
 
+// ---------- 截圖：卡片在圖裡哪裡不知道 ----------
+// 上下有字和按鈕、旁邊是遊戲畫面，底色又跟卡片的黑底差不多。先找虹膜（金色一圈，中間暗的瞳孔，兩旁暗的眼白）抓大概的位置和大小，
+// 再拿鏡框兩邊直的那段和下緣，跟卡片原本的樣子對齊，量出準確的縮放和位移。鏡框符文的格子細，縮放差 0.2% 就會錯開
+
+// 金色有多金：紅減藍。金底、鏡框邊線、細金線約 1；墨、黑底、紫煙、瞳孔約 0
+const goldness = (d, i) => Math.min(1, Math.max(0, (d[i] - d[i + 2] - 20) / 75));
+
+// 虹膜的候選：在縮小的金色比例圖上，用方塊估「瞳孔沒有金、外圈一半金、兩旁眼白沒有金」。回傳原圖座標的圓心和半徑，最像的在前面
+function irisSpots(img) {
+  const { width: W, height: H, data: d } = img, q = Math.max(1, Math.round(W / 400));
+  const w = Math.floor(W / q), h = Math.floor(H / q), S = new Float64Array((w + 1) * (h + 1));
+  for (let y = 0; y < h; y++) {
+    let row = 0;
+    for (let x = 0; x < w; x++) {
+      let g = 0;
+      for (let j = 0; j < q; j++) for (let i = 0; i < q; i++) g += goldness(d, ((y * q + j) * W + x * q + i) * 4);
+      row += g / (q * q);
+      S[(y + 1) * (w + 1) + x + 1] = S[y * (w + 1) + x + 1] + row;
+    }
+  }
+  const sum = (x0, y0, x1, y1) => {
+    x0 = Math.max(0, Math.min(w, Math.round(x0))); x1 = Math.max(0, Math.min(w, Math.round(x1)));
+    y0 = Math.max(0, Math.min(h, Math.round(y0))); y1 = Math.max(0, Math.min(h, Math.round(y1)));
+    return [S[y1 * (w + 1) + x1] - S[y0 * (w + 1) + x1] - S[y1 * (w + 1) + x0] + S[y0 * (w + 1) + x0], (x1 - x0) * (y1 - y0)];
+  };
+  const frac = (a, b = [0, 0]) => (a[1] - b[1] > 0 ? (a[0] - b[0]) / (a[1] - b[1]) : 0);
+  const sq = (x, y, r) => sum(x - r, y - r, x + r, y + r);
+  const found = [];
+  for (let R = Math.max(5, 0.025 * w); R <= 0.12 * w; R *= 1.06) {
+    const step = Math.max(1, R / 8);
+    for (let cy = R; cy < h - R; cy += step) {
+      for (let cx = R * 1.5; cx < w - R * 1.5; cx += step) {
+        const pupil = frac(sq(cx, cy, 0.22 * R));
+        if (pupil > 0.15) continue;
+        const ring = frac(sq(cx, cy, 0.65 * R), sq(cx, cy, 0.4 * R));
+        if (ring < 0.3) continue;
+        const side = (frac(sum(cx - 1.5 * R, cy - 0.25 * R, cx - 1.1 * R, cy + 0.25 * R)) + frac(sum(cx + 1.1 * R, cy - 0.25 * R, cx + 1.5 * R, cy + 0.25 * R))) / 2;
+        const score = ring - pupil - side;
+        if (score > 0.25) found.push({ x: cx, y: cy, R, score });
+      }
+    }
+  }
+  found.sort((a, b) => b.score - a.score);
+  const keep = [];
+  for (const c of found) if (keep.length < 4 && keep.every((k) => Math.hypot(k.x - c.x, k.y - c.y) > k.R)) keep.push(c);
+  return keep.map((c) => {
+    const spot = { x: c.x * q, y: c.y * q, R: c.R * q };
+    return { ...spot, R: irisRadius(img, spot) };
+  });
+}
+
+// 方塊估的半徑偏大。從圓心那一橫往左右看，金色（上下一小段平均）一路到哪裡，那裡就是虹膜的邊
+function irisRadius(img, spot) {
+  const { width: W, height: H, data: d } = img, half = Math.max(1, Math.round(spot.R * 0.08));
+  const reach = (dir) => {
+    let last = 0;
+    for (let r = Math.round(spot.R * 0.5); r < spot.R * 1.3; r++) {
+      const X = Math.round(spot.x + dir * r);
+      if (X < 0 || X >= W) break;
+      let g = 0, n = 0;
+      for (let dy = -half; dy <= half; dy++) {
+        const Y = Math.round(spot.y) + dy;
+        if (Y >= 0 && Y < H) { g += goldness(d, (Y * W + X) * 4); n++; }
+      }
+      if (n && g / n > 0.2) last = r;
+    }
+    return last;
+  };
+  const R = (reach(-1) + reach(1)) / 2;
+  return R > spot.R * 0.6 ? R : spot.R;
+}
+
+// 鏡框左邊理想的樣子（橫著看，x 是卡片座標）：外面兩道細金線、鏡框外緣那一小段純金、符文（不比）、內緣那一小段純金，再進去是照片（不比）。
+// 右邊左右對稱。下緣同理（y 是卡片座標）：上面是照片和符文（不比）、外緣那一小段純金、再下面是黑的
+const SIDE = [], FOOT = [];
+for (let x = 100; x <= WIN.l + 1.5; x += 0.5) {
+  if (x >= 185 && x < 275) continue;
+  const v = Math.abs(x - (WIN.l - BAND - LINES[1][0])) <= LINES[1][1] / 2 || Math.abs(x - (WIN.l - BAND - LINES[0][0])) <= LINES[0][1] / 2
+    || (x >= WIN.l - BAND - 1.5 && x < 185) || x >= 275 ? 1 : 0;
+  SIDE.push([x, v], [CARD_W - x, v]);
+}
+for (let y = WIN.b - 1.5; y <= WIN.b + BAND + 25; y += 0.5) if (y < WIN.b + IN || y >= WIN.b + IN + ROWS * CELL) FOOT.push([y, y <= WIN.b + BAND + 1.5 ? 1 : 0]);
+
+// 一串取樣跟理想的樣子有多像（相關係數）。at(t) 把卡片座標換成取樣的值，出了圖是 NaN
+function corr(tpl, at) {
+  let n = 0, sp = 0, st = 0, spp = 0, stt = 0, spt = 0;
+  for (const [t, v] of tpl) {
+    const p = at(t);
+    if (Number.isNaN(p)) return -1;
+    n++; sp += p; st += v; spp += p * p; stt += v * v; spt += p * v;
+  }
+  const cov = spt - (sp * st) / n, vp = spp - (sp * sp) / n, vt = stt - (st * st) / n;
+  return vp > 1e-9 && vt > 1e-9 ? cov / Math.sqrt(vp * vt) : -1;
+}
+const lerp = (P, X) => {
+  const i = Math.floor(X);
+  return i < 0 || i + 1 >= P.length ? NaN : P[i] + (P[i + 1] - P[i]) * (X - i);
+};
+
+// 從一個虹膜候選量出版面。對不齊（不像鏡框）回傳 null
+function alignTo(img, spot) {
+  const { width: W, height: H, data: d } = img, gold = (x, y) => goldness(d, (y * W + x) * 4);
+  let s = spot.R / EYE.R, ox = spot.x - EYE.x * s, oy = spot.y - EYE.y * s;
+  // 兩邊直的那段：一列列取樣、平均成一條
+  const P = new Float32Array(W);
+  let rows = 0;
+  for (let y = 1000; y <= 1650; y += 5) {
+    const Y = Math.round(oy + y * s);
+    if (Y < 0 || Y >= H) continue;
+    rows++;
+    for (let X = 0; X < W; X++) P[X] += gold(X, Y);
+  }
+  if (rows < 20) return null;
+  // 縮放和左右位移：先粗後細。虹膜的圓心是左右的中線，換縮放時跟著它
+  const cx = spot.x;
+  let best = { c: -1 };
+  const tryFit = (k, dx) => {
+    const c = corr(SIDE, (x) => lerp(P, cx + dx + (x - EYE.x) * k));
+    if (c > best.c) best = { c, k, dx };
+  };
+  for (let k = s * 0.92; k <= s * 1.08; k += s * 0.003) for (let dx = -20 * k; dx <= 20 * k; dx += 0.5) tryFit(k, dx);
+  const b0 = best;
+  for (let k = b0.k - s * 0.004; k <= b0.k + s * 0.004; k += s * 0.0005) for (let dx = b0.dx - 1; dx <= b0.dx + 1; dx += 0.1) tryFit(k, dx);
+  if (best.c < 0.6) return null;
+  s = best.k;
+  ox = cx + best.dx - EYE.x * s;
+  // 上下位移：下緣那一段，一行行取樣平均
+  const Q = new Float32Array(H);
+  for (let x = 330; x <= 1170; x += 5) {
+    const X = Math.round(ox + x * s);
+    if (X < 0 || X >= W) continue;
+    for (let Y = 0; Y < H; Y++) Q[Y] += gold(X, Y);
+  }
+  let foot = { c: -1 };
+  const oy0 = spot.y - EYE.y * s;
+  for (let dy = -30 * s; dy <= 30 * s; dy += 0.25) {
+    const c = corr(FOOT, (y) => lerp(Q, oy0 + dy + y * s));
+    if (c > foot.c) foot = { c, dy };
+  }
+  if (foot.c < 0.6) return null;
+  return { s, ox, oy: oy0 + foot.dy };
+}
+
+// 截圖可能的版面：每個虹膜候選對齊鏡框；對不齊的話至少照虹膜估一個（救得回眼紋）
+function* locate(img) {
+  for (const spot of irisSpots(img)) {
+    const f = alignTo(img, spot);
+    if (f) yield f;
+    const s = spot.R / EYE.R;
+    yield { s, ox: spot.x - EYE.x * s, oy: spot.y - EYE.y * s };
+  }
+}
+
 // 每格的亮度（附近幾點平均）→ 比中間值暗的是 1
 function sample(img, cells, f, r) {
   const { width: W, height: H, data: d } = img;
@@ -635,7 +789,7 @@ async function imageData(file) {
 // 讀到是 { save, faces: [身上, 衣櫃1, 衣櫃2, 衣櫃3]（Uint8Array 或 null）, full }：full 是鏡框也讀到了（衣櫃、日子、臉都在）
 export async function readMirrorCard(file) {
   const img = await imageData(file);
-  for (const f of fits(img.width, img.height)) {
+  for (const f of (function* () { yield* fits(img.width, img.height); yield* locate(img); })()) {
     // 太小的圖格子糊在一起，不試
     if (CELL * f.s < 2.2) continue;
     const ib = sample(img, IRIS, f, RING * 0.2);

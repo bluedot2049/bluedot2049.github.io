@@ -489,10 +489,14 @@ body.photo-guest #ph-shutter { visibility: hidden; }
 .ph-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 .ph-actions .btn { letter-spacing: .15em; }
 .ph-actions .btn[hidden] { display: none; }
+.ph-actions .btn:disabled { opacity: .55; cursor: var(--cur-default); }
 .ph-actions svg {
   width: 18px; height: 18px; margin-right: 8px;
   fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round;
 }
+/* 信物卡存下鈕底下的小字：只有 iPhone 有（album.js saveTip） */
+.save-tip { margin: -6px 0 0; font-size: 11px; letter-spacing: .1em; color: var(--muted); }
+.save-tip:empty { display: none; }
 
 /* ───────── 鏡子前請眼睛拍一張 ───────── */
 /* 拍的時候整片透明的擋住點擊，介面全藏起來，只剩畫面 */

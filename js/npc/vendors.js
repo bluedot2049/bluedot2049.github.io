@@ -5,12 +5,14 @@
 // 介面跟 visitors.js 一樣（nearest、blocks、list），玩家的動作按鈕和照鏡子時的半透明直接沿用。
 // 角色只在玩家附近、同一層附近時才畫，攤販多也不會拖慢手機
 // 沖洗師傅（lab）：相簿裡交給他的照片，本人走來聊天才拿得回來（album.js），有照片等著時按鈕寫「取照片」
+// 星潮報（press）：星台的編輯收奇物照片（pressdesk.js），下街眺台的報童有你的報紙時按鈕寫「看報」
 import * as THREE from 'three';
 import { Character } from '../avatar/character.js';
 import { sanitizeLook, presetLook, RACES, GIFTS, unlock, unlockedSet, isOpen, getSave, putSave } from '../avatar/looks.js';
 import { bend } from '../core/lens.js';
 import { HOST_NAME } from './names.js';
 import { atLab, collect, LABS } from '../camera/album.js';
+import { latest, readPaper, submit } from '../save/pressdesk.js';
 
 const SAY_TIME = 3800, GREET_DIST = 3.2, TALK_DIST = 2.4, SHOW_DIST = 22, SHOW_DY = 3.5;
 // 視線：多遠以內的路人會被看、頭和身子最多離櫃台正面多少（弧度）、每次看多久（秒）、沒在說話時看玩家的機會
@@ -105,6 +107,26 @@ export const VENDORS = {
     lines: ['裡面在泡 門簾不要掀', '底片要全黑 洗相紙才開紅燈', '手是藥水染的 洗不掉了', '牆上那些 好久沒人來拿', '曝光過頭的 我反而喜歡', '洗好的會夾在門口那條繩子上', '有底片再拿來給我'],
     quiet: ['沒人的時候 我在裡面泡片', '這時候安靜 洗得比較專心'],
   },
+  // 星台的報社（haishi-press.js）：編輯站在收稿窗口，印刷工在門裡顧機器。報童在下街的眺台
+  press: {
+    press: 'desk', name: '星潮報編輯', race: 'goat', look: { hat: 'none', glasses: 'round', top: 'shirt', topC: 16, bottom: 'pants', botC: 1, outer: 'vest', outC: 1, neck: 'bowtie', neckC: 2, back: 'none' },
+    greet: ['有稿子嗎', '有新聞要給我嗎'],
+    lines: ['這張很好看 可是不是新聞', '我們只登沒人看過的東西', '拍到稀奇的再拿來', '最近大家都在講白鹿 拍到的話拿來', '風景照我這裡太多了', '稀奇的東西 一下就不見了 手要快', '晚上稿子少 我在校對'],
+    // 印好了照版面講一句：角落、半版、頭版、號外
+    printed: [['角落還有一格 擠一下', '先登小小的 下次拍清楚一點'], ['給你半版', '拍得不錯 半版'], ['頭版 就是這張', '今天的頭版是你的'], ['號外 快去敲鐘', '加印 全部加印']],
+  },
+  printer: {
+    name: '印刷工', race: 'dog', look: { hat: 'none', top: 'tank', topC: 16, bottom: 'pants', botC: 26, outer: 'apron', outC: 17, neck: 'towel', neckC: 16, back: 'none' },
+    greet: ['墨還沒乾 別碰', '小心機器'],
+    lines: ['一張一張壓 手很痠', '這台機器比我還老', '字是一個一個排的', '墨要調得剛好 太稀會糊', '印壞的拿去包番薯', '有號外的時候 整晚不能睡'],
+    quiet: ['沒稿子 我在擦鉛字', '晚上安靜 機器聲音特別大'],
+  },
+  newsboy: {
+    press: 'stand', name: '報童', race: 'toast', look: { hat: 'none', top: 'shirt', topC: 16, bottom: 'shorts', botC: 5, outer: 'vest', outC: 3, back: 'satchel', backC: 2, shoes: 'geta', shoeC: 8 },
+    greet: () => latest()?.head ?? pick(['星潮報喔', '今天的報紙']),
+    lines: ['今天沒什麼大新聞', '有大新聞我會喊很大聲', '星台那邊印好 就拿來這裡', '昨天有人說看到一道白光', '報紙一份 拿去看', '頭版要是你就好了'],
+    quiet: ['晚上沒人看報 我先坐一下', '早上那一疊還沒發完'],
+  },
   // 小吃推車，id 對應 haishi.js 的 CARTS
   squid: {
     name: '烤魷魚', race: 'hammer', look: { hat: 'none', clothes: 'tank', robe: 1 },
@@ -194,7 +216,12 @@ class Vendor {
     this.lookAt = list.length && Math.random() < 0.85 ? list[Math.floor(Math.random() * list.length)] : null;
     this.idleYaw = (Math.random() - 0.5) * 1.2;
   }
-  get actionLabel() { return this.spec.lab && atLab(this.spec.lab) ? '取照片' : this.label; }
+  get actionLabel() {
+    if (this.spec.lab && atLab(this.spec.lab)) return '取照片';
+    if (this.spec.press === 'desk') return '投稿';
+    if (this.spec.press === 'stand' && latest()) return '看報';
+    return this.label;
+  }
   setGhost(a) { this.ch.setGhost(a); }
 
   say(text) {
@@ -225,6 +252,22 @@ class Vendor {
 
   // 台詞洗一輪才重來，同一句不會連著講。有東西要送的話，第一次聊天先送
   talkTo() {
+    // 編輯：有拍到奇物的照片就打開稿紙，印好了照版面講一句；沒有的話講一句退件的話
+    const press = this.spec.press;
+    if (press === 'desk') {
+      submit().then((p) => {
+        if (p === false) this.say(this.next());
+        else if (p) this.say(pick(this.spec.printed[p.rare.grade | 0] || this.spec.printed[0]));
+      });
+      return;
+    }
+    // 報童：喊你那一則的標題，把報紙遞過來
+    const paper = press === 'stand' && latest();
+    if (paper) {
+      this.say(paper.rare.grade === 3 ? `號外 ${paper.head}` : paper.head);
+      setTimeout(() => readPaper(paper), 900);
+      return;
+    }
     const lab = this.spec.lab;
     if (lab && atLab(lab)) {
       collect(lab).then((n) => {
@@ -250,9 +293,13 @@ class Vendor {
       this.say(pick(this.spec.quiet));
       return;
     }
-    if (!this.bag.length) this.bag = [...this.spec.lines].sort(() => Math.random() - 0.5);
-    this.say(this.bag.pop());
+    this.say(this.next());
     if (this.spec.postcard) setTimeout(() => this.onPostcard?.(), 1200);
+  }
+
+  next() {
+    if (!this.bag.length) this.bag = [...this.spec.lines].sort(() => Math.random() - 0.5);
+    return this.bag.pop();
   }
 
   update(dt, px, py, pz, camera, people) {
@@ -265,7 +312,7 @@ class Vendor {
     if (!show) return;
     if (d < GREET_DIST && !this.greeted) {
       this.greeted = true;
-      this.say(pick(this.spec.greet));
+      this.say(typeof this.spec.greet === 'function' ? this.spec.greet() : pick(this.spec.greet));
     } else if (d > GREET_DIST + 3) this.greeted = false;
     // 視線：頭去看，身子只跟著轉一點，不會轉身背對櫃台。目標隔幾秒才換一次，每幀只算一個點的角度
     const talking = d < 6 && this.bubble.classList.contains('show');

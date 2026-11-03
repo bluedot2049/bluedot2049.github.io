@@ -65,6 +65,21 @@ function shoot(look, frame) {
 
 const keyOf = (look, frame) => frame + '|' + lookKey(look);
 
+// 大頭照（報紙上的臉，press.js）：同一個看不見的角色，畫布暫時放大拍一張，回傳畫布
+export function portrait(look, px = 360) {
+  if (!gl) setup();
+  const r = gl.getPixelRatio();
+  gl.setPixelRatio(1);
+  gl.setSize(px, px, false);
+  shoot(look, 'head');
+  const c = document.createElement('canvas');
+  c.width = c.height = px;
+  c.getContext('2d').drawImage(gl.domElement, 0, 0);
+  gl.setPixelRatio(r);
+  gl.setSize(SIZE, SIZE, false);
+  return c;
+}
+
 // 已經拍好的就直接給，沒有的回 null
 export function cached(look, frame) {
   return cache.get(keyOf(look, frame)) ?? null;

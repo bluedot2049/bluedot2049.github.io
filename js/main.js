@@ -616,11 +616,11 @@ async function start() {
     document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : t.kind === 'pet' || t.kind === 'talk' ? t.p.name : t.kind === 'exit' ? t.p.title : '';
   }
 
-  // 越肩鎖住滑鼠時，作品面板、清單、行囊、說明卡、樹洞、打字框打開就把游標還回來
+  // 越肩鎖住滑鼠時，作品面板、清單、行囊、說明卡、樹洞、報社的稿紙和報紙、打字框打開就把游標還回來
   player.cursorWanted = () => {
     const b = document.body.classList;
     return b.contains('panel-open') || b.contains('chatting') || !document.getElementById('pack-card').hidden
-      || !!document.querySelector('#list.open, #guide.show, #hollow.show, #cams.open, #ferry.open') || !!document.activeElement?.closest?.('input, textarea');
+      || !!document.querySelector('#list.open, #guide.show, #hollow.show, #cams.open, #ferry.open, #press.show') || !!document.activeElement?.closest?.('input, textarea');
   };
   // 第一次鎖住滑鼠時提一下怎麼點按鈕
   let lockTold = false;

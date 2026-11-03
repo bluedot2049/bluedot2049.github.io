@@ -291,7 +291,8 @@ body.desk .album-sel button, body.desk .album-note button, body.desk .album-dir 
   background: rgba(10, 7, 5, .92); cursor: var(--cur-pointer); touch-action: none;
 }
 #album-view[hidden] { display: none; }
-#album-view img { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 6px 30px rgba(0, 0, 0, .6); }
+#album-view img, #album-view video { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 6px 30px rgba(0, 0, 0, .6); }
+#album-view img[hidden], #album-view video[hidden] { display: none; }
 #album-view .av-close { position: absolute; top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right)); }
 .av-step {
   position: absolute; top: 50%; left: calc(12px + env(safe-area-inset-left)); width: 44px; height: 44px; margin-top: -22px; padding: 0;
@@ -597,3 +598,39 @@ body.flat #list-close, body.flat #top-btns { display: none; }
   .card { grid-template-columns: 280px 1fr; padding: 20px; gap: 22px; }
   .card img { max-height: 320px; }
 }
+
+/* ───────── 星潮報（pressdesk.js）：報社的稿紙和看報。海市的紙，不用金線 ───────── */
+#press {
+  position: fixed; inset: 0; z-index: 42; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+  background: rgba(14, 10, 8, 0.82); color: #241c17; cursor: var(--cur-default);
+}
+#press button {
+  font: 600 16px var(--font); color: #241c17; background: #ebe2cc; border: 2px solid #241c17; border-radius: 3px;
+  min-width: 52px; height: 44px; padding: 0 16px; cursor: var(--cur-pointer); box-shadow: 2px 2px 0 rgba(36, 28, 23, .55);
+}
+#press button:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 rgba(36, 28, 23, .55); }
+#press button:disabled { opacity: .45; cursor: var(--cur-default); }
+#press .press-acts { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.press-card {
+  width: min(420px, 100%); max-height: 100%; overflow-y: auto; padding: 22px 20px 20px;
+  background: #ebe2cc; border-radius: 2px; box-shadow: 0 10px 40px rgba(0, 0, 0, .55); display: flex; flex-direction: column; gap: 14px;
+}
+.press-card h2 { margin: 0; font: 900 30px var(--font); letter-spacing: .3em; text-align: center; border-bottom: 3px double #241c17; padding-bottom: 8px; }
+.press-sub { margin: -6px 0 0; text-align: center; font-size: 14px; color: rgba(36, 28, 23, .6); }
+.press-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+#press .press-picks button { height: auto; padding: 3px; aspect-ratio: 3 / 2; box-shadow: none; border: 2px solid transparent; background: none; }
+#press .press-picks button[aria-pressed="true"] { border-color: #a8342a; }
+.press-picks img { width: 100%; height: 100%; object-fit: cover; display: block; filter: sepia(.35); }
+.press-pen { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+.press-pen input {
+  flex: 1; min-width: 0; height: 40px; padding: 0 10px; font: 16px var(--font); color: #241c17;
+  background: transparent; border: none; border-bottom: 2px solid #241c17; border-radius: 0; outline: none;
+}
+.press-pen input::placeholder { color: rgba(36, 28, 23, .4); }
+#press.read .press-sheet { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; width: 100%; }
+#press.read .press-sheet img { max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 8px 36px rgba(0, 0, 0, .6); }
+/* 剛印好：紙從底下滑上來，有一點歪 */
+#press.fresh .press-sheet img { animation: press-out .9s cubic-bezier(.2, .8, .3, 1) both; }
+@keyframes press-out { from { transform: translateY(60%) rotate(-3deg); } to { transform: none; } }
+.press-tip { margin: 0; font-size: 13px; color: #b5a084; }

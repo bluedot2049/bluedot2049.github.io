@@ -28,15 +28,15 @@ export { SHOPS, CARTS } from './haishi-map.js';
 export function buildHaishi(scene, { coarse = false } = {}) {
   const R = rng('haishi'), k = new Kit(R), bucket = newBucket();
   // 亂數一路接著抽，前面多抽少抽一次，後面的房子就整排換樣子。拆改過的地方之後用 R.at 跳回改之前抽到的位置，
-  // 其他地方才跟原本一模一樣。數字是改之前量的：下街崖邊那排房子蓋完、工坊街東頭那間房子蓋完、欄杆圍完
-  const SEEK = { cliff: 2945, darkroom: 3126, rails: 4434 };
+  // 其他地方才跟原本一模一樣。數字是改之前量的：下街崖邊那排房子蓋完、工坊街東頭那間房子蓋完、星台中間那間房子蓋完、欄杆圍完
+  const SEEK = { cliff: 2945, darkroom: 3126, press: 2568, rails: 4434 };
   const group = new THREE.Group(), obstacles = [], solids = [], rails = [];
   const doors = [];   // 住家的門口（世界座標），路人從這裡進出
   const farLamps = [];   // 上星廟那條路的燈：遠遠看是一串會閃的小點（glowPoints 的 far）
   const solid = (x0, x1, z0, z1, top, ground = false) => solids.push({ x0, x1, z0, z1, top, ground });
   const pick = (arr) => arr[Math.floor(R() * arr.length)];
   // 擋住視線時會淡掉的東西，一組一組登記（見 fade.js）
-  const fader = new Fader();
+  const fader = new Fader(false, { lead: 0.35 });
   // 一塊轉了 rot 的長方體換成世界座標的範圍：本地 x 在 lx0~lx1、z 在 lz0~lz1，中心放在 (cx, cz)
   const wbox = (cx, cz, rot, lx0, lx1, y0, y1, lz0, lz1) => {
     const c = Math.cos(rot), s = Math.sin(rot), xs = [], zs = [];
@@ -184,7 +184,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
 
   buildGround({ k, rail, flatAt, groundUnder, solid, farLamps, STRING, lantern, pick, R, obstacles, group, fader, bucket });
 
-  const { shops } = buildStreets({ house, groundUnder, frontage, R, SEEK, tower, darkroom, k, obstacles, string, streetOf, pick, lantern, flatAt, noren, fader, bucket, signs, solid });
+  const { shops, newsTop } = buildStreets({ house, groundUnder, frontage, R, SEEK, tower, darkroom, k, obstacles, string, streetOf, pick, lantern, flatAt, noren, fader, bucket, signs, solid, wbox, doors, group, lattice, coarse, STONES, BAMBOO });
 
   const { shimmerMore, vessel, harborFx, bob, headingOf } = buildHarbor({ obstacles, k, R, SEEK, lantern, group, pick, string, groundUnder, signs, coarse, solid, fader, bucket, lattice, house, solids, rail });
 
@@ -299,7 +299,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   const raycastTargets = [...meshes.filter((o) => o.isMesh), sea];
 
   return {
-    rooms: [room], paintings: [], mirror: null, outdoor: null, raycastTargets, env, shops,
+    rooms: [room], paintings: [], mirror: null, outdoor: null, raycastTargets, env, shops, newsTop,
     // 鏡頭可以拉到很遠，整座山城收進畫面
     camDistMax: 46,
     // 下船的地方：長棧橋的盡頭，離小船幾步，面向山上的鎮子

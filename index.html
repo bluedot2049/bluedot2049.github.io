@@ -19,147 +19,155 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=IM+Fell+DW+Pica&display=swap">  
-  <link rel="stylesheet" href="css/base.css?v=202611031620">
-  <link rel="stylesheet" href="css/loading.css?v=202611031620">
-  <link rel="stylesheet" href="css/hud.css?v=202611031620">
-  <link rel="stylesheet" href="css/panels.css?v=202611031620">
-  <link rel="stylesheet" href="css/photo.css?v=202611031620">
-  <link rel="stylesheet" href="css/party.css?v=202611031620">
+  <link rel="stylesheet" href="css/base.css?v=202611031748">
+  <link rel="stylesheet" href="css/loading.css?v=202611031748">
+  <link rel="stylesheet" href="css/hud.css?v=202611031748">
+  <link rel="stylesheet" href="css/panels.css?v=202611031748">
+  <link rel="stylesheet" href="css/photo.css?v=202611031748">
+  <link rel="stylesheet" href="css/party.css?v=202611031748">
+  <!-- LINE、Facebook 這些 App 裡開的：LINE 新來的直接跳到手機的瀏覽器，其他的在前門告示說明（js/boot/inapp.js） -->
+  <script src="js/boot/inapp.js?v=202611031748"></script>
   <script type="importmap">
     { "imports": {
-      "three": "./vendor/three.module.min.js?v=202611031620",
-      "./js/audio/ambience.js": "./js/audio/ambience.js?v=202611031620",
-      "./js/audio/ambience-voices.js": "./js/audio/ambience-voices.js?v=202611031620",
-      "./js/audio/orbits.js": "./js/audio/orbits.js?v=202611031620",
-      "./js/audio/study.js": "./js/audio/study.js?v=202611031620",
-      "./js/audio/wear-voices.js": "./js/audio/wear-voices.js?v=202611031620",
-      "./js/avatar/attention.js": "./js/avatar/attention.js?v=202611031620",
-      "./js/avatar/character.js": "./js/avatar/character.js?v=202611031620",
-      "./js/avatar/clothes.js": "./js/avatar/clothes.js?v=202611031620",
-      "./js/avatar/creator.js": "./js/avatar/creator.js?v=202611031620",
-      "./js/avatar/heads.js": "./js/avatar/heads.js?v=202611031620",
-      "./js/avatar/looks.js": "./js/avatar/looks.js?v=202611031620",
-      "./js/avatar/thumbs.js": "./js/avatar/thumbs.js?v=202611031620",
-      "./js/camera/album.js": "./js/camera/album.js?v=202611031620",
-      "./js/camera/cameras.js": "./js/camera/cameras.js?v=202611031620",
-      "./js/camera/eye.js": "./js/camera/eye.js?v=202611031620",
-      "./js/camera/flashfx.js": "./js/camera/flashfx.js?v=202611031620",
-      "./js/camera/marks.js": "./js/camera/marks.js?v=202611031620",
-      "./js/camera/photo.js": "./js/camera/photo.js?v=202611031620",
-      "./js/camera/selfie.js": "./js/camera/selfie.js?v=202611031620",
-      "./js/camera/studio.js": "./js/camera/studio.js?v=202611031620",
-      "./js/controls/deskkeys.js": "./js/controls/deskkeys.js?v=202611031620",
-      "./js/controls/joystick.js": "./js/controls/joystick.js?v=202611031620",
-      "./js/controls/player.js": "./js/controls/player.js?v=202611031620",
-      "./js/controls/screen.js": "./js/controls/screen.js?v=202611031620",
-      "./js/controls/ui.js": "./js/controls/ui.js?v=202611031620",
-      "./js/core/bubbles.js": "./js/core/bubbles.js?v=202611031620",
-      "./js/core/dof.js": "./js/core/dof.js?v=202611031620",
-      "./js/core/fade.js": "./js/core/fade.js?v=202611031620",
-      "./js/core/glyphs.js": "./js/core/glyphs.js?v=202611031620",
-      "./js/core/grade.js": "./js/core/grade.js?v=202611031620",
-      "./js/core/icode.js": "./js/core/icode.js?v=202611031620",
-      "./js/core/lens.js": "./js/core/lens.js?v=202611031620",
-      "./js/core/pathgrid.js": "./js/core/pathgrid.js?v=202611031620",
-      "./js/core/postfx.js": "./js/core/postfx.js?v=202611031620",
-      "./js/core/props.js": "./js/core/props.js?v=202611031620",
-      "./js/core/quality.js": "./js/core/quality.js?v=202611031620",
-      "./js/core/scenery.js": "./js/core/scenery.js?v=202611031620",
-      "./js/core/textures.js": "./js/core/textures.js?v=202611031620",
-      "./js/core/tones.js": "./js/core/tones.js?v=202611031620",
-      "./js/dev/devtools.js": "./js/dev/devtools.js?v=202611031620",
-      "./js/main.js": "./js/main.js?v=202611031620",
-      "./js/npc/animal-models.js": "./js/npc/animal-models.js?v=202611031620",
-      "./js/npc/animals.js": "./js/npc/animals.js?v=202611031620",
-      "./js/npc/manatee.js": "./js/npc/manatee.js?v=202611031620",
-      "./js/npc/names.js": "./js/npc/names.js?v=202611031620",
-      "./js/npc/passersby.js": "./js/npc/passersby.js?v=202611031620",
-      "./js/npc/vendors.js": "./js/npc/vendors.js?v=202611031620",
-      "./js/npc/visitor-lines.js": "./js/npc/visitor-lines.js?v=202611031620",
-      "./js/npc/visitor-models.js": "./js/npc/visitor-models.js?v=202611031620",
-      "./js/npc/visitors.js": "./js/npc/visitors.js?v=202611031620",
-      "./js/save/filmcode.js": "./js/save/filmcode.js?v=202611031620",
-      "./js/save/mirrorcard.js": "./js/save/mirrorcard.js?v=202611031620",
-      "./js/save/pack.js": "./js/save/pack.js?v=202611031620",
-      "./js/save/postcard.js": "./js/save/postcard.js?v=202611031620",
-      "./js/save/savecode.js": "./js/save/savecode.js?v=202611031620",
-      "./js/scene/frontdoor.js": "./js/scene/frontdoor.js?v=202611031620",
-      "./js/scene/harbor.js": "./js/scene/harbor.js?v=202611031620",
-      "./js/scene/homedoor.js": "./js/scene/homedoor.js?v=202611031620",
-      "./js/social/lantern.js": "./js/social/lantern.js?v=202611031620",
-      "./js/social/multiplayer.js": "./js/social/multiplayer.js?v=202611031620",
-      "./js/social/party.js": "./js/social/party.js?v=202611031620",
-      "./js/zones/gallery/arcane.js": "./js/zones/gallery/arcane.js?v=202611031620",
-      "./js/zones/gallery/camtable.js": "./js/zones/gallery/camtable.js?v=202611031620",
-      "./js/zones/gallery/clock.js": "./js/zones/gallery/clock.js?v=202611031620",
-      "./js/zones/gallery/guidesign.js": "./js/zones/gallery/guidesign.js?v=202611031620",
-      "./js/zones/gallery/hollow.js": "./js/zones/gallery/hollow.js?v=202611031620",
-      "./js/zones/gallery/lore.js": "./js/zones/gallery/lore.js?v=202611031620",
-      "./js/zones/gallery/magicpaint.js": "./js/zones/gallery/magicpaint.js?v=202611031620",
-      "./js/zones/gallery/mirror.js": "./js/zones/gallery/mirror.js?v=202611031620",
-      "./js/zones/gallery/news.js": "./js/zones/gallery/news.js?v=202611031620",
-      "./js/zones/gallery/noticeboard.js": "./js/zones/gallery/noticeboard.js?v=202611031620",
-      "./js/zones/gallery/outdoor.js": "./js/zones/gallery/outdoor.js?v=202611031620",
-      "./js/zones/gallery/outdoor-ground.js": "./js/zones/gallery/outdoor-ground.js?v=202611031620",
-      "./js/zones/gallery/outdoor-map.js": "./js/zones/gallery/outdoor-map.js?v=202611031620",
-      "./js/zones/gallery/outdoor-plants.js": "./js/zones/gallery/outdoor-plants.js?v=202611031620",
-      "./js/zones/gallery/outdoor-props.js": "./js/zones/gallery/outdoor-props.js?v=202611031620",
-      "./js/zones/gallery/outdoor-sky.js": "./js/zones/gallery/outdoor-sky.js?v=202611031620",
-      "./js/zones/gallery/outdoor-terrace.js": "./js/zones/gallery/outdoor-terrace.js?v=202611031620",
-      "./js/zones/gallery/outdoor-textures.js": "./js/zones/gallery/outdoor-textures.js?v=202611031620",
-      "./js/zones/gallery/tree.js": "./js/zones/gallery/tree.js?v=202611031620",
-      "./js/zones/gallery/vestibule-sound.js": "./js/zones/gallery/vestibule-sound.js?v=202611031620",
-      "./js/zones/gallery/world.js": "./js/zones/gallery/world.js?v=202611031620",
-      "./js/zones/gallery/world-rooms.js": "./js/zones/gallery/world-rooms.js?v=202611031620",
-      "./js/zones/gallery/zone-gallery.js": "./js/zones/gallery/zone-gallery.js?v=202611031620",
-      "./js/zones/haishi/distant.js": "./js/zones/haishi/distant.js?v=202611031620",
-      "./js/zones/haishi/eaves.js": "./js/zones/haishi/eaves.js?v=202611031620",
-      "./js/zones/haishi/haishi.js": "./js/zones/haishi/haishi.js?v=202611031620",
-      "./js/zones/haishi/haishi-boats.js": "./js/zones/haishi/haishi-boats.js?v=202611031620",
-      "./js/zones/haishi/haishi-ground.js": "./js/zones/haishi/haishi-ground.js?v=202611031620",
-      "./js/zones/haishi/haishi-harbor.js": "./js/zones/haishi/haishi-harbor.js?v=202611031620",
-      "./js/zones/haishi/haishi-houses.js": "./js/zones/haishi/haishi-houses.js?v=202611031620",
-      "./js/zones/haishi/haishi-map.js": "./js/zones/haishi/haishi-map.js?v=202611031620",
-      "./js/zones/haishi/haishi-plants.js": "./js/zones/haishi/haishi-plants.js?v=202611031620",
-      "./js/zones/haishi/haishi-sky.js": "./js/zones/haishi/haishi-sky.js?v=202611031620",
-      "./js/zones/haishi/haishi-temple.js": "./js/zones/haishi/haishi-temple.js?v=202611031620",
-      "./js/zones/haishi/haishi-terrain.js": "./js/zones/haishi/haishi-terrain.js?v=202611031620",
-      "./js/zones/haishi/haze.js": "./js/zones/haishi/haze.js?v=202611031620",
-      "./js/zones/haishi/latrine.js": "./js/zones/haishi/latrine.js?v=202611031620",
-      "./js/zones/haishi/pave.js": "./js/zones/haishi/pave.js?v=202611031620",
-      "./js/zones/haishi/yatai.js": "./js/zones/haishi/yatai.js?v=202611031620",
-      "./js/zones/haishi/zone-haishi.js": "./js/zones/haishi/zone-haishi.js?v=202611031620",
-      "./js/zones/jinghai/jinghai.js": "./js/zones/jinghai/jinghai.js?v=202611031620",
-      "./js/zones/jinghai/jinghai-foil.js": "./js/zones/jinghai/jinghai-foil.js?v=202611031620",
-      "./js/zones/jinghai/jinghai-hq.js": "./js/zones/jinghai/jinghai-hq.js?v=202611031620",
-      "./js/zones/jinghai/jinghai-sky.js": "./js/zones/jinghai/jinghai-sky.js?v=202611031620",
-      "./js/zones/jinghai/manatees.js": "./js/zones/jinghai/manatees.js?v=202611031620",
-      "./js/zones/jinghai/zone-jinghai.js": "./js/zones/jinghai/zone-jinghai.js?v=202611031620",
-      "./js/zones/shenlou/shenlou.js": "./js/zones/shenlou/shenlou.js?v=202611031620",
-      "./js/zones/shenlou/shenlou-houses.js": "./js/zones/shenlou/shenlou-houses.js?v=202611031620",
-      "./js/zones/shenlou/shenlou-iron.js": "./js/zones/shenlou/shenlou-iron.js?v=202611031620",
-      "./js/zones/shenlou/shenlou-under.js": "./js/zones/shenlou/shenlou-under.js?v=202611031620",
-      "./js/zones/shenlou/zone-shenlou.js": "./js/zones/shenlou/zone-shenlou.js?v=202611031620",
-      "./js/zones/ting/ting.js": "./js/zones/ting/ting.js?v=202611031620",
-      "./js/zones/ting/ting-bugs.js": "./js/zones/ting/ting-bugs.js?v=202611031620",
-      "./js/zones/ting/ting-lines.js": "./js/zones/ting/ting-lines.js?v=202611031620",
-      "./js/zones/ting/ting-marsh.js": "./js/zones/ting/ting-marsh.js?v=202611031620",
-      "./js/zones/ting/ting-station.js": "./js/zones/ting/ting-station.js?v=202611031620",
-      "./js/zones/ting/ting-travelers.js": "./js/zones/ting/ting-travelers.js?v=202611031620",
-      "./js/zones/ting/ting-tree.js": "./js/zones/ting/ting-tree.js?v=202611031620",
-      "./js/zones/ting/zone-ting.js": "./js/zones/ting/zone-ting.js?v=202611031620"
+      "three": "./vendor/three.module.min.js?v=202611031748",
+      "./js/audio/ambience.js": "./js/audio/ambience.js?v=202611031748",
+      "./js/audio/ambience-voices.js": "./js/audio/ambience-voices.js?v=202611031748",
+      "./js/audio/orbits.js": "./js/audio/orbits.js?v=202611031748",
+      "./js/audio/study.js": "./js/audio/study.js?v=202611031748",
+      "./js/audio/wear-voices.js": "./js/audio/wear-voices.js?v=202611031748",
+      "./js/avatar/attention.js": "./js/avatar/attention.js?v=202611031748",
+      "./js/avatar/character.js": "./js/avatar/character.js?v=202611031748",
+      "./js/avatar/clothes.js": "./js/avatar/clothes.js?v=202611031748",
+      "./js/avatar/creator.js": "./js/avatar/creator.js?v=202611031748",
+      "./js/avatar/heads.js": "./js/avatar/heads.js?v=202611031748",
+      "./js/avatar/looks.js": "./js/avatar/looks.js?v=202611031748",
+      "./js/avatar/thumbs.js": "./js/avatar/thumbs.js?v=202611031748",
+      "./js/camera/album.js": "./js/camera/album.js?v=202611031748",
+      "./js/camera/cameras.js": "./js/camera/cameras.js?v=202611031748",
+      "./js/camera/eye.js": "./js/camera/eye.js?v=202611031748",
+      "./js/camera/flashfx.js": "./js/camera/flashfx.js?v=202611031748",
+      "./js/camera/marks.js": "./js/camera/marks.js?v=202611031748",
+      "./js/camera/photo.js": "./js/camera/photo.js?v=202611031748",
+      "./js/camera/selfie.js": "./js/camera/selfie.js?v=202611031748",
+      "./js/camera/studio.js": "./js/camera/studio.js?v=202611031748",
+      "./js/controls/deskkeys.js": "./js/controls/deskkeys.js?v=202611031748",
+      "./js/controls/joystick.js": "./js/controls/joystick.js?v=202611031748",
+      "./js/controls/player.js": "./js/controls/player.js?v=202611031748",
+      "./js/controls/screen.js": "./js/controls/screen.js?v=202611031748",
+      "./js/controls/ui.js": "./js/controls/ui.js?v=202611031748",
+      "./js/core/bubbles.js": "./js/core/bubbles.js?v=202611031748",
+      "./js/core/dof.js": "./js/core/dof.js?v=202611031748",
+      "./js/core/fade.js": "./js/core/fade.js?v=202611031748",
+      "./js/core/glyphs.js": "./js/core/glyphs.js?v=202611031748",
+      "./js/core/grade.js": "./js/core/grade.js?v=202611031748",
+      "./js/core/icode.js": "./js/core/icode.js?v=202611031748",
+      "./js/core/lens.js": "./js/core/lens.js?v=202611031748",
+      "./js/core/pathgrid.js": "./js/core/pathgrid.js?v=202611031748",
+      "./js/core/postfx.js": "./js/core/postfx.js?v=202611031748",
+      "./js/core/props.js": "./js/core/props.js?v=202611031748",
+      "./js/core/quality.js": "./js/core/quality.js?v=202611031748",
+      "./js/core/scenery.js": "./js/core/scenery.js?v=202611031748",
+      "./js/core/textures.js": "./js/core/textures.js?v=202611031748",
+      "./js/core/tones.js": "./js/core/tones.js?v=202611031748",
+      "./js/dev/devtools.js": "./js/dev/devtools.js?v=202611031748",
+      "./js/main.js": "./js/main.js?v=202611031748",
+      "./js/npc/animal-models.js": "./js/npc/animal-models.js?v=202611031748",
+      "./js/npc/animals.js": "./js/npc/animals.js?v=202611031748",
+      "./js/npc/manatee.js": "./js/npc/manatee.js?v=202611031748",
+      "./js/npc/names.js": "./js/npc/names.js?v=202611031748",
+      "./js/npc/passersby.js": "./js/npc/passersby.js?v=202611031748",
+      "./js/npc/vendors.js": "./js/npc/vendors.js?v=202611031748",
+      "./js/npc/visitor-lines.js": "./js/npc/visitor-lines.js?v=202611031748",
+      "./js/npc/visitor-models.js": "./js/npc/visitor-models.js?v=202611031748",
+      "./js/npc/visitors.js": "./js/npc/visitors.js?v=202611031748",
+      "./js/save/filmcode.js": "./js/save/filmcode.js?v=202611031748",
+      "./js/save/mirrorcard.js": "./js/save/mirrorcard.js?v=202611031748",
+      "./js/save/pack.js": "./js/save/pack.js?v=202611031748",
+      "./js/save/postcard.js": "./js/save/postcard.js?v=202611031748",
+      "./js/save/press.js": "./js/save/press.js?v=202611031748",
+      "./js/save/pressdesk.js": "./js/save/pressdesk.js?v=202611031748",
+      "./js/save/savecode.js": "./js/save/savecode.js?v=202611031748",
+      "./js/scene/frontdoor.js": "./js/scene/frontdoor.js?v=202611031748",
+      "./js/scene/harbor.js": "./js/scene/harbor.js?v=202611031748",
+      "./js/scene/homedoor.js": "./js/scene/homedoor.js?v=202611031748",
+      "./js/social/lantern.js": "./js/social/lantern.js?v=202611031748",
+      "./js/social/multiplayer.js": "./js/social/multiplayer.js?v=202611031748",
+      "./js/social/party.js": "./js/social/party.js?v=202611031748",
+      "./js/zones/gallery/arcane.js": "./js/zones/gallery/arcane.js?v=202611031748",
+      "./js/zones/gallery/camtable.js": "./js/zones/gallery/camtable.js?v=202611031748",
+      "./js/zones/gallery/clock.js": "./js/zones/gallery/clock.js?v=202611031748",
+      "./js/zones/gallery/guidesign.js": "./js/zones/gallery/guidesign.js?v=202611031748",
+      "./js/zones/gallery/hollow.js": "./js/zones/gallery/hollow.js?v=202611031748",
+      "./js/zones/gallery/lore.js": "./js/zones/gallery/lore.js?v=202611031748",
+      "./js/zones/gallery/magicpaint.js": "./js/zones/gallery/magicpaint.js?v=202611031748",
+      "./js/zones/gallery/mirror.js": "./js/zones/gallery/mirror.js?v=202611031748",
+      "./js/zones/gallery/news.js": "./js/zones/gallery/news.js?v=202611031748",
+      "./js/zones/gallery/noticeboard.js": "./js/zones/gallery/noticeboard.js?v=202611031748",
+      "./js/zones/gallery/outdoor.js": "./js/zones/gallery/outdoor.js?v=202611031748",
+      "./js/zones/gallery/outdoor-ground.js": "./js/zones/gallery/outdoor-ground.js?v=202611031748",
+      "./js/zones/gallery/outdoor-map.js": "./js/zones/gallery/outdoor-map.js?v=202611031748",
+      "./js/zones/gallery/outdoor-plants.js": "./js/zones/gallery/outdoor-plants.js?v=202611031748",
+      "./js/zones/gallery/outdoor-props.js": "./js/zones/gallery/outdoor-props.js?v=202611031748",
+      "./js/zones/gallery/outdoor-sky.js": "./js/zones/gallery/outdoor-sky.js?v=202611031748",
+      "./js/zones/gallery/outdoor-terrace.js": "./js/zones/gallery/outdoor-terrace.js?v=202611031748",
+      "./js/zones/gallery/outdoor-textures.js": "./js/zones/gallery/outdoor-textures.js?v=202611031748",
+      "./js/zones/gallery/tree.js": "./js/zones/gallery/tree.js?v=202611031748",
+      "./js/zones/gallery/vestibule-sound.js": "./js/zones/gallery/vestibule-sound.js?v=202611031748",
+      "./js/zones/gallery/world.js": "./js/zones/gallery/world.js?v=202611031748",
+      "./js/zones/gallery/world-rooms.js": "./js/zones/gallery/world-rooms.js?v=202611031748",
+      "./js/zones/gallery/zone-gallery.js": "./js/zones/gallery/zone-gallery.js?v=202611031748",
+      "./js/zones/haishi/distant.js": "./js/zones/haishi/distant.js?v=202611031748",
+      "./js/zones/haishi/eaves.js": "./js/zones/haishi/eaves.js?v=202611031748",
+      "./js/zones/haishi/haishi.js": "./js/zones/haishi/haishi.js?v=202611031748",
+      "./js/zones/haishi/haishi-boats.js": "./js/zones/haishi/haishi-boats.js?v=202611031748",
+      "./js/zones/haishi/haishi-ground.js": "./js/zones/haishi/haishi-ground.js?v=202611031748",
+      "./js/zones/haishi/haishi-harbor.js": "./js/zones/haishi/haishi-harbor.js?v=202611031748",
+      "./js/zones/haishi/haishi-houses.js": "./js/zones/haishi/haishi-houses.js?v=202611031748",
+      "./js/zones/haishi/haishi-map.js": "./js/zones/haishi/haishi-map.js?v=202611031748",
+      "./js/zones/haishi/haishi-plants.js": "./js/zones/haishi/haishi-plants.js?v=202611031748",
+      "./js/zones/haishi/haishi-press.js": "./js/zones/haishi/haishi-press.js?v=202611031748",
+      "./js/zones/haishi/haishi-sky.js": "./js/zones/haishi/haishi-sky.js?v=202611031748",
+      "./js/zones/haishi/haishi-temple.js": "./js/zones/haishi/haishi-temple.js?v=202611031748",
+      "./js/zones/haishi/haishi-terrain.js": "./js/zones/haishi/haishi-terrain.js?v=202611031748",
+      "./js/zones/haishi/haze.js": "./js/zones/haishi/haze.js?v=202611031748",
+      "./js/zones/haishi/latrine.js": "./js/zones/haishi/latrine.js?v=202611031748",
+      "./js/zones/haishi/pave.js": "./js/zones/haishi/pave.js?v=202611031748",
+      "./js/zones/haishi/yatai.js": "./js/zones/haishi/yatai.js?v=202611031748",
+      "./js/zones/haishi/zone-haishi.js": "./js/zones/haishi/zone-haishi.js?v=202611031748",
+      "./js/zones/jinghai/jinghai.js": "./js/zones/jinghai/jinghai.js?v=202611031748",
+      "./js/zones/jinghai/jinghai-foil.js": "./js/zones/jinghai/jinghai-foil.js?v=202611031748",
+      "./js/zones/jinghai/jinghai-hq.js": "./js/zones/jinghai/jinghai-hq.js?v=202611031748",
+      "./js/zones/jinghai/jinghai-sky.js": "./js/zones/jinghai/jinghai-sky.js?v=202611031748",
+      "./js/zones/jinghai/manatees.js": "./js/zones/jinghai/manatees.js?v=202611031748",
+      "./js/zones/jinghai/zone-jinghai.js": "./js/zones/jinghai/zone-jinghai.js?v=202611031748",
+      "./js/zones/shenlou/shenlou.js": "./js/zones/shenlou/shenlou.js?v=202611031748",
+      "./js/zones/shenlou/shenlou-alchemy.js": "./js/zones/shenlou/shenlou-alchemy.js?v=202611031748",
+      "./js/zones/shenlou/shenlou-houses.js": "./js/zones/shenlou/shenlou-houses.js?v=202611031748",
+      "./js/zones/shenlou/shenlou-iron.js": "./js/zones/shenlou/shenlou-iron.js?v=202611031748",
+      "./js/zones/shenlou/shenlou-shops.js": "./js/zones/shenlou/shenlou-shops.js?v=202611031748",
+      "./js/zones/shenlou/shenlou-under.js": "./js/zones/shenlou/shenlou-under.js?v=202611031748",
+      "./js/zones/shenlou/shenlou-water.js": "./js/zones/shenlou/shenlou-water.js?v=202611031748",
+      "./js/zones/shenlou/zone-shenlou.js": "./js/zones/shenlou/zone-shenlou.js?v=202611031748",
+      "./js/zones/ting/ting.js": "./js/zones/ting/ting.js?v=202611031748",
+      "./js/zones/ting/ting-bugs.js": "./js/zones/ting/ting-bugs.js?v=202611031748",
+      "./js/zones/ting/ting-lines.js": "./js/zones/ting/ting-lines.js?v=202611031748",
+      "./js/zones/ting/ting-marsh.js": "./js/zones/ting/ting-marsh.js?v=202611031748",
+      "./js/zones/ting/ting-station.js": "./js/zones/ting/ting-station.js?v=202611031748",
+      "./js/zones/ting/ting-travelers.js": "./js/zones/ting/ting-travelers.js?v=202611031748",
+      "./js/zones/ting/ting-tree.js": "./js/zones/ting/ting-tree.js?v=202611031748",
+      "./js/zones/ting/zone-ting.js": "./js/zones/ting/zone-ting.js?v=202611031748"
     } }
   </script>
   <!-- 依區域先下載會用到的模組，不必等 import 一層一層往下找。tools/stamp.ps1 上傳時產生，不用手改 -->
   <script id="preload">
     (function () {
-      var core = ['vendor/three.module.min.js?v=202611031620', 'js/audio/ambience.js?v=202611031620', 'js/audio/ambience-voices.js?v=202611031620', 'js/audio/wear-voices.js?v=202611031620', 'js/avatar/attention.js?v=202611031620', 'js/avatar/character.js?v=202611031620', 'js/avatar/clothes.js?v=202611031620', 'js/avatar/creator.js?v=202611031620', 'js/avatar/heads.js?v=202611031620', 'js/avatar/looks.js?v=202611031620', 'js/avatar/thumbs.js?v=202611031620', 'js/camera/album.js?v=202611031620', 'js/camera/cameras.js?v=202611031620', 'js/camera/eye.js?v=202611031620', 'js/camera/flashfx.js?v=202611031620', 'js/camera/marks.js?v=202611031620', 'js/camera/photo.js?v=202611031620', 'js/camera/selfie.js?v=202611031620', 'js/camera/studio.js?v=202611031620', 'js/controls/deskkeys.js?v=202611031620', 'js/controls/joystick.js?v=202611031620', 'js/controls/player.js?v=202611031620', 'js/controls/screen.js?v=202611031620', 'js/controls/ui.js?v=202611031620', 'js/core/bubbles.js?v=202611031620', 'js/core/dof.js?v=202611031620', 'js/core/glyphs.js?v=202611031620', 'js/core/grade.js?v=202611031620', 'js/core/icode.js?v=202611031620', 'js/core/lens.js?v=202611031620', 'js/core/postfx.js?v=202611031620', 'js/core/props.js?v=202611031620', 'js/core/quality.js?v=202611031620', 'js/core/scenery.js?v=202611031620', 'js/core/textures.js?v=202611031620', 'js/core/tones.js?v=202611031620', 'js/save/filmcode.js?v=202611031620', 'js/save/mirrorcard.js?v=202611031620', 'js/save/pack.js?v=202611031620', 'js/save/postcard.js?v=202611031620', 'js/save/savecode.js?v=202611031620', 'js/social/lantern.js?v=202611031620', 'js/social/multiplayer.js?v=202611031620', 'js/social/party.js?v=202611031620', 'js/zones/gallery/hollow.js?v=202611031620', 'js/zones/gallery/news.js?v=202611031620', 'vendor/BufferGeometryUtils.js'];
+      var core = ['vendor/three.module.min.js?v=202611031748', 'js/audio/ambience.js?v=202611031748', 'js/audio/ambience-voices.js?v=202611031748', 'js/audio/wear-voices.js?v=202611031748', 'js/avatar/attention.js?v=202611031748', 'js/avatar/character.js?v=202611031748', 'js/avatar/clothes.js?v=202611031748', 'js/avatar/creator.js?v=202611031748', 'js/avatar/heads.js?v=202611031748', 'js/avatar/looks.js?v=202611031748', 'js/avatar/thumbs.js?v=202611031748', 'js/camera/album.js?v=202611031748', 'js/camera/cameras.js?v=202611031748', 'js/camera/eye.js?v=202611031748', 'js/camera/flashfx.js?v=202611031748', 'js/camera/marks.js?v=202611031748', 'js/camera/photo.js?v=202611031748', 'js/camera/selfie.js?v=202611031748', 'js/camera/studio.js?v=202611031748', 'js/controls/deskkeys.js?v=202611031748', 'js/controls/joystick.js?v=202611031748', 'js/controls/player.js?v=202611031748', 'js/controls/screen.js?v=202611031748', 'js/controls/ui.js?v=202611031748', 'js/core/bubbles.js?v=202611031748', 'js/core/dof.js?v=202611031748', 'js/core/glyphs.js?v=202611031748', 'js/core/grade.js?v=202611031748', 'js/core/icode.js?v=202611031748', 'js/core/lens.js?v=202611031748', 'js/core/postfx.js?v=202611031748', 'js/core/props.js?v=202611031748', 'js/core/quality.js?v=202611031748', 'js/core/scenery.js?v=202611031748', 'js/core/textures.js?v=202611031748', 'js/core/tones.js?v=202611031748', 'js/save/filmcode.js?v=202611031748', 'js/save/mirrorcard.js?v=202611031748', 'js/save/pack.js?v=202611031748', 'js/save/postcard.js?v=202611031748', 'js/save/savecode.js?v=202611031748', 'js/social/lantern.js?v=202611031748', 'js/social/multiplayer.js?v=202611031748', 'js/social/party.js?v=202611031748', 'js/zones/gallery/hollow.js?v=202611031748', 'js/zones/gallery/news.js?v=202611031748', 'vendor/BufferGeometryUtils.js'];
       var zones = {
-        gallery: ['js/audio/study.js?v=202611031620', 'js/core/fade.js?v=202611031620', 'js/core/pathgrid.js?v=202611031620', 'js/npc/animal-models.js?v=202611031620', 'js/npc/animals.js?v=202611031620', 'js/npc/manatee.js?v=202611031620', 'js/npc/names.js?v=202611031620', 'js/npc/visitor-lines.js?v=202611031620', 'js/npc/visitor-models.js?v=202611031620', 'js/npc/visitors.js?v=202611031620', 'js/scene/frontdoor.js?v=202611031620', 'js/scene/harbor.js?v=202611031620', 'js/zones/gallery/arcane.js?v=202611031620', 'js/zones/gallery/camtable.js?v=202611031620', 'js/zones/gallery/clock.js?v=202611031620', 'js/zones/gallery/guidesign.js?v=202611031620', 'js/zones/gallery/lore.js?v=202611031620', 'js/zones/gallery/magicpaint.js?v=202611031620', 'js/zones/gallery/mirror.js?v=202611031620', 'js/zones/gallery/noticeboard.js?v=202611031620', 'js/zones/gallery/outdoor.js?v=202611031620', 'js/zones/gallery/outdoor-ground.js?v=202611031620', 'js/zones/gallery/outdoor-map.js?v=202611031620', 'js/zones/gallery/outdoor-plants.js?v=202611031620', 'js/zones/gallery/outdoor-props.js?v=202611031620', 'js/zones/gallery/outdoor-sky.js?v=202611031620', 'js/zones/gallery/outdoor-terrace.js?v=202611031620', 'js/zones/gallery/outdoor-textures.js?v=202611031620', 'js/zones/gallery/tree.js?v=202611031620', 'js/zones/gallery/vestibule-sound.js?v=202611031620', 'js/zones/gallery/world.js?v=202611031620', 'js/zones/gallery/world-rooms.js?v=202611031620', 'js/zones/gallery/zone-gallery.js?v=202611031620', 'vendor/Water.js'],
-        haishi: ['js/core/fade.js?v=202611031620', 'js/core/pathgrid.js?v=202611031620', 'js/npc/animal-models.js?v=202611031620', 'js/npc/animals.js?v=202611031620', 'js/npc/names.js?v=202611031620', 'js/npc/passersby.js?v=202611031620', 'js/npc/vendors.js?v=202611031620', 'js/scene/frontdoor.js?v=202611031620', 'js/scene/harbor.js?v=202611031620', 'js/scene/homedoor.js?v=202611031620', 'js/zones/haishi/distant.js?v=202611031620', 'js/zones/haishi/eaves.js?v=202611031620', 'js/zones/haishi/haishi.js?v=202611031620', 'js/zones/haishi/haishi-boats.js?v=202611031620', 'js/zones/haishi/haishi-ground.js?v=202611031620', 'js/zones/haishi/haishi-harbor.js?v=202611031620', 'js/zones/haishi/haishi-houses.js?v=202611031620', 'js/zones/haishi/haishi-map.js?v=202611031620', 'js/zones/haishi/haishi-plants.js?v=202611031620', 'js/zones/haishi/haishi-sky.js?v=202611031620', 'js/zones/haishi/haishi-temple.js?v=202611031620', 'js/zones/haishi/haishi-terrain.js?v=202611031620', 'js/zones/haishi/haze.js?v=202611031620', 'js/zones/haishi/latrine.js?v=202611031620', 'js/zones/haishi/pave.js?v=202611031620', 'js/zones/haishi/yatai.js?v=202611031620', 'js/zones/haishi/zone-haishi.js?v=202611031620'],
-        jinghai: ['js/audio/orbits.js?v=202611031620', 'js/core/pathgrid.js?v=202611031620', 'js/npc/manatee.js?v=202611031620', 'js/scene/harbor.js?v=202611031620', 'js/zones/jinghai/jinghai.js?v=202611031620', 'js/zones/jinghai/jinghai-foil.js?v=202611031620', 'js/zones/jinghai/jinghai-hq.js?v=202611031620', 'js/zones/jinghai/jinghai-sky.js?v=202611031620', 'js/zones/jinghai/manatees.js?v=202611031620', 'js/zones/jinghai/zone-jinghai.js?v=202611031620'],
-        shenlou: ['js/core/pathgrid.js?v=202611031620', 'js/scene/harbor.js?v=202611031620', 'js/zones/shenlou/shenlou.js?v=202611031620', 'js/zones/shenlou/shenlou-houses.js?v=202611031620', 'js/zones/shenlou/shenlou-iron.js?v=202611031620', 'js/zones/shenlou/shenlou-under.js?v=202611031620', 'js/zones/shenlou/zone-shenlou.js?v=202611031620'],
-        ting: ['js/core/pathgrid.js?v=202611031620', 'js/scene/harbor.js?v=202611031620', 'js/zones/ting/ting.js?v=202611031620', 'js/zones/ting/ting-bugs.js?v=202611031620', 'js/zones/ting/ting-lines.js?v=202611031620', 'js/zones/ting/ting-marsh.js?v=202611031620', 'js/zones/ting/ting-station.js?v=202611031620', 'js/zones/ting/ting-travelers.js?v=202611031620', 'js/zones/ting/ting-tree.js?v=202611031620', 'js/zones/ting/zone-ting.js?v=202611031620']
+        gallery: ['js/audio/study.js?v=202611031748', 'js/core/fade.js?v=202611031748', 'js/core/pathgrid.js?v=202611031748', 'js/npc/animal-models.js?v=202611031748', 'js/npc/animals.js?v=202611031748', 'js/npc/manatee.js?v=202611031748', 'js/npc/names.js?v=202611031748', 'js/npc/visitor-lines.js?v=202611031748', 'js/npc/visitor-models.js?v=202611031748', 'js/npc/visitors.js?v=202611031748', 'js/scene/frontdoor.js?v=202611031748', 'js/scene/harbor.js?v=202611031748', 'js/zones/gallery/arcane.js?v=202611031748', 'js/zones/gallery/camtable.js?v=202611031748', 'js/zones/gallery/clock.js?v=202611031748', 'js/zones/gallery/guidesign.js?v=202611031748', 'js/zones/gallery/lore.js?v=202611031748', 'js/zones/gallery/magicpaint.js?v=202611031748', 'js/zones/gallery/mirror.js?v=202611031748', 'js/zones/gallery/noticeboard.js?v=202611031748', 'js/zones/gallery/outdoor.js?v=202611031748', 'js/zones/gallery/outdoor-ground.js?v=202611031748', 'js/zones/gallery/outdoor-map.js?v=202611031748', 'js/zones/gallery/outdoor-plants.js?v=202611031748', 'js/zones/gallery/outdoor-props.js?v=202611031748', 'js/zones/gallery/outdoor-sky.js?v=202611031748', 'js/zones/gallery/outdoor-terrace.js?v=202611031748', 'js/zones/gallery/outdoor-textures.js?v=202611031748', 'js/zones/gallery/tree.js?v=202611031748', 'js/zones/gallery/vestibule-sound.js?v=202611031748', 'js/zones/gallery/world.js?v=202611031748', 'js/zones/gallery/world-rooms.js?v=202611031748', 'js/zones/gallery/zone-gallery.js?v=202611031748', 'vendor/Water.js'],
+        haishi: ['js/core/fade.js?v=202611031748', 'js/core/pathgrid.js?v=202611031748', 'js/npc/animal-models.js?v=202611031748', 'js/npc/animals.js?v=202611031748', 'js/npc/names.js?v=202611031748', 'js/npc/passersby.js?v=202611031748', 'js/npc/vendors.js?v=202611031748', 'js/save/press.js?v=202611031748', 'js/save/pressdesk.js?v=202611031748', 'js/scene/frontdoor.js?v=202611031748', 'js/scene/harbor.js?v=202611031748', 'js/scene/homedoor.js?v=202611031748', 'js/zones/haishi/distant.js?v=202611031748', 'js/zones/haishi/eaves.js?v=202611031748', 'js/zones/haishi/haishi.js?v=202611031748', 'js/zones/haishi/haishi-boats.js?v=202611031748', 'js/zones/haishi/haishi-ground.js?v=202611031748', 'js/zones/haishi/haishi-harbor.js?v=202611031748', 'js/zones/haishi/haishi-houses.js?v=202611031748', 'js/zones/haishi/haishi-map.js?v=202611031748', 'js/zones/haishi/haishi-plants.js?v=202611031748', 'js/zones/haishi/haishi-press.js?v=202611031748', 'js/zones/haishi/haishi-sky.js?v=202611031748', 'js/zones/haishi/haishi-temple.js?v=202611031748', 'js/zones/haishi/haishi-terrain.js?v=202611031748', 'js/zones/haishi/haze.js?v=202611031748', 'js/zones/haishi/latrine.js?v=202611031748', 'js/zones/haishi/pave.js?v=202611031748', 'js/zones/haishi/yatai.js?v=202611031748', 'js/zones/haishi/zone-haishi.js?v=202611031748'],
+        jinghai: ['js/audio/orbits.js?v=202611031748', 'js/core/pathgrid.js?v=202611031748', 'js/npc/manatee.js?v=202611031748', 'js/scene/harbor.js?v=202611031748', 'js/zones/jinghai/jinghai.js?v=202611031748', 'js/zones/jinghai/jinghai-foil.js?v=202611031748', 'js/zones/jinghai/jinghai-hq.js?v=202611031748', 'js/zones/jinghai/jinghai-sky.js?v=202611031748', 'js/zones/jinghai/manatees.js?v=202611031748', 'js/zones/jinghai/zone-jinghai.js?v=202611031748'],
+        shenlou: ['js/core/fade.js?v=202611031748', 'js/core/pathgrid.js?v=202611031748', 'js/scene/harbor.js?v=202611031748', 'js/zones/shenlou/shenlou.js?v=202611031748', 'js/zones/shenlou/shenlou-alchemy.js?v=202611031748', 'js/zones/shenlou/shenlou-houses.js?v=202611031748', 'js/zones/shenlou/shenlou-iron.js?v=202611031748', 'js/zones/shenlou/shenlou-shops.js?v=202611031748', 'js/zones/shenlou/shenlou-under.js?v=202611031748', 'js/zones/shenlou/shenlou-water.js?v=202611031748', 'js/zones/shenlou/zone-shenlou.js?v=202611031748'],
+        ting: ['js/core/pathgrid.js?v=202611031748', 'js/scene/harbor.js?v=202611031748', 'js/zones/ting/ting.js?v=202611031748', 'js/zones/ting/ting-bugs.js?v=202611031748', 'js/zones/ting/ting-lines.js?v=202611031748', 'js/zones/ting/ting-marsh.js?v=202611031748', 'js/zones/ting/ting-station.js?v=202611031748', 'js/zones/ting/ting-travelers.js?v=202611031748', 'js/zones/ting/ting-tree.js?v=202611031748', 'js/zones/ting/zone-ting.js?v=202611031748']
       };
       var z = new URLSearchParams(location.search).get('z');
       var all = core.concat(Object.prototype.hasOwnProperty.call(zones, z) ? zones[z] : zones.gallery);
@@ -254,9 +262,12 @@
             <li><svg><use href="#i-camera"/></svg><span>到前廳桌上拿一台相機</span><i></i></li>
             <li><svg><use href="#i-boat"/></svg><span>從後門走到港口，搭船</span><i></i></li>
           </ul>
+          <!-- 在 LINE、Facebook 這些 App 裡開的才有（js/boot/inapp.js）：說怎麼換到手機的瀏覽器 -->
+          <p class="inapp" hidden></p>
           <button class="btn enter" type="button" disabled><span>載入中</span><kbd>Enter</kbd></button>
           <!-- 換了裝置的人：進門前先把行囊拿回來（pack.js），載好才出現 -->
           <button class="soul" type="button" hidden><span>讀取靈魂相片</span></button>
+          <button class="soul leave" type="button" hidden><span>用瀏覽器開</span></button>
         </div>
       </div>
     </div>
@@ -397,9 +408,22 @@
         var el = document.getElementById('loading'), seen = false;
         if (q.get('z') === 'haishi' || q.get('z') === 'shenlou' || q.get('z') === 'ting' || q.get('z') === 'jinghai') return el.classList.add('plain');
         try { seen = localStorage.getItem('entered') === '1'; } catch (e) {}
-        if (!seen || q.has('intro')) {
+        // 在 App 裡開的，來過也照樣出告示，多一行說怎麼換到手機的瀏覽器
+        var A = window.inApp;
+        if (!seen || q.has('intro') || A) {
           el.classList.add('first');
           el.querySelector('.side').hidden = false;
+        }
+        if (A) {
+          var p = el.querySelector('.notice .inapp'), go = el.querySelector('.notice .leave');
+          p.textContent = '這頁開在 ' + A.app + ' 裡，存下常常沒反應，也不能全螢幕。'
+            + (A.leave ? '' : '右上角 ⋯ 選「用瀏覽器開啟」。')
+            + (A.progress ? '這裡的東西跟手機的瀏覽器分開放，要帶走，先到鏡子前請眼睛拍一張，截圖也可以。' : '');
+          p.hidden = false;
+          if (A.leave) {
+            go.hidden = false;
+            go.addEventListener('click', function () { location.href = A.leave; });
+          }
         }
         return;
       }
@@ -661,10 +685,12 @@
       <div id="ph-media"></div>
       <p id="ph-tip"></p>
       <div class="ph-actions">
-        <button id="ph-share" class="btn primary"><svg><use href="#i-share"/></svg>分享</button>
-        <button id="ph-save" class="btn"><svg><use href="#i-save"/></svg>下載</button>
-        <button id="ph-again" class="btn">繼續拍</button>
+        <button id="ph-save" class="btn primary"><svg><use href="#i-save"/></svg><span>存下</span></button>
+        <button id="ph-share" class="btn" hidden><svg><use href="#i-share"/></svg>分享</button>
+        <button id="ph-again" class="btn">重拍</button>
+        <button id="ph-done" class="btn">好了</button>
       </div>
+      <p class="save-tip"></p>
     </div>
   </div>
 
@@ -675,10 +701,11 @@
       <div class="selfie-card"><img alt="鏡中的照片"><canvas class="selfie-lids"></canvas></div>
       <p class="selfie-tip"></p>
       <div class="ph-actions">
-        <button class="btn primary" data-act="download"><svg><use href="#i-save"/></svg>下載</button>
+        <button class="btn primary" data-act="keep"><svg><use href="#i-save"/></svg><span>存下</span></button>
         <button class="btn" data-act="again">重拍</button>
         <button class="btn" data-act="close">好了</button>
       </div>
+      <p class="save-tip"></p>
     </div>
   </div>
 
@@ -695,6 +722,6 @@
     <div id="list-body"></div>
   </div>
 
-  <script type="module" src="js/main.js?v=202611031620"></script>
+  <script type="module" src="js/main.js?v=202611031748"></script>
 </body>
 </html>

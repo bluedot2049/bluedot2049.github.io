@@ -40,20 +40,20 @@ export function wreckSand(x, z) {
 
 // ---------- 小零件 ----------
 // 從 a 到 b 的一根圓管；square 是方的鐵條
-function rod(k, a, b, r, c, o = {}, seg = 6) {
+export function rod(k, a, b, r, c, o = {}, seg = 6) {
   const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], L = Math.hypot(dx, dy, dz);
   const geo = o.square ? new THREE.BoxGeometry(r * 2, L, r * 2) : new THREE.CylinderGeometry(r, r, L, seg);
   k.add(geo, c, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2, { ...o, rx: Math.acos(Math.min(1, Math.max(-1, dy / L))), ry: Math.atan2(dx, dz) });
 }
-const bar = (k, a, b, t, c, o = {}) => rod(k, a, b, t / 2, c, { ...o, square: true });
+export const bar = (k, a, b, t, c, o = {}) => rod(k, a, b, t / 2, c, { ...o, square: true });
 // 從 a 到 b 的一條板子：寬 w 保持水平、厚 h（出水槽用，a、b 差不多一樣高）
-function plank(k, a, b, w, h, c) {
+export function plank(k, a, b, w, h, c) {
   const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], L = Math.hypot(dx, dy, dz);
   k.add(new THREE.BoxGeometry(w, L, h), c, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2, { rx: Math.acos(Math.min(1, Math.max(-1, dy / L))), ry: Math.atan2(dx, dz) });
 }
 
 // 垂下來的電纜：拋物線切幾段
-const sagAt = (a, b, sag, s) => [a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s - sag * 4 * s * (1 - s), a[2] + (b[2] - a[2]) * s];
+export const sagAt = (a, b, sag, s) => [a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s - sag * 4 * s * (1 - s), a[2] + (b[2] - a[2]) * s];
 function cable(k, a, b, sag, n = 8) {
   let p = a;
   for (let i = 1; i <= n; i++) {
@@ -255,7 +255,8 @@ function roofSpot(rects, avoid, r, R) {
 
 // ---------- 主體 ----------
 // lanes、houses 從 shenlou.js 來（lanes 的 text 是城門鐵牌上打的字）；擋路的方塊直接加進 obstacles
-export function makeIron({ obstacles, lanes, houses, terrain, TOWN_R, WELL, SHAFT, COURT_IN, RING_TOP, WATER_Y, CAP_Y }) {
+// under：井圈公寓（提水機的腳踩在它的岩牆上）；fader：給一塊範圍回一個淡出的編號（蜃樓擋住鏡頭時整組淡掉），沒有就不淡
+export function makeIron({ obstacles, lanes, houses, terrain, TOWN_R, WELL, SHAFT, COURT_IN, WATER_Y, CAP_Y, under, fader = null }) {
   const spin = [], anchors = [];
   const deg = PI / 180;
   const block = (o) => obstacles.push(o);
@@ -510,22 +511,38 @@ export function makeIron({ obstacles, lanes, houses, terrain, TOWN_R, WELL, SHAF
         block({ x: sx * (A - 0.15), z: sz * (A - 0.15), hw: 0.95, hd: 0.95, a: 0 });
       }
 
-      // ---------- 沉井的提水機：北邊、西邊各一座。水斗鏈從井底的水池陡陡地拉上天井口，頂輪架在井圈屋頂上，
-      // 水斗翻過頂輪倒進槽，一道長槽跨過屋頂和階梯流進廣場上的水塔。本地 x 朝外、z 沿著井邊 ----------
-      for (const [rotY, zc, tz] of [[PI / 2, 1.2, 5], [PI, 1.2, 0]]) {
+      // ---------- 沉井的提水機：北邊、西邊各一座。水斗鏈從井底的水池陡陡地拉上天井口，頂輪的 A 字架前腳踩天井口的欄牆、後腳踩廊道後面的岩牆，
+      // 水斗翻過頂輪倒進槽，一道長槽跨過井圈和階梯流進廣場上的水塔。機器擺在兩腳中間吊著的一塊鐵板上。本地 x 朝外、z 沿著井邊；
+      // zc 是鏈子在井邊的哪裡，挑過了：架子的腳都踩在岩牆上，不擋門 ----------
+      for (const [rotY, zc, tz] of [[PI / 2, 1.6, 5], [PI, 1.8, 0]]) {
         const e = new Kit(k.R), f = frame(0, 0, rotY);
+        const at = (x, z) => { const [wx, , wz] = f.p(x, 0, z); return under.topAt(wx, wz); };
+        const onFloor = (x, z) => { const [wx, , wz] = f.p(x, 0, z); return under.walkOk(wx, wz, 0); };
         const foot = [1.8, WATER_Y + 0.15], head = [4.3, 7], rf = 0.5, rh = 0.6;
         const ux = head[0] - foot[0], uy = head[1] - foot[1], L = Math.hypot(ux, uy), u = [ux / L, uy / L], nrm = [-u[1], u[0]];
-        // 底輪的架子立在水池裡；頂輪的 A 字架前腳踩天井口的欄牆，後腳踩屋頂
+        // 底輪的架子立在水池裡
         for (const s of [-1, 1]) bar(e, [foot[0], WATER_Y - 0.3, zc + s * 0.55], [foot[0], foot[1] + 0.1, zc + s * 0.55], 0.1, IRON_DK);
-        const legs = [[SHAFT + 0.25, RING_TOP + 0.6], [SHAFT + 2.3, RING_TOP]];
+        // 前腳在欄牆上，後腳在岩牆上；legX：那隻腳在高度 y 時的 x
+        const DECK = 2.2;
+        const legX = (x0, y0, y) => x0 + ((head[0] - x0) * (y - y0)) / (head[1] - 0.1 - y0);
+        let backAt = SHAFT + 2.3;
         for (const s of [-1, 1]) {
-          for (const [x0, y0] of legs) bar(e, [x0, y0, zc + s * 0.95], [head[0], head[1] - 0.1, zc + s * 0.95], 0.18, IRON_DK);
-          bar(e, [SHAFT + 0.28, 2.2, zc + s * 0.95], [SHAFT + 1.6, 2.2, zc + s * 0.95], 0.1, IRON);
+          const z = zc + s * 0.95;
+          for (const x0 of [SHAFT + 0.25, SHAFT + 2.3]) {
+            const y0 = at(x0, z);
+            bar(e, [x0, y0, z], [head[0], head[1] - 0.1, z], 0.18, IRON_DK);
+            if (onFloor(x0, z)) block(f.box(x0, z, 0.2, 0.2));
+            if (x0 > SHAFT + 1) backAt = Math.min(backAt, legX(x0, y0, DECK));
+          }
         }
+        // 吊著的鐵板：兩腳之間鋪一塊，往外伸到放機器的地方，外角從頂輪的軸吊兩根拉桿
+        const dz0 = zc - 1.05, dz1 = zc + 2.7, dx0 = SHAFT + 0.3, dx1 = Math.max(dx0 + 1.1, backAt);
+        e.box(dx1 - dx0, 0.08, dz1 - dz0, STEEL, (dx0 + dx1) / 2, DECK, (dz0 + dz1) / 2, { color2: IRON });
+        for (const x of [dx0, dx1]) bar(e, [x, DECK - 0.08, dz0], [x, DECK - 0.08, dz1], 0.1, IRON_DK);
+        for (const x of [dx0 + 0.1, dx1 - 0.1]) bar(e, [head[0], head[1], zc + 1.6], [x, DECK + 0.05, dz1 - 0.1], 0.05, IRON_DK);
         bar(e, [SHAFT + 0.3, 4.6, zc - 0.95], [SHAFT + 0.3, 4.6, zc + 0.95], 0.1, IRON);
         rod(e, [head[0], head[1], zc - 1.1], [head[0], head[1], zc + 1.6], 0.08, IRON_DK);
-        // 鏈子和水斗：上去一排、下來一排；中段兩根撐桿頂著井壁，鏈子才不晃
+        // 鏈子和水斗：上去一排、下來一排；欄牆以下兩根撐桿頂著井壁，鏈子才不晃
         for (const off of [1, -1]) {
           const a = [foot[0] + nrm[0] * (rf + 0.05) * off, foot[1] + nrm[1] * (rf + 0.05) * off, zc], b = [head[0] + nrm[0] * (rh + 0.12) * off, head[1] + nrm[1] * (rh + 0.12) * off, zc];
           bar(e, a, b, 0.05, IRON_DK);
@@ -535,19 +552,21 @@ export function makeIron({ obstacles, lanes, houses, terrain, TOWN_R, WELL, SHAF
             e.box(0.26, 0.24, 0.32, j % 3 ? RUST : IRON, a[0] + (b[0] - a[0]) * t + nrm[0] * 0.13 * off, a[1] + (b[1] - a[1]) * t + nrm[1] * 0.13 * off, zc, { rz: Math.atan2(u[1], u[0]) });
           }
         }
-        for (const y of [-6, -2.5]) {
+        const rail = at(SHAFT + 0.25, zc);
+        for (const y of [-6.5, rail - 0.6]) {
+          if (y > rail - 0.5 || y < WATER_Y + 1.5) continue;
           const x = foot[0] + ((y - foot[1]) / uy) * ux;
           for (const s of [-1, 1]) bar(e, [x, y, zc + s * 0.3], [SHAFT, y, zc + s * 0.3], 0.07, IRON_DK);
           bar(e, [x - 0.3, y, zc - 0.35], [x - 0.3, y, zc + 0.35], 0.07, IRON_DK);
         }
-        // 出水槽：從頂輪外側一路斜斜跨過屋頂、階梯，接到廣場上的水塔，屋頂上、井口邊各一根撐柱
+        // 出水槽：從頂輪外側一路斜斜跨過井圈、階梯，接到廣場上的水塔；撐柱立在井口外緣的矮牆、階梯和廣場上
         const tx = 16.2, tr = 1.15, A = [head[0] + 0.7, head[1] - 0.4, zc], B = [tx - tr + 0.1, 5.45, tz];
         const along = (x) => { const t = (x - A[0]) / (B[0] - A[0]); return [x, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t]; };
         const dx = B[0] - A[0], dz = B[2] - A[2], dl = Math.hypot(dx, dz), px = -dz / dl, pz = dx / dl;
         plank(e, A, B, 0.5, 0.06, IRON);
         for (const s of [-1, 1]) plank(e, [A[0] + px * s * 0.25, A[1] + 0.12, A[2] + pz * s * 0.25], [B[0] + px * s * 0.25, B[1] + 0.12, B[2] + pz * s * 0.25], 0.05, 0.26, RUST);
-        for (const [x, y0] of [[SHAFT + 3.6, RING_TOP], [WELL + 0.7, 0.06], [14.6, 0]]) {
-          const p = along(x);
+        for (const x of [SHAFT + 4.75, WELL + 0.7, 14.6]) {
+          const p = along(x), y0 = x < WELL ? at(x, p[2]) : x < WELL + 1.4 ? 0.06 : 0;
           bar(e, [x, y0, p[2]], [x, p[1] - 0.05, p[2]], 0.12, IRON_DK);
           if (y0 >= 0) block(f.box(x, p[2], 0.2, 0.2));
         }
@@ -565,13 +584,15 @@ export function makeIron({ obstacles, lanes, houses, terrain, TOWN_R, WELL, SHAF
         rod(e, [tx, 3.3, tz], [tx, 0.35, tz], 0.11, IRON);
         rod(e, [tx, 0.35, tz], [17.8, 0.35, tz], 0.11, IRON);
         e.cyl(0.45, 0.45, 0.05, IRON_DK, 17.95, 0.03, tz, {}, 10);
-        // 機器：屋頂上一個鐵箱，排氣管、壓力表，側面一個飛輪，皮帶直直拉上頂輪軸上的小齒輪
-        const ex = SHAFT + 1.6, ez = zc + 2.2, fw = [ex, RING_TOP + 1, zc + 1.5], pg = [head[0], head[1], zc + 1.5];
-        e.box(1.4, 1.5, 0.9, IRON, ex, RING_TOP + 0.75, ez, { color2: RUST });
-        rod(e, [ex + 0.4, RING_TOP + 1.5, ez + 0.2], [ex + 0.4, RING_TOP + 3.2, ez + 0.2], 0.1, IRON_DK);
-        e.cyl(0.14, 0.14, 0.12, BRONZE, ex + 0.72, RING_TOP + 1.1, ez, { rz: PI / 2 }, 8);
+        // 機器：鐵板上一個鐵箱，排氣管、壓力表，側面一個飛輪，皮帶直直拉上頂輪軸上的小齒輪
+        const ex = dx0 + 0.6, ez = zc + 2.15, fw = [ex, DECK + 1, zc + 1.5], pg = [head[0], head[1], zc + 1.5];
+        e.box(1, 1.2, 0.9, IRON, ex, DECK + 0.64, ez, { color2: RUST });
+        rod(e, [ex + 0.3, DECK + 1.2, ez + 0.2], [ex + 0.3, DECK + 2.9, ez + 0.2], 0.1, IRON_DK);
+        e.cyl(0.14, 0.14, 0.12, BRONZE, ex + 0.56, DECK + 0.95, ez, { rz: PI / 2 }, 8);
         const bx = pg[0] - fw[0], by = pg[1] - fw[1], bl = Math.hypot(bx, by), bn = [-by / bl, bx / bl];
         for (const s of [-1, 1]) bar(e, [fw[0] + bn[0] * 0.62 * s, fw[1] + bn[1] * 0.62 * s, fw[2]], [pg[0] + bn[0] * 0.44 * s, pg[1] + bn[1] * 0.44 * s, pg[2]], 0.04, BELT);
+        // 擋住鏡頭時整組淡掉：水塔一塊、架子一塊（從欄牆頂到頂輪，人在廊道裡被腳擋住也淡）
+        if (fader) e.fid = fader([{ ...f.box(tx, tz, tr + 0.4, tr + 0.4), y0: 0, y1: 5.6 }, { ...f.box(SHAFT + 1.4, zc + 0.8, 1.6, 2.1), y0: rail - 0.5, y1: head[1] + 0.8 }]);
         e.emit(bucket, 0, 0, rotY);
         // 會轉的：頂輪、底輪、軸上的小齒輪、飛輪。鏈子走得一樣快，輪子小就轉得快；頂上往外翻，水斗才倒得進槽
         const put = (kind, [x, y, z], s, w) => {

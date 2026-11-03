@@ -24,6 +24,34 @@ const LEVELS = [6, 11, 16];          // 大廳的三層迴廊
 const BAL = 3.2;                     // 迴廊多深
 export const EARTH_EL = 34;          // 地球在北邊天上多高（度），大望遠鏡對著它
 
+// 小圓角的方塊：每條邊、每個角磨成兩刀的圓弧，法線跟著轉，平滑著色下看起來是圓的；面的中間還是一大片平的。
+// 一塊 108 個三角形（方塊是 12），只給看得到的重點地方用。r 最多是最薄那邊的一半（整條邊變成圓的）
+const _v = new THREE.Vector3(), _c = new THREE.Vector3();
+export function softBox(w, h, d, r) {
+  const g = new THREE.BoxGeometry(w, h, d, 3, 3, 3);
+  const half = [w / 2, h / 2, d / 2];
+  r = Math.min(r, ...half);
+  const inner = half.map((v) => v - r);
+  const p = g.attributes.position, n = g.attributes.normal;
+  for (let i = 0; i < p.count; i++) {
+    _v.fromBufferAttribute(p, i);
+    // 中間那兩道格線挪到離邊 r 的地方，再把外圈的點繞著內框推成圓弧
+    for (let a = 0; a < 3; a++) {
+      const c = _v.getComponent(a);
+      if (Math.abs(c) < half[a] - 1e-6) _v.setComponent(a, Math.sign(c) * inner[a]);
+      _c.setComponent(a, Math.max(-inner[a], Math.min(inner[a], _v.getComponent(a))));
+    }
+    _v.sub(_c);
+    if (_v.lengthSq() > 1e-12) {
+      _v.normalize();
+      n.setXYZ(i, _v.x, _v.y, _v.z);
+      _v.multiplyScalar(r).add(_c);
+    } else _v.add(_c);
+    p.setXYZ(i, _v.x, _v.y, _v.z);
+  }
+  return g;
+}
+
 export function buildHQ({ coarse = false } = {}) {
   // k 是一般的、kg 玻璃、kf 室外的金箔、kfi 室內的金箔（反光的環境不一樣）
   const k = new Kit(null), kg = new Kit(null), kf = new Kit(null), kfi = new Kit(null), R = rng('jinghai:hq');
@@ -32,6 +60,18 @@ export function buildHQ({ coarse = false } = {}) {
   const block = (x0, z0, x1, z1) => obstacles.push({ x: (x0 + x1) / 2, z: (z0 + z1) / 2, hw: Math.abs(x1 - x0) / 2, hd: Math.abs(z1 - z0) / 2, a: 0 });
   const solid = (x0, y0, z0, x1, y1, z1) => solids.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), y0, y1, z0: Math.min(z0, z1), z1: Math.max(z0, z1) });
   const floor = (x0, z0, x1, z1, c, y = 0) => B(k, x0, y - 0.3, z0, x1, y, z1, c, { ao: false });
+  // 跟 B 一樣，但邊角磨圓（softBox）。r 沒給就照最薄那邊算
+  const SB = (kit, x0, y0, z0, x1, y1, z1, c, r = null, o) => {
+    const w = Math.abs(x1 - x0), h = Math.abs(y1 - y0), d = Math.abs(z1 - z0);
+    kit.add(softBox(w, h, d, r ?? Math.min(w, h, d) * 0.35), c, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, o);
+  };
+  // 建築的外角：一根跟牆一樣粗的圓柱，剛好貼齊兩面牆，轉角從上面看是圓的
+  const post = (x, z, y0, y1, r = 0.3) => {
+    const b = y0 > 0 ? y0 : -0.3;
+    k.cyl(r, r, y1 - b, WHITE, x, (b + y1) / 2, z, {}, 16);
+    solid(x - r, y0, z - r, x + r, y1, z + r);
+    block(x - r, z - r, x + r, z + r);
+  };
 
   // 一片玻璃：擋人也擋鏡頭；mull 是每隔幾公尺一根霧銀直框
   function pane(axis, at, a, b, lo, hi, mull = 0) {
@@ -53,7 +93,7 @@ export function buildHQ({ coarse = false } = {}) {
     const piece = (u0, u1, v0, v1) => {
       if (u1 - u0 < 1e-3 || v1 - v0 < 1e-3) return;
       const [x0, x1, z0, z1] = axis === 'x' ? [u0, u1, at - t / 2, at + t / 2] : [at - t / 2, at + t / 2, u0, u1];
-      B(k, x0, v0, z0, x1, v1, z1, c);
+      B(k, x0, v0 > 0 ? v0 : -0.3, z0, x1, v1, z1, c);   // 落地的往地下多埋一截，跟地面的接縫藏起來
       solid(x0, v0, z0, x1, v1, z1);
       if (v0 < 1.6) block(x0, z0, x1, z1);
     };
@@ -109,10 +149,11 @@ export function buildHQ({ coarse = false } = {}) {
   foil('z-', A.z0 - 0.32, A.x0 - 0.3, A.x1 + 0.3, cy0, cy1);
   foil('x-', A.x0 - 0.32, A.z0 - 0.3, A.z1 + 0.3, cy0, cy1);
   foil('x+', A.x1 + 0.32, A.z0 - 0.3, A.z1 + 0.3, cy0, cy1);
-  B(k, A.x0 - 0.4, cy1, A.z0 - 0.4, A.x1 + 0.4, cy1 + 0.25, A.z0 + 0.3, SILVER);
-  B(k, A.x0 - 0.4, cy1, A.z1 - 0.3, A.x1 + 0.4, cy1 + 0.25, A.z1 + 0.4, SILVER);
-  B(k, A.x0 - 0.4, cy1, A.z0, A.x0 + 0.3, cy1 + 0.25, A.z1, SILVER);
-  B(k, A.x1 - 0.3, cy1, A.z0, A.x1 + 0.4, cy1 + 0.25, A.z1, SILVER);
+  SB(k, A.x0 - 0.4, cy1, A.z0 - 0.4, A.x1 + 0.4, cy1 + 0.25, A.z0 + 0.3, SILVER, 0.12);
+  SB(k, A.x0 - 0.4, cy1, A.z1 - 0.3, A.x1 + 0.4, cy1 + 0.25, A.z1 + 0.4, SILVER, 0.12);
+  SB(k, A.x0 - 0.4, cy1, A.z0, A.x0 + 0.3, cy1 + 0.25, A.z1, SILVER, 0.12);
+  SB(k, A.x1 - 0.3, cy1, A.z0, A.x1 + 0.4, cy1 + 0.25, A.z1, SILVER, 0.12);
+  for (const x of [A.x0, A.x1]) for (const z of [A.z0, A.z1]) post(x, z, 0, cy0);
 
   // 迴廊：北、西、南三面，每層一圈。前緣霧銀條、玻璃欄板、扶手；一樓那層的後牆是一排亮著的店窗
   // gaps：欄杆要讓開的地方（手扶梯接上來那一截），{ x1: 西邊那條沿 z 的範圍, z1: 北邊那條沿 x 的範圍 }
@@ -191,7 +232,7 @@ export function buildHQ({ coarse = false } = {}) {
   escalator(...ESC1.up);
   escalator(ESC1.down[1], ESC1.down[0]);
   block(-12.1, 3.2, -8.7, 9.3);
-  B(k, -12.1, 0, 3.4, -8.7, 0.7, 6.8, WHITE);
+  SB(k, -12.1, 0, 3.4, -8.7, 0.7, 6.8, WHITE, 0.12);
   for (let i = 0; i < 4; i++) k.add(new THREE.IcosahedronGeometry(0.5 + R() * 0.2, 1), i % 2 ? PLANT : PLANT2, -11.5 + i * 0.95, 0.95, 4.2 + R() * 2, { sy: 0.8 });
   B(k, -14.8, 5.55, -4.6, -8.6, 6, -2.4, WHITE);
   solid(-14.8, 5.55, -4.6, -8.6, 7, -2.4);
@@ -227,13 +268,13 @@ export function buildHQ({ coarse = false } = {}) {
   for (let t = -5; t <= 5; t += 2.5) { const p = along(t); solid(p[0] - 1.1, p[1] - 1.1, p[2] - 1.1, p[0] + 1.1, p[1] + 1.1, p[2] + 1.1); }
 
   // 服務台：大門進來右手邊，白色長台，正面一片金箔
-  B(k, 5.5, 0, 9.4, 11.5, 1.05, 10.3, WHITE);
-  B(k, 5.4, 1.05, 9.3, 11.6, 1.12, 10.4, SILVER);
-  foil('z+', 10.31, 5.6, 11.4, 0.1, 0.95, 1.2, true);
+  SB(k, 5.5, 0, 9.4, 11.5, 1.05, 10.3, WHITE, 0.1);
+  SB(k, 5.4, 1.05, 9.3, 11.6, 1.12, 10.4, SILVER, 0.035);
+  foil('z+', 10.31, 5.7, 11.3, 0.1, 0.95, 1.2, true);
   block(5.4, 9.3, 11.6, 10.4);
   // 長椅對著望遠鏡；四個花台，種月面溫室長的銀綠色灌木
   for (const s of [-1, 1]) {
-    B(k, s * 7.5 - 1.5, 0.38, 5.3, s * 7.5 + 1.5, 0.46, 5.8, WHITE);
+    SB(k, s * 7.5 - 1.5, 0.38, 5.3, s * 7.5 + 1.5, 0.46, 5.8, WHITE, 0.04);
     for (const x of [-1.2, 1.2]) B(k, s * 7.5 + x - 0.06, 0, 5.4, s * 7.5 + x + 0.06, 0.38, 5.7, SILVER);
     block(s * 7.5 - 1.5, 5.3, s * 7.5 + 1.5, 5.8);
     for (const z of [12.6, -9]) {
@@ -252,9 +293,9 @@ export function buildHQ({ coarse = false } = {}) {
 
   // ================= 大門和雨遮 =================
   const P = CANOPY;
-  B(k, P.x0, 5.6, P.z0 + 0.3, P.x1, 6.2, P.z1, WHITE);
+  SB(k, P.x0, 5.6, P.z0 + 0.3, P.x1, 6.2, P.z1, WHITE, 0.16);
   solid(P.x0, 5.5, P.z0, P.x1, 6.3, P.z1);
-  foil('z+', P.z1 + 0.01, P.x0, P.x1, 5.6, 6.2, 1.7);
+  foil('z+', P.z1 + 0.01, P.x0 + 0.16, P.x1 - 0.16, 5.7, 6.1, 1.7);
   for (const s of [-1, 1]) {
     k.cyl(0.3, 0.3, 5.6, SILVER, s * 7.6, 2.8, 21.6, {}, 12);
     block(s * 7.6 - 0.3, 21.3, s * 7.6 + 0.3, 21.9);
@@ -280,13 +321,14 @@ export function buildHQ({ coarse = false } = {}) {
   // ================= 食堂 =================
   const C = CANTEEN;
   floor(C.x0, C.z0, A.x0, C.z1, '#d6cdb9');
-  wall('x', C.z0, C.x0 - 0.3, A.x0 - 0.3, 0, C.top + 0.6, 0.6, WHITE);
-  wall('x', C.z1, C.x0 - 0.3, A.x0 - 0.3, 0, 1.2, 0.6, WHITE);
-  wall('x', C.z1, C.x0 - 0.3, A.x0 - 0.3, 1.2, 6.6, 0.6, WHITE, [{ a: -48.6, b: -19.6, lo: 1.2, hi: 6.6, glass: true, mull: 2.4 }]);
-  wall('x', C.z1, C.x0 - 0.3, A.x0 - 0.3, 6.6, C.top + 0.6, 0.6, WHITE);
+  wall('x', C.z0, C.x0, A.x0 - 0.3, 0, C.top + 0.6, 0.6, WHITE);
+  wall('x', C.z1, C.x0, A.x0 - 0.3, 0, 1.2, 0.6, WHITE);
+  wall('x', C.z1, C.x0, A.x0 - 0.3, 1.2, 6.6, 0.6, WHITE, [{ a: -48.6, b: -19.6, lo: 1.2, hi: 6.6, glass: true, mull: 2.4 }]);
+  wall('x', C.z1, C.x0, A.x0 - 0.3, 6.6, C.top + 0.6, 0.6, WHITE);
   wall('z', C.x0, C.z0, C.z1, 0, 1.2, 0.6, WHITE);
   wall('z', C.x0, C.z0, C.z1, 1.2, 6.6, 0.6, WHITE, [{ a: -12.6, b: 12.6, lo: 1.2, hi: 6.6, glass: true, mull: 2.5 }]);
   wall('z', C.x0, C.z0, C.z1, 6.6, C.top + 0.6, 0.6, WHITE);
+  for (const z of [C.z0, C.z1]) post(C.x0, z, 0, C.top - 0.6);
   B(k, C.x0 - 0.3, C.top, C.z0 - 0.3, A.x0, C.top + 0.8, C.z1 + 0.3, WHITE2);
   solid(C.x0 - 0.3, C.top - 0.1, C.z0 - 0.3, A.x0, C.top + 0.9, C.z1 + 0.3);
   foil('z+', C.z1 + 0.32, C.x0 - 0.3, A.x0 - 0.3, C.top - 0.6, C.top + 0.9);
@@ -294,15 +336,15 @@ export function buildHQ({ coarse = false } = {}) {
   foil('x-', C.x0 - 0.32, C.z0 - 0.3, C.z1 + 0.3, C.top - 0.6, C.top + 0.9);
   for (let x = -46; x <= -22; x += 6) for (let z = -6; z <= 12; z += 4.5) glowBox(x - 1.5, C.top - 0.06, z - 0.45, x + 1.5, C.top - 0.01, z + 0.45, '#fff3dd');
   // 廚房：靠北牆一排不鏽鋼櫃、上面排煙罩，鍋子
-  B(k, C.x0 + 0.3, 0, C.z0 + 0.3, -20, 1.0, -13.1, STEEL);
-  B(k, C.x0 + 0.3, 3.1, C.z0 + 0.3, -20, 4.0, -12.6, '#c2c7cc');
+  SB(k, C.x0 + 0.3, 0, C.z0 + 0.3, -20, 1.0, -13.1, STEEL, 0.08);
+  SB(k, C.x0 + 0.3, 3.1, C.z0 + 0.3, -20, 4.0, -12.6, '#c2c7cc', 0.12);
   for (let x = -47; x < -21; x += 2.3) {
     k.cyl(0.32, 0.28, 0.4, x % 2 ? SILVER : DARK, x, 1.2, -13.6, {}, 10);
     if (R() < 0.5) k.light(x, 1.05, -13.2, '#ff9a5a', 0.25);
   }
   // 打菜的長台：不鏽鋼，一排菜盤，上面一道玻璃擋板；東頭疊著餐盤
-  B(k, -45, 0, -10.6, -24, 0.85, -9.8, STEEL);
-  B(k, -45.1, 0.85, -10.65, -23.9, 0.9, -9.75, '#c9ced3');
+  SB(k, -45, 0, -10.6, -24, 0.85, -9.8, STEEL, 0.08);
+  SB(k, -45.1, 0.85, -10.65, -23.9, 0.9, -9.75, '#c9ced3', 0.025);
   const FOOD = ['#d9984a', '#6e8f4e', '#f3efe4', '#c0453a', '#e2c06e', '#8fb38a'];
   for (let i = 0, x = -44; x < -26.5; x += 1.6, i++) B(k, x - 0.62, 0.9, -10.45, x + 0.62, 0.97, -10.0, FOOD[i % FOOD.length]);
   B(kg, -45, 1.2, -10.24, -26.5, 1.7, -10.18, GLASS);
@@ -319,10 +361,10 @@ export function buildHQ({ coarse = false } = {}) {
   ROWS_Z.forEach((zr, r) => {
     const bench = r % 2 ? '#7a8450' : '#d9822b';
     for (const cx of TABLES_X) {
-      B(k, cx - 2.8, 0.58, zr - 0.45, cx + 2.8, 0.64, zr + 0.45, '#f2efe8');
+      SB(k, cx - 2.8, 0.58, zr - 0.45, cx + 2.8, 0.64, zr + 0.45, '#f2efe8', 0.03);
       for (const sx of [-2.5, 2.5]) B(k, cx + sx - 0.05, 0, zr - 0.05, cx + sx + 0.05, 0.58, zr + 0.05, SILVER);
       for (const s of [-1, 1]) {
-        B(k, cx - 2.7, 0.27, zr + s * 0.64, cx + 2.7, 0.33, zr + s * 1.0, bench);
+        SB(k, cx - 2.7, 0.27, zr + s * 0.64, cx + 2.7, 0.33, zr + s * 1.0, bench, 0.03);
         for (const sx of [-2.3, 2.3]) B(k, cx + sx - 0.04, 0, zr + s * 0.8 - 0.04, cx + sx + 0.04, 0.27, zr + s * 0.8 + 0.04, SILVERDK);
       }
       block(cx - 2.85, zr - 1.05, cx + 2.85, zr + 1.05);
@@ -382,7 +424,7 @@ export function buildHQ({ coarse = false } = {}) {
         B(k, x0 + sx - 1, 0, zb - s * 0.7, x0 + sx + 1, 2.6, zb - s * 0.2, WHITE2);
         for (let j = 0; j < 3; j++) for (let q = 0; q < 4; q++) B(k, x0 + sx - 0.85 + q * 0.45, 0.4 + j * 0.8, zb - s * 0.62, x0 + sx - 0.55 + q * 0.45, 0.72 + j * 0.8, zb - s * 0.28, FOOD[(i + j + q) % FOOD.length]);
       }
-      B(k, x0 + 4.4, 0, s * 10.4, x0 + 6.6, 1.0, s * 11.1, WHITE2);
+      SB(k, x0 + 4.4, 0, s * 10.4, x0 + 6.6, 1.0, s * 11.1, WHITE2, 0.08);
       glowBox(x0 + 1, 5.42, s * 8, x1 - 1, 5.47, s * 12, '#fff5e2');
       display(type, x0 + 2.55, zf + s * 1.1, s);
       shopSpots.push({ x: x0 + 2.55, z: zf - s * 1.7, face: s > 0 ? 0 : Math.PI, keeper: [x0 + 5.5, s * 11.6] });
@@ -416,7 +458,7 @@ export function buildHQ({ coarse = false } = {}) {
     if (R() < 0.6) k.add(new THREE.IcosahedronGeometry(0.12, 0), '#e2697a', x + 0.3, 1.25, 0.4);
     block(x - 1.1, -1.1, x + 1.1, 1.1);
     for (const s of [-1, 1]) {
-      B(k, x - 1.3 + 3.2, 0.38, s * 1.4 - 0.25, x + 1.3 + 3.2, 0.46, s * 1.4 + 0.25, WHITE);
+      SB(k, x - 1.3 + 3.2, 0.38, s * 1.4 - 0.25, x + 1.3 + 3.2, 0.46, s * 1.4 + 0.25, WHITE, 0.04);
       for (const bx of [-1, 1]) B(k, x + 3.2 + bx - 0.05, 0, s * 1.4 - 0.2, x + 3.2 + bx + 0.05, 0.38, s * 1.4 + 0.2, SILVER);
       block(x + 1.9, s * 1.4 - 0.25, x + 4.5, s * 1.4 + 0.25);
     }
@@ -452,6 +494,7 @@ export function buildHQ({ coarse = false } = {}) {
   wall('x', S.z0, S.x0, S.x1, 0, S.top, 0.6, WHITE);
   wall('x', S.z1, S.x0, S.x1, 0, S.top, 0.6, WHITE);
   wall('z', S.x1, S.z0, S.z1, 0, S.top, 0.6, WHITE);
+  for (const z of [S.z0, S.z1]) post(S.x1, z, 0, 15.6);
   wall('z', S.x0, S.z0, G.z0, 0, S.top, 0.3, WHITE);
   wall('z', S.x0, G.z1, S.z1, 0, S.top, 0.3, WHITE);
   B(k, S.x0, S.top, S.z0, S.x1, S.top + 0.6, S.z1, WHITE2);
@@ -490,8 +533,8 @@ export function buildHQ({ coarse = false } = {}) {
   const seats = [];
   for (const zr of [-30, -26.5, -23, -19.5]) {
     for (const cx of [-8.5, 0, 8.5]) {
-      B(k, cx - 3.25, 0, zr - 0.45, cx + 3.25, 0.72, zr + 0.35, '#c9ccd0');
-      B(k, cx - 3.3, 0.72, zr - 0.5, cx + 3.3, 0.78, zr + 0.4, SILVERDK);
+      SB(k, cx - 3.25, 0, zr - 0.45, cx + 3.25, 0.72, zr + 0.35, '#c9ccd0', 0.08);
+      SB(k, cx - 3.3, 0.72, zr - 0.5, cx + 3.3, 0.78, zr + 0.4, SILVERDK, 0.03);
       k.box(6.5, 0.55, 0.08, '#3a3d44', cx, 1.02, zr - 0.3, { rx: -0.45 });
       for (let j = 0; j < 3; j++) {
         const sx = cx + (j - 1) * 2.2;
@@ -665,10 +708,10 @@ function makePlan({ seats, shopSpots, coarse, R }) {
   const order = [0, 8, 4, 12, 1, 9, 5, 13, 2, 10, 6, 14, 3, 11, 7, 15].map((i) => canteenSeats[i]);
   const canteen = { slots, serve, face: W, seats: order, outfits: ['engineer', 'engineer', 'jumpsuit', ...CASUAL] };
 
-  // 站著、坐著不走的
+  // 站著、坐著不走的。seat 是椅面多高（沒寫的是食堂長椅 0.33）。act 是在做什麼（manatees.js 照這個擺手）：cook 煮菜、guard 手背在後面、gaze 抬頭看、counter 手放櫃台上、type 敲操作台
   const still = [];
   // 廚師沿著台子挪
-  for (const [x, z, sway, face] of [[-37.6, -11.2, 0.5, S], [-32.4, -11.2, 0.9, S], [-27.6, -11.4, 1.2, S], [-42.5, -12.9, 0.4, N]]) still.push({ p: [x, 0, z], face, sway, look: 0.35, outfit: 'cook' });
+  for (const [x, z, sway, face] of [[-37.6, -11.2, 0.5, S], [-32.4, -11.2, 0.9, S], [-27.6, -11.4, 1.2, S], [-42.5, -12.9, 0.4, N]]) still.push({ p: [x, 0, z], face, sway, look: 0.35, outfit: 'cook', act: 'cook' });
   // 食堂裡坐著慢慢吃的
   for (const zr of [1.2, 6.0, 10.8]) {
     for (const cx of [-43, -36.4, -29.8, -23.2]) {
@@ -679,18 +722,18 @@ function makePlan({ seats, shopSpots, coarse, R }) {
     }
   }
   // 服務台、望遠鏡前抬頭看的、長椅上坐著的
-  still.push({ p: [7.3, 0, 8.9], face: S, outfit: 'usher', look: 0.4 }, { p: [9.9, 0, 8.9], face: S, outfit: 'usher', look: 0.4 });
-  still.push({ p: [-3.2, 0, 6.6], face: N + 0.2, outfits: CASUAL, look: 0.1 }, { p: [3.6, 0, 6.9], face: N - 0.3, outfits: CASUAL, kid: true, look: 0.1 });
-  still.push({ p: [-7.9, 0, 5.55], face: N, sit: true, outfits: CASUAL, look: 0.3 }, { p: [7.0, 0, 5.55], face: N, sit: true, outfits: ['engineer'], look: 0.3 });
+  still.push({ p: [7.3, 0, 8.9], face: S, outfit: 'usher', look: 0.4, act: 'guard' }, { p: [9.9, 0, 8.9], face: S, outfit: 'usher', look: 0.4, act: 'guard' });
+  still.push({ p: [-3.2, 0, 6.6], face: N + 0.2, outfits: CASUAL, look: 0.1, act: 'gaze' }, { p: [3.6, 0, 6.9], face: N - 0.3, outfits: CASUAL, kid: true, look: 0.1, act: 'gaze' });
+  still.push({ p: [-7.9, 0, 5.55], face: N, sit: true, seat: 0.46, outfits: CASUAL, look: 0.3 }, { p: [7.0, 0, 5.55], face: N, sit: true, seat: 0.46, outfits: ['engineer'], look: 0.3 });
   // 觀星台上看地球的
-  for (const x of [-8, 8]) still.push({ p: [x, 16, -11.75], face: N, outfit: 'jumpsuit', look: 0.08 });
+  for (const x of [-8, 8]) still.push({ p: [x, 16, -11.75], face: N, outfit: 'jumpsuit', look: 0.08, act: 'gaze' });
   // 店員：站在店裡的櫃台後面；商店街的小亭子、百貨公司門口
-  shopSpots.forEach((sp, i) => still.push({ p: [sp.keeper[0], 0, sp.keeper[1]], face: sp.face === N ? S : N, outfits: ['vest', 'cardigan', 'usher'], look: 0.5, sway: 0.5, fine: i % 2 === 1 }));
-  still.push({ p: [33, 0, 0.6], face: S, outfit: 'cook', look: 0.8 });
-  still.push({ p: [60.4, 0, 3.4], face: W, outfit: 'usher', look: 0.3 });
+  shopSpots.forEach((sp, i) => still.push({ p: [sp.keeper[0], 0, sp.keeper[1]], face: sp.face === N ? S : N, outfits: ['vest', 'cardigan', 'usher'], look: 0.5, sway: 0.5, fine: i % 2 === 1, act: 'counter' }));
+  still.push({ p: [33, 0, 0.6], face: S, outfit: 'cook', look: 0.8, act: 'counter' });
+  still.push({ p: [60.4, 0, 3.4], face: W, outfit: 'usher', look: 0.3, act: 'guard' });
   for (const z of [-8, 8]) still.push({ p: [63.4, 0, z], face: W, outfits: ['dress', 'cardigan'], look: 0.6, sway: 0.8, fine: true });
   // 控制室：坐滿一半
-  for (const st of seats) if (R() < 0.5) still.push({ p: [st.x, 0, st.z], face: N, sit: true, outfits: ['engineer', 'engineer', 'jumpsuit'], look: 0.2, fine: R() < 0.4 });
+  for (const st of seats) if (R() < 0.5) still.push({ p: [st.x, 0, st.z], face: N, sit: true, seat: 0.36, outfits: ['engineer', 'engineer', 'jumpsuit'], look: 0.2, fine: R() < 0.4, act: 'type' });
   // 月球車和老降落艇旁邊的外勤
   still.push({ p: [9.6, 0, 29.4], face: W, outfit: 'crew', look: 0.5 }, { p: [-13.2, 0, 32.6], face: N + 0.6, outfit: 'crew', look: 0.3 });
   return { loops, canteen, still };

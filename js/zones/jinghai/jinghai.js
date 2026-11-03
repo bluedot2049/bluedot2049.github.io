@@ -13,9 +13,16 @@ import { makeSkiff } from '../../scene/harbor.js';
 import { setGravity } from '../../avatar/character.js';
 import { buildSky } from './jinghai-sky.js';
 import { crinkle, foilRing, foilMaterials } from './jinghai-foil.js';
-import { buildHQ, ATRIUM, CANTEEN, GALLERIA, CONTROL, STORE, CANOPY, EARTH_EL } from './jinghai-hq.js';
+import { buildHQ, softBox, ATRIUM, CANTEEN, GALLERIA, CONTROL, STORE, CANOPY, EARTH_EL } from './jinghai-hq.js';
 
 const deg = Math.PI / 180;
+// 碗的內面（碟形天線、傘形天線）：鏡射一份再把法線反過來。平滑著色看的是法線，只寫 sx: -1 的話內面的明暗會是反的
+function innerFace(geo) {
+  geo.scale(-1, 1, 1);
+  const n = geo.attributes.normal;
+  for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+  return geo;
+}
 const PAD = { x: 0, z: 62, r: 9, y: 0.12 };      // 降落坪
 const WALK = { x0: -4.6, x1: 4.6, z0: CANOPY.z1, z1: PAD.z - PAD.r + 0.6, y: 0.05 };   // 降落坪到雨遮的步道
 const WALK_C = { x: 12, z: 16 }, WALK_R = 125;    // 走得到多遠
@@ -82,7 +89,8 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), z = pos.getZ(i);
       let y = terrain(x, z);
-      if (indoor(x, z, 0.4)) y = -0.45;
+      // 房子裡沉一點點就好，地板會蓋住；沉太深的話，跨過牆的大三角形會在牆外挖出一道溝，牆腳看起來一排鋸齒
+      if (indoor(x, z, 0.4)) y = -0.05;
       if (sink && sink(x, z)) y -= 1.2;
       pos.setY(i, y);
       const flat = terrain(x, z) + Math.max(0, Math.hypot(x - WALK_C.x, z - WALK_C.z) - BEND) ** 2 / (2 * PLANET);
@@ -135,21 +143,21 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
   {
     const x = 11, z = 31, a = 0.35;
     const rv = new Kit(R);
-    rv.box(1.5, 0.12, 2.8, SILVER, 0, 0.55, 0);
+    rv.add(softBox(1.5, 0.12, 2.8, 0.05), SILVER, 0, 0.55, 0);
     rv.box(1.6, 0.04, 2.9, SILVERDK, 0, 0.62, 0);
     for (const [lx, lz] of [[-0.85, 1.05], [0.85, 1.05], [-0.85, -1.05], [0.85, -1.05]]) {
       rv.cyl(0.42, 0.42, 0.24, '#6b6f76', lx, 0.42, lz, { rz: Math.PI / 2 }, 14);
       rv.cyl(0.14, 0.14, 0.28, SILVER, lx, 0.42, lz, { rz: Math.PI / 2 }, 8);
-      rv.box(0.32, 0.05, 0.9, '#9a958c', lx, 0.86, lz, {});
+      rv.add(softBox(0.32, 0.05, 0.9, 0.025), '#9a958c', lx, 0.86, lz);
     }
     for (const lx of [-0.38, 0.38]) {
       rv.box(0.55, 0.05, 0.5, NAVY, lx, 0.8, -0.35);
       rv.box(0.55, 0.5, 0.05, NAVY, lx, 1.05, -0.62);
     }
-    rv.box(0.9, 0.5, 0.4, '#d6d3cb', 0, 0.9, 0.95);
+    rv.add(softBox(0.9, 0.5, 0.4, 0.08), '#d6d3cb', 0, 0.9, 0.95);
     rv.cyl(0.03, 0.03, 1.5, SILVER, -0.5, 1.4, 1.1, {}, 5);
     rv.add(new THREE.ConeGeometry(0.62, 0.3, 16, 1, true), GOLDS[1], -0.5, 2.15, 1.1, { rx: Math.PI - 0.5 });
-    rv.add(new THREE.ConeGeometry(0.62, 0.3, 16, 1, true), GOLDS[3], -0.5, 2.15, 1.1, { rx: Math.PI - 0.5, sx: -1 });
+    rv.add(innerFace(new THREE.ConeGeometry(0.62, 0.3, 16, 1, true)), GOLDS[3], -0.5, 2.15, 1.1, { rx: Math.PI - 0.5 });
     rv.box(0.22, 0.16, 0.3, '#d6d3cb', 0.5, 1.35, 1.15);
     rv.emit(bucket, x, z, a);
     obstacles.push({ x, z, hw: 1.2, hd: 1.7, a });
@@ -178,11 +186,11 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
   // 大碟形天線：觀星前哨站的「站」，白色大碟子對著地球，底下銀色的台座
   {
     const x = 46, z = 44, el = EARTH_EL * deg;
-    k.box(4, 1.6, 4, SILVER, x, 0.8, z);
+    k.add(softBox(4, 1.6, 4, 0.2), SILVER, x, 0.8, z);
     k.cyl(0.9, 1.1, 5.4, WHITE, x, 4.3, z, {}, 14);
     const cy = 8.6, rx = Math.PI / 2 + el;
     k.add(new THREE.ConeGeometry(7.2, 2.3, 28, 1, true), '#eceae4', x, cy, z, { rx });
-    k.add(new THREE.ConeGeometry(7.2, 2.3, 28, 1, true), '#d9d7d0', x, cy, z, { rx, sx: -1 });
+    k.add(innerFace(new THREE.ConeGeometry(7.2, 2.3, 28, 1, true)), '#d9d7d0', x, cy, z, { rx });
     k.cyl(1.2, 1.2, 0.8, SILVERDK, x, cy - Math.sin(el) * 1.2, z + Math.cos(el) * 1.2, { rx: el - Math.PI / 2 }, 14);
     const focus = [x, cy + Math.sin(el) * 5.2, z - Math.cos(el) * 5.2];
     for (let i = 0; i < 3; i++) {
@@ -210,7 +218,7 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
   }
   // 補給箱和白色氣瓶，堆在食堂外面
   for (const [x, z] of [[-55, 6], [-55.5, 9.5], [-53.6, 12]]) {
-    for (let i = 0; i < 3; i++) k.box(1.1, 0.8, 0.9, i % 2 ? GOLDS[i] : WHITE, x + (R() - 0.5) * 0.6, 0.4 + (i === 2 ? 0.8 : 0), z + (i === 1 ? 1 : 0), { ry: (R() - 0.5) * 0.4 });
+    for (let i = 0; i < 3; i++) k.add(softBox(1.1, 0.8, 0.9, 0.08), i % 2 ? GOLDS[i] : WHITE, x + (R() - 0.5) * 0.6, 0.4 + (i === 2 ? 0.8 : 0), z + (i === 1 ? 1 : 0), { ry: (R() - 0.5) * 0.4 });
     k.cyl(0.35, 0.35, 1.6, '#eceae4', x + 1.4, 0.8, z, {}, 10);
     obstacles.push({ x: x + 0.4, z: z + 0.4, hw: 1.5, hd: 1.2, a: 0 });
   }
@@ -225,9 +233,10 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
   k.emit(bucket, 0, 0, 0);
 
   // 合成網格：實心的會擋太陽、被影子照到；發光的、玻璃不擋
-  const parts = bucketObjects(bucket);
+  // 靜海的房子用平滑著色：圓柱和小圓角看起來是圓的（別區是一面一面的）。方塊的法線本來就各面分開，看起來跟原本一樣；石頭還是有稜角
+  const parts = bucketObjects(bucket), softMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   for (const m of parts) {
-    if (m.isMesh && m.material.isMeshLambertMaterial) { m.castShadow = true; m.receiveShadow = true; meshes.push(m); }
+    if (m.isMesh && m.material.isMeshLambertMaterial) { m.material = softMat; m.castShadow = true; m.receiveShadow = true; meshes.push(m); }
     group.add(m);
   }
   // 金箔：金屬反光，室外的映著黑天和亮地，室內的映著暖牆

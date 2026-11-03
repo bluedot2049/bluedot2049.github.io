@@ -119,6 +119,10 @@
   background: none; border: 0; border-bottom: 1px solid rgba(232, 184, 106, .25); cursor: var(--cur-pointer);
 }
 .notice .soul[hidden] { display: none; }
+.notice .soul.leave { margin-top: -8px; }
+/* 在 App 裡開的才有：一段小字，說怎麼換到手機的瀏覽器（js/boot/inapp.js） */
+.notice .inapp { font-size: 12px; line-height: 1.7; letter-spacing: .08em; color: var(--muted); }
+.notice .inapp[hidden] { display: none; }
 @media (hover: hover) { .notice .soul:hover { color: var(--gold-hi); border-color: var(--gold); } }
 @keyframes swatch-in { from { transform: scaleX(0); } }
 @keyframes row-in { from { opacity: 0; transform: translateX(-4px); } }

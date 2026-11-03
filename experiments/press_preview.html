@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>星潮報預覽</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&display=swap">
+  <style>
+    html, body { margin: 0; background: #1c1814; color: #e9e0cc; font-family: "Noto Serif TC", serif; }
+    .row { display: flex; gap: 16px; padding: 16px; flex-wrap: wrap; }
+    figure { margin: 0; }
+    figcaption { font-size: 14px; opacity: 0.7; padding: 6px 0; }
+    canvas { width: 360px; height: 640px; display: block; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "../vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+  <div class="row" id="row"></div>
+  <script type="module">
+    // 四種版面並排：照片拿空拍照代替，臉是預設的學徒。網址 pen= 換筆名，place= 換地名
+    import { makePaper, pressReady, RANKS } from '../js/save/press.js';
+    import { portrait } from '../js/avatar/thumbs.js';
+    import { presetLook, sanitizeLook } from '../js/avatar/looks.js';
+
+    const q = new URLSearchParams(location.search);
+    const img = new Image();
+    img.src = '../assets/aerial/gallery-海上看碼頭-1920.webp';
+    await img.decode();
+    const photo = await createImageBitmap(img);
+    const face = portrait(sanitizeLook(presetLook(0)));
+    await pressReady();
+    const t = Date.UTC(2026, 10, 3, 14, 20);
+    for (let grade = 0; grade < 4; grade++) {
+      const c = makePaper({ photo, face, pen: grade === 1 ? '' : (q.get('pen') ?? '小煉金'), rare: { kind: 'deer', grade, where: '海市', place: q.get('place') ?? '燈巷' }, t: t + grade });
+      const f = document.createElement('figure');
+      f.innerHTML = `<figcaption>${grade}　${RANKS[grade]}</figcaption>`;
+      f.prepend(c);
+      document.getElementById('row').append(f);
+    }
+    document.body.dataset.ready = '1';
+  </script>
+</body>
+</html>
