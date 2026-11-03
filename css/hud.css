@@ -533,6 +533,15 @@ body.desk #action-btn {
 }
 body.desk #action-btn.show { transform: translateX(-50%); }
 body.desk #hint { bottom: auto; top: calc(18px + env(safe-area-inset-top)); }
+/* 越肩時點不到按鈕：互動鍵左邊標一顆 E 鍵帽 */
+body.desk.shoulder #action-btn::after {
+  content: 'E'; position: absolute; right: calc(100% + 10px); top: 50%; width: 24px; height: 24px; margin-top: -12px;
+  display: flex; align-items: center; justify-content: center;
+  font: 600 12px/1 var(--latin); color: var(--gold-hi);
+  background: rgba(16, 11, 9, .82); border: 1px solid rgba(232, 184, 106, .55); border-radius: 4px;
+  box-shadow: 0 2px 0 rgba(232, 184, 106, .25);
+  pointer-events: none;
+}
 /* 右側面板打開時，按鈕列移到剩下畫面的中間，不被面板蓋住 */
 @media (min-width: 900px) {
   body.desk.panel-open #top-btns, body.desk.panel-open #action-btn { left: calc((100vw - var(--panel-w)) / 2); }

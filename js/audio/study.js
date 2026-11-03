@@ -21,7 +21,8 @@ const mix = (v) => v * v * 1.3;
 const MIX = { keys: mix(0.45), bell: mix(0.6), bass: mix(0.28), drums: mix(0.55), vinyl: mix(0.42), foley: mix(0.79) };
 const MUSIC_GAIN = 2.1;           // 對到原本 gallery.m4a 的響度
 const VINYL_GAIN = 0.5, FOLEY_GAIN = 0.55;
-const TICK_VOL = 0.5, TICK_HEAR = 10;   // 擺鐘：最大聲多大、幾公尺外聽不到
+// 擺鐘：最大聲多大、幾公尺外聽不到。高頻的「喀」聽久了讓人緊張，所以是悶悶的木頭聲、走過去才聽得到
+const TICK_VOL = 0.28, TICK_HEAR = 7;
 
 // 四個和弦各兩小節：低音、上方聲部、音盒的音池（MIDI）
 const CHORDS = [
@@ -382,22 +383,21 @@ export class StudyNight {
     }
   }
 
-  // 走廊擺鐘的一聲：照聽的人離它多遠、在左在右。滴 2350Hz、答 1850Hz
+  // 走廊擺鐘的一聲：照聽的人離它多遠、在左在右。木頭敲一下，滴 1100Hz、答 900Hz 輕一點，上面的高頻削掉
   clockTick(t, tic) {
     const amb = this.amb, k = amb.clock, ear = amb.ear;
     if (!k || !ear) return;
     const dx = k.x - ear.x, dz = k.z - ear.z, d = Math.hypot(dx, k.y - ear.y, dz);
     if (d > TICK_HEAR) return;
-    const c = this.ctx, v = TICK_VOL * (1 - d / TICK_HEAR) ** 1.5, f = tic ? 2350 : 1850;
+    const c = this.ctx, v = TICK_VOL * (1 - d / TICK_HEAR) ** 1.5 * (tic ? 1 : 0.75), f = tic ? 1100 : 900;
     const out = gain(c, 1);
     if (c.createStereoPanner) {
       const p = c.createStereoPanner();
       p.pan.value = amb.panOf(dx, dz, d);
       out.connect(p).connect(this.out);
     } else out.connect(this.out);
-    noiseHit(c, out, this.white, t, v, 0.001, 0.008, filter(c, 'bandpass', f, 6));
-    ping(c, out, 'sine', f, t, v * 0.25, 0.001, 0.012);
-    ping(c, out, 'triangle', 420, t, v * 0.2, 0.001, 0.02);
+    noiseHit(c, out, this.white, t, v * 0.7, 0.001, 0.006, filter(c, 'bandpass', f, 3), filter(c, 'lowpass', 2400));
+    ping(c, out, 'triangle', tic ? 380 : 330, t, v * 0.25, 0.001, 0.025);
   }
 
   // 羽毛筆：一段 8 到 24 下短促的沙沙聲，筆劃之間停得不規則，偶爾提筆。偏右

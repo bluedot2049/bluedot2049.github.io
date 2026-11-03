@@ -14,6 +14,7 @@ import { bindJoystick } from './controls/joystick.js';
 import { Multiplayer, EMOTES } from './social/multiplayer.js';
 import * as TX from './core/textures.js';
 import { Ambience } from './audio/ambience.js';
+import { dressSound, paintSound } from './audio/wear-voices.js';
 import { ANIMAL_LAYER, REFLECT_LAYER } from './core/scenery.js';
 import { Quality } from './core/quality.js';
 import { createPostFX } from './core/postfx.js';
@@ -269,12 +270,17 @@ async function start() {
     lastInput = performance.now();
   };
   const creator = new Creator({
-    onChange: wear,
+    // 換上去的那件東西出聲（wear-voices.js），再穿到身上
+    onChange(L) {
+      dressSound(ambience, look, L);
+      wear(L);
+    },
     onView(v) {
       dressView = v;
       frameMirror();
     },
     onPaint(cells) {
+      paintSound(ambience);
       character.paintFace(cells);
       lastInput = performance.now();
     },
