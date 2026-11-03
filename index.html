@@ -349,7 +349,7 @@
         haishi: { shot: 'haishi-碼頭外看主街', note: '海市・夜', px: 0.5 },
         gallery: { shot: 'gallery-海上看碼頭', note: '畫廊・黃昏', px: 0.4 },
       };
-      var NOTE = { shenlou: '蜃樓・沙', ting: '汀・淺水' };
+      var NOTE = { shenlou: '蜃樓・沙', ting: '汀・淺水', jinghai: '靜海・月面' };
       function set(name, tall, ext) {
         return (tall ? [720, 1080, 1440] : [1280, 1920, 2560]).map(function (w) {
           return 'assets/aerial/' + name + (tall ? '-直-' : '-') + w + '.' + ext + ' ' + w + 'w';
@@ -376,7 +376,7 @@
       if (q.get('from') === 'door') return document.getElementById('loading').classList.add('doorway');
       if (!q.has('from')) {
         var el = document.getElementById('loading'), seen = false;
-        if (q.get('z') === 'haishi' || q.get('z') === 'shenlou' || q.get('z') === 'ting') return el.classList.add('plain');
+        if (q.get('z') === 'haishi' || q.get('z') === 'shenlou' || q.get('z') === 'ting' || q.get('z') === 'jinghai') return el.classList.add('plain');
         try { seen = localStorage.getItem('entered') === '1'; } catch (e) {}
         if (!seen || q.has('intro')) {
           el.classList.add('first');
@@ -384,7 +384,7 @@
         }
         return;
       }
-      var WHERE = { gallery: '回畫廊', haishi: '往海市', shenlou: '往蜃樓', ting: '往汀' };
+      var WHERE = { gallery: '回畫廊', haishi: '往海市', shenlou: '往蜃樓', ting: '往汀', jinghai: '往靜海' };
       var el = document.getElementById('loading'), to = WHERE[q.get('z')] ? q.get('z') : 'gallery', t = 0;
       try { t = Date.now() - +sessionStorage.getItem('crossAt'); } catch (e) {}
       if (!(t >= 0 && t < 60000)) t = 0;
@@ -631,7 +631,8 @@
         <button id="ph-flash" aria-label="閃光" hidden></button>
         <button id="ph-date" aria-label="日期印記" hidden></button>
         <button id="ph-record" aria-label="錄影" title="錄影，最長一分鐘"><i></i></button>
-        <i class="ph-tag t-shutter">左鍵</i><i class="ph-tag t-flash">Q</i><i class="ph-tag t-date">~</i>
+        <button id="ph-look" aria-label="看鏡頭" aria-pressed="false">看鏡</button>
+        <i class="ph-tag t-shutter">左鍵</i><i class="ph-tag t-flash">Q</i><i class="ph-tag t-date">~</i><i class="ph-tag t-look">L</i>
         <span id="ph-grip"><b></b><small>滾輪 高低　中鍵 自拍</small></span>
       </div>
     </div>

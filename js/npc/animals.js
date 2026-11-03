@@ -549,6 +549,7 @@ export class Animals {
     this.ambience = ambience;
     this.shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false });
     this.list = [];
+    this.onSay = null;              // (動物, 多遠)：叫了一聲而且聽得到
     let seed = 101;
     const add = (o) => {
       const a = new Animal(this, { ...o, index: this.list.length, seed: seed++ });
@@ -646,6 +647,13 @@ export class Animals {
     }
   }
 
+  // 注意力（attention.js）：看得到的動物都可以看，看牠的頭
+  lookables(push) {
+    for (const a of this.list) {
+      if (a.shown) push(`a${a.index}`, (o) => a.shown && !!a.rig.head.getWorldPosition(o), 'animal', a.spec.high ? 1.2 : 1);
+    }
+  }
+
   // 「摸摸」按鈕：附近最近的一隻
   nearest(x, z) {
     let best = null, bd = Infinity;
@@ -693,5 +701,6 @@ export class Animals {
     const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
     const pan = d > 0.3 ? Math.max(-0.8, Math.min(0.8, (dx * right.x + dz * right.z) / d)) : 0;
     amb.voice(kind, a.spec.vol * loud * (1 - d / hear) ** 1.5, pan, a.pitch);
+    this.onSay?.(a, d);   // 聽到叫聲，轉頭看一下（main.js 接到 attention.js）
   }
 }

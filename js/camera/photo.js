@@ -12,7 +12,8 @@
 // 帶相機是手持取景，沒帶就是畫廊的眼睛當空拍機飛出去（WASD 飛、E/Q 升降、Shift 快）。介面全收起來，拍好收進相簿（album.js），最後在行囊選片。
 // 舉相機的對焦像攝影師的「背鍵對焦」：舉起來時相機朝準心對到的那一點看、對焦在那裡，然後鎖住，怎麼重新構圖都不跑；
 // R 對準心重新對焦，按住一直追焦、放開鎖住；Shift+滾輪是手動對焦環。對焦快慢、等不等焦照相機的 af。
-// 舉著時滾輪換高低（蹲低、眼高、舉高），中鍵切自拍；Q 閃光、~ 日期。相機的快門、閃光、日期照樣顯示，標上按鍵。
+// 舉著時滾輪換高低（蹲低、眼高、舉高），中鍵切自拍；Q 閃光、~ 日期、L 看鏡。相機的快門、閃光、日期、看鏡照樣顯示，標上按鍵。
+// 看鏡（lookOn）：開著時自己的頭一直看著鏡頭，關著就隨意看（attention.js）。鏡頭的位置和方向由 lensInfo 給別人和自己的頭
 import * as THREE from 'three';
 import { lens, fitSource, unbend } from '../core/lens.js';
 import { makePostcard, loadQR } from '../save/postcard.js';
@@ -167,6 +168,8 @@ export class PhotoMode {
     const s = this.load();
     this.aspect = s.aspect; this.move = 0;
     this.self = true; this.sig = true; this.pose = s.pose;
+    this.lookOn = s.look === 1;             // 看鏡：自己的頭一直看著這次的鏡頭（attention.js）；關著就隨意看，偶爾瞄一眼
+    this.lensOut = { id: 'self', pos: this.pos, yaw: 0, pitch: 0, fov: 50, aspect: 1, kind: 1, studio: false };
     this.markH = 1.1;                       // 落款多高（落款基準大小的幾倍），跟著記號換（marks.js）
     this.$ = (q) => document.querySelector(q);
     this.bindUI();
@@ -182,21 +185,22 @@ export class PhotoMode {
   }
 
   load() {
-    const d = { aspect: 0, pose: 0 };
+    const d = { aspect: 0, pose: 0, look: 0 };
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
       if (s && typeof s === 'object') {
         for (const k of Object.keys(d)) if (typeof s[k] === typeof d[k]) d[k] = s[k];
         d.aspect = Math.min(Math.max(0, d.aspect | 0), ASPECTS.length - 1);
         d.pose = d.pose === 1 ? 1 : 0;
+        d.look = d.look === 1 ? 1 : 0;
       }
     } catch {}
     return d;
   }
 
   save() {
-    const { aspect, pose } = this;
-    try { localStorage.setItem(KEY, JSON.stringify({ aspect, pose })); } catch {}
+    const { aspect, pose } = this, look = this.lookOn ? 1 : 0;
+    try { localStorage.setItem(KEY, JSON.stringify({ aspect, pose, look })); } catch {}
     if (this.gear) this.saveGear();
   }
 
@@ -412,6 +416,35 @@ export class PhotoMode {
 
   toggle() { this.active ? this.exit() : this.enter(); }
 
+  // 鏡頭在哪、朝哪、多廣：送給別人判斷有沒有被拍、畫出畫廊的眼睛（multiplayer.js），自己的頭也照這個看鏡頭（attention.js）。
+  // kind 0 是手上的相機，1 是畫廊的眼睛；studio 是照相館架好的鏡頭（不送給別人）
+  lensInfo() {
+    if (!this.active) return null;
+    const L = this.lensOut, f = this.frame;
+    L.yaw = this.yaw;
+    L.pitch = this.pitch;
+    L.fov = Math.min(this.cur, 120);
+    L.aspect = f.w / Math.max(1, f.h);
+    L.kind = this.gear ? 0 : 1;
+    L.studio = !!this.studio;
+    return L;
+  }
+
+  // 看鏡：開著時自己的頭一直看著鏡頭，關著就照注意力隨意看。記在這台瀏覽器
+  toggleLook() {
+    this.lookOn = !this.lookOn;
+    this.save();
+    this.refreshLook();
+    if (this.quick && !this.gear) this.ui.hint(this.lookOn ? '看著鏡頭' : '隨意看', 1500);
+  }
+
+  refreshLook() {
+    const b = this.$('#ph-look');
+    b.classList.toggle('on', this.lookOn);
+    b.setAttribute('aria-pressed', this.lookOn);
+    b.title = (this.lookOn ? '一直看著鏡頭' : '隨意看，偶爾瞄一眼') + (this.coarse ? '' : '（L）');
+  }
+
   // 右鍵：按下舉起來、放開放下；按一下就放（短於 0.25 秒）是一直舉著，再按一次才放下
   aimButton(down) {
     const now = performance.now();
@@ -504,6 +537,8 @@ export class PhotoMode {
     this.$('#ph-exit').addEventListener('click', () => this.exit());
     this.$('#ph-flash').addEventListener('click', () => this.toggleFlash());
     this.$('#ph-date').addEventListener('click', () => this.toggleDate());
+    this.$('#ph-look').addEventListener('click', () => this.toggleLook());
+    this.refreshLook();
     // 帶著能長曝光的相機時，按下和放開分開算：按一下是一張，按住不放是長曝光
     const shutter = this.$('#ph-shutter');
     shutter.addEventListener('pointerdown', (e) => {
@@ -773,6 +808,7 @@ export class PhotoMode {
       if (e.key === 'h' || e.key === 'H') return this.showControls(document.body.classList.contains('photo-bare'));
       if ((e.key === 'q' || e.key === 'Q' || e.key === 'f' || e.key === 'F') && this.gear?.flash) return e.repeat || this.toggleFlash();
       if (e.code === 'Backquote' && this.gear?.date) return e.repeat || this.toggleDate();
+      if (e.key === 'l' || e.key === 'L') return e.repeat || this.toggleLook();
       if ((e.key === 'r' || e.key === 'R') && this.gear) return e.repeat || (this.quick ? this.refocusButton(true) : this.focusAt(window.innerWidth / 2, window.innerHeight / 2));
       this.keys.add(e.key.toLowerCase());
     });

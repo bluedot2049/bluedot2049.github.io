@@ -130,6 +130,7 @@ export class Party {
     this.log = [];
     this.view = { bottom: window.innerHeight, floor: Infinity };   // 看得到的範圍，每幀在 update 更新
     this.away = false;
+    this.onHeard = null;            // (multiplayer 代號)：隊友說了一句話
     // 切到背景時畫面停了，update 不會跑：另外每十秒報一次（瀏覽器會再放慢），別區的隊友才知道還在
     setInterval(() => { if (document.hidden && this.state) this.beat(); }, BEAT_IDLE * 2);
 
@@ -307,6 +308,7 @@ export class Party {
     o.seen = now;
     o.bubble = this.speak(o.bubble, text, this.colorOf(o.m));
     this.addLog(o.m, text);
+    if (o.s) this.onHeard?.(o.s);   // 隊友說話，轉頭看他（main.js 接到 attention.js，o.s 是他在 multiplayer 的代號）
   }
 
   onMark(p) {

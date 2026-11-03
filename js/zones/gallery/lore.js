@@ -84,6 +84,7 @@ export function buildLore({ group, sky, h, Z, heightAt, SUN_DIR, REFLECT_LAYER }
   for (const b of birds) group.add(b.g);
 
   return {
+    birds: birds.map((b) => b.g),   // 飛過時角色會抬頭看（zone-gallery.js 的 attention）
     update(t, target) {
       const now = Date.now() / 1000;
       const flash = bump(towerPhase(now), 0.52, 0.07);

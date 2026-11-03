@@ -513,6 +513,14 @@ export class Passersby {
     }
   }
 
+  // 注意力（attention.js）：近處畫成角色的路人都可以看，看他的臉。遠處那一片只是光點，不算
+  lookables(push) {
+    for (const e of this.pool) {
+      const key = e.key, ch = e.ch;
+      if (key && ch.group.visible) push(`w${key}`, (o) => e.key === key && ch.group.visible && !!o.copy(ch.group.position).setY(ch.group.position.y + ch.dims.faceY), 'person', 0.9);
+    }
+  }
+
   update(dt, player) {
     this.glows.visible = !this.hidden;
     if (this.hidden) {

@@ -35,6 +35,7 @@ export function crowd({ scene, world, shadowTex, player, camera, ambience, coars
   });
   const passers = new Passersby({ scene, world, shadowTex, ambience, coarse, force: params.get('crowd') });
   vendors.setQuiet(() => passers.busy < 0.2);
+  vendors.people = (push) => passers.lookables(push);   // 攤販大部分時間看街上的路人，偶爾才看玩家
   // 山路上的貓（haishi-map.js 的 STRAYS）：地盤上的點貼到最近走得到的地方
   const cats = STRAYS.map((c) => ({ ...c, spots: c.spots?.map(([x, z]) => world.findWalkable(x, z, x, z)).filter(Boolean) }));
   const animals = new Animals({ world, shadowTex, player, camera, ambience, cats });

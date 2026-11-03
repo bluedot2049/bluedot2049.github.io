@@ -40,7 +40,8 @@ const SH_ACCEL_T = 0.14, SH_DECEL_T = 0.11;
 // 面板關掉後按這些鍵就把滑鼠鎖回去
 const MOVE_KEYS = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ']);
 // 視線（所有模式）：頭左右最多轉幾度、抬頭和低頭最多幾度；鏡頭繞到前面超過 GAZE_BACK 就改成看著鏡頭，回到 GAZE_FRONT 以內再看前方（中間重疊，交界不會來回甩）
-const SH_GAZE = 1.2, GAZE_UP = 0.55, GAZE_DOWN = 0.4, GAZE_BACK = 2.05, GAZE_FRONT = 1.75;
+// 鏡頭在背後時，這麼多秒沒轉鏡頭、沒走路，頭就交給注意力東張西望（attention.js）
+const SH_GAZE = 1.2, GAZE_UP = 0.55, GAZE_DOWN = 0.4, GAZE_BACK = 2.05, GAZE_FRONT = 1.75, GAZE_IDLE = 4;
 const shDefaultDist = () => (window.innerWidth < window.innerHeight ? 2.9 : 2.4);
 // 稍微廣角：橫拿垂直 60°；直拿照水平 44° 換算，上下最多 84°，免得畫面上下兩端拉長
 function shoulderFov() {
@@ -139,6 +140,11 @@ export class Player {
     this.lookVel = {};
     this.headPos = new THREE.Vector3();
     this.liftPos = new THREE.Vector3();
+    this.attn = null;               // 注意力（attention.js）：主程式建好後填進來，頭要看哪裡由它挑
+    this.gazeId = null;             // 頭在看誰（別人的代號、'self' 是自己的鏡頭），multiplayer 送 g
+    this.gazeHead = new THREE.Vector3();
+    this.stillT = 0;                // 多久沒轉鏡頭、沒走路
+    this.stillSig = 0;
     this.keys = new Set();
     this.joy = { x: 0, y: 0 };      // 虛擬搖桿，-1 ~ 1
     this.mouseRun = false;          // 滑鼠左右鍵同時按著：往鏡頭前方走
@@ -420,9 +426,9 @@ export class Player {
     const now = performance.now();
     if (now - (this.aimT || 0) < 100) return;
     this.aimT = now;
-    const r = this.dom.getBoundingClientRect();
-    const u = this.pick(r.left + r.width / 2, r.top + r.height / 2)?.object.userData;
-    document.body.classList.toggle('aim-hot', !!(u && ((WORKS_OPEN && u.painting) || u.mirror || u.animal || u.guide || u.hollow)));
+    const r = this.dom.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const u = this.pick(cx, cy)?.object.userData;
+    document.body.classList.toggle('aim-hot', !!(this.lensAt(cx, cy) || (u && ((WORKS_OPEN && u.painting) || u.mirror || u.animal || u.guide || u.hollow))));
   }
 
   // 越肩放手：照最後的速度再滑一小段，彈簧接著慢慢停，不會一放手就卡住
@@ -500,18 +506,31 @@ export class Player {
     return this.raycaster.intersectObjects(this.world.raycastTargets, false).find((h) => isShown(h.object) && !h.object.userData.ghost);
   }
 
-  // 滑鼠停在畫、鏡子、動物上時，游標換成可點的樣子。射線不用每次移動都打，隔 0.1 秒看一次就夠
+  // 畫面上 (cx, cy) 附近有沒有對著自己的鏡頭（看畫、坐船時不算）
+  lensAt(cx, cy) {
+    if (!this.attn || (this.focus && this.focus.kind !== 'seat')) return null;
+    return this.attn.lensAt(cx, cy, this.camera, this.dom.getBoundingClientRect());
+  }
+
+  // 滑鼠停在畫、鏡子、動物、對著自己的鏡頭上時，游標換成可點的樣子。射線不用每次移動都打，隔 0.1 秒看一次就夠
   hover(cx, cy) {
     const now = performance.now();
     if (now - (this.hoverT || 0) < 100) return;
     this.hoverT = now;
     const u = this.pick(cx, cy)?.object.userData;
-    this.dom.classList.toggle('hot', !!(u && ((WORKS_OPEN && u.painting) || u.mirror || u.animal || u.guide || u.hollow)));
+    this.dom.classList.toggle('hot', !!(this.lensAt(cx, cy) || (u && ((WORKS_OPEN && u.painting) || u.mirror || u.animal || u.guide || u.hollow))));
   }
 
   tap(cx, cy) {
     if (this.boarding) return;
     if (this.onTap?.(cx, cy)) return;   // 組隊時按了「標記」，這一下是標記地點，不是走過去
+    // 點到對著自己的鏡頭（別人的相機、畫廊的眼睛）：看著它，再點一次放掉
+    const lens = this.lensAt(cx, cy);
+    if (lens) {
+      this.events.onInput('tap');
+      this.attn.toggle(lens);
+      return;
+    }
     const hit = this.pick(cx, cy);
     if (!hit) return;
     this.events.onInput('tap');
@@ -780,6 +799,9 @@ export class Player {
   // 動作按鈕現在該做什麼：看畫、照鏡子、挑相機、看說明、聽樹洞、坐下、拿點心、摸動物、跟訪客聊天、搭船、吃一口、起來。回傳 { kind, p? } 或 null
   actionTarget() {
     const ch = this.character;
+    // 有鏡頭對著自己：互動鍵先讓給「看鏡」，被拍只是一下子，鏡頭移開了原本的按鍵就回來（attention.js 有緩衝）
+    const lens = (!this.focus || this.focus.kind === 'seat') && !this.boarding ? this.attn?.frontLens() : null;
+    if (lens) return { kind: 'lens', p: lens, on: this.attn.lock === lens.id };
     if (this.sitting) {
       if (ch.food) return { kind: 'eat' };
       return { kind: this.focus.kind === 'seat' && this.world.outdoor.seats[this.focus.seat].table ? 'table' : 'stand' };
@@ -838,6 +860,7 @@ export class Player {
     this.events.onInput('tap');
     const ch = this.character;
     switch (t.kind) {
+      case 'lens': this.attn.toggle(t.p.id); break;
       case 'painting': this.goToPainting(t.p); break;
       case 'mirror': this.goToMirror(); break;
       case 'cameras': this.events.onCameras?.(); break;
@@ -1023,11 +1046,14 @@ export class Player {
 
   // 視線：頭轉向鏡頭看的方向，超過的部分只轉鏡頭；鏡頭繞到前面時改成轉頭看著鏡頭。上下也跟著：
   // 越肩照俯仰，一般跟拍只有抬頭看天時才抬；看著鏡頭時照鏡頭的高低。
-  // 攝影模式用畫廊的眼睛飛出去時，頭跟著眼睛走。同行的人也看得到（multiplayer 送 l、v）
-  updateGaze() {
-    let yaw = 0, pitch = 0;
+  // 注意力（attention.js）接手的時候頭自己找東西看：鏡頭在前面（鏡頭只是其中一個）、鏡頭在背後放著不動、
+  // 自己拍（空拍機、自拍，攝影模式的看鏡開著就一直看鏡頭）；按了「看鏡」就一直看著別人對著自己的那個鏡頭。
+  // 同行的人也看得到（multiplayer 送 l、v，看的是人或鏡頭時另外送 g）
+  updateGaze(dt) {
+    let yaw = 0, pitch = 0, pid = null;
     const aim = this.camAim, eye = this.paused && (!aim || aim.grip === 4);
-    if (eye || (!this.paused && (!this.focus || this.focus.kind === 'seat') && !this.boarding)) {
+    const free = !this.paused && (!this.focus || this.focus.kind === 'seat') && !this.boarding;
+    if (eye || free) {
       const cam = this.camera.position, ex = cam.x - this.pos.x, ez = cam.z - this.pos.z;
       const rel = wrapAngle(this.camYaw - Math.PI - this.heading), a = Math.abs(rel);
       if (eye) this.gazeBack = true;
@@ -1042,8 +1068,27 @@ export class Player {
         pitch = this.shoulder ? -this.sh.pitch : Math.max(0, PITCH_LOW - this.camPitch);
       }
     }
+    if (this.attn) {
+      // 有沒有在操作：轉鏡頭、拉遠近、走路都算
+      const sig = this.camYaw + this.camPitch * 3 + this.camDist * 7 + this.shPitch * 11 + this.shDist * 13;
+      if (sig !== this.stillSig || this.speed > 0.05 || this.path.length) {
+        this.stillSig = sig;
+        this.stillT = 0;
+      } else this.stillT += dt;
+      const selfie = this.paused && aim?.grip === 3;
+      const mode = eye || selfie ? 'own' : !free ? 'off' : this.shoulder ? 'shoulder' : this.gazeBack ? 'front' : this.stillT > GAZE_IDLE ? 'idle' : 'back';
+      const head = this.gazeHead.set(this.pos.x, this.pos.y + this.character.dims.faceY, this.pos.z);
+      const at = this.attn.update(dt, { mode, head, heading: this.heading, cam: this.camera.position, moving: this.speed > 0.1, now: performance.now() / 1000 });
+      if (at) {
+        const dx = at.point.x - head.x, dz = at.point.z - head.z;
+        yaw = wrapAngle(Math.atan2(dx, dz) - this.heading);
+        pitch = Math.atan2(at.point.y - head.y, Math.hypot(dx, dz));
+        pid = at.pid;
+      }
+    }
     this.gaze = THREE.MathUtils.clamp(yaw, -SH_GAZE, SH_GAZE);
     this.gazeP = THREE.MathUtils.clamp(pitch * 0.8, -GAZE_DOWN, GAZE_UP);
+    this.gazeId = pid;
     this.character.gaze = this.gaze;
     this.character.gazeP = this.gazeP;
   }
@@ -1240,7 +1285,7 @@ export class Player {
     if (this.focus?.kind === 'pet' && !ch.act) this.exitFocus();   // 摸完了
     ch.group.position.copy(this.pos);
     ch.group.rotation.y = this.heading;
-    this.updateGaze();
+    this.updateGaze(dt);
     ch.update(dt, this.speed);
 
     let settling = false;

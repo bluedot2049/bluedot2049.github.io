@@ -54,6 +54,25 @@ export function crowd({ scene, world, shadowTex, player, camera, ambience, host,
   return { animals, visitors };
 }
 
+// 注意力（attention.js）會看的東西：站在畫前面、離得夠近的畫；擺鐘的鐘面；大鳥飛過時抬頭看。人和動物在 crowd 那邊
+export function attention({ world, player }) {
+  const dial = new THREE.Vector3(0, 1.7, 0.17), out = world.outdoor, birds = out?.lore?.birds || [];
+  return [(push, { head }) => {
+    const rooms = world.rooms, last = rooms.length - 1;
+    for (let i = Math.max(0, player.room - 1); i <= Math.min(last, player.room + 1); i++) {
+      rooms[i].paintings.forEach((p, j) => {
+        const dx = head.x - p.wall.x, dz = head.z - p.wall.z;
+        if (dx * p.n.x + dz * p.n.z > 0.4 && Math.hypot(dx, dz) < 6) push(`pt${i}.${j}`, (o) => !!o.copy(p.center), 'thing', 1.3);
+      });
+    }
+    const c = world.clock?.group;
+    if (c?.parent?.visible && c.getWorldPosition(dial.clone()).distanceTo(head) < 6) push('clock', (o) => !!c.localToWorld(o.copy(dial)), 'thing', 0.8);
+    if (player.room === last) birds.forEach((b, i) => {
+      if (b.visible) push(`bird${i}`, (o) => b.visible && !!b.getWorldPosition(o), 'sky', 4);
+    });
+  }];
+}
+
 // 從海市搭船回來：站在小划船往草原走幾步的地方，面向草原，鏡頭就在角色背後
 // ?go=房間.畫 是在海市點了清單裡的畫，到了直接站到那幅畫前面
 export function arrive({ player, world, params, ui }) {

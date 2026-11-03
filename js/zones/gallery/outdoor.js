@@ -403,6 +403,7 @@ export function buildOutdoor(room, h) {
     table: { x: tableX, z: Z(tableRel), hw: 0.5, hd: tableLen / 2 },
     pavilion: { x: pc.x, z: pc.z, r: PAV.r },
     hollow: tree.hollow,                     // 大樹的樹洞：作者和網站消息（hollow.js）
+    lore,                                    // 偶爾才看得到的東西（lore.js）：大鳥飛過時角色會抬頭看
     // 貓頭鷹停的地方：大樹的枝幹、石階口兩根燈串柱、棧橋的燈柱、涼亭頂上的金球。y 是站的高度，h 是面向，w 是停在那裡的機會
     perches: [
       { ...tree.perch, w: 6 },

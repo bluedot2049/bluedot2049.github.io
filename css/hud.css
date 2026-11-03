@@ -211,6 +211,8 @@ body.shoulder #guide .for-free, body:not(.shoulder) #guide .for-shoulder { displ
   top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right));
   display: flex; gap: 8px; align-items: center;
   transition: opacity .3s;
+  /* 按的時候手指滑一點，瀏覽器不會當成要捲頁面而把這一下取消（放開才按，見 ui.js） */
+  touch-action: none;
 }
 #top-btns .icon-btn span { font-size: 14px; letter-spacing: .2em; margin-right: -.2em; }
 /* 窄手機：那排按鈕縮一點，左邊的在線人數才不會被擠出畫面 */

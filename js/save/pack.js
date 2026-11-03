@@ -220,13 +220,9 @@ export class Pack {
     const m = loadMark(), mirror = this.events.canSelfie(), page = this.page;
     const state = page === 'album' ? this.albumState()
       : !m ? '還沒存過' : this.stale ? `上次存檔 ${when(m.t)}，之後又有變動` : `存好了・${when(m.t)}`;
-    const party = document.getElementById('party-btn');
     const tabs = `<nav class="pack-tabs">
         <button data-page="album" class="${page === 'album' ? 'on' : ''}">相簿</button>
         <button data-page="save" class="${page === 'save' ? 'on' : ''}">存讀檔</button>
-        <span></span>
-        <button data-go="list-btn">作品清單<kbd>L</kbd></button>
-        ${party && !party.hidden ? '<button data-go="party-btn">同行<kbd>O</kbd></button>' : ''}
       </nav>`;
     this.card.innerHTML = `<div class="pack-bar"><b class="seal-wax${this.ready ? ' lit' : ''}"></b><div><h3>行囊</h3><p class="pack-state">${state}</p></div>
         <button class="icon-btn round close" data-act="close" aria-label="收起"><svg><use href="#i-close"/></svg></button></div>`
@@ -366,11 +362,6 @@ export class Pack {
     if (b.dataset.page) {
       this.page = b.dataset.page;
       this.render();
-      return;
-    }
-    if (b.dataset.go) {
-      this.close();
-      document.getElementById(b.dataset.go)?.click();
       return;
     }
     if (b.classList.contains('ph-cell')) {

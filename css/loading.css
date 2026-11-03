@@ -191,6 +191,7 @@
 #loading.to-gallery .cine { --light: radial-gradient(circle at 50% 50%, #fff3dc, #ffd9a8 45%, #f4b984); }
 #loading.to-shenlou .cine { --light: radial-gradient(circle at 50% 50%, #fff4e0, #f0cfa0 45%, #d9a777); }
 #loading.to-ting .cine { --light: radial-gradient(circle at 50% 50%, #f6f0f6, #e3c8d8 45%, #9fa6cf); }
+#loading.to-jinghai .cine { --light: radial-gradient(circle at 50% 50%, #f4efe4, #c9b27a 45%, #2a2744); }
 #loading.to-haishi .cine { --light: radial-gradient(circle at 50% 50%, #eef4fa, #b4c8e6 45%, #7088b4); }
 /* 照片蓋滿整個畫面，門板蓋住上下（直式是右邊），拉開就看得到更多 */
 .cine .stage { position: absolute; inset: 0; }

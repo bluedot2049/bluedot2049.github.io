@@ -204,6 +204,14 @@ export const VOICES = {
     for (let i = 0; i < 9; i++) hiss(ctx, out, noise, t + 0.05 + Math.random() * 0.6, 0.006, 'bandpass', 5000 + Math.random() * 3000, 0.3 + Math.random() * 0.3, 4);
     return 0.9;
   },
+  // 望浮起來：片盒裡的小馬達嗚一聲轉起來又停下，吐片口的彈片喀一下
+  whir(ctx, out, t, p, noise) {
+    const o = osc(ctx, 'sawtooth', t, 0.3, [[0, 120 * p], [0.08, 230 * p], [0.3, 190 * p]]);
+    o.connect(biquad(ctx, 'bandpass', 1700 * p, 2.5)).connect(envelope(ctx, t, 0.03, 0.3, 0.05)).connect(out);
+    hiss(ctx, out, noise, t + 0.02, 0.26, 'bandpass', 2600 * p, 0.05, 1.2);
+    hiss(ctx, out, noise, t + 0.33, 0.012, 'bandpass', 3400 * p, 0.45, 4);
+    return 0.45;
+  },
   // 前門（frontdoor.js、載入畫面）：門閂喀一聲，門軸低低嘎一下
   latch(ctx, out, t, p, noise) {
     hiss(ctx, out, noise, t, 0.02, 'bandpass', 2400 * p, 0.9, 3);

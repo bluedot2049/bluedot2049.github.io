@@ -16,7 +16,7 @@
   </script>
 </head>
 <body>
-  <div class="note">拖曳轉、滾輪縮放。上排放大看，下排是掛在角色身上的實際大小。網址 ids=bulb,gui 選要看哪幾台</div>
+  <div class="note">拖曳轉、滾輪縮放。上排放大看，下排是掛在角色身上的實際大小。網址 ids=bulb,gui,wang 選要看哪幾台</div>
   <div class="bar">
     <button data-v="0">正面</button>
     <button data-v="0.7">斜前</button>
@@ -47,7 +47,7 @@
 
     // 上排：每台放大 S 倍
     const S = 5;
-    const ids = (params.get('ids') || 'bulb,gui').split(',');
+    const ids = (params.get('ids') || 'bulb,gui,wang').split(',');
     const GAP = +(params.get('gap') || 1.3);
     const model = (id) => {
       const k = new Kit(null);

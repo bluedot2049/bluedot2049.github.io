@@ -791,6 +791,14 @@ export class Visitors {
   }
 
   // 「聊天」按鈕：附近最近的一位，在船上的不算
+  // 注意力（attention.js）：岸上看得到的訪客都可以看，看他的臉
+  lookables(push) {
+    for (const v of this.list) {
+      if (!v.shown || v.aboard) continue;
+      push(`v${v.seed}`, (o) => v.shown && !v.aboard && !!v.rig.head.getWorldPosition(o).setY(o.y + 0.12 * v.L.scale), 'person', 1);
+    }
+  }
+
   nearest(x, z) {
     let best = null, bd = 1.8;
     for (const v of this.list) {

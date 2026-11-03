@@ -5,6 +5,7 @@
 // 介面跟 visitors.js 一樣（nearest、blocks、list），玩家的動作按鈕和照鏡子時的半透明直接沿用。
 // 角色只在玩家附近、同一層附近時才畫，攤販多也不會拖慢手機
 // 沖洗師傅（lab）：相簿裡交給他的照片，本人走來聊天才拿得回來（album.js），有照片等著時按鈕寫「取照片」
+import * as THREE from 'three';
 import { Character } from '../avatar/character.js';
 import { sanitizeLook, presetLook, RACES, GIFTS, unlock, unlockedSet, isOpen, getSave, putSave } from '../avatar/looks.js';
 import { bend } from '../core/lens.js';
@@ -12,6 +13,9 @@ import { HOST_NAME } from './names.js';
 import { atLab, collect, LABS } from '../camera/album.js';
 
 const SAY_TIME = 3800, GREET_DIST = 3.2, TALK_DIST = 2.4, SHOW_DIST = 22, SHOW_DY = 3.5;
+// 視線：多遠以內的路人會被看、頭和身子最多離櫃台正面多少（弧度）、每次看多久（秒）、沒在說話時看玩家的機會
+const LOOK_DIST = 9, LOOK_SPAN = 1.1, LOOK_TIME = [2, 5], LOOK_YOU = 0.15;
+const _p = new THREE.Vector3();
 
 // id 對應 haishi.js 的 SHOPS。look 只寫跟預設不一樣的地方
 export const VENDORS = {
@@ -167,9 +171,29 @@ class Vendor {
     this.bubble.className = 'speech';
     document.body.appendChild(this.bubble);
     this.hideTimer = 0;
+    this.lookAt = null;             // 正在看的：(out) => 還在不在；null 是看櫃台前面
+    this.lookYou = false;
+    this.lookT = Math.random() * 2; // 每攤錯開換目標的時間
+    this.idleYaw = 0;
   }
 
   get shown() { return this.group.visible; }
+
+  // 換一個看的：說話時看著玩家；平常多半看附近走過的路人，偶爾看玩家，沒人就看前面偏一點
+  pickLook(d, px, py, pz, talking, people) {
+    this.lookT = LOOK_TIME[0] + Math.random() * (LOOK_TIME[1] - LOOK_TIME[0]);
+    const you = (o) => !!o.set(px, py + 1.3, pz);
+    this.lookYou = talking || (d < 6 && Math.random() < LOOK_YOU);
+    if (this.lookYou) { this.lookAt = you; return; }
+    const list = [];
+    people?.((key, get) => {
+      if (!get(_p)) return;
+      const dx = _p.x - this.pos.x, dz = _p.z - this.pos.z;
+      if (dx * dx + dz * dz < LOOK_DIST * LOOK_DIST && Math.abs(wrap(Math.atan2(dx, dz) - this.base)) < LOOK_SPAN) list.push(get);
+    });
+    this.lookAt = list.length && Math.random() < 0.85 ? list[Math.floor(Math.random() * list.length)] : null;
+    this.idleYaw = (Math.random() - 0.5) * 1.2;
+  }
   get actionLabel() { return this.spec.lab && atLab(this.spec.lab) ? '取照片' : this.label; }
   setGhost(a) { this.ch.setGhost(a); }
 
@@ -231,7 +255,7 @@ class Vendor {
     if (this.spec.postcard) setTimeout(() => this.onPostcard?.(), 1200);
   }
 
-  update(dt, px, py, pz, camera) {
+  update(dt, px, py, pz, camera, people) {
     const dx = px - this.pos.x, dz = pz - this.pos.z, d = Math.hypot(dx, dz);
     const show = d < SHOW_DIST && Math.abs(py - this.pos.y) < SHOW_DY;
     if (show !== this.group.visible) {
@@ -243,10 +267,20 @@ class Vendor {
       this.greeted = true;
       this.say(pick(this.spec.greet));
     } else if (d > GREET_DIST + 3) this.greeted = false;
-    // 有人靠近就轉過去看，但不會轉身背對櫃台
-    const want = d < 6 ? this.base + Math.max(-1.1, Math.min(1.1, wrap(Math.atan2(dx, dz) - this.base))) : this.base;
-    this.heading += wrap(want - this.heading) * Math.min(1, dt * 3);
+    // 視線：頭去看，身子只跟著轉一點，不會轉身背對櫃台。目標隔幾秒才換一次，每幀只算一個點的角度
+    const talking = d < 6 && this.bubble.classList.contains('show');
+    this.lookT -= dt;
+    if (this.lookT <= 0 || (talking && !this.lookYou)) this.pickLook(d, px, py, pz, talking, people);
+    let rel = this.idleYaw, up = 0;
+    if (this.lookAt?.(_p)) {
+      const ex = _p.x - this.pos.x, ez = _p.z - this.pos.z;
+      rel = Math.max(-LOOK_SPAN, Math.min(LOOK_SPAN, wrap(Math.atan2(ex, ez) - this.base)));
+      up = Math.atan2(_p.y - this.pos.y - this.ch.dims.faceY, Math.hypot(ex, ez));
+    } else this.lookAt = null;
+    this.heading += wrap(this.base + rel * 0.35 - this.heading) * Math.min(1, dt * 2);
     this.group.rotation.y = this.heading;
+    this.ch.gaze = Math.max(-1.1, Math.min(1.1, wrap(this.base + rel - this.heading)));
+    this.ch.gazeP = Math.max(-0.4, Math.min(0.5, up * 0.8));
     this.ch.update(dt, 0);
     if (this.bubble.classList.contains('show')) this.placeBubble(camera);
   }
@@ -267,6 +301,7 @@ export class Vendors {
   // spots：haishi.js 算好的攤販位置 [{ id, x, y, z, heading }]
   constructor({ scene, shadowTex, spots, onPostcard, onGift, onLab }) {
     this.list = spots.filter((s) => VENDORS[s.id]).map((s, i) => new Vendor(scene, shadowTex, s, VENDORS[s.id], i, onPostcard, onGift));
+    this.people = null;             // (push) => 街上看得到的人（passersby.js 的 lookables），攤販的視線從裡面挑
     for (const v of this.list) v.onLab = onLab;
     this.mp = null;
   }
@@ -286,6 +321,13 @@ export class Vendors {
     return best ? { v: best, d: bd } : null;
   }
 
+  // 注意力（attention.js）：看得到的攤販都可以看，看他的臉
+  lookables(push) {
+    this.list.forEach((v, i) => {
+      if (v.shown) push(`k${i}`, (o) => v.shown && !!o.set(v.pos.x, v.pos.y + v.ch.dims.faceY, v.pos.z), 'person', 0.9);
+    });
+  }
+
   // 攤販站在櫃台後面，櫃台本身已經擋住了
   blocks() { return false; }
   seatBusy() { return false; }
@@ -293,6 +335,6 @@ export class Vendors {
 
   update(dt, player, camera) {
     const p = player.pos;
-    for (const v of this.list) v.update(dt, p.x, p.y, p.z, camera);
+    for (const v of this.list) v.update(dt, p.x, p.y, p.z, camera, this.people);
   }
 }

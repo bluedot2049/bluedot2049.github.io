@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { Player } from './controls/player.js';
 import { Character } from './avatar/character.js';
+import { Attention } from './avatar/attention.js';
 import { sanitizeLook, randomPreset, getSave, putSave } from './avatar/looks.js';
 import { decodeLook, decodeSave, tryOn, hasProgress, restoreSave } from './save/savecode.js';
 import { Creator } from './avatar/creator.js';
@@ -37,7 +38,7 @@ import { bindDeskKeys } from './controls/deskkeys.js';
 const ZONES = {
   gallery: { crossing: '渡海　回畫廊', load: () => import('./zones/gallery/zone-gallery.js') },
   haishi: { crossing: '渡海　往海市', load: () => import('./zones/haishi/zone-haishi.js') },
-  // 灰模型階段，渡船還沒開過去，只能用 ?z=shenlou、?z=ting 進來
+  jinghai: { crossing: '渡海　往靜海', load: () => import('./zones/jinghai/zone-jinghai.js') },
   shenlou: { crossing: '渡海　往蜃樓', load: () => import('./zones/shenlou/zone-shenlou.js') },
   ting: { crossing: '渡海　往汀', load: () => import('./zones/ting/zone-ting.js') },
 };
@@ -47,8 +48,9 @@ const ZONES = {
 const FERRY = [
   { to: 'gallery', name: '畫廊', desc: '山坡上的老屋，掛著作品。', tags: ['看畫', '照鏡子', '挑相機', '樹洞'] },
   { to: 'haishi', name: '海市', desc: '海上的夜市。', tags: ['照相館', '攤販'] },
-  { to: null, dev: 'shenlou', name: '蜃樓', desc: '影子之城', tags: ['還沒有航線'] },
-  { to: null, dev: 'ting', name: '汀', desc: '淺水', tags: ['還沒有航線'] },
+  { to: 'jinghai', name: '靜海', desc: '月亮上，海牛族的前哨站。', tags: ['食堂', '商店街', '看地球'] },
+  { to: 'shenlou', name: '蜃樓', desc: '沙漠裡的影子之城。', tags: ['井圈公寓', '沙船', '集露田'] },
+  { to: 'ting', name: '汀', desc: '時間外的淺水。', tags: ['孤櫻', '汀站', '沼澤'] },
 ];
 
 async function loadJSON(url) {
@@ -435,6 +437,28 @@ async function start() {
   player.animals = animals;
   player.visitors = crowd;
 
+  // 頭看哪裡（attention.js）：這一區的人、動物、東西登記進去；別人的人和鏡頭等連上線、自己的鏡頭等攝影模式建好再接（見下面）
+  const attention = new Attention({ world, character });
+  player.attn = attention;
+  for (const c of [animals, visitors, vendors, passers]) if (c?.lookables) attention.add((push) => c.lookables(push));
+  // 胖頭頭人：頭身一體，臉大約在一公尺高
+  for (const [k, m] of [['manatee', manatee], ['host', host]]) {
+    if (m) attention.add((push) => m.group.visible && push(k, (o) => m.group.visible && !!o.copy(m.group.position).setY(m.group.position.y + 0.95), 'person', 1.1));
+  }
+  for (const src of Z.attention?.({ world, player }) ?? []) attention.add(src);
+  // 動物叫了一聲：轉頭看牠
+  if (animals) animals.onSay = (a, d) => d < 10 && attention.notice(`a${a.index}`, (o) => a.shown && !!a.rig.head.getWorldPosition(o), { kind: 'animal', dur: 1.2 + Math.random() * 1.2 });
+  // 別人做了什麼（揮手、跳、閃光、說話）：在附近就轉頭看他一下
+  const lookAtOther = (id, dur) => {
+    const o = mp?.others.get(id);
+    if (!o || !o.ch.group.visible || Math.hypot(o.pos.x - player.pos.x, o.pos.z - player.pos.z) > 10) return;
+    attention.notice(`p:${id}`, (v) => { const at = mp.lookPoint(id); return !!at && !!v.copy(at); }, { pid: id, dur });
+  };
+  const otherOf = (ch) => {
+    for (const [id, o] of mp?.others ?? []) if (o.ch === ch) return id;
+    return null;
+  };
+
   // 渡海：載入畫面換成小船，蓋住畫面後整頁換到另一個區域。from 記住從哪裡來，到了站在對應的碼頭。
   // 走進歸門（door）：不搭船，門裡的光鋪滿畫面就換頁，到了是前廳的前門（from=door）
   // 渡海那張目的地的照片：一選好去哪裡就先下載（index.html 的 crossing.picture，跟下一頁挑的是同一張），
@@ -568,13 +592,14 @@ async function start() {
   actionBtn.addEventListener('click', () => player.action());
   const actionLabel = actionBtn.querySelector('.a1');
   const actionShort = actionBtn.querySelector('.a0');
-  const LABELS = { painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來' };
+  // lens：有鏡頭對著自己（attention.js），按了就一直看著它，再按一次放掉
+  const LABELS = { painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來', lens: '看鏡頭' };
   // 手機的互動鍵是一顆小圓章，只放兩個字；沒列在這裡的取前兩個字
-  const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信' };
+  const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信', 看鏡頭: '看鏡', 不看了: '不看' };
   let nearKey = null;
   function updateAction() {
     const t = player.actionTarget();
-    const key = t ? (t.kind === 'exit' ? `${t.p.title}:${t.p.label}` : t.kind === 'painting' || t.kind === 'pet' || t.kind === 'talk' ? t.p : t.kind) : null;
+    const key = t ? (t.kind === 'exit' ? `${t.p.title}:${t.p.label}` : t.kind === 'lens' ? `lens:${t.p.id}:${t.on}` : t.kind === 'painting' || t.kind === 'pet' || t.kind === 'talk' ? t.p : t.kind) : null;
     const sitting = player.sitCode !== 0;
     if (sitting !== document.body.classList.contains('sitting')) {
       document.body.classList.toggle('sitting', sitting);
@@ -585,7 +610,7 @@ async function start() {
     nearKey = key;
     actionBtn.classList.toggle('show', !!t);
     if (!t) return;
-    actionLabel.textContent = (t.kind === 'talk' && t.p.actionLabel) || (t.kind === 'exit' && t.p.label) || LABELS[t.kind];
+    actionLabel.textContent = (t.kind === 'talk' && t.p.actionLabel) || (t.kind === 'exit' && t.p.label) || (t.kind === 'lens' && t.on && '不看了') || LABELS[t.kind];
     actionShort.textContent = SHORT[actionLabel.textContent] || actionLabel.textContent.slice(0, 2);
     actionBtn.setAttribute('aria-label', actionLabel.textContent);
     document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : t.kind === 'pet' || t.kind === 'talk' ? t.p.name : t.kind === 'exit' ? t.p.title : '';
@@ -686,13 +711,20 @@ async function start() {
       },
       onJump(o) {
         animals?.startle(o.pos.x, o.pos.z);
+        lookAtOther(o.id, 1 + Math.random() * 0.6);
       },
       onLand: (ch) => ambience.footstep(ch, 0, true),
-      onEmote: (ch, e) => ambience.cheer(ch, e),
+      onEmote: (ch, e) => {
+        ambience.cheer(ch, e);
+        lookAtOther(otherOf(ch), 1.8 + Math.random());
+      },
       onStudio: (m) => studio?.onMessage(m),
       onParty: (m) => party?.onInvite(m),
       onGate: (m) => world.home?.receive(m),
-      onFlash: (ch) => flashFx.fire(ch),
+      onFlash: (ch) => {
+        flashFx.fire(ch);
+        lookAtOther(otherOf(ch), 1.2);
+      },
     }, look);
     mp.claude = params.get('as') === 'claude';   // 開發時我進站拍照：在場的人看到的是燈籠
     mp.camera = carried();
@@ -701,6 +733,14 @@ async function start() {
       mp, player, character, camera, scene, world, zone, ui,
       channel: `${rt.channel || 'gallery'}-party-`,
       busy: () => photo.active || !!ui.panel || player.boarding,
+    });
+    party.onHeard = (id) => lookAtOther(id, 2 + Math.random());
+    // 別人的人和鏡頭：人可以看；鏡頭對著自己時算被拍（attention.js 的 scan）
+    attention.lenses = () => mp.lenses();
+    attention.add((push) => {
+      for (const [id, o] of mp.others) {
+        if (o.ch.group.visible) push(`p:${id}`, (v) => { const at = mp.lookPoint(id); return !!at && !!v.copy(at); }, 'person', 1.4, id);
+      }
     });
     mp.connect().then(() => party.resume()).catch((e) => console.warn('多人連線失敗：', e));
     // 掛機：分頁看不到，或五分鐘沒碰任何東西，別人看到的自己頭上冒 ZZZ。切走時畫面馬上停，所以切的當下就先說
@@ -778,6 +818,15 @@ async function start() {
   });
   // 手機上攝影時同一顆變成收起，按一下就出來
   document.getElementById('photo-btn').addEventListener('click', () => photo.toggle());
+  // 自己的鏡頭：自己的頭照攝影模式的看鏡看它，也送給別人（照相館架好的鏡頭不送）
+  attention.ownLens = () => photo.lensInfo();
+  attention.ownLock = () => photo.lookOn || !!photo.counting;
+  if (mp) mp.lens = () => { const L = photo.lensInfo(); return L && !L.studio ? L : null; };
+  // 有鏡頭剛對到自己：從那個方向傳來一點聲音，手上的相機是對焦的嗶，畫廊的眼睛是瞳孔收的棘輪聲
+  attention.onSeen = (L, d) => {
+    const dx = L.pos.x - player.pos.x, dz = L.pos.z - player.pos.z;
+    ambience.voice(L.kind ? 'iris' : 'focus', 0.3 * Math.max(0, 1 - d / 12), ambience.panOf(dx, dz, Math.hypot(dx, dz)));
+  };
   if (world.studios) {
     studio = new Studio({ world, player, photo, passers });
     studio.mp = mp;

@@ -257,6 +257,29 @@ body.photo-expose #ph-shutter.gear .leaf { transform: translateY(-15px); transit
 body.photo-rec #ph-record { border-color: #c4452d; }
 body.photo-rec #ph-record i { width: 18px; height: 18px; border-radius: 4px; }
 
+/* 看鏡：開著（.on）時自己的頭一直看著鏡頭（attention.js），關著就隨意看。
+   電腦排在快門那一排最右邊；手機跟閃光、日期同一組，在快門那一圈的外圈（錄影和收起中間）。
+   搖桿旁互動鍵的位置在空拍機時會壓到鏡頭那一排，窄的手機會蓋住「望遠」 */
+#ph-look {
+  display: flex; align-items: center; justify-content: center;
+  width: 54px; height: 54px; padding: 0 0 0 .08em; border-radius: 50%;
+  font-size: 15px; font-weight: 600; letter-spacing: .08em; line-height: 1;
+  color: var(--gold-hi); background: var(--panel); border: 1px solid var(--line); cursor: var(--cur-pointer);
+  transition: background .2s, color .2s, border-color .2s, transform .1s;
+}
+#ph-look.on {
+  color: #2a1a0c; background: var(--gold-fill); border-color: transparent;
+  box-shadow: inset 0 0 0 1px rgba(255, 244, 220, .55), inset 0 0 0 4px rgba(190, 135, 65, .35), inset 0 0 0 5px rgba(90, 58, 24, .35);
+}
+#ph-look:active { transform: scale(.92); }
+body:not(.desk) #ph-look {
+  --w: var(--btn); --r: var(--r2); --a: calc(var(--a-cam) / 2);
+  position: fixed; z-index: 20; margin: 0; width: var(--w); height: var(--w); font-size: calc(var(--btn) * .3);
+  left: calc(var(--jx) + var(--r) * cos(var(--a)) - var(--w) / 2); right: auto;
+  bottom: calc(var(--jy) + var(--r) * sin(var(--a)) - var(--w) / 2);
+}
+body.joy-left:not(.desk) #ph-look { left: auto; right: calc(var(--jx) + var(--r) * cos(var(--a)) - var(--w) / 2); }
+
 /* 閃光開關：長成相機的零件，不跟其他金線按鈕一樣。圖是 cameras.js 的 flashKnob 畫的；
    .on 扇子展開、燈泡亮著，.swap 是剛閃過、換燈泡（--swap 秒），邊上一圈走完就換好了。
    手機排在拇指弧上「坐」的位置（日期在「表情」的位置），電腦在快門左邊 */
@@ -402,6 +425,7 @@ body.photo-quick.photo-gear .ph-tag {
 .t-shutter { left: 0; width: 72px; }
 .t-flash { right: calc(100% + 18px); width: 56px; }
 .t-date { right: calc(100% + 86px); width: 64px; }
+.t-look { right: 0; width: 54px; }
 body.photo-quick #ph-flash[hidden] ~ .t-flash, body.photo-quick #ph-date[hidden] ~ .t-date { display: none; }
 body.photo-quick.photo-gear #ph-grip {
   display: flex; flex-direction: column; gap: 5px; position: absolute;

@@ -14,6 +14,9 @@ function mat(color) {
 }
 
 export const JUMP_V = 4.2, GRAVITY = 14;
+// 這一區的重力有幾倍（靜海是月球，跳得高、落得慢）。區域建場景時設一次，所有角色一起用
+let gravity = GRAVITY;
+export const setGravity = (k) => { gravity = GRAVITY * k; };
 const ACT_TIME = 1.6;
 const AIM_TIME = 0.45;     // 舉起相機要多久：前三分之一收起手上的東西，後面才舉
 const STOW = 0.35;
@@ -839,7 +842,7 @@ export class Character {
     }
 
     if (this.airborne) {
-      this.jumpV -= GRAVITY * dt;
+      this.jumpV -= gravity * dt;
       this.jumpY = Math.max(0, this.jumpY + this.jumpV * dt);
       if (this.jumpY === 0) {
         this.jumpV = 0;
@@ -872,9 +875,13 @@ export class Character {
       this.headYaw += this.headV * h;
       this.headPV += (w * w * ((this.gazeP || 0) - this.headPitch) - 2 * w * this.headPV) * h;
       this.headPitch += this.headPV * h;
+      // 停在一點上也有很慢的一點晃動（兩個頻率疊，每個人相位不同），看著鏡頭才像活人。各自的畫面自己晃，不送給別人
+      const t = this.time, ph = (this.swayPh ??= Math.random() * 100);
+      const sy = 0.0175 * (Math.sin(t * 0.53 + ph) + 0.6 * Math.sin(t * 1.27 + ph * 2.3));
+      const sp = 0.012 * (Math.sin(t * 0.71 + ph * 1.7) + 0.5 * Math.sin(t * 1.9 + ph));
       this.head.rotation.order = 'YXZ';
-      this.head.rotation.y = this.headYaw;
-      this.head.rotation.x -= this.headPitch * (1 - this.aimP);
+      this.head.rotation.y = this.headYaw + sy;
+      this.head.rotation.x -= (this.headPitch + sp) * (1 - this.aimP);
     }
     // 手上的東西抵銷手臂的轉動，不管手怎麼擺都直立
     const A = this.armL.rotation;

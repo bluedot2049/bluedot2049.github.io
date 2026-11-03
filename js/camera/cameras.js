@@ -41,10 +41,10 @@ export const CAMERAS = {
 };
 
 // 桌上從左到右的位置；null 是還沒做出來的，留一個空位
-export const TABLE = ['bulb', 'gui', null];
+export const TABLE = ['bulb', 'gui', 'wang'];
 
 // 擺在桌上、還拿不走的：只有模型和名字，面板寫名字，按鈕是灰的
-export const SOON = { gui: { name: '晷', rattle: 'sand' } };
+export const SOON = { gui: { name: '晷', rattle: 'sand' }, wang: { name: '望', rattle: 'whir' } };
 
 // 帶在身上的相機，記在存檔裡
 export const carried = () => (CAMERAS[getSave().camera] ? getSave().camera : null);
@@ -71,6 +71,8 @@ function blade(k, a, b, w0, w1, t, c, n) {
 export function cameraModel(k, id) {
   if (id === 'bulb') bulbModel(k);
   else if (id === 'gui') guiModel(k);
+  else if (id === 'wang') wangCuteModel(k);
+  else if (id === 'wangbox') wangModel(k);
 }
 
 // 燭乙式：皮革方盒、銀灰上蓋。快門在右手邊（-x），觀景窗和閃光傘在左手邊（+x）。
@@ -158,6 +160,115 @@ function guiModel(k) {
   k.cyl(0.012, 0.012, 0.036, VIAL, vx, 0.05, 0, { glow: true }, 10);
   k.cyl(0.0125, 0.0125, 0.004, DBRZ, vx, 0.05, 0, {}, 10);
   k.cyl(0.0065, 0.0065, 0.007, GILT, vx, 0.0715, 0, {}, 8);
+}
+
+// 望的方盒版（第一版，比較用，只在 experiments/camera_preview.html?ids=wang,wangbox 看，不上桌）：
+// 靜海海牛族「望」：拍立得，登月年代的器材。白漆方盒、霧銀面板和螺絲，片盒門在底下，照片從鏡頭下的縫吐出來。
+// 頂上是腰平取景的遮光罩，低頭看裡面一小塊毛玻璃；右手邊（-x）一支大握把，頂上一顆大快門給鰭按。
+// 左邊側面是變亮變暗的三格轉盤，機背小窗露出片盒還剩幾張；新片盒的遮光片拖著一條紅布條
+const PAINT = '#eeede8', PAINTSH = '#dddcd6', ALU = '#a7aeb6', ALUHI = '#cfd4d9', ALUDK = '#757c84',
+  RUBBER = '#383b40', GROUND = '#76828a', SLOT = '#25272b', TAG = '#b8432f';
+function wangModel(k) {
+  const W = 0.13, H = 0.105, D = 0.085, front = D / 2, back = -D / 2, face = { rx: Math.PI / 2 }, side = { rz: Math.PI / 2 };
+  const lx = 0.012, ly = 0.064;
+  k.box(W, H - 0.022, D, PAINT, 0, 0.022 + (H - 0.022) / 2, 0);
+  // 片盒門：底下一圈霧銀，正面一條吐片縫，遮光片的紅布條從縫裡垂出來
+  k.box(W + 0.002, 0.022, D + 0.002, ALU, 0, 0.011, 0);
+  k.box(W + 0.002, 0.004, D + 0.002, ALU, 0, H - 0.002, 0);
+  k.box(0.094, 0.003, 0.002, SLOT, lx * 0.5, 0.013, front + 0.001);
+  k.box(0.012, 0.001, 0.026, TAG, 0.04, 0.0105, front + 0.013, { rx: 0.35 });
+  // 鏡頭板：一塊霧銀方板，四角螺絲
+  k.box(0.078, 0.07, 0.003, ALU, lx, ly, front + 0.0015);
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) k.cyl(0.0025, 0.0025, 0.002, ALUDK, lx + sx * 0.032, ly + sy * 0.028, front + 0.004, face, 6);
+  // 鏡頭：暗灰筒、亮銀前圈、對焦撥片伸出來給鰭撥
+  k.cyl(0.029, 0.031, 0.02, RUBBER, lx, ly, front + 0.013, face, 14);
+  k.cyl(0.032, 0.032, 0.006, ALUHI, lx, ly, front + 0.025, face, 14);
+  k.cyl(0.021, 0.021, 0.002, GLASS, lx, ly, front + 0.0285, face, 14);
+  k.box(0.006, 0.02, 0.005, ALUHI, lx + 0.036, ly + 0.012, front + 0.018, { rz: -0.5 });
+  // 左上的小銘牌，模板噴字的位置先留著
+  k.box(0.024, 0.009, 0.002, RUBBER, -0.042, 0.088, front + 0.001);
+  // 頂上的腰平取景罩：四片霧銀圍成方框，裡面是毛玻璃
+  const hy = H, hs = 0.062, hh = 0.024, ht = 0.002;
+  k.box(hs + 0.006, 0.004, hs + 0.006, ALUDK, lx, hy + 0.002, 0);
+  k.plane(hs - 0.004, hs - 0.004, GROUND, lx, hy + 0.0045, 0, { rx: -Math.PI / 2 });
+  for (const s of [-1, 1]) {
+    k.box(hs, hh, ht, ALU, lx, hy + hh / 2, s * hs / 2);
+    k.box(ht, hh * 0.8, hs, ALU, lx + s * hs / 2, hy + hh * 0.4, 0);
+  }
+  // 握把：右手邊一支白漆直握把，底下霧銀，頂上一顆大快門
+  const gx = -W / 2 - 0.016;
+  k.box(0.032, 0.095, 0.05, PAINTSH, gx, 0.0475, 0.008);
+  k.box(0.034, 0.012, 0.052, ALU, gx, 0.006, 0.008);
+  for (let i = 0; i < 3; i++) k.box(0.033, 0.003, 0.002, ALU, gx, 0.04 + i * 0.012, 0.034);
+  k.cyl(0.017, 0.017, 0.004, RUBBER, gx, 0.097, 0.008, {}, 12);
+  k.cyl(0.0135, 0.0135, 0.006, ALUHI, gx, 0.1, 0.008, {}, 12);
+  // 左側面：變亮變暗的三格轉盤
+  const dx = W / 2 + 0.003;
+  k.cyl(0.016, 0.016, 0.004, ALUDK, dx, 0.062, 0.01, side, 12);
+  k.cyl(0.012, 0.012, 0.006, ALU, dx + 0.003, 0.062, 0.01, side, 12);
+  k.box(0.004, 0.003, 0.016, ALUHI, dx + 0.007, 0.062, 0.01);
+  // 機背：霧銀背板，右上小窗裡三個點是片盒還剩幾張
+  k.box(W - 0.02, H - 0.04, 0.002, ALU, 0, 0.022 + (H - 0.04) / 2 + 0.005, back - 0.001);
+  k.box(0.026, 0.01, 0.002, SLOT, -0.03, 0.085, back - 0.0025);
+  for (let i = 0; i < 3; i++) k.box(0.004, 0.004, 0.001, PAINT, -0.038 + i * 0.008, 0.085, back - 0.004);
+  // 背帶扣在頂上後面兩角，右邊那個讓開握把
+  for (const s of [-1, 1]) k.box(0.012, 0.008, 0.006, ALUDK, s * (W / 2 - 0.01), H + 0.004, back + 0.008);
+}
+
+// 靜海海牛族「望」，桌上擺的這台：拍立得，登月年代的器材，白漆配霧銀，做得圓一點。
+// 矮胖、正面圓角、肚子一圈銀腰帶，鏡頭放大當眼睛，取景罩的兩片側板往外翻像耳朵，紅布條像舌頭，
+// 握把是圓頭連指手套，頂上一支小碟形天線（前哨站的那座）
+const CREAM = '#f3f0e8', CREAMSH = '#e2ded4', SILV = '#bcc3ca', SILVHI = '#dde2e6', SILVDK = '#8b939b';
+// 正面看是圓角長方形的厚板：中間一塊、上下兩條、四角四根沿 z 的圓柱。top、bot 決定上面、下面兩角要不要圓
+function roundSlab(k, w, h, d, r, c, x, y, z, top = true, bot = true) {
+  const rt = top ? r : 0, rb = bot ? r : 0;
+  k.box(w - 2 * r, h, d, c, x, y, z);
+  k.box(w, h - rt - rb, d, c, x, y + (rb - rt) / 2, z);
+  for (const s of [-1, 1]) {
+    if (top) k.cyl(r, r, d, c, x + s * (w / 2 - r), y + h / 2 - r, z, { rx: Math.PI / 2 }, 10);
+    if (bot) k.cyl(r, r, d, c, x + s * (w / 2 - r), y - h / 2 + r, z, { rx: Math.PI / 2 }, 10);
+  }
+}
+function wangCuteModel(k) {
+  const W = 0.12, H = 0.1, D = 0.08, r = 0.022, front = D / 2, back = -D / 2, face = { rx: Math.PI / 2 };
+  const lx = 0.008, ly = 0.062, by = 0.021;
+  roundSlab(k, W, H, D, r, CREAM, 0, H / 2, 0);
+  // 肚子上一圈霧銀腰帶，吐片縫開在上面，舌頭似的紅布條從縫裡垂出來
+  k.box(W + 0.003, 0.014, D + 0.003, SILV, 0, by, 0);
+  k.box(0.07, 0.003, 0.002, SILVDK, lx * 0.5, by - 0.002, front + 0.0025);
+  k.cyl(0.008, 0.008, 0.024, TAG, 0.012, by - 0.003, front + 0.013, { rx: Math.PI / 2 + 0.3, sz: 0.12 }, 8);
+  // 大眼睛：霧銀外圈、暗筒、玻璃
+  k.cyl(0.037, 0.037, 0.004, SILV, lx, ly, front + 0.002, face, 16);
+  k.cyl(0.031, 0.033, 0.016, RUBBER, lx, ly, front + 0.011, face, 16);
+  k.cyl(0.032, 0.032, 0.005, SILVHI, lx, ly, front + 0.02, face, 16);
+  k.cyl(0.0235, 0.0235, 0.002, GLASS, lx, ly, front + 0.0235, face, 16);
+  // 取景罩：矮矮一圈底座、毛玻璃，前後兩片立著，左右兩片往外翻成耳朵
+  const hy = H, hs = 0.05, hh = 0.02;
+  k.box(hs + 0.006, 0.004, hs + 0.006, SILVDK, lx, hy + 0.002, 0);
+  k.plane(hs - 0.004, hs - 0.004, GROUND, lx, hy + 0.0045, 0, { rx: -Math.PI / 2 });
+  for (const s of [-1, 1]) {
+    k.box(hs, hh * 0.7, 0.002, SILV, lx, hy + hh * 0.35, s * hs / 2);
+    k.box(0.002, hh, hs * 0.9, SILV, lx + s * (hs / 2 + 0.006), hy + hh / 2, 0, { rz: -s * 0.55 });
+  }
+  // 握把：圓頭連指手套，頂上一顆圓圓的大快門
+  const gx = -W / 2 - 0.013;
+  k.cyl(0.017, 0.018, 0.07, CREAMSH, gx, 0.045, 0.006, {}, 12);
+  k.cyl(0.011, 0.017, 0.01, CREAMSH, gx, 0.085, 0.006, {}, 12);
+  k.cyl(0.019, 0.019, 0.012, SILV, gx, 0.008, 0.006, {}, 12);
+  k.cyl(0.009, 0.0105, 0.005, SILVHI, gx, 0.0925, 0.006, {}, 12);
+  // 左側面的轉盤
+  k.cyl(0.013, 0.013, 0.006, SILV, W / 2 + 0.003, 0.058, 0.008, { rz: Math.PI / 2 }, 12);
+  k.box(0.002, 0.008, 0.003, SILVDK, W / 2 + 0.0065, 0.066, 0.008);
+  // 機背：三顆圓點是剩幾張
+  roundSlab(k, W - 0.03, 0.04, 0.002, 0.01, SILV, 0, 0.062, back - 0.001);
+  for (let i = 0; i < 3; i++) k.cyl(0.0035, 0.0035, 0.001, CREAM, -0.012 + i * 0.012, 0.062, back - 0.0025, face, 8);
+  // 頂上後面一支小碟形天線
+  const ax = -0.04, az = back + 0.014;
+  k.cyl(0.0018, 0.0018, 0.024, SILVDK, ax, H + 0.012, az, {}, 5);
+  k.cone(0.012, 0.006, SILVHI, ax, H + 0.027, az, { rx: Math.PI });
+  k.ball(0.0025, SILVDK, ax, H + 0.032, az);
+  // 背帶扣
+  for (const s of [-1, 1]) k.box(0.01, 0.007, 0.006, SILVDK, s * (W / 2 - 0.014), H + 0.0035, back + 0.008);
 }
 
 // 背帶：繞過脖子垂到胸口，相機（cameraModel）另外一個網格掛在 y0、z0，舉起來時才拿得走。y0 是相機底部的高度，z0 是胸口前緣

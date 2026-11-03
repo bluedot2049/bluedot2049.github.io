@@ -14,14 +14,14 @@ const GREETINGS = ['歡迎光臨哈哈', '歡迎光臨', '歡迎到處看看', '
 export const TABLE_LINES = ['要吃自己拿', '都可以吃', '桌上可以拿去吃', '你要吃東西嗎 這裡有', '要吃一點嗎'];
 const SURPRISED = ['天啊不是吧!', '蛤!'];
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
-// 身體輪廓 [高度, 半寬]，取自遊戲專案 character_model.gd 的 PROFILE
-const PROFILE = [
+// 身體輪廓 [高度, 半寬]，取自遊戲專案 character_model.gd 的 PROFILE。靜海的海牛人（zones/jinghai/manatees.js）也用這個身形
+export const PROFILE = [
   [0.12, 0.0], [0.15, 0.2], [0.21, 0.3], [0.3, 0.355], [0.4, 0.37], [0.52, 0.35], [0.61, 0.338],
   [0.71, 0.362], [0.83, 0.385], [0.95, 0.378], [1.06, 0.345], [1.16, 0.282], [1.24, 0.19], [1.295, 0.085], [1.31, 0.0],
 ];
 const FACE_Y = 0.91, FACE_W = 0.6, FACE_H = 0.62;
 
-function radiusAt(y) {
+export function radiusAt(y) {
   for (let i = 0; i < PROFILE.length - 1; i++) {
     const [y0, r0] = PROFILE[i], [y1, r1] = PROFILE[i + 1];
     if (y <= y1) return r0 + ((r1 - r0) * (y - y0)) / (y1 - y0);
