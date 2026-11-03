@@ -5,6 +5,7 @@
 // 鏡頭鑽進樹冠、或隔著樹冠看人時，樹冠變淡
 import * as THREE from 'three';
 import { Kit, newBucket, rng } from '../../core/props.js';
+import { glowTexture } from '../../core/textures.js';
 
 const BARK = '#4e3322', BARK_HI = '#6a4a30', ROOT = '#3a281c';
 // 每團樹冠底下暗、頂上亮，像頂上照著夕陽。金色那幾團是秋天先黃的
@@ -136,14 +137,16 @@ export function buildTree({ k, group, h, x, z, G, heightAt, face, clear = [] }) 
     blocks.push({ x: x + Math.cos(a) * 1.35, z: z + Math.sin(a) * 1.35, hw: 0.3, hd: 0.3 });
   }
 
-  // 樹洞：面向石階那一側，裡頭亮著暖光。光自己一個網格，亮暗由 hollow.js 調（有沒讀的消息時亮著呼吸，讀過就剩炭火）
+  // 樹洞：面向石階那一側，裡頭亮著暖光，從石階上下來就看得到。光自己一個網格，亮暗由 hollow.js 調：
+  // 這次來還沒聽過時整個亮著呼吸、洞口往外飄火星、地上照出一圈暖光；聽過就退成炭火，火星只剩零星幾點
   const hollow = { x: x + Math.cos(fa) * 1.2, y: G + 0.95, z: z + Math.sin(fa) * 1.2, n: { x: Math.cos(fa), z: Math.sin(fa) } };
+  const embers = { n: 18, lvl: 1, seed: [] };
   {
     const fx = Math.cos(fa), fz = Math.sin(fa), ry = Math.atan2(fx, fz);
-    k.ball(0.4, '#1e140e', x + fx * 0.95, G + 0.95, z + fz * 0.95, { sx: 1, sy: 1.6, sz: 0.45, ry });
+    k.ball(0.5, '#1e140e', x + fx * 0.92, G + 0.98, z + fz * 0.92, { sx: 1, sy: 1.6, sz: 0.5, ry });
     const hk = new Kit(R), hb = newBucket();
-    hk.ball(0.27, '#ffc870', x + fx * 1.05, G + 0.92, z + fz * 1.05, { sx: 1, sy: 1.6, sz: 0.4, ry, glow: true });
-    hk.light(x + fx * 1.15, G + 0.92, z + fz * 1.15, '#ffc870', 1.2);
+    hk.ball(0.35, '#ffc870', x + fx * 1.03, G + 0.94, z + fz * 1.03, { sx: 1, sy: 1.6, sz: 0.4, ry, glow: true });
+    hk.light(x + fx * 1.15, G + 0.94, z + fz * 1.15, '#ffc870', 2.4);
     hk.emit(hb, 0, 0, 0);
     const lamp = h.bucketObjects(hb);
     for (const o of lamp) {
@@ -151,14 +154,47 @@ export function buildTree({ k, group, h, x, z, G, heightAt, face, clear = [] }) 
       group.add(o);
     }
     const ball = lamp.find((o) => !o.isPoints), halo = lamp.find((o) => o.isPoints), size = halo.geometry.attributes.aSize;
-    ball.userData.hollow = true;   // 點樹洞裡的光就打開消息
+    ball.userData.hollow = true;   // 點樹洞裡的光就打開航路
+    // 洞口前地上一圈暖光，平貼在草上，疊加上去
+    const px = x + fx * 1.9, pz = z + fz * 1.9;
+    const pool = new THREE.Mesh(new THREE.CircleGeometry(1.7, 24), new THREE.MeshBasicMaterial({
+      map: glowTexture(), color: '#ff9a50', transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    }));
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.set(px, heightAt(px, pz) + 0.04, pz);
+    pool.renderOrder = 3;
+    group.add(pool);
+    // 火星：從洞口冒出來，往前往上飄，越高越暗；位置每幀算（update）
+    const pos = new Float32Array(embers.n * 3), col = new Float32Array(embers.n * 3);
+    for (let i = 0; i < embers.n; i++) embers.seed.push({ ph: R(), w: 0.11 + R() * 0.07, side: (R() - 0.5) * 2, sw: 1.5 + R() * 2 });
+    const eg = new THREE.BufferGeometry();
+    eg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    eg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const ep = new THREE.Points(eg, new THREE.PointsMaterial({
+      map: glowTexture(), size: 0.16, sizeAttenuation: true, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    }));
+    ep.frustumCulled = false;
+    group.add(ep);
+    embers.geo = eg;
+    embers.col = col;
+    embers.at = (i, life, t) => {
+      const s = embers.seed[i], sx = -fz, sz = fx, wob = Math.sin(t * s.sw + s.ph * 9) * 0.22 * life;
+      const out = 1.05 + life * 1.3;
+      pos[i * 3] = x + fx * out + sx * (s.side * 0.3 * life + wob);
+      pos[i * 3 + 1] = G + 0.75 + life * 2.4 + Math.sin(life * 6 + s.ph * 7) * 0.08;
+      pos[i * 3 + 2] = z + fz * out + sz * (s.side * 0.3 * life + wob);
+    };
     // v：0 是炭火，1 是全亮
     hollow.glow = (v) => {
+      embers.lvl = v;
       ball.material.color.setScalar(0.3 + 0.7 * v);
-      size.setX(0, 0.35 + 0.85 * v);
+      size.setX(0, 0.5 + 1.3 * v);
       size.needsUpdate = true;
+      pool.material.opacity = 0.18 + 0.4 * v;
     };
   }
+
 
   // 五根大枝往外往上撐開，枝頭各頂一團樹冠；半路再分出一根細枝，也頂一小團
   for (let i = 0; i < 5; i++) {
@@ -248,6 +284,16 @@ export function buildTree({ k, group, h, x, z, G, heightAt, face, clear = [] }) 
     update(t, cam, target) {
       const dt = Math.min(0.1, Math.max(0, t - last));
       last = t;
+      // 火星：每顆照自己的相位循環，第一幀就散在半路上，看不出起跑點；聽過以後大半顆熄掉
+      for (let i = 0; i < embers.n; i++) {
+        const s = embers.seed[i], life = (t * s.w + s.ph) % 1;
+        embers.at(i, life, t);
+        const lit = i < 4 || embers.lvl > i / embers.n;
+        const a = lit ? (1 - life) * (1 - life) * (0.35 + 0.65 * embers.lvl) : 0;
+        embers.col[i * 3] = a; embers.col[i * 3 + 1] = a * 0.72; embers.col[i * 3 + 2] = a * 0.4;
+      }
+      embers.geo.attributes.position.needsUpdate = true;
+      embers.geo.attributes.color.needsUpdate = true;
       for (const s of isles) {
         const a = s.a + t * s.w;
         s.g.position.set(x + Math.cos(a) * s.r, s.y + Math.sin(t * 0.5 + s.ph) * 0.35, z + Math.sin(a) * s.r);

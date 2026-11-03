@@ -8,6 +8,7 @@ from .primitives import bar, wing, dot, ring, T
 from .layouts import combine
 from .ids import compose
 from .optics import optical
+from .places import PLACE_GLYPHS
 from .components import (
     RAD_FIRE_LEFT, BODY_JIAN, RAD_GUANG, BODY_LANG_FULL,
     COMP_SUN, COMP_MOON, COMP_WOOD, COMP_EARTH, COMP_WATER, COMP_GATE, COMP_LIGHT,
@@ -21,14 +22,13 @@ LOCKED = set('煉金画廊')
 # 1. 經典字標四字（100% 保持原生手刻美學座標）
 GLYPH_REGISTRY['煉'] = combine(RAD_FIRE_LEFT, BODY_JIAN)
 
-GLYPH_REGISTRY['金'] = [
+GLYPH_REGISTRY['金'] = [                                      # 豎筆從屋頂尖貫到底當中軸，兩點是菱形
     bar((2, 42), (50, 5), (98, 42)),
-    bar((30, 46), (70, 46)),
-    bar((24, 64), (76, 64)),
-    bar((50, 46), (50, 87)),
-    bar((33, 71), (40, 80)),
-    bar((67, 71), (60, 80)),
-    wing(6, 92, 87),
+    bar((50, 5), (50, 90)),
+    bar((28, 38), (72, 38)),
+    bar((20, 58), (80, 58)),
+    dot(32, 74, 5), dot(68, 74, 5),
+    wing(6, 92, 90),
 ]
 
 GLYPH_REGISTRY['画'] = [
@@ -80,7 +80,12 @@ GLYPH_REGISTRY['☽'] = [                                      # 一筆封閉繞
     bar((56, 12), (32, 28), (24, 50), (32, 72), (56, 88), (46, 68), (44, 50), (46, 32), (56, 12)),
 ]
 
-# 4. 光學修正：漢字整組調勻（墨量、字面、重心），規則見 optics.py
+# 4. 地名用字：房間、地點名稱跳出來時用，見 places.py
+GLYPH_REGISTRY.update(PLACE_GLYPHS)
+GLYPH_REGISTRY['畫'] = GLYPH_REGISTRY['画']   # 跟字標一樣寫成「画」
+LOCKED.add('畫')
+
+# 5. 光學修正：漢字整組調勻（墨量、字面、重心），規則見 optics.py
 for _ch, _prims in GLYPH_REGISTRY.items():
     if _ch not in LOCKED and 0x4E00 <= ord(_ch) <= 0x9FFF:
         GLYPH_REGISTRY[_ch] = optical(_prims)

@@ -381,8 +381,9 @@ function hatGeo(L) {
 
 const smooth = (t) => t * t * (3 - 2 * t);
 
-// 陽台長桌上拿得起來的點心，編號從 1 開始，0 是空手
-export const FOODS = ['bread', 'apple', 'pomegranate', 'cheese', 'grapes'];
+// 陽台長桌上拿得起來的點心，編號從 1 開始，0 是空手。6 以後是靜海的：溫室拿的一束海草、速食店換的三種漢堡和薯條，
+// 總部裡攤位拿的冰淇淋、汽水、熱茶（jinghai-stalls.js）
+export const FOODS = ['bread', 'apple', 'pomegranate', 'cheese', 'grapes', 'seaweed', 'kelpburger', 'beefburger', 'cabbageburger', 'fries', 'icecream', 'soda', 'tea'];
 const BITES = 3;
 const BITE_TIME = 0.5;
 
@@ -401,6 +402,55 @@ function foodModel(kind) {
     case 'cheese': add(new THREE.CylinderGeometry(0.08, 0.08, 0.06, 3), 0xf0cc70, 0, 0, 0); break;
     case 'grapes':
       for (let i = 0; i < 8; i++) add(new THREE.IcosahedronGeometry(0.024, 0), i % 3 ? 0x5a2a5a : 0x7a3a6a, ((i % 3) - 1) * 0.03, -Math.floor(i / 3) * 0.035, (i % 2) * 0.02);
+      break;
+    case 'seaweed':
+      // 一束長長的海草，中間綁一圈草繩
+      for (let i = 0; i < 4; i++) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.2, 0.006), mat(i % 2 ? 0x4f6b2e : 0x6a7f34));
+        m.position.set((i - 1.5) * 0.012, 0.02, (i % 2) * 0.008);
+        m.rotation.z = (i - 1.5) * 0.12;
+        g.add(m);
+      }
+      add(new THREE.CylinderGeometry(0.03, 0.03, 0.018, 8), 0xc9a86a, 0, -0.02, 0.004);
+      break;
+    case 'kelpburger': case 'beefburger': case 'cabbageburger': {
+      // 下麵包、餡、一片菜、上麵包（圓頂、芝麻）；牛肉堡多一片起司
+      const fill = { kelpburger: 0x3f4f26, beefburger: 0x5e321e, cabbageburger: 0xc4d98e }[FOODS[kind - 1]];
+      add(new THREE.CylinderGeometry(0.075, 0.07, 0.03, 12), 0xd99a52, 0, -0.04, 0);
+      add(new THREE.CylinderGeometry(0.078, 0.078, 0.026, 12), fill, 0, -0.012, 0);
+      if (kind === 8) add(new THREE.BoxGeometry(0.12, 0.006, 0.12), 0xf0c04a, 0, 0.004, 0);
+      add(new THREE.CylinderGeometry(0.085, 0.082, 0.01, 10), 0x86b94e, 0, 0.012, 0);
+      add(new THREE.SphereGeometry(0.078, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0xcf8a3c, 0, 0.016, 0, 1, 0.62, 1);
+      for (let i = 0; i < 5; i++) add(new THREE.BoxGeometry(0.008, 0.004, 0.014), 0xf6ead0, Math.cos(i * 1.3) * 0.035, 0.058 - (i % 2) * 0.006, Math.sin(i * 1.3) * 0.035);
+      break;
+    }
+    case 'fries':
+      // 番茄紅的紙套，上面冒出一把薯條
+      add(new THREE.CylinderGeometry(0.06, 0.042, 0.1, 4), 0xc8432f, 0, -0.03, 0, 1, 1, 0.55);
+      for (let i = 0; i < 9; i++) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.013, 0.1, 0.013), mat(0xf0c860));
+        m.position.set(((i % 5) - 2) * 0.017, 0.035 + (i % 3) * 0.012, (i < 5 ? -0.008 : 0.008));
+        m.rotation.z = ((i * 7) % 5 - 2) * 0.07;
+        g.add(m);
+      }
+      break;
+    case 'icecream':
+      // 餅乾甜筒，上面香草一球、海草一球（淡淡的灰綠）
+      add(new THREE.ConeGeometry(0.036, 0.12, 8).rotateX(Math.PI), 0xd4a462, 0, -0.045, 0);
+      add(new THREE.IcosahedronGeometry(0.04, 1), 0xf3ecd8, 0, 0.022, 0, 1, 0.9, 1);
+      add(new THREE.IcosahedronGeometry(0.035, 1), 0xb7c79a, 0.004, 0.07, 0, 1, 0.9, 1);
+      break;
+    case 'soda':
+      // 半透明的杯子裝橘子汽水，白蓋子、一根番茄紅的吸管
+      add(new THREE.CylinderGeometry(0.04, 0.032, 0.13, 10), 0xe8a24a, 0, -0.01, 0);
+      add(new THREE.CylinderGeometry(0.043, 0.043, 0.012, 10), 0xf3f0e8, 0, 0.06, 0);
+      add(new THREE.CylinderGeometry(0.006, 0.006, 0.09, 5), 0xc8432f, 0.012, 0.1, 0);
+      break;
+    case 'tea':
+      // 奶油色紙杯、可可色紙套、深色杯蓋
+      add(new THREE.CylinderGeometry(0.038, 0.03, 0.1, 10), 0xefe6d2, 0, -0.02, 0);
+      add(new THREE.CylinderGeometry(0.037, 0.034, 0.04, 10), 0x6b4a36, 0, -0.015, 0);
+      add(new THREE.CylinderGeometry(0.041, 0.039, 0.014, 10), 0x3a3330, 0, 0.035, 0);
       break;
   }
   return g;

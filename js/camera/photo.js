@@ -13,7 +13,7 @@
 // 帶相機是手持取景，沒帶就是畫廊的眼睛當空拍機飛出去（WASD 飛、E/Q 升降、Shift 快）。介面全收起來，拍好收進相簿（album.js），最後在行囊選片。
 // 舉相機的對焦像攝影師的「背鍵對焦」：舉起來時相機朝準心對到的那一點看、對焦在那裡，然後鎖住，怎麼重新構圖都不跑；
 // R 對準心重新對焦，按住一直追焦、放開鎖住；Shift+滾輪是手動對焦環。對焦快慢、等不等焦照相機的 af。
-// 舉著時滾輪換高低（蹲低、眼高、舉高），中鍵切自拍；Q 閃光、~ 日期、L 看鏡。相機的快門、閃光、日期、看鏡照樣顯示，標上按鍵。
+// 舉著時滾輪換高低（蹲低、眼高、舉高），中鍵切自拍；Q 閃光、~ 日期、L 看鏡、F 直橫（攝影模式裡都能按）。舉起和切自拍時先黑一下（darken）。相機的快門、閃光、日期、看鏡照樣顯示，標上按鍵。
 // 看鏡（lookOn）：開著時自己的頭一直看著鏡頭，關著就隨意看（attention.js）。鏡頭的位置和方向由 lensInfo 給別人和自己的頭
 import * as THREE from 'three';
 import { lens, fitSource, unbend } from '../core/lens.js';
@@ -35,6 +35,7 @@ const ASPECTS = [
   { label: '4:5', r: 4 / 5 },
   { label: '寬銀幕', r: 2.39 },
 ];
+const TALL = ASPECTS.findIndex((a) => a.r === 9 / 16);   // 空拍機按 F 直過來的比例
 // 照片的樣子：畫廊的眼睛看到什麼就是什麼，不套濾鏡，只壓一點暗角。帶著相機時換成相機的 develop（同一種寫法）。
 // filter 是 CSS 的寫法，畫面上直接套在 canvas，存檔時給 2D 畫布的 ctx.filter（Safari 17 以前不支援，就存成原色）
 const PLAIN = { filter: '', vig: 0.32, grain: 0 };
@@ -284,9 +285,14 @@ export class PhotoMode {
     this.active = true;
     this.gear = null;
     const gear = studio || eye ? null : carried();
-    if (gear) this.holdGear(gear);
-    // 手持舉相機：按著的走路鍵接過來，邊走邊舉不用重按（空拍機的 WASD 是飛，不接）
-    if (gear && quick) for (const k of walking) this.keys.add(k);
+    if (gear) {
+      this.holdGear(gear);
+      // 手持舉相機：按著的走路鍵接過來，邊走邊舉不用重按（空拍機的 WASD 是飛，不接）；鏡頭一下到了手上，先黑一下
+      if (quick) {
+        for (const k of walking) this.keys.add(k);
+        this.darken();
+      }
+    }
     // 沒拿相機是畫廊的眼睛，快門換成一顆眼睛；照相館用的是海市的金快門
     else if (!studio) {
       const sh = this.$('#ph-shutter');
@@ -305,7 +311,7 @@ export class PhotoMode {
     if (quick) this.quickHint();
     else if (studio) this.setStudio(studio);
     else if (postcard) this.ui.hint('拍一張做成明信片，拍好就能寄出去', 6000);
-    else if (gear) this.ui.hint(this.coarse ? '搖桿走路　拖曳轉身　點一下對焦　按住快門慢慢曝光' : 'WASD 走路　拖曳轉身　點一下對焦　空白鍵拍照，按住不放慢慢曝光' + (this.gear.flash ? '　F 閃光' : ''), 6000);
+    else if (gear) this.ui.hint(this.coarse ? '搖桿走路　拖曳轉身　點一下對焦　按住快門慢慢曝光' : 'WASD 走路　拖曳轉身　點一下對焦　空白鍵拍照，按住不放慢慢曝光' + (this.gear.flash ? '　Q 閃光' : '') + '　F 直橫', 6000);
     else this.ui.hint(this.coarse ? '拖曳轉頭　雙指變焦　點兩下靠近　點一下收起按鈕' : 'WASD 移動　E / Q 升降　拖曳轉頭　滾輪變焦　點兩下靠近　空白鍵拍照　H 收起按鈕', 6000);
   }
 
@@ -317,6 +323,7 @@ export class PhotoMode {
     this.aimTarget = null;
     clearTimeout(this.afTimer);
     this.$('#ph-af').className = '';
+    this.$('#ph-dark').className = '';   // 留著的話，下次打開攝影模式動畫會重播一次
     // 手持舉相機放下時，越肩接著相機最後瞄的方向和高低（像射擊遊戲放下瞄準）；走路鍵交回去，人不停
     if (quick && this.gear) {
       const p = this.player;
@@ -495,7 +502,7 @@ export class PhotoMode {
     if (this.told[key]) return;
     this.told[key] = true;
     if (this.gear) this.ui.toast('舉起就對準心對焦鎖定，左鍵拍照', 'R 重新對焦，按住追焦　Shift＋滾輪手動對焦　放開右鍵放下');
-    else this.ui.toast('空拍機：WASD 飛、E / Q 升降', '左鍵拍照　滾輪變焦　放開右鍵收回　短按右鍵一直飛');
+    else this.ui.toast('空拍機：WASD 飛、E / Q 升降', '左鍵拍照　滾輪變焦　F 直橫　放開右鍵收回　短按右鍵一直飛');
   }
 
   // 帶著相機時，拿相機拍和畫廊的眼睛（相機照樣掛在身上，拍得到自己帶著它）在攝影模式裡直接換，不用先退出
@@ -669,10 +676,10 @@ export class PhotoMode {
   // 高度尺：拖軌道直接到想要的高度，點刻度跳到常用的高度，按住兩端慢慢升降（電腦也可以按 E / Q）
   bindAlt() {
     const alt = this.$('#ph-alt');
-    alt.innerHTML = `<button class="ph-alt-step" data-v="1" aria-label="升高">▲</button>`
+    alt.innerHTML = `<button class="ph-alt-step" data-v="1" data-key="E" aria-label="升高" title="升高（E）">▲</button>`
       + `<div class="ph-alt-track">${ALT_MARKS.map(([label, h]) => `<button class="ph-alt-mark" data-h="${h}" style="--s:${altAt(h)}">${label}</button>`).join('')}`
       + `<i class="ph-alt-knob"><b></b></i></div>`
-      + `<button class="ph-alt-step" data-v="-1" aria-label="降低">▼</button>`;
+      + `<button class="ph-alt-step" data-v="-1" data-key="Q" aria-label="降低" title="降低（Q）">▼</button>`;
     this.altKnob = alt.querySelector('.ph-alt-knob');
     for (const b of alt.querySelectorAll('.ph-alt-step')) {
       const v = +b.dataset.v;
@@ -810,9 +817,10 @@ export class PhotoMode {
         return;
       }
       if (e.key === 'h' || e.key === 'H') return this.showControls(document.body.classList.contains('photo-bare'));
-      if ((e.key === 'q' || e.key === 'Q' || e.key === 'f' || e.key === 'F') && this.gear?.flash) return e.repeat || this.toggleFlash();
+      if ((e.key === 'q' || e.key === 'Q') && this.gear?.flash) return e.repeat || this.toggleFlash();
       if (e.code === 'Backquote' && this.gear?.date) return e.repeat || this.toggleDate();
       if (e.key === 'l' || e.key === 'L') return e.repeat || this.toggleLook();
+      if ((e.key === 'f' || e.key === 'F') && !this.studio) return e.repeat || this.turn();
       if ((e.key === 'r' || e.key === 'R') && this.gear) return e.repeat || (this.quick ? this.refocusButton(true) : this.focusAt(window.innerWidth / 2, window.innerHeight / 2));
       this.keys.add(e.key.toLowerCase());
     });
@@ -1226,9 +1234,29 @@ export class PhotoMode {
     this.yaw = this.aimYaw = this.yaw + Math.PI;
     this.pitch = this.aimPitch = 0;
     this.snapHand = true;
+    this.darken();
     this.refresh();
     clearTimeout(this.selfieAF);
     this.selfieAF = setTimeout(() => { if (this.active && this.quick && this.gear) this.focusAt(window.innerWidth / 2, window.innerHeight / 2); }, 120);
+  }
+
+  // 眼睛貼上觀景窗：舉起相機、切自拍時鏡頭一下換了位置，墨色蓋住一下再淡開，不硬切。只蓋在畫面上，不進照片
+  darken() {
+    replay(this.$('#ph-dark'), 'on');
+  }
+
+  // F：直拿、橫拿互換。帶著相機換的是「方向」（每台相機各記）；空拍機在現在的比例和 9:16 之間換，再按一次回原本的
+  turn() {
+    if (this.rec || this.result) return;
+    const r = ASPECTS[this.aspect].r;
+    if (this.gear) this.upright = 1 - this.upright;
+    else if (r > 0 && r < 1) this.aspect = this.wideAspect ?? 0;
+    else {
+      this.wideAspect = this.aspect;
+      this.aspect = TALL;
+    }
+    this.save();
+    this.refresh();
   }
 
   // 對到焦：嗶兩聲，框停住，過一下淡掉。鎖住以後轉動鏡頭焦距也不變，可以先對焦再構圖

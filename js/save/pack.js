@@ -12,7 +12,7 @@ import { decodeSave, decodeLook, tryOn, codeFrom, hasProgress, restoreSave } fro
 import { readPostcard } from './postcard.js';
 import { readMirrorCard } from './mirrorcard.js';
 import { encodeFace, getSave } from '../avatar/looks.js';
-import { dockR, panelW, uiScale } from '../controls/ui.js';
+import { dockR, hugMedia, panelW, uiScale } from '../controls/ui.js';
 import { album, canPick, canShare, discard, folderName, hourMark, KINDS, LABS, labOk, loadAlbum, pickFolder, putBack, saveChosen, saveTip, shareChosen, toLab, visible } from '../camera/album.js';
 
 const ICONS = {
@@ -474,6 +474,11 @@ export class Pack {
       <button class="av-step next" data-step="1" aria-label="下一張" title="下一張（→）">${arrow('M9.5 5.5 16 12l-6.5 6.5')}</button>
       <button class="icon-btn round av-close" aria-label="收起" title="收起（Esc）"><svg><use href="#i-close"/></svg></button>
       <div class="av-bar"><span class="av-n"></span><button class="av-pick" data-v="pick" title="選（空白鍵）"><i class="chk"></i>選</button><button class="av-drop" data-v="drop" title="丟掉（Delete）">丟掉</button></div>`;
+    // 電腦版的箭頭、收起鈕貼著圖：圖載好、換張、拉視窗時量一次
+    const hug = () => { if (!v.hidden) hugMedia(v, v.querySelector(this.viewing?.kind === 'video' ? 'video' : 'img')); };
+    v.querySelector('img').addEventListener('load', hug);
+    v.querySelector('video').addEventListener('loadedmetadata', hug);
+    addEventListener('resize', hug);
     // 左右滑換張。滑的那一下不算點，不會收起來
     let x0 = 0, y0 = 0, swiped = false;
     v.addEventListener('pointerdown', (e) => { x0 = e.clientX; y0 = e.clientY; swiped = false; });
@@ -515,6 +520,7 @@ export class Pack {
     const pick = v.querySelector('.av-pick'), on = this.chosen.has(it);
     pick.classList.toggle('on', on);
     pick.setAttribute('aria-pressed', on);
+    if (movie ? vid.readyState >= 1 : img.complete) hugMedia(v, movie ? vid : img);   // 已經載好的不會再發 load
   }
 
   step(d) {

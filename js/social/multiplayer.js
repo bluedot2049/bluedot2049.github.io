@@ -275,8 +275,8 @@ export class Multiplayer {
       if (this.active) return;
       const old = this.channel;
       this.channel = null;
-      this.client.removeChannel(old).catch(() => {});
-      this.join();
+      // 舊頻道拆完才加入：還沒拆完時 channel() 會把同名的舊頻道原封不動還回來，訂閱等於沒做，接著被拆掉，什麼都收不到
+      this.client.removeChannel(old).catch(() => {}).then(() => { if (!this.channel) this.join(); });
     }, RETRY);
   }
 
@@ -305,11 +305,13 @@ export class Multiplayer {
     const aim = p.camAim;
     const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room, s: p.sitCode, f: p.character.foodCode, a: aim ? aim.grip + 1 : 0, q: aim ? Math.round(aim.pitch * 20) / 20 : 0, w: this.away ? 1 : 0, l: Math.round((p.gaze || 0) * 20) / 20, v: Math.round((p.gazeP || 0) * 20) / 20 };
     if (p.gazeId) st.g = p.gazeId === 'self' ? this.id : p.gazeId;
+    // y：有樓上的區域（靜海）才送，別人照這個知道站在哪一層
+    if (p.world.drift) st.y = Math.round(p.pos.y * 10) / 10;
     const L = this.lens?.();
     if (L) st.c = [r50(L.pos.x), r50(L.pos.y), r50(L.pos.z), r50(wrapAngle(L.yaw)), r50(L.pitch), Math.round(L.fov), Math.round(L.aspect * 100) / 100, L.kind];
     const l = this.last;
     const changed = !l || Math.abs(st.x - l.x) > 0.02 || Math.abs(st.z - l.z) > 0.02 || Math.abs(wrapAngle(st.h - l.h)) > 0.05 || st.r !== l.r || st.s !== l.s || st.f !== l.f || st.a !== l.a || st.q !== l.q || st.w !== l.w || st.l !== l.l || st.v !== l.v
-      || st.g !== l.g || String(st.c) !== String(l.c);
+      || st.g !== l.g || st.y !== l.y || String(st.c) !== String(l.c);
     if (now - this.lastSent < (changed ? SEND_MOVING : SEND_IDLE)) return;
     this.channel.send({ type: 'broadcast', event: 'pos', payload: { id: this.id, ...st } });
     this.last = st;
@@ -327,6 +329,7 @@ export class Multiplayer {
     m.a = Number.isInteger(m.a) && m.a >= 0 && m.a <= 5 ? m.a : 0;
     m.q = isNum(m.q, 2) ? m.q : 0;
     m.w = m.w === 1 ? 1 : 0;
+    m.y = isNum(m.y, 200) ? m.y : null;
     m.l = isNum(m.l, 1.3) ? m.l : 0;
     m.v = isNum(m.v, 0.6) ? m.v : 0;
     m.g = isId(m.g) ? m.g : null;
@@ -607,7 +610,7 @@ export class Multiplayer {
       o.speed = Math.hypot(o.pos.x - ox, o.pos.z - oz) / Math.max(dt, 1e-4);
       o.heading += wrapAngle(t.h - o.heading) * Math.min(1, dt * 8);
       const world = this.player.world, seat = t.s > 0 ? world.outdoor.seats[t.s - 1] : null;
-      o.pos.y = world.groundY(o.pos.x, o.pos.z);
+      o.pos.y = world.groundY(o.pos.x, o.pos.z, t.y ?? o.pos.y);
       o.ch.sitting = t.s !== 0;
       if (t.s) o.ch.lift = seat ? seat.lift : 0.02;
       if (t.f !== o.ch.foodCode) o.ch.setFoodCode(t.f);

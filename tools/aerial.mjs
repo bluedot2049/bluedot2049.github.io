@@ -89,7 +89,7 @@ for (const { zone, shot } of picked) {
   await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: SCALE, mobile: false });
   // 當成從另一區搭船過來：不會停在第一次來的門口等人按「進入」；畫廊會在碼頭上岸，戶外才是打開的、光線和霧也是戶外那組
   const from = zone === 'gallery' ? 'haishi' : 'gallery';
-  await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/?z=${zone}&q=mid&debug&crowd=0&beast=0&from=${from}` });
+  await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/?z=${zone}&q=mid&debug&crowd=0&beast=0&rain=0&from=${from}` });
   for (let i = 0; i < 240; i++) {
     await sleep(250);
     if (await ev(`!!window.__g && document.getElementById('loading')?.classList.contains('done')`).catch(() => false)) break;

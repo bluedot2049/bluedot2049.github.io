@@ -221,6 +221,32 @@ export const VOICES = {
     hiss(ctx, out, noise, t + 0.33, 0.012, 'bandpass', 3400 * p, 0.45, 4);
     return 0.45;
   },
+  // 靜海速食店的叫號：叮、咚兩聲，第二聲低一點
+  pickup(ctx, out, t, p) {
+    for (const [dt, f] of [[0, 1318], [0.22, 1046]]) {
+      ring(ctx, out, t + dt, f * p, 0.16, 1.1);
+      ring(ctx, out, t + dt, f * 2.01 * p, 0.03, 0.5);
+    }
+    return 1.4;
+  },
+  // 肉排落回煎台：滋一聲，油星劈啪幾下
+  sizzle(ctx, out, t, p, noise) {
+    air(ctx, out, noise, t, [[0, 6200 * p], [0.6, 4200 * p]], 0.01, 0.7, 0.22, 0.9, 'highpass');
+    for (let i = 0; i < 6; i++) hiss(ctx, out, noise, t + Math.random() * 0.5, 0.006, 'bandpass', 3000 + Math.random() * 3500, 0.12 + Math.random() * 0.15, 3);
+    return 0.75;
+  },
+  // 靜海的汽水吧：倒進杯子嘩一下，氣泡一顆一顆慢慢破（月球上浮得慢，間隔拉長）
+  fizz(ctx, out, t, p, noise) {
+    air(ctx, out, noise, t, [[0, 900 * p], [0.5, 1800 * p]], 0.04, 0.55, 0.12, 1.6, 'bandpass');
+    for (let i = 0; i < 7; i++) hiss(ctx, out, noise, t + 0.5 + i * 0.16 + Math.random() * 0.1, 0.005, 'bandpass', 4200 + Math.random() * 2500, 0.08 + Math.random() * 0.08, 5);
+    return 1.7;
+  },
+  // 靜海的熱茶攤：熱水從壺嘴倒下去，細細一條，最後收尾
+  pour(ctx, out, t, p, noise) {
+    air(ctx, out, noise, t, [[0, 1400 * p], [0.7, 900 * p]], 0.06, 0.8, 0.09, 2.2, 'bandpass');
+    hiss(ctx, out, noise, t + 0.82, 0.03, 'bandpass', 1100 * p, 0.2, 2);
+    return 0.95;
+  },
   // 前門（frontdoor.js、載入畫面）：門閂喀一聲，門軸低低嘎一下
   latch(ctx, out, t, p, noise) {
     hiss(ctx, out, noise, t, 0.02, 'bandpass', 2400 * p, 0.9, 3);
@@ -503,6 +529,25 @@ export const VOICES = {
       tt += d + 0.14;
     }
     return tt - t;
+  },
+  // 隊友吹哨叫人（party.js）：用嘴吹的兩聲，先短短往上挑、再拉長往下帶一點顫，像在喊「喂——」。
+  // p 照隊伍顏色分高低，聽得出是誰。帶一點氣音，不是電子的嗶
+  hail(ctx, out, t, p, noise) {
+    const blow = (tt, d, pts, vib) => {
+      const o = osc(ctx, 'sine', tt, d, pts);
+      if (vib) lfo(ctx, tt, d, 5.5, vib, o.frequency);
+      o.connect(envelope(ctx, tt, 0.025, d, 0.9)).connect(out);
+      air(ctx, out, noise, tt, [[0, pts[0][1] * 1.4]], 0.02, d, 0.05, 2.5, 'bandpass');
+    };
+    blow(t, 0.15, [[0, 1350 * p], [0.12, 1900 * p]], 0);
+    blow(t + 0.23, 0.42, [[0, 1950 * p], [0.1, 1880 * p], [0.42, 1420 * p]], 18 * p);
+    return 0.7;
+  },
+  // 別區的隊友吹哨：隔著海傳過來，悶悶的、帶一點空曠的殘響
+  hailFar(ctx, out, t, p, noise) {
+    const muff = biquad(ctx, 'lowpass', 1100, 0.5);
+    muff.connect(hall(ctx, out, 0.7));
+    return VOICES.hail(ctx, muff, t, p * 0.97, noise) + 0.9;
   },
 };
 

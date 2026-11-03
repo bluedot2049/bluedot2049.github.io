@@ -80,7 +80,7 @@ export class Manatee {
     bean.scale.z = 0.76;
     body.add(bean);
 
-    // 臉先蓋住：深底問號，貼在豆子正面的一片弧形（原本的臉是 assets/manatee_face.png）
+    // 臉先蓋住：深底問號，貼在豆子正面的一片弧形（原本的臉收在本機 originals/manatee/，不上傳）
     // 臉吃場景光，跟身體一起被夕陽染暖、被夜色壓藍，不會像貼紙浮在上面
     const tex = new THREE.CanvasTexture(mysteryFace());
     tex.colorSpace = THREE.SRGBColorSpace;

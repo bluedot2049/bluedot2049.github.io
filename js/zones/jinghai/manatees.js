@@ -27,11 +27,11 @@ const v2 = (r, y) => new THREE.Vector2(r, y);
 function bean(k, c) {
   k.add(new THREE.LatheGeometry(PROFILE.map(([y, r]) => v2(r, y)), SEG), c, 0, 0, 0, { sz: DEPTH });
 }
-// 沿著身體輪廓包一圈布：從 y0 到 y1，比身體胖 d。phi 給了就只包前面那一片（圍裙）
+// 沿著身體輪廓包一圈布：從 y0 到 y1，比身體胖 d。phi 給了就只包那一段角度（[起點, 多長]，0 是正前方）：圍裙、敞開的外套
 function band(k, y0, y1, d, c, phi = null) {
   const ys = [y0, ...PROFILE.map(([y]) => y).filter((y) => y > y0 + 0.01 && y < y1 - 0.01), y1];
   const pts = ys.map((y) => v2(radiusAt(y) + d, y));
-  k.add(phi ? new THREE.LatheGeometry(pts, 6, phi[0], phi[1]) : new THREE.LatheGeometry(pts, SEG), c, 0, 0, 0, { sz: DEPTH });
+  k.add(phi ? new THREE.LatheGeometry(pts, Math.max(6, Math.ceil((phi[1] / (Math.PI * 2)) * SEG)), phi[0], phi[1]) : new THREE.LatheGeometry(pts, SEG), c, 0, 0, 0, { sz: DEPTH });
 }
 // 身體正面 (x, y) 那一點：貼著弧面的深度和角度，小零件（領帶、識別證、徽章）照這個轉
 function surf(x, y, d) {
@@ -85,7 +85,7 @@ function cap(k, c, brim = true) {
 }
 
 const NAVY = '#2c3248', SHIRT = '#efede6', TIE = '#30333f';
-// 每一套打扮：先身體再衣服。桌上看到的制服就這幾種，便服四種顏色
+// 每一套打扮：先身體再衣服。這裡是上班的地方：工程師、辦公室、修東西的、外勤這些制服為主，便服三種是下了班的
 const OUTFITS = {
   // 工程師：白襯衫、深藍長褲、細領帶，胸前識別證、口袋插兩支筆
   engineer(k) {
@@ -147,6 +147,18 @@ const OUTFITS = {
     k.box(0.36, 0.38, 0.01, '#c9a14e', 0, 0.62, bz - 0.085);
     for (const s of [-1, 1]) k.box(0.05, 0.05, 0.05, '#9aa1a8', s * 0.14, 0.88, bz);
   },
+  // 速食店「咬月」的店員：可可色短袖、番茄紅圍裙、奶油色遮陽帽
+  burger(k) {
+    bean(k, SKIN);
+    band(k, 0.15, 0.42, 0.012, '#3a2a22');
+    band(k, 0.4, NECK, 0.02, '#4a3027');
+    band(k, 0.14, 0.64, 0.032, '#d8452b', [-0.85, 1.7]);
+    limbs(k, '#4a3027', '#3a2a22');
+    collar(k, '#f6ecd6');
+    onFront(k, disc(0.035), '#e8b13a', 0.13, 0.66, 0.03);
+    k.cyl(0.235, 0.25, 0.07, '#f6ecd6', 0, 1.22, 0, { sz: DEPTH * 1.1 }, 10);
+    k.box(0.3, 0.016, 0.16, '#f6ecd6', 0, 1.19, 0.25);
+  },
   // 便服：芥末黃毛背心配白襯衫
   vest(k) {
     bean(k, SKIN);
@@ -175,13 +187,31 @@ const OUTFITS = {
     k.add(new THREE.IcosahedronGeometry(0.25, 1), '#e2c06e', 0, 1.24, 0, { sy: 0.45, sz: DEPTH * 1.08 });
     k.add(new THREE.IcosahedronGeometry(0.06, 0), '#f3eee2', 0, 1.36, 0);
   },
-  // 便服：薰衣草色洋裝，裙襬撐開，一串珍珠
-  dress(k) {
+  // 坐辦公室的：炭灰西裝外套敞開、白襯衫、酒紅領帶，識別證夾在口袋上
+  office(k) {
     bean(k, SKIN);
-    band(k, 0.32, NECK, 0.02, '#9b8fb8');
-    k.cyl(radiusAt(0.32) + 0.03, 0.44, 0.24, '#9b8fb8', 0, 0.2, 0, { sz: DEPTH * 1.05 }, SEG);
-    limbs(k, SKIN, SKIN);
-    for (let i = -3; i <= 3; i++) onFront(k, new THREE.IcosahedronGeometry(0.017, 0), '#f6f1e4', i * 0.045, NECK - 0.04 - (3 - Math.abs(i)) * 0.012, 0.035);
+    band(k, 0.15, 0.44, 0.012, '#3b3a3c');
+    band(k, 0.42, NECK, 0.018, SHIRT);
+    band(k, 0.4, NECK - 0.02, 0.03, '#4a4a4f', [0.35, Math.PI * 2 - 0.7]);
+    limbs(k, '#4a4a4f', '#3b3a3c');
+    collar(k, SHIRT);
+    tie(k, '#7a3b3b');
+    onFront(k, flat(0.06, 0.08), '#f6f4ee', -0.16, 0.6, 0.04);
+    onFront(k, flat(0.06, 0.016), '#a8553c', -0.16, 0.63, 0.046);
+  },
+  // 修東西的：芥末黃安全帽、深灰工作褲、橘色背心兩道銀色反光條，腰上一條工具帶
+  worker(k) {
+    bean(k, SKIN);
+    band(k, 0.15, 0.46, 0.014, '#4b4a46');
+    band(k, 0.44, NECK, 0.016, '#8a8478');
+    band(k, 0.4, NECK - 0.03, 0.03, '#d9822b');
+    for (const y of [0.52, 0.64]) band(k, y, y + 0.03, 0.036, '#d5d8dc');
+    band(k, 0.4, 0.45, 0.04, '#5a4634');
+    limbs(k, '#8a8478', '#4b4a46');
+    onFront(k, new THREE.BoxGeometry(0.08, 0.1, 0.05), '#5a4634', 0.17, 0.38, 0.05);
+    onFront(k, new THREE.BoxGeometry(0.03, 0.12, 0.03), '#9aa1a8', -0.15, 0.4, 0.06);
+    k.add(new THREE.SphereGeometry(0.25, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), '#e2b13a', 0, 1.2, 0, { sy: 0.7, sz: DEPTH * 1.12 });
+    k.cyl(0.27, 0.27, 0.02, '#e2b13a', 0, 1.2, 0.02, { sz: DEPTH * 1.2 }, 12);
   },
 };
 
@@ -193,6 +223,27 @@ function trayModel(k) {
   k.cyl(0.07, 0.07, 0.012, '#f3f0e8', 0.08, 0.028, -0.04, {}, 10);
   k.add(new THREE.IcosahedronGeometry(0.045, 0), '#6e8f4e', 0.08, 0.048, -0.04, { sy: 0.5 });
   k.cyl(0.03, 0.026, 0.07, '#e9e4d8', 0.11, 0.057, 0.08, {}, 8);
+}
+// 咬月的餐盤：可可色托盤、一顆漢堡、一份薯條、一杯飲料
+function mealModel(k) {
+  k.box(0.46, 0.02, 0.3, '#4a3027', 0, 0.01, 0);
+  k.cyl(0.065, 0.06, 0.03, '#d99a52', -0.1, 0.035, 0.02, {}, 10);
+  k.cyl(0.067, 0.067, 0.018, '#5e321e', -0.1, 0.058, 0.02, {}, 10);
+  k.add(new THREE.SphereGeometry(0.066, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2), '#cf8a3c', -0.1, 0.066, 0.02, { sy: 0.6 });
+  k.box(0.07, 0.08, 0.04, '#d8452b', 0.07, 0.06, -0.05);
+  for (let i = 0; i < 4; i++) k.box(0.012, 0.06, 0.012, '#f0c860', 0.05 + i * 0.013, 0.12, -0.05);
+  k.cyl(0.035, 0.03, 0.12, '#f6ecd6', 0.14, 0.08, 0.07, {}, 8);
+}
+// 外帶的牛皮紙袋，折口上蓋一顆咬月
+function togoModel(k) {
+  k.box(0.2, 0.26, 0.12, '#c9a46e', 0, 0.13, 0);
+  k.box(0.2, 0.04, 0.02, '#b48d56', 0, 0.24, 0.05);
+  k.cyl(0.04, 0.04, 0.006, '#4a3027', 0, 0.14, 0.061, { rx: Math.PI / 2 }, 10);
+}
+// 煎台的鏟子：原點在握把，鏟面朝前
+function spatulaModel(k) {
+  k.box(0.025, 0.025, 0.22, '#2a2a2e', 0, 0, 0.1);
+  k.box(0.12, 0.008, 0.13, '#c9ced3', 0, -0.01, 0.27);
 }
 function bagModel(k) {
   k.box(0.2, 0.24, 0.09, '#f2eee4', 0, 0.12, 0);
@@ -411,15 +462,15 @@ function faceGeo() {
 }
 
 // ---------- 時間表 ----------
-// 一條路線是一串點：{ p: [x, y, z], wait 停幾秒, face 停的時候面向哪, sit 坐著, ride 這一段是站在手扶梯上, speed 走到這一點多快,
-//   carry 停在這裡和從這裡走出去時手上拿什麼（'tray' 端著餐盤、'table' 餐盤放在面前桌上），leave 走出去時改拿的（沒寫就跟 carry 一樣） }。
+// 一條路線是一串點：{ p: [x, y, z], wait 停幾秒, face 停的時候面向哪, sit 坐著, seat 椅面多高, act 停著做什麼（跟 still 的 act 一樣）, ride 這一段是站在手扶梯上, speed 走到這一點多快,
+//   carry 停在這裡和從這裡走出去時手上拿什麼（'tray' 端著餐盤、'table' 餐盤放在面前桌上、'togo' 外帶紙袋），leave 走出去時改拿的（沒寫就跟 carry 一樣） }。
 // loop 的最後一點會再走回第一點。排成一段一段「走」和「停」，給一個時間就算得出在哪
-function timeline(nodes, { speed = 0.75, loop = true } = {}) {
+export function timeline(nodes, { speed = 0.75, loop = true } = {}) {
   const segs = [];
   const n = nodes.length, last = loop ? n : n - 1;
   for (let i = 0; i < last; i++) {
     const a = nodes[i], b = nodes[(i + 1) % n];
-    if (a.wait) segs.push({ wait: true, p: a.p, dur: a.wait, face: a.face, sit: a.sit, carry: a.carry });
+    if (a.wait) segs.push({ wait: true, p: a.p, dur: a.wait, face: a.face, sit: a.sit, seat: a.seat, act: a.act, carry: a.carry });
     const d = Math.hypot(b.p[0] - a.p[0], b.p[1] - a.p[1], b.p[2] - a.p[2]);
     if (d > 1e-3) segs.push({ wait: false, a: a.p, b: b.p, dur: d / (b.speed || speed), ride: !!b.ride, carry: 'leave' in a ? a.leave : a.carry });
   }
@@ -429,7 +480,7 @@ function timeline(nodes, { speed = 0.75, loop = true } = {}) {
   return { segs, T };
 }
 // 時間表上 t 秒時在哪（t 已經對週期取過餘數）。hint 是上一幀在第幾段，時間往前走時從那裡找起
-function at(tl, t, out, hint = 0) {
+export function at(tl, t, out, hint = 0) {
   const S = tl.segs;
   let i = Math.min(hint, S.length - 1);
   if (S[i].t0 > t) i = 0;
@@ -437,6 +488,8 @@ function at(tl, t, out, hint = 0) {
   const s = S[i];
   out.i = i;
   out.carry = s.carry || null;
+  out.act = s.act || null;
+  out.seat = s.seat ?? null;
   if (s.wait) {
     out.x = s.p[0]; out.y = s.p[1]; out.z = s.p[2];
     out.move = false; out.ride = false; out.sit = !!s.sit; out.face = s.face ?? null;
@@ -542,11 +595,57 @@ function pose(a, s, act, carry, glance, near, look, t) {
         lsw += Math.sin(t * 11 + a.seed) * 0.07;
         rsw += Math.sin(t * 11 + a.seed + 1.9) * 0.07;
       } else pitch = -0.08;
+    } else if (act === 'drive') {
+      // 開月球車：兩隻鰭搭在前面；停在得來速窗口時，左邊那隻往窗口伸過去拿袋子
+      lsw = rsw = 0.95;
+      lra = rra = -0.1;
+      pitch = 0.02;
+      legL = legR = 1.2;
+      if (!a.moving && s.since > 0.6 && s.left > 0.6) { lsw = 1.45; lra = 0.45; yaw = -0.4; }
     } else {
       lsw = rsw = 0.55;
       lra = rra = -0.15;
     }
-  } else if (a.still) {
+  } else if (act === 'kiosk') {
+    // 點餐機：低頭看螢幕，一隻鰭在上面點一點
+    lsw = 0.3;
+    lra = -0.3;
+    rsw = 1.25 + Math.max(0, Math.sin(t * 5 + a.seed)) * 0.15;
+    rra = -0.25;
+    pitch = 0.12;
+  } else if (act === 'flip' || act === 'fry') {
+    const st = a.still, u = frac((t + st.phase) / st.period);
+    if (act === 'flip') {
+      // 煎台：每 period 秒鏟子一挑翻一片；肉排飛在空中的時候抬頭看它
+      lsw = 0.7;
+      lra = -0.2;
+      rsw = u < 0.14 ? 0.95 + Math.sin((u / 0.14) * Math.PI) * 0.75 : 0.95 + Math.sin(t * 7 + a.seed) * 0.05;
+      rra = -0.12;
+      pitch = u < st.air / st.period ? -0.14 : 0.1;
+    } else {
+      // 炸鍋：籃子提起來那一段兩手往前抬，先甩一甩油
+      const up = u > 0.68 && u < 0.9;
+      lsw = rsw = up ? 1.25 : 0.8;
+      lra = rra = -0.2;
+      if (u > 0.72 && u < 0.8) { lsw += Math.sin(t * 28) * 0.12; rsw += Math.sin(t * 28) * 0.12; }
+      pitch = 0.08;
+    }
+  } else if (act === 'scoop') {
+    // 裝薯條：一手拿紙套，一手用鏟子往下舀、抬起來倒進去
+    const u = frac((t + a.seed) / 2.4);
+    lsw = 0.95;
+    lra = -0.25;
+    rsw = u < 0.35 ? 1.1 - ease(u / 0.35) * 0.45 : u < 0.6 ? 0.65 + ease((u - 0.35) / 0.25) * 0.65 : 1.3 - ease((u - 0.6) / 0.4) * 0.2;
+    rra = -0.2;
+    pitch = 0.12;
+  } else if (act === 'wrap') {
+    // 包漢堡：兩手一前一後折紙
+    const w = t * 3 + a.seed;
+    lsw = 0.95 + Math.sin(w) * 0.15;
+    rsw = 0.95 + Math.sin(w + 2.4) * 0.15;
+    lra = rra = -0.1 - Math.max(0, Math.sin(w * 0.5)) * 0.2;
+    pitch = 0.12;
+  } else if (a.still || act) {
     if (act === 'guard') {
       // 手背在後面，前後輕輕晃
       lsw = rsw = -0.45;
@@ -609,8 +708,8 @@ function pose(a, s, act, carry, glance, near, look, t) {
 // 人潮聲：多遠以內的海牛人算進來、整體比海市小幾成；近處坐著、站著的最多兩隻有自己的嗓子
 const MURMUR_R = 18, QUIET = 0.35, VOICE_R = 6;
 
-// ambience、indoorness 給了才有人聲（只在室內）
-export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience = null, indoorness = null }) {
+// ambience、indoorness 給了才有人聲（只在室內）。groundY(x, z, y) 給了，搭手扶梯時腳踩在踏板上（時間表只排中線，踏板比中線高一截）
+export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience = null, indoorness = null, groundY = null }) {
   const R = rng('jinghai:manatees');
   const pick = (arr) => arr[Math.floor(R() * arr.length)];
   const agents = [];
@@ -630,14 +729,15 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
     a.waved = -99;
     agents.push(a);
   };
+  // drive：坐在車上走（vehicle 是車的模型，seat 是椅面多高）；meal：端的是速食店的餐盤
   for (const L of plan.loops) {
     if (coarse && L.fine) continue;
     const tl = timeline(L.nodes, { speed: L.speed });
     for (let i = 0; i < L.count; i++) {
-      const lead = { tl, offset: (i / L.count) * tl.T + R() * 2, outfit: pick(L.outfits), carry: L.carry || null, speedUp: 1 };
+      const lead = { tl, offset: (i / L.count) * tl.T + R() * 2, outfit: pick(L.outfits), carry: L.carry || null, speedUp: 1, drive: L.drive, vehicle: L.vehicle, seat: L.seat, meal: L.meal };
       add(lead);
       // 帶小孩的：小孩跟在後面一點點
-      if (L.kids && i % 2 === 0) add({ tl, offset: lead.offset - 1.6, outfit: pick(['vest', 'sweater', 'cardigan', 'dress']), kid: true, carry: null });
+      if (L.kids && i % 2 === 0) add({ tl, offset: lead.offset - 1.6, outfit: pick(['vest', 'sweater', 'cardigan']), kid: true, carry: null });
     }
   }
   if (plan.canteen) {
@@ -645,14 +745,14 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
   }
   for (const s of plan.still) {
     if (coarse && s.fine) continue;
-    add({ still: s, outfit: s.outfit || pick(s.outfits), face: s.face, kid: s.kid, size: s.size });
+    add({ still: s, outfit: s.outfit || pick(s.outfits), face: s.face, kid: s.kid, size: s.size, meal: s.meal });
   }
 
   // 每一種打扮一個 InstancedMesh；身體是平滑著色，手腳和上半身的角度在著色器裡擺
   const group = new THREE.Group();
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
   posed(mat, 'jinghai-manatee', true);
-  const things = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });   // 餐盤、紙袋
+  const things = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });   // 餐盤、紙袋、鏟子、車
   const byOutfit = new Map();
   for (const a of agents) {
     if (!byOutfit.has(a.outfit)) byOutfit.set(a.outfit, []);
@@ -691,21 +791,30 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
   const shadows = new THREE.InstancedMesh(sgeo, new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }), agents.length);
   shadows.frustumCulled = false;
   group.add(shadows);
-  // 餐盤、紙袋：要拿的才有一份，沒拿的時候縮成 0
-  const holders = (kind, fn) => {
-    const list = agents.filter((a) => (kind === 'tray' ? a.tl?.segs.some((s) => s.carry) || a.still?.tray : a.carry === 'bag'));
-    if (!list.length) return null;
+  // 手上拿的、坐的車：要拿的才有一份，沒拿的時候縮成 0。a[key] 記 { m 哪個網格, i 第幾個 }
+  const extras = [];
+  const holders = (fn, test, key) => {
+    const list = agents.filter(test);
+    if (!list.length) return;
     const m = new THREE.InstancedMesh(geometry(fn), things, list.length);
     m.frustumCulled = false;
-    list.forEach((a, i) => { a[kind] = i; });
+    m.receiveShadow = true;
+    list.forEach((a, i) => { a[key] = { m, i }; });
     group.add(m);
-    return m;
+    extras.push(m);
   };
-  const trays = holders('tray', trayModel), bags = holders('bag', bagModel);
+  const hasTray = (a) => a.tl?.segs.some((x) => x.carry === 'tray' || x.carry === 'table') || a.still?.tray;
+  holders(trayModel, (a) => !a.meal && hasTray(a), 'tray');
+  holders(mealModel, (a) => a.meal && hasTray(a), 'tray');
+  holders(bagModel, (a) => a.carry === 'bag', 'bag');
+  holders(togoModel, (a) => a.tl?.segs.some((x) => x.carry === 'togo'), 'togo');
+  holders(spatulaModel, (a) => a.still?.tool === 'spatula', 'tool');
+  for (const fn of new Set(agents.map((a) => a.vehicle).filter(Boolean))) holders(fn, (a) => a.vehicle === fn, 'car');
   scene.add(group);
 
   const s = {}, m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, 'YXZ'), p = new THREE.Vector3(), sc = new THREE.Vector3();
-  const zero = new THREE.Matrix4().makeScale(0, 0, 0), held = new THREE.Matrix4(), off = new THREE.Matrix4();
+  const zero = new THREE.Matrix4().makeScale(0, 0, 0), held = new THREE.Matrix4(), off = new THREE.Matrix4(), one = new THREE.Vector3(1, 1, 1);
+  const hand = new THREE.Matrix4(), rot = new THREE.Matrix4();
   let time = 0;
   const api = {
     hidden: false,
@@ -731,6 +840,7 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
           glance = Math.sin(time * 0.23 + a.seed) * (st.look ?? 0.25);
           target = st.face + glance * 0.5;
           s.sit = st.sit;
+          s.seat = st.seat ?? null;
           if (st.tray) carry = 'table';
           s.move = false;
           s.ride = false;
@@ -738,15 +848,19 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
         } else {
           const tl = a.tl, t = (((time + a.offset) % tl.T) + tl.T) % tl.T;
           at(tl, t, s, a.hint);
+          if (s.ride && groundY) s.y = groundY(s.x, s.z, s.y);
           a.hint = s.i;
           carry = s.carry ?? a.carry;
           target = s.face ?? a.heading;
+          // 開車的：坐著不走路，停下來的時候算「沒在動」（pose 的 drive 照這個伸手）
+          a.moving = s.move || s.ride;
+          if (a.drive) { s.sit = true; s.move = false; s.ride = false; }
           if (s.move) {
             a.step = (a.step || 0) + dt * 2.6;
             roll = Math.sin(a.step * Math.PI) * 0.07;
             bob = Math.abs(Math.sin(a.step * Math.PI)) * 0.035;
           }
-          if (s.sit) act = carry === 'table' ? 'eat' : 'idle';
+          act = a.drive ? 'drive' : s.sit ? (carry === 'table' ? 'eat' : s.act || 'idle') : s.act;
         }
         if (s.sit) { lean = -0.07; breath *= 0.7; }
         // 轉彎時身體往裡傾
@@ -784,7 +898,7 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
         cells.array[i * 2] = a.cell;
         cells.array[i * 2 + 1] = ROWS - 1 - Q.expr;
 
-        const sq = g[9], y = s.y + bob + (s.sit ? (a.still?.seat ?? SEAT) - BOTTOM * a.scale : 0);
+        const sq = g[9], y = s.y + bob + (s.sit ? (s.seat ?? a.seat ?? SEAT) - BOTTOM * a.scale : 0);
         p.set(s.x, y, s.z);
         e.set(lean, a.heading, roll);
         q.setFromEuler(e);
@@ -792,12 +906,26 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
         m4.compose(p, q, sc);
         bodies.get(a.outfit).setMatrixAt(a.slot, m4);
         faces.setMatrixAt(i, m4);
+        // 鏟子：握在 x 正那隻鰭的尖端，跟著手前後甩；手在平常工作的角度時鏟面是平的
+        if (a.tool) {
+          hand.makeTranslation(SHOULDER[0], SHOULDER[1], 0).multiply(rot.makeRotationX(-g[2])).multiply(off.makeTranslation(0, -0.42, 0.06)).multiply(rot.makeRotationX(0.95));
+          a.tool.m.setMatrixAt(a.tool.i, held.multiplyMatrices(m4, hand));
+        }
+        // 車：駕駛坐右邊那張椅子，車的中心在駕駛的左前方一點
+        if (a.car) {
+          e.set(0, a.heading, 0);
+          q.setFromEuler(e);
+          p.set(0.38, 0, 0.35).applyQuaternion(q);
+          p.x += s.x; p.y = s.y; p.z += s.z;
+          a.car.m.setMatrixAt(a.car.i, held.compose(p, q, one));
+        }
         p.set(s.x, s.y + 0.012, s.z);
         q.identity();
         sc.setScalar(a.scale * (s.sit ? 0.8 : 1));
         m4.compose(p, q, sc);
         shadows.setMatrixAt(i, m4);
-        if (a.tray !== undefined) {
+        if (a.tray) {
+          const { m, i: ti } = a.tray;
           if (carry === 'tray') {
             // 兩隻鰭往前托著
             p.set(s.x, s.y + bob, s.z);
@@ -806,26 +934,31 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
             sc.setScalar(a.scale);
             held.compose(p, q, sc);
             off.makeTranslation(0, 0.6, 0.42);
-            trays.setMatrixAt(a.tray, m4.multiplyMatrices(held, off));
+            m.setMatrixAt(ti, m4.multiplyMatrices(held, off));
           } else if (carry === 'table') {
             // 坐著吃：餐盤放在面前的桌上
             p.set(s.x + Math.sin(a.heading) * 0.55, s.y + 0.64, s.z + Math.cos(a.heading) * 0.55);
             e.set(0, a.heading, 0);
             q.setFromEuler(e);
             sc.setScalar(1);
-            trays.setMatrixAt(a.tray, m4.compose(p, q, sc));
-          } else trays.setMatrixAt(a.tray, zero);
+            m.setMatrixAt(ti, m4.compose(p, q, sc));
+          } else m.setMatrixAt(ti, zero);
         }
-        if (a.bag !== undefined) {
+        // 紙袋提在 x 正那邊，跟著走路晃
+        for (const [h, kind] of [[a.bag, 'bag'], [a.togo, 'togo']]) {
+          if (!h) continue;
+          if (carry !== kind) { h.m.setMatrixAt(h.i, zero); continue; }
           e.set(0, a.heading, roll * 0.5);
           q.setFromEuler(e);
           p.set(s.x, y, s.z);
           sc.setScalar(a.scale);
           held.compose(p, q, sc);
           off.makeTranslation(0.47, 0.2, 0.05);
-          bags.setMatrixAt(a.bag, m4.multiplyMatrices(held, off));
+          h.m.setMatrixAt(h.i, m4.multiplyMatrices(held, off));
         }
       }
+      // 區域自己的小動畫（速食店的肉排、炸籃）跟海牛人用同一個時鐘，廚師的手才對得上
+      plan.tick?.(time, P);
       if (hum) {
         const k = indoorness(P.x, P.z) * QUIET, a = hum.amount;
         hum.voices.sort((p, q) => p.far - q.far).length = Math.min(2, hum.voices.length);
@@ -840,8 +973,7 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
       facePose.body.needsUpdate = true;
       cells.needsUpdate = true;
       shadows.instanceMatrix.needsUpdate = true;
-      if (trays) trays.instanceMatrix.needsUpdate = true;
-      if (bags) bags.instanceMatrix.needsUpdate = true;
+      for (const m of extras) m.instanceMatrix.needsUpdate = true;
     },
   };
   api.update(0);

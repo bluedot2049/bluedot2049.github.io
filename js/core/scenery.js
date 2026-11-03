@@ -12,6 +12,10 @@ export const REFLECT_LAYER = 2;
 
 export const uTime = { value: 0 };
 
+// 天氣改到的、每一區共用的東西（海市的雨，rain.js 每一幀寫）：veil 是雲遮住天上的光幾成（星、月暈、天上的光點），
+// rain 是雨量，halo 是燈的光暈放大幾倍（下雨空氣濕，光暈暈得比較開）。沒有天氣的區域一直是 0、0、1
+export const AIR = { veil: { value: 0 }, rain: { value: 0 }, halo: { value: 1 } };
+
 // 太陽拉長的人影（蜃樓用）：len 是一公尺高的東西影子多長，sx、sz 是影子倒向的方向；len 為 0 就照常畫腳下的圓影。
 // open(x, z)：那一點曬得到太陽嗎（井圈公寓裡照不到）。character.js 每一幀照這個拉影子，區域自己每一幀更新
 export const sunShadow = { len: 0, sx: 1, sz: 0, open: null };
@@ -43,7 +47,8 @@ export function bucketObjects(b, ghost = false, floor = null, far = false) {
 // 遠處的樣子跟海上的漁火一樣像星星：芯很小很亮、偏白，光暈攤開淡一點，亮一下的那瞬間有一點點十字光芒。
 // 遠處的點至少留 2.5 像素，不會縮成亂閃的次像素
 // 中心是燈本身的顏色，往外偏深、偏紅，像燈在霧裡那樣；疊的方式是 screen（越疊越接近飽和，不會像直接相加那樣爆成白的）。
-// 有調色的區域（grade.js）跟著霧淡掉；sky 是掛在天上的（星、月暈、海對面的塔），不吃霧
+// 有調色的區域（grade.js）跟著霧淡掉；sky 是掛在天上的（星、月暈、海對面的塔），不吃霧，被雲遮住時淡掉（AIR.veil）
+// 地上的燈下雨時光暈放大（AIR.halo），放大的光暈每個像素淡一點
 // gain：遠處的亮度倍數（近處照舊）；dot：遠處至少幾像素。要從很遠就看得清楚的燈（上星廟的山路）才調高
 export function glowPoints(list, { far = false, sky = false, gain = 1, dot = 2.5 } = {}) {
   const n = list.length;
@@ -62,14 +67,15 @@ export function glowPoints(list, { far = false, sky = false, gain = 1, dot = 2.5
   geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
   geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uTime, uScale: { value: 150 * pr }, uPr: { value: pr }, uFar: { value: far ? 1 : 0 }, uAir: { value: sky ? 0 : 1 }, uGain: { value: gain }, uDot: { value: dot }, ...gradeUniforms() },
+    uniforms: { uTime, uScale: { value: 150 * pr }, uPr: { value: pr }, uFar: { value: far ? 1 : 0 }, uAir: { value: sky ? 0 : 1 }, uGain: { value: gain }, uDot: { value: dot }, uVeil: AIR.veil, uHalo: AIR.halo, ...gradeUniforms() },
     vertexShader: GRADE_VERT + `
-      uniform float uTime; uniform float uScale; uniform float uPr; uniform float uFar; uniform float uAir; uniform float uGain; uniform float uDot;
+      uniform float uTime; uniform float uScale; uniform float uPr; uniform float uFar; uniform float uAir; uniform float uGain; uniform float uDot; uniform float uVeil; uniform float uHalo;
       attribute vec3 aColor; attribute float aSize; attribute float aPhase;
       varying vec3 vC; varying float vA; varying float vF; varying float vSp;
       void main() {
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        float d = -mv.z, px = aSize * uScale / d;
+        float halo = mix(1.0, uHalo, uAir);
+        float d = -mv.z, px = aSize * uScale * halo / d;
         float flick = 0.5 + 0.08 * sin(uTime * 7.0 + aPhase) + 0.05 * sin(uTime * 13.0 + aPhase * 2.0);
         float f = smoothstep(20.0, 60.0, d) * uFar;
         // 兩道頻率對不上的慢波同時到頂才亮，什麼時候閃每盞都不一樣
@@ -80,7 +86,7 @@ export function glowPoints(list, { far = false, sky = false, gain = 1, dot = 2.5
         // 燭火：幾道快的抖動疊在一起，偶爾一陣風讓它縮一下；風頭（breeze 的波峰）經過時那一帶一起抖
         float candle = 0.84 + 0.09 * sin(uTime * 9.1 + aPhase) * sin(uTime * 5.3 + aPhase * 2.0) + 0.07 * sin(uTime * 13.7 + aPhase * 3.0);
         candle *= 1.0 - 0.4 * pow(breeze, 10.0) * (0.5 + 0.5 * sin(uTime * 17.0 + aPhase * 4.0));
-        vA = mix(flick, (0.42 + 0.22 * breeze + 0.8 * spark) * candle * uGain, f) * mix(1.0, gradeLight(gradeFog((modelMatrix * vec4(position, 1.0)).xyz)), uAir);
+        vA = mix(flick, (0.42 + 0.22 * breeze + 0.8 * spark) * candle * uGain, f) * mix(1.0 - uVeil, gradeLight(gradeFog((modelMatrix * vec4(position, 1.0)).xyz)) * pow(halo, -0.35), uAir);
         vC = mix(aColor, vec3(1.0, 0.94, 0.8), spark * f * 0.5);
         vF = f; vSp = spark;
         gl_PointSize = mix(px, max(px, uDot * uPr) * (1.0 + 2.0 * spark) * 2.2, f);

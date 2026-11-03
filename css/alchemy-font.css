@@ -1,8 +1,8 @@
 /* © 2026 bluedot2049《煉金畫廊》。未經授權禁止重製、改作或用於 AI 訓練，詳見 LICENSE。 */
-/* 煉金體（Alchemy Gallery Font）- 系統化幾何造字 */
+/* 煉金體（Alchemy Gallery Font）：系統化幾何造字，房間名稱用。由 tools/build_font.py 產生，不要手改 */
 @font-face {
     font-family: 'AlchemyGallery';
-    src: url('../assets/AlchemyGallery.woff2') format('woff2'),
+    src: url('../assets/AlchemyGallery.woff2?v=3a78185d') format('woff2'),
          url('../assets/AlchemyGallery.ttf') format('truetype');
     font-weight: normal;
     font-style: normal;
@@ -12,7 +12,7 @@
 /* 小字用：筆畫較細、橫更細，24px 以下比較不會糊 */
 @font-face {
     font-family: 'AlchemyGalleryText';
-    src: url('../assets/AlchemyGalleryText.woff2') format('woff2'),
+    src: url('../assets/AlchemyGalleryText.woff2?v=940da7f7') format('woff2'),
          url('../assets/AlchemyGalleryText.ttf') format('truetype');
     font-weight: normal;
     font-style: normal;

@@ -588,6 +588,22 @@ function gradeSections(G, { zone, renderer, scene, world, bar, section, onOpen, 
   shapeLine.append(shapeBtn, h('span', 'note', '圓和方框的大小是邊上的位置，漸變往外加'));
   shape.append(shapeLine);
   S1.body.append(pos, list, tools, opts, shape);
+  // 照天氣的分區（海市的雨，weather.js 的 __rain）：先把天氣固定住再調，或跳到快下、快停的時候看轉換
+  const rainy = window.__rain;
+  if (rainy && SET.regions.some((r) => r.weather)) {
+    const wx = h('div', 'line'), force = (v, what) => { rainy.force(v); say(what); };
+    wx.append(
+      h('span', 'note', '天氣'),
+      button('照時間', () => force(null, '天氣照伺服器時間（大家同一場）')),
+      button('毛毛雨', () => force(0.3, '固定成毛毛雨')),
+      button('大雨', () => force(1, '固定成大雨')),
+      button('雨後', () => force('after', '固定成雨後')),
+      button('乾', () => force(0, '固定成不下')),
+      button('看起雨', () => say('下一場：' + rainy.soon(160)), '跳到下一場開始前兩分多鐘，從雲聚過來開始看'),
+      button('看收雨', () => { rainy.end(40); say('四十秒後停，接著是雨後'); }, '跳到這一場停之前四十秒'),
+    );
+    S1.body.append(wx);
+  }
 
   function renderList() {
     list.replaceChildren();
@@ -595,7 +611,8 @@ function gradeSections(G, { zone, renderer, scene, world, bar, section, onOpen, 
       const r = i < 0 ? SET.base : SET.regions[i];
       const row = h('div', 'reg' + (i === cur ? ' cur' : '')), bar = h('i'), fill = h('b'), val = h('span', 'note');
       bar.append(fill);
-      row.append(h('span', null, (i < 0 ? '全區' : `${i + 1}. ${r.name || '分區'}`) + (r.tone ? `（${r.tone}）` : '')), bar, val);
+      const wx = r.weather ? `・照${r.weather === 'rain' ? '雨' : '地濕'}` : '';
+      row.append(h('span', null, (i < 0 ? '全區' : `${i + 1}. ${r.name || '分區'}`) + (r.tone ? `（${r.tone}）` : '') + wx), bar, val);
       row.onclick = () => setCur(i);
       list.append(row);
       return { fill, val };
@@ -632,6 +649,7 @@ function gradeSections(G, { zone, renderer, scene, world, bar, section, onOpen, 
     lines.visible = showLines && !isShut();
     if (!lines.visible) return;
     SET.regions.forEach((r, i) => {
+      if (r.weather) return;   // 照天氣的分區沒有範圍
       const color = i === cur ? 0xffc978 : 0x7fd8ff;
       lines.add(new THREE.LineLoop(edge(r, 0), mat(color, i === cur ? 1 : 0.55)));
       if (r.fade > 0) lines.add(new THREE.LineLoop(edge(r, r.fade), mat(color, 0.22)));
@@ -977,8 +995,8 @@ function gradeSections(G, { zone, renderer, scene, world, bar, section, onOpen, 
     renderList();
     for (const r of rows) r.sync();
     const r = R();
-    shape.hidden = !r;
-    if (r) {
+    shape.hidden = !r || !!r.weather;   // 照天氣的分區沒有範圍
+    if (r && !r.weather) {
       for (const k of ['x', 'z', 'fade']) shapeRows[k].sync();
       shapeRows.r.el.hidden = !!r.box;
       shapeRows.w.el.hidden = shapeRows.d.el.hidden = !r.box;

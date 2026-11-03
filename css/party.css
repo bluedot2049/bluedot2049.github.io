@@ -12,6 +12,8 @@
 .party-who { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: center; }
 .mate-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; letter-spacing: .08em; color: var(--muted); }
 .mate-chip i { width: 9px; height: 9px; border-radius: 50%; background: var(--pc); box-shadow: 0 0 6px var(--pc); }
+.mate-chip[data-m] { cursor: pointer; }
+.mate-chip[data-m]:hover { color: var(--text); }
 body.desk #party-card, body.desk #party-invite { bottom: calc(84px + env(safe-area-inset-bottom)); }
 
 /* 隊友的記號：頭上一顆小燈；跑出畫面時在邊上指方向；在別的區域時左上角掛名牌。位置由 party.js 用 transform 擺 */
@@ -48,10 +50,31 @@ body.photo #mates { display: none; }
 }
 @keyframes mate-zzz { 0% { transform: translate(0, 2px); opacity: .3; } 50% { opacity: 1; } 100% { transform: translate(3px, -4px); opacity: .3; } }
 .mate.ask i { animation: mate-ask 1.2s ease-in-out infinite; }
+/* 隊友的記號點了會走過去：記號本身很小，外面多一圈看不見的按得到的範圍 */
+.mate[data-m] i, .mate[data-m] span { pointer-events: auto; cursor: pointer; }
+.mate[data-m]::before { content: ""; position: absolute; left: -18px; top: -18px; width: 36px; height: 36px; border-radius: 50%; pointer-events: auto; cursor: pointer; }
+/* 看不到人時箭頭底下寫地名：靠右邊往左長、靠左邊往右長 */
+.mate[data-mode="edge"] span {
+  display: block; position: absolute; top: 13px; left: 0; transform: translateX(-50%); white-space: nowrap;
+  font-size: 11px; line-height: 18px; padding: 0 7px; letter-spacing: .1em; color: var(--text);
+  background: var(--panel-soft); border-radius: 999px;
+}
+.mate[data-mode="edge"][data-side="r"] span { left: auto; right: -8px; transform: none; }
+.mate[data-mode="edge"][data-side="l"] span { left: -8px; transform: none; }
+.mate[data-mode="edge"] span:empty { display: none; }
+/* 剛吹了哨：記號外面一圈隊伍顏色的環往外散三次 */
+.mate.call i::before {
+  content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid var(--pc);
+  animation: mate-call .8s ease-out 3; opacity: 0; pointer-events: none;
+}
+@keyframes mate-call { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(2.6); opacity: 0; } }
 @keyframes mate-ask { 50% { transform: scale(1.6); } }
 
 /* 隊友說的話：跟一般對話框一樣，前面一顆隊伍顏色的小點 */
 .speech.party-say .pc { display: inline-block; width: 8px; height: 8px; margin: 0 7px 2px 0; border-radius: 50%; background: var(--pc); vertical-align: middle; box-shadow: 0 0 0 1px rgba(26, 18, 12, .5); }
+/* 自動說的話（去哪了、到哪了）：字淡一點，看得出不是打的 */
+.speech.party-say.auto span, #chat-log li.auto { opacity: .7; }
+#chat-log li.auto i { opacity: 1; }
 
 /* 打字框：手機貼在鍵盤上緣（--kb 是鍵盤高度），電腦在下方按鈕列上面。上面列出剛剛說的幾句 */
 #chat {
@@ -94,6 +117,11 @@ body.party-arming #stage canvas { cursor: crosshair; }
   font-size: 13px; letter-spacing: .1em; white-space: nowrap;
   background: rgba(20, 14, 10, .88); border-color: var(--line-soft);
 }
+.chat-quick .btn.call { border-color: var(--line); color: var(--gold-hi); }
+/* 渡船卡：隊友在（或正往）那一區，名字旁邊亮他的顏色，底下的頁點也描一圈 */
+.ferry-mates { display: inline-flex; gap: 4px; margin-left: 10px; vertical-align: middle; }
+.ferry-mates i { width: 8px; height: 8px; border-radius: 50%; background: var(--pc); box-shadow: 0 0 6px var(--pc); }
+#ferry-dots i.mate { box-shadow: 0 0 0 1.5px var(--pc); }
 /* 手機橫拿：畫面本來就矮。打字框開著時上面的按鈕整排收起，剛剛的話只留最後兩句；
    鍵盤出來時只剩打字那一行，話看頭上的對話框 */
 @media (orientation: landscape) and (max-height: 500px) {

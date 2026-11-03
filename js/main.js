@@ -30,29 +30,21 @@ import { CAMERAS, SOON, TABLE, carried, carry } from './camera/cameras.js';
 import { FlashFx } from './camera/flashfx.js';
 import { installGrade, gradeAt, NEUTRAL } from './core/grade.js';
 import { Hollow } from './zones/gallery/hollow.js';
+import { PLACES } from './scene/places.js';
 import { bindDeskKeys } from './controls/deskkeys.js';
 import { Beast } from './npc/beast.js';
 
 // 世界分成幾個區域，一次只建一個，用 ?z= 指定，沒有寫就是畫廊。每個區域的內容寫在自己的 zone-*.js，用到才下載。
 // 換區域時整頁重新載入：瀏覽器一定會把上一個區域的記憶體收回去，手機才撐得住。
-// 新增區域：這裡加一行、寫一個 zone-*.js，index.html 開頭那段渡海的字也加上去
+// 新增區域：這裡加一行、scene/places.js 加一筆、寫一個 zone-*.js，index.html 開頭那段渡海的字（crossing）也加上去
 const ZONES = {
-  gallery: { crossing: '渡海　回畫廊', load: () => import('./zones/gallery/zone-gallery.js') },
-  haishi: { crossing: '渡海　往海市', load: () => import('./zones/haishi/zone-haishi.js') },
-  jinghai: { crossing: '渡海　往靜海', load: () => import('./zones/jinghai/zone-jinghai.js') },
-  shenlou: { crossing: '渡海　往蜃樓', load: () => import('./zones/shenlou/zone-shenlou.js') },
-  ting: { crossing: '渡海　往汀', load: () => import('./zones/ting/zone-ting.js') },
+  gallery: { load: () => import('./zones/gallery/zone-gallery.js') },
+  haishi: { load: () => import('./zones/haishi/zone-haishi.js') },
+  jinghai: { load: () => import('./zones/jinghai/zone-jinghai.js') },
+  shenlou: { load: () => import('./zones/shenlou/zone-shenlou.js') },
+  ting: { load: () => import('./zones/ting/zone-ting.js') },
 };
-// 渡船能去的地方，每個渡口都照這個順序一張一張卡；to 是 null 的還沒有航線。
-// dev 是還在蓋的區域：一般人看到「還不能搭」，網址有 ?debug（調色模式）時才開得到
-// desc 是卡片上的一兩句，tags 只寫到了那裡已經能做的事
-const FERRY = [
-  { to: 'gallery', name: '畫廊', desc: '山坡上的老屋，掛著作品。', tags: ['看畫', '照鏡子', '挑相機', '樹洞'] },
-  { to: 'haishi', name: '海市', desc: '海上的夜市。', tags: ['照相館', '攤販'] },
-  { to: 'jinghai', name: '靜海', desc: '月亮上，海牛族的前哨站。', tags: ['食堂', '商店街', '看地球'] },
-  { to: 'shenlou', name: '蜃樓', desc: '沙漠裡的影子之城。', tags: ['井圈公寓', '沙船', '集露田'] },
-  { to: 'ting', name: '汀', desc: '時間外的淺水。', tags: ['孤櫻', '汀站', '沼澤'] },
-];
+// 渡船能去的地方在 scene/places.js，每個渡口都照那個順序一張一張卡
 
 async function loadJSON(url) {
   const res = await fetch(url, { cache: 'no-cache' });
@@ -156,6 +148,8 @@ async function precompile(renderer, scene, camera, world) {
 async function start() {
   const params = new URLSearchParams(location.search);
   const zone = Object.hasOwn(ZONES, params.get('z')) ? params.get('z') : 'gallery';
+  // 介面依區域換字色（hud.css 的 :root[data-zone]）
+  document.documentElement.dataset.zone = zone;
   // 區域的程式和 gallery.json 同時下載
   const zoneJob = ZONES[zone].load();
   let gallery, Z;
@@ -208,7 +202,7 @@ async function start() {
   // 沒匯出的區域在 ?debug 時裝一組不改畫面的（NEUTRAL），調色面板一樣打得開
   const grade = params.get('grade') === '0' ? null : Z.grade || (params.has('debug') ? NEUTRAL : null);
   if (grade) installGrade(grade, scene);
-  const world = Z.build(scene, { gallery, coarse, params, renderer });
+  const world = Z.build(scene, { gallery, coarse, params, renderer, quality });
 
   // 光線、霧。畫廊有室內和戶外兩組，走出後門時在兩組之間漸變；只有一組的區域兩頭都用它
   const envs = Z.env(world);
@@ -246,7 +240,7 @@ async function start() {
   // 角色出來之前先站好的（畫廊的胖頭頭人）
   const { manatee = null, host = null } = Z.residents?.({ scene, world, shadowTex }) ?? {};
   // 大樹的樹洞：作者和網站消息。沒有大樹的區域什麼都不做
-  const hollow = new Hollow(world.outdoor?.hollow ?? null);
+  const hollow = new Hollow(world.outdoor?.hollow ?? null, zone);
   const ambience = new Ambience();
   // 別人閃燈時，那盞閃光燈移過去亮一下
   const flashFx = new FlashFx(scene, flashLight, camera, ambience);
@@ -373,26 +367,30 @@ async function start() {
       mp?.pet(a.index);
       lastInput = performance.now();
     },
-    // 搭船：先選去哪裡，再跳進碼頭邊的渡船坐好，船夫在船頭現身、燈亮起來，才轉到渡海畫面
-    onExit(ex) {
+    // 搭船：先選去哪裡，再跳進碼頭邊的渡船坐好，船夫在船頭現身、燈亮起來，才轉到渡海畫面。
+    // 有隊友的那一區亮他的顏色；want 是點了別區隊友的名牌要去的地方，沒有就翻到隊友剛去的那一區（同船）
+    onExit(ex, want) {
       if (ex.home) return ex.home.act();
       if (!ex.boat) return travel(ex.to);
       if (player.boarding) return;
-      const list = FERRY.map((d) => {
-        if ((d.to || d.dev) === zone) return { ...d, to: null, here: true };
-        if (d.dev && params.has('debug')) return { ...d, to: d.dev, tags: ['調色模式才開得到'] };
-        return d;
+      const mates = party?.ferryInfo();
+      const list = PLACES.map((d) => {
+        const at = mates?.at.get(d.to || d.dev);
+        const m = at ? { ...d, mates: at } : d;
+        if ((d.to || d.dev) === zone) return { ...m, to: null, here: true };
+        if (d.dev && params.has('debug')) return { ...m, to: d.dev, tags: ['調色模式才開得到'] };
+        return m;
       });
       ferryBoat = ex.boat;
       ui.showFerry(list, (to) => {
         ui.hideFerry();
-        fetchCrossing(to);
+        party?.leaving(to);   // 坐上船這時候就說「去海市了」，船還沒開，旁邊的隊友看得到
         player.board(ex.boat, () => {
           ex.boat.board();
           ambience.voice('push', 0.5);
           setTimeout(() => travel(to), 1100);
         });
-      });
+      }, list.findIndex((d) => d.to && d.to === (want || mates?.lead)));
     },
     // 相機桌：走過去先看身上那台原本的位置，沒帶就從最左邊看起
     onCameras() {
@@ -448,7 +446,7 @@ async function start() {
   }
   for (const src of Z.attention?.({ world, player }) ?? []) attention.add(src);
   // 白獸（beast.js）：很久才出現一次，同一區的人同時看到。拍到的照片快門當下評分，拿去海市星台的報社登報
-  const beast = new Beast({ scene, world, zone, where: FERRY.find((d) => d.to === zone)?.name ?? '', ambience, attention, spots: Z.beast?.spots, params });
+  const beast = new Beast({ scene, world, zone, where: PLACES.find((d) => d.to === zone)?.name ?? '', ambience, attention, spots: Z.beast?.spots, params });
   // 動物叫了一聲：轉頭看牠
   if (animals) animals.onSay = (a, d) => d < 10 && attention.notice(`a${a.index}`, (o) => a.shown && !!a.rig.head.getWorldPosition(o), { kind: 'animal', dur: 1.2 + Math.random() * 1.2 });
   // 別人做了什麼（揮手、跳、閃光、說話）：在附近就轉頭看他一下
@@ -464,10 +462,6 @@ async function start() {
 
   // 渡海：載入畫面換成小船，蓋住畫面後整頁換到另一個區域。from 記住從哪裡來，到了站在對應的碼頭。
   // 走進歸門（door）：不搭船，門裡的光鋪滿畫面就換頁，到了是前廳的前門（from=door）
-  // 渡海那張目的地的照片：一選好去哪裡就先下載（index.html 的 crossing.picture，跟下一頁挑的是同一張），
-  // 上船、船夫現身這一兩秒抓好，換頁後通常直接從快取拿。留著參照，下載到一半不會被丟掉
-  let crossingPic = null;
-  const fetchCrossing = (to) => { crossingPic ??= window.crossing?.picture(to); };
   let traveling = false;
   function travel(to, extra = {}, door = false) {
     if (traveling) return;
@@ -477,6 +471,7 @@ async function start() {
     if (to !== 'gallery') q.set('z', to);
     q.set('from', zone);
     for (const [k, v] of Object.entries(extra)) q.set(k, v);
+    party?.leaving(to);   // 隊友那邊等久一點、名牌寫「往哪裡」
     const el = document.getElementById('loading');
     if (door) {
       q.set('from', 'door');
@@ -489,10 +484,10 @@ async function start() {
       setTimeout(() => location.replace(`${location.pathname}?${q}`), 1100);
       return;
     }
-    el.querySelector('.msg').textContent = ZONES[to].crossing;
-    el.querySelector('.cine .label span').textContent = ZONES[to].crossing.split('　')[1];
+    const where = window.crossing?.where(to) ?? '';
+    el.querySelector('.msg').textContent = '渡海　' + where;
+    el.querySelector('.cine .label span').textContent = where;
     el.querySelector('.cine .label small').textContent = window.crossing?.note(to) ?? '';
-    fetchCrossing(to);
     try { sessionStorage.setItem('crossAt', Date.now()); } catch (e) {}
     keepFullscreen();
     el.style.setProperty('--t', '0ms');
@@ -540,6 +535,7 @@ async function start() {
   }
   // 電腦版的渡船卡浮在船上方：投影船艙上方一點，卡片底邊對著那裡，不出畫面。船在鏡頭後面就放畫面中間
   let ferryBoat = null;
+  let ferryWalk = null;   // 點了別區隊友的名牌，正走去渡口 { ex, to, goal }
   const ferryAt = new THREE.Vector3();
   function placeFerry() {
     const s = ferryBoat.seat(), el = ui.ferry;
@@ -737,8 +733,17 @@ async function start() {
       mp, player, character, camera, scene, world, zone, ui,
       channel: `${rt.channel || 'gallery'}-party-`,
       busy: () => photo.active || !!ui.panel || player.boarding,
+      ambience,
     });
     party.onHeard = (id) => lookAtOther(id, 2 + Math.random());
+    // 點了別區隊友的名牌：走到渡口，到了渡船卡直接翻到他那一區
+    party.onFar = (to) => {
+      const ex = world.exits?.find((e) => e.boat);
+      if (!ex || player.boarding) return;
+      if (Math.hypot(player.pos.x - ex.x, player.pos.z - ex.z) < ex.r) return player.events.onExit(ex, to);
+      const goal = player.walkToward(ex.x, ex.z);
+      ferryWalk = goal && { ex, to, goal };
+    };
     // 別人的人和鏡頭：人可以看；鏡頭對著自己時算被拍（attention.js 的 scan）
     attention.lenses = () => mp.lenses();
     attention.add((push) => {
@@ -1051,6 +1056,12 @@ async function start() {
       else host.hush();
     }
     party?.update(dt);
+    // 正走去渡口找別區的隊友：走到了就打開渡船卡；半路改走別處就算了
+    if (ferryWalk && (player.goal !== ferryWalk.goal || !player.path.length)) {
+      const { ex, to, goal } = ferryWalk;
+      ferryWalk = null;
+      if (player.goal === goal && Math.hypot(player.pos.x - ex.x, player.pos.z - ex.z) < ex.r + 0.8) player.events.onExit(ex, to);
+    }
     world.home?.update(dt, player.pos, mp ? mp.others.values() : [], camera.position);
     if (frame % 30 === 0) checkAway?.();
     const talking = layoutBubbles() > 0;

@@ -24,7 +24,8 @@ export class Ambience {
     this.stepGate = {};
     this.emoteGate = {};
     this.duck = 0;           // 人潮聲把背景音樂壓低幾成
-    this.beds = [];          // 某個地方自己的底聲（例如前廳的 vestibule-sound.js）：每一幀 update(this)，on 為真時音訊不睡
+    this.beds = [];          // 某個地方自己的底聲（例如前廳的 vestibule-sound.js）：每一幀 update(this)，on 為真時音訊不睡，duck 是背景音樂要壓低幾成
+    this.wetStep = null;     // 踩在濕地上多一聲水（海市的雨，rain-sound.js）：(角色, 出口, 時間)
     try { this.muted = localStorage.getItem('muted') === '1'; } catch { this.muted = false; }
     // 手機要在 touchend / click 這類「放開」的手勢裡才算使用者操作（iOS 的 pointerdown 不算），所以全部都聽。
     // 一直留著不拿掉：iOS 切到別的 App 回來會變成 interrupted，Safari 也不一定讓手勢以外的 resume() 生效，
@@ -252,6 +253,7 @@ export class Ambience {
     let t = ctx.currentTime + 0.01, dur = 0;
     for (const f of land ? [0, 1] : [foot]) {
       dur = t - ctx.currentTime + shoe(f)(ctx, out, t, p, this.noise, PENTA[base + f * 2]);
+      this.wetStep?.(ch, out, t);   // 下過雨的地：多一聲水（海市的 rain-sound.js）
       t += 0.035 + Math.random() * 0.02;
     }
     this.played(dur);
@@ -429,8 +431,9 @@ export class Ambience {
           a.play().catch(() => {});
           this.bgmFadeUntil = t + BGM_FADE;
         }
-        // 淡入中途走到戶外也照原本的速度淡，不會突然跳大聲
-        const vol = BGM_VOL * (1 - this.level * (1 - BGM_OUTDOOR)) * (1 - this.duck);
+        // 淡入中途走到戶外也照原本的速度淡，不會突然跳大聲。人潮和某個地方的底聲（下雨）要壓低的，取壓得最多的那個
+        const duck = Math.max(this.duck, ...this.beds.map((b) => b.duck || 0));
+        const vol = BGM_VOL * (1 - this.level * (1 - BGM_OUTDOOR)) * (1 - duck);
         g.setTargetAtTime(vol, t, t < this.bgmFadeUntil ? BGM_FADE / 3 : 0.8);
       }
     }

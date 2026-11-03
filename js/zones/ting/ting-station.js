@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from '../../../vendor/BufferGeometryUtils.js';
 import { drawText } from '../../core/glyphs.js';
 import { rng } from '../../core/props.js';
+import { signOf } from '../../scene/places.js';
 import { floatPetals, flowerMesh } from './ting-marsh.js';
 
 export const STATION = { x: 16, z: -9, hl: 11, hw: 2.8, top: 0.36, skirt: 0.6 };   // 中心、半長（南北）、半寬、檯面多高、斜邊多寬
@@ -18,14 +19,14 @@ const S = STATION;
 
 // 兩條線。pts 是沿線的點 (x, z)，沿線的距離 s 從第一個點量起；arrive 是每一班（150 秒）裡第幾秒停好；
 // through：穿過月台開到另一頭（一班往南、一班往北），不然停完倒著開回去。side 是停在月台哪一邊。
-// 方位跟水裡照的天一樣：北靜海、東海市、南蜃樓、西畫廊（畫廊那條是擱淺的渡船，只寫在時刻表上）
+// 方位跟水裡照的天一樣：北月球、東海市、南沙島、西畫廊（畫廊那條是擱淺的渡船，只寫在時刻表上）。站名讀 scene/places.js 的短名
 export const LINES = [
   {
-    id: 'gold', ends: ['靜海', '蜃樓'], color: '#e8cd8e', light: '#f9e3ab', arrive: 12, through: true, side: 'W',
+    id: 'gold', ends: [signOf('jinghai'), signOf('shenlou')], color: '#e8cd8e', light: '#f9e3ab', arrive: 12, through: true, side: 'W',
     pts: [[34, -335], [22, -195], [13.6, -85], [S.x - TRACK, -42], [S.x - TRACK, -26], [S.x - TRACK, S.z], [S.x - TRACK, 8], [S.x - TRACK, 22], [9, 72], [-2, 172], [-20, 335]],
   },
   {
-    id: 'blue', ends: ['海市'], color: '#a9b6e6', light: '#ccd4f7', arrive: 87, through: false, side: 'E',
+    id: 'blue', ends: [signOf('haishi')], color: '#a9b6e6', light: '#ccd4f7', arrive: 87, through: false, side: 'E',
     pts: [[335, -80], [205, -66], [105, -54], [50, -44], [30, -37], [22.6, -28], [S.x + TRACK, -18], [S.x + TRACK, S.z], [S.x + TRACK, 0], [S.x + TRACK, 3]],
   },
 ];
@@ -242,7 +243,7 @@ function signAtlas() {
   drawText(g, '汀站', { x: T.x + 256, y: T.y + 92, size: 84, step: 96, color: INK, brush: 0 });
   g.fillStyle = LILAC;
   g.fillRect(T.x + 60, T.y + 160, T.w - 120, 4);
-  const rows = [[LINES[0].color, LINES[0].ends[0]], [LINES[0].color, LINES[0].ends[1]], [LINES[1].color, LINES[1].ends[0]], [FERRY, '畫廊']];
+  const rows = [[LINES[0].color, LINES[0].ends[0]], [LINES[0].color, LINES[0].ends[1]], [LINES[1].color, LINES[1].ends[0]], [FERRY, signOf('gallery')]];
   rows.forEach(([color, name], i) => {
     const y = T.y + 236 + i * 104;
     dot(T.x + 70, y, 22, color);

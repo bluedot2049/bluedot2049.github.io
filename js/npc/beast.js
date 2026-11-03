@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { buildBeast, BODY_Y, HORN_TIPS, PRINTS } from './beast-models.js';
 import { judgeShot } from './beast-judge.js';
-import { serverNow, syncTime } from '../core/servertime.js';
+import { hash, seedOf, serverNow, syncTime } from '../core/servertime.js';
 
 const SLOT = 60e3;              // 一格一分鐘
 const CHANCE = 1 / 120;         // 一格抽中的機率
@@ -23,19 +23,6 @@ const CUES = [...[0, 7.5, 15, 22.5, 30, 37.5].map((b, i) => [b, 'omen', 1 + i * 
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const smooth = (x) => { const t = clamp01(x); return t * t * (3 - 2 * t); };
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-
-// 三個整數雜湊成 [0, 1)，每台裝置算出來一樣
-function hash(a, b, c = 0) {
-  let h = Math.imul(a | 0, 0x27d4eb2d) ^ Math.imul(b | 0, 0x165667b1) ^ Math.imul(c | 0, 0x9e3779b1);
-  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
-  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}
-function seedOf(s) {
-  let h = 2166136261;
-  for (const ch of s) h = Math.imul(h ^ ch.codePointAt(0), 16777619);
-  return h | 0;
-}
 
 // 這一格抽中、而且前半小時沒有抽中過的，才真的出現
 const hit = (seed, s) => hash(seed, s, 1) < CHANCE;
@@ -134,7 +121,7 @@ export class Beast {
     // 寫好的點照用，不在這裡篩：每台裝置的清單要一模一樣，抽到第幾個才是同一個地方（太擠的 ?debug 時提醒）
     const list = spots?.length ? spots : autoSpots(world);
     if (spots?.length && params?.has('debug')) for (const s of spots) if (!roomy(world, s.x, s.z, 0.7)) console.warn('白獸的出現點太擠：', s);
-    // 地名跟區域同名（汀、靜海）就不重複寫
+    // 地名跟區域同名（汀）就不重複寫
     this.spots = list.map((s) => ({ ...s, place: s.place ?? world.placeAt?.(s.x, s.z)?.name ?? '' })).map((s) => (s.place === where ? { ...s, place: '' } : s));
     const B = buildBeast();
     Object.assign(this, B);

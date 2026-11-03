@@ -540,12 +540,12 @@ export class Player {
     if (hit.object.userData.guide) return this.events.onGuide?.();
     if (hit.object.userData.hollow) return this.goToHollow();
     if (this.shoulder) return;   // 越肩不點地板走路
-    const t =this.world.findWalkable(hit.point.x, hit.point.z, this.pos.x, this.pos.z);
+    const t = this.world.findWalkable(hit.point.x, hit.point.z, this.pos.x, this.pos.z, hit.point.y);
     if (!t) return;
     this.exitFocus();
     this.pending = null;
-    this.walkTo(t.x, t.z);
-    this.marker.position.set(t.x, this.world.groundY(t.x, t.z) + 0.03, t.z);
+    this.walkTo(t.x, t.z, t.y);
+    this.marker.position.set(t.x, this.world.groundY(t.x, t.z, t.y) + 0.03, t.z);
     this.markerT = 0;
   }
 
@@ -707,10 +707,25 @@ export class Player {
     console.log(`鏡頭朝 ${deg(this.camYaw + Math.PI)}°`);
   }
 
-  // 用尋路找出繞過家具的路線
-  walkTo(x, z) {
-    this.goal = { x, z };
-    const path = this.world.findPath(this.pos.x, this.pos.z, x, z);
+  // 走到 (x, z) 附近能站的地方，跟點地面一樣：離開正在看的東西、坐著就站起來（隊友的記號、渡口都用這個）。
+  // 回傳這一趟的目標，之後 goal 換掉了就是玩家自己改走別的地方。again：跟著人走、半路重找路，不再收面板
+  walkToward(x, z, again = false) {
+    if (this.boarding || this.shoulder) return null;
+    const t = this.world.findWalkable(x, z, this.pos.x, this.pos.z);
+    if (!t) return null;
+    if (!again) {
+      this.events.onInput('tap');
+      this.exitFocus();
+      this.pending = null;
+    }
+    this.walkTo(t.x, t.z);
+    return this.goal;
+  }
+
+  // 用尋路找出繞過家具的路線。y：要去的那一層多高（有樓上的區域才用得到，沒給就當作同一層或一樓）
+  walkTo(x, z, y) {
+    this.goal = { x, z, y };
+    const path = this.world.findPath(this.pos.x, this.pos.z, x, z, this.pos.y, y);
     this.path = path ? path.map((p) => new THREE.Vector2(p.x, p.z)) : [];
     if (!path && this.pending) this.pending = null;
   }
@@ -1118,9 +1133,9 @@ export class Player {
   // 移動並處理碰撞：先試原方向，再沿牆滑，手動操作時再試左右偏轉的方向繞過家具角
   tryMove(vx, vz, deflect) {
     const w = this.world, ox = this.pos.x, oz = this.pos.z;
-    const stuck = !w.walkable(ox, oz);   // 已經卡在家具裡（例如瞬移進去），允許往任何方向脫困
+    const y = this.pos.y, stuck = !w.walkable(ox, oz, y);   // 已經卡在家具裡（例如瞬移進去），允許往任何方向脫困。y：樓上的區域照現在多高找是哪一層
     const go = (x, z) => {
-      if (stuck || (w.walkable(x, z) && !this.animals?.blocks(x, z, ox, oz) && !this.visitors?.blocks(x, z, ox, oz))) { this.pos.x = x; this.pos.z = z; return true; }
+      if (stuck || (w.walkable(x, z, y) && !this.animals?.blocks(x, z, ox, oz) && !this.visitors?.blocks(x, z, ox, oz))) { this.pos.x = x; this.pos.z = z; return true; }
       return false;
     };
     if (go(ox + vx, oz + vz)) return true;
@@ -1244,13 +1259,16 @@ export class Player {
         const g = this.goal, pend = this.pending;
         if (g && !this.repathed) {
           this.repathed = true;
-          this.walkTo(g.x, g.z);
+          this.walkTo(g.x, g.z, g.y);
           this.pending = pend;
         } else this.stop();
       } else this.repathed = false;
     }
     const mx = this.pos.x - ox, mz = this.pos.z - oz;
     this.speed = Math.hypot(mx, mz) / Math.max(dt, 1e-4);
+    // 站在手扶梯上：被帶著走（不算自己在走，腳不動、身體不轉）
+    const flow = !this.boarding && w.drift?.(this.pos.x, this.pos.z, this.pos.y);
+    if (flow) this.tryMove(flow.x * dt, flow.z * dt, false);
     // 到了座位旁邊：挪進座位、轉向，對準了才坐下去（挪動不算走路）
     if (this.focus?.kind === 'seat') {
       const st = w.outdoor.seats[this.focus.seat], k = Math.min(1, dt * 4);
@@ -1263,7 +1281,7 @@ export class Player {
       }
     }
     if (this.boarding) this.updateBoard(dt);
-    else this.pos.y = w.groundY(this.pos.x, this.pos.z);
+    else this.pos.y = w.groundY(this.pos.x, this.pos.z, this.pos.y);
 
     // 角色轉向：走路時面向前進方向，看畫或照鏡子時面向它
     // 越肩時身體跟著視線轉（倒退走也是面向前方）；照路線走去看畫時反過來，鏡頭慢慢轉到角色背後

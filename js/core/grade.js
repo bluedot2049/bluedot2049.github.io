@@ -6,9 +6,12 @@
 // 每個區域在 zone-*.js 匯出一組 grade（數值、曲線），main.js 在建場景之前裝上；沒有匯出的區域不受影響（uGrade.on 是 0）。
 // 同一張地圖可以分區：grade.regions 是一塊一塊的範圍（圓或方框），角色走進去就慢慢換成那一塊的色調，只要寫跟全區不一樣的幾項。
 // 調好的色調可以存進 tones.js，區域或分區寫 tone: '名字' 就套上。
+// 分區也可以照天氣：{ name, weather: 'rain' | 'wet' } 不看位置，權重是 WEATHER 現在的值（海市的雨，rain.js 每一幀寫）。
+// 天氣的分區疊在前一個天氣分區上：「雨」只寫比「雨後」多的那幾項，下雨的時候地一定是濕的。
 // 自己寫的 ShaderMaterial（霧、煙、光暈這些疊上去的層）不經過內建的霧，要自己引入 GRADE_GLSL，見下面的 gradeUniforms
 import * as THREE from 'three';
 import { TONES } from './tones.js';
+import { WET, WET_GLSL } from './wet.js';
 
 // density：相機高度的霧有多濃；falloff：每往上一公尺變淡多少；base：霧最濃的高度（海面）；start：鏡頭前幾公尺不起霧；maxFog：高度霧最多蓋掉幾成
 // far、farAir：遠景空氣，far 公尺以外不管高低都罩上一層，越遠越接近 farAir，收向天邊的顏色。far 是 0 時沒有
@@ -199,11 +202,16 @@ const PARS_FRAGMENT = `#ifdef USE_FOG
 		uniform float fogFar;
 	#endif
 	${GRADE_GLSL}
+	${WET_GLSL}
 #endif`;
 
-// 霧在 colorspace 之後才上：直接畫上螢幕時這裡已經是 sRGB，畫進後製的貼圖時還是線性的（gradeSurface 自己會分）
+// 霧在 colorspace 之後才上：直接畫上螢幕時這裡已經是 sRGB，畫進後製的貼圖時還是線性的（gradeSurface 自己會分）。
+// 下過雨的區域，吃光的材質先濕（wet.js），再調色、混霧
 const FRAGMENT = `#ifdef USE_FOG
 	if ( uGrade.on > 0.5 ) {
+		#ifdef LAMBERT
+			if ( uWet.amount > 0.0 ) gl_FragColor.rgb = wetSurface( gl_FragColor.rgb, vFogWorld );
+		#endif
 		float gradeF = gradeHeightFog( vFogWorld ), gradeA = gradeAir( vFogWorld );
 		#ifndef FOG_EXP2
 			if ( uGrade.linear > 0.5 ) { gradeF = smoothstep( fogNear, fogFar, vFogDepth ); gradeA = 0.0; }
@@ -227,6 +235,7 @@ let fileSet = { linear: 0, base: {}, regions: [] };   // zone 檔裡原本的樣
 // solo：只看哪一組（-1 是全區，數字是第幾個分區，null 是照位置）；mode：'edit' 看正在改的，'file' 看 zone 檔原本的
 export const VIEW = { solo: null, mode: 'edit', pos: null };
 export const WEIGHTS = [];   // 每個分區現在佔幾成（照位置、平滑過）
+export const WEATHER = { rain: 0, wet: 0 };   // 照天氣的分區現在佔幾成（0 到 1），有天氣的區域每一幀寫
 let installed = false, dirty = true, baked = null, bakedFile = null, applied = [], appliedTune = 0;
 
 // 本機存的色調（面板「存成色調」），只有這台電腦看得到；複製出去時會展開成數值
@@ -245,10 +254,13 @@ function layer(under, p) {
     tune: { ...under.tune, ...t?.tune, ...p.tune },
   };
 }
-// 第 i 組實際用的完整數值，i 是 -1 時是全區
+// 第 i 組實際用的完整數值，i 是 -1 時是全區。天氣的分區疊在前一個天氣分區上
 export function resolved(i, set = SET) {
   const base = layer({ ...DEFAULTS, curves: {}, tune: {} }, set.base);
-  return i < 0 ? base : layer(base, set.regions[i]);
+  if (i < 0) return base;
+  const r = set.regions[i];
+  if (r.weather) for (let j = i - 1; j >= 0; j--) if (set.regions[j].weather) return layer(resolved(j, set), r);
+  return layer(base, r);
 }
 export const fileResolved = (i) => resolved(i, fileSet);
 export const fileTarget = (i) => (i < 0 ? fileSet.base : fileSet.regions[i]);
@@ -334,7 +346,7 @@ export function gradeAt(dt, x, z) {
   WEIGHTS.length = regs.length;
   let moved = false;
   for (let i = 0; i < regs.length; i++) {
-    const goal = VIEW.solo == null ? regionWeight(regs[i], x, z) : VIEW.solo === i ? 1 : 0;
+    const r = regs[i], goal = VIEW.solo == null ? (r.weather ? WEATHER[r.weather] ?? 0 : regionWeight(r, x, z)) : VIEW.solo === i ? 1 : 0;
     const prev = WEIGHTS[i];
     let w = prev == null || VIEW.solo != null ? goal : prev + (goal - prev) * k;   // 瞬間移動時也是慢慢換過去
     if (Math.abs(w - goal) < 0.002) w = goal;
@@ -389,7 +401,7 @@ export function installGrade(preset = {}, scene = null) {
     fog_pars_vertex: PARS_VERTEX, fog_vertex: VERTEX, fog_pars_fragment: PARS_FRAGMENT, fog_fragment: FRAGMENT,
   });
   for (const lib of Object.values(THREE.ShaderLib)) {
-    if (lib.fragmentShader.includes('fog_fragment')) lib.uniforms.uGrade = { value: GRADE };
+    if (lib.fragmentShader.includes('fog_fragment')) Object.assign(lib.uniforms, { uGrade: { value: GRADE }, uWet: { value: WET } });
   }
   if (scene) {
     syncFog(scene);
@@ -449,8 +461,8 @@ export function presetText(set = SET) {
   if (set.regions.length) {
     lines.push('regions: [');
     for (const r of set.regions) {
-      const p = portable(r), { name, at, r: rad, box, fade, tone, curves, tune, ...v } = p;
-      const o = tidy({ name, ...(box ? { box } : { at, r: rad }), fade, tone, ...own(v), curves: roundCurves(curves), tune });
+      const p = portable(r), { name, weather, at, r: rad, box, fade, tone, curves, tune, ...v } = p;
+      const o = tidy({ name, ...(weather ? { weather } : box ? { box } : { at, r: rad }), fade, tone, ...own(v), curves: roundCurves(curves), tune });
       lines.push(`  ${lit(o)},`);
     }
     lines.push('],');

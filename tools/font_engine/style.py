@@ -4,7 +4,8 @@
   t         豎筆筆寬
   contrast  橫筆筆寬 ÷ 豎筆筆寬。1.0 是等粗；小於 1 就是「橫細豎粗」，
             斜筆按角度在兩者之間過渡。密的字（境、竟）靠這條規則透氣。
-  body      100 格放大成字型單位的倍數（字身大小，1000 UPM）。字身置中在 500, 450。
+  body      100 格放大成字型單位的倍數（字身大小，1000 UPM）。字身置中在 500, 380（見 exporter.py）。
+            一般中文字型的字面約佔字身框九成，Display 用 9.0，跟別的字型排在一起才不會小一號。
   terminals 收筆替換表，例如 (('wing', None),) 把燕尾換成平頭。
 
 Text 的數值是量出來的：12–20px 渲染後算「糊度」（有墨像素裡中間灰的比例），
@@ -34,5 +35,5 @@ class Style:
 
 
 MONO = Style('Mono')                                   # 等粗，舊版的樣子
-DISPLAY = Style('Display', t=T, contrast=0.82)         # 標題、字標，24px 以上
+DISPLAY = Style('Display', t=T, contrast=0.82, body=9.0)  # 標題、字標、房間名稱，24px 以上
 TEXT = Style('Text', t=7.0, contrast=1.0, body=8.8)   # 小字，24px 以下

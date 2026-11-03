@@ -18,6 +18,9 @@ from .style import Style, MONO
 
 UPM = 1000
 ADVANCE_WIDTH = 1000
+# 中文字型的字身框是基線下 120 到基線上 880，中心在 380。字身放在這個中心，
+# 跟其他中文字型排在一起時高低一樣，行高置中時字也置中（房間名稱兩側的紋飾靠它對齊）
+ASCENT, DESCENT, CENTER_Y = 880, 120, 380
 MITRE_LIMIT = 2.0  # 銳角折筆（被壓窄的鉤）改成斜切，不會拉出尖刺
 
 
@@ -139,7 +142,7 @@ def draw_shapely_to_pen(geom: Any, pen: TTGlyphPen, body: float):
     """將 Shapely 幾何形狀寫入 TrueType Glyph Pen，並完成座標系對齊"""
     if geom.is_empty:
         return
-    ox, oy = ADVANCE_WIDTH / 2 - 50 * body, 450 - 50 * body
+    ox, oy = ADVANCE_WIDTH / 2 - 50 * body, CENTER_Y - 50 * body
 
     polygons = [geom] if geom.geom_type == 'Polygon' else list(geom.geoms)
     for poly in polygons:
@@ -224,8 +227,8 @@ def build_font(
     fb.setupCharacterMap(cmap)
     fb.setupGlyf(glyf_dict)
     fb.setupHorizontalMetrics(metrics_dict)
-    ascent = max(880, int(450 + 50 * style.body) + 10)  # 字身放大時，頂端不能超出 ascent 被裁掉
-    fb.setupHorizontalHeader(ascent=ascent, descent=-120)
+    ascent, descent = ASCENT, DESCENT
+    fb.setupHorizontalHeader(ascent=ascent, descent=-descent)
     fb.setupNameTable({
         'familyName': family_name,
         'styleName': style_name,
@@ -236,9 +239,9 @@ def build_font(
     })
     fb.setupOS2(
         sTypoAscender=ascent,
-        sTypoDescender=-120,
+        sTypoDescender=-descent,
         usWinAscent=ascent,
-        usWinDescent=120,
+        usWinDescent=descent,
         sxHeight=500,
         sCapHeight=700
     )

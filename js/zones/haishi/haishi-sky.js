@@ -3,7 +3,7 @@
 // 海市的天空和海：天空球、星星、頭頂小圖、海面倒影的著色器；buildSky 照順序蓋霧、煙、海面、月光和遠景。
 import * as THREE from 'three';
 import { rng } from '../../core/props.js';
-import { glowPoints, uTime } from '../../core/scenery.js';
+import { AIR, glowPoints, uTime } from '../../core/scenery.js';
 import { mist, pools, ripples, smoke } from './haze.js';
 import { SHIP_PERIODS, brightStars, fishingFires, horizonShips, meteor, seaGlints, skyLanterns } from './distant.js';
 import { GRADE, GRADE_GLSL, HORIZON, TUNE, gradeCurvesOnly } from '../../core/grade.js';
@@ -35,6 +35,29 @@ export const SKY_EDGE_GLSL = `
   float mistAt(vec2 dir) { return pow(max(0.0, dot(normalize(dir), normalize(vec2(1.0, 0.3)))), mix(6.0, 0.8, uMistWidth)) * uMist; }
 `;
 
+// 下雨的雲（weather.js，uVeil 是雲多厚）：一層低低的雲把整片天蓋住，星和銀河都在雲後面。顏色是天邊的霧色，頭頂暗一點；
+// 雲底一塊一塊有點深淺，順著海風往山後慢慢飄；頭頂和山那一側被整座鎮的燈從底下照出一點暖（跟日出光一樣先褪灰再加暖，不會出紫）。
+// 天空球和殿裡的水鏡共用，要接在 SKY_EDGE_GLSL 後面，uTime 各自宣告
+const CLOUD_GLSL = `
+  uniform float uVeil; uniform float uCloudWarm;
+  float cloudHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float cloudNoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(cloudHash(i), cloudHash(i + vec2(1.0, 0.0)), f.x), mix(cloudHash(i + vec2(0.0, 1.0)), cloudHash(i + 1.0), f.x), f.y);
+  }
+  // low 是天邊的霧色（天空球的 uLow）
+  vec3 overcast(vec3 c, vec3 d, float h, vec3 low) {
+    if (uVeil <= 0.0) return c;
+    vec2 uv = d.xz / (max(h, 0.0) + 0.15) * 0.8 + uTime * vec2(0.012, -0.03);
+    // 貼近天邊的雲擠得很密，深淺抹平，不然會閃
+    float n = mix(0.5, 0.6 * cloudNoise(uv) + 0.4 * cloudNoise(uv * 2.7 + 4.0), smoothstep(0.02, 0.15, h));
+    vec3 cl = skyLow(low) * mix(1.0, 0.7, smoothstep(0.0, 0.6, h)) * (0.84 + 0.32 * n);
+    float town = (0.6 + 0.4 * dot(normalize(d.xz + vec2(1e-4)), vec2(0.0, -1.0))) * smoothstep(-0.02, 0.4, h) * (0.7 + 0.3 * n);
+    return mix(c, sunLit(cl, town * uCloudWarm * 0.05), uVeil);
+  }
+`;
+
 // 藍調時刻的天空：地平線和霧同色，往上漸深，西邊貼著海平線一團日出前的暖光，東邊天邊起霧。
 // uStars 越往山上越大：天頂再暗一點，淡淡浮出一條銀河
 export function skyDome(bg) {
@@ -44,6 +67,7 @@ export function skyDome(bg) {
       uLow: { value: new THREE.Color(bg) }, uTop: { value: new THREE.Color('#34405e') },
       uWarm: { value: new THREE.Color('#ff9f4a') }, uGlow: { value: 0.28 }, uMist: { value: 0.85 }, uMistWidth: { value: 0.85 }, uHorizon: HORIZON,
       uBand: { value: BAND }, uMilk: { value: new THREE.Color('#4c5288') }, uStars: { value: 0 }, uDeep: { value: 0.82 }, uGrade: { value: GRADE },
+      uTime, uVeil: AIR.veil, uCloudWarm: { value: 0.6 },
     },
     vertexShader: `
       varying vec3 vDir;
@@ -51,7 +75,7 @@ export function skyDome(bg) {
         vDir = normalize(position);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }`,
-    fragmentShader: GRADE_GLSL + SKY_EDGE_GLSL + `
+    fragmentShader: GRADE_GLSL + SKY_EDGE_GLSL + 'uniform float uTime;' + CLOUD_GLSL + `
       uniform vec3 uLow; uniform vec3 uTop; uniform vec3 uBand; uniform vec3 uMilk; uniform float uStars; uniform float uDeep;
       varying vec3 vDir;
       void main() {
@@ -67,6 +91,7 @@ export function skyDome(bg) {
         float lump = 0.55 + 0.45 * sin(d.x * 7.0 + sin(d.z * 5.0) * 2.0) * sin(d.z * 9.0 - d.y * 6.0 + 1.3);
         float milk = exp(-b * b * 22.0) * lump * (1.0 - 0.6 * exp(-(b - 0.025) * (b - 0.025) * 900.0));
         c += uMilk * milk * uStars * smoothstep(0.02, 0.35, h);
+        c = overcast(c, d, h, uLow);
         gl_FragColor = vec4(sunLit(c, sunUp(d.xz, h)), 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -88,6 +113,7 @@ export function skyDome(bg) {
     { label: '融合範圍', key: 'skyMistWidth', uniform: mat.uniforms.uMistWidth, kind: [0, 1, 0.01] },
     { label: '天邊深淺', key: 'skyHorizon', uniform: mat.uniforms.uHorizon, kind: [0.3, 1.2, 0.01] },
     { label: '銀河色', key: 'skyMilk', uniform: mat.uniforms.uMilk, kind: 'color' },
+    { label: '雲底暖光', key: 'cloudWarm', uniform: mat.uniforms.uCloudWarm, kind: [0, 3, 0.01] },
   );
   return m;
 }
@@ -188,6 +214,7 @@ export function waterMirror(o, dome, field, lists, size) {
       uCapA: { value: capA }, uCapB: { value: capB }, uFade: field.material.uniforms.uFade, uPr: field.material.uniforms.uPr, uTime,
       uC: { value: new THREE.Vector3(o.x, o.y, o.z) }, uR: { value: o.r }, uOcY: { value: o.ocY }, uOcR: { value: o.ocR },
       uRoof: { value: new THREE.Vector3(0.045, 0.06, 0.085) },   // 輸出的顏色直接用，不經過色彩空間轉換；暗藍不用純黑
+      uRain: AIR.rain,
     },
     vertexShader: `
       varying vec3 vW;
@@ -199,8 +226,9 @@ export function waterMirror(o, dome, field, lists, size) {
     fragmentShader: GRADE_GLSL + SKY_EDGE_GLSL + `
       uniform vec3 uLow; uniform vec3 uTop; uniform vec3 uBand; uniform vec3 uMilk; uniform float uStars; uniform float uDeep;
       uniform sampler2D uCapA; uniform sampler2D uCapB; uniform float uFade; uniform float uPr; uniform float uTime;
-      uniform vec3 uC; uniform float uR; uniform float uOcY; uniform float uOcR; uniform vec3 uRoof;
+      uniform vec3 uC; uniform float uR; uniform float uOcY; uniform float uOcR; uniform vec3 uRoof; uniform float uRain;
       varying vec3 vW;
+      ${CLOUD_GLSL}
       vec3 hash3(vec2 p) {
         vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
         q += dot(q, q.yxz + 33.33);
@@ -244,6 +272,15 @@ export function waterMirror(o, dome, field, lists, size) {
         vec2 q = p - (vec2(fract(sin(id * 12.9898) * 43758.5453), fract(sin(id * 78.233) * 24634.6345)) - 0.5) * 1.4;
         float dq = length(q), front = age * 0.45;
         n += q / max(dq, 0.001) * sin((dq - front) * 30.0) * exp(-abs(dq - front) * 8.0) * exp(-age * 0.7) * 0.035;
+        // 下雨：雨從天井落進池子，一圈一圈的漣漪多起來，雨越大越密
+        if (uRain > 0.0) {
+          for (int i = 0; i < 5; i++) {
+            float fi = float(i), per = 0.7 + fi * 0.37, cy = uTime / per + fi * 0.31, rid = floor(cy), ra = fract(cy) * per;
+            vec2 rq = p - (vec2(fract(sin(rid * 12.9898 + fi * 7.1) * 43758.5453), fract(sin(rid * 78.233 + fi * 3.7) * 24634.6345)) - 0.5) * 2.6;
+            float rd = length(rq), rf = ra * 0.45, on = step(fract(sin(rid * 3.3 + fi) * 911.7), 0.3 + 0.7 * uRain);
+            n += rq / max(rd, 0.001) * sin((rd - rf) * 30.0) * exp(-abs(rd - rf) * 8.0) * exp(-ra * 1.5) * 0.03 * min(1.0, uRain * 2.5) * on;
+          }
+        }
         vec3 V = normalize(vW - cameraPosition), d = reflect(V, normalize(vec3(n.x, 1.0, n.y)));
         // 照實反射的話，站在池邊往下看，反射上去的線都打在屋頂底下，要趴到池子正上方才看得到天井。
         // 這池水不照實：反射上去的方向往頭頂收攏，從哪個角度看，水裡都是天井正上方那一塊天，
@@ -265,6 +302,7 @@ export function waterMirror(o, dome, field, lists, size) {
           float b = dot(d, uBand);
           float lump = 0.55 + 0.45 * sin(d.x * 7.0 + sin(d.z * 5.0) * 2.0) * sin(d.z * 9.0 - d.y * 6.0 + 1.3);
           c += uMilk * exp(-b * b * 22.0) * lump * (1.0 - 0.6 * exp(-(b - 0.025) * (b - 0.025) * 900.0)) * uStars * smoothstep(0.02, 0.35, h);
+          c = overcast(c, d, h, uLow);
           gl_FragColor = vec4(sunLit(c, sunUp(d.xz, h)), 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -499,5 +537,5 @@ export function buildSky(c) {
     fishers.push({ x, z, r: 1 + VR() * 4, seed: VR() * 10, period, on: 0.75 + VR() * 0.22, off: VR() * period, lamps });
   }
   group.add(fishingFires(fishers, { uFade: field.material.uniforms.uFade, sea: SEA }));
-  return { sea, env, sky, field, dome, towerSize, seaFog, far, towerColor, TOWER_RGB };
+  return { sea, env, sky, field, dome, moon, towerSize, seaFog, far, towerColor, TOWER_RGB };
 }

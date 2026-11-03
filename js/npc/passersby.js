@@ -125,7 +125,7 @@ const FACE = {
 const COLOR_KEYS = ['topC', 'topC2', 'botC', 'botC2', 'outC', 'outC2', 'oneC', 'oneC2', 'shoeC', 'neckC', 'backC', 'handC'];
 
 // zone：harbor 走到碼頭的、upper 走到燈巷以上的、其他 mid
-function personLook(R, local, hand, zone) {
+export function personLook(R, local, hand, zone) {
   const pick = (a) => a[Math.floor(R() * a.length)];
   const race = RACES[Math.floor(R() * RACES.length)], L = presetLook(0);
   const role = local ? ROLES[pick(ROLE_MIX[zone])] : null;

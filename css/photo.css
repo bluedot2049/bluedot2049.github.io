@@ -43,6 +43,11 @@ body.photo-expose #ph-frame { outline-color: rgba(196, 69, 45, .7); }
 #ph-af.lock { opacity: 1; border-color: var(--gold); transform: scale(.82); transition: transform .12s, opacity .4s; }
 @keyframes ph-hunt { from { transform: scale(1.12); } to { transform: scale(.94); } }
 
+/* 眼睛貼上觀景窗（舉起相機、切自拍）：墨色蓋一下再淡開，鏡頭換位置那一下不硬切。舉相機的快門、拿法照樣浮在上面 */
+#ph-dark { position: fixed; inset: 0; z-index: 13; background: #0e0906; opacity: 0; pointer-events: none; }
+#ph-dark.on { animation: ph-dark .26s ease-out both; }
+@keyframes ph-dark { 0%, 30% { opacity: 1; } 100% { opacity: 0; } }
+
 /* 閃光燈泡燒完冒的煙：從取景框上緣飄過去，慢慢散掉 */
 #ph-smoke { position: fixed; inset: 0; z-index: 12; pointer-events: none; overflow: hidden; }
 #ph-smoke i {
@@ -357,7 +362,7 @@ body.joy-left:not(.desk) #ph-look { left: auto; right: calc(var(--jx) + var(--r)
 @keyframes ph-burn { 0% { opacity: .85; } 100% { opacity: 0; } }
 @keyframes ph-burn-die { 0% { fill: #ffe2b0; } 100% { fill: #e08a4a; } }
 
-/* 高度尺：手機疊在搖桿上方，電腦在右邊中間。刻度在左，圓點旁邊寫幾公尺 */
+/* 高度尺：手機疊在搖桿上方，電腦在快門那排右邊。刻度在左，圓點旁邊寫幾公尺 */
 #ph-alt {
   position: fixed; z-index: 20;
   right: calc(var(--joy-x) + var(--joy) / 2 - 18px); bottom: calc(var(--edge-b) + var(--joy) + 22px);
@@ -410,8 +415,16 @@ body.desk .ph-keys { position: relative; }
 body.desk #ph-flash { position: absolute; right: calc(100% + 18px); top: calc(50% - 28px); }
 body.desk #ph-date { position: absolute; right: calc(100% + 86px); top: calc(50% - 20px); }
 body.desk #ph-rec { top: calc(18px + env(safe-area-inset-top)); }
-body.desk #ph-alt { right: calc(70px + env(safe-area-inset-right)); bottom: auto; top: 50%; transform: translateY(-50%); }
-body.desk .ph-alt-track { height: 240px; }
+/* 高度尺和離開鈕靠著快門那一排，不貼螢幕邊（docs 的介面原則）：高度尺在右，刻度朝內；離開在左，閃光、日期的外側。
+   兩邊都讓開上面那列選項 */
+body.desk #ph-alt { right: auto; left: calc(50% + 240px); bottom: calc(24px + env(safe-area-inset-bottom)); }
+body.desk .ph-alt-track { height: 150px; }
+body.desk .ph-alt-step { position: relative; }
+body.desk .ph-alt-step::after {
+  content: attr(data-key); position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%);
+  font: 600 11px/1 var(--latin); color: var(--gold-hi);
+}
+body.desk #ph-exit { top: auto; right: calc(50% + 250px); bottom: calc(38px + env(safe-area-inset-bottom)); }
 
 /* 舉相機（越肩右鍵，只有電腦）：其他介面收起，手上相機的快門、閃光、日期照樣看得到，下面標按鍵，右邊是拿法；
    滑鼠鎖著，只看不點 */

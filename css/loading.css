@@ -177,7 +177,10 @@
   .door .leaf, .door .pane, .lamp, .notice * { animation: none; }
   .porch { transition: none; }
 }
-/* ───────── 渡海：目的地的空拍 ─────────
+/* ───────── 渡海 ─────────
+   現在：照片拿掉，只有墨色；「渡海」、進度條、往哪裡、小字一疊在畫面正中，橫直都一樣。到了照舊光鋪滿。
+   底下照片、門板的規則留著，之後要放回照片時再接（index.html 的 crossing 已不再塞照片）。
+   以前：
    照片是用遊戲自己拍的（tools/aerial.mjs、assets/aerial/），像旅遊照：要去的地方從高處看一眼。
    第一幀是墨色加一行字幕（直式是右邊的註解），像電影的字卡。照片整張解碼好才從墨色淡入，同時開始很慢地推近（index.html 底下那段）。
    跟門口同一套：橫式上下黑邊、直式右邊黑塊是門板；等的時候門板很慢退開一點；到了（ui.landing）靠岸一震，門板先拉開一點、停半拍，再整個打開，光鋪滿。
@@ -232,6 +235,12 @@
   .cine .lid, #loading.crossing .msg, #loading.crossing .loadbar.sub { display: none; }
   .cine .wing { display: block; }
 }
+/* 置中版：右邊門板改成整個畫面、透明，裡面的字置中；上下黑邊、底下那行字和小進度條不用 */
+#loading.crossing .cine .lid, #loading.crossing .msg, #loading.crossing .loadbar.sub { display: none; }
+#loading.crossing .cine .wing { display: flex; inset: 0; width: auto; align-items: center; justify-content: center; background: none; animation: none; }
+#loading.crossing .cine .label { position: static; width: min(280px, 80cqw); text-align: center; }
+#loading.crossing .cine .label b { padding-left: .3em; }
+#loading.crossing .cine .label .loadbar { margin: 14px auto 12px; width: 132px; }
 @keyframes cine-in { to { opacity: 1; } }
 @keyframes cine-push { from { transform: scale(1); } to { transform: scale(1.07); } }
 @keyframes cine-lid-up { to { transform: translateY(-2.5cqh); } }

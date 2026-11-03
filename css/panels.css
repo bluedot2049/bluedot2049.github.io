@@ -301,6 +301,10 @@ body.desk .album-sel button, body.desk .album-note button, body.desk .album-dir 
 }
 .av-step.next { left: auto; right: calc(12px + env(safe-area-inset-right)); }
 .av-step:disabled { visibility: hidden; }
+/* 電腦：箭頭貼著圖的左右，收起鈕在圖右上角的外側（--ml、--mr、--mt 是 ui.js 的 hugMedia 量的）。圖太寬、太高時退回螢幕邊，壓在圖上 */
+body.desk #album-view .av-step { left: max(12px, calc(var(--ml, 0px) / var(--ui, 1) - 56px)); }
+body.desk #album-view .av-step.next { left: auto; right: max(12px, calc(var(--mr, 0px) / var(--ui, 1) - 56px)); }
+body.desk #album-view .av-close { top: max(14px, calc(var(--mt, 0px) / var(--ui, 1))); right: max(14px, calc(var(--mr, 0px) / var(--ui, 1) - 58px)); }
 .av-step svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .av-bar {
   position: absolute; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%);
@@ -545,6 +549,8 @@ body.dock-in #sheet.open, body.dock-in #dress.open {
 #viewer.open { display: flex; }
 #viewer-img { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center; user-select: none; -webkit-user-drag: none; }
 #viewer-close { position: absolute; top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right)); }
+/* 電腦：收起鈕在畫右上角的外側，跟相簿大圖一樣（ui.js 的 hugMedia） */
+body.desk #viewer-close { top: max(14px, calc(var(--mt, 0px) / var(--ui, 1))); right: max(14px, calc(var(--mr, 0px) / var(--ui, 1) - 58px)); }
 
 /* ───────── 平面清單 ───────── */
 #list {

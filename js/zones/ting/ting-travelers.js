@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { Character } from '../../avatar/character.js';
 import { presetLook, sanitizeLook, RACES, SLIDERS, CLOTH, SKINS } from '../../avatar/looks.js';
 import { rng } from '../../core/props.js';
+import { signOf } from '../../scene/places.js';
 import { ENDS, LINES, SPOTS, STATION, doorFloor } from './ting-station.js';
 import { TREE } from './ting-marsh.js';
 import { PERIOD, nextTrip, tripTimes } from './ting-lines.js';
@@ -68,10 +69,10 @@ function travelerLook(R, from) {
     hairC: Math.floor(R() * 8), hatC: Math.floor(R() * 8), one: 'none',
     topPat: pick(['plain', 'plain', 'stripe', 'dot']), botPat: pick(['plain', 'plain', 'stripe']),
   });
-  // 從哪裡來看得出一點：靜海偶爾穿太空衣，蜃樓披沙色的斗篷、撐傘遮太陽，海市穿雨衣
-  if (from === '靜海' && R() < 0.2) L.one = 'astronaut';
-  if (from === '蜃樓' && R() < 0.55) Object.assign(L, { outer: pick(['cloak', 'cape']), outC: pick(SAND), hand: R() < 0.4 ? 'umbrella' : L.hand });
-  if (from === '海市' && R() < 0.3) Object.assign(L, { outer: 'raincoat', outC: pick([24, 25, 14]) });
+  // 從哪裡來看得出一點：月球偶爾穿太空衣，沙島披沙色的斗篷、撐傘遮太陽，海市穿雨衣（from 是站牌上的短名）
+  if (from === signOf('jinghai') && R() < 0.2) L.one = 'astronaut';
+  if (from === signOf('shenlou') && R() < 0.55) Object.assign(L, { outer: pick(['cloak', 'cape']), outC: pick(SAND), hand: R() < 0.4 ? 'umbrella' : L.hand });
+  if (from === signOf('haishi') && R() < 0.3) Object.assign(L, { outer: 'raincoat', outC: pick([24, 25, 14]) });
   for (const [k, , v] of SLIDERS) L[k] = Math.max(0, v + Math.floor(R() * 5) - 2);
   return sanitizeLook(L);
 }

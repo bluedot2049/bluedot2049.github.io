@@ -7,7 +7,7 @@
 // 每個 x、z 只有一層地面，沒有天橋，尋路格子才能維持平面的
 import * as THREE from 'three';
 import { Kit, newBucket, rng } from '../../core/props.js';
-import { bucketObjects, uTime } from '../../core/scenery.js';
+import { AIR, bucketObjects, uTime } from '../../core/scenery.js';
 import { makePathfinder } from '../../core/pathgrid.js';
 import { bump, makeSkiff, towerPhase } from '../../scene/harbor.js';
 import { tickClock } from './distant.js';
@@ -196,7 +196,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   const latrine = buildLatrine({ bucket, signs, lantern, obstacles, group });
 
   const { meshes } = buildTemple({ k, bucket, fader, group, signs, farLamps, obstacles, solid });
-  const { sea, env, sky, field, dome, towerSize, seaFog, far, towerColor, TOWER_RGB } = buildSky({ group, bucket, coarse, shimmerMore, inArea });
+  const { sea, env, sky, field, dome, moon, towerSize, seaFog, far, towerColor, TOWER_RGB } = buildSky({ group, bucket, coarse, shimmerMore, inArea });
 
   // ---------- 渡船：長棧橋盡頭右邊繫著一艘，跟畫廊那邊同一款（harbor.js 的 makeSkiff） ----------
   const ferry = makeSkiff(bucketObjects), boat = ferry.boat;
@@ -288,8 +288,10 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   }
 
   let lastT = 0;
-  // 星空跟著角色的高度出來：碼頭和街上燈太亮只看得到一些，爬上遠眺台整片天和銀河才都出來
+  // 星空跟著角色的高度出來：碼頭和街上燈太亮只看得到一些，爬上遠眺台整片天和銀河才都出來。下雨時雲把它們都遮住（AIR.veil）
   let starFade = 0.25;
+  // 月亮被雲遮住：圓盤慢慢褪成雲的顏色（天邊的霧色），雲厚了就整個藏起來
+  const MOON = moon.material.color.clone(), cloudy = new THREE.Color();
   const eyes = [], eyeA = new THREE.Vector3(), eyeB = new THREE.Vector3(), eyeC = new THREE.Vector3(), fwd = new THREE.Vector3();
 
   const room = {
@@ -300,6 +302,9 @@ export function buildHaishi(scene, { coarse = false } = {}) {
 
   return {
     rooms: [room], paintings: [], mirror: null, outdoor: null, raycastTargets, env, shops, newsTop,
+    // 鎮上每一盞燈（{ x, y, z, color, size }）：下雨時畫燈光圖用（rain.js）
+    lamps: bucket.glows,
+    rain: null,
     // 鏡頭可以拉到很遠，整座山城收進畫面
     camDistMax: 46,
     // 下船的地方：長棧橋的盡頭，離小船幾步，面向山上的鎮子
@@ -337,6 +342,8 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     update(t, cam, target, camera, still = false) {
       const dt = Math.min(0.1, Math.max(0, t - lastT));
       lastT = t;
+      // 天氣先走：雲、雨、地濕這一幀是多少（rain.js，zone-haishi.js 建好掛上來的）
+      this.rain?.update(dt, camera);
       eyes.length = 0;
       if (target) {
         eyes.push(eyeA.set(target.x, target.y + 1.1, target.z));
@@ -358,8 +365,12 @@ export function buildHaishi(scene, { coarse = false } = {}) {
       uTime.value = t;
       sky.position.copy(cam);
       if (target) starFade += (0.25 + 0.75 * smooth(11, 19, target.y) - starFade) * Math.min(1, dt * 1.5);
-      field.material.uniforms.uFade.value = starFade;
-      dome.material.uniforms.uStars.value = smooth(0.25, 1, starFade);
+      const veil = AIR.veil.value, seen = starFade * (1 - veil);
+      field.material.uniforms.uFade.value = seen;
+      dome.material.uniforms.uStars.value = smooth(0.25, 1, seen);
+      if (veil > 0) cloudy.copy(scene.fog.color).multiplyScalar(dome.material.uniforms.uHorizon.value);
+      moon.material.color.copy(MOON).lerp(cloudy, smooth(0, 0.85, veil));
+      moon.visible = veil < 0.9;
       boat.position.y = SEA + 0.36 + Math.sin(t * 1.3) * 0.05;
       boat.rotation.set(Math.sin(t * 0.9) * 0.03, 0.08 + Math.sin(t * 0.3) * 0.05, Math.sin(t * 1.1 + 1) * 0.05);
       const now = Date.now() / 1000;

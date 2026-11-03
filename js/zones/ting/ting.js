@@ -4,7 +4,7 @@
 // 調成珍珠底的粉彩，水面上流著一層像肥皂泡的虹彩。空中飄著很細的浮塵。人在水裡走會留下一圈一圈的漣漪，點水的光蟲也會。
 // 現在有水、天（低空幾道很淡的雲）、浮塵、擱淺的渡船，船西北邊一小塊沼澤（ting-marsh.js），沼澤中間一圈靜水裡的小島上長著一棵老櫻樹（孤櫻，ting-tree.js），草叢間有光蟲（ting-bugs.js）；
 // 船東北邊的水上是汀站（ting-station.js），兩條線的車從天邊開來停靠（ting-lines.js），旅客在這裡換線（ting-travelers.js，由 zone-ting.js 交給 main.js）。
-// 座標：x 往東、z 往南，船在原點附近。方位對到的區：北靜海、東海市、南蜃樓、西畫廊
+// 座標：x 往東、z 往南，船在原點附近。方位對到的區：北月球、東海市、南沙島、西畫廊
 import * as THREE from 'three';
 import { bucketObjects, uTime } from '../../core/scenery.js';
 import { makePathfinder } from '../../core/pathgrid.js';
