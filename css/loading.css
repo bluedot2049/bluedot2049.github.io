@@ -97,7 +97,7 @@
 .loadbar.sub { display: none; }
 .notice .tasks { list-style: none; margin: 0; padding: 0; }
 .notice .tasks li {
-  display: grid; grid-template-columns: 18px 1fr 9px; align-items: center; gap: 12px; padding: 11px 0;
+  display: grid; grid-template-columns: 18px 1fr; align-items: center; gap: 12px; padding: 11px 0;
   border-bottom: 1px solid rgba(232, 184, 106, .1); font-size: 13.5px; letter-spacing: .06em; color: var(--text);
   animation: row-in .45s ease-out both;
 }
@@ -105,19 +105,24 @@
 .notice .tasks li:nth-child(2) { animation-delay: .3s; }
 .notice .tasks li:nth-child(3) { animation-delay: .4s; }
 .notice .tasks svg { width: 18px; height: 18px; fill: none; stroke: var(--gold); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
-.notice .tasks i { width: 9px; height: 9px; border: 1px solid var(--gold-lo); }
-.notice .enter { width: 100%; min-height: 42px; margin-top: 4px; gap: 12px; border-radius: 2px; letter-spacing: .5em; }
+.notice .tasks .en { letter-spacing: .04em; }
+.notice .enter { width: 100%; min-height: 42px; margin-top: 4px; gap: 14px; border-radius: 2px; letter-spacing: .5em; }
+/* 字距會在最後一個字後面多留一格，拉回來，兩邊的紋才對稱 */
+.notice .enter span { margin-right: -.5em; }
+.notice .enter .orn { width: 30px; height: 10px; flex: none; fill: currentColor; stroke: currentColor; stroke-width: 1; opacity: .7; }
+.notice .enter .orn path { fill: none; }
+.notice .enter .orn.r { transform: scaleX(-1); }
 .notice .enter:disabled { color: var(--muted); border-color: rgba(232, 184, 106, .2); cursor: var(--cur-default); }
+.notice .enter:disabled .orn { opacity: .35; }
 .notice .enter.primary { box-shadow: none; animation: ready .6s ease-out; }
-.notice .enter kbd { padding: 0 5px; font: 11px/1.5 var(--latin); letter-spacing: .04em; border: 1px solid rgba(42, 26, 12, .35); border-radius: 2px; opacity: .6; }
-.notice .enter:disabled kbd { display: none; }
-@media (pointer: coarse) { .notice .enter kbd { display: none; } }
 /* 讀取靈魂相片：按鈕底下一行小字，不跟「進入」搶 */
 .notice .soul {
+  display: inline-flex; align-items: center; gap: 7px;
   align-self: center; margin-top: -2px; padding: 4px 8px;
   font: inherit; font-size: 12px; letter-spacing: .2em; color: var(--muted);
   background: none; border: 0; border-bottom: 1px solid rgba(232, 184, 106, .25); cursor: var(--cur-pointer);
 }
+.notice .soul .bag { width: 17px; height: 17px; flex: none; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
 .notice .soul[hidden] { display: none; }
 .notice .soul.leave { margin-top: -8px; }
 /* 在 App 裡開的才有：一段小字，說怎麼換到手機的瀏覽器（js/boot/inapp.js） */
@@ -140,9 +145,8 @@
   .notice { width: 400px; padding: 26px 28px 22px; gap: 14px; }
   .notice .lead { font-size: 18px; }
   .notice .sub { font-size: 14px; }
-  .notice .tasks li { grid-template-columns: 20px 1fr 10px; padding: 14px 0; font-size: 15.5px; }
+  .notice .tasks li { grid-template-columns: 20px 1fr; padding: 14px 0; font-size: 15.5px; }
   .notice .tasks svg { width: 20px; height: 20px; }
-  .notice .tasks i { width: 10px; height: 10px; }
   .notice .enter { min-height: 50px; font-size: 16px; }
 }
 @media (orientation: landscape) and (max-height: 560px) {

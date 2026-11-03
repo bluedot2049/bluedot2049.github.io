@@ -255,8 +255,9 @@ body.desk #guide.show { animation-name: guide-mid; }
   #top-btns { gap: 5px; right: calc(10px + env(safe-area-inset-right)); }
   #top-btns .icon-btn.round { width: 40px; min-width: 40px; height: 40px; }
 }
-/* 「⋯」：按一下整排收進來，畫面乾淨；再按一下展開。收著時行囊有東西沒存，印泥亮在「⋯」上。
-   相機、表情、在線人數不收；手機上收掉的按鈕寬度一起縮成零，人數才會靠到「⋯」旁邊 */
+/* 「⋯」：按一下整排收進來，畫面乾淨；再按一下展開。
+   相機、表情、在線人數不收；手機上收掉的按鈕寬度一起縮成零，人數才會靠到「⋯」旁邊。
+   手機的行囊在拇指弧上，不在這排；電腦收著時行囊跟著收，照片洗好了印泥亮在「⋯」上 */
 #top-btns > * { transition: opacity .25s, transform .25s, width .25s, min-width .25s, margin .25s, border-color .2s, color .2s, background .2s; }
 /* 叫出來的黑眼也不收：帶路中要收得掉它 */
 body.tidy #top-btns > :not(#more-btn, #photo-btn, #emote, #online, #eye-btn.on) { opacity: 0; transform: translateX(14px) scale(.7); pointer-events: none; }
@@ -519,9 +520,9 @@ body.sitting #sit-btn {
 #action-btn .a2:empty { display: none; }
 #action-btn .a0 { display: none; }
 body.panel-open #joy, body.panel-open #action-btn, body.panel-open #emote, body.panel-open #emote-btn, body.panel-open #swap-btn,
-body.panel-open:not(.desk) #photo-btn, body.panel-open:not(.desk) #say-btn { opacity: 0; pointer-events: none; }
+body.panel-open:not(.desk) #photo-btn, body.panel-open:not(.desk) #say-btn, body.panel-open:not(.desk):not(:has(#dress.open)) #pack-btn { opacity: 0; pointer-events: none; }
 /* 坐著看風景時，其他按鈕退到背景，但還是按得到。相機不淡，坐著也常拍 */
-body.sitting #joy, body.sitting #jump-btn, body.sitting #emote, body.sitting #top-btns, body.sitting #swap-btn, body.sitting:not(.desk) #say-btn { opacity: .3; }
+body.sitting #joy, body.sitting #jump-btn, body.sitting #emote, body.sitting #top-btns, body.sitting #swap-btn, body.sitting:not(.desk) #say-btn, body.sitting:not(.desk) #pack-btn { opacity: .3; }
 
 /* ───────── 搖桿換邊：小圓鈕貼在搖桿內側。直拿預設搖桿在右，橫拿預設在左，按一下就反過來 ───────── */
 #swap-btn {
@@ -546,7 +547,7 @@ body.touch #toast.show ~ #hint { top: calc(13vh + 118px + env(safe-area-inset-to
 body.touch:has(#ph-rec:not([hidden])) #hint { top: calc(106px + env(safe-area-inset-top)); }
 
 /* ───────── 拇指弧（手機）：「跳」放在不推搖桿那隻手的角落當圓心，坐、相機、表情排在拇指掃得到的弧上，
-   說話在外圈。只有兩種大小：「跳」（攝影時是快門）是 --seal，其他全部是 --btn。
+   外圈是行囊和說話，各坐在內圈兩顆的中間。只有兩種大小：「跳」（攝影時是快門）是 --seal，其他全部是 --btn。
    弧的半徑照按鈕大小算：相鄰兩顆的弦長 = 一顆按鈕 + 10px（--k 是 1 / (2 sin(半個夾角))）。
    直拿弧往上開，三顆隔 45°；橫拿螢幕矮，隔 40°，大小跟著螢幕高度走、最小 44px。
    搖桿換邊時整組鏡像（從右邊量）。攝影模式同一個位置換成快門和收相機 ───────── */
@@ -556,7 +557,7 @@ body:not(.desk) {
   --jx: calc(max(16px, var(--inset)) + var(--seal) / 2);
   --jy: calc(var(--edge-b) + var(--seal) / 2);
   --r1: calc((var(--btn) + 10px) * var(--k)); --r2: calc(var(--r1) + var(--btn) + 10px);
-  --a-sit: 0deg; --a-cam: 45deg; --a-emo: 90deg; --a-say: 67.5deg;
+  --a-sit: 0deg; --a-cam: 45deg; --a-emo: 90deg; --a-say: 67.5deg; --a-pack: 22.5deg;
 }
 body.joy-left:not(.desk) { --inset: var(--safe-r); }
 #jump-btn { --w: var(--seal); }
@@ -564,26 +565,42 @@ body.joy-left:not(.desk) { --inset: var(--safe-r); }
 #photo-btn { --w: var(--btn); --r: var(--r1); --a: var(--a-cam); }
 #emote { --w: var(--btn); --r: var(--r1); --a: var(--a-emo); }
 #say-btn { --w: var(--btn); --r: var(--r2); --a: var(--a-say); }
+#pack-btn { --w: var(--btn); --r: var(--r2); --a: var(--a-pack); }
 /* 攝影模式坐和表情收掉了，那兩個位置讓給相機的閃光（沒帶相機時是錄影）和日期，拇指記得的位置不變 */
 #ph-flash, #ph-record { --w: var(--btn); --r: var(--r1); --a: var(--a-sit); }
 #ph-date { --w: 64px; --h: 40px; --r: var(--r1); --a: var(--a-emo); }
 body:not(.desk) #ph-flash { width: var(--w); height: var(--w); }
-body:not(.desk) :is(#jump-btn, #sit-btn, #photo-btn, #say-btn, #emote, #ph-flash, #ph-record, #ph-date) {
+body:not(.desk) :is(#jump-btn, #sit-btn, #photo-btn, #say-btn, #pack-btn, #emote, #ph-flash, #ph-record, #ph-date) {
   position: fixed; z-index: 20; margin: 0;
   left: calc(var(--jx) + var(--r, 0px) * cos(var(--a, 0deg)) - var(--w) / 2); right: auto;
   bottom: calc(var(--jy) + var(--r, 0px) * sin(var(--a, 0deg)) - var(--h, var(--w)) / 2);
 }
-body.joy-left:not(.desk) :is(#jump-btn, #sit-btn, #photo-btn, #say-btn, #emote, #ph-flash, #ph-record, #ph-date) {
+body.joy-left:not(.desk) :is(#jump-btn, #sit-btn, #photo-btn, #say-btn, #pack-btn, #emote, #ph-flash, #ph-record, #ph-date) {
   left: auto; right: calc(var(--jx) + var(--r, 0px) * cos(var(--a, 0deg)) - var(--w) / 2);
 }
-body:not(.desk) :is(#photo-btn, #say-btn, #emote-btn) { width: var(--btn); min-width: var(--btn); height: var(--btn); }
+body:not(.desk) :is(#photo-btn, #say-btn, #pack-btn, #emote-btn) { width: var(--btn); min-width: var(--btn); height: var(--btn); }
 body:not(.desk) #photo-btn svg { width: calc(var(--btn) * .44); height: calc(var(--btn) * .44); }
 body:not(.desk) #photo-btn .cam { width: calc(var(--btn) * .53); height: calc(var(--btn) * .53); }
-body:not(.desk) :is(#say-btn, #emote-btn) svg { width: calc(var(--btn) * .42); height: calc(var(--btn) * .42); }
+body:not(.desk) :is(#say-btn, #pack-btn, #emote-btn) svg { width: calc(var(--btn) * .42); height: calc(var(--btn) * .42); }
 body:not(.desk) #emote { align-items: center; }
 /* 表情點開時那一排會蓋到弧上其他按鈕，先讓它們退後 */
-body:not(.desk):has(#emote.open) :is(#sit-btn, #photo-btn, #say-btn) { opacity: .2; pointer-events: none; }
-body.flat :is(#photo-btn, #say-btn) { display: none; }
+body:not(.desk):has(#emote.open) :is(#sit-btn, #photo-btn, #say-btn, #pack-btn) { opacity: .2; pointer-events: none; }
+body.flat :is(#photo-btn, #say-btn, #pack-btn) { display: none; }
+/* 行囊：外圈靠「坐」和相機那一側，照片拍完順手就開。開著時抽屜蓋在這裡，鈕先收起來，關掉用抽屜上的 ✕。
+   換裝鏡子開著時拇指弧都收了，行囊鈕留著（請眼睛拍存檔要站在鏡子前開行囊）：直拿的抽屜蓋住整排，
+   鈕站到抽屜上緣、拇指那一邊，跟著抽屜滑上去；橫拿和平板的鏡子是右邊的側欄，拇指弧也在右邊時往左讓出側欄 */
+body:not(.desk) #pack-btn {
+  transition: opacity .3s, left .4s cubic-bezier(.2, .8, .2, 1), right .4s cubic-bezier(.2, .8, .2, 1), bottom .4s cubic-bezier(.2, .8, .2, 1), border-color .2s, color .2s, background .2s;
+}
+body:not(.desk) #pack-btn.on { opacity: 0; pointer-events: none; }
+body:not(.desk):has(#dress.open) #pack-btn { --a: 90deg; --r: calc(var(--dress-h) + 12px - var(--jy) + var(--w) / 2); }
+@media (min-width: 900px), (orientation: landscape) and (max-height: 500px) {
+  body:not(.desk):has(#dress.open) #pack-btn { --a: var(--a-pack); --r: var(--r2); }
+  body.joy-left:not(.desk):has(#dress.open) #pack-btn { --a: 0deg; --r: calc(var(--panel-w) + 16px - var(--jx) + var(--w) / 2); }
+}
+@media (prefers-reduced-motion: reduce) { body:not(.desk) #pack-btn { transition: opacity .3s; } }
+/* 360 寬的手機：互動鍵跟搖桿擠過來，22.5° 只剩 3px，往「坐」那邊轉一點，每一顆都還隔 10px 以上 */
+@media (orientation: portrait) and (max-width: 370px) { body:not(.desk) { --a-pack: 18deg; } }
 
 /* 互動鍵：搖桿內側斜上方（45°），拇指從搖桿往裡一滑就到。推搖桿時手指被搖桿抓著，滑過去不會誤按。
    跟其他次要鍵一樣大，只寫兩個字（完整說法在 aria-label），光暈出現時擴一圈就停 */
@@ -604,7 +621,7 @@ body:not(.desk) #action-btn.show::before { animation-iteration-count: 1; }
     --joy: clamp(92px, 30vh, 124px);
     --seal: clamp(52px, 15vh, 60px);
     --btn: max(44px, 12vh); --k: 1.462;
-    --a-sit: 0deg; --a-cam: 40deg; --a-emo: 80deg; --a-say: 60deg;
+    --a-sit: 0deg; --a-cam: 40deg; --a-emo: 80deg; --a-say: 60deg; --a-pack: 20deg;
   }
   body.touch #joy::after { inset: 26%; }
   /* 日期窗是扁長的，弧壓扁後會碰到收起鈕的角，往上轉一點 */

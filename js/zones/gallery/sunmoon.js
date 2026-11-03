@@ -10,13 +10,15 @@ import * as THREE from 'three';
 import { rng } from '../../core/props.js';
 import { tag } from '../../core/scenery.js';
 import { ARCH } from './mirror.js';
-import { BAN_W, TABLE_W } from './camtable.js';
+import { BAN_SIDE, BAN_TOP, BAN_W, TABLE_W } from './camtable.js';
 import { SW, blade, broad, fan, glowDots, gradMaterial, instanced, motes, orb, spire, vineGeo, vineMesh } from './plantkit.js';
 
 const C = (h) => new THREE.Color(h);
-// 根部都是色票裡的灰藍綠（影子那一頭），尖端：冷的給鏡子那邊、暖的給掛布那邊，四成維持綠
+// 根部都是色票裡的灰藍綠（影子那一頭），尖端：冷的給鏡子那邊、暖的給掛布那邊，大多維持綠
+// 暖的那組有窗戶原本那個橘（窗戶現在安靜了，橘留給太陽這邊）；冷的那組不用桃色，換一個淡到發白的紫，月那邊才是真的冷
 const SLATE = C(SW.slate), GREEN = C(SW.green), LIGHT = C('#9cc46a');
-const COOL = [SW.lavender, SW.pink, SW.peach].map(C), WARM = [SW.coral, SW.apricot, SW.red, SW.peach].map(C);
+const ORANGE = '#f08c5a', MOONLIGHT = '#d8cfff';
+const COOL = [SW.lavender, SW.pink, MOONLIGHT].map(C), WARM = [SW.coral, SW.apricot, ORANGE, SW.red].map(C);
 // 手機少長一點
 const FEW = matchMedia('(pointer: coarse)').matches ? 0.75 : 1;
 const UP = Math.PI / 2, DOWN = -Math.PI / 2;
@@ -35,11 +37,18 @@ export function buildSunMoon({ mirror: M, table: T, len }) {
   const E = (T + TABLE_W / 2 + len) / 2 + 0.06;      // 靠出口的牆角那座葉山
   const EW = (len - T - TABLE_W / 2) / 2 - 0.1;
 
-  // 顏色：根部灰藍綠；尖端照在牆上的位置，越靠掛布越常是暖色
+  // 顏色：根部灰藍綠；尖端照在牆上的位置，越靠掛布越常是暖色。
+  // 彩色集中在兩個焦點：鏡子上的月牙、掛布兩側；焦點外（窗邊牆角、中間的藤、出口牆角）大多留綠，偶爾一片也褪淡，牆才不會整面都在搶
+  const focus = (x, y) => {
+    const moon = smooth(1.3 - Math.hypot((x - M) / (ARCH.r + 0.9), (y - ARCH.y - 0.3) / 1.1));
+    const sun = smooth(1.3 - Math.hypot((x - T) / (BAN_W / 2 + 0.9), (y - (BAN_TOP - BAN_SIDE / 2)) / 1.3));
+    return Math.max(moon, sun);
+  };
   const base = () => SLATE.clone().lerp(GREEN, 0.25 + 0.45 * R());
-  const tip = (x) => {
-    if (R() < 0.4) return LIGHT.clone().lerp(GREEN, R() * 0.4);
-    return pick(R() < smooth((x - M) / (br - M)) ? WARM : COOL);
+  const tip = (x, y) => {
+    const f = focus(x, y);
+    if (R() > 0.25 + 0.5 * f) return LIGHT.clone().lerp(GREEN, R() * 0.4);
+    return pick(R() < smooth((x - M) / (br - M)) ? WARM : COOL).lerp(LIGHT, (1 - f) * 0.45);
   };
   const blades = [], broads = [], fans = [], spires = [], orbs = [], vines = [];
   // 一叢葉：從牆上 c 放射出去，主方向 dir（牆面上的角度，0 往出口、π/2 往上），張開 ±spread，n 片，長 len 上下浮動；lift 越大越往房間翹
@@ -49,15 +58,16 @@ export function buildSunMoon({ mirror: M, table: T, len }) {
       list.push({
         p: c.clone().add(V((R() - 0.5) * 0.06, (R() - 0.5) * 0.06, 0.02 + R() * 0.05)),
         y: V(Math.cos(a), Math.sin(a), lift + (R() - 0.5) * 0.3), len: len * (0.75 + 0.5 * R()), wid: 0.8 + 0.4 * R(),
-        roll: (R() - 0.5) * 0.6, base: base(), tip: tip(c.x),
+        roll: (R() - 0.5) * 0.6, base: base(), tip: tip(c.x, c.y),
       });
     }
   };
-  // 扇葉：從 c 朝 dir 張開
-  const addFan = (c, dir, l, lift = 0.25) => fans.push({ p: c, y: V(Math.cos(dir), Math.sin(dir), lift), len: l, roll: (R() - 0.5) * 0.3, base: base(), tip: pick(WARM), glow: 0.55, side: 1, phase: R() * 6.28 });
-  // 光球、花穗：會亮的那幾個，side 0 跟鏡子的毯子、1 跟相機桌
-  const addOrb = (p, r, side, cols) => orbs.push({ p, y: V(0, 1, 0), len: r, roll: R() * 6, base: cols[0].clone(), tip: cols[1].clone(), glow: 1, side, phase: R() * 6.28 });
-  const addSpire = (p, lean, h, side, cols) => spires.push({ p, y: V(lean, 1, 0.15), len: h, wid: 1.1, roll: R() * 6, base: cols[0].clone(), tip: cols[1].clone(), glow: 0.8, side, phase: R() * 6.28 });
+  // 扇葉：從 c 朝 dir 張開；離焦點遠的（出口牆角那幾把）褪一點綠
+  const addFan = (c, dir, l, lift = 0.25) => fans.push({ p: c, y: V(Math.cos(dir), Math.sin(dir), lift), len: l, roll: (R() - 0.5) * 0.3, base: base(), tip: pick(WARM).lerp(LIGHT, (1 - focus(c.x, c.y)) * 0.45), glow: 0.55, side: 1, phase: R() * 6.28 });
+  // 光球、花穗：會亮的那幾個，side 0 跟鏡子的毯子、1 跟相機桌。兩個牆角的離焦點遠，顏色沉一點（往灰藍走），亮起來才跳出來
+  const dusty = (p, c) => c.clone().lerp(SLATE, (1 - focus(p.x, p.y)) * 0.3);
+  const addOrb = (p, r, side, cols) => orbs.push({ p, y: V(0, 1, 0), len: r, roll: R() * 6, base: dusty(p, cols[0]), tip: dusty(p, cols[1]), glow: 1, side, phase: R() * 6.28 });
+  const addSpire = (p, lean, h, side, cols) => spires.push({ p, y: V(lean, 1, 0.15), len: h, wid: 1.1, roll: R() * 6, base: dusty(p, cols[0]), tip: dusty(p, cols[1]), glow: 0.8, side, phase: R() * 6.28 });
   const vine = (pts, r) => {
     const c = path(pts);
     vines.push(vineGeo(c, r, (t) => SLATE.clone().lerp(GREEN, 0.3 + 0.5 * t)));
@@ -71,8 +81,8 @@ export function buildSunMoon({ mirror: M, table: T, len }) {
       tuft(p, a + (i % 2 ? 0.75 : -0.75), 0.35, 2, len, 0.35);
     }
   };
-  const cool = (i) => [[SLATE, C(SW.lavender)], [C(SW.lavender), C(SW.pink)], [C(SW.slate), C(SW.peach)]][i % 3];
-  const warm = (i) => [[C(SW.red), C(SW.apricot)], [C(SW.coral), C(SW.peach)], [C(SW.red), C(SW.coral)]][i % 3];
+  const cool = (i) => [[SLATE, C(SW.lavender)], [C(SW.lavender), C(SW.pink)], [C(SW.slate), C(MOONLIGHT)]][i % 3];
+  const warm = (i) => [[C(SW.red), C(SW.apricot)], [C(ORANGE), C(SW.peach)], [C(SW.red), C(SW.coral)]][i % 3];
 
   // ---------- 月 ----------
   // 窗邊牆角：地上兩大叢往上散，再一叢一叢沿著牆角爬到頂，最上面那叢沿著牆頂往鏡子那邊倒；腳下和半腰幾片寬葉
@@ -151,7 +161,7 @@ export function buildSunMoon({ mirror: M, table: T, len }) {
   // 飄起來的光點：鏡子那頭淡紫、掛布那頭淡金
   const dots = [];
   for (let i = 0; i < 12; i++) dots.push({ p: V(0.15 + R() * (M + 0.7), 0.4 + R() * 1.8, 0.2 + R() * 0.25), color: '#cdbcff', side: 0, phase: R() });
-  for (let i = 0; i < 14; i++) dots.push({ p: V(bl + R() * (len - bl - 0.3), 0.6 + R() * 1.8, 0.2 + R() * 0.3), color: '#ffd29a', side: 1, phase: R() });
+  for (let i = 0; i < 14; i++) dots.push({ p: V(bl + R() * (len - bl - 0.3), 0.6 + R() * 1.8, 0.2 + R() * 0.3), color: '#ffc08a', side: 1, phase: R() });
 
   // ---------- 合起來 ----------
   // 葉不要伸進另一面牆、相機桌、鏡子前面
@@ -162,7 +172,7 @@ export function buildSunMoon({ mirror: M, table: T, len }) {
   const group = new THREE.Group();
   for (const [geo, list] of [[blade(), blades.filter(keep)], [broad(), broads.filter(keep)], [fan(), fans], [spire(), spires], [orb(), orbs]]) group.add(tag(instanced(geo, list, mat), 'prop'));
   group.add(tag(vineMesh(vines), 'prop'));
-  group.add(glowDots(orbs.filter((o) => !o.side), uMoon, '#c8b8ff', 380), glowDots(orbs.filter((o) => o.side), uSun, '#ffcf96', 380), motes(dots, uMoon, uSun));
+  group.add(glowDots(orbs.filter((o) => !o.side), uMoon, '#c8b8ff', 380), glowDots(orbs.filter((o) => o.side), uSun, '#ffbc8a', 380), motes(dots, uMoon, uSun));
 
   return {
     group,

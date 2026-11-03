@@ -458,7 +458,7 @@ export function furnish(room, R, set, noCat, tidy = false) {
     const { sp, s: sMid } = win;
     const pt = sp.at(sMid), rot = Math.atan2(pt.nx, pt.nz);
     const k = new Kit(R);
-    buildWindow(k);
+    buildWindow(k, 1.2, 1.3, 1.0, win.style);
     k.emit(bucketFor(sp.entry, true), pt.x, pt.z, rot);
     sp.occ.push([sMid - 1.0, sMid + 1.0]);
     // 光束
@@ -470,7 +470,7 @@ export function furnish(room, R, set, noCat, tidy = false) {
     const nrm = new THREE.Vector3().crossVectors(u, v);
     const beam = new THREE.Mesh(
       new THREE.PlaneGeometry(1.3, len),
-      new THREE.MeshBasicMaterial({ map: s.beam, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ map: s.beam, transparent: true, opacity: win.beam ?? 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
     );
     beam.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(u, v, nrm));
     beam.position.copy(top).add(bottom).multiplyScalar(0.5);
@@ -546,10 +546,10 @@ export function furnish(room, R, set, noCat, tidy = false) {
     room.group.add(tag(rug, 'floor'));
   }
 
-  // 工作室地上的顏料點和紙張
+  // 工作室地上的顏料點和紙張（前廳 tidy：顏料點褪成乾掉的顏色，不搶鏡子和相機桌；亂數抽法一樣）
   if (room.propSet === 'studio') {
     const k = new Kit(R);
-    const colors = ['#c8553d', '#e0a458', '#588b8b', '#8e5572', '#f3a712', '#efe6d2'];
+    const colors = tidy ? ['#a3675a', '#c9a878', '#75908a', '#8c7080', '#cfae72', '#e8dfcc'] : ['#c8553d', '#e0a458', '#588b8b', '#8e5572', '#f3a712', '#efe6d2'];
     for (let i = 0; i < 14; i++) {
       const x = (R() * 2 - 1) * (room.halfW - 0.6), z = room.zStart - 0.6 - R() * (room.d - 1.2);
       const r = 0.04 + R() * 0.16;

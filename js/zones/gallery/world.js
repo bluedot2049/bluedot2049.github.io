@@ -205,9 +205,10 @@ export function buildWorld(scene, gallery) {
       });
 
       // 入口那面牆（進門的左手邊）：靠鏡子那頭開窗，夕陽照在鏡子前；靠前門那頭空著，之後貼活動和消息的海報。
-      // 空著的這段家具照樣做一次再丟掉，海報掛上去時別處的擺設不會跟著換位置。窗前不放東西（low: false），那個牆角讓給月的花
+      // 空著的這段家具照樣做一次再丟掉，海報掛上去時別處的擺設不會跟著換位置。窗前不放東西（low: false），那個牆角讓給月的花。
+      // 這扇窗要安靜：玻璃是淡淡的粉橘黃昏、窗簾跟鏡子同一路的灰紫、光束淡一點，眼睛才會先落到鏡子和掛布（那個橘給了掛布上的太陽）
       const front = boxSpan(room, 'front');
-      room.window = { sp: front, s: 2.4, low: false };
+      room.window = { sp: front, s: 2.4, low: false, style: { glass: '#f3dfcc', glass2: '#e2ad98', curtain: '#5a4f6a' }, beam: 0.3 };
       front.clear = [[4.0, front.length]];
       // 空位上掛佈告欄（noticeboard.js），窗邊長過來的藤纏在靠窗那個上角
       const bs = 5.5, bp = front.at(bs);

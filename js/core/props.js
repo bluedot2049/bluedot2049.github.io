@@ -359,16 +359,16 @@ export function weightedPick(R, weights, maxW) {
   return entries[entries.length - 1][0];
 }
 
-// 牆上的窗：木框、窗簾、夕陽色玻璃
-export function buildWindow(k, ww = 1.2, wh = 1.3, y0 = 1.0) {
-  const wood = '#5e3b22';
-  k.plane(ww, wh, '#ffe2a8', 0, y0 + wh / 2, 0.02, { glow: true, color2: '#f08c5a' });
+// 牆上的窗：木框、窗簾、夕陽色玻璃。style 可以換玻璃上下兩色和窗簾色（前廳的窗要安靜一點，見 world.js）
+export function buildWindow(k, ww = 1.2, wh = 1.3, y0 = 1.0, style = {}) {
+  const wood = '#5e3b22', { glass = '#ffe2a8', glass2 = '#f08c5a', curtain = '#9a3b2b' } = style;
+  k.plane(ww, wh, glass, 0, y0 + wh / 2, 0.02, { glow: true, color2: glass2 });
   k.box(ww + 0.12, 0.08, 0.1, wood, 0, y0 + wh + 0.04, 0.05);
   k.box(ww + 0.24, 0.06, 0.2, wood, 0, y0 - 0.03, 0.08);
   for (const x of [-ww / 2 - 0.03, ww / 2 + 0.03]) k.box(0.06, wh, 0.1, wood, x, y0 + wh / 2, 0.05);
   k.box(0.04, wh, 0.05, wood, 0, y0 + wh / 2, 0.04);
   k.box(ww, 0.04, 0.05, wood, 0, y0 + wh * 0.55, 0.04);
-  for (const x of [-ww / 2 - 0.16, ww / 2 + 0.16]) k.box(0.18, wh + 0.4, 0.04, '#9a3b2b', x, y0 + wh / 2 - 0.05, 0.08);
+  for (const x of [-ww / 2 - 0.16, ww / 2 + 0.16]) k.box(0.18, wh + 0.4, 0.04, curtain, x, y0 + wh / 2 - 0.05, 0.08);
   k.cyl(0.1, 0.08, 0.12, '#b5643c', ww * 0.25, y0 + 0.06, 0.08, {}, 7);
   k.rock(0.1, '#5f8f45', ww * 0.25, y0 + 0.18, 0.08);
 }

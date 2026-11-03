@@ -1,7 +1,7 @@
 /* © 2026 bluedot2049《煉金畫廊》。未經授權禁止重製、改作或用於 AI 訓練，詳見 LICENSE。 */
 /* 攝影：取景框和控制列、閃光燈、照相館、拍好之後的結果、鏡子前請眼睛拍照。 */
 /* ───────── 攝影模式 ───────── */
-body.photo #top-btns, body.photo #action-btn, body.photo #jump-btn, body.photo #sit-btn, body.photo #say-btn, body.photo #toast { display: none !important; }
+body.photo #top-btns, body.photo #action-btn, body.photo #jump-btn, body.photo #sit-btn, body.photo #say-btn, body.photo #pack-btn, body.photo #toast { display: none !important; }
 body.photo #stage::after { display: none; }   /* 暗角改由取景框畫，存檔時才一致 */
 body.photo #joy, body.photo #emote { opacity: 1; }
 body.photo-hush .speech { opacity: 0 !important; }

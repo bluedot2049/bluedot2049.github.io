@@ -4,7 +4,7 @@
 // 還沒做出來的位置只有木座和一張空白的小立卡。帶走的那台不在桌上，木座空著。
 // 挑的時候看著的那台會稍微浮起來、轉向鏡頭。面向本地 +z（房間裡），桌子沿著本地 x 擺。
 // 桌子後面的牆上掛一塊酒紅布，繡著一圈金色細光芒、卷草框著一顆眼睛，下襬流蘇；開場遠遠就看得到這裡是拿相機的地方。
-// 桌前地上一條同色的長毯，每個木座正前方繡一格，拿得走的那幾格亮著。
+// 桌前地上一條同色的長毯，每個木座正前方繡一格，拿得走的那幾格亮著；毯子往房間裡鋪出去，末端收成一個尖，跟掛布的下襬同一個形。
 import * as THREE from 'three';
 import { Kit, newBucket } from '../../core/props.js';
 import { bucketObjects, tag } from '../../core/scenery.js';
@@ -20,12 +20,14 @@ const WOOD = '#7a4e2e', DARK = '#4e3020', CLOTH = '#5e2a32', HEM = '#c9a24a', PA
 export const BAN_W = 1.8, BAN_SIDE = 1.55, BAN_V = 0.24, BAN_TOP = 3.03;
 const FRINGE = 0.07, PPM = 640;   // 下襬細流蘇的長度；貼圖每公尺幾個像素
 const WINE = '#5e2a32';
-// 桌前的長毯：寬、從哪裡鋪到哪裡（本地 z，桌子底下壓一截，蓋到挑相機時站的地方；旁邊並排的是鏡子前的毯子）；貼圖每公尺幾個像素
-const RUG_W = 2.9, RUG_Z0 = -0.15, RUG_Z1 = 1.25, RUG_PPM = 256;
+// 桌前的長毯：寬、從哪裡鋪到哪裡（本地 z，桌子底下壓一截，直的部分鋪到 RUG_Z1，再收成一個尖到 RUG_TIP；旁邊並排的是鏡子前的毯子）；貼圖每公尺幾個像素
+const RUG_W = 2.9, RUG_Z0 = -0.15, RUG_Z1 = 2.1, RUG_TIP = 2.9, RUG_PPM = 256;
 // 地上的格子：方框邊長、方框上緣離桌子中心多遠；整張貼片連同框外那把光芒的寬和深
 const CELL = 0.34, CELL_Z = 0.43, CELL_OW = 0.7, CELL_OD = 0.62, CELL_PPM = 320;
 // 格子的金線：暗著是乾掉的赭色，亮起來從裡面透出金光
-const INK = '#7a4f2e', GLOW = '#ffc266';
+const INK = '#7a4f2e', GLOW = '#ffb470';
+// 太陽的中心透出來的那團橘：窗戶原本那個橘（窗戶現在安靜了，這面牆最暖的一點搬到這裡）
+const SUN = '240, 140, 90';
 
 // 一條粗細會變的線，像沾水筆畫的：pts 是線走過的點，width(t) 是 t（0 到 1）處的寬。跟 mirrorcard.js 的眼睛同一套畫法
 function ribbon(g, pts, width, side = 0) {
@@ -233,6 +235,17 @@ function banner() {
     g.fillStyle = `rgba(${rnd() < 0.5 ? '255, 220, 220' : '30, 5, 10'}, ${0.02 + rnd() * 0.03})`;
     g.fillRect(x, 0, 1, H);
   }
+  // 太陽的中心一團橘，光芒從這團光裡長出去；發光圖也鋪一團，遠遠看布的中心真的在亮
+  const S = 1024, P = Math.round(Math.min(W - 100, side - 60)), cy = 0.5 * side;
+  const sun = (ctx, a0) => {
+    const gr = ctx.createRadialGradient(W / 2, cy, 0, W / 2, cy, P * 0.42);
+    gr.addColorStop(0, `rgba(${SUN}, ${a0})`);
+    gr.addColorStop(0.4, `rgba(${SUN}, ${a0 * 0.55})`);
+    gr.addColorStop(1, `rgba(${SUN}, 0)`);
+    ctx.fillStyle = gr;
+    ctx.fillRect(0, 0, W, H);
+  };
+  sun(g, 0.6);
   g.restore();
   a.fillStyle = '#fff';
   outline(a, 0);
@@ -255,7 +268,6 @@ function banner() {
   sh.lineTo(W, side - 3.5);
   sh.stroke();
   // 金紋：光芒的尖端留在金線裡面
-  const S = 1024, P = Math.round(Math.min(W - 100, side - 60)), cy = 0.5 * side;
   sh.drawImage(pattern(S), (W - P) / 2, cy - P / 2, P, P);
   const gold = canvas(), gg = gold.getContext('2d');
   gg.fillStyle = sheen(gg);
@@ -276,6 +288,7 @@ function banner() {
   g.drawImage(gold, 0, 0);
   e.fillStyle = '#000';
   e.fillRect(0, 0, W, H);
+  sun(e, 0.5);
   e.drawImage(gold, 0, 0);
 
   // 細流蘇：沿著下襬兩條斜邊一根一根垂下來，長短有一點不齊
@@ -310,18 +323,30 @@ function tassel(k, x, y, z) {
   k.cyl(0.033, 0.033, 0.006, '#e0bd6e', x, y - 0.2, z, {}, 12);
 }
 
-// 桌前長毯的貼圖：跟桌巾同一塊酒紅，沿邊兩道金線，中間夾一排小菱形。圖的上緣壓在桌子底下，暗一點
+// 桌前長毯的貼圖：跟桌巾同一塊酒紅，沿邊兩道金線順著尖角走，直的那段夾一排小菱形；尖角那頭繡一顆小太陽（掛布那圈光芒的小一號），
+// 底下透一點點橘。圖的上緣壓在桌子底下，暗一點；圖的下緣是尖
 function rugTexture() {
-  const W = Math.round(RUG_W * RUG_PPM), H = Math.round((RUG_Z1 - RUG_Z0) * RUG_PPM);
+  const W = Math.round(RUG_W * RUG_PPM), H = Math.round((RUG_TIP - RUG_Z0) * RUG_PPM), ys = Math.round((RUG_Z1 - RUG_Z0) * RUG_PPM);
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
   const g = c.getContext('2d');
   let seed = 31;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  // 毯子的輪廓往內縮 d 像素（金線沿著它走），跟掛布同一套
+  const outline = (d) => {
+    const m = (H - ys) / (W / 2), dv = d * Math.hypot(1, m);
+    g.beginPath();
+    g.moveTo(d, d);
+    g.lineTo(W - d, d);
+    g.lineTo(W - d, ys + m * d - dv);
+    g.lineTo(W / 2, H - dv);
+    g.lineTo(d, ys + m * d - dv);
+    g.closePath();
+  };
   const cloth = g.createLinearGradient(0, 0, 0, H);
   cloth.addColorStop(0, '#451d25');
-  cloth.addColorStop(0.35, WINE);
+  cloth.addColorStop(0.25, WINE);
   cloth.addColorStop(1, '#62303a');
   g.fillStyle = cloth;
   g.fillRect(0, 0, W, H);
@@ -329,22 +354,66 @@ function rugTexture() {
     g.fillStyle = `rgba(${rnd() < 0.5 ? '255, 220, 220' : '30, 5, 10'}, ${0.02 + rnd() * 0.03})`;
     g.fillRect(x, 0, 1, H);
   }
+  // 小太陽：擺在直的部分和尖角交界，底下一團很淡的橘
+  const sx = W / 2, sy = ys + 6, r0 = 38, RL = 72;
+  const halo = g.createRadialGradient(sx, sy, 0, sx, sy, RL * 1.6);
+  halo.addColorStop(0, `rgba(${SUN}, 0.32)`);
+  halo.addColorStop(1, `rgba(${SUN}, 0)`);
+  g.fillStyle = halo;
+  g.fillRect(0, 0, W, H);
   const gr = g.createLinearGradient(0, 0, W, H);
   gr.addColorStop(0, '#e6c27e');
   gr.addColorStop(0.5, '#c4924a');
   gr.addColorStop(1, '#dcb06a');
   g.strokeStyle = g.fillStyle = gr;
+  g.lineJoin = 'miter';
   for (const [m, w] of [[12, 5], [30, 2]]) {
     g.lineWidth = w;
-    g.strokeRect(m, m, W - m * 2, H - m * 2);
+    outline(m);
+    g.stroke();
   }
   const dia = (x, y) => { g.beginPath(); g.moveTo(x, y - 4); g.lineTo(x + 4, y); g.lineTo(x, y + 4); g.lineTo(x - 4, y); g.fill(); };
-  for (let x = 40; x < W - 30; x += 22) { dia(x, 21); dia(x, H - 21); }
-  for (let y = 40; y < H - 30; y += 22) { dia(21, y); dia(W - 21, y); }
+  for (let x = 40; x < W - 30; x += 22) dia(x, 21);
+  for (let y = 40; y < ys - 30; y += 22) { dia(21, y); dia(W - 21, y); }
+  // 光芒：一根長、一根短交錯，尖端收細淡掉；裡面兩圈細線
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2, L = r0 + RL * [1, 0.68, 0.84, 0.68][i % 4], w = i % 2 ? 4 : 6, cs = Math.cos(a), sn = Math.sin(a);
+    const ray = g.createLinearGradient(sx + cs * r0, sy + sn * r0, sx + cs * L, sy + sn * L);
+    ray.addColorStop(0, 'rgba(230, 194, 126, 1)');
+    ray.addColorStop(1, 'rgba(230, 194, 126, 0.1)');
+    g.fillStyle = ray;
+    g.beginPath();
+    g.moveTo(sx + cs * r0 - sn * w / 2, sy + sn * r0 + cs * w / 2);
+    g.lineTo(sx + cs * L, sy + sn * L);
+    g.lineTo(sx + cs * r0 + sn * w / 2, sy + sn * r0 - cs * w / 2);
+    g.fill();
+  }
+  g.strokeStyle = gr;
+  for (const [r, w] of [[r0 - 8, 2.5], [r0 - 15, 1.2]]) {
+    g.lineWidth = w;
+    g.beginPath();
+    g.arc(sx, sy, r, 0, Math.PI * 2);
+    g.stroke();
+  }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;
   return t;
+}
+
+// 毯子的形狀：直的一段，末端收成尖（跟掛布的下襬一樣）。本地座標，原點在桌子中心，面朝上；uv 對準 rugTexture（上緣壓在桌子底下）
+function rugGeometry() {
+  const r = RUG_W / 2, s = new THREE.Shape();
+  s.moveTo(-r, -RUG_Z0);
+  s.lineTo(r, -RUG_Z0);
+  s.lineTo(r, -RUG_Z1);
+  s.lineTo(0, -RUG_TIP);
+  s.lineTo(-r, -RUG_Z1);
+  s.closePath();
+  const geo = new THREE.ShapeGeometry(s), uv = geo.attributes.uv, pos = geo.attributes.position;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) / RUG_W + 0.5, 1 - (-pos.getY(i) - RUG_Z0) / (RUG_TIP - RUG_Z0));
+  geo.rotateX(-Math.PI / 2);
+  return geo;
 }
 
 // 地上那一格的形狀（白色是金線，當 alphaMap 用）：雙線方框；有相機的位置框裡一圈鏡頭、中間一顆點，
@@ -463,10 +532,8 @@ export function buildCamTable(x, z, rot) {
 
   // 桌前的長毯，每個位置正前方的地上一格。格子是魔法印泥：桌上這台拿得走，那格就亮著、慢慢呼吸；
   // 帶走了、還沒開放（日晷III）、空位置都是暗的
-  const rugGeo = new THREE.PlaneGeometry(RUG_W, RUG_Z1 - RUG_Z0);
-  rugGeo.rotateX(-Math.PI / 2);
-  const rug = new THREE.Mesh(rugGeo, new THREE.MeshLambertMaterial({ map: rugTexture() }));
-  rug.position.set(0, 0.006, (RUG_Z0 + RUG_Z1) / 2);
+  const rug = new THREE.Mesh(rugGeometry(), new THREE.MeshLambertMaterial({ map: rugTexture() }));
+  rug.position.y = 0.006;
   group.add(tag(rug, 'floor'));
   const cellGeo = new THREE.PlaneGeometry(CELL_OW, CELL_OD);
   cellGeo.rotateX(-Math.PI / 2);

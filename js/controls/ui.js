@@ -143,6 +143,8 @@ export class UI {
       try { localStorage.setItem('tidy', on ? '1' : '0'); } catch {}
     });
     tapOnRelease($('#top-btns'));
+    // 手機的行囊鈕在拇指弧上，不在那排裡（電腦上面已經排進去了）
+    if (!$('#top-btns').contains($('#pack-btn'))) tapOnRelease($('#pack-btn'));
     $('#sheet-close').addEventListener('click', () => { this.hidePainting(); this.onClose?.(); });
     $('#dress-close').addEventListener('click', () => { this.hideDress(); this.onClose?.(); });
     $('#cams-close').addEventListener('click', () => { this.hideCams(); this.onClose?.(); });

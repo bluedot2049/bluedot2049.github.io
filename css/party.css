@@ -105,7 +105,7 @@ body.desk #chat { bottom: calc(84px + env(safe-area-inset-bottom)); }
 .chat-row .icon-btn { width: 40px; min-width: 40px; height: 40px; box-shadow: none; }
 /* 打字時：走路、跳、坐、動作、表情先收起來，畫面留給對話框和隊友的記號；上面的按鈕淡一點 */
 body.chatting #joy, body.chatting #swap-btn, body.chatting .seal, body.chatting #action-btn, body.chatting #emote, body.chatting #emote-btn, body.chatting #hint,
-body.chatting:not(.desk) #photo-btn, body.chatting:not(.desk) #say-btn { opacity: 0 !important; pointer-events: none !important; }
+body.chatting:not(.desk) #photo-btn, body.chatting:not(.desk) #say-btn, body.chatting:not(.desk) #pack-btn { opacity: 0 !important; pointer-events: none !important; }
 body.chatting.touch #top-btns { opacity: .35; }
 /* 按了「標記」，等點地面 */
 body.party-arming #stage canvas { cursor: crosshair; }

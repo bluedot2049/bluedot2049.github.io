@@ -34,8 +34,10 @@
   letter-spacing: .12em; color: var(--muted);
 }
 /* ───────── 捏角色 ───────── */
-/* 手機上固定高度，鏡頭才知道角色要擺在畫面哪裡。圓章、部位小格、顏料列不動，只有中間的圖卡捲動 */
-#dress { height: 54vh; max-height: none; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+/* 手機上固定高度，鏡頭才知道角色要擺在畫面哪裡。圓章、部位小格、顏料列不動，只有中間的圖卡捲動。
+   鏡子開著時行囊鈕站到抽屜上緣，也照這個高度（hud.css） */
+:root { --dress-h: 54vh; }
+#dress { height: var(--dress-h); max-height: none; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
 #dress .dress-head { display: none; }
 #dress-tabs svg, #dress-subs svg, .pack svg {
   fill: none; stroke: var(--gold); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round;
@@ -140,7 +142,7 @@
   height: 28px; padding: 0 12px; font: inherit; font-size: 12px; letter-spacing: .1em; color: var(--text);
   background: none; border: 1px solid var(--line); border-radius: 999px; cursor: var(--cur-pointer);
 }
-/* 行囊（pack.js）：浮著的卡，開著照樣能走。手機掛在右上那排按鈕底下；電腦抓最上面那條拖，放大一點 */
+/* 行囊（pack.js）：電腦是浮著的卡，開著照樣能走，抓最上面那條拖，放大一點；手機是貼底的抽屜（在這段最後） */
 .pack {
   display: flex; flex-direction: column; gap: 10px; padding: 14px;
   background: #261a12; border: 1px solid var(--line-soft);
@@ -169,6 +171,42 @@ body.desk .pack h3 { font-size: 17px; }
 body.desk .pack .pack-state, body.desk .pack .pack-how { font-size: 13px; }
 body.desk .pack-acts button { min-height: 56px; font-size: 14px; }
 body.desk .pack-acts small { font-size: 11.5px; }
+/* 手機：鈕在拇指弧外圈（hud.css），卡片跟作品資訊、換裝一樣是貼底的抽屜，分頁、存下、丟掉都在拇指搆得到的下半。
+   開著時搖桿被蓋住，要走就點地面。換裝鏡子開著時蓋在鏡子抽屜上面（31）：請眼睛拍存檔要站在鏡子前，兩個一起開著。
+   橫拿和平板改成拇指弧那一邊的側欄，另一邊的搖桿照樣能推 */
+body:not(.desk) #pack-card {
+  left: 0; right: 0; top: auto; bottom: 0; width: auto;
+  max-height: calc(100% - 72px - env(safe-area-inset-top));
+  padding: 20px 18px calc(16px + env(safe-area-inset-bottom));
+  border-width: 0; border-radius: 20px 20px 0 0;
+  animation: pack-up .4s cubic-bezier(.2, .8, .2, 1);
+}
+body:not(.desk):has(#dress.open) #pack-card { z-index: 31; }
+/* 頂邊一條金線、中間一顆菱形，跟其他抽屜一樣 */
+body:not(.desk) #pack-card::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--hair); opacity: .6; }
+body:not(.desk) #pack-card::after { content: ""; position: absolute; left: 50%; top: -4px; width: 7px; height: 7px; margin-left: -3.5px; transform: rotate(45deg); background: var(--gold); }
+/* 矮的手機放不下時，相簿的格子先縮、自己捲 */
+body:not(.desk) #pack-card .album-grid { flex: 0 1 auto; min-height: 0; }
+@keyframes pack-up { from { transform: translateY(100%); } }
+@keyframes pack-in-r { from { transform: translateX(100%); } }
+@keyframes pack-in-l { from { transform: translateX(-100%); } }
+@media (min-width: 900px), (orientation: landscape) and (max-height: 500px) {
+  body:not(.desk) #pack-card {
+    top: 0; left: auto; width: var(--panel-w); max-height: none;
+    padding: calc(14px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) 18px;
+    border-radius: 0; animation-name: pack-in-r;
+  }
+  body:not(.desk) #pack-card::before { right: auto; bottom: 0; width: 1px; height: auto; background: var(--gold); opacity: 1; }
+  body:not(.desk) #pack-card::after { left: -4px; top: 50%; margin: -3.5px 0 0; }
+  /* 拇指弧在左邊（搖桿換到右邊）：側欄跟著到左邊，金線換到右緣 */
+  body:not(.desk):not(.joy-left) #pack-card { left: 0; right: auto; padding-left: calc(16px + env(safe-area-inset-left)); padding-right: 18px; animation-name: pack-in-l; }
+  body:not(.desk):not(.joy-left) #pack-card::before { left: auto; right: 0; }
+  body:not(.desk):not(.joy-left) #pack-card::after { left: auto; right: -4px; }
+  body:not(.desk) #pack-card .album-grid { flex: 1 1 auto; max-height: none; align-content: start; }
+  /* 側欄窄，存讀檔兩顆並排小字會斷行，改成上下 */
+  body:not(.desk) #pack-card .pack-acts { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { body:not(.desk) #pack-card { animation: none; } }
 /* 封蠟是魔法印泥：平常是乾掉的暗赭紅；有東西還沒存，就從裡面亮起來，像灰裡的炭火慢慢呼吸。只往裡亮，不往外發光 */
 .seal-wax, #pack-btn .ink {
   background: #6a2c22; border-radius: 52% 48% 55% 45% / 46% 56% 44% 54%;
@@ -177,12 +215,12 @@ body.desk .pack-acts small { font-size: 11.5px; }
   width: 38px; height: 38px;
   box-shadow: inset 0 0 0 6px #6a2c22, inset 0 0 0 7.5px #4e2018;
 }
-.seal-wax.lit, #pack-btn.lit .ink, body.tidy:has(#pack-btn.lit) #more-btn .ink {
+.seal-wax.lit, #pack-btn.lit .ink, body.desk.tidy:has(#pack-btn.lit) #more-btn .ink {
   background: radial-gradient(circle at 46% 52%, #f0a050 0, #d0602e 34%, #8a3424 72%);
   animation: ember 3.6s ease-in-out infinite;
 }
 .seal-wax.lit { box-shadow: inset 0 0 0 6px rgba(138, 52, 36, .55), inset 0 0 0 7.5px #5a2219; }
-.seal-wax.lit::after, #pack-btn.lit .ink::after, body.tidy:has(#pack-btn.lit) #more-btn .ink::after {
+.seal-wax.lit::after, #pack-btn.lit .ink::after, body.desk.tidy:has(#pack-btn.lit) #more-btn .ink::after {
   content: ""; position: absolute; inset: 0; border-radius: inherit;
   background:
     radial-gradient(circle at 32% 38%, rgba(255, 214, 150, .9) 0 .8px, transparent 1.4px),
@@ -197,7 +235,7 @@ body.desk .pack-acts small { font-size: 11.5px; }
 @media (prefers-reduced-motion: reduce) { .seal-wax.lit, #pack-btn.lit .ink, .seal-wax.lit::after, #pack-btn.lit .ink::after { animation: none; } }
 #pack-btn { position: relative; }
 #pack-btn .ink { display: none; }
-#pack-btn.lit .ink, body.tidy:has(#pack-btn.lit) #more-btn .ink { display: block; position: absolute; right: 3px; bottom: 3px; width: 10px; height: 10px; box-shadow: 0 0 0 1.5px rgba(20, 14, 10, .85); }
+#pack-btn.lit .ink, body.desk.tidy:has(#pack-btn.lit) #more-btn .ink { display: block; position: absolute; right: 3px; bottom: 3px; width: 10px; height: 10px; box-shadow: 0 0 0 1.5px rgba(20, 14, 10, .85); }
 .pack h3 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .3em; color: var(--gold); }
 .pack p { margin: 0; font-size: 11px; line-height: 1.6; letter-spacing: .04em; color: var(--muted); }
 .pack .pack-state { margin-top: 2px; color: var(--text); }
@@ -352,7 +390,7 @@ body.desk #album-view .av-close { top: max(14px, calc(var(--mt, 0px) / var(--ui,
 .pad-tools .chips button { height: 30px; padding: 0 10px; font-size: 12px; }
 /* 矮一點的手機：抽屜拉高一點，圓章、小格縮小，圖卡至少看得到兩排 */
 @media (orientation: portrait) and (max-height: 740px) {
-  #dress { height: 60vh; }
+  :root { --dress-h: 60vh; }
   #dress-tabs { padding-top: 12px; }
   .med { gap: 3px; }
   .med span { width: 36px; height: 36px; }
