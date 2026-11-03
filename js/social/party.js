@@ -22,6 +22,8 @@ const GONE = 45000;          // 這麼久沒消息就當作離隊了
 // 背景裡瀏覽器一分鐘才讓它報一次，等久一點。手機整個凍住的話一次也報不了，這麼久才放掉
 const GONE_AWAY = 10 * 60000;
 const LONELY = 45000;        // 隊伍只剩自己這麼久就散了
+const ASK = 1000;            // 等著跟上隊伍時（剛答應邀請、剛渡海過來）多久報一次，收到的隊友馬上回一次
+const FOLLOW = 20000;        // 答應了邀請卻一直沒收到隊伍的消息，這麼久就不等了（多半對方已經走了）
 const SAY_MAX = 60;          // 一句最多幾個字
 const SAY_GAP = 1200;        // 自己送話的最短間隔
 const HEAR_GAP = 700;        // 同一個隊友的話，間隔太短的不理
@@ -35,7 +37,7 @@ export const PHRASES = ['等我一下', '這邊', '走吧', '好', '看這個', 
 const flat = matchMedia('(orientation: landscape) and (max-height: 500px)');
 const touch = () => document.body.classList.contains('touch');
 export const COLORS = ['#f0b060', '#82c4d6', '#e69088', '#a9d08a'];   // 琥珀、海藍、珊瑚、青苔，照入隊先後分
-const ZONE_NAMES = { gallery: '畫廊', haishi: '海市' };
+const ZONE_NAMES = { gallery: '畫廊', haishi: '海市', jinghai: '靜海', shenlou: '蜃樓', ting: '汀' };   // 新區域要加在這，不然在那邊的隊友會被當成不存在
 
 const rid = () => Math.random().toString(36).slice(2, 10);
 const isId = (v) => typeof v === 'string' && /^[a-z0-9]{1,16}$/.test(v);
@@ -219,11 +221,11 @@ export class Party {
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           // 斷了就重新加入，跟 multiplayer.js 一樣
           clearTimeout(this.retry);
+          // 舊頻道拆完才加入：還沒拆完時 channel() 會把同名的舊頻道還回來，接上去什麼都收不到
           this.retry = setTimeout(() => {
             if (ch !== this.ch || !this.state) return;
             this.ch = null;
-            client.removeChannel(ch).catch(() => {});
-            this.join();
+            client.removeChannel(ch).catch(() => {}).then(() => { if (!this.ch && this.state) this.join(); });
           }, 3000);
         }
       });
@@ -235,11 +237,21 @@ export class Party {
     this.ch.send({ type: 'broadcast', event, payload: { m: this.state.me, ...payload } });
   }
 
-  // 報自己在哪：這一區的代號（找得到畫面上的角色）、區域、座標
+  // 隊伍應該有別人、自己卻還沒收到任何人的消息：剛答應邀請，或剛渡海換頁
+  get asking() {
+    return !!this.state && !this.mates.size && !!(this.state.guest || this.state.met);
+  }
+
+  // 報自己在哪：這一區的代號（找得到畫面上的角色）、區域、座標。a：還在等隊友回話
   beat() {
     const p = this.player.pos;
     this.lastBeat = performance.now();
-    this.send('hi', { s: this.mp.id, j: this.state.j, zn: this.zone, x: +p.x.toFixed(2), z: +p.z.toFixed(2), w: this.away ? 1 : 0 });
+    this.send('hi', { s: this.mp.id, j: this.state.j, zn: this.zone, x: +p.x.toFixed(2), z: +p.z.toFixed(2), w: this.away ? 1 : 0, a: this.asking ? 1 : 0 });
+  }
+
+  // 下一幀就報一次
+  beatSoon() {
+    this.lastBeat = Math.min(this.lastBeat, performance.now() - BEAT_IDLE - 1);
   }
 
   // 掛機和回來都馬上跟隊伍說（main 跟 mp.setAway 一起呼叫）
@@ -284,7 +296,13 @@ export class Party {
       this.mates.set(p.m, o);
     }
     Object.assign(o, { s: p.s, j: p.j, zn: p.zn, x: p.x, z: p.z, w: p.w === 1 ? 1 : 0, seen: performance.now() });
+    // 對方還沒聽到任何隊友：多半是剛答應、頻道還沒接好，漏掉了這邊上一次的回報。馬上再報一次，不讓他等五秒
+    if (p.a === 1) this.beatSoon();
     if (!fresh) return;
+    if (!this.state.met) {
+      this.state.met = 1;   // 真的組成過：之後渡海換頁、一時沒人，照一般的時間等，不當成沒跟上
+      store(this.state);
+    }
     // 隊伍滿了，自己是最後進來的那個就退出
     if (this.roster().findIndex((r) => r.m === this.state.me) >= MAX) {
       this.ui.hint('隊伍已經滿了');
@@ -293,7 +311,7 @@ export class Party {
     }
     if (!was) this.ui.hint('一起同行了，按「說話」可以打字', 4000);
     else if (p.j > this.state.j) this.ui.hint('有人加入了隊伍', 3000);
-    this.lastBeat = Math.min(this.lastBeat, performance.now() - BEAT_IDLE + 300);   // 新人進來，馬上報一次讓他知道
+    this.beatSoon();   // 新人進來，馬上報一次讓他知道
     this.refresh();
   }
 
@@ -687,13 +705,15 @@ export class Party {
     };
     if (this.pending) this.updateAsk();
     if (!this.state) return;
-    if (now - this.lastBeat > (this.player.moving ? BEAT_MOVING : BEAT_IDLE)) this.beat();
+    if (now - this.lastBeat > (this.asking ? ASK : this.player.moving ? BEAT_MOVING : BEAT_IDLE)) this.beat();
     for (const [m, o] of this.mates) if (this.gone(o, now)) {
       this.drop(m);
       this.ui.hint('有人離開了隊伍', 3000);
     }
-    if (!this.mates.size && now - this.aloneSince > LONELY) {
+    const missed = this.state.guest && !this.state.met;
+    if (!this.mates.size && now - this.aloneSince > (missed ? FOLLOW : LONELY)) {
       this.leave(false);
+      if (missed) this.ui.hint('沒有跟上隊伍，對方可能已經離開了', 4000);
       return;
     }
 
