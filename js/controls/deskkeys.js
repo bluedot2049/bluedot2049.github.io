@@ -3,15 +3,16 @@
 // 電腦的按鍵，照現代遊戲的排法：越肩鎖住滑鼠時點不到按鈕，每個功能一個鍵。
 // Tab 行囊（按一下開、再按一下或 Esc 收；開著時滑鼠放出來用點的，收起時鎖回去；舉著相機時先放下再開相簿）、B 行囊的存讀檔、L 作品清單、O 同行、H 收起按鈕；
 // Q 按住叫出表情輪，滑鼠往方向撥、放開就做；Esc 放開滑鼠時跳出暫停選單（沒鎖滑鼠、什麼都沒開著時按 Esc 也會跳）：
-// 繼續、聲音、全螢幕、說明、滑鼠靈敏度和上下反轉、介面大小、按鍵一覽。Esc 也收換裝鏡子、作品資訊、看畫的大圖。
+// 繼續、滑鼠靈敏度和上下反轉、越肩的視野廣度和魚眼、介面大小、切走時繼續播聲音、按鍵一覽。Esc 也收換裝鏡子、作品資訊、看畫的大圖。
 // （V 越肩、E 互動、中鍵標記在 player.js；P 攝影、Q 閃光、~ 日期、F 直橫在 photo.js；T 說話、G 標記、X 吹哨在 party.js；1–5 表情在 main.js）
 import { setUiSize, uiSize } from './ui.js';
+import { emoteSVG } from '../social/emotes.js';
 
 const typing = (e) => !!e.target.closest?.('#dress, input:not([type=checkbox]):not([type=range]), textarea');
 const HOTKEYS = { o: 'party-btn', h: 'more-btn' };
 const WHEEL_R = 92, WHEEL_DEAD = 26;
 
-export function bindDeskKeys({ player, ui, photo, pack, emotes, emote }) {
+export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote }) {
   const $ = (id) => document.getElementById(id);
   const click = (id) => {
     const b = $(id);
@@ -50,7 +51,7 @@ export function bindDeskKeys({ player, ui, photo, pack, emotes, emote }) {
   const wheel = $('wheel');
   wheel.innerHTML = emotes.map((m, i) => {
     const a = -Math.PI / 2 + (i * Math.PI * 2) / emotes.length;
-    return `<i style="left:calc(50% + ${(Math.cos(a) * WHEEL_R).toFixed(1)}px);top:calc(50% + ${(Math.sin(a) * WHEEL_R).toFixed(1)}px)">${m}</i>`;
+    return `<i style="left:calc(50% + ${(Math.cos(a) * WHEEL_R).toFixed(1)}px);top:calc(50% + ${(Math.sin(a) * WHEEL_R).toFixed(1)}px)">${emoteSVG(m)}</i>`;
   }).join('');
   const slots = [...wheel.children];
   let open = false, vx = 0, vy = 0, pick = -1;
@@ -101,9 +102,6 @@ export function bindDeskKeys({ player, ui, photo, pack, emotes, emote }) {
   const hide = () => menu.classList.remove('show');
   const show = () => {
     shownAt = performance.now();
-    // 按鈕列上沒出現的功能（還沒連線的同行、還沒開放的作品清單），選單裡也不放
-    for (const b of menu.querySelectorAll('.acts [data-act$="-btn"]')) b.hidden = !!$(b.dataset.act)?.hidden;
-    menu.querySelector('[data-act="sound-btn"] span').textContent = $('sound-btn').classList.contains('muted') ? '開啟聲音' : '靜音';
     menu.classList.add('show');
   };
   // 玩家自己按 Esc 放開的才跳；程式為了面板放開的不跳
@@ -115,10 +113,7 @@ export function bindDeskKeys({ player, ui, photo, pack, emotes, emote }) {
     const b = e.target.closest('button');
     if (!b) return;
     hide();
-    if (b.dataset.act === 'resume') { if (player.shoulder) player.lock(); return; }
-    if (b.dataset.act === 'guide') ui.guide(true);
-    else click(b.dataset.act);
-    player.relock = true;   // 面板關掉後一走路就鎖回去
+    if (b.dataset.act === 'resume' && player.shoulder) player.lock();
   });
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && menu.classList.contains('show') && performance.now() - shownAt > 300) hide();
@@ -156,6 +151,20 @@ export function bindDeskKeys({ player, ui, photo, pack, emotes, emote }) {
   sens.addEventListener('input', keep);
   inv.addEventListener('change', keep);
 
+  // 越肩的視野廣度、魚眼（拉到 0 是一般廣角）：邊拖邊換，選單背後的畫面就是預覽
+  const fov = menu.querySelector('.fov input'), fish = menu.querySelector('.fish input');
+  const showView = () => {
+    menu.querySelector('.fov b').textContent = `${fov.value}°`;
+    menu.querySelector('.fish b').textContent = +fish.value ? `${Math.round(fish.value * 100)}%` : '一般廣角';
+  };
+  fov.value = player.view.fov;
+  fish.value = player.view.fish;
+  showView();
+  for (const el of [fov, fish]) el.addEventListener('input', () => {
+    player.setView({ fov: +fov.value, fish: +fish.value });
+    showView();
+  });
+
   // 介面大小：100% 是照視窗高度自動放大的大小，矮的螢幕可以調小、大螢幕可以再調大。
   // 拖的時候只改數字，放開才套用：選單自己也會跟著變大變小，邊拖邊變滑桿會從游標底下跑掉
   const size = menu.querySelector('.size input'), sizeText = menu.querySelector('.size b');
@@ -164,4 +173,9 @@ export function bindDeskKeys({ player, ui, photo, pack, emotes, emote }) {
   showSize();
   size.addEventListener('input', showSize);
   size.addEventListener('change', () => setUiSize(+size.value));
+
+  // 切到別的分頁、視窗被整個蓋住時聲音要不要繼續（ambience.js 的 background）
+  const away = menu.querySelector('.away input');
+  away.checked = ambience.background;
+  away.addEventListener('change', () => ambience.setBackground(away.checked));
 }

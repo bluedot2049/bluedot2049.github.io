@@ -195,7 +195,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   // 山路半途的茅房：自己一串亂數，門和月牙的燈每一幀照時間動
   const latrine = buildLatrine({ bucket, signs, lantern, obstacles, group });
 
-  const { meshes } = buildTemple({ k, bucket, fader, group, signs, farLamps, obstacles, solid });
+  const { meshes, gate } = buildTemple({ k, bucket, fader, group, signs, farLamps, obstacles, solid });
   const { sea, env, sky, field, dome, moon, towerSize, seaFog, far, towerColor, TOWER_RGB } = buildSky({ group, bucket, coarse, shimmerMore, inArea });
 
   // ---------- 渡船：長棧橋盡頭右邊繫著一艘，跟畫廊那邊同一款（harbor.js 的 makeSkiff） ----------
@@ -207,6 +207,8 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   const exits = [{ x: 0.6, z: 27.9, r: 1.4, to: 'gallery', label: '搭船', title: '渡船', boat: ferry }];
   const home = buildHomeCircle({ x: 2.2, y: AREA.reditus.y, z: -97.9, R: rng('haishi-reditus'), obstacles, exits });
   group.add(home.group);
+  // 星廟無像殿最裡面的星門：推進去是鏡宮（zones/jinggong/）
+  exits.push({ ...gate.exit, to: 'jinggong', gate: true, title: '星門', label: '進去' });
 
   scene.add(group);
 
@@ -309,6 +311,8 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     camDistMax: 46,
     // 下船的地方：長棧橋的盡頭，離小船幾步，面向山上的鎮子
     spawn: { x: 0, z: 26.4, heading: Math.PI },
+    // 從鏡宮出來：站在星門前，面向水鏡
+    templeGate: { x: gate.x, z: gate.z, heading: gate.heading },
     exits, home,
     roomIndexAt: () => 0,
     placeAt: (x, z) => {

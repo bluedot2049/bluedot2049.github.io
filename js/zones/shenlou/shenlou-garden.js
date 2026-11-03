@@ -201,8 +201,8 @@ const WALLS = ring(SHAFT);
 const LAMPS = [[0, 2.5], [1, -2.5], [2, -2.5], [3, 2.5]];
 const EXIT = [-1.6, -0.4];
 
-// fade：給一塊範圍回一個淡出的編號（榕樹、樹蕨各一組）；capY：晷針石柱頂（銅鏡套在上面的金針上）
-export function makeGarden({ under, fade, capY }) {
+// fade：給一塊範圍回一個淡出的編號（榕樹、樹蕨各一組）；capY：晷針石柱頂（銅鏡套在上面的金針上）；needle：金針多長
+export function makeGarden({ under, fade, capY, needle = 24 }) {
   // L、k：天井裡的葉子和石頭陶槽；L2、k2：井口內緣那圈（在剖面的切面以上，人進井圈時收掉）
   const R = rng('shenlou:garden'), L = leafy(), k = new Kit(R), L2 = leafy(), k2 = new Kit(R);
   const floorY = FLOOR_B;
@@ -625,7 +625,7 @@ export function makeGarden({ under, fade, capY }) {
 
   // ---------- 晷針上的銅鏡：金針上一圈銅箍，伸出一支臂，臂頭一面圓銅鏡跟著太陽轉（臂繞著針轉到曬得到的那邊），
   // 把一道光打進井底，落在這一影的那朵花上。光柱很淡，照到的地方亮一圈 ----------
-  const HY = capY + 4, ARM = 1.2, needleR = 0.44 - (0.18 * (HY - capY)) / 24;
+  const HY = capY + 4, ARM = 1.2, needleR = 0.44 - (0.18 * (HY - capY)) / needle;
   k.cyl(needleR + 0.08, needleR + 0.08, 0.3, BRONZE, 0, HY, 0, { color2: VERD }, 10);
   const bronzeMat = new THREE.MeshLambertMaterial({ color: BRONZE, flatShading: true });
   const arm = new THREE.Mesh(new THREE.BoxGeometry(1, 0.08, 0.08), bronzeMat);

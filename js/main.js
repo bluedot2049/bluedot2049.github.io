@@ -23,7 +23,7 @@ import { PhotoMode } from './camera/photo.js';
 import { Selfie } from './camera/selfie.js';
 import { Studio } from './camera/studio.js';
 import { Party } from './social/party.js';
-import { lens, LensPass } from './core/lens.js';
+import { lens, LensPass, bend } from './core/lens.js';
 import { dof, DofPass } from './core/dof.js';
 import { fullscreenButton, keepFullscreen } from './controls/screen.js';
 import { CAMERAS, SOON, TABLE, carried, carry } from './camera/cameras.js';
@@ -33,6 +33,7 @@ import { Hollow } from './zones/gallery/hollow.js';
 import { PLACES } from './scene/places.js';
 import { bindDeskKeys } from './controls/deskkeys.js';
 import { Beast } from './npc/beast.js';
+import { Guide } from './scene/guide.js';
 
 // 世界分成幾個區域，一次只建一個，用 ?z= 指定，沒有寫就是畫廊。每個區域的內容寫在自己的 zone-*.js，用到才下載。
 // 換區域時整頁重新載入：瀏覽器一定會把上一個區域的記憶體收回去，手機才撐得住。
@@ -43,6 +44,7 @@ const ZONES = {
   jinghai: { load: () => import('./zones/jinghai/zone-jinghai.js') },
   shenlou: { load: () => import('./zones/shenlou/zone-shenlou.js') },
   ting: { load: () => import('./zones/ting/zone-ting.js') },
+  jinggong: { load: () => import('./zones/jinggong/zone-jinggong.js') },   // 海市星廟裡的鏡宮，不搭船，從星門進出
 };
 // 渡船能去的地方在 scene/places.js，每個渡口都照那個順序一張一張卡
 
@@ -75,7 +77,7 @@ document.addEventListener('contextmenu', (e) => { if (!e.target.closest('#ph-med
 // 萬一頁面已經被放大，就不擋，讓人能用雙指縮回來
 document.addEventListener('touchmove', (e) => {
   if (window.visualViewport && window.visualViewport.scale > 1.01) return;
-  if (!e.target.closest('#sheet, #dress, #list, #ph-bar')) e.preventDefault();
+  if (!e.target.closest('#sheet, #dress, #list, #ph-bar, #eye-card')) e.preventDefault();
 }, { passive: false });
 // iOS 的雙指縮放整頁
 document.addEventListener('gesturestart', (e) => e.preventDefault());
@@ -249,6 +251,7 @@ async function start() {
   let camSwipeHinted = false;
   let mp = null;
   let party = null;   // 組隊同行（party.js），有連線才有
+  let guide = null;   // 黑眼帶路（scene/guide.js），攝影模式建好以後才建
   let checkAway = null;   // 看自己是不是掛機中，有連線才有
   let studio = null;   // 海市信差站的照相館（studio.js），畫廊沒有
   let place = null;   // 戶外現在在哪裡：null 是陽台，否則是草原或棧橋盡頭的地名
@@ -332,6 +335,7 @@ async function start() {
       ui.hidePainting();
       ui.hideCams();
       ui.hideFerry();
+      guide?.closeCard();
       // 照鏡子時拖曳、縮放是在轉著看自己，面板留著
       if (!(kind === 'drag' && player.focus?.kind === 'mirror')) ui.hideDress();
       ui.hideHint();
@@ -371,6 +375,7 @@ async function start() {
     // 有隊友的那一區亮他的顏色；want 是點了別區隊友的名牌要去的地方，沒有就翻到隊友剛去的那一區（同船）
     onExit(ex, want) {
       if (ex.home) return ex.home.act();
+      if (ex.gate) return travel(ex.to, {}, 'gate');   // 星門（海市星廟和鏡宮之間）：門光鋪滿就換頁，不渡海
       if (!ex.boat) return travel(ex.to);
       if (player.boarding) return;
       const mates = party?.ferryInfo();
@@ -385,9 +390,9 @@ async function start() {
       ui.showFerry(list, (to) => {
         ui.hideFerry();
         party?.leaving(to);   // 坐上船這時候就說「去海市了」，船還沒開，旁邊的隊友看得到
+        ambience.musicOut(3);   // 背景音樂從跳上船開始慢慢淡掉，換頁前就沒了
         player.board(ex.boat, () => {
           ex.boat.board();
-          ambience.voice('push', 0.5);
           setTimeout(() => travel(to), 1100);
         });
       }, list.findIndex((d) => d.to && d.to === (want || mates?.lead)));
@@ -461,20 +466,23 @@ async function start() {
   };
 
   // 渡海：載入畫面換成小船，蓋住畫面後整頁換到另一個區域。from 記住從哪裡來，到了站在對應的碼頭。
-  // 走進歸門（door）：不搭船，門裡的光鋪滿畫面就換頁，到了是前廳的前門（from=door）
+  // 走進歸門（door 給 true）：不搭船，門裡的光鋪滿畫面就換頁，到了是前廳的前門（from=door）。
+  // 星門（door 給 'gate'）：一樣是門光，from 照舊記從哪一區來，另外帶 via=door，到了那頁一開始就是門光
   let traveling = false;
   function travel(to, extra = {}, door = false) {
     if (traveling) return;
     traveling = true;
     const q = new URLSearchParams(location.search);
-    for (const k of ['z', 'from', 'go']) q.delete(k);
+    for (const k of ['z', 'from', 'go', 'via']) q.delete(k);
     if (to !== 'gallery') q.set('z', to);
     q.set('from', zone);
     for (const [k, v] of Object.entries(extra)) q.set(k, v);
     party?.leaving(to);   // 隊友那邊等久一點、名牌寫「往哪裡」
+    ambience.musicOut(0.8);   // 沒坐船（點清單的畫、走歸門）也別讓音樂在換頁時硬斷；坐船的早就在淡了
     const el = document.getElementById('loading');
     if (door) {
-      q.set('from', 'door');
+      if (door === 'gate') q.set('via', 'door');
+      else q.set('from', 'door');
       keepFullscreen();
       for (const a of el.getAnimations({ subtree: true })) a.cancel();
       el.classList.remove('done', 'first', 'opening', 'landing', 'crossing', 'plain');
@@ -526,7 +534,7 @@ async function start() {
   const camsAt = new THREE.Vector3();
   function placeCams() {
     const t = world.camTable, w = t.slots[player.focus.slot].world, el = ui.cams;
-    camsAt.set(w.x + t.n.x * 0.14, w.y, w.z + t.n.z * 0.14).project(camera);
+    bend(camsAt.set(w.x + t.n.x * 0.14, w.y, w.z + t.n.z * 0.14).project(camera));
     const W = window.innerWidth, H = window.innerHeight, z = uiScale(), hw = (el.offsetWidth * z) / 2;
     const x = THREE.MathUtils.clamp(((camsAt.x + 1) / 2) * W, hw + 16, W - hw - 16);
     const y = THREE.MathUtils.clamp(((1 - camsAt.y) / 2) * H + 22, 16, H - (el.offsetHeight + 96) * z);
@@ -541,6 +549,7 @@ async function start() {
     const s = ferryBoat.seat(), el = ui.ferry;
     ferryAt.set(s.x, s.y + 1.2, s.z).project(camera);
     if (ferryAt.z > 1) ferryAt.set(0, -0.2, 0);
+    else bend(ferryAt);
     const W = window.innerWidth, H = window.innerHeight, z = uiScale(), hw = (el.offsetWidth * z) / 2;
     const x = THREE.MathUtils.clamp(((ferryAt.x + 1) / 2) * W, hw + 16, W - hw - 16);
     const y = THREE.MathUtils.clamp(((1 - ferryAt.y) / 2) * H, el.offsetHeight * z + 16, H - 96 * z);
@@ -593,13 +602,14 @@ async function start() {
   const actionLabel = actionBtn.querySelector('.a1');
   const actionShort = actionBtn.querySelector('.a0');
   // lens：有鏡頭對著自己（attention.js），按了就一直看著它，再按一次放掉
-  const LABELS = { painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來', lens: '看鏡頭' };
+  // follow：走到帶路中的黑眼（自己的或隊友的）旁邊，按了跟著它走（scene/guide.js），底下小字是要去哪
+  const LABELS = { painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來', lens: '看鏡頭', follow: '跟著' };
   // 手機的互動鍵是一顆小圓章，只放兩個字；沒列在這裡的取前兩個字
   const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信', 看鏡頭: '看鏡', 不看了: '不看' };
   let nearKey = null;
   function updateAction() {
     const t = player.actionTarget();
-    const key = t ? (t.kind === 'exit' ? `${t.p.title}:${t.p.label}` : t.kind === 'lens' ? `lens:${t.p.id}:${t.on}` : t.kind === 'painting' || t.kind === 'pet' || t.kind === 'talk' ? t.p : t.kind) : null;
+    const key = t ? (t.kind === 'exit' ? `${t.p.title}:${t.p.label}` : t.kind === 'lens' ? `lens:${t.p.id}:${t.on}` : t.kind === 'follow' ? `follow:${t.p.id}:${t.p.title}` : t.kind === 'painting' || t.kind === 'pet' || t.kind === 'talk' ? t.p : t.kind) : null;
     const sitting = player.sitCode !== 0;
     if (sitting !== document.body.classList.contains('sitting')) {
       document.body.classList.toggle('sitting', sitting);
@@ -613,14 +623,14 @@ async function start() {
     actionLabel.textContent = (t.kind === 'talk' && t.p.actionLabel) || (t.kind === 'exit' && t.p.label) || (t.kind === 'lens' && t.on && '不看了') || LABELS[t.kind];
     actionShort.textContent = SHORT[actionLabel.textContent] || actionLabel.textContent.slice(0, 2);
     actionBtn.setAttribute('aria-label', actionLabel.textContent);
-    document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : t.kind === 'pet' || t.kind === 'talk' ? t.p.name : t.kind === 'exit' ? t.p.title : '';
+    document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : t.kind === 'pet' || t.kind === 'talk' ? t.p.name : t.kind === 'exit' || t.kind === 'follow' ? t.p.title : '';
   }
 
   // 越肩鎖住滑鼠時，作品面板、清單、行囊、說明卡、樹洞、報社的稿紙和報紙、打字框打開就把游標還回來
   player.cursorWanted = () => {
     const b = document.body.classList;
     return b.contains('panel-open') || b.contains('chatting') || !document.getElementById('pack-card').hidden
-      || !!document.querySelector('#list.open, #guide.show, #hollow.show, #cams.open, #ferry.open, #press.show') || !!document.activeElement?.closest?.('input, textarea');
+      || !!document.querySelector('#list.open, #guide.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show') || !!document.activeElement?.closest?.('input, textarea');
   };
   // 第一次鎖住滑鼠時提一下怎麼點按鈕
   let lockTold = false;
@@ -783,7 +793,7 @@ async function start() {
 
   // 後製和著色器預先編譯同時進行；載不到就照原本的畫法
   let fx = null;
-  // 攝影模式的魚眼：有後製就接在後製最後面，沒有就自己先畫進一張圖再彎
+  // 攝影模式的魚眼、越肩的廣角變形：有後製就接在後製最後面，沒有就自己先畫進一張圖再彎
   const lensPass = new LensPass();
   // 帶著實體相機時的景深：有後製就接在後製中間，沒有就自己畫
   const dofPass = new DofPass();
@@ -816,7 +826,7 @@ async function start() {
   });
   photo.beast = beast;
   // 電腦的快捷鍵、Q 表情輪、Esc 暫停選單（表情要連上線才送得出去）
-  bindDeskKeys({ player, ui, photo, pack, emotes: EMOTES, emote: (e) => mp && sendEmote(e) });
+  bindDeskKeys({ player, ui, photo, pack, ambience, emotes: EMOTES, emote: (e) => mp && sendEmote(e) });
   const selfie = new Selfie({
     renderer, scene, camera, player, character, ambience, render: draw,
     resizeFX: (w, h) => fx?.setSize(w, h),
@@ -844,7 +854,21 @@ async function start() {
     if (params.has('studio')) setTimeout(() => studio.begin(+params.get('studio') || 0), 1500);
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, passers, quality, host, photo, studio, beast };
+  // 黑眼（scene/guide.js）：上排的黑眼鈕或 M 叫出來，帶路到這一區去過的地方，最遠到渡船。清單在各區 zone-*.js 的 guide。
+  // 要建在電腦按鍵（bindDeskKeys）後面：Esc 先讓暫停選單那段看到卡片開著，這裡才收卡片
+  guide = new Guide({ scene, world, zone, player, camera, ui, ambience, coarse, list: Z.guide?.(world) ?? [] });
+  // 攝影、自拍（照相館也是攝影模式）、上船時收起來；看畫、照鏡子、挑相機、聽樹洞時鏡頭被接管，也先收
+  guide.blocked = () => photo.active || selfie.active || player.boarding || !!player.focus?.camPos;
+  guide.busy = () => photo.active || selfie.active || player.boarding;
+  guide.onShip = (ex) => player.events.onExit(ex);
+  player.actionables.push((x, z) => guide.target(x, z));
+  if (mp) {
+    guide.mp = mp;
+    mp.eye = () => guide.net();
+    guide.isMate = (id) => !!party && [...party.mates.values()].some((o) => o.s === id);
+  }
+
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, passers, quality, host, photo, studio, beast, guide };
   const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass, dofPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
@@ -890,10 +914,11 @@ async function start() {
   // 抵達：站在哪裡、開場鏡頭怎麼走，每個區域自己定
   Z.arrive({ player, world, params, ui });
   // 抵達用的參數用過就拿掉，重新整理時不會又跑去同一個地方
-  if (params.has('from') || params.has('go')) {
+  if (params.has('from') || params.has('go') || params.has('via')) {
     const q = new URLSearchParams(location.search);
     q.delete('from');
     q.delete('go');
+    q.delete('via');
     const s = q.toString();
     history.replaceState(null, '', s ? `${location.pathname}?${s}` : location.pathname);
   }
@@ -901,17 +926,14 @@ async function start() {
   // 推門的那一刻門閂響；門在背後靠上時悶的一聲
   ui.onDoorOpen = () => ambience.voice('latch', 0.55);
   if (world.frontDoor) world.frontDoor.onClose = () => ambience.voice('doorshut', 0.4);
-  // 渡海到了：船靠岸的聲音。這時候已經換頁、還沒點過畫面，瀏覽器肯讓聲音出來才放（Chrome、Edge 剛在同一個網站按過「搭船」會肯），
-  // 不肯的話不排進去，免得等到第一次點畫面才突然響
-  ui.onMoor = () => {
-    ambience.start();
-    if (ambience.ctx?.state === 'running') ambience.voice('moor', 0.6);
-  };
+  // 渡海到了：先把音訊叫起來。這時候已經換頁、還沒點過畫面，瀏覽器肯的話（Chrome、Edge 剛在同一個網站按過「搭船」會肯）環境聲直接接上
+  ui.onMoor = () => ambience.start();
   const entered = ui.loading(null);
   fullscreenButton(coarse);
   // 進門以後：前門在背後闔上，跳出這間房的名字，再跳操作說明卡（已經先動起來的人就不打擾，下次進門再出現）。
   // 搭船回來、直接開海市的，還是底下那行操作提示。不能 await，下面還要開始畫
   entered.then(() => {
+    guide.ready = true;   // 上次沒收起來的黑眼：進門、上岸以後才蹦出來
     // 從歸門回來的（from=door）也是從前門進來，只是不再跳操作說明
     const homeDoor = params.get('from') === 'door', byDoor = world.frontDoor && (!params.has('from') || homeDoor), at = performance.now();
     if (byDoor) world.frontDoor.shut(0.15);
@@ -1056,6 +1078,7 @@ async function start() {
       else host.hush();
     }
     party?.update(dt);
+    guide.update(dt);   // 黑眼：飛到哪、帶路、別人的黑眼、畫面邊的記號（照這一幀擺好的鏡頭投影）
     // 正走去渡口找別區的隊友：走到了就打開渡船卡；半路改走別處就算了
     if (ferryWalk && (player.goal !== ferryWalk.goal || !player.path.length)) {
       const { ex, to, goal } = ferryWalk;
@@ -1096,7 +1119,7 @@ async function start() {
     // 牆上的色塊畫：視差跟著鏡頭，站在畫前不動才醒；拍照時醒的程度停著
     world.updatePaintings?.(camera.position, photo.active ? null : player.pos, player.focus?.kind === 'painting' ? player.focus.p : null);
     frame++;
-    const idle = !photo.active && !player.moving && !othersMoving && !fading && !talking && !world.home?.busy && !beast.busy && performance.now() - lastInput > 2000;
+    const idle = !photo.active && !player.moving && !othersMoving && !fading && !talking && !world.home?.busy && !beast.busy && !guide.flying && performance.now() - lastInput > 2000;
     if (idle && frame % 2) return;
     if (!idle) quality.sample(dt);
     if (stats) renderer.info.reset();

@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { Kit, rng, newBucket, mergeBucket } from '../../core/props.js';
 import { bucketObjects, uTime } from '../../core/scenery.js';
+import { footMask } from '../../core/footshadow.js';
 import { makePathfinder } from '../../core/pathgrid.js';
 import { makeSkiff } from '../../scene/harbor.js';
 import { setGravity } from '../../avatar/character.js';
@@ -256,11 +257,19 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
   burger.orderBoard = board;
   // 咬月圓牌：店門上方、店裡北牆、高桿招牌兩面（招牌會慢慢轉）
   const logoMat = new THREE.MeshBasicMaterial({ map: logoTexture(coarse), toneMapped: false });
+  const rimMat = new THREE.MeshLambertMaterial({ color: BRAND.COCOA });
+  // 牆上的兩顆是一塊有厚度的圓餅：x、z 是牆面，往外凸 d，圖貼在正面（只貼一張紙會跟牆和燈條打架）
   for (const l of burger.logos) {
-    const m = new THREE.Mesh(new THREE.CircleGeometry(l.r, 32), logoMat);
-    m.position.set(l.x, l.y, l.z);
-    m.rotation.y = l.ry;
-    group.add(m);
+    const g = new THREE.Group();
+    g.position.set(l.x, l.y, l.z);
+    g.rotation.y = l.ry;
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(l.r + 0.08, l.r + 0.08, l.d, 40).rotateX(Math.PI / 2), rimMat);
+    rim.position.z = l.d / 2;
+    rim.castShadow = true;
+    const m = new THREE.Mesh(new THREE.CircleGeometry(l.r, 40), logoMat);
+    m.position.z = l.d + 0.005;
+    g.add(rim, m);
+    group.add(g);
   }
   const pole = new THREE.Group(), PL = burger.pole;
   pole.position.set(PL.x, PL.h + PL.r * 0.6, PL.z);
@@ -366,6 +375,8 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
     sun.shadow.normalBias = 0.06;
     scene.add(sun.target);
   }
+  // 人和海牛人腳下的影子扣地面的光，跟房子的影子一樣過調色（footshadow.js）：每一幀畫一張影子圖
+  const foot = renderer && sun ? footMask(renderer, scene, { coarse }) : null;
   // 在室內幾成：離房子的牆越近越往室內靠，走進門裡一兩公尺就是 1。天光和人潮聲照這個
   const indoorness = (x, z) => {
     let d = Infinity;
@@ -430,7 +441,7 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
     crowdSpots: null,
     setCurrentRoom() {},
     debug: { terrain, obstacles, solids },
-    update(t, cam, target) {
+    update(t, cam, target, camera) {
       const dt = Math.min(0.1, Math.max(0, t - lastT));
       lastT = t;
       uTime.value = t;
@@ -455,6 +466,7 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
           lastCenter.copy(center);
         }
       }
+      if (foot && camera) foot.update(camera);
     },
   };
 }

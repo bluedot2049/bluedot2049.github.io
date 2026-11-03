@@ -6,13 +6,37 @@ import { buildManatees } from './manatees.js';
 import { burgerCounter } from './jinghai-burger.js';
 import { stallCounter } from './jinghai-stalls.js';
 import { buildGuests } from './jinghai-guests.js';
+import { ATRIUM, CANTEEN, CONTROL, STORE, LEVELS } from './jinghai-hq.js';
+import { BURGER } from './jinghai-burger.js';
+import { GREEN, FACTORY } from './jinghai-back.js';
+import { BRAND } from './jinghai-ads.js';
 import { SilentOrbits } from '../../audio/orbits.js';
 
 // 背景音樂「寂靜軌道」：現場合成的宇宙 ambient，一進來就放
 export const bgm = { src: SilentOrbits, from: 'jinghai' };
 
+// 調色（grade.js）：linear 是霧照 env 的線性霧，只調顏色；色調「月球工廠02」在 tones.js。?debug 時右上角可以即時調，「複製」貼回這裡
+export const grade = { linear: 1, tone: '月球工廠02' };
+
 export function build(scene, { coarse, params, renderer }) {
   return buildJinghai(scene, { coarse, params, renderer });
+}
+
+// 黑眼（scene/guide.js）帶得到的地方，去過才列，渡船 guide.js 自己加在第一個。id 只用小寫英文和數字（會送給別人）。
+// 房子站在中間（走不到的地方 guide.js 會挪到旁邊站得下的點），place 是 world.placeAt 的地名。觀星台在大廳頂樓，y 是那一層多高
+const mid = (b) => ({ x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2 });
+export function guide() {
+  return [
+    { id: 'atrium', name: '大廳', tag: '汽水吧', x: 0, z: ATRIUM.z1 - 6, place: '大廳' },
+    { id: 'canteen', name: '食堂', ...mid(CANTEEN), place: '食堂' },
+    { id: 'galleria', name: '商店街', tag: '冰淇淋', x: 24, z: 0, place: '商店街' },
+    { id: 'store', name: '百貨公司', x: STORE.x0 - 2, z: 4, r: 8 },   // 百貨公司裡面進不去、商店街盡頭中間也擋著：站在門口南邊那條走道上
+    { id: 'deck', name: '觀星台', tag: '熱茶', x: 9, y: LEVELS[2], z: -11.4, r: 5 },
+    { id: 'burger', name: BRAND.name, ...mid(BURGER), place: BRAND.name },
+    { id: 'control', name: '控制室', ...mid(CONTROL), place: '控制室' },
+    { id: 'greenhouse', name: '海草溫室', ...mid(GREEN), place: '海草溫室' },
+    { id: 'factory', name: '片盒工廠', x: (FACTORY.x0 + FACTORY.x1) / 2, z: FACTORY.z1 + 3, place: '片盒工廠' },
+  ];
 }
 
 // 一組光線；太陽固定不動，走進室內時 world.update 自己把天光換暖

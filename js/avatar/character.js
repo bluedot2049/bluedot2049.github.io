@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { Kit, mergeBucket } from '../core/props.js';
 import { sunShadow } from '../core/scenery.js';
+import { CONTACT, footShadow } from '../core/footshadow.js';
 import { HEADS, rod } from './heads.js';
 import { HAT_COLORS, HAIR_COLORS, SKINS, CLOTH, FACE, FACE_INK, raceOf, sizes, sanitizeLook, lookKey, decodeFace } from './looks.js';
 import { strapModel, cameraModel } from '../camera/cameras.js';
@@ -321,11 +322,14 @@ function hatGeo(L) {
   const c = hex(HAT_COLORS[L.hatC]);
   const main = build((k) => {
     switch (L.hat) {
-      case 'wizard':
+      case 'wizard': {
         k.cyl(0.34, 0.34, 0.03, c, 0, 0, 0, {}, 12);
-        k.add(new THREE.ConeGeometry(0.22, 0.5, 9), c, 0.03, 0.25, 0, { rz: -0.25 });
-        k.cyl(0.205, 0.215, 0.05, GOLD, 0, 0.04, 0, {}, 9);
+        // 帽尖往右歪用斜切，不轉：帽底平貼帽緣，帽帶跟著一起切，整圈包住帽子
+        const lean = new THREE.Matrix4().makeShear(0, 0, 0.22, 0, 0, 0);
+        k.add(new THREE.ConeGeometry(0.22, 0.5, 9).translate(0, 0.25, 0).applyMatrix4(lean), c, 0, 0, 0);
+        k.add(new THREE.CylinderGeometry(0.205, 0.215, 0.05, 9).translate(0, 0.04, 0).applyMatrix4(lean), GOLD, 0, 0, 0);
         break;
+      }
       case 'crown':
         k.add(new THREE.CylinderGeometry(0.17, 0.16, 0.09, 10, 1, true), GOLD, 0, 0.07, 0);
         for (let i = 0; i < 6; i++) {
@@ -547,13 +551,12 @@ export class Character {
     this.handMesh = mesh(this.handG);
     this.handK = 0;
 
-    const shadow = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.9, 0.9),
-      new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })
-    );
+    const shadow = footShadow(new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9)), shadowTex);
     shadow.rotation.x = -Math.PI / 2;
     shadow.position.y = 0.012;
     g.add(shadow);
+    // 有陰影圖的區域（蜃樓、靜海）站進房子的影子裡，身上跟腳下的影子一起暗下來
+    g.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
 
     this.shadow = shadow;
     g.userData.character = true;   // tools/smoke.mjs 的場景指紋跳過角色：訪客、路人什麼時候出現每次不同
@@ -745,6 +748,7 @@ export class Character {
     this.bites = bites;
     if (!kind) return;
     this.foodMesh = foodModel(kind);
+    this.foodMesh.traverse((o) => { o.receiveShadow = true; });
     this.foodMesh.position.set(0, -0.37, 0.07);
     this.armR.add(this.foodMesh);
     this.foodMesh.scale.setScalar(1 - bites * 0.28);
@@ -911,18 +915,24 @@ export class Character {
     this.shadow.position.y = 0.012 - up;
     this.shadow.scale.setScalar((1 - Math.min(0.4, this.jumpY * 0.5)) * this.shadowS);
     // 蜃樓的太陽把影子拉長（scenery.js 的 sunShadow）：順著太陽倒下去的一長條。影子掛在角色底下，方向要轉成角色自己的座標
-    const sun = sunShadow, gp = this.group.position;
+    // 有陰影圖時（footshadow.js，u 才有）同一片也畫腳底那一圈，半徑 R 跟圓影時一樣：長方形往腳後、往兩旁放大到蓋得住那一圈，長條照舊
+    const sun = sunShadow, gp = this.group.position, u = this.shadow.material.uniforms;
     if (sun.len > 0 && (!sun.open || sun.open(gp.x, gp.z))) {
       const yaw = this.group.rotation.y, c = Math.cos(yaw), s = Math.sin(yaw);
       const lx = sun.sx * c - sun.sz * s, lz = sun.sx * s + sun.sz * c, j = 1 - Math.min(0.4, this.jumpY * 0.5);
-      const L = Math.min(9, sun.len * this.dims.crownY) * j + 0.4;
+      const L = Math.min(9, sun.len * this.dims.crownY) * j + 0.4, wide = 0.9 * 0.62 * this.shadowS * j;
+      const R = CONTACT * 0.45 * this.shadowS * j, B = u ? Math.max(0.25, R) : 0.25, Q = L - 0.25 + B, W = u ? Math.max(wide, 2 * R) : wide;
       this.shadow.rotation.z = Math.atan2(-lz, lx);
-      this.shadow.scale.set(L / 0.9, 0.62 * this.shadowS * j, 1);
-      this.shadow.position.x = lx * (L / 2 - 0.25);
-      this.shadow.position.z = lz * (L / 2 - 0.25);
+      this.shadow.scale.set(Q / 0.9, W / 0.9, 1);
+      this.shadow.position.x = lx * (Q / 2 - B);
+      this.shadow.position.z = lz * (Q / 2 - B);
+      u?.uSun.value.set(Q / L, W / wide, (0.25 - B) / L, 0.5 - W / wide / 2);
+      u?.uFoot.value.set(B / Q, 0.5, Q / (2 * R), W / (2 * R));
     } else if (this.shadow.position.x || this.shadow.position.z) {
       this.shadow.rotation.z = 0;
       this.shadow.position.x = this.shadow.position.z = 0;
+      u?.uSun.value.set(1, 1, 0, 0);
+      u?.uFoot.value.set(0.5, 0.5, 1 / CONTACT, 1 / CONTACT);
     }
 
     if (this.act) this.pose(dt, Math.max(w, sk));

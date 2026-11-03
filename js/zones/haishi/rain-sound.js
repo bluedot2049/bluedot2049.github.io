@@ -59,7 +59,8 @@ export class RainSound {
     // 音訊暫停時 currentTime 不會走，節拍用頁面時間算
     if (!ctx || !ear || now - this.at < EVERY) return;
     this.at = now;
-    const w = this.rain.weather, r = w.rain, on = r > 0.003 || w.wet > 0.02;
+    // 切走時畫雨的那邊不跑，天氣自己算（ambience 的 awayTick）
+    const w = document.hidden ? this.rain.weather.update() : this.rain.weather, r = w.rain, on = r > 0.003 || w.wet > 0.02;
     if (on !== this.on) {
       this.on = on;
       amb.apply();

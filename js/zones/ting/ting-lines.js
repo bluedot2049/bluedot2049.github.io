@@ -92,6 +92,14 @@ function carState(li, now) {
   }
   return null;
 }
+// 這一刻第 li 條線的車在哪裡（填進 p）、開多快（公尺／秒）。背景音樂照這個排鐵軌聲（ting-music.js）。不在線上回傳 null
+export function carNow(li, now, p) {
+  const st = carState(li, now);
+  if (!st) return null;
+  const st2 = carState(li, now + 0.2);
+  at(li, st.s, p);
+  return { tr: st.tr, phase: st.phase, v: st2 ? Math.abs(st2.s - st.s) / 0.2 : V };
+}
 
 // ---------- 燈柱、燈、線 ----------
 

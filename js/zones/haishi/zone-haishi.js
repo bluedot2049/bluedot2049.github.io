@@ -16,10 +16,10 @@ import { RainSound } from './rain-sound.js';
 export const bgm = { src: 'assets/audio/haishi.m4a', from: 'haishi' };
 
 // 海市的高度霧和調色（grade.js）：鎮子和山坡從近處就開始往夜色裡退。?debug 時右上角可以即時調，「複製」貼回這裡
-// far、farAir：一百公尺外再罩一層遠景空氣，遠山越遠越退進天邊的顏色，海和山腳也吃同一層
+// 色調「海市藍夜01」（tones.js）裡的 far、farAir：一百公尺外再罩一層遠景空氣，遠山越遠越退進天邊的顏色，海和山腳也吃同一層
 // regions 是照天氣的兩組（rain.js 每一幀寫權重）：雨後跟著地濕，雨夜跟著雲和雨量、疊在雨後上
 export const grade = {
-  tone: '海市03', far: 100, farAir: 0.6,
+  tone: '海市藍夜01',
   regions: [{ name: '雨後', weather: 'wet', tone: '海市雨後' }, { name: '雨', weather: 'rain', tone: '海市雨夜' }],
 };
 
@@ -43,6 +43,29 @@ export const beast = {
     { x: -21.5, z: -3, place: '小祠' },
   ],
 };
+
+// 黑眼（scene/guide.js）帶得到的地方，去過才列，渡船 guide.js 自己加在第一個。id 只用小寫英文和數字（會送給別人）。
+// 街和平台站的位置跟上面白獸那份一樣，place 是 world.placeAt 的地名，走進那條街就算去過；店站在櫃台前面，眼睛到了看櫃台
+export function guide(world) {
+  const shop = (id) => world.shops.find((s) => s.id === id);
+  const front = (s) => s && { x: s.x + Math.sin(s.heading ?? 0) * 1.8, z: s.z + Math.cos(s.heading ?? 0) * 1.8, look: { x: s.x, y: (s.y ?? 0) + 1.3, z: s.z }, r: 3.5 };
+  return [
+    { id: 'post', name: '信差站', tag: '照相館', ...front(shop('post')) },
+    { id: 'harbor', name: '漁港', x: -17, z: 7, place: '漁港' },
+    { id: 'mole', name: '防波堤', x: -28, z: 21, place: '防波堤' },
+    { id: 'shrine', name: '小祠', x: -21.5, z: -3, place: '小祠' },
+    { id: 'lower', name: '下街', x: -1, z: -16, place: '下街' },
+    { id: 'lantern', name: '燈巷', x: -10, z: -24.3, place: '燈巷' },
+    { id: 'upper', name: '工坊街', x: -7, z: -34.75, place: '工坊街' },
+    { id: 'darkroom', name: '暗房', tag: '沖洗底片', ...front(shop('darkroom')) },
+    { id: 'specula', name: '星台', x: -12.5, z: -45, place: '星台' },
+    { id: 'press', name: '報社', tag: '投稿', ...front(shop('press')) },
+    { id: 'summit', name: '遠眺台', x: -25, z: -58.5, place: '遠眺台' },
+    { id: 'latrina', name: '淨房', x: -26.8, z: -79.2, place: '淨房' },
+    { id: 'home', name: '歸門', tag: '回前廳', x: 2.2, z: -96.2, place: '歸門' },
+    { id: 'temple', name: '星廟', x: -6, z: -109.5, place: '星廟' },
+  ];
+}
 
 // 雨（rain.js）照伺服器時間下，大家淋同一場（weather.js）。遮雨圖和燈光圖趁載入畫一次。?rain=0 不下
 export function build(scene, { coarse, params, renderer, quality }) {
@@ -98,7 +121,16 @@ export function crowd({ scene, world, shadowTex, player, camera, ambience, coars
 
 // 抵達：從碼頭開始，面向山城，鏡頭在角色背後
 export function arrive({ player, world, params }) {
-  player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
+  // 從鏡宮的星門出來：站在無像殿裡的星門前，面向水鏡；其他都是搭船到棧橋
+  const gate = params.get('from') === 'jinggong' && world.templeGate, at = gate || world.spawn;
+  player.place(at.x, at.z, at.heading);
+  // 鏡頭在水鏡那一頭往回看：人剛跨出星門，門在背後
+  if (gate) {
+    player.camYaw = at.heading + 0.35;
+    player.camDist = 7;
+    player.camPitch = 0.3;
+    player.snapCamera();
+  }
   // 測試用：?view=x,z,面向(度),鏡頭距離,俯角(度)，直接站到那裡看
   const view = params.get('view')?.split(',').map(Number);
   if (view?.length >= 2 && view.every(Number.isFinite)) {

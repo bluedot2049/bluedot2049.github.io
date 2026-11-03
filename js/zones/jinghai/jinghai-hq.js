@@ -396,7 +396,7 @@ export function buildHQ({ coarse = false } = {}) {
     block(s * 7.6 - 0.3, 21.3, s * 7.6 + 0.3, 21.9);
     for (let z = 16.5; z < 22; z += 2.4) k.light(s * 4, 5.45, z, WARM, 0.4);
   }
-  // 南牆外面的標誌：海牛嘴邊那兩瓣肉的 W，一條金色的粗線，跟金箔一樣會反光。掛高一點，從步道上越過雨遮看得到
+  // 南牆外面的標誌：海牛嘴邊那兩瓣肉的 W，一條金色的粗線，跟金箔一樣會反光。放在白底（6.25–10.5）正中略上，底下還高過雨遮一公尺半
   {
     const pts = [], W2 = 2.7, H2 = 1.0;
     const curve = (p0, p1, p2, n, last = false) => {
@@ -410,7 +410,7 @@ export function buildHQ({ coarse = false } = {}) {
     curve([-0.46, -0.5], [-0.07, -0.42], [0, 0.1], 6);
     curve([0, 0.1], [0.07, -0.42], [0.46, -0.5], 6);
     curve([0.46, -0.5], [1.06, -0.62], [1, 0.55], 10, true);
-    kf.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 90, 0.19, 8), '#d8b25c', 0, 9.35, A.z1 + 0.55);
+    kf.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 90, 0.19, 8), '#d8b25c', 0, 8.5, A.z1 + 0.55);
   }
 
   // ================= 食堂 =================

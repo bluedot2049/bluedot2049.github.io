@@ -6,7 +6,10 @@
 import { CHEERS, EMOTE_BURST, EMOTE_HEAR, EMOTE_RATE, EMOTE_VOL, LAND_HEAR, LAND_VOL, MURMUR_DUCK, MURMUR_LAYERS, MURMUR_RMS, MURMUR_VOL, PENTA, SHOES, STEP_BURST, STEP_HEAR, STEP_RATE, STEP_VOL, VOICES, VOICE_LEN, VOICE_RMS, VOICE_VOL, biquad, loopOf, renderMurmur, silentWav } from './ambience-voices.js';
 const GUST_EVERY = 4;   // 每隔幾秒換一次風勢
 // 風聲和草葉聲的總音量。手機喇叭沒有低音，雜訊剛好落在它最響的中高頻，所以手機再壓低
-const HISS_VOL = matchMedia('(pointer: coarse)').matches ? 0.4 : 0.7;
+const COARSE = matchMedia('(pointer: coarse)').matches;
+const HISS_VOL = COARSE ? 0.4 : 0.7;
+// 電腦切走（別的分頁、視窗整個被蓋住）時還在播的話剩幾成，提醒人不在這裡
+const AWAY_VOL = 0.7;
 
 // 背景音樂是唯一要下載的音檔，每個區域一首
 const BGM_VOL = 0.16;      // 室內的音量，當背景就好
@@ -24,9 +27,12 @@ export class Ambience {
     this.stepGate = {};
     this.emoteGate = {};
     this.duck = 0;           // 人潮聲把背景音樂壓低幾成
+    this.leaving = false;    // 上船了：背景音樂淡出，之後不再淡回來（musicOut）
     this.beds = [];          // 某個地方自己的底聲（例如前廳的 vestibule-sound.js）：每一幀 update(this)，on 為真時音訊不睡，duck 是背景音樂要壓低幾成
     this.wetStep = null;     // 踩在濕地上多一聲水（海市的雨，rain-sound.js）：(角色, 出口, 時間)
     try { this.muted = localStorage.getItem('muted') === '1'; } catch { this.muted = false; }
+    // 切走時繼續播：電腦預設開，暫停選單可以關（setBackground）。手機切走是換 App 或鎖螢幕，一律不出聲
+    try { this.background = !COARSE && localStorage.getItem('bgAudio') !== '0'; } catch { this.background = !COARSE; }
     // 手機要在 touchend / click 這類「放開」的手勢裡才算使用者操作（iOS 的 pointerdown 不算），所以全部都聽。
     // 一直留著不拿掉：iOS 切到別的 App 回來會變成 interrupted，Safari 也不一定讓手勢以外的 resume() 生效，
     // 都要等下一次點畫面才救得回來
@@ -47,7 +53,7 @@ export class Ambience {
         if (this.keepAlive.paused) this.keepAlive.play().catch(() => {});
       } catch {}
       // iOS 只讓手勢裡的 play() 生效，背景音樂沒播起來就趁這次再試
-      if (this.bgm?.paused && !this.muted && !document.hidden) this.apply();
+      if (this.bgm?.paused && !this.muted && !this.gone) this.apply();
       if (ctx.state === 'running') return;
       // 室內安靜時是故意暫停的，不用叫醒
       if (this.quiet && performance.now() > this.voiceUntil) return;
@@ -61,7 +67,24 @@ export class Ambience {
       } catch {}
     };
     for (const e of events) window.addEventListener(e, unlock, true);
-    document.addEventListener('visibilitychange', () => this.apply());
+    document.addEventListener('visibilitychange', () => { this.apply(); this.awayTick(); });
+  }
+
+  // 分頁看不到、而且不在背景播：叫聲、腳步都不用排了
+  get gone() { return document.hidden && !this.background; }
+
+  setBackground(on) {
+    this.background = !COARSE && on;
+    try { localStorage.setItem('bgAudio', on ? '1' : '0'); } catch {}
+    this.apply();
+    this.awayTick();
+  }
+
+  // 切走時主迴圈不跑，listen() 沒人叫：每秒替它叫一次底聲，雨下起來、風沙捲過來照樣聽得到
+  awayTick() {
+    clearInterval(this.awayTimer);
+    if (!document.hidden || !this.background) return;
+    this.awayTimer = setInterval(() => { for (const b of this.beds) b.update(this); }, 1000);
   }
 
   start() {
@@ -206,7 +229,7 @@ export class Ambience {
   // 動物叫聲：vol 已經照距離算好，pan 是左右
   voice(kind, vol, pan = 0, pitch = 1) {
     const ctx = this.ctx;
-    if (!ctx || this.muted || document.hidden || !VOICES[kind] || vol < 0.002) return;
+    if (!ctx || this.muted || this.gone || !VOICES[kind] || vol < 0.002) return;
     pitch *= 0.94 + Math.random() * 0.12;   // 每次叫的大小聲和高低都差一點，不會像同一段錄音
     this.played(VOICES[kind](ctx, this.out(vol * (0.8 + Math.random() * 0.2), pan), ctx.currentTime + 0.03, pitch, this.noise));
   }
@@ -221,7 +244,7 @@ export class Ambience {
   // 角色離聽的人多遠、在左還是右，聽不到就回傳 null。k 是照距離算的音量比例
   heard(ch, hear) {
     const ear = this.ear, g = ch.group.position;
-    if (!this.ctx || this.muted || document.hidden || !ear || !ch.group.visible) return null;
+    if (!this.ctx || this.muted || this.gone || !ear || !ch.group.visible) return null;
     const dx = g.x - ear.x, dz = g.z - ear.z, d = Math.hypot(dx, g.y - ear.y, dz);
     if (d > hear) return null;
     return { k: (1 - d / hear) ** 1.5, pan: this.panOf(dx, dz, d) };
@@ -413,16 +436,16 @@ export class Ambience {
   apply() {
     const ctx = this.ctx;
     if (!ctx) return;
-    const off = this.muted || document.hidden, v = off ? 0 : this.level * 0.7;
+    const off = this.muted || this.gone, away = document.hidden ? AWAY_VOL : 1, v = off ? 0 : this.level * 0.7 * away;
     const live = v > 0 || ((this.bgm || this.murmurGain || this.beds.some((b) => b.on)) && !off);
     if (live && ctx.state !== 'running') ctx.resume().catch(() => {});
     const t = ctx.currentTime;
     this.master.gain.setTargetAtTime(v, t, 0.4);
-    this.sfx.gain.setTargetAtTime(off ? 0 : 1, t, 0.05);
-    if (this.bgm) {
+    this.sfx.gain.setTargetAtTime(off ? 0 : away, t, 0.05);
+    if (this.bgm && !this.leaving) {
       const a = this.bgm, g = this.bgmGain.gain;
       if (off) {
-        // 靜音或切到別的分頁就停下來，不再下載
+        // 靜音或切走（沒開背景播）就停下來，不再下載
         a.pause();
         g.cancelScheduledValues(t);
         g.setValueAtTime(0, t);
@@ -433,13 +456,24 @@ export class Ambience {
         }
         // 淡入中途走到戶外也照原本的速度淡，不會突然跳大聲。人潮和某個地方的底聲（下雨）要壓低的，取壓得最多的那個
         const duck = Math.max(this.duck, ...this.beds.map((b) => b.duck || 0));
-        const vol = BGM_VOL * (1 - this.level * (1 - BGM_OUTDOOR)) * (1 - duck);
+        const vol = BGM_VOL * (1 - this.level * (1 - BGM_OUTDOOR)) * (1 - duck) * away;
         g.setTargetAtTime(vol, t, t < this.bgmFadeUntil ? BGM_FADE / 3 : 0.8);
       }
     }
     this.quiet = !live;
     clearTimeout(this.sleepTimer);
     if (this.quiet) this.sleepSoon();
+  }
+
+  // 上船要離開這一區：背景音樂在 sec 秒裡淡到沒有，不等換頁才斷。之後音量、戶外、人潮都不再動它
+  musicOut(sec) {
+    if (this.leaving) return;
+    this.leaving = true;
+    if (!this.bgm || !this.ctx) return;
+    const g = this.bgmGain.gain, t = this.ctx.currentTime;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(0, t + sec);
   }
 
   // 環境聲是零的時候，等叫聲播完再暫停

@@ -18,6 +18,8 @@ const WOOD = '#4a2c1a', DARK = '#2a1810', TRIM = '#5e3b22', BRASS = '#b08a45', B
 const MARKS = [[16, 0.05], [29, 0.03], [39, 0.042], [57, 0.05], [123, 0.032], [140, 0.05], [161, 0.036]];
 // 眼睛：半徑、圓心（一半埋在拱頂裡，往上、往前鼓出來）
 const RE = 0.085, EY = TOP - 0.015, EZ = 0.02;
+// 牆上的花（sunmoon.js）繞著拱長：拱的圓心多高、木框外緣的半徑、眼睛頂多高
+export const ARCH = { y: AC, r: W / 2 + FB, eye: EY + RE };
 
 function mat(color, extra = {}) {
   // 擋在鏡頭前時要能變半透明，所以一律開 transparent

@@ -1,25 +1,22 @@
 /* © 2026 bluedot2049《煉金畫廊》。未經授權禁止重製、改作或用於 AI 訓練，詳見 LICENSE。 */
 /* 遊戲中的介面：房間名稱、對話框、一般按鈕、在線人數、表情、搖桿、跳坐印章、動作徽章、手機拇指弧、電腦版下方那排。 */
 /* ───────── 房間名稱：金字，兩側細線 ───────── */
-/* 每個區域一組字色：--tt 主字、--ts 副字、--tl 兩側細線、--th 字後面那片霧（只寫 r, g, b）。
-   霧是為了亮的場景（靜海的白牆、蜃樓的沙）也看得清，暗的地方幾乎看不出來 */
+/* 每個區域一組字色：--tt 主字、--ts 副字、--tl 兩側細線 */
 :root {
-  --tt: var(--gold-hi); --ts: var(--text); --tl: rgba(232, 184, 106, 0.75); --th: 18, 12, 8;
+  --tt: var(--gold-hi); --ts: var(--text); --tl: rgba(232, 184, 106, 0.75);
 }
-:root[data-zone="haishi"] { --tt: #f4dcae; --ts: #dfe4f0; --tl: rgba(240, 190, 120, 0.75); --th: 10, 16, 32; }
-:root[data-zone="jinghai"] { --tt: #f3efe6; --ts: #e9e4d8; --tl: rgba(232, 120, 64, 0.85); --th: 22, 24, 30; }
-:root[data-zone="shenlou"] { --tt: #f2cf9e; --ts: #f1e2cc; --tl: rgba(214, 140, 80, 0.7); --th: 42, 22, 12; }
-:root[data-zone="ting"] { --tt: #fbe7ee; --ts: #e8ddf6; --tl: rgba(236, 196, 222, 0.8); --th: 44, 30, 60; }
+:root[data-zone="haishi"] { --tt: #f4dcae; --ts: #dfe4f0; --tl: rgba(240, 190, 120, 0.75); }
+:root[data-zone="jinghai"] { --tt: #f3efe6; --ts: #e9e4d8; --tl: rgba(232, 120, 64, 0.85); }
+:root[data-zone="shenlou"] { --tt: #f2cf9e; --ts: #f1e2cc; --tl: rgba(214, 140, 80, 0.7); }
+:root[data-zone="ting"] { --tt: #fbe7ee; --ts: #e8ddf6; --tl: rgba(236, 196, 222, 0.8); }
 #toast {
   position: fixed; left: 0; right: 0; top: calc(13vh / var(--ui, 1) + env(safe-area-inset-top));
   display: flex; flex-direction: column; align-items: center;
   padding: 18px 0;
   pointer-events: none; z-index: 10;
   opacity: 0;
-  background: radial-gradient(ellipse 270px 62px at 50% 50%, rgba(var(--th), 0.5), rgba(var(--th), 0.22) 55%, transparent);
-  text-shadow: 0 0 3px rgba(var(--th), 0.75), 0 0 14px rgba(var(--th), 0.6);
 }
-#toast.show { animation: toast 3.6s ease forwards; }
+#toast.show { animation: toast 8s ease forwards; }
 /* 名字長（--n 是字數，ui.js 寫）、螢幕窄時先收字距，再不夠才縮字；--tw 是扣掉兩側紋飾最短時剩下的寬 */
 #toast .t1 {
   display: flex; align-items: center; gap: 16px; max-width: calc(100vw / var(--ui, 1) - 16px); white-space: nowrap;
@@ -45,9 +42,18 @@
   font-family: var(--latin); font-style: italic; font-size: 17px;
   letter-spacing: .25em; color: var(--ts); opacity: .92;
 }
+/* 電腦版的地名放大：#toast 已照視窗高度乘 --ui（base.css），這裡只改 1080 高的基準。
+   --tw 已除過 --ui，長地名縮字的 min(…) 照舊接手；字距是 em 跟著字放大；紋飾是 mask auto 100%，維持 84:18 的比例線才不會變粗 */
+body.desk #toast .t1 {
+  font-size: min(48px, calc(var(--tw) / var(--n, 2)));
+  gap: 24px;
+  --tw: calc(100vw / var(--ui, 1) - 160px);
+}
+body.desk #toast .t1::before, body.desk #toast .t1::after { width: 120px; height: 26px; min-width: 50px; }
+body.desk #toast .t2 { font-size: 22px; margin-top: 12px; }
 @keyframes toast {
   0% { opacity: 0; transform: translateY(10px); }
-  15%, 72% { opacity: 1; transform: none; }
+  15%, 75% { opacity: 1; transform: none; }
   100% { opacity: 0; }
 }
 
@@ -252,18 +258,19 @@ body.desk #guide.show { animation-name: guide-mid; }
 /* 「⋯」：按一下整排收進來，畫面乾淨；再按一下展開。收著時行囊有東西沒存，印泥亮在「⋯」上。
    相機、表情、在線人數不收；手機上收掉的按鈕寬度一起縮成零，人數才會靠到「⋯」旁邊 */
 #top-btns > * { transition: opacity .25s, transform .25s, width .25s, min-width .25s, margin .25s, border-color .2s, color .2s, background .2s; }
-body.tidy #top-btns > :not(#more-btn, #photo-btn, #emote, #online) { opacity: 0; transform: translateX(14px) scale(.7); pointer-events: none; }
-body.tidy:not(.desk) #top-btns > :not(#more-btn, #online) { width: 0; min-width: 0; padding: 0; margin-left: -8px; border-width: 0; overflow: hidden; }
-body.desk.tidy #top-btns > :not(#more-btn, #photo-btn, #emote, #online) { display: none; }
+/* 叫出來的黑眼也不收：帶路中要收得掉它 */
+body.tidy #top-btns > :not(#more-btn, #photo-btn, #emote, #online, #eye-btn.on) { opacity: 0; transform: translateX(14px) scale(.7); pointer-events: none; }
+body.tidy:not(.desk) #top-btns > :not(#more-btn, #online, #eye-btn.on) { width: 0; min-width: 0; padding: 0; margin-left: -8px; border-width: 0; overflow: hidden; }
+body.desk.tidy #top-btns > :not(#more-btn, #photo-btn, #emote, #online, #eye-btn.on) { display: none; }
 @media (orientation: portrait) and (max-width: 400px) {
-  body.tidy:not(.desk) #top-btns > :not(#more-btn, #online) { margin-left: -5px; }
+  body.tidy:not(.desk) #top-btns > :not(#more-btn, #online, #eye-btn.on) { margin-left: -5px; }
 }
 body.tidy #more-btn { color: var(--muted); border-style: dashed; }
 #more-btn { position: relative; }
 #more-btn .ink { display: none; }
 body.desk #more-btn { order: 2; }
 #sound-btn .off, #sound-btn.muted .on { display: none; }
-/* 攝影：縮小版的金快門。外金圈、一道深縫，中間一塊太陽紋金片，相機刻在金片上（深色線＋底下一道亮邊）。
+/* 攝影：縮小版的金快門。外金圈、一道深縫，中間一塊太陽紋金片，光圈的六片葉片刻在金片上（深色線＋底下一道亮邊）。
    按鈕小，細紋放寬，主要靠兩道亮帶看出是金屬；滑過時亮帶轉一點，像換了角度 */
 @property --sheen { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 #photo-btn {
@@ -279,6 +286,8 @@ body.desk #more-btn { order: 2; }
   transition: --sheen .4s ease-out, transform .1s;
 }
 #photo-btn svg { stroke-width: 1.6; filter: drop-shadow(0 .7px 0 rgba(255, 240, 205, .65)); }
+/* 光圈比一般圖示大一號：20px 時葉片擠成一團，整排最主要的鈕反而最淡。收起的 ✕ 照舊 */
+#photo-btn .cam { width: 24px; height: 24px; stroke-width: 1.5; }
 /* 帶著相機時收起鈕跟相機的快門同一種舊金（#ph-shutter.gear） */
 body.photo-gear #photo-btn {
   color: #2e1c0c; border-color: rgba(90, 58, 24, .95);
@@ -301,6 +310,30 @@ body.photo #photo-btn .x { display: block; }
 #sound-btn.muted .off { display: block; }
 #sound-btn.muted { color: var(--muted); }
 #shoulder-btn.on { border-color: var(--gold); color: var(--gold-hi); }
+/* 黑眼鈕：叫出來時外圈變金（scene/guide.js） */
+#eye-btn.on { border-color: var(--gold); color: var(--gold-hi); }
+/* 黑眼帶路時飛出畫面：畫面邊上一顆小眼睛（藍紫炭色的球、金眼眶），金色箭頭朝外指，底下寫要去哪。
+   跟隊友的記號（party.css 的 .mate）同一個範圍、同一種擺法，位置由 guide.js 用 transform 擺 */
+#eye-mark { position: fixed; left: 0; top: 0; z-index: 8; pointer-events: none; will-change: transform; }
+#eye-mark b { position: absolute; left: -20px; top: -20px; width: 40px; height: 40px; }
+#eye-mark b::after {
+  content: ""; position: absolute; right: 0; top: 50%; margin-top: -5px;
+  border: 5px solid transparent; border-left: 7px solid #e3bb76; border-right: 0;
+  filter: drop-shadow(0 0 3px rgba(28, 19, 13, .8));
+}
+#eye-mark i {
+  position: absolute; left: -11px; top: -11px; width: 22px; height: 22px; border-radius: 50%;
+  background: #2a2638; box-shadow: 0 0 0 1.5px #e3bb76, 0 0 12px rgba(143, 122, 176, .8);
+}
+#eye-mark i::after { content: ""; position: absolute; left: 7px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: #0e0b14; border: 1.5px solid #e3bb76; }
+#eye-mark span {
+  position: absolute; top: 14px; left: 0; transform: translateX(-50%); white-space: nowrap;
+  font-size: 11px; line-height: 18px; padding: 0 7px; letter-spacing: .1em; color: var(--text);
+  background: var(--panel-soft); border-radius: 999px;
+}
+#eye-mark[data-side="r"] span { left: auto; right: -12px; transform: none; }
+#eye-mark[data-side="l"] span { left: -12px; transform: none; }
+body.photo #eye-mark { display: none; }
 /* 越肩鎖住滑鼠時的準心：一顆小金點，對到畫、鏡子、動物時外面亮一圈金線 */
 #reticle { position: fixed; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: var(--gold-hi); box-shadow: 0 0 0 1px rgba(20, 14, 10, .45); pointer-events: none; opacity: 0; transition: opacity .2s; z-index: 4; }
 #reticle::after { content: ''; position: absolute; left: 50%; top: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; border: 1px solid var(--gold); opacity: 0; transform: scale(.5); transition: opacity .2s, transform .25s; }
@@ -317,20 +350,19 @@ body.desk .snapsave { left: auto; right: calc(50% + 320px); bottom: calc(24px + 
 /* 表情輪：一圈細金線，五個表情排在圈上，撥到的那個放大亮起來 */
 #wheel { position: fixed; left: 50%; top: 50%; width: 240px; height: 240px; margin: -120px 0 0 -120px; border-radius: 50%; border: 1px solid rgba(232, 184, 106, .35); background: radial-gradient(rgba(16, 11, 9, .55), rgba(16, 11, 9, .2) 70%); pointer-events: none; opacity: 0; transform: scale(.9); transition: opacity .15s, transform .2s; z-index: 26; }
 #wheel.show { opacity: 1; transform: none; }
-#wheel i { position: absolute; width: 50px; height: 50px; margin: -25px 0 0 -25px; display: grid; place-items: center; font-style: normal; font-size: 26px; border-radius: 50%; border: 1px solid transparent; transition: transform .15s, border-color .15s, background .15s; }
+#wheel i { position: absolute; width: 50px; height: 50px; margin: -25px 0 0 -25px; display: grid; place-items: center; font-style: normal; color: var(--gold-hi); border-radius: 50%; border: 1px solid transparent; transition: transform .15s, border-color .15s, background .15s; }
+#wheel i svg { width: 30px; height: 30px; }
 #wheel i.on { transform: scale(1.25); border-color: var(--gold); background: rgba(232, 184, 106, .12); }
 /* 暫停選單：跟操作說明同一種卡，放在畫面中間 */
 #pause { position: fixed; left: 50%; top: 50%; z-index: 27; display: none; width: 380px; max-height: calc(100vh / var(--ui, 1) - 24px); overflow-y: auto; transform: translate(-50%, -50%); background: rgba(16, 11, 9, .94); box-shadow: var(--shadow); }
 #pause.show { display: flex; animation: pause-in .25s ease-out both; }
 @keyframes pause-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 6px)); } }
-#pause .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-#pause .acts .btn { justify-content: space-between; min-height: 36px; padding: 0 12px; font-size: 13px; letter-spacing: .1em; }
 #pause kbd { padding: 0 5px; font: 11px/1.5 var(--latin); letter-spacing: .04em; color: var(--muted); border: 1px solid rgba(232, 184, 106, .3); border-radius: 2px; }
 #pause .set { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; letter-spacing: .08em; color: var(--text); }
 #pause .set input[type=range] { width: 160px; accent-color: var(--gold); }
 #pause .set input[type=checkbox] { accent-color: var(--gold); }
 /* 介面大小：100% 是照視窗高度自動放大的大小 */
-#pause .size b { margin-left: 8px; font-weight: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
+#pause .size b, #pause .view b { margin-left: 8px; font-weight: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
 #pause .saves b { font-weight: normal; color: var(--muted); }
 #pause .saves .btn { min-height: 30px; padding: 0 12px; font-size: 12.5px; letter-spacing: .08em; }
 #pause .keys { list-style: none; margin: 0; padding: 0; }
@@ -369,12 +401,15 @@ body.desk.locked #top-btns [data-key]::after { content: attr(data-key); position
   transition: opacity .2s, transform .2s;
 }
 #emote.open #emote-bar { opacity: 1; transform: none; pointer-events: auto; }
+/* 圖示在 emotes.js：金線，跟著按鈕的字色 */
 #emote-bar button {
-  width: 44px; height: 44px; padding: 0; font-size: 21px; line-height: 1;
+  width: 44px; height: 44px; padding: 0; display: grid; place-items: center;
+  color: var(--gold-hi);
   background: var(--panel); border: 1px solid var(--line-soft); border-radius: 50%;
   box-shadow: var(--shadow);
   cursor: var(--cur-pointer);
 }
+#emote-bar button svg { width: 52%; height: 52%; }
 #emote-bar button:active { transform: scale(.9); }
 
 /* ───────── 手機按鈕的底線和邊線：搖桿、「跳」都貼著它。瀏海、home 條的安全區本身就是留白，不再另外加；
@@ -426,10 +461,11 @@ body.joy-left { --joy-x: max(16px, var(--safe-l)); }
 }
 body.touch #joy { display: block; }
 
-/* ───────── 跳、坐：圓形印章 ───────── */
+/* ───────── 跳、坐：圓形印章，字是煉金體（小字那一套，css/alchemy-font.css）。比一般字型看起來小一號，字級放大一點 ───────── */
 .seal {
   position: fixed; z-index: 20;
   padding: 0; border-radius: 50%;
+  font-family: 'AlchemyGalleryText', var(--font); line-height: 1;
   color: var(--gold-hi);
   background: rgba(40, 27, 18, .9);
   border: 1px solid var(--line);
@@ -440,11 +476,11 @@ body.touch #joy { display: block; }
 }
 .seal:active { transform: scale(.93); border-color: var(--gold); }
 #jump-btn {
-  width: var(--seal); height: var(--seal); font-size: calc(var(--seal) * .3);
+  width: var(--seal); height: var(--seal); font-size: calc(var(--seal) * .34);
   touch-action: none;
 }
 /* 「跳」的內側，坐著時變成「起」 */
-#sit-btn { width: var(--btn); height: var(--btn); font-size: calc(var(--btn) * .3); }
+#sit-btn { width: var(--btn); height: var(--btn); font-size: calc(var(--btn) * .34); }
 body.touch .seal { display: block; }
 body.panel-open .seal { opacity: 0; pointer-events: none; }
 body.sitting #sit-btn {
@@ -542,6 +578,7 @@ body.joy-left:not(.desk) :is(#jump-btn, #sit-btn, #photo-btn, #say-btn, #emote, 
 }
 body:not(.desk) :is(#photo-btn, #say-btn, #emote-btn) { width: var(--btn); min-width: var(--btn); height: var(--btn); }
 body:not(.desk) #photo-btn svg { width: calc(var(--btn) * .44); height: calc(var(--btn) * .44); }
+body:not(.desk) #photo-btn .cam { width: calc(var(--btn) * .53); height: calc(var(--btn) * .53); }
 body:not(.desk) :is(#say-btn, #emote-btn) svg { width: calc(var(--btn) * .42); height: calc(var(--btn) * .42); }
 body:not(.desk) #emote { align-items: center; }
 /* 表情點開時那一排會蓋到弧上其他按鈕，先讓它們退後 */
@@ -578,7 +615,7 @@ body:not(.desk) #action-btn.show::before { animation-iteration-count: 1; }
   body:not(.desk) #emote-bar { flex-direction: row; padding: 0; transform: translateX(-8px); }
   body.joy-left:not(.desk) #emote-bar { flex-direction: row-reverse; transform: translateX(8px); }
   body:not(.desk) #emote.open #emote-bar { transform: none; }
-  body:not(.desk) #emote-bar button { width: 40px; height: 40px; font-size: 19px; }
+  body:not(.desk) #emote-bar button { width: 40px; height: 40px; }
 }
 
 /* ───────── 電腦版：按鈕集中在畫面下方中間一列，動作按鈕浮在那一列正上方，提示移到頂端 ───────── */

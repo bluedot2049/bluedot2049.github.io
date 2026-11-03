@@ -232,7 +232,7 @@ export function buildTing(scene, { renderer = null, coarse = false } = {}) {
   const pxScale = { value: 800 };   // 一公尺在一公尺外佔幾個像素，浮塵和花粉照這個算大小
   const marsh = buildMarsh(group, WATER_Y);
   meshes.push(...marsh.meshes);
-  const tree = buildTree(group, groundY, { pxScale, waterY: WATER_Y, coarse });
+  const tree = buildTree(group, groundY, { waterY: WATER_Y, coarse });
   obstacles.push(tree.obstacle);
   pollen(group, [...marsh.spots, ...tree.pollen], pxScale);
   const inWater = (x, z) => groundY(x, z) < WATER_Y - 0.03;

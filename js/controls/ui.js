@@ -3,6 +3,7 @@
 // 畫面上的 HTML 介面：作品資訊、捏角色的抽屜、房間名稱、平面清單。捏角色面板的內容在 creator.js。
 
 import { alchemyCovers } from '../core/alchemy-glyphs.js';
+import { emoteSVG, emoteName } from '../social/emotes.js';
 
 const $ = (s) => document.querySelector(s);
 
@@ -110,6 +111,7 @@ export class UI {
     this.dress = $('#dress');
     this.cams = $('#cams');
     this.ferry = $('#ferry');
+    this.eyeCard = $('#eye-card');   // 黑眼的清單，內容和開關在 scene/guide.js
     this.toastEl = $('#toast');
     // 煉金體先下載好，第一次跳房間名稱時才不會先閃一下一般字型
     document.fonts?.load('30px AlchemyGallery').catch(() => {});
@@ -118,10 +120,10 @@ export class UI {
     this.onSheet = null;
     this.onClose = null;
     // 電腦版：表情、相機和其他按鈕排成一列放在畫面下方中間，不再分散在左右兩邊。
-    // 照用途分組：自己的（表情、相機、行囊）、同行、設定、清單
+    // 照用途分組：自己的（表情、相機、行囊、黑眼）、同行、設定、清單
     if (!matchMedia('(pointer: coarse)').matches) {
       document.body.classList.add('desk');
-      $('#top-btns').prepend($('#emote'), $('#photo-btn'), $('#pack-btn'), $('#party-btn'), $('#say-btn'));
+      $('#top-btns').prepend($('#emote'), $('#photo-btn'), $('#pack-btn'), $('#eye-btn'), $('#party-btn'), $('#say-btn'));
       fitUi();
       addEventListener('resize', fitUi);
     }
@@ -196,13 +198,13 @@ export class UI {
 
   // 目前打開的抽屜，主程式用它的高度挪畫面
   get panel() {
-    return [this.sheet, this.dress, this.cams, this.ferry].find((el) => el.classList.contains('open')) || null;
+    return [this.sheet, this.dress, this.cams, this.ferry, this.eyeCard].find((el) => el.classList.contains('open')) || null;
   }
 
-  // 佔掉一邊畫面的那個面板：電腦版的相機桌是浮在相機底下的銘牌、渡船是浮在船上的小卡，不算
+  // 佔掉一邊畫面的那個面板：電腦版的相機桌是浮在相機底下的銘牌、渡船是浮在船上的小卡、黑眼的清單是按鈕旁邊的小卡，不算
   get docked() {
     const p = this.panel;
-    return (p === this.cams || p === this.ferry) && document.body.classList.contains('desk') ? null : p;
+    return (p === this.cams || p === this.ferry || p === this.eyeCard) && document.body.classList.contains('desk') ? null : p;
   }
 
   // 相機桌：v = { i, n, cam, ready, carried, other }。cam 是 null 的位置還沒有相機；ready 是 false 的擺著看、拿不走
@@ -356,7 +358,9 @@ export class UI {
   // 表情按鈕：點一下展開，選了就收起來
   bindEmotes(list, onPick) {
     const box = $('#emote'), bar = $('#emote-bar');
-    bar.innerHTML = list.map((e) => `<button aria-label="${esc(e)}">${esc(e)}</button>`).join('');
+    // 電腦按數字鍵也送得出去，滑過去看得到是第幾個
+    const key = document.body.classList.contains('desk');
+    bar.innerHTML = list.map((e, i) => `<button aria-label="${emoteName(e)}" title="${emoteName(e)}${key ? `（${i + 1}）` : ''}">${emoteSVG(e)}</button>`).join('');
     bar.querySelectorAll('button').forEach((b, i) => b.addEventListener('click', () => {
       box.classList.remove('open');
       onPick(list[i]);
@@ -376,7 +380,7 @@ export class UI {
     el.classList.add('show');
     // 動畫播完把 show 拿掉：提示看 #toast.show 決定要不要讓位（hud.css）
     clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => el.classList.remove('show'), 3600);
+    this.toastTimer = setTimeout(() => el.classList.remove('show'), 8000);
   }
 
   hint(text, ms = 5000) {
@@ -463,7 +467,7 @@ export class UI {
     return this.landing(el);
   }
 
-  // 渡海到了：跟推門同一個節奏。船靠岸一震（onMoor 放聲音），門板先拉開一點、停半拍，再整個打開；
+  // 渡海到了：跟推門同一個節奏。船靠岸一震（onMoor 叫醒音訊），門板先拉開一點、停半拍，再整個打開；
   // 照片往前推近（直式同時回到正中央），目的地的光鋪滿，再淡出到遊戲畫面。
   // 橫式的門板是上下黑邊，直式是右邊的黑塊。動畫都接在 CSS 正在跑的那一格後面，不會跳
   landing(el) {

@@ -8,6 +8,7 @@
 // 鎖著時點不到按鈕：按住 Alt 暫時叫出游標，放開鎖回去；面板自己打開時放開，關掉後一走路就鎖回去（按鈕的快捷鍵在 main.js）。
 import * as THREE from 'three';
 import { dockR, panelW, WORKS_OPEN } from './ui.js';
+import { lens, fitSource, unbend } from '../core/lens.js';
 
 const SPEED = 2.6;
 const DRAG_THRESHOLD = 8;
@@ -37,16 +38,25 @@ const SH_COAST = 0.16, SH_COAST_MAX = 0.45, SH_EASE = 0.6;
 const SH_MOUSE = 0.0022, SH_MOUSE_T = 0.04, SH_PITCH_EASE = 0.1, SH_PITCH_EASE_MIN = 0.45;
 // 越肩走路的起步和停下（秒）
 const SH_ACCEL_T = 0.14, SH_DECEL_T = 0.11;
+// 越肩和手持相機的高度另外慢慢跟（秒）：石階是一階一階踩上去的，跟緊了每一階都把畫面頂一下；一下差超過這麼多公尺（瞬移）直接跟過去
+const SH_STEP_T = 0.15, SH_STEP_SNAP = 1.5;
 // 面板關掉後按這些鍵就把滑鼠鎖回去
 const MOVE_KEYS = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ']);
 // 視線（所有模式）：頭左右最多轉幾度、抬頭和低頭最多幾度；鏡頭繞到前面超過 GAZE_BACK 就改成看著鏡頭，回到 GAZE_FRONT 以內再看前方（中間重疊，交界不會來回甩）
 // 鏡頭在背後時，這麼多秒沒轉鏡頭、沒走路，頭就交給注意力東張西望（attention.js）
 const SH_GAZE = 1.2, GAZE_UP = 0.55, GAZE_DOWN = 0.4, GAZE_BACK = 2.05, GAZE_FRONT = 1.75, GAZE_IDLE = 4;
 const shDefaultDist = () => (window.innerWidth < window.innerHeight ? 2.9 : 2.4);
-// 稍微廣角：橫拿垂直 60°；直拿照水平 44° 換算，上下最多 84°，免得畫面上下兩端拉長
-function shoulderFov() {
-  const v = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(22)) * window.innerHeight / window.innerWidth);
-  return THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(v), 60, 84);
+// 越肩的視野（暫停選單裡調，記在 localStorage view；越肩只有電腦，不怕效能）：
+// fov 是 16:9 的畫面左右看得到幾度，別的比例上下照同一個角度；fish 是魚眼，0 是一般廣角（直線不彎），1 是等距魚眼（k 見 lens.js）
+// 魚眼時左右兩邊的角度照 fov 不變，中間放大、越往邊緣收得越緊；SH_COVER 以外是鏡頭邊緣的暗角
+const SH_VIEW = { fov: 100, fish: 0.3 }, SH_FOV = [70, 160], SH_COVER = THREE.MathUtils.degToRad(75);
+// 越肩看畫、照鏡子時不照設定，用固定的視角（垂直），取景才不會怪
+const SH_FOCUS_FOV = 68;
+const shoulderFov = (h) => THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(h / 2)) * 9 / 16));
+// 視角 fov 加上彎法 k、左右兩邊角度不變時，成像的焦距（半個畫面高當 1）
+function bentFocal(fov, k, aspect) {
+  const th = Math.atan(Math.tan(THREE.MathUtils.degToRad(fov / 2)) * aspect);
+  return aspect * k / Math.tan(k * th);
 }
 
 // 臨界阻尼彈簧：o[k] 帶著速度 vel[k] 追 goal，起步會加速，到了不回彈。smoothTime 大約是追上要花的秒數
@@ -94,7 +104,7 @@ export class Player {
     this.lookHold = 0;              // 越肩照路線走時鏡頭會轉到角色背後；剛拖過就先別轉
     this.freeLook = false;          // 越肩時右鍵拖曳：只轉鏡頭，身體不跟；一走路或按左右鍵就轉回視線方向
     this.turnVel = 0;               // 鍵盤搖桿轉身的角速度，起步和停下都有緩衝
-    this.sh = { yaw: 0, pitch: SH_PITCH_DEFAULT, dist: 0, reach: null, dt: 0 };   // 鏡頭實際的角度和遠近，帶阻尼追 camYaw、shPitch、shDist
+    this.sh = { yaw: 0, pitch: SH_PITCH_DEFAULT, dist: 0, reach: null, dt: 0, y: 0 };   // 鏡頭實際的角度和遠近，帶阻尼追 camYaw、shPitch、shDist；y 是鏡頭跟的腳下高度
     this.shVel = {};
     this.bodyVel = {};              // 越肩時身體轉向也是彈簧，起步不會一下子甩過去
     this.drag = { yaw: 0, pitch: 0, last: 0 };   // 拖曳的速度（弧度／毫秒），放手時滑一段
@@ -117,6 +127,12 @@ export class Player {
       if (Number.isFinite(m?.sens)) this.mouseSens = THREE.MathUtils.clamp(m.sens, 0.3, 2.5);
       this.invertY = m?.invert === true;
     } catch {}
+    this.view = { ...SH_VIEW };     // 越肩的廣度和魚眼（暫停選單裡調）
+    try {
+      const v = JSON.parse(localStorage.getItem('view') || 'null');
+      if (Number.isFinite(v?.fov)) this.view.fov = THREE.MathUtils.clamp(v.fov, ...SH_FOV);
+      if (Number.isFinite(v?.fish)) this.view.fish = THREE.MathUtils.clamp(v.fish, 0, 1);
+    } catch {}
     this.cursorWanted = null;       // 主程式：面板、打字框打開時要游標，放開鎖定
     this.mv = { x: 0, z: 0 };       // 越肩走路的速度（公尺／秒），帶起步和停下
     this.bodyRel = 0;               // 越肩平移、倒退時身體要轉離視線多少
@@ -131,8 +147,9 @@ export class Player {
     addEventListener('pagehide', () => {
       try { sessionStorage.setItem('camDist', JSON.stringify({ free: this.camDist, sh: this.shDist })); } catch {}
     });
-    camera.fov = this.baseFov();
-    camera.updateProjectionMatrix();
+    this.fov = this.baseFov();      // 一般鏡頭的視角；越肩再加上鏡頭變形 bendK（1 是不彎），切換時兩個一起慢慢換過去
+    this.bendK = this.wantK();
+    this.applyLens();
     this.debug = false;             // ?debug：V 鍵印出鏡頭位置
     this.camPos = new THREE.Vector3();
     this.camLook = new THREE.Vector3();
@@ -154,6 +171,7 @@ export class Player {
     this.raycaster = new THREE.Raycaster();
     this.raycaster.layers.enable(1);   // 動物在圖層 1
     this.animals = null;            // 主程式建好動物後填進來
+    this.actionables = [];          // 別的模組掛上來的互動：(x, z) => { kind, p, d } 或 null，按了呼叫 p.act()（黑眼的「跟著」，scene/guide.js）
     this.marker = this.makeMarker();
     this.markerT = 1;
     this.moving = true;
@@ -458,7 +476,44 @@ export class Player {
   }
 
   baseFov() {
-    return this.shoulder ? shoulderFov() : 50;
+    return this.freeShoulder() ? shoulderFov(this.view.fov) : this.focusFov();
+  }
+
+  // 看畫、照鏡子的視角：取景距離照它算
+  focusFov() {
+    return this.shoulder ? SH_FOCUS_FOV : 50;
+  }
+
+  // 越肩走路時才照設定的廣度和魚眼；看畫、照鏡子要看得正，不彎
+  freeShoulder() {
+    return this.shoulder && !this.focus?.camPos && !this.focus?.orb;
+  }
+
+  // 現在該彎多少（1 是不彎）
+  wantK() {
+    return this.freeShoulder() ? Math.max(1 - this.view.fish, 1e-3) : 1;
+  }
+
+  // 暫停選單改越肩的廣度、魚眼：鏡頭在 update 裡慢慢換過去
+  setView(v) {
+    Object.assign(this.view, v);
+    try { localStorage.setItem('view', JSON.stringify(this.view)); } catch {}
+  }
+
+  // 視角和鏡頭變形套到鏡頭上：要彎時鏡頭畫一張比較廣的原圖，lens.js 再彎回畫面。攝影模式自己管，回來時呼叫這裡
+  applyLens() {
+    const cam = this.camera, W = window.innerWidth, H = window.innerHeight;
+    let fov = this.fov;
+    lens.on = this.bendK < 0.999;
+    if (lens.on) {
+      Object.assign(lens, { k: this.bendK, fo: bentFocal(this.fov, this.bendK, W / H) * H / 2, w: W, h: H, cover: SH_COVER });
+      lens.fs = fitSource(W, H);
+      fov = THREE.MathUtils.radToDeg(2 * Math.atan(H / 2 / lens.fs));
+    }
+    if (cam.fov !== fov) {
+      cam.fov = fov;
+      cam.updateProjectionMatrix();
+    }
   }
 
   // 照鏡子時拖曳是繞著自己轉，不離開鏡子。角度先記在目標上，鏡頭慢慢追過去；放手時照最後的速度再滑一段
@@ -502,7 +557,7 @@ export class Player {
   pick(cx, cy) {
     const rect = this.dom.getBoundingClientRect();
     const ndc = new THREE.Vector2(((cx - rect.left) / rect.width) * 2 - 1, -((cy - rect.top) / rect.height) * 2 + 1);
-    this.raycaster.setFromCamera(ndc, this.camera);
+    this.raycaster.setFromCamera(unbend(ndc), this.camera);
     return this.raycaster.intersectObjects(this.world.raycastTargets, false).find((h) => isShown(h.object) && !h.object.userData.ghost);
   }
 
@@ -554,7 +609,7 @@ export class Player {
   planFocus(p) {
     const W = window.innerWidth, H = window.innerHeight, pw = panelW();
     const visW = pw ? (W - 2 * dockR() - pw) / W : 1, visH = pw ? 1 : 0.58;
-    const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    const tanV = Math.tan(THREE.MathUtils.degToRad(this.focusFov() / 2));
     const fd = Math.max(1.6, (p.h * 1.6) / 2 / (tanV * visH), (p.w * 1.4) / 2 / (tanV * (W / H) * visW));
     const n = p.n, t = new THREE.Vector3(-n.z, 0, n.x);
     let stand = null;
@@ -579,7 +634,7 @@ export class Player {
   planMirror() {
     const m = this.world.mirror, n = m.n;
     const visH = panelW() ? 1 : 0.6;
-    const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    const tanV = Math.tan(THREE.MathUtils.degToRad(this.focusFov() / 2));
     const d = 0.35 + Math.max(1.8, Math.max(2.0, this.character.dims.topY * 1.3) / 2 / (tanV * visH));
     const stand = this.world.findWalkable(m.x + n.x * d, m.z + n.z * d, this.pos.x, this.pos.z) || { x: this.pos.x, z: this.pos.z };
     return {
@@ -600,7 +655,7 @@ export class Player {
     // 換到臉或全身時遠近回到預設，轉到的角度留著
     if (f.mode && f.mode !== mode) f.orb.tZoom = 1;
     f.mode = mode;
-    const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * visH;
+    const tanV = Math.tan(THREE.MathUtils.degToRad(this.focusFov() / 2)) * visH;
     const gap = Math.max(0.9, (p.x - m.x) * n.x + (p.z - m.z) * n.z);
     if (mode === 'face') {
       const d = THREE.MathUtils.clamp((dims.headH * 1.7) / 2 / tanV, 0.7, gap - 0.3);
@@ -812,7 +867,7 @@ export class Player {
     }
   }
 
-  // 動作按鈕現在該做什麼：看畫、照鏡子、挑相機、看說明、聽樹洞、坐下、拿點心、摸動物、跟訪客聊天、搭船、吃一口、起來。回傳 { kind, p? } 或 null
+  // 動作按鈕現在該做什麼：看畫、照鏡子、挑相機、看說明、聽樹洞、坐下、拿點心、摸動物、跟訪客聊天、搭船、吃一口、起來，還有 actionables 掛上來的（跟著黑眼）。回傳 { kind, p? } 或 null
   actionTarget() {
     const ch = this.character;
     // 有鏡頭對著自己：互動鍵先讓給「看鏡」，被拍只是一下子，鏡頭移開了原本的按鍵就回來（attention.js 有緩衝）
@@ -866,6 +921,10 @@ export class Player {
       const d = Math.hypot(x - ex.x, z - ex.z);
       if (d < ex.r) list.push({ kind: 'exit', p: ex, d });
     }
+    for (const f of this.actionables) {
+      const t = f(x, z);
+      if (t) list.push(t);
+    }
     if (list.length) return list.reduce((a, b) => (b.d < a.d ? b : a));
     return ch.food ? { kind: 'eat' } : null;
   }
@@ -895,6 +954,7 @@ export class Player {
         ch.bite();
         this.events.onFood?.();
         break;
+      default: t.p?.act?.();
     }
   }
 
@@ -969,6 +1029,7 @@ export class Player {
     this.sh.pitch = this.shPitch;
     this.sh.dist = this.shDist;
     this.sh.reach = null;
+    this.sh.y = this.pos.y;
     this.shVel = {};
     this.turnVel = 0;
     this.desiredCamera(this.camPos, this.camLook);
@@ -1035,7 +1096,8 @@ export class Player {
           return this.liftPos.set(head.x + (dx / h) * Math.cos(e) * len, head.y + Math.sin(e) * len, head.z + (dz / h) * Math.cos(e) * len);
         };
         // 二分找最少要抬多少
-        let lo = 0, hi = CLIP_LIFT;
+        // 區域可以寫 camLift 改最多抬多少：鏡宮有天花板，抬了反而撞上去，給 0 就是直接往前移
+        let lo = 0, hi = this.world.camLift ?? CLIP_LIFT;
         if (this.world.camClip(head, lifted(hi)) >= 1) {
           for (let i = 0; i < 8; i++) {
             const m = (lo + hi) / 2;
@@ -1109,15 +1171,16 @@ export class Player {
     this.character.gazeP = this.gazeP;
   }
 
-  // 越肩：鏡頭在右肩後面，視線跟角色前方平行。角色在畫面左邊三分之一、略低；
+  // 越肩：鏡頭在右肩後面，視線跟角色前方平行。角色在畫面中線偏左、略低；
   // 直拿畫面窄，角色只偏左一點、放得更低，前方和上方多留空間
   shoulderCamera(outPos, outLook) {
-    const port = this.camera.aspect < 1;
-    const tanV = Math.tan(THREE.MathUtils.degToRad(this.baseFov() / 2)), tanH = tanV * this.camera.aspect;
+    const asp = this.camera.aspect, port = asp < 1;
+    // 畫面上離中線多遠（半個畫面高當 1）換成離正前方的斜率；照鏡頭變形反推，角色才落在想要的位置
+    const k = this.wantK(), fo = bentFocal(this.baseFov(), k, asp), slope = (x) => Math.tan(Math.atan(k * x / fo) / k);
     const d = this.sh.dist, p = this.sh.pitch;
     const fx = -Math.sin(this.sh.yaw), fz = -Math.cos(this.sh.yaw);
-    const side = Math.min(1.2, (port ? 0.12 : 0.3) * d * tanH);
-    const piv = this.headPos.set(this.pos.x - fz * side, this.pos.y + SH_UP, this.pos.z + fx * side);
+    const side = Math.min(1.2, d * slope((port ? 0.12 : 0.24) * asp));
+    const piv = this.headPos.set(this.pos.x - fz * side, this.sh.y + SH_UP, this.pos.z + fx * side);
     const e = Math.max(p, SH_LOW), ce = Math.cos(e);
     outPos.set(piv.x - fx * ce * d, piv.y + Math.sin(e) * d, piv.z - fz * ce * d);
     // 背後是山坡或石台：越肩不往上抬，往肩膀收近。收近要快才不會穿進坡裡，退回去慢慢來，免得一抽一抽
@@ -1126,7 +1189,7 @@ export class Player {
     if (this.sh.reach < 1) outPos.lerpVectors(piv, outPos, this.sh.reach);
     outPos.y = Math.max(outPos.y, this.world.camFloor(outPos.x, outPos.z) + 0.3);
     // 視線往上偏一點，肩膀落在畫面中線下方；往下拉過 SH_LOW 的部分換成抬頭
-    const v = THREE.MathUtils.clamp(p - Math.atan((port ? 0.36 : 0.1) * tanV), -ZENITH, ZENITH), cv = Math.cos(v);
+    const v = THREE.MathUtils.clamp(p - Math.atan(slope(port ? 0.36 : 0.1)), -ZENITH, ZENITH), cv = Math.cos(v);
     outLook.set(outPos.x + fx * cv * 8, outPos.y - Math.sin(v) * 8, outPos.z + fz * cv * 8);
   }
 
@@ -1282,6 +1345,9 @@ export class Player {
     }
     if (this.boarding) this.updateBoard(dt);
     else this.pos.y = w.groundY(this.pos.x, this.pos.z, this.pos.y);
+    // 鏡頭跟的高度（越肩、手持相機用）：攝影模式裡也要跟，所以不放在下面的鏡頭那段
+    if (Math.abs(this.pos.y - this.sh.y) > SH_STEP_SNAP) { this.sh.y = this.pos.y; this.shVel.y = 0; }
+    else damp(this.sh, 'y', this.pos.y, this.shVel, SH_STEP_T, dt);
 
     // 角色轉向：走路時面向前進方向，看畫或照鏡子時面向它
     // 越肩時身體跟著視線轉（倒退走也是面向前方）；照路線走去看畫時反過來，鏡頭慢慢轉到角色背後
@@ -1331,12 +1397,15 @@ export class Player {
         const e = this.easeT / SH_EASE;
         T = Math.max(T, T + (0.35 - T) * e * e * (3 - 2 * e));
       }
-      const fov = this.baseFov();
-      if (this.camera.fov !== fov) {
-        this.camera.fov = Math.abs(fov - this.camera.fov) < 0.05 ? fov : this.camera.fov + (fov - this.camera.fov) * Math.min(1, dt * 5);
-        this.camera.updateProjectionMatrix();
+      // 切換越肩、走去看畫時，視角和鏡頭變形慢慢換過去
+      const fov = this.baseFov(), k = this.wantK();
+      if (this.fov !== fov || this.bendK !== k) {
+        const a = Math.min(1, dt * 5);
+        this.fov = Math.abs(fov - this.fov) < 0.05 ? fov : this.fov + (fov - this.fov) * a;
+        this.bendK = Math.abs(k - this.bendK) < 0.002 ? k : this.bendK + (k - this.bendK) * a;
         settling = true;
       }
+      this.applyLens();
       for (const k of 'xyz') {
         damp(this.camPos, k, dPos[k], this.posVel, T, dt);
         damp(this.camLook, k, dLook[k], this.lookVel, T, dt);

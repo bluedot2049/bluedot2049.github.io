@@ -480,7 +480,9 @@ export function furnish(room, R, set, noCat, tidy = false) {
     if (R() < 0.6) {
       const low = ['crate', 'booksPile', 'plant'][Math.floor(R() * 3)];
       const d = PROPS[low].d;
-      place(low, pt.x + pt.nx * (d / 2 + 0.25), pt.z + pt.nz * (d / 2 + 0.25), rot, sp.entry);
+      // low 是 false（前廳）：窗前不放，照樣做一次再丟，亂數才對得上
+      if (win.low === false) PROPS[low].build(new Kit(R));
+      else place(low, pt.x + pt.nx * (d / 2 + 0.25), pt.z + pt.nz * (d / 2 + 0.25), rot, sp.entry);
     }
   }
 

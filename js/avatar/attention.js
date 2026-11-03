@@ -4,6 +4,7 @@
 // 別人的鏡頭（相機、空拍機）對著自己時算「被拍」，按「看鏡」（toggle）就一直看著它；沒按只會偶爾瞄一眼。自己拍時照攝影模式的看鏡。
 // 這裡只回答看哪一點、那一點是誰（pid，同步給別人用）；什麼時候輪到注意力管、轉成頭的角度在 player.updateGaze
 import * as THREE from 'three';
+import { bend } from '../core/lens.js';
 
 // 發現得到別人鏡頭的距離（公尺）；身高佔畫面高度不到 MIN_SIZE 是背景裡的小人，不算被拍
 const NOTICE = 12, MIN_SIZE = 0.1;
@@ -281,7 +282,7 @@ export class Attention {
     let best = null, bd = 48 * 48;
     for (const s of this.seen.values()) {
       if (!s.on) continue;
-      const p = this.q.copy(s.lens.pos).project(camera);
+      const p = bend(this.q.copy(s.lens.pos).project(camera));
       if (p.z > 1) continue;
       const x = rect.left + ((p.x + 1) / 2) * rect.width, y = rect.top + ((1 - p.y) / 2) * rect.height, d = (x - cx) ** 2 + (y - cy) ** 2;
       if (d < bd) { bd = d; best = s.lens.id; }

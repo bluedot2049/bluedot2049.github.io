@@ -8,6 +8,7 @@ import { Manatee, TABLE_LINES } from '../../npc/manatee.js';
 import { Animals } from '../../npc/animals.js';
 import { Visitors } from '../../npc/visitors.js';
 import { HORIZON, SUN_DIR } from './outdoor.js';
+import { TD } from './outdoor-map.js';
 import { StudyNight } from '../../audio/study.js';
 import { VestibuleSound } from './vestibule-sound.js';
 import { CAMERAS, SOON } from '../../camera/cameras.js';
@@ -15,6 +16,9 @@ import { CAMERAS, SOON } from '../../camera/cameras.js';
 // 背景音樂「星盤夜讀」（study.js，現場合成）：走進「歡迎光臨煉金畫廊」那間才開始放，往後的房間和戶外一路放著。
 // 那間一進門就是落地擺鐘，滴答聲從那裡來
 export const bgm = { src: StudyNight, from: '02-nigredo' };
+
+// 調色（grade.js）：linear 是霧照 env 的線性霧，只調顏色；色調「畫廊01」在 tones.js。?debug 時右上角可以即時調，「複製」貼回這裡
+export const grade = { linear: 1, tone: '畫廊01' };
 
 export function build(scene, { gallery }) {
   return buildWorld(scene, gallery);
@@ -36,6 +40,26 @@ export const beast = {
     { x: 9, z: -70, place: '渡口', room: 3 },
   ],
 };
+
+// 黑眼（scene/guide.js）帶得到的地方，去過才列，渡船 guide.js 自己加在第一個。id 只用小寫英文和數字（會送給別人）。
+// 房間站在中間，名字長的（歡迎光臨⋯）照白獸登報那樣叫短的；戶外是陽台、原野、大樹的樹洞、涼亭
+const ROOM_SHORT = { corridor: '長廊', rotunda: '展廳' };
+export function guide(world) {
+  const list = world.rooms.filter((r) => r.type !== 'outdoor').map((r) => ({
+    id: `room${r.index}`, name: [...(r.data.name || '')].length > 4 ? ROOM_SHORT[r.type] ?? r.data.name : r.data.name, room: r.index, x: r.center.x, z: r.center.z,
+  }));
+  const out = world.outdoor;
+  if (!out) return list;
+  const ho = out.hollow, pv = out.pavilion;
+  list.push(
+    { id: 'terrace', name: '陽台', tag: '宴', x: 0, z: out.door - TD / 2, r: 5 },
+    // 原野站在石階下來、大樹西邊那片；走進草原任何地方都算去過
+    { id: 'meadow', name: '原野', x: -6, z: out.door - 16, at: (x, z) => out.inMeadow(z) && out.placeAt(x, z) === out.meadow },
+  );
+  if (ho) list.push({ id: 'tree', name: '大樹', tag: '樹洞', x: ho.x + ho.n.x * 1.6, z: ho.z + ho.n.z * 1.6, look: { x: ho.x, y: ho.y, z: ho.z } });
+  if (pv) list.push({ id: 'pavilion', name: '涼亭', x: pv.x, z: pv.z, r: pv.r + 1.5 });
+  return list;
+}
 
 // 室內和戶外的光線、霧。走出後門時在兩組之間漸變
 export function env() {

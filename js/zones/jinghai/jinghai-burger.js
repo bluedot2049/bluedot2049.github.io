@@ -244,8 +244,8 @@ export function buildBurger({ coarse = false } = {}) {
     block(x - 0.36, 25.2, x + 0.36, 25.75);
   });
   // 北牆裡面掛一顆大咬月（jinghai.js 貼圖）；天花板一格一格的燈
-  const wallLogo = { x: -15.6, y: 3.6, z: F.z0 + 0.29, r: 1.25, ry: 0 };
-  const bandLogo = { x: F.x1 + 0.23, y: 5.6, z: 33, r: 0.95, ry: E };
+  const wallLogo = { x: -15.6, y: 3.6, z: F.z0 + 0.27, r: 1.25, d: 0.12, ry: 0 };
+  const bandLogo = { x: F.x1 + 0.2, y: 5.64, z: 33, r: 0.95, d: 0.28, ry: E };
   for (let x = -19.5; x < -11.5; x += 2.4) for (let z = 27; z < 40; z += 3) glowBox(x - 0.5, F.roof - 0.03, z - 0.5, x + 0.5, F.roof, z + 0.5, '#fff4e0');
   for (let z = 27.5; z < 39; z += 2.6) glowBox(-28.5, F.roof - 0.03, z - 0.2, -25.5, F.roof, z + 0.2, '#fff4e0');
   // 桌子：北排三張、南排三張，每張兩把椅子；吊燈

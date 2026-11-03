@@ -6,15 +6,19 @@
 // 每個區域在 zone-*.js 匯出一組 grade（數值、曲線），main.js 在建場景之前裝上；沒有匯出的區域不受影響（uGrade.on 是 0）。
 // 同一張地圖可以分區：grade.regions 是一塊一塊的範圍（圓或方框），角色走進去就慢慢換成那一塊的色調，只要寫跟全區不一樣的幾項。
 // 調好的色調可以存進 tones.js，區域或分區寫 tone: '名字' 就套上。
-// 分區也可以照天氣：{ name, weather: 'rain' | 'wet' } 不看位置，權重是 WEATHER 現在的值（海市的雨，rain.js 每一幀寫）。
+// 分區也可以照天氣：{ name, weather: 'rain' | 'wet' | 'dust' | 'calm' } 不看位置，權重是 WEATHER 現在的值（海市的雨 rain.js、蜃樓的塵 shenlou-dust.js 每一幀寫）。
 // 天氣的分區疊在前一個天氣分區上：「雨」只寫比「雨後」多的那幾項，下雨的時候地一定是濕的。
+// 沙漠的塵另外兩樣，預設關著：scatter 讓朝太陽那一側的霧和天邊被照亮（細沙把陽光往前散），drift 讓霧的濃淡照一張被風吹著走的雜訊圖一團一團變。
 // 自己寫的 ShaderMaterial（霧、煙、光暈這些疊上去的層）不經過內建的霧，要自己引入 GRADE_GLSL，見下面的 gradeUniforms
 import * as THREE from 'three';
 import { TONES } from './tones.js';
 import { WET, WET_GLSL } from './wet.js';
+import { hash } from './servertime.js';
 
 // density：相機高度的霧有多濃；falloff：每往上一公尺變淡多少；base：霧最濃的高度（海面）；start：鏡頭前幾公尺不起霧；maxFog：高度霧最多蓋掉幾成
 // far、farAir：遠景空氣，far 公尺以外不管高低都罩上一層，越遠越接近 farAir，收向天邊的顏色。far 是 0 時沒有
+// drift：高度霧的濃淡最多變幾成（一團一團被風吹過去，0 是不變）；driftSize：一張雜訊圖鋪多大（公尺），團大約是它的四分之一。風往哪吹由區域每一幀寫 GRADE.driftOff
+// scatter、scatterPow、scatterColor：朝太陽看時霧和天邊被照亮多少、光集中在太陽附近多窄（大一點越窄）、什麼顏色。太陽的方向由區域寫 GRADE.sunDir。scatter 是 0 時沒有
 // exposure：物件先亮幾格（只動東西，不動霧和天空，分區時拿來把一塊壓暗或提亮）
 // desat：暗部和中間調降多少飽和度；keep：亮到多少以上留著原本的顏色（燈籠、窗光）；cool：綠色往藍綠推多少
 // shadow：最暗的地方抬到這個顏色（sRGB），不會再是黑的；gain：最亮的地方壓成這個顏色，白色是不動
@@ -22,22 +26,24 @@ import { WET, WET_GLSL } from './wet.js';
 // glow：疊上去發光的那幾層（光暈、燈照地面、水上燈影、被燈照暖的霧）整體再乘多少
 // curves：亮度和紅綠藍四條曲線，每條是 [輸入, 輸出] 的點，0 到 1。紅綠藍先套，亮度最後套在三個色版上
 // tune：各區域自己登記的參數（haze.js 的霧色、霧的濃淡），用登記時的 key 當名字
-// linear：1 是不換高度霧，內建材質照舊用場景的線性霧（光線面板的 near、far），只調顏色（畫廊）。整個區域一個，分區不能改
-export const NUMBERS = ['density', 'falloff', 'base', 'start', 'maxFog', 'far', 'farAir', 'exposure', 'desat', 'keep', 'cool', 'sat', 'vivid', 'contrast', 'glow'];
-export const COLORS = ['shadow', 'gain'];
-export const FOG_KEYS = NUMBERS.slice(0, 7);
+// linear：1 是不換高度霧，內建材質照舊用場景的線性霧（光線面板的 near、far），只調顏色（畫廊、月球、汀）。整個區域一個，分區不能改
+export const NUMBERS = ['density', 'falloff', 'base', 'start', 'maxFog', 'far', 'farAir', 'drift', 'driftSize', 'scatter', 'scatterPow', 'exposure', 'desat', 'keep', 'cool', 'sat', 'vivid', 'contrast', 'glow'];
+export const COLORS = ['shadow', 'gain', 'scatterColor'];
+export const FOG_KEYS = NUMBERS.slice(0, 11);
 export const CHANNELS = ['l', 'r', 'g', 'b'];
-// 沒寫的項目用這組（海市最早調好的樣子）
-const DEFAULTS = { density: 0.016, falloff: 0.04, base: -0.6, start: 6, maxFog: 1, far: 0, farAir: 0, exposure: 0, desat: 0.2, keep: 0.75, cool: 0.9, sat: 1, vivid: 0.6, contrast: 1.6, glow: 1, shadow: '#16151b', gain: '#ffffff' };
-// 不改畫面的一組：沒有匯出 grade 的區域（畫廊）在 ?debug 時先裝這組，調色面板才打得開。調好按「複製」貼回 zone-*.js 才會上線
+// 沒寫的項目用這組（海市最早調好的樣子；沒有霧團、沒有朝太陽發亮）
+const DEFAULTS = { density: 0.016, falloff: 0.04, base: -0.6, start: 6, maxFog: 1, far: 0, farAir: 0, drift: 0, driftSize: 160, scatter: 0, scatterPow: 6, exposure: 0, desat: 0.2, keep: 0.75, cool: 0.9, sat: 1, vivid: 0.6, contrast: 1.6, glow: 1, shadow: '#16151b', gain: '#ffffff', scatterColor: '#ffe2b8' };
+// 不改畫面的一組：沒有匯出 grade 的區域在 ?debug 時先裝這組，調色面板才打得開。調好按「複製」貼回 zone-*.js 才會上線
 export const NEUTRAL = { linear: 1, density: 0, desat: 0, cool: 0, contrast: 1, vivid: 0, glow: 1, shadow: '#000000' };
 
 // 著色器讀的那一份。fogLin、pivot 是每次畫之前照場景的霧色先算好的（不用每個像素各算一次），curves 是 0 時跳過查曲線
+// driftOff：霧團被風吹走了多遠（公尺，區域每一幀加）；sunDir：太陽的方向，長度是太陽多亮（0 到 1）；scatterLin：scatterColor 換成線性的
 export const GRADE = {
   on: 0, linear: 0, density: 0.016, falloff: 0.04, base: -0.6, start: 6, maxFog: 1, far: 0, farAir: 0, exposure: 0, expo: 1,
-  desat: 0.2, keep: 0.75, cool: 0.9, sat: 1, vivid: 0.6, contrast: 1.6, glow: 1,
+  drift: 0, driftSize: 160, driftOff: new THREE.Vector2(), scatter: 0, scatterPow: 6, scatterLin: new THREE.Vector3(1, 1, 1), sunDir: new THREE.Vector3(0, 1, 0),
+  desat: 0.2, keep: 0.75, cool: 0.9, sat: 1, vivid: 0.6, contrast: 1.6, glow: 1, plain: 0,
   shadow: new THREE.Vector3(), gain: new THREE.Vector3(1, 1, 1), fogLin: new THREE.Vector3(), airLin: new THREE.Vector3(), pivot: 0.1, curves: 0,
-  lut: null,
+  lut: null, noise: null,
 };
 // 天邊比霧深多少（霧色乘這個數）：遠景空氣收向這個顏色，退進去的遠山才跟天邊同色。
 // 海市的天空球「天邊深淺」用的就是這一個；沒有天空球的區域是 1，天邊就是霧色
@@ -51,6 +57,36 @@ GRADE.lut.magFilter = GRADE.lut.minFilter = THREE.LinearFilter;
 GRADE.lut.generateMipmaps = false;
 const ONE = THREE.DataUtils.toHalfFloat(1);
 for (let i = 0; i < N; i++) lutData[i * 4 + 3] = ONE;
+
+// 霧團用的雜訊：64×64、上下左右接得起來的平滑雜訊（4、8、16 格三層，大的佔多），拉滿 0 到 1，一張鋪 driftSize 公尺。
+// 別的東西要一張平滑的雜訊也拿這張（蜃樓地上的流沙），所以留著 mipmap
+GRADE.noise = (() => {
+  const n = 64, data = new Uint8Array(n * n), v = new Float32Array(n * n);
+  const at = (c, i, j) => hash(((i % c) + c) % c, ((j % c) + c) % c, c);
+  let lo = Infinity, hi = -Infinity;
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      let s = 0;
+      for (const [c, w] of [[4, 0.55], [8, 0.3], [16, 0.15]]) {
+        const fx = (x / n) * c, fy = (y / n) * c, i = Math.floor(fx), j = Math.floor(fy);
+        const tx = fx - i, ty = fy - j, sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+        const a = at(c, i, j), b = at(c, i + 1, j), d = at(c, i, j + 1), e = at(c, i + 1, j + 1);
+        s += w * (a + (b - a) * sx + (d - a) * sy + (a - b - d + e) * sx * sy);
+      }
+      v[y * n + x] = s;
+      lo = Math.min(lo, s);
+      hi = Math.max(hi, s);
+    }
+  }
+  for (let i = 0; i < v.length; i++) data[i] = Math.round(((v[i] - lo) / (hi - lo)) * 255);
+  const t = new THREE.DataTexture(data, n, n, THREE.RedFormat, THREE.UnsignedByteType);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true;
+  t.needsUpdate = true;
+  return t;
+})();
 
 // 單調的三次曲線（Fritsch–Carlson）：點跟點之間平滑接起來，不會超出前後兩點的高低，暗部不會反黑
 export function curveFn(pts) {
@@ -106,19 +142,33 @@ function hexVec(hex, v = new THREE.Vector3()) {
 // 霧色一律用場景的霧（uGrade.fogLin，線性），每個材質、每個像素都一樣，所以畫之前在 CPU 先算好，連支點的亮度一起
 // GRADE_VERT 只有霧和發光，頂點著色器也能用；GRADE_GLSL 是完整的，給片段著色器
 export const GRADE_VERT = `
-struct Grade { float on; float linear; float density; float falloff; float base; float start; float maxFog; float far; float farAir; float expo; float desat; float keep; float cool; float sat; float vivid; float contrast; float glow; vec3 shadow; vec3 gain; vec3 fogLin; vec3 airLin; float pivot; float curves; sampler2D lut; };
+struct Grade { float on; float linear; float density; float falloff; float base; float start; float maxFog; float far; float farAir; float drift; float driftSize; vec2 driftOff; float scatter; float scatterPow; vec3 scatterLin; vec3 sunDir; float expo; float desat; float keep; float cool; float sat; float vivid; float contrast; float glow; float plain; vec3 shadow; vec3 gain; vec3 fogLin; vec3 airLin; float pivot; float curves; sampler2D lut; sampler2D noise; };
 uniform Grade uGrade;
+// 霧團：視線走到一半的那一點查雜訊圖，濃的那團飄到視線上，後面的東西就退進霧裡一陣。只動高度霧，遠景空氣照舊收向天邊
+float gradeDrift( vec3 ray ) {
+	float n = textureLod( uGrade.noise, ( cameraPosition.xz + uGrade.driftOff + ray.xz * 0.5 ) / uGrade.driftSize, 0.0 ).r;
+	return max( 1.0 + uGrade.drift * ( n * 2.0 - 1.0 ), 0.0 );
+}
 float gradeHeightFog( vec3 world ) {
 	vec3 ray = world - cameraPosition;
 	float dist = length( ray );
 	float bdy = uGrade.falloff * ray.y;
 	float slope = abs( bdy ) > 1e-4 ? ( 1.0 - exp( - bdy ) ) / bdy : 1.0;
 	float amount = uGrade.density * exp( - uGrade.falloff * ( cameraPosition.y - uGrade.base ) ) * max( dist - uGrade.start, 0.0 ) * slope;
+	if ( uGrade.drift > 0.0 ) amount *= gradeDrift( ray );
 	return min( 1.0 - exp( - amount ), uGrade.maxFog );
 }
 float gradeAir( vec3 world ) {
 	if ( uGrade.far <= 0.0 ) return 0.0;
 	return uGrade.farAir * ( 1.0 - exp( - max( length( world - cameraPosition ) - uGrade.far, 0.0 ) / uGrade.far ) );
+}
+// 朝太陽看時霧和天邊多亮的那一份（線性色，加在霧色、天邊的顏色上）。sunDir 的長度是太陽現在多亮（夜裡、被塵遮住時短）。
+// 天空球也要加同一份（蜃樓的天空球在著色器裡呼叫它），完全進霧的東西才跟天接得起來
+vec3 gradeScatter( vec3 world ) {
+	float k = length( uGrade.sunDir );
+	if ( uGrade.scatter <= 0.0 || k < 1e-3 ) return vec3( 0.0 );
+	float c = max( dot( normalize( world - cameraPosition ), uGrade.sunDir ) / k, 0.0 );
+	return uGrade.scatterLin * ( uGrade.scatter * k * pow( c, uGrade.scatterPow ) );
 }
 // 兩層合起來一共蓋掉幾成：疊上去發光的層、自己混霧的煙和霧用這個（顏色都當成場景的霧）
 float gradeFog( vec3 world ) {
@@ -149,8 +199,8 @@ vec3 gradeCurvesOut( vec3 o ) {
 	return sRGBTransferEOTF( vec4( gradeCurves( sRGBTransferOETF( vec4( o, 1.0 ) ).rgb ), 1.0 ) ).rgb;
 }
 // col 在輸出空間（colorspace_fragment 之後），f 是高度霧（gradeHeightFog），air 是遠景空氣（gradeAir）。
-// fogLin 是高度霧要混的顏色（線性），平常就是場景的霧；海面這種要自己的霧色的才傳第三個參數
-vec3 gradeSurface( vec3 col, float f, vec3 fogLin, float air ) {
+// fogLin 是高度霧要混的顏色（線性），平常就是場景的霧；海面這種要自己的霧色的才傳第三個參數。airLin 是遠景空氣收向的顏色，平常是天邊
+vec3 gradeSurface( vec3 col, float f, vec3 fogLin, float air, vec3 airLin ) {
 	const vec3 LUMA = vec3( 0.2126, 0.7152, 0.0722 );
 	bool srgbOut = gradeSrgbOut();
 	vec3 s = ( srgbOut ? col : sRGBTransferOETF( vec4( col, 1.0 ) ).rgb ) * uGrade.expo;
@@ -160,18 +210,24 @@ vec3 gradeSurface( vec3 col, float f, vec3 fogLin, float air ) {
 	s = mix( s, vec3( dot( s, LUMA ) ), uGrade.desat * ( 1.0 - smoothstep( uGrade.keep - 0.2, uGrade.keep + 0.2, bright ) ) );
 	s = uGrade.shadow + s * ( uGrade.gain - uGrade.shadow );
 	vec3 c = mix( sRGBTransferEOTF( vec4( max( s, 0.0 ), 1.0 ) ).rgb, fogLin, f );
-	vec3 o = sRGBTransferOETF( vec4( c, 1.0 ) ).rgb;
-	float pivot = uGrade.pivot;
-	float l = dot( o, LUMA );
-	float l2 = l < pivot ? pivot * pow( l / pivot, uGrade.contrast ) : 1.0 - ( 1.0 - pivot ) * pow( max( 1.0 - l, 0.0 ) / ( 1.0 - pivot ), uGrade.contrast );
-	o *= l2 / max( l, 1e-4 );
-	float ol = dot( o, LUMA );
-	o = max( ol + ( o - ol ) * uGrade.sat * ( 1.0 + uGrade.vivid * smoothstep( 0.35, 0.8, max( o.r, max( o.g, o.b ) ) ) ), 0.0 );
-	o /= max( 1.0, max( o.r, max( o.g, o.b ) ) );
-	if ( air > 0.0 ) o = sRGBTransferOETF( vec4( mix( sRGBTransferEOTF( vec4( o, 1.0 ) ).rgb, uGrade.airLin, air ), 1.0 ) ).rgb;
+	vec3 o;
+	// 對比、飽和都沒動（plain）：遠景空氣直接在線性裡接著混，少換兩次色彩空間（手機省一點）。太亮的照輸出截掉，跟天空球一樣
+	if ( uGrade.plain > 0.5 ) o = sRGBTransferOETF( vec4( mix( c, airLin, air ), 1.0 ) ).rgb;
+	else {
+		o = sRGBTransferOETF( vec4( c, 1.0 ) ).rgb;
+		float pivot = uGrade.pivot;
+		float l = dot( o, LUMA );
+		float l2 = l < pivot ? pivot * pow( l / pivot, uGrade.contrast ) : 1.0 - ( 1.0 - pivot ) * pow( max( 1.0 - l, 0.0 ) / ( 1.0 - pivot ), uGrade.contrast );
+		o *= l2 / max( l, 1e-4 );
+		float ol = dot( o, LUMA );
+		o = max( ol + ( o - ol ) * uGrade.sat * ( 1.0 + uGrade.vivid * smoothstep( 0.35, 0.8, max( o.r, max( o.g, o.b ) ) ) ), 0.0 );
+		o /= max( 1.0, max( o.r, max( o.g, o.b ) ) );
+		if ( air > 0.0 ) o = sRGBTransferOETF( vec4( mix( sRGBTransferEOTF( vec4( o, 1.0 ) ).rgb, airLin, air ), 1.0 ) ).rgb;
+	}
 	o = gradeCurves( o );
 	return srgbOut ? gradeDither( o ) : sRGBTransferEOTF( vec4( o, 1.0 ) ).rgb;
 }
+vec3 gradeSurface( vec3 col, float f, vec3 fogLin, float air ) { return gradeSurface( col, f, fogLin, air, uGrade.airLin ); }
 vec3 gradeSurface( vec3 col, float f, vec3 fogLin ) { return gradeSurface( col, f, fogLin, 0.0 ); }
 vec3 gradeSurface( vec3 col, float f ) { return gradeSurface( col, f, uGrade.fogLin, 0.0 ); }
 `;
@@ -206,7 +262,7 @@ const PARS_FRAGMENT = `#ifdef USE_FOG
 #endif`;
 
 // 霧在 colorspace 之後才上：直接畫上螢幕時這裡已經是 sRGB，畫進後製的貼圖時還是線性的（gradeSurface 自己會分）。
-// 下過雨的區域，吃光的材質先濕（wet.js），再調色、混霧
+// 下過雨的區域，吃光的材質先濕（wet.js），再調色、混霧。朝太陽那一側的霧比較亮（scatter，沒開時是 0）
 const FRAGMENT = `#ifdef USE_FOG
 	if ( uGrade.on > 0.5 ) {
 		#ifdef LAMBERT
@@ -216,7 +272,8 @@ const FRAGMENT = `#ifdef USE_FOG
 		#ifndef FOG_EXP2
 			if ( uGrade.linear > 0.5 ) { gradeF = smoothstep( fogNear, fogFar, vFogDepth ); gradeA = 0.0; }
 		#endif
-		gl_FragColor.rgb = gradeSurface( gl_FragColor.rgb, gradeF, uGrade.fogLin, gradeA );
+		vec3 gradeS = gradeScatter( vFogWorld );
+		gl_FragColor.rgb = gradeSurface( gl_FragColor.rgb, gradeF, uGrade.fogLin + gradeS, gradeA, uGrade.airLin + gradeS );
 	} else {
 		#ifdef FOG_EXP2
 			float fogFactor = 1.0 - exp( - fogDensity * fogDensity * vFogDepth * vFogDepth );
@@ -235,13 +292,17 @@ let fileSet = { linear: 0, base: {}, regions: [] };   // zone 檔裡原本的樣
 // solo：只看哪一組（-1 是全區，數字是第幾個分區，null 是照位置）；mode：'edit' 看正在改的，'file' 看 zone 檔原本的
 export const VIEW = { solo: null, mode: 'edit', pos: null };
 export const WEIGHTS = [];   // 每個分區現在佔幾成（照位置、平滑過）
-export const WEATHER = { rain: 0, wet: 0 };   // 照天氣的分區現在佔幾成（0 到 1），有天氣的區域每一幀寫
+// 照天氣的分區現在佔幾成（0 到 1），有天氣的區域每一幀寫：海市的雨（rain 下雨、wet 雨後），蜃樓的塵（dust 風沙、calm 沙停）
+export const WEATHER = { rain: 0, wet: 0, dust: 0, calm: 0 };
 let installed = false, dirty = true, baked = null, bakedFile = null, applied = [], appliedTune = 0;
 
 // 本機存的色調（面板「存成色調」），只有這台電腦看得到；複製出去時會展開成數值
 let localTones = {};
 export const tones = () => ({ ...TONES, ...localTones });
 export const isFileTone = (name) => Object.hasOwn(TONES, name);
+// 本機的一組跟 tones.js 同名的是不是一樣（數字照複製出去那一行比到小數四位，順序不算）
+const sortedRounded = (k, v) => (typeof v === 'number' ? r4(v) : v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map((key) => [key, v[key]])) : v);
+export const sameAsFile = (name, t) => isFileTone(name) && JSON.stringify(t, sortedRounded) === JSON.stringify(TONES[name], sortedRounded);
 export function setLocalTones(t) { localTones = t || {}; dirty = true; }
 
 const own = (p) => { const o = {}; for (const k of [...NUMBERS, ...COLORS]) if (p?.[k] != null) o[k] = p[k]; return o; };
@@ -268,7 +329,7 @@ export const fileHasRegion = (i) => i < fileSet.regions.length;
 
 function bake(r) {
   return {
-    n: NUMBERS.map((k) => r[k]), shadow: hexVec(r.shadow), gain: hexVec(r.gain),
+    n: NUMBERS.map((k) => r[k]), shadow: hexVec(r.shadow), gain: hexVec(r.gain), scatter: hexVec(r.scatterColor),
     lut: bakeLut(r.curves), straight: CHANNELS.every((k) => isLine(r.curves[k])), tune: r.tune,
   };
 }
@@ -291,7 +352,7 @@ export function regionWeight(r, x, z) {
   return 1 - t * t * (3 - 2 * t);
 }
 
-const acc = { n: new Float32Array(NUMBERS.length), shadow: new THREE.Vector3(), gain: new THREE.Vector3(), lut: new Float32Array(N * 3) };
+const acc = { n: new Float32Array(NUMBERS.length), shadow: new THREE.Vector3(), gain: new THREE.Vector3(), scatter: new THREE.Vector3(), lut: new Float32Array(N * 3) };
 const tmpC = new THREE.Color(), outC = new THREE.Color();
 // 照權重混好寫進 GRADE、更新曲線小圖、各區域登記的參數
 function apply(w) {
@@ -300,6 +361,7 @@ function apply(w) {
   acc.n.set(b0.n);
   acc.shadow.copy(b0.shadow);
   acc.gain.copy(b0.gain);
+  acc.scatter.copy(b0.scatter);
   acc.lut.set(b0.lut);
   let straight = b0.straight;
   for (let i = 0; i < B.length - 1; i++) {
@@ -308,13 +370,16 @@ function apply(w) {
     for (let j = 0; j < acc.n.length; j++) acc.n[j] += (b.n[j] - acc.n[j]) * t;
     acc.shadow.lerp(b.shadow, t);
     acc.gain.lerp(b.gain, t);
+    acc.scatter.lerp(b.scatter, t);
     if (!b.straight || !straight) for (let j = 0; j < acc.lut.length; j++) acc.lut[j] += (b.lut[j] - acc.lut[j]) * t;
     straight &&= b.straight;
   }
   NUMBERS.forEach((k, j) => { GRADE[k] = acc.n[j]; });
   GRADE.expo = 2 ** (GRADE.exposure / 2.2);   // 在 sRGB 裡乘，換算成大約亮幾格
+  GRADE.plain = GRADE.contrast === 1 && GRADE.sat === 1 && GRADE.vivid === 0 ? 1 : 0;   // 著色器走快的那條
   GRADE.shadow.copy(acc.shadow);
   GRADE.gain.copy(acc.gain);
+  GRADE.scatterLin.set(eotf(acc.scatter.x), eotf(acc.scatter.y), eotf(acc.scatter.z));
   GRADE.curves = straight ? 0 : 1;
   if (!straight) {
     for (let i = 0; i < N; i++) for (let c = 0; c < 3; c++) lutData[i * 4 + c] = THREE.DataUtils.toHalfFloat(acc.lut[i * 3 + c]);
@@ -360,6 +425,7 @@ export function touch() { dirty = true; }
 
 // 霧色每次畫之前抄一份：場景的霧（線性）、它在 sRGB 裡的亮度（S 曲線的支點）、天邊的顏色（遠景空氣）
 const oetf = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+const eotf = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 function syncFog(scene) {
   const c = scene.fog?.color;
   if (!c) return;

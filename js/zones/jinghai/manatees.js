@@ -6,6 +6,7 @@
 // 海牛人不擋路，跟海市的路人一樣，玩家走過去會穿過去
 import * as THREE from 'three';
 import { Kit, rng, mergeBucket } from '../../core/props.js';
+import { footShadow } from '../../core/footshadow.js';
 import { PROFILE, radiusAt } from '../../npc/manatee.js';
 
 const SKIN = '#91abb0', INK = '#2a2722', TONGUE = '#d98a85', BLUSH = '#e8a59c', MOUTH = '#5b2b2b';
@@ -786,9 +787,9 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
   faces.frustumCulled = false;
   faces.receiveShadow = true;
   group.add(faces);
-  // 腳下的影子：跟其他角色一樣是一圈淡影
+  // 腳下的影子：跟其他角色一樣是一圈淡影，走進房子的影子裡只剩接地的那一圈（footshadow.js）。身體比人胖，那一圈用整片圓影才露得出來
   const sgeo = new THREE.PlaneGeometry(1.1, 1.1).rotateX(-Math.PI / 2);
-  const shadows = new THREE.InstancedMesh(sgeo, new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }), agents.length);
+  const shadows = footShadow(new THREE.InstancedMesh(sgeo, undefined, agents.length), shadowTex, { contact: 1 });
   shadows.frustumCulled = false;
   group.add(shadows);
   // 手上拿的、坐的車：要拿的才有一份，沒拿的時候縮成 0。a[key] 記 { m 哪個網格, i 第幾個 }

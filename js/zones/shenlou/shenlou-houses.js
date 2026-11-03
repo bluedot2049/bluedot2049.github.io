@@ -146,12 +146,12 @@ function windTower(k, x, y, z, s, h, c) {
 
 // 一間房子：圓邊的夯土梯形、平頂一圈女兒牆，朝井那面開門、一兩組 I 窗、一排工字鋼樑頭。照日晷之城的規矩：
 // 同一圈一樣高（井邊那圈一層、外圈高一點，像看台往外升），三間一組中間那間（h.tall）高一層、頂上三支捕風塔（III）。圓頂留給神聖的房子，住家一律平頂。
-// num 是門牌號碼（I 碼寫在窗上）。回傳尺寸給 shenlou-iron.js、shenlou-water.js、shenlou-shops.js
-export function buildHouse(k, h, R, num) {
+// num 是門牌號碼（I 碼寫在窗上）；lift：牆再加高幾倍（shenlou.js 的 LIFT）。回傳尺寸給 shenlou-iron.js、shenlou-water.js、shenlou-shops.js
+export function buildHouse(k, h, R, num, lift = 1) {
   const W = h.w / 2, D0 = h.d0 / 2, D1 = h.d1 / 2, D = Math.min(D0, D1);
   // 拱廊兩邊壓低：下午的光要翻過屋頂才落得進拱廊
   const low = h.flank.includes('arcade'), tall = h.tall && !low;
-  const ht = low ? 3.5 + Math.min(0.6, h.band * 0.6) : (h.band ? 5 : 3.5) + (tall ? 1.1 : 0);
+  const ht = low ? 3.5 + Math.min(0.6, h.band * 0.6) : ((h.band ? 5 : 3.5) + (tall ? 1.1 : 0)) * lift;
   const c = WALLS[h.band];
   k.add(softPrism(trap(W, D0, D1), ht, 0.38, 0), c, 0, 0, 0);
   k.add(softPrism(trap(W + 0.06, D0 + 0.06, D1 + 0.06), 0.42, 0.42, 0.17), c, 0, ht, 0);

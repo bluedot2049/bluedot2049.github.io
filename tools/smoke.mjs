@@ -2,7 +2,7 @@
 //   node tools/smoke.mjs                 三個區域＋experiments 的預覽頁
 //   node tools/smoke.mjs --save base     指紋存成 tools/out/smoke-base.json
 //   node tools/smoke.mjs --diff base     跟存好的指紋比對，場景有任何不同就列出來
-// 每一區：無頭 Edge 開 ?q=mid&debug&crowd=0&beast=0&rain=0（白獸不排、不下雨，畫面才固定），亂數固定成同一串，等載入畫面收掉，記下
+// 每一區：無頭 Edge 開 ?q=mid&debug&crowd=0&beast=0&rain=0&dust=0.5（白獸不排、不下雨、塵固定在平常，畫面才固定），亂數固定成同一串，等載入畫面收掉，記下
 //   頁面錯誤、console.error、載不到的檔案（404）
 //   場景指紋：每種物件幾個、頂點總數、材質種類。同樣的亂數，搬檔前後應該一模一樣
 //   開場那一幀的 draw call 和三角形數（含水面反射），改效能時拿來比
@@ -38,7 +38,8 @@ const srv = http.createServer((q, r) => {
   });
 }).listen(PORT);
 const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'smoke-'));
-const edge = spawn(EDGE, ['--headless=new', `--remote-debugging-port=${DBG}`, `--user-data-dir=${prof}`, '--window-size=1280,800', '--autoplay-policy=no-user-gesture-required', 'about:blank']);
+// 多人頻道的 WebSocket 擋不掉（Network.setBlockedURLs 只管一般請求），直接讓 supabase.co 查不到網址，測試角色才不會出現在線上
+const edge = spawn(EDGE, ['--headless=new', `--remote-debugging-port=${DBG}`, `--user-data-dir=${prof}`, '--host-resolver-rules=MAP *.supabase.co ~NOTFOUND', '--window-size=1280,800', '--autoplay-policy=no-user-gesture-required', 'about:blank']);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let tgt;
 for (let i = 0; i < 90 && !tgt; i++) {
@@ -88,7 +89,7 @@ for (const zone of ZONES) {
   // 測試用的瀏覽器每次都是新的：清掉存檔，大家都從第一次來開始
   await send('Network.clearBrowserCookies');
   await ev(`try { localStorage.clear(); } catch (e) {}`).catch(() => {});
-  await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/?z=${zone}&q=mid&debug&crowd=0&beast=0&rain=0&from=${zone === 'gallery' ? 'haishi' : 'gallery'}` });
+  await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/?z=${zone}&q=mid&debug&crowd=0&beast=0&rain=0&dust=0.5&from=${zone === 'gallery' ? 'haishi' : 'gallery'}` });
   let ok = false;
   for (let i = 0; i < 240 && !ok; i++) {
     await sleep(250);

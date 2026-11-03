@@ -18,7 +18,8 @@ export const AIR = { veil: { value: 0 }, rain: { value: 0 }, halo: { value: 1 } 
 
 // 太陽拉長的人影（蜃樓用）：len 是一公尺高的東西影子多長，sx、sz 是影子倒向的方向；len 為 0 就照常畫腳下的圓影。
 // open(x, z)：那一點曬得到太陽嗎（井圈公寓裡照不到）。character.js 每一幀照這個拉影子，區域自己每一幀更新
-export const sunShadow = { len: 0, sx: 1, sz: 0, open: null };
+// map：這一區的太陽有陰影圖（蜃樓、靜海），建場景時打開；之後才建的人、海牛人腳下的影子改照陰影圖畫（footshadow.js）
+export const sunShadow = { len: 0, sx: 1, sz: 0, open: null, map: false };
 
 const LIT = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
 const GLOW = new THREE.MeshBasicMaterial({ vertexColors: true });

@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>鏡宮預覽</title>
+<script type="importmap">{ "imports": { "three": "../vendor/three.module.min.js" } }</script>
+<style>
+  html, body { margin: 0; height: 100%; background: #07060d; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; }
+  canvas { display: block; }
+  #hud { position: fixed; left: max(10px, env(safe-area-inset-left)); top: max(10px, env(safe-area-inset-top)); z-index: 5;
+    font: 12px/1.7 ui-monospace, Menlo, Consolas, monospace; color: #cdb88e; background: rgba(9, 7, 15, .66);
+    border: 1px solid rgba(201, 164, 90, .32); border-radius: 8px; padding: 7px 10px; max-width: calc(100vw - 40px); }
+  #stat { white-space: pre; }
+  #hud.min #rows { display: none; }
+  #rows { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+  #hud button { font: 12px sans-serif; background: rgba(40, 30, 22, .7); color: #e8d9b8; border: 1px solid rgba(201, 164, 90, .45); border-radius: 12px; padding: 3px 9px; cursor: pointer; }
+  #hud button.off { color: #8a7c66; border-color: rgba(201, 164, 90, .18); }
+  #help { position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 4;
+    font: 12px sans-serif; color: rgba(205, 184, 142, .7); pointer-events: none; white-space: nowrap; }
+  body.touch #help { display: none; }
+  #joy { position: fixed; z-index: 20; right: max(16px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom));
+    width: 124px; height: 124px; border-radius: 50%; background: rgba(20, 15, 26, .4); border: 1px solid rgba(232, 184, 106, .4);
+    box-shadow: inset 0 0 0 5px rgba(12, 9, 18, .35), inset 0 0 0 6px rgba(232, 184, 106, .18); display: none; touch-action: none; }
+  #joy.active { background: rgba(20, 15, 26, .6); }
+  #joy-knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%;
+    background: #e2ad5f; box-shadow: inset 0 0 0 1px rgba(255, 240, 210, .35); pointer-events: none; }
+  #jump { position: fixed; z-index: 20; right: calc(max(16px, env(safe-area-inset-right)) + 136px); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 56px);
+    width: 58px; height: 58px; border-radius: 50%; display: none; font: 17px serif; color: #f0d9a8;
+    background: rgba(20, 15, 26, .45); border: 1px solid rgba(232, 184, 106, .5); touch-action: none; }
+  #jump:active { background: rgba(232, 184, 106, .25); }
+  body.touch #joy, body.touch #jump { display: block; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <div id="stat">載入中…</div>
+  <div id="rows">
+    <button id="b-ceil">天花板鏡</button><button id="b-trim">金線</button><button id="b-copy">人的倒影</button>
+    <button id="b-depth">反射 12 次</button><button id="b-dpr">解析度</button><button id="b-hide">收起</button>
+  </div>
+</div>
+<div id="help">WASD 或方向鍵走　拖曳轉鏡頭　滾輪遠近　空白鍵跳（光從腳邊推出去）</div>
+<div id="joy"><div id="joy-knob"></div></div>
+<button id="jump">跳</button>
+<script type="module">
+  // 鏡宮預覽：遊戲裡的 ?z=jinggong 同一套（js/zones/jinggong/），這頁只有鏡宮和自己，好量效能。反射怎麼算見 jinggong-mirror.js，空間在 jinggong-map.js。
+  // ?ceil=0 天花板不是鏡子　?depth=反射幾次　?dpr=解析度　?view=x,z,鏡頭方位,俯角,距離 直接站到那裡（無頭測試用）
+  // 角色用這台瀏覽器在遊戲裡捏好的樣子（只讀存檔，不寫）
+  import * as THREE from 'three';
+  import { Character } from '../js/avatar/character.js';
+  import { bindJoystick } from '../js/controls/joystick.js';
+  import * as MAP from '../js/zones/jinggong/jinggong-map.js';
+  import { MirrorHall } from '../js/zones/jinggong/jinggong-mirror.js';
+
+  const q = new URLSearchParams(location.search);
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  if (coarse) document.body.classList.add('touch');
+
+  const renderer = new THREE.WebGLRenderer({ antialias: !coarse, powerPreference: 'high-performance', preserveDrawingBuffer: q.has('test') });
+  const DPRS = [1, 1.5, 2, 3].filter((d) => d <= Math.max(1, devicePixelRatio));
+  let dpr = +q.get('dpr') || Math.min(devicePixelRatio, coarse ? 1.5 : 2);
+  renderer.setPixelRatio(dpr);
+  renderer.setSize(innerWidth, innerHeight);
+  document.body.prepend(renderer.domElement);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.05, 220);
+
+  let look = {};
+  try { look = JSON.parse(localStorage.getItem('save'))?.look || {}; } catch {}
+  const ch = new Character(null, look);
+  ch.shadow.visible = false;
+  scene.add(ch.group);
+  // 跟遊戲一樣兩盞燈：天光、主光。主光每一幀照角色附近的燈調，本人和倒影吃同一組
+  const hemi = new THREE.HemisphereLight(0x69617f, 0x544f69, Math.PI * 0.9), sun = new THREE.DirectionalLight(0x806f60, Math.PI);
+  scene.add(hemi, sun);
+
+  const hall = new MirrorHall(MAP, MAP.buildLights(), { ceiling: q.get('ceil') !== '0', ...(q.get('depth') ? { depth: +q.get('depth') } : {}) });
+  scene.add(hall.group);
+  // 腳踩進黑水盪一圈漣漪，落地那一下大一點
+  ch.onStep = (c, foot) => hall.ripple(me.x + Math.cos(me.yaw) * (foot ? -0.09 : 0.09), me.z - Math.sin(me.yaw) * (foot ? -0.09 : 0.09), time, 0.7);
+  ch.onLand = () => hall.ripple(me.x, me.z, time, 1.5);
+
+  const me = { x: MAP.SPAWN.x, z: MAP.SPAWN.z, yaw: MAP.SPAWN.heading, speed: 0 };
+  const cam = { yaw: MAP.SPAWN.heading + Math.PI, pitch: 0.16, dist: 3.2 };
+  if (q.get('view')) {
+    const [x, z, yaw, pitch, dist] = q.get('view').split(',').map(Number);
+    Object.assign(me, { x, z });
+    if (Number.isFinite(yaw)) { cam.yaw = yaw; me.yaw = yaw + Math.PI; }
+    if (Number.isFinite(pitch)) cam.pitch = pitch;
+    if (Number.isFinite(dist)) cam.dist = dist;
+  }
+
+  // ---------- 操作 ----------
+  const keys = new Set();
+  addEventListener('keydown', (e) => {
+    keys.add(e.code);
+    if (e.code === 'Space') { e.preventDefault(); jump(); }
+  });
+  addEventListener('keyup', (e) => keys.delete(e.code));
+  addEventListener('blur', () => keys.clear());
+  let joy = [0, 0];
+  bindJoystick(document.getElementById('joy'), document.getElementById('joy-knob'), (x, y) => { joy = [x, y]; });
+  const jumpBtn = document.getElementById('jump');
+  jumpBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); jump(); });
+
+  let time = 0;
+  function jump() {
+    if (ch.jump()) hall.pulse(me.x, me.z, time);
+  }
+
+  // 拖曳轉鏡頭，兩指縮放
+  const ptrs = new Map();
+  let span = 0, dragging = false;
+  const cv = renderer.domElement;
+  cv.addEventListener('pointerdown', (e) => {
+    cv.setPointerCapture(e.pointerId);
+    ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; span = Math.hypot(a[0] - b[0], a[1] - b[1]); }
+  });
+  cv.addEventListener('pointermove', (e) => {
+    const p = ptrs.get(e.pointerId);
+    if (!p) return;
+    if (ptrs.size === 1) {
+      cam.yaw -= (e.clientX - p[0]) * 0.006;
+      cam.pitch = Math.min(1.25, Math.max(-0.55, cam.pitch + (e.clientY - p[1]) * 0.004));
+      dragging = true;
+    }
+    p[0] = e.clientX; p[1] = e.clientY;
+    if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()], s = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      if (span > 0) cam.dist = Math.min(7, Math.max(0.9, cam.dist * span / s));
+      span = s;
+    }
+  });
+  const up = (e) => { ptrs.delete(e.pointerId); span = 0; if (!ptrs.size) dragging = false; };
+  cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', (e) => { cam.dist = Math.min(7, Math.max(0.9, cam.dist * (1 + e.deltaY * 0.001))); }, { passive: true });
+
+  // ---------- 介面 ----------
+  const $ = (id) => document.getElementById(id);
+  const DEPTHS = [4, 8, 12, 16];
+  const sync = () => {
+    $('b-ceil').classList.toggle('off', !hall.ceiling);
+    $('b-trim').classList.toggle('off', !hall.trims.visible);
+    $('b-copy').classList.toggle('off', !hall.reflectPeople);
+    $('b-depth').textContent = `反射 ${hall.opt.depth} 次`;
+    $('b-dpr').textContent = `解析度 ${dpr}x`;
+  };
+  $('b-ceil').onclick = () => { hall.setCeiling(!hall.ceiling); sync(); };
+  $('b-trim').onclick = () => { hall.trims.visible = !hall.trims.visible; sync(); };
+  $('b-copy').onclick = () => { hall.reflectPeople = !hall.reflectPeople; sync(); };
+  $('b-depth').onclick = () => { hall.opt.depth = DEPTHS[(DEPTHS.indexOf(hall.opt.depth) + 1) % DEPTHS.length] ?? 12; sync(); };
+  $('b-dpr').onclick = () => { dpr = DPRS[(DPRS.indexOf(dpr) + 1) % DPRS.length] ?? 1; renderer.setPixelRatio(dpr); renderer.setSize(innerWidth, innerHeight); sync(); };
+  $('b-hide').onclick = () => { $('hud').classList.toggle('min'); $('b-hide').textContent = $('hud').classList.contains('min') ? '展開' : '收起'; };
+  $('hud').classList.toggle('min', coarse);
+  $('stat').onclick = () => $('b-hide').onclick();
+  sync();
+  addEventListener('resize', () => {
+    renderer.setSize(innerWidth, innerHeight);
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+  });
+
+  // ---------- 每一幀 ----------
+  const SPEED = 2.4, R = 0.28, H = MAP.H;
+  const clock = new THREE.Clock();
+  let fps = 60, frameMs = 16, engineMs = 0, statT = 0;
+  const angleTo = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+
+  function step(dt) {
+    time += dt;
+    // 走：搖桿或按鍵，方向照鏡頭
+    let ix = joy[0], iy = joy[1];
+    if (keys.has('KeyW') || keys.has('ArrowUp')) iy -= 1;
+    if (keys.has('KeyS') || keys.has('ArrowDown')) iy += 1;
+    if (keys.has('KeyA') || keys.has('ArrowLeft')) ix -= 1;
+    if (keys.has('KeyD') || keys.has('ArrowRight')) ix += 1;
+    const amt = Math.min(1, Math.hypot(ix, iy));
+    const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = -fz, rz = fx;
+    let mx = fx * -iy + rx * ix, mz = fz * -iy + rz * ix;
+    const ml = Math.hypot(mx, mz);
+    me.speed = 0;
+    if (ml > 0.05) {
+      mx /= ml; mz /= ml;
+      const [nx, nz] = hall.collide(me.x + mx * SPEED * amt * dt, me.z + mz * SPEED * amt * dt, R);
+      if (hall.locate(nx, nz) >= 0) { me.x = nx; me.z = nz; }
+      me.speed = SPEED * amt;
+      me.yaw += angleTo(me.yaw, Math.atan2(mx, mz)) * Math.min(1, dt * 10);
+      // 走的時候鏡頭慢慢轉回背後
+      if (!dragging) cam.yaw += angleTo(cam.yaw, me.yaw + Math.PI) * Math.min(1, dt * 1.1 * amt);
+    }
+    ch.group.position.set(me.x, 0, me.z);
+    ch.group.rotation.y = me.yaw;
+    ch.update(dt, me.speed);
+    const g = hall.glow(me.x, 0.8, me.z);
+    sun.position.set(...g.dir).multiplyScalar(10);
+    sun.color.setRGB(Math.min(0.9, 0.25 + g.color[0]), Math.min(0.9, 0.22 + g.color[1]), Math.min(0.9, 0.2 + g.color[2]));
+
+    // 鏡頭：繞著頭轉，碰到鏡子就拉近，一定留在鏡宮裡面
+    const ty = 0.95, cp = Math.cos(cam.pitch);
+    let dx = Math.sin(cam.yaw) * cp * cam.dist, dz = Math.cos(cam.yaw) * cp * cam.dist;
+    const t = hall.cast(me.x, me.z, me.x + dx * 1.08, me.z + dz * 1.08);
+    if (t < 1) { const L = Math.hypot(dx, dz) * 1.08, k = Math.max(0, t * L - 0.25) / L; dx *= k * 1.08; dz *= k * 1.08; }
+    const cy = Math.min(H - 0.2, Math.max(0.15, ty + Math.sin(cam.pitch) * cam.dist));
+    camera.position.set(me.x + dx, cy, me.z + dz);
+    if (hall.locate(camera.position.x, camera.position.z) < 0) camera.position.set(me.x, cy, me.z);
+    camera.lookAt(me.x, ty, me.z);
+  }
+
+  function frame() {
+    const dt = Math.min(0.05, clock.getDelta());
+    step(dt);
+    hall.update(camera, time, scene);
+    renderer.render(scene, camera);
+    fps += (1 / Math.max(dt, 1e-3) - fps) * 0.05;
+    frameMs += (dt * 1000 - frameMs) * 0.05;
+    engineMs += (hall.stats.ms - engineMs) * 0.05;
+    if ((statT -= dt) < 0) {
+      statT = 0.4;
+      const s = hall.stats, r = renderer.info.render;
+      $('stat').textContent = `${fps.toFixed(0)} fps  ${frameMs.toFixed(1)} ms（追光 ${engineMs.toFixed(1)}）\n`
+        + `光束 ${s.pieces}${s.capped ? '+' : ''}（${s.reach.toFixed(0)} 公尺）  燈 ${s.points}  人 ${s.copies}  金線 ${s.trims}\n`
+        + `${r.calls} 次繪製  ${(r.triangles / 1000).toFixed(0)}k 面  ${dpr}x`;
+    }
+  }
+  renderer.setAnimationLoop(q.has('test') ? null : frame);
+
+  // 無頭測試：__mh.shot(x, z, 鏡頭方位, 俯角, 距離, 秒) 站好、跑幾幀、回傳截圖
+  window.__mh = {
+    hall, me, cam, ch, renderer, camera,
+    // 追光加整理資料平均一幀多久（不含畫）
+    bench(n = 60) {
+      const t0 = performance.now();
+      for (let k = 0; k < n; k++) hall.update(camera, time, scene);
+      return (performance.now() - t0) / n;
+    },
+    pulse(dt) { hall.pulse(me.x, me.z, time - dt); },
+    shot(x, z, yaw, pitch, dist, t = 2) {
+      Object.assign(me, { x, z }); Object.assign(cam, { yaw, pitch, dist }); me.yaw = yaw + Math.PI;
+      time = t;
+      for (let k = 0; k < 40; k++) { step(0); hall.update(camera, time, scene); }
+      const t0 = performance.now();
+      renderer.render(scene, camera);
+      renderer.getContext().finish();
+      const ms = performance.now() - t0;
+      return { url: renderer.domElement.toDataURL('image/png'), stats: { ...hall.stats, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, renderMs: ms } };
+    },
+  };
+</script>
+</body>
+</html>

@@ -454,6 +454,67 @@ body.desk #ferry .close svg { width: 16px; height: 16px; }
 body.desk #ferry .cams-info { padding-right: 18px; }
 body.desk #ferry .cams-foot { margin-top: 14px; }
 
+/* 黑眼（scene/guide.js）：船和去過的地方排成兩欄，點一個黑眼就飛在前面帶路，下面是收起黑眼。
+   手機跟渡船卡一樣是底部抽屜（橫拿是右邊側欄），一格至少 48px 高，拇指按得到；電腦是一張小卡，點鈕打開的從鈕往上長，按 M 打開的在角色右邊（位置 guide.js 寫進 style） */
+/* 地方多了只捲清單那一段：上面的「在哪裡」、下面的收起黑眼一直看得到（手機抽屜只有半個畫面高） */
+#eye-card { display: flex; flex-direction: column; }
+#eye-card.panel { overflow: hidden; }
+#eye-card > :not(#eye-list) { flex: none; }
+#eye-here { margin: -6px 0 12px; font-size: 12.5px; letter-spacing: .16em; color: var(--muted); }
+#eye-here:empty { display: none; }
+#eye-list {
+  flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 6px;
+  margin: -3px; padding: 3px;   /* 方向鍵選到的那格外框不被捲動的邊切掉 */
+}
+.eye-go {
+  position: relative; min-width: 0; min-height: 48px; padding: 6px 12px;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; text-align: left;
+  font: inherit; color: var(--text);
+  background: rgba(232, 184, 106, .03); border: 1px solid var(--line-soft); border-radius: 10px;
+  cursor: var(--cur-pointer); transition: border-color .2s, background .2s;
+}
+.eye-go b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 600; letter-spacing: .12em; }
+.eye-go span { font-size: 11px; letter-spacing: .1em; color: var(--muted); }
+.eye-go span:empty { display: none; }
+/* 正在去的：金框；站在那裡的：淡掉、按不了 */
+.eye-go.on { border-color: var(--gold); background: rgba(232, 184, 106, .12); color: var(--gold-hi); }
+.eye-go.on span { color: var(--gold); }
+.eye-go:disabled { opacity: .45; cursor: var(--cur-default); }
+.eye-go.kb { outline: 1.5px solid var(--gold-hi); outline-offset: 2px; }
+.eye-go:active:not(:disabled) { background: rgba(232, 184, 106, .14); }
+/* 電腦：右邊一顆鍵帽寫第幾個，按數字就去 */
+.eye-go kbd, .eye-foot kbd { display: none; }
+body.desk .eye-go { min-height: 44px; padding-right: 32px; }
+body.desk .eye-go kbd {
+  display: block; position: absolute; right: 8px; top: 50%; margin-top: -9px; min-width: 18px; height: 18px; padding: 0 4px;
+  font: 11px/16px var(--latin); text-align: center; color: var(--muted); border: 1px solid rgba(232, 184, 106, .3); border-radius: 2px;
+}
+@media (hover: hover) {
+  .eye-go:not(:disabled):hover { border-color: var(--gold); }
+}
+#eye-note { margin: 12px 0 0; font-size: 12.5px; letter-spacing: .08em; color: var(--muted); }
+#eye-note:empty { display: none; }
+.eye-foot { display: flex; justify-content: flex-end; margin-top: 14px; }
+.eye-foot .btn { min-height: 40px; padding: 0 16px; font-size: 13.5px; letter-spacing: .16em; gap: 8px; }
+body.desk .eye-foot kbd { display: inline-block; padding: 0 5px; font: 11px/1.5 var(--latin); letter-spacing: .04em; color: var(--muted); border: 1px solid rgba(232, 184, 106, .3); border-radius: 2px; }
+body.desk #eye-card.panel {
+  right: auto; bottom: auto;
+  width: 320px; max-height: calc(100vh / var(--ui, 1) - 32px); overflow: visible;
+  padding: 16px 16px 14px; border: 1px solid var(--line-soft); border-radius: 4px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .5);
+  transform: translateY(8px); opacity: 0; visibility: hidden;
+  transition: opacity .25s, transform .25s, visibility 0s .25s;
+}
+body.desk #eye-card.panel.open { transform: none; opacity: 1; visibility: visible; transition: opacity .25s, transform .25s; }
+body.desk #eye-card::before { right: 0; bottom: auto; width: auto; height: 1px; }
+body.desk #eye-card::after { left: 50%; top: -4px; margin: 0 0 0 -3.5px; }
+body.desk #eye-card .list-title { display: none; }
+body.desk #eye-card .close { top: 6px; right: 6px; width: 32px; min-width: 32px; height: 32px; }
+body.desk #eye-card .close svg { width: 16px; height: 16px; }
+body.desk #eye-here { margin: 2px 40px 12px 2px; }
+@media (prefers-reduced-motion: reduce) { #eye-card.panel, body.desk #eye-card.panel { transition: none; } }
+
 .sheet-head { display: flex; gap: 16px; align-items: center; padding-right: 44px; }
 /* 縮圖：鍍金畫框 */
 #sheet-thumb {

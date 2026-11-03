@@ -9,6 +9,7 @@ import { Lantern } from './lantern.js';
 import { CAMERAS } from '../camera/cameras.js';
 import { Eye } from '../camera/eye.js';
 import { sanitizeLook, lookKey, presetLook, lookFromOutfit, toOutfit, ROBES } from '../avatar/looks.js';
+import { drawEmote } from './emotes.js';
 
 const SEND_MOVING = 200;    // 走動時每 0.2 秒送一次位置
 const SEND_IDLE = 8000;     // 站著不動時偶爾報一次，確認還在
@@ -148,21 +149,20 @@ function tickZzz(z, dt) {
   });
 }
 
-const emojiTextures = new Map();
-function emojiTexture(e) {
-  if (!emojiTextures.has(e)) {
+// 頭上冒的表情：emotes.js 的金線圖示，四邊留一點給光暈
+const emoteTextures = new Map();
+function emoteTexture(e) {
+  if (!emoteTextures.has(e)) {
     const c = document.createElement('canvas');
     c.width = c.height = 128;
     const g = c.getContext('2d');
-    g.font = '96px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.fillText(e, 64, 72);
+    g.translate(4, 4);
+    drawEmote(g, e, 120);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
-    emojiTextures.set(e, t);
+    emoteTextures.set(e, t);
   }
-  return emojiTextures.get(e);
+  return emoteTextures.get(e);
 }
 
 export class Multiplayer {
@@ -192,6 +192,7 @@ export class Multiplayer {
     this.only = null;               // 照相館拍照中：只畫入鏡的人（id 的 Set）
     this.away = false;              // 自己掛機中（main 每幀照分頁看不看得到、多久沒動設定）
     this.lens = null;               // () => 自己正在拍的鏡頭 { pos, yaw, pitch, fov, aspect, kind } 或 null（main 接 photo.js）
+    this.eye = null;                // () => 自己的黑眼 [x, y, z, 帶路中 1／沒有 0, 去哪] 或 null（main 接 scene/guide.js）
     this.tmp = new THREE.Vector3();
     this.tmp2 = new THREE.Vector3();
   }
@@ -302,6 +303,7 @@ export class Multiplayer {
     // g：頭在看誰的臉或鏡頭（代號，自己的鏡頭就是自己），別人照自己畫面上那個人的位置算角度，眼神才對得上；沒有就照 l、v
     // c：正在拍時鏡頭在哪、朝哪、多廣 [x, y, z, 左右, 上下, 視角（度）, 寬高比, 0 手上的相機／1 畫廊的眼睛]，
     //    別人照這個判斷自己有沒有被拍（attention.js），畫廊的眼睛也照這個畫出來。照相館不送
+    // e：叫出來的黑眼在哪 [x, y, z, 帶路中 1／跟在身邊 0, 要去的地方代號]，別人照這個畫出來，隊友走近可以跟著它（scene/guide.js）。收起來就不送
     const aim = p.camAim;
     const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room, s: p.sitCode, f: p.character.foodCode, a: aim ? aim.grip + 1 : 0, q: aim ? Math.round(aim.pitch * 20) / 20 : 0, w: this.away ? 1 : 0, l: Math.round((p.gaze || 0) * 20) / 20, v: Math.round((p.gazeP || 0) * 20) / 20 };
     if (p.gazeId) st.g = p.gazeId === 'self' ? this.id : p.gazeId;
@@ -309,9 +311,11 @@ export class Multiplayer {
     if (p.world.drift) st.y = Math.round(p.pos.y * 10) / 10;
     const L = this.lens?.();
     if (L) st.c = [r50(L.pos.x), r50(L.pos.y), r50(L.pos.z), r50(wrapAngle(L.yaw)), r50(L.pitch), Math.round(L.fov), Math.round(L.aspect * 100) / 100, L.kind];
+    const E = this.eye?.();
+    if (E) st.e = E;
     const l = this.last;
     const changed = !l || Math.abs(st.x - l.x) > 0.02 || Math.abs(st.z - l.z) > 0.02 || Math.abs(wrapAngle(st.h - l.h)) > 0.05 || st.r !== l.r || st.s !== l.s || st.f !== l.f || st.a !== l.a || st.q !== l.q || st.w !== l.w || st.l !== l.l || st.v !== l.v
-      || st.g !== l.g || st.y !== l.y || String(st.c) !== String(l.c);
+      || st.g !== l.g || st.y !== l.y || String(st.c) !== String(l.c) || String(st.e) !== String(l.e);
     if (now - this.lastSent < (changed ? SEND_MOVING : SEND_IDLE)) return;
     this.channel.send({ type: 'broadcast', event: 'pos', payload: { id: this.id, ...st } });
     this.last = st;
@@ -336,6 +340,9 @@ export class Multiplayer {
     const c = m.c;
     m.c = Array.isArray(c) && c.length === 8 && isNum(c[0], COORD_LIMIT) && isNum(c[1], COORD_LIMIT) && isNum(c[2], COORD_LIMIT) && isNum(c[3], 4) && isNum(c[4], 2)
       && c[5] >= 5 && c[5] <= 150 && c[6] > 0.2 && c[6] < 5 && (c[7] === 0 || c[7] === 1) ? c : null;
+    const e = m.e;
+    m.e = Array.isArray(e) && e.length === 5 && isNum(e[0], COORD_LIMIT) && isNum(e[1], COORD_LIMIT) && isNum(e[2], COORD_LIMIT) && (e[3] === 0 || e[3] === 1)
+      && typeof e[4] === 'string' && /^[a-z0-9]{0,16}$/.test(e[4]) ? e : null;
     let o = this.others.get(m.id);
     if (!o) {
       if (this.others.size >= MAX_TRACKED) return;
@@ -447,7 +454,7 @@ export class Multiplayer {
   pop(ch, e) {
     const group = ch.group;
     if (this.fx.filter((f) => f.group === group).length >= 3) return;
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTexture(e), transparent: true, depthWrite: false }));
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: emoteTexture(e), transparent: true, depthWrite: false }));
     const y = ch.dims.topY + 0.22;
     s.position.y = y;
     group.add(s);

@@ -212,7 +212,8 @@ function condenser(k, x, y, z, s, R, wall = null) {
 // ---------- 主體 ----------
 // lanes、houses 從 shenlou.js 來（lanes 的 text 是城門鐵牌上打的字）；擋路的方塊直接加進 obstacles
 // under：井圈公寓（提水機的腳踩在它的岩牆上）；fader：給一塊範圍回一個淡出的編號（蜃樓擋住鏡頭時整組淡掉），沒有就不淡
-export function makeIron({ obstacles, lanes, houses, terrain, TOWN_R, WELL, SHAFT, COURT_IN, WATER_Y, CAP_Y, under, fader = null }) {
+// NEEDLE：晷針金針多長（拉索綁在針上的高度跟著它）；LIFT：城牆加高幾倍（城門的鐵框跟著高）
+export function makeIron({ obstacles, lanes, houses, terrain, TOWN_R, WELL, SHAFT, COURT_IN, WATER_Y, CAP_Y, NEEDLE = 24, LIFT = 1, under, fader = null }) {
   const spin = [];
   const deg = PI / 180;
   const block = (o) => obstacles.push(o);
@@ -227,7 +228,8 @@ export function makeIron({ obstacles, lanes, houses, terrain, TOWN_R, WELL, SHAF
     // 城牆一段：牆外腳一排鐵皮護裙（沙磨得最兇的地方，撿來的板子高高低低一片接一片）、牆裡偶爾補一塊、頂上一條長管
     // 牆外上半截不補：背光時一塊塊鐵皮看起來像黑窗戶。牆腳的沙是地形本身，見 shenlou.js 的 wallDrift
     // wall 是牆身的顏色，牆裡的補丁底下流鏽水；長管的管箍也一道一道往下流
-    wall(kk, i, len, wall) {
+    // top：牆頂多高（長管掛在牆頂下半公尺）
+    wall(kk, i, len, wall, top = 6) {
       const R = rng('shenlou:iron:wall:' + i);
       if (R() < 0.6) {
         for (let z = -len / 2 + 0.2 + R() * 0.8; z < len / 2 - 1;) {
@@ -238,9 +240,9 @@ export function makeIron({ obstacles, lanes, houses, terrain, TOWN_R, WELL, SHAF
       }
       if (R() < 0.35) patch(kk, -0.65, 3.4 + R() * 1.2, (R() - 0.5) * (len - 2.6), 1 + R() * 1.2, 1 + R(), -1, 0, R, wall);
       if ((i >= 4 && i <= 10) || (i >= 26 && i <= 33)) {
-        rod(kk, [-0.8, 5.5, -len / 2 - 0.02], [-0.8, 5.5, len / 2 + 0.02], 0.12, i % 3 ? IRON : RUST);
-        kk.box(0.3, 0.08, 0.1, IRON_DK, -0.72, 5.36, 0);
-        streak(kk, -0.65, 5.3, (R() - 0.5) * 0.6, 1 + R() * 1.6, 0.1, -1, 0, wall);
+        rod(kk, [-0.8, top - 0.5, -len / 2 - 0.02], [-0.8, top - 0.5, len / 2 + 0.02], 0.12, i % 3 ? IRON : RUST);
+        kk.box(0.3, 0.08, 0.1, IRON_DK, -0.72, top - 0.64, 0);
+        streak(kk, -0.65, top - 0.7, (R() - 0.5) * 0.6, 1 + R() * 1.6, 0.1, -1, 0, wall);
       }
     },
 
@@ -260,21 +262,21 @@ export function makeIron({ obstacles, lanes, houses, terrain, TOWN_R, WELL, SHAF
       }
     },
 
-    // 鏡塔：銅鏡裝上鐵叉架和轉盤，頂上一圈欄杆，西面一道爬梯。座標是塔自己的（沒有轉）
-    mirror(k, mx, mz) {
+    // 鏡塔：銅鏡裝上鐵叉架和轉盤，頂上一圈欄杆，西面一道爬梯。座標是塔自己的（沒有轉）；top 是塔頂蓋板的高度
+    mirror(k, mx, mz, top = 18) {
       const axis = [Math.cos(0.6), 0, -Math.sin(0.6)];   // 鏡子傾斜的軸（跟 shenlou.js 鏡子的 rx 1.0、ry 0.6 對上）
-      k.cyl(1.25, 1.35, 0.3, IRON, 0, 18.55, 0, {}, 12);
+      k.cyl(1.25, 1.35, 0.3, IRON, 0, top + 0.55, 0, {}, 12);
       for (const s of [-1, 1]) {
         const ax = axis[0] * 1.72 * s, az = axis[2] * 1.72 * s;
-        bar(k, [ax * 0.7, 18.65, az * 0.7], [ax, 20, az], 0.16, IRON_DK);
-        rod(k, [ax * 0.86, 20, az * 0.86], [ax * 1.08, 20, az * 1.08], 0.1, BRONZE);
+        bar(k, [ax * 0.7, top + 0.65, az * 0.7], [ax, top + 2, az], 0.16, IRON_DK);
+        rod(k, [ax * 0.86, top + 2, az * 0.86], [ax * 1.08, top + 2, az * 1.08], 0.1, BRONZE);
       }
-      bar(k, [-axis[0] * 1.2, 18.75, -axis[2] * 1.2], [axis[0] * 1.2, 18.75, axis[2] * 1.2], 0.18, IRON_DK);
-      gear(k, axis[0] * 1.95, 20, axis[2] * 1.95, 0.5, 10, 0.12, BRONZE, { ry: Math.atan2(axis[0], axis[2]) });
-      for (const [a, b] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) bar(k, [a * 1.7, 18.4, b * 1.7], [a * 1.7, 19.5, b * 1.7], 0.08, IRON_DK);
-      for (const [a, b, c, d] of [[1, 1, 1, -1], [1, -1, -1, -1], [-1, -1, -1, 1], [-1, 1, 1, 1]]) bar(k, [a * 1.7, 19.5, b * 1.7], [c * 1.7, 19.5, d * 1.7], 0.06, IRON_DK);
-      for (const s of [-1, 1]) bar(k, [-1.62, 3, s * 0.28], [-1.62, 18.3, s * 0.28], 0.06, IRON_DK);
-      for (let y = 3.4; y < 18.2; y += 0.5) k.box(0.05, 0.05, 0.6, IRON, -1.62, y, 0);
+      bar(k, [-axis[0] * 1.2, top + 0.75, -axis[2] * 1.2], [axis[0] * 1.2, top + 0.75, axis[2] * 1.2], 0.18, IRON_DK);
+      gear(k, axis[0] * 1.95, top + 2, axis[2] * 1.95, 0.5, 10, 0.12, BRONZE, { ry: Math.atan2(axis[0], axis[2]) });
+      for (const [a, b] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) bar(k, [a * 1.7, top + 0.4, b * 1.7], [a * 1.7, top + 1.5, b * 1.7], 0.08, IRON_DK);
+      for (const [a, b, c, d] of [[1, 1, 1, -1], [1, -1, -1, -1], [-1, -1, -1, 1], [-1, 1, 1, 1]]) bar(k, [a * 1.7, top + 1.5, b * 1.7], [c * 1.7, top + 1.5, d * 1.7], 0.06, IRON_DK);
+      for (const s of [-1, 1]) bar(k, [-1.62, 3, s * 0.28], [-1.62, top + 0.3, s * 0.28], 0.06, IRON_DK);
+      for (let y = 3.4; y < top + 0.2; y += 0.5) k.box(0.05, 0.05, 0.6, IRON, -1.62, y, 0);
     },
 
     // 拱廊：頂下兩側走管，中段一個水龍頭和石槽
@@ -345,7 +347,7 @@ export function makeIron({ obstacles, lanes, houses, terrain, TOWN_R, WELL, SHAF
       gear(k, 0, CAP_Y + 0.3, 0, 1.05, 18, 0.16, BRONZE, { rx: PI / 2 });
       const A = WELL + 0.75;
       for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
-        bar(k, [sx * 0.16, 19, sz * 0.16], [sx * A, 0.45, sz * A], 0.04, BRONZE);
+        bar(k, [sx * 0.16, CAP_Y + NEEDLE * 0.62, sz * 0.16], [sx * A, 0.45, sz * A], 0.04, BRONZE);
         k.box(0.7, 0.4, 0.7, IRON_DK, sx * A, 0.26, sz * A, { color2: IRON });
         rod(k, [sx * (A - 0.35), 0.75, sz * (A - 0.35)], [sx * (A - 0.05), 0.47, sz * (A - 0.05)], 0.08, BRONZE);
         block({ x: sx * (A - 0.15), z: sz * (A - 0.15), hw: 0.95, hd: 0.95, a: 0 });
@@ -427,7 +429,7 @@ export function makeIron({ obstacles, lanes, houses, terrain, TOWN_R, WELL, SHAF
       // ---------- 城門：南門一座鐵閘（閘門吊在上面），頂上立一塊 III（城的名字）；其他城門一個鐵框掛打孔牌，打的是 lanes 的 text ----------
       for (const l of lanes) {
         const a = l.a * deg, gx = Math.cos(a) * (TOWN_R + 2.3), gz = Math.sin(a) * (TOWN_R + 2.3), f = frame(gx, gz, -a);
-        const g = new Kit(rng('shenlou:iron:gate:' + l.a)), hw = l.hw + 0.35, H = l.id === 'arcade' ? 8.2 : 6.6;
+        const g = new Kit(rng('shenlou:iron:gate:' + l.a)), hw = l.hw + 0.35, H = (l.id === 'arcade' ? 8.2 : 6.6) * LIFT;
         for (const s of [-1, 1]) {
           g.box(0.55, H, 0.55, IRON_DK, 0, H / 2, s * hw, { color2: IRON });
           g.box(0.7, 0.5, 0.7, RUST, 0, 0.25, s * hw);

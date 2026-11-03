@@ -56,7 +56,8 @@ const srv = http.createServer((q, r) => {
   });
 }).listen(PORT);
 const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'aerial-'));
-const edge = spawn(EDGE, ['--headless=new', `--remote-debugging-port=${DBG}`, `--user-data-dir=${prof}`, '--window-size=1920,2160', 'about:blank']);
+// 多人頻道的 WebSocket 擋不掉（Network.setBlockedURLs 只管一般請求），直接讓 supabase.co 查不到網址，拍照的角色才不會出現在線上
+const edge = spawn(EDGE, ['--headless=new', `--remote-debugging-port=${DBG}`, `--user-data-dir=${prof}`, '--host-resolver-rules=MAP *.supabase.co ~NOTFOUND', '--window-size=1920,2160', 'about:blank']);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let tgt;
 for (let i = 0; i < 90 && !tgt; i++) {
@@ -81,7 +82,7 @@ const ev = async (expr) => {
 await send('Runtime.enable');
 await send('Page.enable');
 await send('Network.enable');
-// 不擋的話會連上正式的多人頻道，拍照的角色會出現在線上
+// 一般請求也擋掉（WebSocket 靠上面啟動時的 --host-resolver-rules）
 await send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
 
 for (const { zone, shot } of picked) {
@@ -89,7 +90,7 @@ for (const { zone, shot } of picked) {
   await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: SCALE, mobile: false });
   // 當成從另一區搭船過來：不會停在第一次來的門口等人按「進入」；畫廊會在碼頭上岸，戶外才是打開的、光線和霧也是戶外那組
   const from = zone === 'gallery' ? 'haishi' : 'gallery';
-  await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/?z=${zone}&q=mid&debug&crowd=0&beast=0&rain=0&from=${from}` });
+  await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/?z=${zone}&q=mid&debug&crowd=0&beast=0&rain=0&dust=0.5&from=${from}` });
   for (let i = 0; i < 240; i++) {
     await sleep(250);
     if (await ev(`!!window.__g && document.getElementById('loading')?.classList.contains('done')`).catch(() => false)) break;

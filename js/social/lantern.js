@@ -4,6 +4,7 @@
 // 浮在地上一點點，不走路。對方的位置照多人連線傳來的走，其他功能都沒有。
 // 面向本地 +z。紙身是一個網格，眼睛畫在外面薄薄一層，只有眨眼時才重畫。
 import * as THREE from 'three';
+import { footShadow } from '../core/footshadow.js';
 
 const H = 0.56;             // 紙身高
 const R = 0.25;             // 紙身最胖的半徑
@@ -119,8 +120,9 @@ export class Lantern {
     this.body.add(this.tassel);
 
     if (shadowTex) {
-      this.shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, opacity: 0.55 });
-      this.shadow = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.62), this.shadowMat);
+      // 浮著的燈籠沒有貼地的那一圈：影子裡剩整片淡淡的（footshadow.js 的 contact 給 1）
+      this.shadow = footShadow(new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.62)), shadowTex, { opacity: 0.55, contact: 1 });
+      this.shadowMat = this.shadow.material;
       this.shadow.rotation.x = -Math.PI / 2;
       this.shadow.position.y = 0.012;
       this.group.add(this.shadow);

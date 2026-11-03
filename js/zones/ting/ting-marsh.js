@@ -146,7 +146,7 @@ export function buildMarsh(group, waterY) {
     geo.translate(MARSH.x, 0, MARSH.z);
     const pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
     const isleMoss = new THREE.Color('#bdb7c8'), sage = new THREE.Color('#a6ad9d'), damp = new THREE.Color('#9b94ab');
-    const glow = new THREE.Color(GLOW), moss = new THREE.Color(MOSS), mossLt = new THREE.Color(MOSS_LT), mud = new THREE.Color(MUD), c = new THREE.Color();
+    const glow = new THREE.Color(GLOW), moss = new THREE.Color(MOSS), mossLt = new THREE.Color(MOSS_LT), mud = new THREE.Color(MUD), c = new THREE.Color(), W = wind.uWind.value;
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), z = pos.getZ(i), y = moundY(x, z);
       pos.setY(i, y > 0 ? y : -0.05);
@@ -154,11 +154,12 @@ export function buildMarsh(group, waterY) {
       c.copy(mud).lerp(moss, Math.min(1, Math.max(0, (y - waterY + 0.05) / 0.12))).lerp(mossLt, patch * 0.45 * Math.min(1, y / 0.3));
       const isle = Math.hypot(x - TREE.x, z - TREE.z);
       if (isle < 5.6 && y > waterY - 0.04) {
-        // 孤櫻的小島：淡紫灰的青苔上幾塊灰綠的苔，水邊一圈濕的深色；越靠近樹腳，落的花瓣越多（一點一點的粉）
+        // 孤櫻的小島：淡紫灰的青苔上幾塊灰綠的苔，水邊一圈濕的深色；樹下落了一層花瓣，是整片軟軟的粉，往下風那邊多攤一點，邊緣彎彎的
         const lump = Math.sin(x * 2.3 + Math.sin(z * 1.7) * 1.5) * Math.sin(z * 2.1 - x * 0.8) + 0.4 * Math.sin(x * 5.1 + z * 4.3);
         c.copy(isleMoss).lerp(sage, THREE.MathUtils.smoothstep(lump, 0.2, 0.9) * 0.75).lerp(damp, 1 - Math.min(1, (y - waterY + 0.04) / 0.1));
-        const fall = Math.sin(x * 9.7 + z * 3.1) * Math.sin(z * 8.3 - x * 2.9);
-        c.lerp(glow, THREE.MathUtils.smoothstep(fall, 0.3, 0.9) * (1 - Math.min(1, isle / 4.2)) * 0.6);
+        const fx = x - TREE.x - W.x * 0.7, fz = z - TREE.z - W.y * 0.7, fa = Math.atan2(fz, fx);
+        const edge = 3.3 * (1 + 0.12 * Math.sin(fa * 3 + 1) + 0.07 * Math.sin(fa * 5 - 2));
+        c.lerp(glow, (1 - THREE.MathUtils.smoothstep(Math.hypot(fx, fz), edge * 0.45, edge)) * (0.62 + 0.1 * Math.sin(x * 1.3 + z * 0.9)));
       }
       col.set([c.r, c.g, c.b], i * 3);
     }

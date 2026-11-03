@@ -11,6 +11,8 @@ import { TABLE_D, TABLE_W, buildCamTable } from './camtable.js';
 import { buildFrontDoor } from '../../scene/frontdoor.js';
 import { buildGuideSign } from './guidesign.js';
 import { buildNoticeBoard } from './noticeboard.js';
+import { buildSunMoon } from './sunmoon.js';
+import { buildTravelPosters } from './travelposters.js';
 import { CLOCK_D, CLOCK_W, buildClock } from './clock.js';
 import { OUTDOOR_ROOM, buildOutdoor } from './outdoor.js';
 import { catRoomOf } from '../../npc/animals.js';
@@ -24,7 +26,7 @@ import { DEFAULTS, DOOR_NEAR, DOOR_W, MARGIN, ROOM_NEAR, ROOM_TYPES, SEA_SPAN, S
 
 export function buildWorld(scene, gallery) {
   const rooms = [], paintings = [], entries = [], raycastTargets = [];
-  let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null, noticeBoard = null, clock = null, mirrorTick = null;
+  let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null, noticeBoard = null, clock = null, mirrorTick = null, sunMoon = null;
   let z = 0;
   setPropFader(new Fader(true));
 
@@ -137,9 +139,9 @@ export function buildWorld(scene, gallery) {
       mirrorTick = (dt, who) => { tick(dt, who); rug.update(dt, who); };
       mirror.rug = rug;   // 站上去亮了幾成，前廳的底聲要聽（vestibule-sound.js）
 
-      // 右牆靠前是前門（frontdoor.js）：進來的那道門，門外是黃昏的光，不能開
+      // 右牆靠前是前門（frontdoor.js）：進來的那道門，門外是黃昏的光，不能開。靠出口那頭的牆角不擺雜物（旅遊海報那邊）
       const right = room.spans[1], sd = 2.0;
-      right.clear = [[sd - 1.3, sd + 2.0]];
+      right.clear = [[sd - 1.3, sd + 2.0], [5.7, right.length]];
       const dp = right.at(sd), drot = Math.atan2(dp.nx, dp.nz), dc = Math.cos(drot), ds = Math.sin(drot);
       const toWorld = (o) => ({ x: dp.x + o.x * dc + o.z * ds, z: dp.z - o.x * ds + o.z * dc });
       const door = buildFrontDoor();
@@ -175,10 +177,37 @@ export function buildWorld(scene, gallery) {
       room.obstacles.push({ x: tx, z: tz, hw: TABLE_W / 2, hd: TABLE_D / 2, rot: trot });
       room.shadowSpots.push({ x: tx, z: tz, w: TABLE_W, d: TABLE_D, rot: trot });
 
+      // 鏡子和相機桌這面牆的日與月（sunmoon.js）：一叢叢劍葉長滿這面牆，鏡子那頭冷色（月）、掛布那頭暖色（日），站上哪邊的毯子哪邊就亮。
+      // 窗邊的牆角、中間那段、靠出口的牆角讓給花，原本的家具照樣做一次再丟
+      sp.clear = [[0, 1.0], [2.2, 3.1], [5.7, sp.length]];
+      sunMoon = buildSunMoon({ mirror: s0, table: sc, len: sp.length });
+      const w0 = sp.at(0), wrot = Math.atan2(w0.nx, w0.nz);
+      sunMoon.group.position.set(w0.x, 0, w0.z);
+      sunMoon.group.rotation.y = wrot;
+      room.group.add(sunMoon.group);
+      sunMoon.group.traverse((m) => { if (m.isMesh || m.isPoints) sp.entry.tall.push(m); });
+      for (const b of sunMoon.blocks) {
+        const p = sp.at(b.s), bx = p.x + p.nx * b.d, bz = p.z + p.nz * b.d;
+        room.obstacles.push({ x: bx, z: bz, hw: b.hw, hd: b.hd, rot: wrot });
+        room.shadowSpots.push({ x: bx, z: bz, w: b.hw * 2, d: b.hd * 2, rot: wrot });
+      }
+
+      // 出口那面牆：門兩邊各兩張旅遊海報（travelposters.js），照渡船卡的順序從左排到右。牆下原本的家具照樣做一次再丟
+      const back = boxSpan(room, 'back'), seg = back.length / 2 - DOOR_W / 2 - 0.22;
+      back.clear = [[0, back.length]];
+      const posterAt = [seg / 2 - 0.46, seg / 2 + 0.46, back.length - seg / 2 - 0.46, back.length - seg / 2 + 0.46];
+      buildTravelPosters().forEach((p, i) => {
+        const q = back.at(posterAt[i]);
+        p.group.position.set(q.x + q.nx * 0.01, 0, q.z + q.nz * 0.01);
+        p.group.rotation.y = Math.atan2(q.nx, q.nz);
+        room.group.add(p.group);
+        p.group.traverse((m) => { if (m.isMesh) back.entry.tall.push(m); });
+      });
+
       // 入口那面牆（進門的左手邊）：靠鏡子那頭開窗，夕陽照在鏡子前；靠前門那頭空著，之後貼活動和消息的海報。
-      // 空著的這段家具照樣做一次再丟掉，海報掛上去時別處的擺設不會跟著換位置
+      // 空著的這段家具照樣做一次再丟掉，海報掛上去時別處的擺設不會跟著換位置。窗前不放東西（low: false），那個牆角讓給月的花
       const front = boxSpan(room, 'front');
-      room.window = { sp: front, s: 2.4 };
+      room.window = { sp: front, s: 2.4, low: false };
       front.clear = [[4.0, front.length]];
       // 空位上掛佈告欄（noticeboard.js），窗邊長過來的藤纏在靠窗那個上角
       const bs = 5.5, bp = front.at(bs);
@@ -445,6 +474,7 @@ export function buildWorld(scene, gallery) {
     noticeBoard?.update(dt);
     clock?.update();
     mirrorTick?.(dt, target);
+    if (sunMoon && rooms[0].group.visible) sunMoon.update(dt, mirror.rug.glow, camTable.glowAt(target.x, target.z));
     if (outdoor) {
       const out = currentRoom === rooms.length - 1;
       // 房子外殼只在人走出去、鏡頭也在屋外時出現，不然會擋住室內。
@@ -484,5 +514,5 @@ export function buildWorld(scene, gallery) {
   // 搭船去別的區域：棧橋邊繫著的小划船
   const exits = outdoor?.ferry ? [{ ...outdoor.ferry, to: 'haishi', label: '搭船', title: '渡船' }] : [];
 
-  return { rooms, paintings, mirror, camTable, frontDoor, guideSign, noticeBoard, clock, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, updatePaintings, fadeVariants: (on) => roomFader.all(on), propVariants: (on) => propFader.turn(on) };
+  return { rooms, paintings, mirror, camTable, frontDoor, guideSign, noticeBoard, sunMoon, clock, outdoor, exits, raycastTargets, roomIndexAt, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, updatePaintings, fadeVariants: (on) => roomFader.all(on), propVariants: (on) => propFader.turn(on) };
 }

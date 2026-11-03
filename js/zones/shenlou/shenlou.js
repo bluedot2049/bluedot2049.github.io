@@ -4,11 +4,14 @@
 // 這裡排骨架和比例；房子在 shenlou-houses.js，沉井下半截的井圈公寓在 shenlou-under.js，井底花園和花晷在 shenlou-garden.js，補上去的鐵件、屋頂的機器、沙裡的殘骸在 shenlou-iron.js。
 // III 是這座城的記號：窗、柱、塔、晷針都當成一個 I，城裡的字是 I 碼（core/icode.js）。從碼頭看，南門兩座細塔和中間的晷針一樣高。
 // 太陽照台灣時間走，十二小時一輪：3 點、15 點日出，9 點、21 點日落；夜裡換月亮。白天切成十二影，一影三十分鐘。影子用真的陰影圖，十幾秒才重畫一次。
+// 空氣裡一直有一層塵（shenlou-dust.js），遠處很快就退進天邊的顏色；起風沙時連城的另一頭都看不見，沙停時遠方的銅環才浮出來。
 // 測試：?z=shenlou&hour=8.5 固定從幾點開始，&timescale=120 讓時間跑快（120 倍＝半分鐘一小時）
 // 座標：x 往東、z 往南（沙海在南邊），井的中心是原點。擋住鏡頭的房子、塔、城牆照海市的做法淡掉（core/fade.js）
 import * as THREE from 'three';
 import { Kit, rng, newBucket } from '../../core/props.js';
 import { bucketObjects, uTime, sunShadow } from '../../core/scenery.js';
+import { footMask } from '../../core/footshadow.js';
+import { gradeCurvesOnly } from '../../core/grade.js';
 import { makePathfinder } from '../../core/pathgrid.js';
 import { slits, SLOT } from '../../core/icode.js';
 import { makeSkiff } from '../../scene/harbor.js';
@@ -34,6 +37,11 @@ const TOWN_R = 42;                                 // 城牆
 const SAND_SEA = 70;                               // 再往南是沙海：一道道又長又低的沙浪，像凝住的海（附近沒有真的海）
 const WALK_R = 90;                                 // 沙丘走得到多遠
 const MARGIN = 0.3;
+// 這個檔案和 shenlou-*.js 的數字都是「城的尺寸」：蓋好以後整座城放大 SCALE 倍，人、渡船不放大，走在城裡顯得小。
+// 交給外面的（走路、高度、鏡頭、店家站的位置、出口）在 buildShenlou 最後換成真的公尺；霧不跟著放大，遠處更朦朧。?scale= 試別的倍數
+const SCALE = 1.15;
+// 高的東西再另外加高 LIFT 倍：房子、城牆、塔、鏡塔、晷針，走在底下像走在峽谷裡。拱廊兩側的房子不加（下午的光要翻過屋頂進拱廊）。?lift= 試別的倍數
+const LIFT = 1.2;
 
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const deg = Math.PI / 180;
@@ -91,7 +99,13 @@ function terrain(x, z) {
 const wellD = (x, z) => Math.max(Math.abs(x), Math.abs(z));
 
 export function buildShenlou(scene, { coarse = false, renderer = null, params = new URLSearchParams() } = {}) {
-  const group = new THREE.Group(), obstacles = [], meshes = [];
+  // group 是真的公尺（人、船、天空放這裡）；city 是放大過的城
+  const K = Number(params.get('scale')) || SCALE, L = Number(params.get('lift')) || LIFT;
+  const NEEDLE = 24 * L;   // 晷針金針多長（從石柱頂算）
+  const WALL_H = 3.8 * L;  // 城牆夯土那一截（底下 2.2 公尺的砂岩牆基不加高）
+  const group = new THREE.Group(), city = new THREE.Group(), obstacles = [], meshes = [];
+  city.scale.setScalar(K);
+  group.add(city);
   const bucket = newBucket(), lamps = newBucket();
   // 擋住鏡頭會淡掉的：每棟房子、城牆每一段、塔、鏡塔、拱廊、市集的布棚、影牆、提水機和水塔各一組。提早 0.35 秒淡
   const fader = new Fader(false, { lead: 0.35 }), fade = (boxes) => fader.add(boxes);
@@ -122,7 +136,7 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
   const inside = (x, z) => x > IN.x0 + 2 && x < IN.x1 - 2 && z > IN.z0 + 2 && z < IN.z1 - 2;
   const far = sheet(-440, 440, -440, 440, 8, (x, z) => terrain(x, z) - (inside(x, z) ? 12 : 0));
   far.receiveShadow = true;
-  group.add(near, far);
+  city.add(near, far);
   meshes.push(near);
 
   // ---------- 沉井：方的階梯井，砂岩，一階 0.4 公尺寬、0.3 公尺高，往下五階到井圈公寓的屋頂邊 ----------
@@ -147,8 +161,8 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
     // 晷針塔：從井底的水裡立起一根石柱，頂上一根長長的金針和一圈環。影子每天掃過整座城，是城裡最高的那個 I
     k.box(1.8, CAP_Y - WATER_Y, 1.8, SANDSTONE, 0, (CAP_Y + WATER_Y) / 2, 0);
     k.box(2.4, 0.4, 2.4, STONE_DK, 0, CAP_Y, 0);
-    k.cyl(0.26, 0.44, 24, GILT, 0, CAP_Y + 12, 0, {}, 8);
-    k.torus(1.3, 0.12, Math.PI * 2, BRZ, 0, CAP_Y + 22, 0, { rx: Math.PI / 2 });
+    k.cyl(0.26, 0.44, NEEDLE, GILT, 0, CAP_Y + NEEDLE / 2, 0, {}, 8);
+    k.torus(1.3, 0.12, Math.PI * 2, BRZ, 0, CAP_Y + NEEDLE - 2, 0, { rx: Math.PI / 2 });
     k.emit(bucket, 0, 0, 0);
     obstacles.push({ x: 0, z: 0, hw: COURT_IN, hd: COURT_IN, a: 0 }, ...under.obstacles);   // 井底的水池
   }
@@ -178,7 +192,7 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
     reserved: [{ x: MIRROR.x, z: MIRROR.z, rad: 3.2 }],
   });
   // 鐵件另外一條亂數，不會動到房子本身
-  const iron = makeIron({ obstacles, lanes: LANES, houses, terrain, TOWN_R, WELL, SHAFT, COURT_IN, WATER_Y, CAP_Y, under, fader: fade });
+  const iron = makeIron({ obstacles, lanes: LANES, houses, terrain, TOWN_R, WELL, SHAFT, COURT_IN, WATER_Y, CAP_Y, NEEDLE, LIFT: L, under, fader: fade });
   // 日晷之城的節奏：每一圈照方位排，三間一組，中間那間高一層、頂三支捕風塔（shenlou-houses.js）。
   // 屋頂的集露器全城只放六具，外圈每隔六十度左右挑一間不高、不開店的
   const ringOf = (band) => houses.filter((h) => h.band === band).sort((p, q) => ((p.th % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) - ((q.th % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI));
@@ -199,7 +213,7 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
   const RH = rng('shenlou:houses:build');
   for (const [i, h] of houses.entries()) {
     const k = new Kit(RH);
-    const info = buildHouse(k, h, RH, i + 1);
+    const info = buildHouse(k, h, RH, i + 1, L);
     const c = Math.cos(h.th), s = Math.sin(h.th), v = info.vial;
     lamps.glows.push({ x: h.x + c * v.x - s * v.z, y: v.y, z: h.z + s * v.x + c * v.z, color: VIAL, size: 0.9 });
     iron.house(k, h, info, i);
@@ -226,9 +240,9 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
       const len = (2 * Math.PI * TOWN_R) / n + 0.3;
       const kk = new Kit(rng('shenlou:wall:' + i));
       kk.add(softPrism(rectXZ(1.6, len), 2.2, 0.3, 0.2, 1), SANDSTONE, 0, 0, 0);
-      kk.add(softPrism(rectXZ(1.3, len - 0.1), 3.8, 0.28, 0.32, 1), EARTH2, 0, 2.2, 0);
-      iron.wall(kk, i, len, EARTH2);
-      kk.fid = fade([{ x, z, a: -th, hw: 0.9, hd: len / 2, y0: 0, y1: 6.1 }]);
+      kk.add(softPrism(rectXZ(1.3, len - 0.1), WALL_H, 0.28, 0.32, 1), EARTH2, 0, 2.2, 0);
+      iron.wall(kk, i, len, EARTH2, 2.2 + WALL_H);
+      kk.fid = fade([{ x, z, a: -th, hw: 0.9, hd: len / 2, y0: 0, y1: 2.3 + WALL_H }]);
       kk.emit(bucket, x, z, -th);
       obstacles.push({ x, z, hw: 0.9, hd: len / 2, a: -th });
     }
@@ -239,7 +253,7 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
     towers.forEach((th, i) => {
       const x = Math.cos(th) * TOWN_R, z = Math.sin(th) * TOWN_R, RT = rng('shenlou:tower:' + i), kt = new Kit(RT);
       // 南門兩座：細高的方塔，平頂一塊蓋板，頂上每面一組大的 III。從碼頭看，兩座塔的頂和中間的晷針一樣高
-      const gate = i < 2, ht = gate ? 11.2 : 8 + RT() * 5, w = gate ? 2.6 : 3.4 + RT() * 1.2;
+      const gate = i < 2, ht = (gate ? 11.2 : 8 + RT() * 5) * L, w = gate ? 2.6 : 3.4 + RT() * 1.2;
       kt.add(softPrism(rectXZ(w + 0.4, w + 0.4), 3, 0.32, 0.2, 1), SANDSTONE, 0, 0, 0);
       // 圓頂留給神聖的房子，城牆的塔一律平頂（頂上一節打 III 縫的小塔）
       RT();
@@ -265,15 +279,15 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
       obstacles.push({ x, z, hw: w / 2 + 0.2, hd: w / 2 + 0.2, a: -th });
     });
     // 鏡塔：一條巷子的盡頭，最高的那座，頂上一面斜放的銅鏡，白天朝遠方反光傳話
-    const { x: mx, z: mz } = MIRROR;
+    const { x: mx, z: mz } = MIRROR, MT = 18 * L;   // 塔頂蓋板的高度
     k.add(softPrism(rectXZ(3.6, 3.6), 3, 0.34, 0.2), SANDSTONE, 0, 0, 0);
-    k.add(softPrism(rectXZ(3, 3), 15, 0.36, 0), EARTH, 0, 3, 0);
-    for (let yy = 5; yy < 16; yy += 3.2) iii(k, 3, yy, 0.9, 0.13);
-    k.add(softPrism(rectXZ(3.6, 3.6), 0.4, 0.34, 0.14), STONE_DK, 0, 18, 0);
-    k.cyl(1.5, 1.5, 0.2, GILT, 0, 20, 0, { rx: 1.0, ry: 0.6 }, 14);
-    k.box(0.2, 2.2, 0.2, BRZ, 0, 19.2, 0);
-    iron.mirror(k, mx, mz);
-    k.fid = fade([[mx - 1.9, 0, mz - 1.9, mx + 1.9, 20.6, mz + 1.9]]);
+    k.add(softPrism(rectXZ(3, 3), MT - 3, 0.36, 0), EARTH, 0, 3, 0);
+    for (let yy = 5; yy < MT - 2; yy += 3.2) iii(k, 3, yy, 0.9, 0.13);
+    k.add(softPrism(rectXZ(3.6, 3.6), 0.4, 0.34, 0.14), STONE_DK, 0, MT, 0);
+    k.cyl(1.5, 1.5, 0.2, GILT, 0, MT + 2, 0, { rx: 1.0, ry: 0.6 }, 14);
+    k.box(0.2, 2.2, 0.2, BRZ, 0, MT + 1.2, 0);
+    iron.mirror(k, mx, mz, MT);
+    k.fid = fade([[mx - 1.9, 0, mz - 1.9, mx + 1.9, MT + 2.6, mz + 1.9]]);
     k.emit(bucket, mx, mz, 0);
     obstacles.push({ x: mx, z: mz, hw: 1.9, hd: 1.9, a: 0 });
   }
@@ -437,10 +451,10 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
   }
 
   const ferry = makeSkiff(bucketObjects), boat = ferry.boat;
-  boat.position.set(DOCK.x1 + 1.3, 0.25, 61.5);
+  boat.position.set(DOCK.x1 * K + 1.3, 0.25, 61.5 * K);
   boat.rotation.z = 0.06;   // 擱在沙上，微微歪一邊
   group.add(boat);
-  const exits = [{ x: DOCK.x1 - 0.5, z: 61.5, r: 1.5, to: 'gallery', label: '搭船', title: '渡船', boat: ferry }];
+  const exits = [{ x: DOCK.x1 * K - 0.5, z: 61.5 * K, r: 1.5, to: 'gallery', label: '搭船', title: '渡船', boat: ferry }];
 
   // ---------- 鐵件和機械：晷針拉索、沉井提水機、城門、碼頭吊桿、沙船、大齒輪、集露田、電纜 ----------
   const machines = iron.finish(bucket, { DOCK, lamps });
@@ -451,7 +465,7 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
     ring.position.set(-120, terrain(-120, -290) + 14, -290);
     ring.rotation.y = 0.7;
     ring.receiveShadow = true;
-    group.add(ring);
+    city.add(ring);
   }
 
   // ---------- 水管接成兩圈、水塔接進來；鏡塔旁的煉金坊 ----------
@@ -460,7 +474,7 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
   alchemy.emit(bucket);
 
   // ---------- 井底花園：老榕、兩棵樹蕨、井壁的藤、欄牆上的花槽、花晷和金針上的銅鏡（石頭和陶槽跟城合併，葉子另外一個會晃的網格） ----------
-  const garden = makeGarden({ under, fade, capY: CAP_Y });
+  const garden = makeGarden({ under, fade, capY: CAP_Y, needle: NEEDLE });
 
   // ---------- 合併 ----------
   // 貼地壓暗照井裡的石階、井圈各房間的地板算，不然整口井都被當成地底
@@ -479,46 +493,72 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
   const lit = bucketObjects(bucket, false, floorAt);
   for (const m of lit) {
     if (m.isMesh) { m.material = fader.patch(m.material); m.castShadow = m.receiveShadow = true; meshes.push(m); }
-    group.add(m);
+    city.add(m);
   }
   const lid = bucketObjects(lidB, false, floorAt)[0];
   lid.material = lid.material.clone();
   lid.material.transparent = true;
   lid.castShadow = lid.receiveShadow = true;
-  group.add(lid);
+  city.add(lid);
   meshes.push(lid);
   const glow = bucketObjects(lamps).find((o) => o.isPoints);
-  if (glow) group.add(glow);
-  group.add(...machines.objects, ...under.objects, ...alchemy.objects, ...garden.finish(fader));
+  if (glow) city.add(glow);
+  city.add(...machines.objects, ...under.objects, ...alchemy.objects, ...garden.finish(fader));
   meshes.push(garden.mesh);
 
-  // 太陽和月亮的圓盤
+  // 太陽和月亮的圓盤：圓的，邊緣軟一點，疊加在天上（光暈畫在天空球上，圓盤要比光暈亮）。隔著塵的太陽偏橘、變淡，起風沙時只剩一枚淡淡的影子
+  const discTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d'), grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0.72, '#fff');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  })();
   const disc = (color, s) => {
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ color, fog: false, depthWrite: false }));
+    const sp = new THREE.Sprite(gradeCurvesOnly(new THREE.SpriteMaterial({ color, map: discTex, fog: false, depthWrite: false, blending: THREE.AdditiveBlending })));
     sp.scale.setScalar(s);
     group.add(sp);
     return sp;
   };
-  const sunDisc = disc('#fff2d6', 16), moonDisc = disc('#dfe4f4', 10);
+  const SUN = new THREE.Color('#fff2d6'), SUN_DUST = new THREE.Color('#ffd9a0');
+  const sunDisc = disc(SUN, 16), moonDisc = disc('#dfe4f4', 10);
 
-  // 天空：一顆跟著鏡頭的大球，地平線是霧的顏色（遠處沙丘融進去），往上漸漸變藍；太陽那一側的地平線暖一點
+  // 天空：一顆跟著鏡頭的大球，地平線是霧的顏色（遠處沙丘融進去），往上漸漸變藍；塵越濃天頂越是土色，地平線那一圈越高。
+  // 朝太陽那一側每個像素照霧的同一條公式亮起來（grade.js 的 gradeScatter），完全進霧的沙丘才跟天接得起來；
+  // 太陽（夜裡是月亮）四周再兩圈光暈：一圈緊的、一圈散的，塵越濃散的那圈越大。最後過曲線、加抖動，光暈不會一圈一圈的
   const skyGeo = new THREE.SphereGeometry(370, 32, 16), skyCol = new Float32Array(skyGeo.attributes.position.count * 3);
   skyGeo.setAttribute('color', new THREE.BufferAttribute(skyCol, 3));
-  const dome = new THREE.Mesh(skyGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+  const halo = { uHalo: { value: new THREE.Vector4() }, uHaloColor: { value: new THREE.Color('#ffe6c4') } };
+  const skyMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false });
+  skyMat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, halo);
+    sh.vertexShader = 'varying vec3 vSky;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n\tvSky = position;');
+    sh.fragmentShader = 'varying vec3 vSky;\nuniform vec4 uHalo;\nuniform vec3 uHaloColor;\n' + sh.fragmentShader.replace('#include <colorspace_fragment>', `{
+		float k = length( uGrade.sunDir ), c = k > 1e-3 ? max( dot( normalize( vSky ), uGrade.sunDir / k ), 0.0 ) : 0.0;
+		gl_FragColor.rgb += gradeScatter( cameraPosition + vSky ) + uHaloColor * k * ( uHalo.x * pow( c, uHalo.y ) + uHalo.z * pow( c, uHalo.w ) );
+	}
+	#include <colorspace_fragment>`);
+  };
+  gradeCurvesOnly(skyMat);
+  skyMat.customProgramCacheKey = () => 'grade-curves|shenlou-sky';
+  const dome = new THREE.Mesh(skyGeo, skyMat);
   dome.renderOrder = -1;
   dome.frustumCulled = false;
   group.add(dome);
-  const ZENITH = new THREE.Color('#7fa3d1'), GLOW = new THREE.Color('#f3c792'), _sc = new THREE.Color(), _sv = new THREE.Vector3();
-  let domeKey = '';
-  function paintSky(horizon, toSun) {
-    const key = horizon.getHexString() + toSun.x.toFixed(3) + toSun.z.toFixed(3);
-    if (key === domeKey) return;
-    domeKey = key;
-    const pos = skyGeo.attributes.position;
+  const ZENITH = new THREE.Color('#7fa3d1'), _sc = new THREE.Color(), _zc = new THREE.Color(), _sv = new THREE.Vector3();
+  const domeKey = [];
+  function paintSky(horizon, haze, storm) {
+    const key = [horizon.r, horizon.g, horizon.b, haze, storm];
+    if (key.every((v, i) => Math.abs(v - (domeKey[i] ?? 1e9)) < 2e-3)) return;
+    domeKey.splice(0, key.length, ...key);
+    _zc.copy(ZENITH).lerp(horizon, 0.25 + 0.45 * haze + 0.25 * storm);
+    const pos = skyGeo.attributes.position, top = 0.6 + 0.3 * haze;
     for (let i = 0; i < pos.count; i++) {
       _sv.fromBufferAttribute(pos, i).normalize();
-      const up = Math.max(0, _sv.y), glow = Math.max(0, _sv.x * toSun.x + _sv.z * toSun.z) ** 3 * (1 - smooth(0, 0.35, up));
-      _sc.copy(horizon).lerp(GLOW, glow * 0.6).lerp(ZENITH, smooth(0.02, 0.6, up));
+      _sc.copy(horizon).lerp(_zc, smooth(0.02, top, Math.max(0, _sv.y)));
       skyCol.set([_sc.r, _sc.g, _sc.b], i * 3);
     }
     skyGeo.attributes.color.needsUpdate = true;
@@ -551,18 +591,21 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
     return false;
   };
   const onDock = (x, z) => x > DOCK.x0 && x < DOCK.x1 && z > DOCK.z0 && z < DOCK.z1;
-  function walkable(x, z) {
+  // walkIn、groundIn 照城的尺寸；底下 walkable、groundY 起都是真的公尺
+  function walkIn(x, z) {
     if (Math.hypot(x, z) > WALK_R) return false;
     if (wellD(x, z) < RING_OUT + MARGIN && !under.walkOk(x, z, MARGIN)) return false;
     return !hits(x, z, MARGIN);
   }
-  function groundY(x, z) {
+  function groundIn(x, z) {
     if (onDock(x, z)) return DOCK.y;
     const d = wellD(x, z);
     if (d < RING_OUT) return under.floorAt(x, z);
     if (d < WELL) return -(WELL - d) * WELL_K;
     return terrain(x, z);
   }
+  const walkable = (x, z) => walkIn(x / K, z / K);
+  const groundY = (x, z) => groundIn(x / K, z / K) * K;
   function findWalkable(x, z, fromX, fromZ) {
     if (walkable(x, z)) return { x, z };
     for (let r = 0.25; r <= 3; r += 0.25) {
@@ -578,7 +621,7 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
     }
     return null;
   }
-  const { findPath } = makePathfinder(walkable, -WALK_R, -WALK_R, WALK_R, WALK_R);
+  const { findPath } = makePathfinder(walkable, -WALK_R * K, -WALK_R * K, WALK_R * K, WALK_R * K);
 
   // 鏡頭：只躲地面（沙丘、井、井圈的岩牆頂），房子擋住時由 fader 淡掉。
   // 人在井圈公寓裡時，鏡頭可以降到岩牆的切面上，從上面往下看；這時階梯和井口當成一道牆，鏡頭會抬高越過去，不會貼著階梯擋住人
@@ -587,12 +630,13 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
   const _hsl = { h: 0, s: 0, l: 0 };
   const towardHue = (c, h, k) => { c.getHSL(_hsl); c.setHSL(_hsl.h + (((h - _hsl.h + 1.5) % 1) - 0.5) * k, Math.min(1, _hsl.s * (1 + 0.3 * k)), _hsl.l); };
   const camFloor = (x, z) => {
+    x /= K; z /= K;
     const d = wellD(x, z);
     if (inUnder) {
-      if (d < RING_OUT) return under.camAt(x, z);
-      if (d < WELL + 1.4) return 0.4;
+      if (d < RING_OUT) return under.camAt(x, z) * K;
+      if (d < WELL + 1.4) return 0.4 * K;
     }
-    return d < RING_OUT ? under.topAt(x, z) : groundY(x, z);
+    return (d < RING_OUT ? under.topAt(x, z) : groundIn(x, z)) * K;
   };
   function camClip(a, b) {
     const n = Math.ceil(a.distanceTo(b) / 0.3);
@@ -659,22 +703,29 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
     sun.castShadow = true;
     sun.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 1024 : 2048);
     const sc = sun.shadow.camera;
-    sc.left = sc.bottom = -55; sc.right = sc.top = 55; sc.near = 1; sc.far = 400;
+    sc.left = sc.bottom = -55 * K; sc.right = sc.top = 55 * K; sc.near = 1; sc.far = 400 * K;
     sc.updateProjectionMatrix();
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.05;
     scene.add(sun.target);
   }
+  // 人腳下的影子扣地面的光，跟房子的影子一樣過調色（footshadow.js）：每一幀畫一張影子圖
+  const foot = renderer && sun ? footMask(renderer, scene, { coarse }) : null;
   const center = new THREE.Vector3(), lastDir = new THREE.Vector3(), lastCenter = new THREE.Vector3(1e9, 0, 0);
   let lastT = 0;
-  const eyes = [], eyeA = new THREE.Vector3(), eyeB = new THREE.Vector3(), eyeC = new THREE.Vector3(), fwd = new THREE.Vector3();
+  const eyes = [], eyeA = new THREE.Vector3(), eyeB = new THREE.Vector3(), eyeC = new THREE.Vector3(), fwd = new THREE.Vector3(), camIn = new THREE.Vector3();
+  // 店家站的位置：給外面的（之後放人、白獸找空地）換成真的公尺
+  const shopsAt = shops.map((s) => ({ ...s, x: s.x * K, y: s.y * K, z: s.z * K }));
 
   const room = {
     index: 0, id: 'shenlou', data: { name: '沙島', subtitle: 'Sarab', paintings: [] },
     group, obstacles, paintings: [], center: new THREE.Vector3(0, 0, 0),
   };
   // 水窖的拱頂下、拱廊頂下曬不到太陽，人影照常是腳下的圓影（井圈公寓其他地方是露天的）
-  sunShadow.open = (x, z) => !(wellD(x, z) < RING_OUT && under.placeAt(x, z) === 'cisterna') && !(Math.abs(x) < AR.x + 0.5 && z > AR.z0 && z < AR.z1);
+  sunShadow.open = (x, z) => {
+    x /= K; z /= K;
+    return !(wellD(x, z) < RING_OUT && under.placeAt(x, z) === 'cisterna') && !(Math.abs(x) < AR.x + 0.5 && z > AR.z0 && z < AR.z1);
+  };
   const PLACES = {
     dock: { name: '沙上的碼頭', subtitle: 'Portus' },
     well: { name: '沉井', subtitle: 'Puteus' },
@@ -703,12 +754,15 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
   };
 
   return {
-    rooms: [room], paintings: [], mirror: null, outdoor: null, raycastTargets: meshes, env, shops,
-    camDistMax: 46,
-    spawn: { x: 0, z: 59, heading: Math.PI },
+    rooms: [room], paintings: [], mirror: null, outdoor: null, raycastTargets: meshes, env, shops: shopsAt,
+    // 塵（shenlou-dust.js）要的：沙地的材質（地上畫流沙）、城牆離中心多遠（公尺，牆裡風小）。zone-shenlou.js 接上的塵放在 dust
+    sandMat: groundMat, townR: TOWN_R * K, dust: null,
+    camDistMax: 46 * K,
+    spawn: { x: 0, z: 59 * K, heading: Math.PI },
     exits, home: null,
     roomIndexAt: () => 0,
     placeAt(x, z) {
+      x /= K; z /= K;
       for (const [id, l] of Object.entries(LANDMARKS)) if (Math.hypot(x - l.x, z - l.z) < l.r) return PLACES[id];
       if (z > TOWN_R + 2 && z < SAND_SEA) return Math.abs(x) < 12 ? PLACES.dock : PLACES.dunes;
       if (z >= SAND_SEA && Math.abs(x) < 70) return PLACES.sandsea;
@@ -725,7 +779,7 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
     walkable, findWalkable, findPath, groundY, camFloor, camClip,
     crowdSpots: null,
     setCurrentRoom() {},
-    debug: { terrain, obstacles, houses },
+    debug: { terrain, obstacles, houses, scale: K },   // 城的尺寸，要乘 scale 才是真的公尺
     // cam：鏡頭位置；target：角色站的地方；still：拍照中，擋住的東西一律不淡
     update(t, cam, target, camera, still = false) {
       const dt = Math.min(0.1, Math.max(0, t - lastT));
@@ -735,7 +789,7 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
         eyes.push(eyeA.set(target.x, target.y + 1.1, target.z));
         // 走到店前：店家的臉也要看得到
         let best = null, bd = 3.5;
-        for (const s of shops) {
+        for (const s of shopsAt) {
           const d = Math.hypot(s.x - target.x, s.z - target.z);
           if (d < bd && Math.abs(s.y - target.y) < 1.5) { bd = d; best = s; }
         }
@@ -747,42 +801,47 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
           if (depth > 0.5) eyes.push(eyeC.copy(cam).addScaledVector(fwd, depth));
         }
       }
-      fader.update(dt, cam, eyes, still || !target);
+      // 淡不淡照城的尺寸算
+      for (const e of eyes) e.divideScalar(K);
+      fader.update(dt, camIn.copy(cam).divideScalar(K), eyes, still || !target);
       uTime.value = t;
       machines.update(t);
       alchemy.update(t);
       const s = sky(twHour());
+      // 塵（shenlou-dust.js）：a 是被這一刻的塵調過的霧色和光線，方向、時辰照舊看 s
+      const a = this.dust?.update(dt, s, cam, target ? target.y : cam.y - 2, camera) ?? s;
+      const hz = this.dust?.haze ?? 0, st = this.dust?.storm ?? 0;
       // 人的影子跟著太陽拉長（character.js 讀 sunShadow）；夜裡照常是圓影
       const sh = Math.hypot(s.dir.x, s.dir.z);
       sunShadow.len = s.day && s.dir.y > 0.08 && sh > 1e-4 ? Math.min(6, sh / s.dir.y) : 0;
       if (sh > 1e-4) { sunShadow.sx = -s.dir.x / sh; sunShadow.sz = -s.dir.z / sh; }
-      scene.background.copy(s.bg);
+      scene.background.copy(a.bg);
       if (scene.fog) {
-        scene.fog.color.copy(s.bg);
-        if (scene.fog.isFog) { scene.fog.near = s.near; scene.fog.far = s.far; }
+        scene.fog.color.copy(a.bg);
+        if (scene.fog.isFog) { scene.fog.near = a.near; scene.fog.far = a.far; }
       }
       // 井圈公寓：人在井圈裡或下到井底時，岩牆的上半截只留影子不畫（剖面），天光稍微暗一點（站在坑底）
-      inUnder = !!target && wellD(target.x, target.z) < RING_OUT;
+      inUnder = !!target && wellD(target.x / K, target.z / K) < RING_OUT;
       underK += ((inUnder ? 1 : 0) - underK) * Math.min(1, dt * 8);
       lid.material.opacity = 1 - underK;
       lid.material.depthWrite = underK < 0.1;
       lid.material.colorWrite = underK < 0.98;
       lid.userData.ghost = inUnder;
-      if (target) under.update(dt, target.x, target.z, s.day ? s.dir : null);
+      if (target) under.update(dt, target.x / K, target.z / K, s.day ? s.dir : null);
       garden.update(s, dt, underK);
-      deepK += ((inUnder ? smooth(-4.5, -9, target.y) : 0) - deepK) * Math.min(1, dt * 3);
+      deepK += ((inUnder ? smooth(-4.5, -9, target.y / K) : 0) - deepK) * Math.min(1, dt * 3);
       if (hemi) {
-        hemi.color.copy(s.sky);
-        hemi.groundColor.copy(s.ground);
+        hemi.color.copy(a.sky);
+        hemi.groundColor.copy(a.ground);
         if (deepK > 0.001) { towardHue(hemi.color, 0.45, 0.25 * deepK); towardHue(hemi.groundColor, 0.22, 0.45 * deepK); }
-        hemi.intensity = s.hi * (1 - 0.12 * underK + 0.4 * deepK);
+        hemi.intensity = a.hi * (1 - 0.12 * underK + 0.4 * deepK);
       }
       if (sun) {
-        sun.color.copy(s.light);
-        sun.intensity = s.si;
+        sun.color.copy(a.light);
+        sun.intensity = a.si;
         // 陰影的範圍跟著角色，對齊 10 公尺的格子，走動時影子不會跟著游
         if (target) center.set(Math.round(target.x / 10) * 10, 0, Math.round(target.z / 10) * 10);
-        sun.position.copy(center).addScaledVector(s.dir, 150);
+        sun.position.copy(center).addScaledVector(s.dir, 150 * K);
         sun.target.position.copy(center);
         sun.target.updateMatrixWorld();
         if (renderer && (lastDir.dot(s.dir) < Math.cos(0.12 * deg) || !lastCenter.equals(center))) {
@@ -791,14 +850,18 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
           lastCenter.copy(center);
         }
       }
+      // 隔著塵看太陽：圓盤偏橘、變淡，風沙時只剩一枚影子；光暈緊的那圈風沙時收掉，散的那圈塵越濃越亮
       sunDisc.visible = s.day && s.x > -0.02;
+      sunDisc.material.color.copy(SUN).lerp(SUN_DUST, 0.5 * hz + 0.5 * st);
+      sunDisc.material.opacity = 1 - 0.2 * hz - 0.65 * st;
+      halo.uHalo.value.set(0.5 + 0.25 * hz - 0.55 * st, 900, 0.1 + 0.22 * hz + 0.08 * st, 60 - 25 * st);
       moonDisc.visible = !s.day;
       dome.position.copy(cam);
-      _sv.set(s.dir.x, 0, s.dir.z).normalize();
-      paintSky(s.bg, { x: _sv.x, z: _sv.z });
+      paintSky(a.bg, hz, st);
       sunDisc.position.copy(cam).addScaledVector(sunDir, 300);
       moonDisc.position.copy(cam).addScaledVector(moonDir, 300);
       if (glow) glow.visible = s.x < 0.12;
+      if (foot && camera) foot.update(camera);
     },
   };
 }

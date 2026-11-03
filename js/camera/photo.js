@@ -16,7 +16,7 @@
 // 舉著時滾輪換高低（蹲低、眼高、舉高），中鍵切自拍；Q 閃光、~ 日期、L 看鏡、F 直橫（攝影模式裡都能按）。舉起和切自拍時先黑一下（darken）。相機的快門、閃光、日期、看鏡照樣顯示，標上按鍵。
 // 看鏡（lookOn）：開著時自己的頭一直看著鏡頭，關著就隨意看（attention.js）。鏡頭的位置和方向由 lensInfo 給別人和自己的頭
 import * as THREE from 'three';
-import { lens, fitSource, unbend } from '../core/lens.js';
+import { lens, fitSource, unbend, COVER } from '../core/lens.js';
 import { makePostcard, loadQR } from '../save/postcard.js';
 import { packFace } from '../save/filmcode.js';
 import { getSave, sanitizeLook, decodeFace } from '../avatar/looks.js';
@@ -280,7 +280,7 @@ export class PhotoMode {
     const dir = cam.getWorldDirection(new THREE.Vector3());
     this.yaw = this.aimYaw = Math.atan2(-dir.x, -dir.z);
     this.pitch = this.aimPitch = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1));
-    this.fov = this.cur = cam.fov;
+    this.fov = this.cur = Math.min(p.fov, FOV_MAX);   // 越肩時鏡頭畫的是彎之前的原圖，視角照角色那邊記的
     this.room = -1;
     this.active = true;
     this.gear = null;
@@ -366,7 +366,7 @@ export class PhotoMode {
     this.renderer.domElement.style.filter = '';
     this.character.group.visible = true;
     this.player.marker.visible = true;
-    this.camera.fov = this.player.baseFov();
+    this.player.applyLens();
     this.camera.near = 0.1;
     this.camera.updateProjectionMatrix();
     this.player.paused = false;
@@ -427,12 +427,14 @@ export class PhotoMode {
 
   // 鏡頭在哪、朝哪、多廣：送給別人判斷有沒有被拍、畫出畫廊的眼睛（multiplayer.js），自己的頭也照這個看鏡頭（attention.js）。
   // kind 0 是手上的相機，1 是畫廊的眼睛；studio 是照相館架好的鏡頭（不送給別人）
+  // fov 是取景框上下的視角：鏡頭的 fov 是整個螢幕的，框比螢幕矮（手機上常常是）要照框的高換算
   lensInfo() {
     if (!this.active) return null;
     const L = this.lensOut, f = this.frame;
     L.yaw = this.yaw;
     L.pitch = this.pitch;
-    L.fov = Math.min(this.cur, 120);
+    const tv = (Math.tan(THREE.MathUtils.degToRad(this.cur) / 2) * f.h) / window.innerHeight;
+    L.fov = Math.min(THREE.MathUtils.radToDeg(2 * Math.atan(tv)), 120);
     L.aspect = f.w / Math.max(1, f.h);
     L.kind = this.gear ? 0 : 1;
     L.studio = !!this.studio;
@@ -972,7 +974,7 @@ export class PhotoMode {
       cam.fov = this.cur;
     } else {
       const { k, fo } = this.fish(this.cur);
-      Object.assign(lens, { on: true, k, fo, w: W, h: H });
+      Object.assign(lens, { on: true, k, fo, w: W, h: H, cover: COVER });
       lens.fs = fitSource(W, H);
       cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(H / 2 / lens.fs));
     }
@@ -1086,13 +1088,14 @@ export class PhotoMode {
   }
 
   // 手持相機：鏡頭在角色手上。走路交給角色，方向照鏡頭算，拿著相機走慢一點；
-  // 角色面向鏡頭看的方向，自拍時反過來面向鏡頭。蹲低、眼高、舉高照角色的身高算
+  // 角色面向鏡頭看的方向，自拍時反過來面向鏡頭。蹲低、眼高、舉高照角色的身高算；
+  // 高度照 player.sh.y（慢慢跟的腳下高度），走石階時畫面才不會每一階頂一下
   updateHeld(dt) {
     const p = this.player, ch = this.character, k = this.keys, cam = this.camera;
     // 舉相機：手上的相機直接朝準心剛才對到的那一點看（肩後和手上差了半公尺，不轉過去會偏一點）
     const tgt = this.aimTarget;
     if (tgt) {
-      const hy = p.pos.y + [ch.dims.faceY * 0.5, ch.dims.faceY, ch.dims.topY + 0.35][this.grip];
+      const hy = p.sh.y + [ch.dims.faceY * 0.5, ch.dims.faceY, ch.dims.topY + 0.35][this.grip];
       const dx = tgt.x - p.pos.x, dy = tgt.y - hy, dz = tgt.z - p.pos.z, len = Math.hypot(dx, dy, dz) || 1;
       this.aimYaw = this.yaw = Math.atan2(-dx, -dz);
       this.aimPitch = this.pitch = Math.asin(THREE.MathUtils.clamp(dy / len, -1, 1));
@@ -1112,7 +1115,7 @@ export class PhotoMode {
     const selfie = this.grip === 3;
     p.heading = selfie ? this.yaw : this.yaw + Math.PI;
     ch.group.rotation.y = p.heading;
-    const hx = -Math.sin(this.yaw), hz = -Math.cos(this.yaw), d = ch.dims, y = p.pos.y;
+    const hx = -Math.sin(this.yaw), hz = -Math.cos(this.yaw), d = ch.dims, y = p.sh.y;
     const want = selfie
       ? new THREE.Vector3(p.pos.x - hx * 0.9, y + d.faceY + 0.12, p.pos.z - hz * 0.9)
       : new THREE.Vector3(p.pos.x + hx * 0.12, y + [d.faceY * 0.5, d.faceY, d.topY + 0.35][this.grip], p.pos.z + hz * 0.12);

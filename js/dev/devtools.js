@@ -251,6 +251,11 @@ const INFO = {
   maxFog: ['霧最多', '高度霧最多蓋掉幾成，1 是全部進霧', [0, 1, 0.01]],
   far: ['遠景空氣起點', '幾公尺以外不管高低都罩上一層空氣，收向天邊的顏色；0 是沒有', [0, 300, 1]],
   farAir: ['遠景空氣最多', '最遠的地方空氣蓋掉幾成：大一點遠山退得更進天色', [0, 1, 0.01]],
+  drift: ['霧團', '高度霧的濃淡最多變幾成，一團一團被風吹過去；0 是均勻的', [0, 1, 0.01]],
+  driftSize: ['霧團大小', '一張雜訊圖鋪幾公尺，團大約是它的四分之一', [20, 600, 1]],
+  scatter: ['朝陽發亮', '朝太陽看時霧和天邊亮多少（沙塵把陽光往前散）；0 是沒有', [0, 2, 0.01]],
+  scatterPow: ['發亮集中', '大一點光集中在太陽附近，小一點整片天邊都亮', [1, 40, 0.1]],
+  scatterColor: ['發亮的顏色', '朝太陽那一側的霧和天邊被照成什麼顏色', null],
   exposure: ['物件曝光', '東西亮幾格（不動霧和天空）：分區時拿來把一塊壓暗或提亮', [-2, 2, 0.02]],
   desat: ['暗處褪色', '暗部和中間調降多少飽和度', [0, 1, 0.01]],
   keep: ['留色亮度', '亮到多少以上留著原本的顏色（燈籠、窗光）', [0.2, 1.2, 0.01]],
@@ -604,6 +609,21 @@ function gradeSections(G, { zone, renderer, scene, world, bar, section, onOpen, 
     );
     S1.body.append(wx);
   }
+  // 照塵的濃淡（蜃樓，weather.js 的 __dust）：一樣先固定住再調
+  const dusty = window.__dust;
+  if (dusty && SET.regions.some((r) => r.weather)) {
+    const wx = h('div', 'line'), force = (v, what) => { dusty.force(v); say(what); };
+    wx.append(
+      h('span', 'note', '塵'),
+      button('照時間', () => force(null, '塵照伺服器時間（大家同一陣風）')),
+      button('沙停', () => force(0, '固定成沙停')),
+      button('平常', () => force(0.5, '固定成平常的濃塵')),
+      button('風沙', () => force(1, '固定成風沙')),
+      button('看起風沙', () => { const n = dusty.soon('storm', 20); say('下一次起風沙：' + n.風沙); }, '跳到下一次起風沙開始捲過來之前二十秒'),
+      button('看沙停', () => { const n = dusty.soon('calm', 20); say('下一次沙停：' + n.沙停); }, '跳到下一次沙停開始之前二十秒'),
+    );
+    S1.body.append(wx);
+  }
 
   function renderList() {
     list.replaceChildren();
@@ -611,7 +631,7 @@ function gradeSections(G, { zone, renderer, scene, world, bar, section, onOpen, 
       const r = i < 0 ? SET.base : SET.regions[i];
       const row = h('div', 'reg' + (i === cur ? ' cur' : '')), bar = h('i'), fill = h('b'), val = h('span', 'note');
       bar.append(fill);
-      const wx = r.weather ? `・照${r.weather === 'rain' ? '雨' : '地濕'}` : '';
+      const wx = r.weather ? `・照${{ rain: '雨', wet: '地濕', dust: '風沙', calm: '沙停' }[r.weather] ?? r.weather}` : '';
       row.append(h('span', null, (i < 0 ? '全區' : `${i + 1}. ${r.name || '分區'}`) + (r.tone ? `（${r.tone}）` : '') + wx), bar, val);
       row.onclick = () => setCur(i);
       list.append(row);
@@ -659,12 +679,19 @@ function gradeSections(G, { zone, renderer, scene, world, bar, section, onOpen, 
 
   // ── 色調庫 ──
   const S2 = section('tones', '色調庫', false);
+  // 本機的貼進 tones.js 以後就多了，一樣的丟掉；留著的話會一直蓋住檔案裡的，之後改 tones.js 這台電腦看不到
   let local = store.get('grade-tones', {});
+  const pasted = Object.keys(local).filter((k) => G.sameAsFile(k, local[k]));
+  if (pasted.length) {
+    for (const k of pasted) delete local[k];
+    store.set('grade-tones', local);
+    console.log(`本機的色調 ${pasted.join('、')} 已經在 tones.js 裡了，刪掉本機那一份`);
+  }
   G.setLocalTones(local);
   const toneSel = h('select'), toneNow = h('div', 'note');
   const fillTones = () => {
     const all = G.tones();
-    toneSel.replaceChildren(...Object.keys(all).map((k) => Object.assign(h('option', null, k + (G.isFileTone(k) ? '' : '（本機）')), { value: k })));
+    toneSel.replaceChildren(...Object.keys(all).map((k) => Object.assign(h('option', null, k + (!G.isFileTone(k) ? '（本機）' : local[k] ? '（本機改過）' : '')), { value: k })));
   };
   const toneKeys = (t) => [...G.NUMBERS, ...G.COLORS].filter((k) => t?.[k] != null);
   const t1 = h('div', 'line'), t2 = h('div', 'line');
@@ -706,14 +733,16 @@ function gradeSections(G, { zone, renderer, scene, world, bar, section, onOpen, 
     }, '把這一組現在的樣子存成一個色調'),
     button('刪掉本機的', () => {
       const name = toneSel.value;
-      if (G.isFileTone(name)) return say('tones.js 裡的要在檔案裡刪');
+      if (!local[name]) return say('tones.js 裡的要在檔案裡刪');
       delete local[name];
       local = { ...local };
       store.set('grade-tones', local);
       G.setLocalTones(local);
       fillTones();
+      if (G.isFileTone(name)) toneSel.value = name;
       refresh();
-    }),
+      if (G.isFileTone(name)) say(`「${name}」回到 tones.js 的版本`);
+    }, '刪掉存在這台電腦的那一份（tones.js 也有的就回到檔案裡的版本）'),
   );
   fillTones();
   S2.body.append(t1, t2, toneNow, h('div', 'note', '色調可以只寫幾項（例如只有顏色、沒有霧），沒寫的照原本的'));
@@ -960,9 +989,9 @@ function gradeSections(G, { zone, renderer, scene, world, bar, section, onOpen, 
   const S4 = section('color', '顏色', true);
   for (const k of COLOR_KEYS) gradeRow(S4.body, k);
   const S5 = section('fog', '霧', true);
-  const linearNote = h('div', 'note', '這一區用線性霧（畫廊）：霧從哪裡開始、到哪裡全白在「光線」的霧起點、霧終點，下面幾項沒有作用');
+  const linearNote = h('div', 'note', '這一區用線性霧：霧從哪裡開始、到哪裡全白在「光線」的霧起點、霧終點，下面幾項沒有作用');
   S5.body.append(linearNote);
-  for (const k of G.FOG_KEYS) gradeRow(S5.body, k);
+  for (const k of [...G.FOG_KEYS, 'scatterColor']) gradeRow(S5.body, k);
 
   // 各區域自己登記的參數（海市的霧色、暖霧、蒸氣、煙、海霧、天空）：跟著分區一起混
   if (TUNE.length) {
