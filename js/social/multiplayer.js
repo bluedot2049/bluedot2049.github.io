@@ -542,7 +542,7 @@ export class Multiplayer {
         L.eye.setOpen(1);
         L.eye.addTo(this.scene);
       }
-      L.eye.group.visible = L.eye.tail.visible = true;
+      L.eye.group.visible = true;
       L.pupil += ((L.onMe ? 0.6 : 1) - L.pupil) * Math.min(1, dt * 6);
       L.eye.setPupil(L.pupil);
       L.eye.group.position.copy(L.pos);
@@ -567,7 +567,7 @@ export class Multiplayer {
   hideLens(o) {
     const L = o.lens;
     if (!L) return;
-    if (L.eye) L.eye.group.visible = L.eye.tail.visible = false;
+    if (L.eye) L.eye.group.visible = false;
     if (L.glint) L.glint.visible = false;
   }
 

@@ -326,7 +326,8 @@ body.photo #photo-btn .x { display: block; }
   position: absolute; left: -11px; top: -11px; width: 22px; height: 22px; border-radius: 50%;
   background: #2a2638; box-shadow: 0 0 0 1.5px #e3bb76, 0 0 12px rgba(143, 122, 176, .8);
 }
-#eye-mark i::after { content: ""; position: absolute; left: 7px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: #0e0b14; border: 1.5px solid #e3bb76; }
+/* 瞳孔往右偏 3px（連邊框 11px，正中是 5.5px），跟箭頭一起轉（guide.js updateMark）：看著黑眼在的方向，不正面看人 */
+#eye-mark i::after { content: ""; position: absolute; left: 8.5px; top: 5.5px; width: 8px; height: 8px; border-radius: 50%; background: #0e0b14; border: 1.5px solid #e3bb76; }
 #eye-mark span {
   position: absolute; top: 14px; left: 0; transform: translateX(-50%); white-space: nowrap;
   font-size: 11px; line-height: 18px; padding: 0 7px; letter-spacing: .1em; color: var(--text);

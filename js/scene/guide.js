@@ -24,10 +24,10 @@ const ARRIVE = 2.2;     // 離目的地這麼近算到了
 const SEEN = 4;         // 離一個地方這麼近算去過（沒寫 r、place、room 的）
 const REPATH = 0.8;     // 自己走的時候，隔幾秒照現在的位置重找一次路
 const SCALE = 1.25;     // 比鏡子前那顆大一點，遠遠也看得到
-const WAKE = 16;        // 帶路時飛過的地方留下的煙，幾團輪流用
-const WAKE_LIFE = 3.2;  // 煙留多久，回頭找得到它剛走哪條路
 const OTHERS = 8;       // 別人的黑眼最多畫幾顆
 const CHASE_STEP = 0.8; // 跟著隊友的黑眼：隔幾秒照它現在的位置重找路
+const AVERT = 0.38;     // 視線離「眼睛到鏡頭」那條線至少多少弧度（約 22°），再近看起來就是在看玩家。越肩回頭時落在大腿附近（18° 只到腰帶）
+const DROP = 2.5;       // 太靠近鏡頭時，看的那一點最多往下移幾公尺：看角色就變成看腰、腳邊
 const STEP = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 2, ArrowUp: -2 };   // 方向鍵：清單是兩欄
 const KEY_SEEN = 'eyeSeen', KEY_ON = 'eyeOn', KEY_TOLD = 'eyeTold';
 
@@ -41,6 +41,7 @@ const smooth = (v) => { const t = clamp01(v); return t * t * (3 - 2 * t); };
 const pop = (t) => { const c = 1.70158, u = t - 1; return 1 + (c + 1) * u * u * u + c * u * u; };
 
 const _f = new THREE.Vector3(), _v = new THREE.Vector3(), _w = new THREE.Vector3(), _t = new THREE.Vector3(), _g = new THREE.Vector3();
+const _c = new THREE.Vector3(), _u = new THREE.Vector3(), _s = new THREE.Vector3();
 
 // 折線上離 (px, pz) 最近的那一點，再往前走 s 公尺。回傳 { x, z, i, t, end }：落在第 i 段的 t 處，end 是走到底了
 function ahead(pts, px, pz, s) {
@@ -65,17 +66,10 @@ function ahead(pts, px, pz, s) {
   return { x: e.x, z: e.z, i: pts.length - 2, t: 1, end: true };
 }
 
-// 煙的貼圖：中間亮、往外淡掉
-function puffTexture() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const g = c.getContext('2d'), grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grd.addColorStop(0, 'rgba(255,255,255,1)');
-  grd.addColorStop(0.4, 'rgba(255,255,255,.35)');
-  grd.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grd;
-  g.fillRect(0, 0, 64, 64);
-  return new THREE.CanvasTexture(c);
+// 從 E 看 G 往下 d 公尺的那一點，跟 c（E 往鏡頭的單位向量）夾角的 cos。G 跟 E 疊在一起沒有方向，當作沒對著鏡頭
+function cosDown(E, G, d, c) {
+  const x = G.x - E.x, y = G.y - d - E.y, z = G.z - E.z, n = Math.hypot(x, y, z);
+  return n < 1e-3 ? -1 : (x * c.x + y * c.y + z * c.z) / n;
 }
 
 // 一顆眼睛的蹦出來、闔眼消失、眨眼：自己的和別人的共用。state：pop 正蹦出來、here 在、leave 正闔眼消失、gone 收掉了
@@ -147,11 +141,6 @@ export class Guide {
     this.loud = false;              // 剛叫出來：蹦出來時出聲。攝影完回來那種不出聲
     this.flying = false;            // 這一幀黑眼還在飛、在蹦，主迴圈別降幀
     this.others = new Map();        // 別人的黑眼：代號 → { eye, pos, gaze, last, state, ... }
-
-    // 帶路的煙：第一次帶路才放進場景，沒叫出黑眼的人場景裡什麼都不多（tools/smoke.mjs 的場景指紋才不會變）
-    this.lastPuff = new THREE.Vector3();
-    this.wake = [];
-    this.puffAt = 0;
 
     // 按鈕、卡片、畫面邊的記號
     const $ = (id) => document.getElementById(id);
@@ -521,7 +510,6 @@ export class Guide {
       me.t = 0;
     }
     if (me.state !== 'gone') this.updateEye(dt, now);
-    this.updateWake(dt);
     this.updateOthers(dt);
     this.updateMark();
     if (this.isOpen && this.busy()) this.closeCard();
@@ -555,7 +543,7 @@ export class Guide {
   }
 
   // 跟在身邊：角色左上方（照畫面的左邊；越肩的鏡頭在右肩後面，放右邊會擋住）。
-  // 輪流看前面、看角色、偶爾看鏡頭一眼
+  // 輪流看前面、看角色、看角色正在看的東西。不看鏡頭：一顆眼睛盯著螢幕，有的人會有壓力（拍照才看，那是 selfie.js 的事）
   beside(T, G, dt) {
     const pl = this.player, ch = pl.character;
     this.camera.getWorldDirection(_f);
@@ -566,12 +554,12 @@ export class Guide {
     // 往前看時偏向畫面左邊一點：正對著鏡頭看的方向，看到的只有眼球後面那一片黑
     if ((this.idleT -= dt) <= 0) {
       const r = Math.random();
-      this.idleLook = r < 0.3 ? 'ahead' : r < 0.65 ? 'face' : 'viewer';
+      this.idleLook = r < 0.3 ? 'ahead' : r < 0.65 ? 'face' : 'thing';
       this.idleT = 2.2 + Math.random() * 3;
     }
     if (this.idleLook === 'face') G.set(pl.pos.x, pl.pos.y + (ch.dims?.faceY ?? 1.2), pl.pos.z);
-    else if (this.idleLook === 'viewer') G.copy(this.camera.position);
-    else G.set(T.x + _f.x * 8 + _f.z * 5, T.y - 0.3, T.z + _f.z * 8 - _f.x * 5);
+    // 角色在看人、動物、畫、鳥（attention.js）就跟著看同一個；沒在看什麼的時候（鏡頭在背後操作、越肩）角色看的就是前面
+    else if (this.idleLook !== 'thing' || !pl.attn?.thing(G)) G.set(T.x + _f.x * 8 + _f.z * 5, T.y - 0.3, T.z + _f.z * 8 - _f.x * 5);
   }
 
   // 帶路：沿著路飛在角色前面 LEAD 公尺，眼珠看再往前一點的路。跟著走時路就是角色正在走的那條；
@@ -605,9 +593,10 @@ export class Guide {
     T.set(a.x, this.heightOn(a, ys) + HOVER, a.z);
     this.stillT = pl.speed < 0.1 ? this.stillT + dt : 0;
     const face = pl.pos.y + (pl.character.dims?.faceY ?? 1.2);
-    // 走著走著每隔幾秒回頭看你一眼，像在確認你有跟上；一直看路的話，畫面上只看得到眼球後面
+    // 走著走著每隔幾秒回頭看角色一眼，像在確認你有跟上；一直看路的話，畫面上只看得到眼球後面。
+    // 越肩時從前面看臉差不多就是正對鏡頭，avert 會把它往下移到腰、腳邊
     if ((this.backT -= dt) < -0.9) this.backT = 2.5 + Math.random() * 2;
-    // 你停下來、落在後面、或剛好回頭：看你。快到了看那個地方，不然看路
+    // 你停下來、落在後面、或剛好回頭：看角色。快到了看那個地方，不然看路
     if (this.stillT > 1.1 || this.backT < 0 || Math.hypot(this.pos.x - px, this.pos.z - pz) > LEAD + 2.5) G.set(px, face, pz);
     else if (a.end && d.look) G.set(d.look.x, d.look.y, d.look.z);
     else G.set(b.x, this.heightOn(b, ys) + 1.5, b.z);
@@ -624,6 +613,32 @@ export class Guide {
   // 鏡頭轉到角色前面時，帶路的黑眼會飛到鏡頭跟前：離鏡頭不到兩公尺就縮小，貼著鏡頭時整顆不見，不會一大團黑的擋住畫面
   lensRoom(p) {
     return Math.max(0.001, smooth((p.distanceTo(this.camera.position) - 0.5) / 1.3));
+  }
+
+  // 黑眼在 E、要看 G：視線離鏡頭不到 AVERT，看起來就是在看玩家。看的那一點往下移，看角色就變成看腰、腳邊；
+  // 鏡頭比看的地方還低（往下反而更近）、或移了 DROP 還不夠，就沿著原本偏開鏡頭的那一邊轉開。改的是 G 本身，下一幀從這裡接著追
+  avert(E, G) {
+    _c.subVectors(this.camera.position, E);
+    if (_c.lengthSq() < 0.25) return;   // 貼著鏡頭時整顆已經縮到看不見（lensRoom）
+    _c.normalize();
+    const lim = Math.cos(AVERT), at = (d) => cosDown(E, G, d, _c);
+    if (at(0) <= lim) return;
+    if (at(0.05) < at(0) && at(DROP) <= lim) {
+      let lo = 0, hi = DROP;
+      for (let i = 0; i < 12; i++) {
+        const m = (lo + hi) / 2;
+        if (at(m) <= lim) hi = m;
+        else lo = m;
+      }
+      G.y -= hi;
+      return;
+    }
+    const n = _u.subVectors(G, E).length();
+    _u.divideScalar(n);
+    _s.copy(_u).addScaledVector(_c, -_u.dot(_c));
+    if (_s.lengthSq() < 1e-6) _s.set(0, -1, 0).addScaledVector(_c, _c.y);   // 正對著鏡頭：往下轉
+    _s.normalize();
+    G.copy(E).addScaledVector(_c, Math.cos(AVERT) * n).addScaledVector(_s, Math.sin(AVERT) * n);
   }
 
   heightOn(a, ys) {
@@ -652,46 +667,12 @@ export class Guide {
     eye.group.position.y += Math.sin(this.time * 1.7) * 0.035;
     eye.group.scale.setScalar(s * this.lensRoom(this.pos));
     eye.setOpen(open);
+    this.avert(eye.group.position, this.gaze);
     eye.update(dt, this.gaze);
     this.flying = d > 0.05 || me.state !== 'here' || this.mode !== 'idle';
-    // 帶路時每飛半公尺留一團煙
-    if (this.mode === 'lead' && me.state === 'here' && this.pos.distanceTo(this.lastPuff) > 0.5) {
-      this.lastPuff.copy(this.pos);
-      if (!this.wake.length) {
-        const tex = puffTexture();
-        for (let i = 0; i < WAKE; i++) {
-          const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0x6a5a8a, transparent: true, opacity: 0, depthWrite: false, blending: THREE.NormalBlending }));
-          s.visible = false;
-          s.userData.age = WAKE_LIFE;
-          this.scene.add(s);
-          this.wake.push(s);
-        }
-      }
-      const p = this.wake[this.puffAt++ % WAKE];
-      p.position.copy(this.pos);
-      p.userData.age = 0;
-      p.visible = true;
-    }
   }
 
-  // 攝影、照鏡子時跟黑眼一起收掉，不入鏡
-  updateWake(dt) {
-    const hide = this.blocked();
-    for (const p of this.wake) {
-      if (!p.visible) continue;
-      const a = (p.userData.age += dt);
-      if (a >= WAKE_LIFE || hide) {
-        p.visible = false;
-        continue;
-      }
-      this.flying = true;
-      p.position.y += dt * 0.12;
-      p.scale.setScalar(0.28 + a * 0.14);
-      p.material.opacity = 0.2 * (1 - a / WAKE_LIFE) ** 1.5;
-    }
-  }
-
-  // 別人的黑眼：照送來的位置平滑跟上；飛得快時看前面，慢下來就看它的主人（像在等）
+  // 別人的黑眼：照送來的位置平滑跟上；飛得快時看前面，慢下來就看它的主人（像在等）。跟自己的一樣不看鏡頭（avert）
   updateOthers(dt) {
     const mp = this.mp, live = new Set();
     if (mp) for (const [id, o] of mp.others) {
@@ -741,6 +722,7 @@ export class Guide {
       r.eye.group.position.y += Math.sin(this.time * 1.7 + r.blinkT) * 0.035;
       r.eye.group.scale.setScalar(s * this.lensRoom(r.pos));
       r.eye.setOpen(open);
+      this.avert(r.eye.group.position, r.gaze);
       r.eye.update(dt, r.gaze);
     }
   }
@@ -755,7 +737,8 @@ export class Guide {
     }
     if (el.hidden) el.hidden = false;
     el.style.transform = `translate3d(${e.x.toFixed(1)}px, ${e.y.toFixed(1)}px, 0)`;
-    el.firstElementChild.style.transform = `rotate(${e.a.toFixed(3)}rad)`;
+    // 箭頭和小眼睛一起轉：瞳孔偏在箭頭那邊，小眼睛看著黑眼在的方向，不正面看人
+    el.children[0].style.transform = el.children[1].style.transform = `rotate(${e.a.toFixed(3)}rad)`;
     const side = e.x > innerWidth * 0.65 ? 'r' : e.x < innerWidth * 0.35 ? 'l' : '';
     if (el.dataset.side !== side) el.dataset.side = side;
     const label = el.lastElementChild;

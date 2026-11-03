@@ -27,6 +27,8 @@ const FAR = { person: 5, animal: 4, lens: 6, thing: 3 };
 const ROAM = new Set(['front', 'idle', 'own']);
 // 按了看鏡以後，這幾種模式照樣看著鏡頭（看畫、坐船、自己在拍的時候不管）
 const LOCKABLE = new Set(['front', 'idle', 'back', 'shoulder']);
+// 帶路的黑眼（guide.js）不跟著看的：自己這邊的鏡頭（黑眼看了就是在看玩家）、看前面、東張西望、低頭
+const UNSHARED = new Set(['cam', 'own', 'ahead', 'around', 'down']);
 
 const rand = ([a, b]) => a + Math.random() * (b - a);
 
@@ -107,6 +109,14 @@ export class Attention {
     this.out.point.copy(p);
     this.out.pid = pid;
     return this.out;
+  }
+
+  // 頭現在看著的真東西（人、動物、畫、鳥、別人對著自己的鏡頭）放進 out，沒在看東西回 false。帶路的黑眼跟著看同一個
+  thing(out) {
+    const s = this.lock && LOCKABLE.has(this.mode) ? this.seen.get(this.lock) : null;
+    if (s?.on) return !!out.copy(s.lens.pos);
+    const c = this.cur;
+    return !!c && !UNSHARED.has(c.kind) && !!c.get(out);
   }
 
   // 有事發生，插隊轉過去看 dur 秒：別人揮手、跳、閃光，隊友說話，動物叫，鏡頭剛對到自己
