@@ -492,8 +492,22 @@ export function buildCamTable(x, z, rot) {
       carried = id;
       for (const sl of slots) if (sl.holder) sl.holder.visible = sl.id !== id;
     },
-    // 正在看哪一個位置；-1 是沒在挑
-    look(i) { looking = i; },
+    // 正在看哪一個位置；-1 是沒在挑。換到一台擺在桌上的相機時，它浮起來會出一點聲音（onLook，zone-gallery.js 接）
+    onLook: null,
+    look(i) {
+      if (i === looking) return;
+      looking = i;
+      const sl = slots[i];
+      if (sl?.holder?.visible) this.onLook?.(sl.id);
+    },
+    // 腳下那一格亮幾成（0 到 1）：站在拿得走的那台前面才有，前廳的底聲照這個（vestibule-sound.js）
+    glowAt(wx, wz) {
+      const dx = wx - x, dz = wz - z, c = Math.cos(rot), s = Math.sin(rot);
+      const lx = dx * c - dz * s, lz = dx * s + dz * c;
+      if (lz < CELL_Z - 0.1 || lz > CELL_Z + CELL_OD + 0.1) return 0;
+      for (const sl of slots) if (Math.abs(lx - sl.local.x) < GAP / 2) return sl.glow || 0;
+      return 0;
+    },
     update(dt) {
       const a = 1 - Math.exp(-dt * 6);
       t += dt;

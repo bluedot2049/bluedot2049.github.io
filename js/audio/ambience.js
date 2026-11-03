@@ -24,6 +24,7 @@ export class Ambience {
     this.stepGate = {};
     this.emoteGate = {};
     this.duck = 0;           // 人潮聲把背景音樂壓低幾成
+    this.beds = [];          // 某個地方自己的底聲（例如前廳的 vestibule-sound.js）：每一幀 update(this)，on 為真時音訊不睡
     try { this.muted = localStorage.getItem('muted') === '1'; } catch { this.muted = false; }
     // 手機要在 touchend / click 這類「放開」的手勢裡才算使用者操作（iOS 的 pointerdown 不算），所以全部都聽。
     // 一直留著不拿掉：iOS 切到別的 App 回來會變成 interrupted，Safari 也不一定讓手勢以外的 resume() 生效，
@@ -213,6 +214,7 @@ export class Ambience {
   listen(pos, camera) {
     this.ear = pos;
     this.earCam = camera;
+    for (const b of this.beds) b.update(this);
   }
 
   // 角色離聽的人多遠、在左還是右，聽不到就回傳 null。k 是照距離算的音量比例
@@ -410,7 +412,7 @@ export class Ambience {
     const ctx = this.ctx;
     if (!ctx) return;
     const off = this.muted || document.hidden, v = off ? 0 : this.level * 0.7;
-    const live = v > 0 || ((this.bgm || this.murmurGain) && !off);
+    const live = v > 0 || ((this.bgm || this.murmurGain || this.beds.some((b) => b.on)) && !off);
     if (live && ctx.state !== 'running') ctx.resume().catch(() => {});
     const t = ctx.currentTime;
     this.master.gain.setTargetAtTime(v, t, 0.4);

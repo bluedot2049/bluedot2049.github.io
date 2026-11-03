@@ -331,5 +331,5 @@ export function buildMirrorRug() {
     on += ((inside ? 1 : 0) - on) * (1 - Math.exp(-dt * (inside ? 0.9 : 0.6)));
     m.emissiveIntensity = on * (0.5 + 0.15 * Math.sin(t * 1.3));
   }
-  return { mesh, update };
+  return { mesh, update, get glow() { return on; } };
 }

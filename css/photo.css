@@ -390,6 +390,26 @@ body.desk #ph-rec { top: calc(18px + env(safe-area-inset-top)); }
 body.desk #ph-alt { right: calc(70px + env(safe-area-inset-right)); bottom: auto; top: 50%; transform: translateY(-50%); }
 body.desk .ph-alt-track { height: 240px; }
 
+/* 舉相機（越肩右鍵，只有電腦）：其他介面收起，手上相機的快門、閃光、日期照樣看得到，下面標按鍵，右邊是拿法；
+   滑鼠鎖著，只看不點 */
+.ph-tag, #ph-grip { display: none; }
+body.photo-quick.photo-gear #ph-shoot { display: flex !important; pointer-events: none; }
+body.photo-quick.photo-gear .ph-tag {
+  display: block; position: absolute; top: calc(50% + 42px);
+  font-style: normal; font-size: 11px; font-weight: 600; line-height: 1; letter-spacing: .05em;
+  text-align: center; white-space: nowrap; color: var(--gold-hi);
+}
+.t-shutter { left: 0; width: 72px; }
+.t-flash { right: calc(100% + 18px); width: 56px; }
+.t-date { right: calc(100% + 86px); width: 64px; }
+body.photo-quick #ph-flash[hidden] ~ .t-flash, body.photo-quick #ph-date[hidden] ~ .t-date { display: none; }
+body.photo-quick.photo-gear #ph-grip {
+  display: flex; flex-direction: column; gap: 5px; position: absolute;
+  left: calc(100% + 18px); top: 50%; transform: translateY(-50%); white-space: nowrap;
+}
+#ph-grip b { font-size: 14px; font-weight: 600; letter-spacing: .2em; color: var(--gold-hi); }
+#ph-grip small { font-size: 11px; letter-spacing: .05em; color: var(--muted); }
+
 /* 照相館（studio.js） */
 .studio-card {
   position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 45;

@@ -107,7 +107,7 @@ export class Player {
     this.onAim = null;              // 鎖定時右鍵按下、放開：舉相機（photo.js）
     this.onShutter = null;          // 舉著相機時左鍵按下、放開：快門
     this.onPausedLook = null;       // 舉著相機時移動滑鼠：轉相機
-    this.onRefocus = null;          // 舉著相機時中鍵按下、放開：重新對焦，按住一直追焦
+    this.onMiddle = null;           // 舉著相機時中鍵按下、放開：切換自拍
     this.holdLock = false;          // 舉相機時攝影模式接手，滑鼠照樣鎖著
     this.mouseSens = 1;             // 滑鼠靈敏度倍數、上下反轉（暫停選單裡調）
     this.invertY = false;
@@ -195,18 +195,25 @@ export class Player {
       }
     });
 
+    // 鎖定時：右鍵舉相機；舉著時左鍵是快門，沒舉時左鍵點準心對到的東西。
+    // 已經按著一顆鍵再按（或放）另一顆，瀏覽器只送 pointermove（button 是變的那顆），所以三種事件都從這裡進來
+    const lockedButton = (b, down) => {
+      if (b === 2) this.onAim?.(down);
+      else if (this.paused) {
+        if (b === 0) this.onShutter?.(down);
+        else if (b === 1) this.onMiddle?.(down);
+      }
+      else if (!down) return;
+      else if (b === 0) this.aimTap();
+      else if (b === 1) { const c = this.aimPoint(); this.onPing?.(c.x, c.y); }
+    };
+    const BIT = [1, 4, 2];   // e.button → e.buttons 的位元
+
     el.addEventListener('pointerdown', (e) => {
-      // 鎖定時：右鍵舉相機；舉著時左鍵是快門，沒舉時左鍵點準心對到的東西
       if (this.locked) {
         chord(e);
         if (e.button === 1) e.preventDefault();
-        if (e.button === 2) this.onAim?.(true);
-        else if (this.paused) {
-          if (e.button === 0) this.onShutter?.(true);
-          else if (e.button === 1) this.onRefocus?.(true);
-        }
-        else if (e.button === 0) this.aimTap();
-        else if (e.button === 1) { const c = this.aimPoint(); this.onPing?.(c.x, c.y); }
+        lockedButton(e.button, true);
         return;
       }
       if (this.paused) return;
@@ -229,6 +236,7 @@ export class Player {
     el.addEventListener('pointermove', (e) => {
       chord(e);
       if (this.locked) {
+        if (e.pointerType === 'mouse' && BIT[e.button]) lockedButton(e.button, !!(e.buttons & BIT[e.button]));
         if (!this.paused) this.look(e.movementX, e.movementY);
         else this.onPausedLook?.(e.movementX, e.movementY);
         return;
@@ -258,9 +266,7 @@ export class Player {
     const up = (e) => {
       if (this.locked) {
         chord(e);
-        if (e.button === 2) this.onAim?.(false);
-        else if (e.button === 0 && this.paused) this.onShutter?.(false);
-        else if (e.button === 1 && this.paused) this.onRefocus?.(false);
+        lockedButton(e.button, false);
         return;
       }
       const p = pts.get(e.pointerId);
@@ -918,23 +924,7 @@ export class Player {
     this.snapCamera();
   }
 
-  // 從舉相機、空拍放下來：鏡頭從相機那裡慢慢滑回肩後，不直接跳回去
-  flyBack() {
-    const cam = this.camera;
-    this.camPos.copy(cam.position);
-    this.camLook.copy(cam.position).add(cam.getWorldDirection(new THREE.Vector3()).multiplyScalar(8));
-    this.posVel = {};
-    this.lookVel = {};
-    this.sh.yaw = this.camYaw;
-    this.sh.pitch = this.shPitch;
-    this.sh.dist = this.shDist;
-    this.sh.reach = null;
-    this.shVel = {};
-    this.turnVel = 0;
-    this.easeT = SH_EASE;
-  }
-
-  // 鏡頭直接到角色身後該在的地方：換區域抵達、收起相機時用
+  // 鏡頭直接到角色身後該在的地方：換區域抵達、收起相機、舉相機和空拍放下時用（放下要一幀切回，不滑）
   snapCamera() {
     this.sh.yaw = this.camYaw;
     this.sh.pitch = this.shPitch;

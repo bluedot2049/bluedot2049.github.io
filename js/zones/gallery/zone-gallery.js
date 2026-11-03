@@ -9,6 +9,8 @@ import { Animals } from '../../npc/animals.js';
 import { Visitors } from '../../npc/visitors.js';
 import { HORIZON, SUN_DIR } from './outdoor.js';
 import { StudyNight } from '../../audio/study.js';
+import { VestibuleSound } from './vestibule-sound.js';
+import { CAMERAS, SOON } from '../../camera/cameras.js';
 
 // 背景音樂「星盤夜讀」（study.js，現場合成）：走進「歡迎光臨煉金畫廊」那間才開始放，往後的房間和戶外一路放著。
 // 那間一進門就是落地擺鐘，滴答聲從那裡來
@@ -40,6 +42,12 @@ export function residents({ scene, world, shadowTex }) {
 // 動物和不定期搭船來看畫的冒險者
 export function crowd({ scene, world, shadowTex, player, camera, ambience, host, params }) {
   ambience.clock = world.clock;
+  // 前廳不放音樂，有自己的底聲；桌上的相機浮起來時各有一點聲音（cameras.js 的 rattle）
+  if (world.frontDoor) ambience.beds.push(new VestibuleSound(world));
+  if (world.camTable) world.camTable.onLook = (id) => {
+    const r = (CAMERAS[id] || SOON[id])?.rattle;
+    if (r) ambience.voice(r, 0.35);
+  };
   const animals = new Animals({ world, shadowTex, player, camera, ambience });
   const visitors = new Visitors({ scene, world, shadowTex, player, camera, host, animals, force: params.get('visit') });
   animals.visitors = visitors;

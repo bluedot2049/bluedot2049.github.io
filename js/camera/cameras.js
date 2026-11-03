@@ -34,6 +34,7 @@ export const CAMERAS = {
     flash: { color: 0xfff1dc, power: 2.6, bulb: 1.6, knob: 'fan' },
     date: { knob: 'die', ink: 'burn' },
     make: { mark: '火', model: 1, serial: [0, 4, 1, 7] }, shutter: 'gold',
+    rattle: 'tink',   // 在桌上浮起來時發出的聲音（ambience-voices.js 的 VOICES）
     hold: true,
     develop: { filter: 'sepia(.16) saturate(.92) contrast(1.08) brightness(1.02)', vig: 0.62, grain: 0.07, halo: 0.16 },
   },
@@ -43,7 +44,7 @@ export const CAMERAS = {
 export const TABLE = ['bulb', 'gui', null];
 
 // 擺在桌上、還拿不走的：只有模型和名字，面板寫名字，按鈕是灰的
-export const SOON = { gui: { name: '晷' } };
+export const SOON = { gui: { name: '晷', rattle: 'sand' } };
 
 // 帶在身上的相機，記在存檔裡
 export const carried = () => (CAMERAS[getSave().camera] ? getSave().camera : null);

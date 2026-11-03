@@ -138,6 +138,7 @@ export function buildFrontDoor() {
     tall, low, obstacles,
     spawn: { x: 0, z: 1.25 },   // 剛跨進門站的地方，本地座標
     onClose: null,   // 門靠上的那一刻（main.js 放關門聲）
+    gap: () => open / OPEN,   // 門開著幾成：剛進來全開是 1，闔上剩一條縫；門外的聲音照這個漏進來
     // 闔門：等 delay 秒再慢慢闔到剩一條縫；now 為真就直接闔好（搭船回來的不是從這道門進來的）
     shut(delay = 0, now = false) {
       if (now) { t0 = -1; to = AJAR; set(AJAR); return; }

@@ -36,8 +36,9 @@ import { bindDeskKeys } from './controls/deskkeys.js';
 const ZONES = {
   gallery: { crossing: '渡海　回畫廊', load: () => import('./zones/gallery/zone-gallery.js') },
   haishi: { crossing: '渡海　往海市', load: () => import('./zones/haishi/zone-haishi.js') },
-  // 灰模型階段，渡船還沒開過去，只能用 ?z=shenlou 進來
+  // 灰模型階段，渡船還沒開過去，只能用 ?z=shenlou、?z=ting 進來
   shenlou: { crossing: '渡海　往蜃樓', load: () => import('./zones/shenlou/zone-shenlou.js') },
+  ting: { crossing: '渡海　往汀', load: () => import('./zones/ting/zone-ting.js') },
 };
 // 渡船能去的地方，每個渡口都照這個順序一張一張卡；to 是 null 的還沒有航線。
 // dev 是還在蓋的區域：一般人看到「還不能搭」，網址有 ?debug（調色模式）時才開得到
@@ -46,6 +47,7 @@ const FERRY = [
   { to: 'gallery', name: '畫廊', desc: '山坡上的老屋，掛著作品。', tags: ['看畫', '照鏡子', '挑相機', '樹洞'] },
   { to: 'haishi', name: '海市', desc: '海上的夜市。', tags: ['照相館', '攤販'] },
   { to: null, dev: 'shenlou', name: '蜃樓', desc: '影子之城', tags: ['還沒有航線'] },
+  { to: null, dev: 'ting', name: '汀', desc: '淺水', tags: ['還沒有航線'] },
 ];
 
 async function loadJSON(url) {
@@ -467,7 +469,7 @@ async function start() {
     const cine = el.querySelector('.cine');
     cine.classList.remove('shown');
     cine.querySelector('.push').replaceChildren();
-    el.classList.remove('to-gallery', 'to-haishi', 'to-shenlou', 'done', 'first', 'opening', 'landing', 'crossing');
+    el.classList.remove('to-gallery', 'to-haishi', 'to-shenlou', 'to-ting', 'done', 'first', 'opening', 'landing', 'crossing');
     void el.offsetWidth;
     el.classList.add('crossing', `to-${to}`);
     mp?.sendNow();
@@ -520,12 +522,16 @@ async function start() {
   document.getElementById('cams-take').addEventListener('click', () => {
     const f = player.focus, id = f?.kind === 'cameras' ? TABLE[f.slot] : null;
     if (!id) return;
-    const next = carried() === id ? null : id;
+    const had = carried(), next = had === id ? null : id;
     carry(next);
     character.setCamera(next);
     world.camTable.setCarried(next);
     mp?.setCamera(next);
-    ambience.voice('shutter', 0.5);
+    // 換一台：先把身上那台放回去，再扣上這台
+    if (next && had) {
+      ambience.voice('setdown', 0.35);
+      setTimeout(() => ambience.voice('strap', 0.45), 380);
+    } else ambience.voice(next ? 'strap' : 'setdown', 0.45);
     ui.hint(next ? `帶著${CAMERAS[next].name}出門。按相機鈕拍照` : '放回桌上了。拍照時又是畫廊的眼睛，可以到處飛', 4000);
     showCams(f.slot);
   });
@@ -590,7 +596,7 @@ async function start() {
   document.addEventListener('pointerlockchange', () => {
     if (!player.locked || lockTold) return;
     lockTold = true;
-    ui.toast('按住 Alt 叫出游標', 'Esc 暫停選單');
+    ui.toast('按住 Alt 叫出游標', 'Tab 行囊　Esc 暫停選單');
   });
   // 中鍵標記地點：同行時才有
   player.onPing = (x, y) => party?.markAt(x, y);
@@ -754,7 +760,7 @@ async function start() {
     resizeFX: (w, h) => fx?.setSize(w, h),
   });
   // 電腦的快捷鍵、Q 表情輪、Esc 暫停選單（表情要連上線才送得出去）
-  bindDeskKeys({ player, ui, photo, emotes: EMOTES, emote: (e) => mp && sendEmote(e) });
+  bindDeskKeys({ player, ui, photo, pack, emotes: EMOTES, emote: (e) => mp && sendEmote(e) });
   const selfie = new Selfie({
     renderer, scene, camera, player, character, ambience, render: draw,
     resizeFX: (w, h) => fx?.setSize(w, h),

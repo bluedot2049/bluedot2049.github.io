@@ -171,6 +171,39 @@ export const VOICES = {
     hiss(ctx, out, noise, t + 1.25, 0.03, 'bandpass', 2600 * p, 0.9, 2);
     return 1.3;
   },
+  // ---------- 前廳的相機桌（camtable.js、main.js 的帶走鈕） ----------
+  // 帶走：相機離開木座，木頭輕輕一聲，背帶的金屬扣「喀、喀」扣上，最後背帶落到胸前一抹布聲
+  strap(ctx, out, t, p, noise) {
+    hiss(ctx, out, noise, t, 0.03, 'bandpass', 700 * p, 0.35, 2);
+    osc(ctx, 'sine', t, 0.05, [[0, 260 * p], [0.05, 190 * p]]).connect(envelope(ctx, t, 0.002, 0.05, 0.2)).connect(out);
+    for (const [dt, f] of [[0.2, 3800], [0.29, 3300]]) {
+      hiss(ctx, out, noise, t + dt, 0.012, 'bandpass', f * p, 0.8, 5);
+      osc(ctx, 'sine', t + dt, 0.07, [[0, f * 0.82 * p]]).connect(envelope(ctx, t + dt, 0.001, 0.07, 0.05)).connect(out);
+    }
+    air(ctx, out, noise, t + 0.36, [[0, 1800 * p], [0.22, 900 * p]], 0.05, 0.25, 0.12, 0.9, 'bandpass');
+    return 0.65;
+  },
+  // 放回桌上：背帶滑下來一抹，扣環碰一下，相機坐回木座悶悶的一聲
+  setdown(ctx, out, t, p, noise) {
+    air(ctx, out, noise, t, [[0, 1100 * p], [0.2, 2200 * p]], 0.08, 0.22, 0.1, 0.9, 'bandpass');
+    hiss(ctx, out, noise, t + 0.17, 0.01, 'bandpass', 3500 * p, 0.45, 5);
+    osc(ctx, 'sine', t + 0.3, 0.09, [[0, 230 * p], [0.09, 140 * p]]).connect(envelope(ctx, t + 0.3, 0.002, 0.09, 0.2)).connect(out);
+    hiss(ctx, out, noise, t + 0.3, 0.04, 'bandpass', 700 * p, 0.6, 1.5);
+    return 0.5;
+  },
+  // 燭乙式浮起來：反光罩裡的燈泡碰到玻璃罩，叮兩下，第二下比較輕
+  tink(ctx, out, t, p) {
+    for (const [dt, g] of [[0, 0.16], [0.11, 0.07]]) {
+      for (const f of [4200, 6900]) osc(ctx, 'sine', t + dt, 0.18, [[0, f * p]]).connect(envelope(ctx, t + dt, 0.001, 0.18, g * (f > 5000 ? 0.4 : 1))).connect(out);
+    }
+    return 0.35;
+  },
+  // 晷浮起來：機身裡的細沙往一邊流過去，沙沙一陣，越流越細
+  sand(ctx, out, t, p, noise) {
+    air(ctx, out, noise, t, [[0, 5200 * p], [0.7, 3400 * p]], 0.12, 0.8, 0.5, 1.4, 'bandpass');
+    for (let i = 0; i < 9; i++) hiss(ctx, out, noise, t + 0.05 + Math.random() * 0.6, 0.006, 'bandpass', 5000 + Math.random() * 3000, 0.3 + Math.random() * 0.3, 4);
+    return 0.9;
+  },
   // 前門（frontdoor.js、載入畫面）：門閂喀一聲，門軸低低嘎一下
   latch(ctx, out, t, p, noise) {
     hiss(ctx, out, noise, t, 0.02, 'bandpass', 2400 * p, 0.9, 3);

@@ -24,13 +24,14 @@ export function env(world) {
   return [world.env];
 }
 
-// 信差站的攤販：聊完直接進攝影模式拍明信片。攤販送東西：記在這台裝置上，回畫廊照鏡子就能穿戴
+// 信差站的攤販：聊完直接進攝影模式拍明信片。攤販送東西：記在這台裝置上，回畫廊照鏡子就能穿戴。暗房師傅：交給他的照片在這裡拿
 // 不說話的路人：人多人少跟著台灣時間走，跟一般夜市反過來。?crowd=0.8 可以指定人潮
 export function crowd({ scene, world, shadowTex, player, camera, ambience, coarse, params, ui, postcard }) {
   const vendors = new Vendors({
     scene, shadowTex, spots: world.shops,
     onPostcard: postcard,
     onGift: (g) => ui.toast('收到' + g.items.map(([k, id]) => optionName(k, id)).join('、'), '回畫廊照鏡子就能穿上'),
+    onLab: (n, L) => ui.toast(`拿到 ${n} 張照片・${L.style}`, '打開行囊的相簿看'),
   });
   const passers = new Passersby({ scene, world, shadowTex, ambience, coarse, force: params.get('crowd') });
   vendors.setQuiet(() => passers.busy < 0.2);

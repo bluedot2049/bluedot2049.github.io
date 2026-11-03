@@ -4,10 +4,12 @@
 // 有幾攤第一次聊天會送東西（looks.js 的 GIFTS），送了之後回畫廊照鏡子就能穿戴。
 // 介面跟 visitors.js 一樣（nearest、blocks、list），玩家的動作按鈕和照鏡子時的半透明直接沿用。
 // 角色只在玩家附近、同一層附近時才畫，攤販多也不會拖慢手機
+// 沖洗師傅（lab）：相簿裡交給他的照片，本人走來聊天才拿得回來（album.js），有照片等著時按鈕寫「取照片」
 import { Character } from '../avatar/character.js';
 import { sanitizeLook, presetLook, RACES, GIFTS, unlock, unlockedSet, isOpen, getSave, putSave } from '../avatar/looks.js';
 import { bend } from '../core/lens.js';
 import { HOST_NAME } from './names.js';
+import { atLab, collect, LABS } from '../camera/album.js';
 
 const SAY_TIME = 3800, GREET_DIST = 3.2, TALK_DIST = 2.4, SHOW_DIST = 22, SHOW_DY = 3.5;
 
@@ -91,8 +93,9 @@ export const VENDORS = {
     lines: ['這張是星圖', '西邊那顆星你看過嗎', '有人把地圖拿反過', '白塔在這裡', '船長都來我這裡買', '咕咕 地圖不要摺'],
     quiet: ['咕咕 這時候星星最清楚', '咕咕 船都還沒進來'],
   },
-  // 工坊街東頭的暗房（haishi.js 的 darkroom），站在取件口裡面。底片機還沒有，現在只聊天
+  // 工坊街東頭的暗房（haishi.js 的 darkroom），站在取件口裡面。相簿交給他的照片在這裡拿（album.js 的 LABS.haishi）
   darkroom: {
+    lab: 'haishi', handover: ['洗好了 拿去', '這幾張我喜歡', '夾在繩子上的 都是你的', '藥水剛乾 別摸正面'],
     name: '洗照片師傅', race: 'squid', look: { hat: 'none', glasses: 'mono', top: 'shirt', topC: 28, bottom: 'pants', botC: 26, outer: 'apron', outC: 17, shoes: 'geta', shoeC: 26, neck: 'towel', neckC: 17, back: 'none' },
     greet: ['門簾不要掀喔', '要洗照片嗎'],
     lines: ['裡面在泡 門簾不要掀', '底片要全黑 洗相紙才開紅燈', '手是藥水染的 洗不掉了', '牆上那些 好久沒人來拿', '曝光過頭的 我反而喜歡', '洗好的會夾在門口那條繩子上', '有底片再拿來給我'],
@@ -153,7 +156,7 @@ class Vendor {
     this.name = spec.name;
     this.spec = spec;
     this.aboard = false;
-    this.actionLabel = spec.postcard ? '寄明信片' : null;
+    this.label = spec.postcard ? '寄明信片' : null;
     this.onPostcard = onPostcard;
     this.onGift = onGift;
     this.id = spot.id;
@@ -167,6 +170,7 @@ class Vendor {
   }
 
   get shown() { return this.group.visible; }
+  get actionLabel() { return this.spec.lab && atLab(this.spec.lab) ? '取照片' : this.label; }
   setGhost(a) { this.ch.setGhost(a); }
 
   say(text) {
@@ -197,6 +201,14 @@ class Vendor {
 
   // 台詞洗一輪才重來，同一句不會連著講。有東西要送的話，第一次聊天先送
   talkTo() {
+    const lab = this.spec.lab;
+    if (lab && atLab(lab)) {
+      collect(lab).then((n) => {
+        this.say(pick(this.spec.handover));
+        if (n) this.onLab?.(n, LABS[lab]);
+      });
+      return;
+    }
     const g = this.gift;
     if (g && !g.items.every(([k, id]) => isOpen(k, id, unlockedSet()))) {
       const why = this.gate(g);
@@ -253,8 +265,9 @@ class Vendor {
 
 export class Vendors {
   // spots：haishi.js 算好的攤販位置 [{ id, x, y, z, heading }]
-  constructor({ scene, shadowTex, spots, onPostcard, onGift }) {
+  constructor({ scene, shadowTex, spots, onPostcard, onGift, onLab }) {
     this.list = spots.filter((s) => VENDORS[s.id]).map((s, i) => new Vendor(scene, shadowTex, s, VENDORS[s.id], i, onPostcard, onGift));
+    for (const v of this.list) v.onLab = onLab;
     this.mp = null;
   }
 

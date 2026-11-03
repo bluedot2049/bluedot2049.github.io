@@ -135,6 +135,7 @@ export function buildWorld(scene, gallery) {
       rug.mesh.rotation.y = rot;
       room.group.add(tag(rug.mesh, 'floor'));
       mirrorTick = (dt, who) => { tick(dt, who); rug.update(dt, who); };
+      mirror.rug = rug;   // 站上去亮了幾成，前廳的底聲要聽（vestibule-sound.js）
 
       // 右牆靠前是前門（frontdoor.js）：進來的那道門，門外是黃昏的光，不能開
       const right = room.spans[1], sd = 2.0;
