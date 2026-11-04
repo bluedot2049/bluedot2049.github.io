@@ -623,7 +623,7 @@ export class Player {
     if (hit.object.userData.mirror) return this.goToMirror();
     if (hit.object.userData.animal) return this.goToAnimal(hit.object.userData.animal);
     if (hit.object.userData.guide) return this.events.onGuide?.();
-    if (hit.object.userData.hollow) return this.goToHollow();
+    if (hit.object.userData.hollow) return this.events.onHollow?.();
     if (this.shoulder) return;   // 越肩不點地板走路
     const t = this.world.findWalkable(hit.point.x, hit.point.z, this.pos.x, this.pos.z, hit.point.y);
     if (!t) return;
@@ -724,22 +724,6 @@ export class Player {
 
   goToCameras(i) {
     if (this.world.camTable) this.goTo(this.planCameras(i));
-  }
-
-  // 聽樹洞：站在洞口前，鏡頭從角色斜後方看著樹洞，消息卡在畫面正中（hollow.js）
-  planHollow() {
-    const h = this.world.outdoor.hollow, n = h.n, sx = -n.z, sz = n.x;
-    const stand = this.world.findWalkable(h.x + n.x * 1.5, h.z + n.z * 1.5, this.pos.x, this.pos.z) || { x: this.pos.x, z: this.pos.z };
-    return {
-      kind: 'hollow', n, stand,
-      camPos: new THREE.Vector3(h.x + n.x * 4 + sx * 1.3, h.y + 1.5, h.z + n.z * 4 + sz * 1.3),
-      look: new THREE.Vector3(h.x, h.y + 0.3, h.z),
-      fadeTarget: new THREE.Vector3(stand.x, 0, stand.z),
-    };
-  }
-
-  goToHollow() {
-    if (this.world.outdoor?.hollow) this.goTo(this.planHollow());
   }
 
   goToPainting(p) {
@@ -1106,7 +1090,7 @@ export class Player {
       case 'mirror': this.goToMirror(); break;
       case 'cameras': this.events.onCameras?.(); break;
       case 'guide': this.events.onGuide?.(); break;
-      case 'hollow': this.goToHollow(); break;
+      case 'hollow': this.events.onHollow?.(); break;
       case 'seat': this.goTo(this.planSeat(t.p)); break;
       case 'pet': this.goToAnimal(t.p); break;
       case 'talk': t.p.talkTo(); break;
@@ -1141,7 +1125,6 @@ export class Player {
     this.focus = plan;
     if (plan.kind === 'mirror') this.events.onArriveMirror?.();
     else if (plan.kind === 'cameras') this.events.onArriveCameras?.(plan.slot);
-    else if (plan.kind === 'hollow') this.events.onArriveHollow?.();
     else if (plan.kind === 'seat') this.events.onSit?.(true);   // 真正坐下去要等挪進座位，見 update
     else if (plan.kind === 'pet') {
       if (!plan.a.within(this)) { this.focus = null; return; }   // 走到時牠已經跑掉了
@@ -1344,6 +1327,8 @@ export class Player {
       } else {
         yaw = rel;
         pitch = this.shoulder ? -this.sh.pitch : Math.max(0, PITCH_LOW - this.camPitch);
+        // 越肩走路時鏡頭往下壓是在看路，頭不跟著低（不然一路盯著地板）；抬頭照樣跟，站著才低頭
+        if (this.shoulder && this.speed > 0.1) pitch = Math.max(pitch, 0);
       }
     }
     let at = null;

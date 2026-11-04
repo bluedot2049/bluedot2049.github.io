@@ -371,7 +371,8 @@ async function start() {
     onGuide() {
       ui.guide(true);
     },
-    onArriveHollow() {
+    // 聽樹洞：原地打開卡片，人和鏡頭都不動
+    onHollow() {
       hollow.open();
     },
     onArriveMirror() {
@@ -559,7 +560,6 @@ async function start() {
     lastInput = performance.now();
   };
   ui.onClose = () => player.exitFocus();
-  hollow.onClose = () => player.exitFocus();
 
   // 相機桌的面板：左右換一台，帶走或放回去；SOON 裡的只看得到名字。一次只能帶一台，換的時候原本那台自己回到桌上
   function showCams(i) {
