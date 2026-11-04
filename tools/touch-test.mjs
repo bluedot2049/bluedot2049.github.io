@@ -92,13 +92,13 @@ try {
   s = await st();
   check(Math.hypot(s.x - s0.x, s.z - s0.z) > 1, '搖桿往前：走了', Math.hypot(s.x - s0.x, s.z - s0.z).toFixed(2));
 
-  // 右半邊往右拖：往右看（camYaw 變小），身體跟著轉
+  // 右半邊往右拖：跟一般視角一樣拖著畫面走，往左看（camYaw 變大），身體跟著轉
   s0 = s;
   await drag([560, 200], [760, 200]);
   await sleep(900);
   s = await st();
   const dy = s.yaw - s0.yaw;
-  check(dy < -0.4, '右邊往右拖：往右看', dy.toFixed(2));
+  check(dy > 0.4, '右邊往右拖：拖著畫面往左看', dy.toFixed(2));
   const body = Math.abs(Math.atan2(Math.sin(s.heading - Math.PI - s.yaw), Math.cos(s.heading - Math.PI - s.yaw)));
   check(body < 0.2, '身體轉向視線', body.toFixed(2));
 
@@ -114,7 +114,7 @@ try {
   await drag([560, 200], [460, 200], { hold: [150, 200] });
   await sleep(700);
   s = await st();
-  check(s.yaw - s0.yaw > 0.2, '左手按著、右手往左拖：往左看', (s.yaw - s0.yaw).toFixed(2));
+  check(s.yaw - s0.yaw < -0.2, '左手按著、右手往左拖：拖著畫面往右看', (s.yaw - s0.yaw).toFixed(2));
   check(Math.abs(s.dist - s0.dist) < 0.01, '沒有被當成捏合（遠近沒變）', (s.dist - s0.dist).toFixed(3));
 
   // 右邊兩指捏：照樣拉遠拉近

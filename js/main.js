@@ -1222,8 +1222,8 @@ async function start() {
     gradeAt(dt, view.x, view.z);
     if (photo.active) world.update(clock.elapsedTime, photo.pos, photo.fadeTarget(), camera, true);
     else world.update(clock.elapsedTime, player.camPos, player.fadeTarget(), camera);
-    // 站進前廳的光池，那盞燈照在自己身上（手機沒有真的燈才有，見 vestibule-light.js 的 lightOn）
-    setStageLight(world.stage?.lightOn(player.pos), camera);
+    // 站進前廳的光池，那盞燈照在自己身上、地上的光池挖出自己的影子（見 vestibule-light.js 的 lightOn）
+    setStageLight(world.stage?.lightOn(player.pos, player.character.dims?.topY), camera);
     // 牆上的色塊畫：視差跟著鏡頭，站在畫前不動才醒；拍照時醒的程度停著
     world.updatePaintings?.(camera.position, photo.active ? null : player.pos, player.focus?.kind === 'painting' ? player.focus.p : null);
     frame++;

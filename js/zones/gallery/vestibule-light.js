@@ -4,6 +4,7 @@
 // 地上的光池是貼在地板上的硬邊圖（兩階、一刀切，卡通的那種），只把底下的地板乘亮，不花燈，手機電腦都有。
 // 光柱從光源本身出來：相機桌是頂上往下的錐面，鏡子是從鏡面斜斜往前鋪到地上的拱形；胖頭人不放（會整隻洗藍）。
 // 電腦另外放三盞真的燈照到人和相機身上（不投影）；手機沒有燈，自己站進鏡子、相機桌的光池時，改由 lightOn 那一項照在自己身上（avatar/mirrorlight.js）。燈在建場景時就放好、一直在場景裡（半路加減燈所有材質要重編著色器），房間藏起來時只把亮度歸零；手機一盞都不放。
+// 光從前面來、鏡頭看著背時，背是暗的：地上的光池在自己身後挖出一條影子（shade），身上亮一圈逆光的輪廓（lightOn 的 rim），兩樣電腦手機都有。
 // 暗下來多少由 main.js 照 dim(x, z) 把室內的光線混向 zone-gallery.js env() 的 dim 那一組
 import * as THREE from 'three';
 import { uTime } from '../../core/scenery.js';
@@ -54,6 +55,25 @@ function poolMaterial(map, color) {
     polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
   });
 }
+
+// 自己在光池裡的影子：光從哪來，身體擋掉的那一條光池就不亮。腳下到影子尖端一段膠囊（尖端寬一點，帽子），
+// 只把光池的光扣掉，扣完跟池外的地板一樣；沒有陰影圖，手機也有。A 腳下、B 影子尖端（世界 xz），W 腳下和尖端的半寬
+const SHADE = 0.9;
+function shade(material, u) {
+  material.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = 'varying vec2 vShXZ;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+	vShXZ = ( modelMatrix * vec4( transformed, 1.0 ) ).xz;`);
+    sh.fragmentShader = 'uniform vec2 uShA, uShB, uShW;\nvarying vec2 vShXZ;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+	{
+		vec2 pa = vShXZ - uShA, ba = uShB - uShA;
+		float h = clamp( dot( pa, ba ) / max( dot( ba, ba ), 1e-4 ), 0.0, 1.0 );
+		float w = mix( uShW.x, uShW.y, h );
+		diffuseColor.rgb *= 1.0 - ${SHADE.toFixed(2)} * ( 1.0 - smoothstep( w - 0.015, w + 0.015, length( pa - ba * h ) ) );
+	}`);
+  };
+}
+const shadeUniforms = () => ({ uShA: { value: new THREE.Vector2(1e4, 1e4) }, uShB: { value: new THREE.Vector2(1e4, 1e4) }, uShW: { value: new THREE.Vector2(0.15, 0.24) } });
 
 // 光柱的圖：上亮下淡，最頂上收掉一小段，看不出從哪裡切開
 function beamTexture() {
@@ -181,10 +201,12 @@ export function buildVestibuleLight(scene, { mirror, camTable, lights = false, m
   const group = new THREE.Group();
   const circle = poolTexture(false), archTex = poolTexture(true), beamTex = beamTexture();
   const pools = [];
-  const pool = (tex, color, x, z, w, l, rot) => {
+  // u：這塊光池會被自己擋出影子（shadeUniforms），胖頭人那塊不用
+  const pool = (tex, color, x, z, w, l, rot, u) => {
     const geo = new THREE.PlaneGeometry(w, l);
     geo.rotateX(-Math.PI / 2);
     const m = new THREE.Mesh(geo, poolMaterial(tex, new THREE.Color(color)));
+    if (u) shade(m.material, u);
     m.position.set(x, POOL_Y, z);
     m.rotation.y = rot;
     m.renderOrder = 2;
@@ -199,11 +221,13 @@ export function buildVestibuleLight(scene, { mirror, camTable, lights = false, m
   // 鏡子：鏡面透出的月光，在地上鋪成一道跟鏡子同形的拱，比長毯寬一點，兩邊露出照亮的木地板
   const mn = mirror.n, mrot = Math.atan2(mn.x, mn.z);
   const ML = 2.9, MW = 2.4;
-  const moon = pool(archTex, MOON_POOL, mirror.x + mn.x * (ML / 2 + 0.05), mirror.z + mn.z * (ML / 2 + 0.05), MW, ML, mrot);
+  const moonShade = shadeUniforms(), sunShade = shadeUniforms();
+  const moon = pool(archTex, MOON_POOL, mirror.x + mn.x * (ML / 2 + 0.05), mirror.z + mn.z * (ML / 2 + 0.05), MW, ML, mrot, moonShade);
   const moonTint = new THREE.Mesh(moon.mesh.geometry, new THREE.MeshBasicMaterial({
     map: archTex, color: MOON_TINT, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
   }));
+  shade(moonTint.material, moonShade);
   moonTint.position.copy(moon.mesh.position);
   moonTint.rotation.y = mrot;
   moonTint.renderOrder = 2;
@@ -220,7 +244,7 @@ export function buildVestibuleLight(scene, { mirror, camTable, lights = false, m
   // 相機桌：頂上一盞暖燈，光池是沿著桌子的長橢圓，一半落在桌前的毯子上
   const tn = camTable.n, ta = camTable.along, trot = camTable.rot;
   const tcx = camTable.x + tn.x * 0.55, tcz = camTable.z + tn.z * 0.55;
-  const sun = pool(circle, SUN, tcx, tcz, 3.3, 2.0, trot);
+  const sun = pool(circle, SUN, tcx, tcz, 3.3, 2.0, trot, sunShade);
   // 錐面的本地 x 沿著桌子（scale x 拉長）
   const sunBeam = beam(beamTex, SUN, camTable.x + tn.x * 0.3, camTable.z + tn.z * 0.3, 1.0, 1.55, 0.8, trot);
   group.add(sunBeam);
@@ -256,8 +280,9 @@ export function buildVestibuleLight(scene, { mirror, camTable, lights = false, m
   let man = null, t = 0, last = { on: false, rug: 0, lift: 0, mirror: 0 };
   const tmp = new THREE.Vector3();
   const setPool = (p, k) => p.mesh.material.color.copy(p.base).multiplyScalar(k * share);
-  // 照在自己身上的光池的光：站在哪一塊光池裡幾成（邊緣軟一點，走進走出慢慢亮）、光從哪盞燈來
-  const self = { k: 0, color: new THREE.Color(), dir: new THREE.Vector3() };
+  // 照在自己身上的光池的光：站在哪一塊光池裡幾成（邊緣軟一點，走進走出慢慢亮）、光從哪盞燈來。
+  // k 是照到的那一面（手機才有，電腦有真的燈），rim 是逆光的輪廓（鏡頭在背後、光從前面來時那一圈，電腦手機都有）
+  const self = { k: 0, rim: 0, color: new THREE.Color(), dir: new THREE.Vector3() };
   const moonCol = new THREE.Color(MOON), sunCol = new THREE.Color(SUN);
   const ss = THREE.MathUtils.smoothstep;
   const inMoon = (x, z) => {
@@ -268,8 +293,9 @@ export function buildVestibuleLight(scene, { mirror, camTable, lights = false, m
     const dx = x - tcx, dz = z - tcz, a = (dx * ta.x + dz * ta.z) / 1.65, b = (dx * tn.x + dz * tn.z) / 1.0;
     return 1 - ss(a * a + b * b, 0.55, 1);
   };
-  const aim = (from, k, color, at) => {
-    self.k = k;
+  const aim = (from, k, rim, color, at) => {
+    self.k = lights ? 0 : k;
+    self.rim = rim;
     self.color.copy(color);
     self.dir.set(from.x - at.x, from.y - at.y - 1, from.z - at.z).normalize();
   };
@@ -294,16 +320,24 @@ export function buildVestibuleLight(scene, { mirror, camTable, lights = false, m
     },
     // on：前廳現在畫不畫（藏起來時燈歸零）；rug：鏡前長毯亮幾成；lift：相機桌上被看著的那台浮起幾成；
     // mirror：照鏡子幾成，照鏡子時鏡前那盞冷光讓給打在自己身上的鏡前光（avatar/mirrorlight.js）
-    // 手機上照在自己身上的光：at 是自己站在哪（main.js 每一幀問），給 mirrorlight.js 的 setStageLight。電腦有真的燈，一直是 0
-    lightOn(at) {
-      self.k = 0;
+    // 自己站在哪（main.js 每一幀問，top 是頭頂到帽尖多高）：地上自己的影子挪過去；照在自己身上的光回傳給 mirrorlight.js 的 setStageLight
+    lightOn(at, top = 1.35) {
+      // 月光順著光柱的斜度來，影子往房間裡倒，長度只看多高；相機桌的燈在頭頂上，影子短短地往燈的反方向
+      const h = Math.min(top, 2);
+      moonShade.uShA.value.set(at.x, at.z);
+      moonShade.uShB.value.set(at.x + mn.x * h * SHAFT.reach, at.z + mn.z * h * SHAFT.reach);
+      const f = h / (sunAt.y - h);
+      sunShade.uShA.value.set(at.x, at.z);
+      sunShade.uShB.value.set(at.x + (at.x - sunAt.x) * f, at.z + (at.z - sunAt.z) * f);
+
+      self.k = self.rim = 0;
       const { on, rug, lift, mirror } = last;
-      if (lights || !on) return self;
+      if (!on) return self;
       const wm = inMoon(at.x, at.z) * (1 - mirror), ws = inSun(at.x, at.z);
       // 兩塊光池不重疊，站在哪一塊就是哪一盞；照鏡子時月光讓給鏡前光
       // 冷光看起來比暖光暗、又是斜著照，數字要比相機桌大才一樣亮
-      if (wm > ws) aim(moonAt, wm * (2 + 1.4 * rug), moonCol, at);
-      else if (ws > 0) aim(sunAt, ws * (1.8 + 0.8 * lift), sunCol, at);
+      if (wm > ws) aim(moonAt, wm * (2 + 1.4 * rug), wm * (4 + 2.5 * rug), moonCol, at);
+      else if (ws > 0) aim(sunAt, ws * (1.8 + 0.8 * lift), ws * (3 + 1.2 * lift), sunCol, at);
       return self;
     },
     update(dt, { on, rug, lift, mirror = 0 }) {

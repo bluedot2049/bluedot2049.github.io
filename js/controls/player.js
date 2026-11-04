@@ -49,9 +49,9 @@ const SH_COAST = 0.16, SH_COAST_MAX = 0.45, SH_EASE = 0.6;
 const SH_MOUSE = 0.0022, SH_MOUSE_T = 0.04, SH_PITCH_EASE = 0.1, SH_PITCH_EASE_MIN = 0.45;
 // 手把（gamepad.js）轉鏡頭時鏡頭角度追視線的時間（秒）：柔順交給轉速那層的緩衝，這裡只比滑鼠鬆一點，不然會慢半拍、容易暈
 const PAD_LOOK_T = 0.08;
-// 手機橫拿越肩：拖過整個畫面長邊轉幾弧度、上下照左右的幾成、鏡頭追手指的時間（秒）。往哪拖就往哪看（手機射擊遊戲的習慣，跟一般跟拍拖著畫面走相反）。
+// 手機橫拿越肩：鏡頭追手指的時間（秒）。拖曳的方向、靈敏度跟一般視角一樣（拖著畫面走），見 orbit。
 // 搖桿那一側這麼寬的畫面不拿來轉視角：左手拇指沒剛好按在搖桿上時，跟右手湊成兩指會被當成捏合
-const SH_TOUCH = 3.2, SH_TOUCH_UP = 0.7, SH_TOUCH_T = 0.12, SH_JOY_ZONE = 0.4;
+const SH_TOUCH_T = 0.12, SH_JOY_ZONE = 0.4;
 // 越肩走路的起步和停下（秒）
 const SH_ACCEL_T = 0.14, SH_DECEL_T = 0.11;
 // 越肩和手持相機的高度另外慢慢跟（秒）：石階是一階一階踩上去的，跟緊了每一階都把畫面頂一下；一下差超過這麼多公尺（瞬移）直接跟過去
@@ -402,12 +402,11 @@ export class Player {
   orbit(dx, dy, mouse = false, right = false) {
     if (this.focus?.orb) return this.mirrorOrbit(dx, dy, mouse);
     this.exitView();
-    const touchSh = this.shoulder && !mouse;
-    const k = (mouse ? 9 : touchSh ? SH_TOUCH : 5.5) / Math.max(this.dom.clientWidth, this.dom.clientHeight);
-    const s = mouse || touchSh ? 1 : -1;   // 觸控是手指拖著畫面走，方向跟滑鼠相反；越肩照射擊遊戲，往哪拖就往哪看
+    const k = (mouse ? 9 : 5.5) / Math.max(this.dom.clientWidth, this.dom.clientHeight);
+    const s = mouse ? 1 : -1;   // 觸控是手指拖著畫面走，方向跟滑鼠相反；越肩也一樣
     this.camYaw -= dx * k * s;
     if (this.shoulder) {
-      this.shPitch = THREE.MathUtils.clamp(this.shPitch + dy * k * s * (touchSh ? SH_TOUCH_UP : 1), ...SH_PITCH);
+      this.shPitch = THREE.MathUtils.clamp(this.shPitch + dy * k * s, ...SH_PITCH);
       this.lookHold = 1.2;
       this.freeLook = right;
       const d = this.drag, now = performance.now(), gap = Math.max(8, now - d.last);
@@ -485,7 +484,7 @@ export class Player {
   // 越肩放手：照最後的速度再滑一小段，彈簧接著慢慢停，不會一放手就卡住
   shoulderFling() {
     const d = this.drag;
-    if (!this.shoulder || performance.now() - d.last > 80) return;
+    if (!this.shoulder || this.coarse || performance.now() - d.last > 80) return;   // 觸控跟一般視角一樣，放手就停
     const cap = (v) => THREE.MathUtils.clamp(v * SH_COAST * 1000, -SH_COAST_MAX, SH_COAST_MAX);
     this.camYaw += cap(d.yaw);
     this.shPitch = THREE.MathUtils.clamp(this.shPitch + cap(d.pitch), ...SH_PITCH);
