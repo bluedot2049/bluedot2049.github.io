@@ -207,8 +207,9 @@ export function buildVestibuleLight(scene, { mirror, camTable, lights = false, m
         group.add(iceDust);
       }
     },
-    // on：前廳現在畫不畫（藏起來時燈歸零）；rug：鏡前長毯亮幾成；lift：相機桌上被看著的那台浮起幾成
-    update(dt, { on, rug, lift }) {
+    // on：前廳現在畫不畫（藏起來時燈歸零）；rug：鏡前長毯亮幾成；lift：相機桌上被看著的那台浮起幾成；
+    // mirror：照鏡子幾成，照鏡子時鏡前那盞冷光讓給打在自己身上的鏡前光（avatar/mirrorlight.js）
+    update(dt, { on, rug, lift, mirror = 0 }) {
       t += dt;
       // 鏡子的月光平常就亮著一層，站上長毯、眼睛睜開時亮起來
       const m = 0.7 + 0.6 * rug;
@@ -223,7 +224,7 @@ export function buildVestibuleLight(scene, { mirror, camTable, lights = false, m
       setPool(ice, i);
       if (sunDust) sunDust.material.uniforms.uGain.value = 0.8 + 0.4 * lift;
       if (!lights) return;
-      moonLight.intensity = on ? 2.6 + 4 * rug : 0;
+      moonLight.intensity = on ? (1.6 + 2.2 * rug) * (1 - mirror) : 0;
       sunLight.intensity = on ? 7 + 4 * lift : 0;
       if (man) {
         man.ice.getWorldPosition(tmp);

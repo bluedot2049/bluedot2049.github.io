@@ -5,6 +5,7 @@
 import { alchemyCovers } from '../core/alchemy-glyphs.js';
 import { emoteSVG, emoteName } from '../social/emotes.js';
 import { pref, setPref } from '../save/prefs.js';
+import { sfx, thing } from '../audio/ui-voices.js';
 
 const $ = (s) => document.querySelector(s);
 
@@ -158,12 +159,14 @@ export class UI {
     const price = d.status === 'sold' ? '' : priceText(d);
     $('#sheet-price').textContent = price;
     $('#sheet-action').innerHTML = actionHTML(d, this.gallery.contact);
+    thing('paper', this.sheetOpen ? 0.16 : 0.3);   // 說明牌是紙卡：開著換下一張是翻一張，輕一點
     this.sheet.classList.add('open');
     this.onSheet?.(true);
   }
 
   hidePainting() {
     if (!this.sheetOpen) return;
+    thing('paper', 0.18, 0.85);
     this.sheet.classList.remove('open');
     this.onSheet?.(false);
   }
@@ -266,11 +269,13 @@ export class UI {
     img.src = src;
     this.zoom = { s: 1, x: 0, y: 0 };
     this.applyZoom();
+    if (!$('#viewer').classList.contains('open')) sfx('up');
     $('#viewer').classList.add('open');
     if (img.complete) hugMedia($('#viewer'), img);
   }
 
   closeViewer() {
+    if ($('#viewer').classList.contains('open')) sfx('down');
     $('#viewer').classList.remove('open');
   }
 
@@ -434,7 +439,10 @@ export class UI {
   }
 
   toggleList(open) {
+    const was = this.list.classList.contains('open');
     this.list.classList.toggle('open', open);
+    const now = this.list.classList.contains('open');
+    if (now !== was) thing('paper', now ? 0.34 : 0.2, now ? 0.9 : 0.85);   // 平面清單像攤開一張紙
   }
 
   // 收掉載入畫面。回傳的 promise 在真的進到遊戲時完成：門口要等門打開（第一次來的人要先按「進入」）

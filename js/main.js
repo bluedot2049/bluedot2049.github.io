@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { Player } from './controls/player.js';
 import { Character } from './avatar/character.js';
+import { addMirrorLight, setMirrorLight } from './avatar/mirrorlight.js';
 import { Attention } from './avatar/attention.js';
 import { sanitizeLook, randomPreset } from './avatar/looks.js';
 import { getSave, putSave } from './save/progress.js';
@@ -18,6 +19,7 @@ import { Multiplayer, EMOTES } from './social/multiplayer.js';
 import * as TX from './core/textures.js';
 import { Ambience } from './audio/ambience.js';
 import { dressSound, paintSound } from './audio/wear-voices.js';
+import { bindUI } from './audio/ui-voices.js';
 import { ANIMAL_LAYER, REFLECT_LAYER } from './core/scenery.js';
 import { Quality } from './core/quality.js';
 import { createPostFX } from './core/postfx.js';
@@ -209,20 +211,25 @@ async function start() {
   // 光線、霧。畫廊有室內和戶外兩組，走出後門時在兩組之間漸變；只有一組的區域兩頭都用它
   const envs = Z.env(world);
   const ENV = (envs.length > 1 ? envs : [envs[0], envs[0]]).map((e) => ({ ...e, bg: new THREE.Color(e.bg), sky: new THREE.Color(e.sky), ground: new THREE.Color(e.ground), sun: new THREE.Color(e.sun) }));
-  // 第三組（有的話）是室內再暗下來的一小塊（畫廊前廳）：k 是那一塊佔幾成，world.envDim(x, z) 給
-  let envT = -1, envK = 0;
-  const envMix = { bg: new THREE.Color(), sky: new THREE.Color(), ground: new THREE.Color(), sun: new THREE.Color(), dir: new THREE.Vector3() };
-  function mixEnv(a, d, k) {
-    for (const c of ['bg', 'sky', 'ground', 'sun']) envMix[c].copy(a[c]).lerp(d[c], k);
-    for (const n of ['near', 'far', 'hi', 'si']) envMix[n] = a[n] + (d[n] - a[n]) * k;
-    envMix.dir.copy(a.dir).lerp(d.dir, k);
-    return envMix;
+  // 第三組（有的話）是室內再暗下來的一小塊（畫廊前廳）：k 是那一塊佔幾成，world.envDim(x, z) 給。
+  // 第四組是照鏡子時：m 是照鏡子幾成，疊在前三組混好的上面
+  let envT = -1, envK = 0, envM = 0;
+  const newMix = () => ({ bg: new THREE.Color(), sky: new THREE.Color(), ground: new THREE.Color(), sun: new THREE.Color(), dir: new THREE.Vector3() });
+  const envMix = [newMix(), newMix()];
+  function mixEnv(out, a, d, k) {
+    for (const c of ['bg', 'sky', 'ground', 'sun']) out[c].copy(a[c]).lerp(d[c], k);
+    for (const n of ['near', 'far', 'hi', 'si']) out[n] = a[n] + (d[n] - a[n]) * k;
+    out.dir.copy(a.dir).lerp(d.dir, k);
+    return out;
   }
-  function applyEnv(t, k = 0) {
-    if (Math.abs(t - envT) < 0.002 && Math.abs(k - envK) < 0.002) return;
+  function applyEnv(t, k = 0, m = 0) {
+    if (Math.abs(t - envT) < 0.002 && Math.abs(k - envK) < 0.002 && Math.abs(m - envM) < 0.002) return;
     envT = t;
     envK = k;
-    const a = ENV[2] && k > 0 ? mixEnv(ENV[0], ENV[2], k) : ENV[0], b = ENV[1];
+    envM = m;
+    let a = ENV[2] && k > 0 ? mixEnv(envMix[0], ENV[0], ENV[2], k) : ENV[0];
+    if (ENV[3] && m > 0) a = mixEnv(envMix[1], a, ENV[3], m);
+    const b = ENV[1];
     scene.background.copy(a.bg).lerp(b.bg, t);
     scene.fog.color.copy(scene.background);
     scene.fog.near = a.near + (b.near - a.near) * t;
@@ -243,6 +250,10 @@ async function start() {
   const shadowTex = TX.shadowTexture();
   let look = loadLook();
   const character = new Character(shadowTex, look);
+  // 照鏡子時只打在自己身上的鏡前光（mirrorlight.js）：別人畫面上的你是另一份材質，看不到
+  addMirrorLight(character.mat);
+  addMirrorLight(character.faceMat);
+  let mirrorK = 0;   // 照鏡子幾成：鏡前光、照鏡子那組光線、鏡子那面牆藏不藏都照它
   character.setCamera(carried());
   world.camTable?.setCarried(carried());
   scene.add(character.group);
@@ -255,6 +266,7 @@ async function start() {
   // 大樹的樹洞：作者和網站消息。沒有大樹的區域什麼都不做
   const hollow = new Hollow(world.outdoor?.hollow ?? null, zone);
   const ambience = new Ambience();
+  bindUI(ambience, zone);   // 介面的聲音（ui-voices.js）：面板直接叫 sfx、thing，根音跟著這一區
   // 別人閃燈時，那盞閃光燈移過去亮一下
   const flashFx = new FlashFx(scene, flashLight, camera, ambience);
   let lastInput = performance.now();
@@ -868,7 +880,7 @@ async function start() {
   // 電腦的快捷鍵、Q 表情輪、Esc 暫停選單（表情要連上線才送得出去）
   const desk = bindDeskKeys({ player, ui, photo, pack, ambience, emotes: EMOTES, emote: (e) => mp && sendEmote(e) });
   // 手把：每幀在主迴圈讀（tick），按鍵類的動作借電腦按鍵的規則；有動就送 padinput（閒置、掛機都聽它）
-  const pad = bindGamepad({ player, photo, ui, desk, party: () => party });
+  const pad = bindGamepad({ player, photo, ui, desk, party: () => party, ambience });
   window.addEventListener('padinput', () => { lastInput = performance.now(); });
   const selfie = new Selfie({
     renderer, scene, camera, player, character, ambience, render: draw,
@@ -958,7 +970,7 @@ async function start() {
       if (!params.has('debug')) return refOverlay(params.get('ref'));
       gradeDock({
         zone, renderer, scene, world, grade: !!grade, ref: params.get('ref'),
-        ENV, applyEnv: () => { const t = Math.max(0, envT); envT = -1; applyEnv(t, envK); }, singleEnv: envs.length === 1,
+        ENV, applyEnv: () => { const t = Math.max(0, envT); envT = -1; applyEnv(t, envK, envM); }, singleEnv: envs.length === 1,
       });
     });
   }
@@ -1151,11 +1163,18 @@ async function start() {
     if (frame % 30 === 0) checkAway?.();
     const talking = layoutBubbles() > 0;
     if (frame % 6 === 0) updateAction();
+    // 照鏡子：鏡前光和暗一階的背景大約半秒換過去
+    const mirrorWant = player.focus?.kind === 'mirror' ? 1 : 0;
+    if (mirrorK !== mirrorWant) {
+      mirrorK = Math.abs(mirrorWant - mirrorK) < 0.01 ? mirrorWant : mirrorK + (mirrorWant - mirrorK) * Math.min(1, dt * 6);
+      setMirrorLight(mirrorK);
+      world.mirrorView?.(mirrorK);
+    }
     // 攝影模式時，光線、聲音、牆跟著鏡頭走
     const view = photo.active ? photo.pos : player.pos;
     if (world.outdoor) {
       const t = world.outdoor.outdoorness(view.z);
-      applyEnv(t, world.envDim?.(view.x, view.z) ?? 0);
+      applyEnv(t, world.envDim?.(view.x, view.z) ?? 0, mirrorK);
       ambience.setLevel(t);
       const meadow = player.room === world.rooms.length - 1 && world.outdoor.inMeadow(player.pos.z);
       const spot = meadow ? world.outdoor.placeAt(player.pos.x, player.pos.z) : null;

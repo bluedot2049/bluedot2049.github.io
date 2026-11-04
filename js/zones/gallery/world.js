@@ -29,6 +29,8 @@ import { DEFAULTS, DOOR_NEAR, DOOR_W, MARGIN, ROOM_NEAR, ROOM_TYPES, SEA_SPAN, S
 export function buildWorld(scene, gallery, opts = {}) {
   const rooms = [], paintings = [], entries = [], raycastTargets = [];
   let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null, noticeBoard = null, clock = null, mirrorTick = null, sunMoon = null, stage = null;
+  // 照鏡子幾成（main.js 每一幀給，0 到 1）；鏡子那面牆的牆段，照鏡子時整段藏起來
+  let mirrorK = 0, mirrorWall = null;
   let z = 0;
   setPropFader(new Fader(true));
 
@@ -140,6 +142,7 @@ export function buildWorld(scene, gallery, opts = {}) {
       room.group.add(tag(rug.mesh, 'floor'));
       mirrorTick = (dt, who) => { tick(dt, who); rug.update(dt, who); };
       mirror.rug = rug;   // 站上去亮了幾成，前廳的底聲要聽（vestibule-sound.js）
+      mirrorWall = sp.entry;
 
       // 右牆靠前是前門（frontdoor.js）：進來的那道門，門外是黃昏的光，不能開。靠出口那頭的牆角不擺雜物（旅遊海報那邊）
       const right = room.spans[1], sd = 2.0;
@@ -436,6 +439,25 @@ export function buildWorld(scene, gallery, opts = {}) {
     for (const p of e.paintings) p.group.visible = k < 1;
   }
 
+  // 照鏡子時鏡頭退到鏡子裡（player.js 的 mirrorBody）：鏡頭一到牆後，這面牆連同鏡子、牆上的花、矮牆整段藏起來，
+  // 不像平常淡成半透明的殘影擋在人前面。回來時從整面淡掉的樣子照平常慢慢立起來
+  function hideMirrorWall(e, cam) {
+    const want = mirrorK > 0.5 && (cam.x - e.px) * e.nx + (cam.z - e.pz) * e.nz < 0.4;
+    if (want !== !!e.gone) {
+      if (want) {
+        setFaded(e, 1);
+        e.gone = [...e.tall, ...e.stub].filter((m) => m.visible);
+        for (const m of e.gone) m.visible = false;
+      } else {
+        for (const m of e.gone) m.visible = true;
+        e.gone = null;
+        setFaded(e, 1);
+      }
+    }
+    if (want) e.hold = WALL_HOLD;
+    return want;
+  }
+
   function shouldFade(e, cam, tgt) {
     const s1 = (cam.x - e.px) * e.nx + (cam.z - e.pz) * e.nz;
     const s2 = (tgt.x - e.px) * e.nx + (tgt.z - e.pz) * e.nz;
@@ -485,7 +507,7 @@ export function buildWorld(scene, gallery, opts = {}) {
     if (stage) {
       let lift = 0;
       for (const sl of camTable.slots) lift = Math.max(lift, sl.lift);
-      stage.update(dt, { on: rooms[0].group.visible, rug: mirror.rug.glow, lift });
+      stage.update(dt, { on: rooms[0].group.visible, rug: mirror.rug.glow, lift, mirror: mirrorK });
     }
     if (outdoor) {
       const out = currentRoom === rooms.length - 1;
@@ -511,6 +533,7 @@ export function buildWorld(scene, gallery, opts = {}) {
     }
     propFader.update(dt, cam, still ? [] : propEyes(cam, target, view), still);
     for (const e of entries) {
+      if (e === mirrorWall && hideMirrorWall(e, cam)) continue;
       if (shouldFade(e, cam, target)) e.hold = WALL_HOLD;
       else e.hold -= dt;
       // 房間之間的牆：角色走到門口附近就跟著距離開始淡，跨過去時已經淡完。只算門那一段，站在牆前看畫不會淡
@@ -526,5 +549,5 @@ export function buildWorld(scene, gallery, opts = {}) {
   // 搭船去別的區域：棧橋邊繫著的小划船
   const exits = outdoor?.ferry ? [{ ...outdoor.ferry, to: 'haishi', label: '搭船', title: '渡船' }] : [];
 
-  return { rooms, paintings, mirror, camTable, stage, frontDoor, guideSign, noticeBoard, sunMoon, clock, outdoor, exits, raycastTargets, roomIndexAt, envDim: (x, z) => stage?.dim(x, z) ?? 0, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, updatePaintings, fadeVariants: (on) => roomFader.all(on), propVariants: (on) => propFader.turn(on) };
+  return { rooms, paintings, mirror, camTable, stage, frontDoor, guideSign, noticeBoard, sunMoon, clock, outdoor, exits, raycastTargets, roomIndexAt, envDim: (x, z) => stage?.dim(x, z) ?? 0, mirrorView: (k) => { mirrorK = k; }, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, updatePaintings, fadeVariants: (on) => roomFader.all(on), propVariants: (on) => propFader.turn(on) };
 }

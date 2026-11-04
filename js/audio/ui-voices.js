@@ -6,6 +6,7 @@
 // 音高不用固定赫茲：對 PENTA 五聲音階，根音每區一個（ROOT），跟那區的背景音樂同調，叮一聲像從音樂裡掉出來的。
 // 播放走 ambience.js 的出口（out、played、allow）。音量在 LEVEL，離線量過的 dB 之後補在這裡。
 import { PENTA, envelope, osc, rub } from './ambience-voices.js';
+import { MAT } from './wear-voices.js';
 
 // 每區的根音（Hz，D4–D5 這一個八度）。畫廊星盤夜讀是 D 小調，用同一組音的 F 大調五聲；月球寂靜軌道 A 大調；汀 D♭ 大調。
 // 海市 haishi.m4a 和沙島還沒對過調，先放 G；鏡宮在海市星廟裡，跟海市同調。
@@ -153,4 +154,21 @@ export function uiSound(amb, kind, { i = 0, pan = 0 } = {}) {
   const dur = fn(ctx, amb.out(vol, pan), ctx.currentTime + 0.02, i, amb.noise);
   TUNE.pitch = saved;
   amb.played(dur);
+}
+
+// ───────── 介面直接叫 ─────────
+// main.js 建好 ambience 以後綁一次（bindUI），面板裡 import sfx、thing 直接出聲，不用把 ambience 傳來傳去。還沒綁、靜音、切走都不出聲
+let bound = null;
+export function bindUI(amb, zone) { bound = amb; setZone(zone); }
+
+// 水晶那一層（UI 表的代號）
+export function sfx(kind, o) { if (bound) uiSound(bound, kind, o); }
+
+// 面板的身體：wear-voices.js 的材質（行囊是皮、相簿和說明牌是紙、渡船卡是木牌）。vol 比照換衣服的 0.4，p 音高倍率（關的時候低一點）
+const thingGates = {};
+export function thing(kind, vol = 0.3, p = 1) {
+  const amb = bound, ctx = amb?.ctx, fn = MAT[kind];
+  if (!ctx || amb.muted || amb.gone || !fn) return;
+  if (!amb.allow(thingGates[kind] ??= {}, 8, 3)) return;   // 滑桿拖著、翻得很快時不會變成一片
+  amb.played(fn(ctx, amb.out(vol * (0.85 + Math.random() * 0.15), 0), ctx.currentTime + 0.02, p * (0.95 + Math.random() * 0.1), amb.noise));
 }

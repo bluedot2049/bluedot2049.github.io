@@ -6,7 +6,7 @@
 // 座標跟 jinghai.js 一樣：x 往東、z 往南，大廳中心是原點
 import * as THREE from 'three';
 import { Kit, rng } from '../../core/props.js';
-import { softBox, earthDish, inside } from './jinghai-hq.js';
+import { softBox, earthDish, inside, wallFaces } from './jinghai-hq.js';
 import { BRAND, MENU, adScreens } from './jinghai-ads.js';
 
 export const BURGER = { x0: -30, x1: -11, z0: 25, z1: 41, roof: 5.2, top: 6.4 };
@@ -42,7 +42,7 @@ export function roverModel(k) {
 
 export function buildBurger({ coarse = false, fade = null } = {}) {
   const k = new Kit(null), kg = new Kit(null), R = rng('jinghai:burger');
-  const obstacles = [], solids = [], fadeKits = [];
+  const obstacles = [], solids = [], fadeKits = [], faces = wallFaces();
   // 擋住鏡頭時整組淡掉（jinghai.js 的 fade，fade.js 那套網點）。objs：跟著一起藏的獨立網格（螢幕的畫面、會轉的圓牌）
   const fadeKit = (boxes) => {
     const fk = new Kit(null);
@@ -58,11 +58,12 @@ export function buildBurger({ coarse = false, fade = null } = {}) {
     kit.add(softBox(w, h, d, r ?? Math.min(w, h, d) * 0.35), c, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, o);
   };
   const glowBox = (x0, y0, z0, x1, y1, z1, c) => B(k, x0, y0, z0, x1, y1, z1, c, { glow: true });
-  // 一片玻璃，每隔 mull 公尺一根可可色細框
-  function pane(axis, at, a, b, lo, hi, mull = 0) {
+  // 一片玻璃，每隔 mull 公尺一根可可色細框。裝在牆上（face）的不擋鏡頭，跟那面牆一起淡
+  function pane(axis, at, a, b, lo, hi, mull = 0, face = null) {
     const [x0, x1, z0, z1] = axis === 'x' ? [a, b, at - 0.03, at + 0.03] : [at - 0.03, at + 0.03, a, b];
     B(kg, x0, lo, z0, x1, hi, z1, '#d8d2c6');
-    solid(x0, lo, z0, x1, hi, z1);
+    if (face) face.boxes.push([x0, lo, z0, x1, hi, z1]);
+    else solid(x0, lo, z0, x1, hi, z1);
     if (lo < 1.6) block(x0, z0, x1, z1);
     if (!mull) return;
     const n = Math.max(1, Math.round((b - a) / mull));
@@ -72,12 +73,14 @@ export function buildBurger({ coarse = false, fade = null } = {}) {
       else B(k, at - 0.08, lo, u - 0.04, at + 0.08, hi, u + 0.04, PANEL);
     }
   }
+  // 牆不擋鏡頭，擋住時整面淡掉（jinghai-hq.js 的 wallFaces）
   function wall(axis, at, a0, a1, y0, y1, t, c, holes = []) {
+    const face = faces.face(axis, at, a0, a1);
     const piece = (u0, u1, v0, v1) => {
       if (u1 - u0 < 1e-3 || v1 - v0 < 1e-3) return;
       const [x0, x1, z0, z1] = axis === 'x' ? [u0, u1, at - t / 2, at + t / 2] : [at - t / 2, at + t / 2, u0, u1];
       B(k, x0, v0 > 0 ? v0 : -0.3, z0, x1, v1, z1, c);
-      solid(x0, v0, z0, x1, v1, z1);
+      face.boxes.push([x0, v0, z0, x1, v1, z1]);
       if (v0 < 1.6) block(x0, z0, x1, z1);
     };
     let u = a0;
@@ -85,7 +88,7 @@ export function buildBurger({ coarse = false, fade = null } = {}) {
       piece(u, h.a, y0, y1);
       piece(h.a, h.b, y0, h.lo);
       piece(h.a, h.b, h.hi, y1);
-      if (h.glass) pane(axis, at, h.a, h.b, h.lo, h.hi, h.mull);
+      if (h.glass) pane(axis, at, h.a, h.b, h.lo, h.hi, h.mull, face);
       u = h.b;
     }
     piece(u, a1, y0, y1);
@@ -120,8 +123,6 @@ export function buildBurger({ coarse = false, fade = null } = {}) {
   // 自動門：兩片玻璃推到兩邊
   for (const z of [31.2, 34.8]) B(kg, F.x1 - 0.12, 0, z - 0.75, F.x1 - 0.06, 3.2, z + 0.75, '#d8d2c6');
   B(k, F.x1 - 0.25, 3.2, 31.6, F.x1 + 0.05, 3.32, 34.4, PANEL);
-  // 門口連上面那段空的一起擋鏡頭（不擋人）：店小、天花板低，鏡頭從門鑽出去就隔著門框、雨遮往裡看，留在店裡
-  solid(F.x1 - 0.2, 0, 31.6, F.x1 + 0.2, 4.8, 34.4);
   // 屋頂和女兒牆；外面一圈番茄紅的細線
   B(k, F.x0, F.roof, F.z0, F.x1, F.roof + 0.4, F.z1, '#d9cfbe');
   solid(F.x0, F.roof - 0.1, F.z0, F.x1, F.top, F.z1);
@@ -409,7 +410,7 @@ export function buildBurger({ coarse = false, fade = null } = {}) {
 
   // hear(kind, vol)：肉排落回煎台時出聲，zone-jinghai.js 接上 ambience
   const api = {
-    kit: k, glass: kg, fadeKits, bill, obstacles, solids, ads, anim, board, logos: [wallLogo, bandLogo], pole: POLE,
+    kit: k, glass: kg, fadeKits, walls: faces.list, bill, obstacles, solids, ads, anim, board, logos: [wallLogo, bandLogo], pole: POLE,
     plan: { loops, still }, tick, hear: null,
     kiosks: KIOSK_X.map((x, i) => ({ x, z: KIOSK_Z, item: MENU[i] })), pickup: PICKUP,
   };

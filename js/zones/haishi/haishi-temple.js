@@ -3,10 +3,11 @@
 // 海市的星廟：後山上一座不供神像的廟，拜的是天。
 import * as THREE from 'three';
 import { Kit, rng, newBucket } from '../../core/props.js';
-import { bucketObjects, glowPoints, uTime } from '../../core/scenery.js';
+import { bucketObjects, glowPoints } from '../../core/scenery.js';
 import { addRoof } from './eaves.js';
 import { AREA, GRAY, PLASTER, shade } from './haishi-map.js';
 import { floorBelow } from './haishi-terrain.js';
+import { DOT_GLSL, trackPixelRatio } from '../../core/stardots.js';
 
 export function buildTemple(c) {
   const { k, bucket, fader, group, signs, farLamps, obstacles, solid } = c;
@@ -152,28 +153,36 @@ export function buildTemple(c) {
 }
 
 // 星門：無像殿最裡面（正北）那段矮牆前面，山門的小一號：兩根石柱一道石樑，樑上一個暗石環，環裡一顆四角星。
-// 柱子中間不是牆，是一片很深的夜，裡面幾層星星有遠有近（走動時看得出深度）。推門進去是鏡宮（zones/jinggong/），整頁換過去。
+// 柱子中間不是牆，是一片很深的夜，裡面幾層星星有遠有近（走動時看得出深度），跟前廳換裝鏡裡的星一樣是實心不發光的點（stardots.js）。
+// 推門進去是鏡宮（zones/jinggong/），整頁換過去。
 // 用自己的一串亂數、自己的網格，整座廟原本的樣子一點都不動
 const VOID_VERT = /* glsl */ `
   varying vec3 vW; varying vec2 vUv;
   void main() { vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
-const VOID_FRAG = /* glsl */ `
-  uniform float uTime;
+const VOID_FRAG = DOT_GLSL + /* glsl */ `
   varying vec3 vW; varying vec2 vUv;
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   void main() {
     vec3 d = normalize(vW - cameraPosition), col = vec3(0.02, 0.018, 0.04);
-    // 三層星：視線穿過門再往後走 D 公尺的地方，那裡的格子裡偶爾一顆。越深越小越淡
-    for (int i = 0; i < 3; i++) {
-      float D = 1.5 + float(i) * 3.0;
-      vec2 p = (vW.xy + d.xy * (D / max(0.08, -d.z))) * (3.0 + float(i));
-      vec2 cell = floor(p), f = fract(p) - 0.5;
-      float h = hash(cell + float(i) * 17.0);
-      if (h < 0.86) continue;
-      vec2 o = vec2(hash(cell + 3.1), hash(cell + 7.7)) - 0.5;
-      float s = smoothstep(0.12, 0.0, length(f - o * 0.6));
-      float tw = 0.6 + 0.4 * sin(uTime * (1.0 + h * 2.0) + h * 40.0);
-      col += mix(vec3(1.0, 0.86, 0.6), vec3(0.65, 0.72, 1.0), fract(h * 9.0)) * s * tw * (0.9 - float(i) * 0.25);
+    // T：視線每往門後一公尺，在門面上橫移多少。導數放在迴圈外面算
+    vec2 T = d.xy / max(0.08, -d.z), wx = dFdx(vW.xy), wy = dFdy(vW.xy), tx = dFdx(T), ty = dFdy(T);
+    // 四層星：視線穿過門再往後走 D 公尺的地方，那裡的格子裡三成有一顆。越深越小越淡；
+    // fw 是一個畫的像素跨幾格，一格不到八個點（CSS 像素）就淡掉，離遠了不擠成雜訊
+    for (int i = 0; i < 4; i++) {
+      float D = 1.5 + float(i) * 3.0, K = 3.0 + float(i);
+      float fw = K * max(length(wx + D * tx), length(wy + D * ty)), fade = smoothstep(0.35, 0.12, fw * uPr);
+      if (fade <= 0.0) continue;
+      // 星心落在格子中間那 0.2~0.8，點不到半格大，只要看自己這格和靠過去的那三格
+      vec2 p = (vW.xy + T * D) * K, id = floor(p), f = p - id, s = step(0.5, f) * 2.0 - 1.0;
+      for (int j = 0; j <= 1; j++) for (int k = 0; k <= 1; k++) {
+        vec2 n = vec2(k, j) * s, cell = id + n;
+        float h = hash(cell + float(i) * 17.0);
+        if (h < 0.7) continue;
+        vec2 o = vec2(hash(cell + 3.1), hash(cell + 7.7)) - 0.5;
+        float m = pow(fract(h * 23.0), 2.0), r = length(f - n - 0.5 - o * 0.6) / fw;
+        col += mix(vec3(1.0, 0.86, 0.6), vec3(0.65, 0.72, 1.0), fract(h * 9.0)) * (0.4 + 0.6 * m) * (0.85 - float(i) * 0.15)
+          * starDot(r, (2.4 - float(i) * 0.4) * (0.7 + 0.6 * m)) * fade;
+      }
     }
     float e = smoothstep(0.0, 0.08, min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y)));
     gl_FragColor = vec4(col * e, 1.0);
@@ -194,7 +203,9 @@ function buildStarGate({ group, obstacles }) {
   obstacles.push({ x, z: z - 0.05, hw: 0.72, hd: 0.15 });
   k.emit(b, 0, 0, 0);
   for (const o of bucketObjects(b, false, floorBelow, true)) group.add(o);
-  const night = new THREE.Mesh(new THREE.PlaneGeometry(1.44, 2.62), new THREE.ShaderMaterial({ uniforms: { uTime }, vertexShader: VOID_VERT, fragmentShader: VOID_FRAG }));
+  const nightMat = new THREE.ShaderMaterial({ vertexShader: VOID_VERT, fragmentShader: VOID_FRAG });
+  nightMat.uniforms.uPr = trackPixelRatio(nightMat);
+  const night = new THREE.Mesh(new THREE.PlaneGeometry(1.44, 2.62), nightMat);
   night.position.set(x, y + 1.38, z - 0.02);
   group.add(night);
   // 回來的人站在門前，面向水鏡

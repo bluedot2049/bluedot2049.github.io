@@ -61,10 +61,10 @@ export function clear() {
   mark = null;
 }
 
-// 剛打開：焦點放在主要那顆（.primary），沒有就是現在這一頁的分頁、第一顆
+// 剛打開：面板寫了 data-pad-start 就從那裡開始（說話框是短句的第一顆），不然是主要那顆（.primary），再不然是第一顆不是分頁的
 export function enter(layer) {
-  const list = items(layer);
-  const pick = list.find((el) => el.matches('.primary')) ?? list.find((el) => !el.matches('[data-page], [data-tab]')) ?? list[0];
+  const list = items(layer), start = layer.dataset.padStart;
+  const pick = (start && list.find((el) => el.matches(start))) ?? list.find((el) => el.matches('.primary')) ?? list.find((el) => !el.matches('[data-page], [data-tab]')) ?? list[0];
   set(pick ?? null);
 }
 

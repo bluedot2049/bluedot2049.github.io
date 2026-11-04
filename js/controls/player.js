@@ -22,14 +22,15 @@ const ZENITH = 1.52;
 const SWIPE_MIN = 40;
 // 鏡頭追目標的時間：跟著角色、看畫照鏡子
 const FOLLOW_T = 0.2, VIEW_T = 0.32;
-// 有天花板的區域（camDuck）穿過窄門時，牆把鏡頭推到身邊：鏡頭現在的位置還看得到頭，就用這麼久慢慢靠過去
-const PULL_T = 0.7;
 // 被山坡、石階擋住時鏡頭最多往上抬幾度（弧度），抬到這裡還擋著才往前推
 const CLIP_LIFT = 0.7;
 // 上面有天花板的區域（camDuck）鏡頭最低壓到哪：從頭看出去的仰角（弧度），比頭略低一點
 const DUCK_LOW = -0.05;
 // 照鏡子時繞著自己轉：俯角範圍、離注視點的遠近、角度追手指的快慢、放手後還滑多久
-const ORB_LOW = -0.3, ORB_HIGH = 1.2, ORB_NEAR = 0.45, ORB_FAR = 6.5, ORB_ZOOM = [0.3, 1.8];
+// 照鏡子：tZoom 1 是全身剛好裝滿，拉近到 0.3 視線一路移到臉上，拉遠最多再留一點邊
+const ORB_LOW = -0.3, ORB_HIGH = 1.2, ORB_NEAR = 0.45, ORB_FAR = 14, ORB_ZOOM = [0.3, 1.35];
+// 照鏡子的鏡頭：長焦（人不變形、背景安靜），退到鏡子裡面拍；站在長毯上離鏡子這麼遠
+const MIRROR_FOV = 30, MIRROR_STAND = 1.75;
 const ORB_EASE = 7, ORB_COAST = 0.22;
 
 const defaultDist = () => (window.innerWidth < window.innerHeight ? 12 : 9.5);
@@ -170,6 +171,7 @@ export class Player {
     this.lookVel = {};
     this.headPos = new THREE.Vector3();
     this.liftPos = new THREE.Vector3();
+    this.orbLook = new THREE.Vector3();   // 照鏡子拉近時移到臉上的視線（mirrorCamera）
     this.attn = null;               // 注意力（attention.js）：主程式建好後填進來，頭要看哪裡由它挑
     this.gazeId = null;             // 頭在看誰（別人的代號、'self' 是自己的鏡頭），multiplayer 送 g
     this.gazeHead = new THREE.Vector3();
@@ -507,6 +509,7 @@ export class Player {
 
   // 看畫、照鏡子的視角：取景距離照它算
   focusFov() {
+    if (this.focus?.kind === 'mirror') return MIRROR_FOV;
     return this.shoulder ? SH_FOCUS_FOV : 50;
   }
 
@@ -664,45 +667,50 @@ export class Player {
     };
   }
 
-  // 照鏡子：站在鏡前，鏡頭從鏡子的位置看回來，看得到自己的正面
-  // 距離依螢幕比例算，手機下方被面板蓋住的部分要扣掉，全身才看得到
+  // 照鏡子：站在鏡前的長毯上，鏡頭從鏡子裡看回來，看得到自己的正面。
+  // 鏡頭退到鏡子後面多遠都可以：照鏡子時那面牆、牆上的花和鏡子本身整面藏起來（world.js）。手機下方被面板蓋住的部分先估四成半
   planMirror() {
     const m = this.world.mirror, n = m.n;
-    const visH = panelW() ? 1 : 0.6;
-    const tanV = Math.tan(THREE.MathUtils.degToRad(this.focusFov() / 2));
-    const d = 0.35 + Math.max(1.8, Math.max(2.0, this.character.dims.topY * 1.3) / 2 / (tanV * visH));
-    const stand = this.world.findWalkable(m.x + n.x * d, m.z + n.z * d, this.pos.x, this.pos.z) || { x: this.pos.x, z: this.pos.z };
+    const stand = this.world.findWalkable(m.x + n.x * MIRROR_STAND, m.z + n.z * MIRROR_STAND, this.pos.x, this.pos.z) || { x: this.pos.x, z: this.pos.z };
     return {
       kind: 'mirror', n, stand,
       orb: { yaw: 0, pitch: 0, zoom: 1, tYaw: 0, tPitch: 0, tZoom: 1, vYaw: 0, vPitch: 0, last: 0, touched: false },
-      camPos: new THREE.Vector3(m.x + n.x * 0.35, 1.05, m.z + n.z * 0.35),
-      look: new THREE.Vector3(stand.x, 0.85, stand.z),
+      ...this.mirrorBody({ x: stand.x, y: this.pos.y, z: stand.z }, n, panelW() ? 1 : 0.55),
       fadeTarget: new THREE.Vector3(stand.x, 0, stand.z),
+    };
+  }
+
+  // 全身取景：帽尖上面留一點、腳下露一點地毯，剛好裝進沒被面板蓋住的那一塊（畫面中心已經挪到那一塊的中間，見 main.js applyViewOffset）。
+  // 鏡頭稍微往下看。faceY 是拉近時視線移過去的高度
+  mirrorBody(p, n, visH) {
+    const d = this.character.dims, tanV = Math.tan(THREE.MathUtils.degToRad(MIRROR_FOV / 2)) * visH;
+    const top = p.y + d.topY + 0.12, bot = p.y - 0.12, mid = (top + bot) / 2;
+    const D = ((top - bot) / 2 / tanV) * 1.04;
+    return {
+      camPos: new THREE.Vector3(p.x - n.x * D, mid + D * 0.07, p.z - n.z * D),
+      look: new THREE.Vector3(p.x, mid, p.z),
+      faceY: p.y + d.faceY + d.headH * 0.12,
     };
   }
 
   // 捏角色時的取景：body 從鏡子看全身，face 湊到臉前面。visH 是畫面沒被面板蓋住的比例
   // 角色變高、頭變大時重算一次，頭頂不會跑出畫面
   frameMirror(mode, visH) {
-    const f = this.focus, m = this.world.mirror;
+    const f = this.focus;
     if (f?.kind !== 'mirror') return;
     const dims = this.character.dims, n = f.n, p = this.pos;
     // 換到臉或全身時遠近回到預設，轉到的角度留著
     if (f.mode && f.mode !== mode) f.orb.tZoom = 1;
     f.mode = mode;
-    const tanV = Math.tan(THREE.MathUtils.degToRad(this.focusFov() / 2)) * visH;
-    const gap = Math.max(0.9, (p.x - m.x) * n.x + (p.z - m.z) * n.z);
     if (mode === 'face') {
-      const d = THREE.MathUtils.clamp((dims.headH * 1.7) / 2 / tanV, 0.7, gap - 0.3);
+      // 臉：鏡頭可以退到鏡子裡，不用再卡在鏡面前面
+      const tanV = Math.tan(THREE.MathUtils.degToRad(MIRROR_FOV / 2)) * visH;
+      const d = Math.max(0.7, (dims.headH * 1.7) / 2 / tanV);
       const y = p.y + dims.faceY + dims.headH * 0.18;
       f.camPos = new THREE.Vector3(p.x - n.x * d, y, p.z - n.z * d);
       f.look = new THREE.Vector3(p.x, y, p.z);
-    } else {
-      // 鏡頭稍微往下看，鏡子前面地上的書堆、箱子比較不會擋住
-      const half = (gap - 0.35) * tanV, y = p.y + Math.max(dims.topY * 0.5, dims.topY + 0.15 - half);
-      f.camPos = new THREE.Vector3(m.x + n.x * 0.35, y + 0.45, m.z + n.z * 0.35);
-      f.look = new THREE.Vector3(p.x, y, p.z);
-    }
+      f.faceY = null;
+    } else Object.assign(f, this.mirrorBody(p, n, visH));
   }
 
   // 挑相機：站在桌前，鏡頭從角色前面斜斜地往下看著第 i 個位置；換位置時鏡頭滑過去
@@ -866,6 +874,8 @@ export class Player {
   padLink(on) {
     if (on) {
       this.shoulderOk = true;
+      // 手機、平板的越肩沒量過幀率：沒自己調過就先收小（不彎、視野 85°），不寫設定
+      if (this.coarse && !pref('view')) Object.assign(this.view, { fov: 85, fish: 0 });
       if (!this.shoulder) {
         this.padForced = true;
         this.setShoulder(true, false);
@@ -1214,8 +1224,15 @@ export class Player {
 
   // 照鏡子的鏡頭：把鏡子取景的位置繞著注視點轉、拉遠拉近。轉到鏡子那面牆後面時，牆和鏡子會自己淡掉（見 world.js）
   mirrorCamera(outPos, outLook) {
-    const f = this.focus, o = f.orb, c = f.look;
-    const ox = f.camPos.x - c.x, oy = f.camPos.y - c.y, oz = f.camPos.z - c.z;
+    const f = this.focus, o = f.orb;
+    const ox = f.camPos.x - f.look.x, oy = f.camPos.y - f.look.y, oz = f.camPos.z - f.look.z;
+    // 全身那一頁拉近時，視線從身體中間一路移到臉上：拉到最近剛好是半身帶臉，不會停在肚子
+    let c = f.look;
+    if (f.faceY != null) {
+      const t = THREE.MathUtils.smoothstep(o.zoom, ORB_ZOOM[0], 1);
+      c = this.orbLook.copy(f.look);
+      c.y = f.faceY + (f.look.y - f.faceY) * t;
+    }
     const h = Math.hypot(ox, oz), r = Math.hypot(h, oy);
     const a = Math.atan2(ox, oz) + o.yaw;
     const e = THREE.MathUtils.clamp(Math.atan2(oy, h) + o.pitch, ORB_LOW, ORB_HIGH);
@@ -1617,12 +1634,6 @@ export class Player {
       // 剛走到鏡前慢慢滑進取景；開始自己轉以後角度已經有緩動，鏡頭跟緊一點，不然繞圈時會從角色身上切過去
       // 越肩離得近，跟緊一點；剛切換越肩時慢慢滑過去
       let T = this.focus?.orb?.touched ? FOLLOW_T : this.focus?.camPos ? VIEW_T : this.shoulder ? SH_POS_T : FOLLOW_T;
-      // 靜海這種有天花板的區域：走過控制室那種窄門，頭一過門檻，想要的位置就從門外跳到門裡的牆邊，鏡頭一下往前衝好幾公尺。
-      // 鏡頭現在的位置還看得到頭（隔著門口，貼著門框也算：camClip 第三個參數 0 是不留鏡頭的邊），就慢慢靠過去；真的被牆擋住了才照平常的快慢追
-      if (this.world.camDuck && !this.focus && !this.shoulder && this.world.camClip) {
-        const head = this.headPos.set(this.pos.x, this.pos.y + 1.2, this.pos.z);
-        if (dPos.distanceToSquared(head) + 1 < this.camPos.distanceToSquared(head) && this.world.camClip(head, this.camPos, 0) >= 1) T = PULL_T;
-      }
       // 剛切換越肩：一開始慢慢滑，越接近越跟緊，鬆緊是漸變的，中途不會突然一緊
       if (this.easeT > 0) {
         this.easeT = Math.max(0, this.easeT - dt);

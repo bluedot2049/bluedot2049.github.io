@@ -90,10 +90,12 @@ export class Selfie {
         if (this.t >= SETTLE) { this.state = 'rise'; this.t0 = this.t; eye.group.visible = true; this.ambience?.voice('eyeout', 0.4); }
         break;
       case 'rise': {
-        // 從鏡面（鏡頭前一點）出來，弧線繞到肩膀旁
+        // 從鏡面出來，弧線繞到肩膀旁。照鏡子時鏡頭退在鏡子後面，所以從鏡子的位置（臉的高度）出來，不是從鏡頭
         const k = Math.min(1, at(this.t0) / RISE), e = ease(k);
         this.anchor(this.to);
-        this.from.copy(cam).lerp(this.to, 0.08);
+        const m = this.player.world.mirror;
+        if (m) this.from.set(m.x + m.n.x * 0.15, this.to.y, m.z + m.n.z * 0.15);
+        else this.from.copy(cam).lerp(this.to, 0.08);
         this.mid.copy(this.from).lerp(this.to, 0.5);
         this.mid.y += 0.35;
         const a = this.from.clone().lerp(this.mid, e), b = this.mid.clone().lerp(this.to, e);

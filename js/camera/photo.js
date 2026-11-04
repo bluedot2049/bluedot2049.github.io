@@ -11,8 +11,9 @@
 // 越肩鎖住滑鼠時另有「舉相機」（quick）：右鍵按住舉起來、左鍵快門，放開右鍵一幀切回肩後；短按右鍵是一直舉著，再按一次放下。
 // 舉起和放下時按著的走路鍵接著算，人不會停一下。
 // 帶相機是手持取景，沒帶就是畫廊的眼睛當空拍機飛出去（WASD 飛、E/Q 升降、Shift 快）。介面全收起來，拍好收進相簿（album.js），最後在行囊選片。
-// 對焦只有一條：對焦點底下的東西一直對著。對焦點平常在準心（畫面正中間），完整攝影模式點一下換到那裡；
-// 舉起來時相機朝準心剛才對到的那一點看，接著瞄到哪對到哪。快慢、找焦、等不等焦照相機的 af，沒有要按的鍵。
+// 對焦方式是相機的個性（cameras.js 的 focus）：舉起來時相機朝準心剛才對到的那一點看、對焦在那裡。
+// lock（燭火乙式）就鎖住，像攝影師的背鍵對焦，怎麼構圖都不跑，R（手把按下右搖桿或 R）重新對焦；follow 是對焦點底下的東西一直對著。
+// 對焦點平常在準心，完整攝影模式點一下換到那裡。快慢、找焦、等不等焦照相機的 af。
 // 舉著時滾輪換高低（蹲低、眼高、舉高），中鍵切自拍；Q 閃光、~ 日期、L 看鏡、F 直橫（攝影模式裡都能按）。舉起和切自拍時先黑一下（darken）。相機的快門、閃光、日期、看鏡照樣顯示，標上按鍵。
 // 看鏡（lookOn）：開著時自己的頭一直看著鏡頭，關著就隨意看（attention.js）。鏡頭的位置和方向由 lensInfo 給別人和自己的頭
 import * as THREE from 'three';
@@ -67,8 +68,9 @@ const GRIPS = ['蹲低', '眼高', '舉高', '自拍'];
 const HOLD_MS = 280, MAX_EXPOSE = 10;
 const GEAR_KEY = 'photoGear';
 const WALK_KEYS = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']);
-// 自動對焦：隔幾秒量一次對焦點底下多遠、差多少（屈光度，1/公尺）才轉過去、轉了多少才嗶一聲報距離
+// 一直跟著對（focus 'follow'）：隔幾秒量一次對焦點底下多遠、差多少（屈光度，1/公尺）才轉過去、轉了多少才嗶一聲報距離
 const AF_EVERY = 0.12, AF_SLACK = 0.03, AF_BEEP = 0.3;
+const canFocus = (g) => g?.focus === 'lock' || g?.focus === 'follow';
 // 長曝光：每幀先把亮部撐開再加起來，燈籠拖出的光痕才不會灰灰的，最後再壓回來
 const EXPAND = 0.9;
 const QUAD_VERT = /* glsl */ `
@@ -504,8 +506,11 @@ export class PhotoMode {
     this.told ??= {};
     if (this.told[key]) return;
     this.told[key] = true;
-    if (pad && this.gear) this.ui.toast(`準心對著的會自己對焦，${padName(7, lb)} 拍照`, `十字鍵上下換高低　${faceName(3, lb)} 自拍　放開 ${padName(6, lb)} 放下`);
+    const lock = this.gear?.focus === 'lock';
+    if (pad && this.gear && lock) this.ui.toast(`舉起就對準心對焦鎖定，${padName(7, lb)} 拍照`, `按下右搖桿或 ${padName(5, lb)} 重新對焦　十字鍵上下換高低　${faceName(3, lb)} 自拍`);
+    else if (pad && this.gear) this.ui.toast(`準心對著的會自己對焦，${padName(7, lb)} 拍照`, `十字鍵上下換高低　${faceName(3, lb)} 自拍　放開 ${padName(6, lb)} 放下`);
     else if (pad) this.ui.toast('空拍機：左搖桿飛、十字鍵上下升降', `${padName(7, lb)} 拍照　十字鍵左右變焦　放開 ${padName(6, lb)} 收回`);
+    else if (this.gear && lock) this.ui.toast('舉起就對準心對焦鎖定，左鍵拍照', 'R 重新對焦　滾輪換高低　中鍵自拍　放開右鍵放下');
     else if (this.gear) this.ui.toast('準心對著的會自己對焦，左鍵拍照', '滾輪換高低　中鍵自拍　放開右鍵放下');
     else this.ui.toast('空拍機：WASD 飛、E / Q 升降', '左鍵拍照　滾輪變焦　F 直橫　放開右鍵收回　短按右鍵一直飛');
   }
@@ -833,6 +838,7 @@ export class PhotoMode {
       if (e.code === 'Backquote' && this.gear?.date) return e.repeat || this.toggleDate();
       if (e.key === 'l' || e.key === 'L') return e.repeat || this.toggleLook();
       if ((e.key === 'f' || e.key === 'F') && !this.studio) return e.repeat || this.turn();
+      if ((e.key === 'r' || e.key === 'R') && this.gear) return e.repeat || this.refocus();
       this.keys.add(e.key.toLowerCase());
     });
     window.addEventListener('keyup', (e) => {
@@ -1165,7 +1171,7 @@ export class PhotoMode {
       this.needAF = false;
       this.afCheck = AF_EVERY;
       // 舉相機：從原本的焦距轉到準心那一點，照這台相機的速度找焦
-      if (tgt && this.gear.focus === 'auto') this.afTo(this.aimDist, window.innerWidth / 2, window.innerHeight / 2, true);
+      if (tgt && canFocus(this.gear)) this.afTo(this.aimDist, window.innerWidth / 2, window.innerHeight / 2, true);
       else this.focusD = this.depthAt(0, 0);
     }
     this.aimTarget = null;
@@ -1210,19 +1216,27 @@ export class PhotoMode {
     return d === Infinity ? 80 : d;
   }
 
-  // 完整攝影模式點一下：對焦點換到點的地方，之後一直對著那裡底下的東西（followFocus）
+  // 完整攝影模式點一下：對焦點換到點的地方，對過去（lock 的相機就鎖在那裡，follow 的之後一直對著那裡底下的東西）
   focusAt(x, y) {
     const fr = this.frame;
-    if (x < fr.x || x > fr.x + fr.w || y < fr.y || y > fr.y + fr.h || this.gear.focus !== 'auto') return;
+    if (x < fr.x || x > fr.x + fr.w || y < fr.y || y > fr.y + fr.h || !canFocus(this.gear)) return;
     this.afPoint = { x, y };
     this.afCheck = AF_EVERY;
     this.afTo(this.depthAt((x / window.innerWidth) * 2 - 1, 1 - (y / window.innerHeight) * 2), x, y, true);
   }
 
-  // 對焦點底下的東西一直對著：隔一下量一次多遠，差得夠多就照這台相機的快慢轉過去。
-  // 轉到一半換了目標，從現在的焦距接著轉；舉相機時對焦點固定在準心
+  // 重新對焦（R；手把按下右搖桿或 R）：對準心再對一次，完整攝影模式是點過的那一點。lock 的相機換焦點靠這個
+  refocus() {
+    if (!this.active || !canFocus(this.gear) || this.result) return;
+    const W = window.innerWidth, H = window.innerHeight, p = (!this.quick && this.afPoint) || { x: W / 2, y: H / 2 };
+    this.afCheck = AF_EVERY;
+    this.afTo(this.depthAt((p.x / W) * 2 - 1, 1 - (p.y / H) * 2), p.x, p.y, true);
+  }
+
+  // follow 的相機：對焦點底下的東西一直對著。隔一下量一次多遠，差得夠多就照這台相機的快慢轉過去；
+  // 轉到一半換了目標，從現在的焦距接著轉。舉相機時對焦點固定在準心
   followFocus(dt) {
-    if (this.gear.focus !== 'auto' || (this.afCheck -= dt) > 0) return;
+    if (this.gear.focus !== 'follow' || (this.afCheck -= dt) > 0) return;
     this.afCheck = AF_EVERY;
     const W = window.innerWidth, H = window.innerHeight, p = (!this.quick && this.afPoint) || { x: W / 2, y: H / 2 };
     const d = this.depthAt((p.x / W) * 2 - 1, 1 - (p.y / H) * 2);
@@ -1265,7 +1279,10 @@ export class PhotoMode {
     this.snapHand = true;
     this.darken();
     this.refresh();
-    this.afCheck = AF_EVERY;   // 手先轉到位，下一次量的時候自己對過去
+    // 手先轉到位再對：lock 的相機自己重新對一次焦，follow 的下一次量的時候就對過去
+    this.afCheck = AF_EVERY;
+    clearTimeout(this.selfieAF);
+    if (this.gear.focus === 'lock') this.selfieAF = setTimeout(() => { if (this.active && this.quick && this.gear) this.refocus(); }, 120);
   }
 
   // 眼睛貼上觀景窗：舉起相機、切自拍時鏡頭一下換了位置，墨色蓋住一下再淡開，不硬切。只蓋在畫面上，不進照片
@@ -1287,18 +1304,19 @@ export class PhotoMode {
     this.refresh();
   }
 
-  // 對到焦：框停住（舉相機時一直留著，完整攝影模式過一下淡掉）。轉得多才嗶一聲、報距離，跟著小晃動的不吵
+  // 對到焦：框停住（舉相機時一直留著，表示鎖住了；完整攝影模式過一下淡掉）。
+  // lock 的相機每次對到都嗶兩聲、報「對焦鎖定」；follow 的轉得多才嗶，跟著小晃動的不吵
   focused(big = false) {
     const el = this.$('#ph-af');
     if (el.className === 'hunt') {
       el.className = 'lock';
       if (!this.quick) this.afTimer = setTimeout(() => { el.className = ''; }, 1300);
     }
-    const now = performance.now();
-    if (big && now - (this.beepT || 0) > 500) {
+    const now = performance.now(), lock = this.gear?.focus === 'lock';
+    if ((big || lock) && now - (this.beepT || 0) > 300) {
       this.beepT = now;
       this.ambience.voice('focus', 0.35);
-      this.showZoom(`對焦 ${dist(this.focusD)}`);
+      this.showZoom(this.quick && lock ? `對焦鎖定 ${dist(this.focusD)}` : `對焦 ${dist(this.focusD)}`);
     }
     // 對好才放快門的相機：剛才按了快門，現在拍
     if (this.pendingShot) {

@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { Kit, newBucket } from '../../core/props.js';
 import { bucketObjects } from '../../core/scenery.js';
+import { DOT_GLSL, trackPixelRatio } from '../../core/stardots.js';
 
 const W = 0.8, H = 1.75, Y0 = 0.22;   // 鏡面寬、高、下緣離地
 const FB = 0.1, FD = 0.1;             // 木框寬、厚
@@ -73,8 +74,7 @@ function glassTexture() {
 
 // 鏡子裡的星：跟星廟的水鏡同一個做法，不用反射相機，鏡面自己算。
 // 視線穿過鏡面繼續往裡走，在不同深度碰到一層一層的星（鏡子裡的像本來就是這樣：前面多遠，裡面就多深）。
-// 每層一格最多一顆，星是實心的小點，不發光、不閃：沒有光暈，邊上只留一個像素的反鋸齒；一層裡少數亮、大多很暗，越深越小越暗越冷。
-// 點的大小照畫面上的點（CSS 像素）算，手機和電腦看起來一樣大。最亮的也壓在泛光的門檻底下，電腦高畫質不會暈開。
+// 每層一格最多一顆，星是實心的小點，不發光、不閃（stardots.js）；一層裡少數亮、大多很暗，越深越小越暗越冷。
 // 平均撒滿會像雪花，所以深的幾層沿一條斜斜往裡退的星河聚集：星河在每一層的位置不同，走動時整條跟著錯開。
 // 只算鏡面佔到的那些像素
 const DEPTHS = [
@@ -85,22 +85,15 @@ const DEPTHS = [
   [16.0, 0.1, 1.1, 0.4, 131, [0.55, 0.66, 1.0], 0.28],
 ];
 const f1 = (v) => v.toFixed(3);
-const bufSize = new THREE.Vector2();
 function glassMaterial(map) {
   const m = new THREE.MeshBasicMaterial({ map, transparent: true });
-  // 一個 CSS 像素等於幾個畫的像素。不能用螢幕的 devicePixelRatio：手機實際只畫 1～1.5 倍再放大（quality.js），
-  // 照 2 倍算點會大一圈又被放糊。拍照時整張重畫成大圖，照大圖跟視窗的比例放大，照片裡的星跟畫面上一樣大
-  const uPr = { value: 1 };
-  m.onBeforeRender = (r) => {
-    const t = r.getRenderTarget(), s = t ? bufSize.set(t.width, t.height) : r.getDrawingBufferSize(bufSize);
-    uPr.value = Math.max(r.getPixelRatio(), s.x / window.innerWidth, s.y / window.innerHeight);
-  };
+  const uPr = trackPixelRatio(m);
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uPr = uPr;
     sh.vertexShader = 'varying vec2 vP; varying vec3 vSee;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
       vP = position.xy;
       vSee = position - (inverse(modelMatrix) * vec4(cameraPosition, 1.0)).xyz;`);
-    sh.fragmentShader = `uniform float uPr; varying vec2 vP; varying vec3 vSee;
+    sh.fragmentShader = DOT_GLSL + `varying vec2 vP; varying vec3 vSee;
       vec3 hash3(vec2 p) {
         vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
         q += dot(q, q.yxz + 33.33);
@@ -121,10 +114,8 @@ function glassMaterial(map) {
           vec3 h = hash3(c + seed);
           if (h.z > occ * band) continue;
           vec3 e = hash3(c.yx * 1.7 + seed + 7.0);
-          // r 離星心幾個畫的像素、rad 半徑；比一個像素還小的點照面積變暗，不會因為反鋸齒那一圈反而變大
-          float m = e.x * e.x * e.x, r = length(f - k - (0.1 + 0.8 * h.xy)) / fw, rad = 0.5 * dia * (0.7 + 0.6 * m) * uPr;
-          float cov = clamp(rad + 0.5 - r, 0.0, 1.0) * min(1.0, 4.0 * rad * rad);
-          acc += mix(tint, vec3(1.0, 0.94, 0.86), e.z * e.z * 0.5) * (0.15 + 0.85 * m) * cov;
+          float m = e.x * e.x * e.x, r = length(f - k - (0.1 + 0.8 * h.xy)) / fw;
+          acc += mix(tint, vec3(1.0, 0.94, 0.86), e.z * e.z * 0.5) * (0.15 + 0.85 * m) * starDot(r, dia * (0.7 + 0.6 * m));
         }
         return acc * fade;
       }

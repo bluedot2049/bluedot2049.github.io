@@ -16,7 +16,7 @@ import { makeSkiff } from '../../scene/harbor.js';
 import { setGravity } from '../../avatar/character.js';
 import { buildSky } from './jinghai-sky.js';
 import { crinkle, foilRing, foilMaterials } from './jinghai-foil.js';
-import { buildHQ, softBox, ATRIUM, CANTEEN, GALLERIA, CONTROL, STORE, CANOPY, EARTH_EL } from './jinghai-hq.js';
+import { buildHQ, softBox, wallNear, ATRIUM, CANTEEN, GALLERIA, CONTROL, STORE, CANOPY, EARTH_EL } from './jinghai-hq.js';
 import { buildBurger, BURGER, BURGER_LOT } from './jinghai-burger.js';
 import { buildBack, GREEN, FACTORY, BACK_LOT } from './jinghai-back.js';
 import { BRAND, logoTexture, orderBoard } from './jinghai-ads.js';
@@ -123,8 +123,8 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
   meshes.push(near);
 
   // ---------- 總部、前台的速食店、後台、總部裡的小攤 ----------
-  // 擋住鏡頭的東西淡掉（fade.js，跟海市、蜃樓同一套網點）：手扶梯、望遠鏡、長旗、亭子和鐘、排煙罩、咬月的大螢幕和高桿招牌。
-  // 牆、樓板還是擋鏡頭（solids），室內鏡頭不能整片淡掉
+  // 擋住鏡頭的東西淡掉（fade.js，跟海市、蜃樓同一套網點）：手扶梯、望遠鏡、長旗、亭子和鐘、排煙罩、咬月的大螢幕和高桿招牌，還有牆（一面一組，見下面）。
+  // 樓板、屋頂、天花板還是擋鏡頭（solids）：鏡頭不會鑽到樓上去，室內整片也不會淡掉
   const fader = new Fader(false, { lead: 0.35 }), fade = (boxes, objs) => fader.add(boxes, objs);
   const hq = buildHQ({ coarse, fade }), burger = buildBurger({ coarse, fade }), back = buildBack({ coarse }), stalls = buildStalls(), lift = buildLift();
   const obstacles = [...hq.obstacles, ...burger.obstacles, ...back.obstacles, ...stalls.obstacles, ...lift.obstacles], solids = [...hq.solids, ...burger.solids, ...back.solids, ...stalls.solids];
@@ -228,20 +228,38 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
   }
   k.emit(bucket, 0, 0, 0);
 
+  // 牆一面一組淡掉（jinghai-hq.js 的 wallFaces）：貼在牆面上的零件（窗框、招牌、內襯、亮著的窗、金箔）照位置分給那面牆，
+  // 整個落在範圍裡的才算；落在好幾面的範圍裡（轉角）給最小的那面，圓柱就拿到自己那根
+  const faces = [...hq.walls, ...burger.walls].map((f) => ({ fid: fade(f.boxes), near: wallNear(f) })).map((f) => ({ ...f, size: (f.near[3] - f.near[0]) * (f.near[4] - f.near[1]) * (f.near[5] - f.near[2]) }));
+  const onWall = (list) => {
+    for (const g of list) {
+      if (g.userData.fid) continue;
+      g.computeBoundingBox();
+      const { min, max } = g.boundingBox;
+      let best = null;
+      for (const f of faces) {
+        const n = f.near;
+        if (min.x >= n[0] && min.y >= n[1] && min.z >= n[2] && max.x <= n[3] && max.y <= n[4] && max.z <= n[5] && (!best || f.size < best.size)) best = f;
+      }
+      if (best) g.userData.fid = best.fid;
+    }
+  };
+  const foilOut = [...hq.foil.lit, ...kf.lit], foilIn = hq.foilIn.lit;
+  for (const list of [bucket.lit, bucket.glow, foilOut, foilIn]) { onWall(list); fader.tag(list); }
+
   // 合成網格：實心的會擋太陽、被影子照到；發光的、玻璃不擋
   // 靜海的房子用平滑著色：圓柱和小圓角看起來是圓的（別區是一面一面的）。方塊的法線本來就各面分開，看起來跟原本一樣；石頭還是有稜角
-  fader.tag(bucket.lit);
-  fader.tag(bucket.glow);
   fader.build();
   const parts = bucketObjects(bucket), softMat = fader.patch(new THREE.MeshLambertMaterial({ vertexColors: true }));
   for (const m of parts) {
     if (m.isMesh && m.material.isMeshLambertMaterial) { m.material = softMat; m.castShadow = true; m.receiveShadow = true; meshes.push(m); }
+    else if (m.isMesh) m.material = fader.patch(m.material);   // 發光的（亮著的窗、燈條）跟著牆淡
     group.add(m);
   }
   // 金箔：金屬反光，室外的映著黑天和亮地，室內的映著暖牆
   const foilMat = foilMaterials(renderer, { sunDir: SUN, earthDir: EARTH });
-  for (const [list, mat] of [[[...hq.foil.lit, ...kf.lit], foilMat.out], [hq.foilIn.lit, foilMat.in]]) {
-    const m = new THREE.Mesh(mergeBucket(list, false), mat);
+  for (const [list, mat] of [[foilOut, foilMat.out], [foilIn, foilMat.in]]) {
+    const m = new THREE.Mesh(mergeBucket(list, false), fader.patch(mat));
     m.castShadow = true;
     m.receiveShadow = true;
     group.add(m);
@@ -359,13 +377,12 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
   const { findPath } = makePathfinder(walkable, -72, -62, 84, 100);
   // 樓上：大廳的迴廊、商店街二樓、手扶梯。walkable、groundY、尋路都多一個 y（現在腳下多高），照它找站在哪一層
   const floors = buildFloors({ ground: { y: groundY, open, walk: walkable, findPath }, holes: [...stalls.holes, ...hq.holes], lift });
-  // 鏡頭：不鑽進地面、牆、樓板、屋頂和玻璃。牆和樓板整條線跟盒子（往外撐 CAM_PAD）求交點：玻璃、欄杆只有幾公分厚，
+  // 鏡頭：不鑽進地面、樓板、屋頂、天花板和欄杆的玻璃（牆不擋，擋住時淡掉）。整條線跟盒子（往外撐 CAM_PAD）求交點：玻璃、欄杆只有幾公分厚，
   // 以前每 0.3 公尺看一點會從中間漏過去，鏡頭跑到大樓外面，回頭被牆和隔壁的屋頂擋住。月面的起伏還是一段一段看。
-  // 離頭 CAM_NEAR 以內的不算（欄杆就在胸前時鏡頭照樣可以越過去），停在撞到的地方前面 CAM_GAP。
-  // pad 給 0 是問「真的看不看得到」（player.js 決定鏡頭要不要趕快往前），不是問鏡頭能不能放在那裡
+  // 離頭 CAM_NEAR 以內的不算（欄杆就在胸前時鏡頭照樣可以越過去），停在撞到的地方前面 CAM_GAP
   const CAM_PAD = 0.2, CAM_NEAR = 0.8, CAM_GAP = 0.3;
   const hitSolids = new Set();
-  function camClip(a, b, pad = CAM_PAD) {
+  function camClip(a, b) {
     const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, L = Math.hypot(dx, dy, dz);
     if (L < CAM_NEAR) return 1;
     hitSolids.clear();
@@ -374,8 +391,8 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
     for (const s of hitSolids) {
       let t0 = 0, t1 = L;
       for (const [o, d, lo, hi] of [[a.x, dx, s.x0, s.x1], [a.y, dy, s.y0, s.y1], [a.z, dz, s.z0, s.z1]]) {
-        if (Math.abs(d) < 1e-9) { if (o <= lo - pad || o >= hi + pad) { t0 = L; break; } continue; }
-        let u = ((lo - pad - o) / d) * L, v = ((hi + pad - o) / d) * L;
+        if (Math.abs(d) < 1e-9) { if (o <= lo - CAM_PAD || o >= hi + CAM_PAD) { t0 = L; break; } continue; }
+        let u = ((lo - CAM_PAD - o) / d) * L, v = ((hi + CAM_PAD - o) / d) * L;
         if (u > v) [u, v] = [v, u];
         t0 = Math.max(t0, u);
         t1 = Math.min(t1, v);

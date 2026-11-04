@@ -218,18 +218,38 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
     if (Math.abs(pitchV) < 1e-4) pitchV = 0;
   }
 
-  // 走動時（看畫、照鏡子、坐著、面板開著也算這裡）
+  // 面板開著：十字鍵移焦點（按住連續，滑桿和選單左右調），A 按，B 退一層，L／R 換分頁。搖桿照常走路、轉鏡頭
+  function panel(l, on, pr, now) {
+    for (const [i, dx, dy] of [[UP, 0, -1], [DOWN, 0, 1], [LEFT, -1, 0], [RIGHT, 1, 0]]) {
+      const first = pr(i);
+      if (!first && !(on[i] && rep?.i === i && now >= rep.at)) continue;
+      rep = { i, at: now + (first ? 400 : 70) };
+      if (!(dx && nav.adjust(nav.focused(l), dx))) nav.move(l, dx, dy);
+    }
+    if (rep && !on[rep.i]) rep = null;
+    if (pr(confirmPos())) nav.press(l);
+    if (pr(backPos())) l.id === 'chat' ? party()?.closeChat() : tap('Escape', 'Escape');
+    if (pr(L)) nav.tab(l, -1);
+    if (pr(R)) nav.tab(l, 1);
+    if (pr(PLUS)) desk.togglePause();
+    if (pr(MINUS)) tap('Tab', 'Tab');
+  }
+
+  // 走動時（看畫、照鏡子、坐著也算這裡；其他面板開著時十字鍵、A、L／R 給 panel）
   function walk(on, pr, rl, lx, ly, rx, ry, dt, now) {
     const A = confirmPos(), B = backPos(), pt = party(), open = desk.busy() || desk.paused();
+    const painting = player.focus?.kind === 'painting';
     player.setPad(lx, ly);
     if (wheelAt) desk.wheel.aim(rx, ry);
     else player.padLook(yawV, pitchV, dt);
     // 門口的告示（第一次來要按「進入」）、操作說明：只聽 Enter，A、B 都當確認，只用手把的人才不會卡在門口
     if ((pr(A) || pr(B)) && document.querySelector('#loading:not(.done), #guide.show')) return void tap('Enter', 'Enter');
+    // 看畫時作品資訊也是面板，但十字鍵左右照樣換畫
+    focusOn(open && !painting ? nav.topLayer() : null);
+    if (layer) return panel(layer, on, pr, now);
     if (pr(A)) {
-      if (open) document.activeElement?.closest?.('button')?.click();
       // 互動鍵給的優先；沒有的話準心亮著就走過去（跟越肩左鍵點準心一樣）
-      else if (!player.actionTarget() && body.contains('aim-hot')) player.aimTap();
+      if (!player.actionTarget() && body.contains('aim-hot')) player.aimTap();
       else tap('e', 'KeyE');
     }
     if (pr(B)) {
@@ -255,7 +275,6 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
       pt.markAt(c.x, c.y);
     }
     if (on[UP] !== on[DOWN]) player.zoomDist *= Math.exp((on[UP] ? -1 : 1) * DIST_RATE * dt);
-    const painting = player.focus?.kind === 'painting';
     if (pr(LEFT)) painting ? player.switchPainting(-1) : tap('o', 'KeyO');
     if (pr(RIGHT)) painting ? player.switchPainting(1) : pt?.together ? tap('t', 'KeyT') : tap('o', 'KeyO');
     if (pr(PLUS)) desk.togglePause();
@@ -263,11 +282,14 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
   }
 
   // 舉著相機、完整攝影模式
-  function camera(on, pr, rl, lx, ly, dt) {
+  function camera(on, pr, rl, lx, ly, dt, now) {
     const A = confirmPos(), B = backPos(), gear = photo.gear;
     player.setPad(0, 0);
     photo.setJoystick(lx, ly);
     photo.padLook(yawV * dt, pitchV * dt);
+    // 明信片那類拍好跳出來的卡（存下、重拍、好了）：跟面板一樣用十字鍵挑、A 按
+    focusOn(photo.result ? nav.topLayer() : null);
+    if (layer) return panel(layer, on, pr, now);
     if (pr(ZL)) photo.aimButton(true);
     if (rl(ZL)) photo.aimButton(false);
     if (zrRaise) {
@@ -278,23 +300,22 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
     }
     if (pr(A)) photo.shutter(true);
     if (rl(A)) photo.shutter(false);
-    if (photo.result) {
-      if (pr(B)) tap('Escape', 'Escape');
-      return;
-    }
     if (pr(B)) return void photo.exit();
     if (gear) {
       photo.padFly(0, false);
       if (photo.quick && pr(UP)) photo.gripWheel(-1);
       if (photo.quick && pr(DOWN)) photo.gripWheel(1);
+      // 重新對焦兩顆都行：按下右搖桿（瞄準的拇指本來就在上面），或 R（食指在快門正上方，對焦、往下一滑就拍，像相機的半按）
+      if (pr(R3) || pr(R)) photo.refocus();
       if (pr(N)) photo.toggleSelfie();
       if (pr(W) && gear.flash) photo.toggleFlash();
       if (pr(L) && gear.date) photo.toggleDate();
+      if (pr(RIGHT)) photo.turn();
     } else {
       photo.padFly((on[UP] ? 1 : 0) - (on[DOWN] ? 1 : 0), !!on[L3]);
       if (on[LEFT] !== on[RIGHT]) photo.zoomBy(photo.fov * Math.exp((on[RIGHT] ? -1 : 1) * ZOOM_RATE * dt));
+      if (pr(R)) photo.turn();
     }
-    if (pr(R)) photo.turn();
     if (pr(MINUS)) tap('Tab', 'Tab');
     if (pr(PLUS)) {
       photo.exit();
@@ -354,7 +375,7 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
       const el = typingIn();
       if (asking && (pr(S) || pr(E))) answer(pr(E) ? E : S);
       else if (el) typing(el, pr, lx, ly);
-      else if (photo.active) camera(on, pr, rl, lx, ly, dt);
+      else if (photo.active) camera(on, pr, rl, lx, ly, dt, now);
       else walk(on, pr, rl, lx, ly, rx, ry, dt, now);
     }
     prev = on;
@@ -367,15 +388,31 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
     mouse += Math.abs(e.movementX) + Math.abs(e.movementY);
     if (mouse > MOUSE_BACK) setActive(false);
   }, { passive: true });
-  for (const ev of ['keydown', 'pointerdown']) addEventListener(ev, (e) => { if (active && e.isTrusted) setActive(false); }, true);
+  addEventListener('keydown', (e) => { if (active && e.isTrusted) setActive(false); }, true);
+  // 手機、平板拿起來時手指常亂碰：在用手把時點到 3D 畫面的第一下只叫出觸控按鈕，不走、不轉（聲音解鎖在 ambience.js 更早就收到了）。
+  // 點到看得到的東西（打字框、按鈕）照常按
+  addEventListener('pointerdown', (e) => {
+    if (!active || !e.isTrusted) return;
+    if (e.pointerType === 'touch' && e.target.closest?.('#stage')) e.stopPropagation();
+    setActive(false);
+  }, true);
   addEventListener('gamepaddisconnected', (e) => { if (e.gamepad.index === cur) lost(); });
   addEventListener('blur', release);
   document.addEventListener('visibilitychange', () => { if (document.hidden) release(); });
 
-  // 暫停選單的手把那幾列：鏡頭速度、上下反轉、按鍵上的字（接過手把才顯示，body.pad-seen）
+  // 暫停選單的手把那幾列：鏡頭速度、上下反轉、震動、按鍵上的字（接過手把才顯示，body.pad-seen）
   const menu = document.getElementById('pause');
   const sens = menu?.querySelector('.pad-set.sens input'), sensText = menu?.querySelector('.pad-set.sens b');
   const inv = menu?.querySelector('.pad-set.inv input'), pick = menu?.querySelector('.pad-set.labels select');
+  const buzz = menu?.querySelector('.pad-set.buzz input');
+  if (buzz) {
+    buzz.checked = opt.rumble;
+    buzz.addEventListener('change', () => {
+      opt.rumble = buzz.checked;
+      keep();
+      if (opt.rumble) rumbler('land');   // 打開時震一下，知道有在震
+    });
+  }
   const showSens = () => { if (sensText) sensText.textContent = `${Math.round(opt.sens * 100)}%`; };
   if (sens) {
     sens.value = opt.sens;

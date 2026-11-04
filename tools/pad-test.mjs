@@ -8,7 +8,7 @@ const FAKE = `(() => {
   const btn = () => ({ pressed: false, touched: false, value: 0 });
   const pad = { id: 'Xbox 360 Controller (XInput STANDARD GAMEPAD)', index: 0, mapping: 'standard', connected: true, timestamp: 0,
     buttons: Array.from({ length: 17 }, btn), axes: [0, 0, 0, 0],
-    vibrationActuator: { type: 'dual-rumble', effects: ['dual-rumble'], playEffect: () => Promise.resolve('complete') } };
+    vibrationActuator: { type: 'dual-rumble', effects: ['dual-rumble'], playEffect: (t, p) => { (window.__rumbles ||= []).push(p.duration); return Promise.resolve('complete'); } } };
   let shown = false;
   Object.defineProperty(Navigator.prototype, 'getGamepads', { configurable: true, value() { if (!shown) return [null, null, null, null]; pad.timestamp = performance.now(); return [pad, null, null, null]; } });
   window.__fakePad = {
@@ -110,10 +110,48 @@ try {
   s = await st();
   const rows = await ev(`[...document.querySelectorAll('#pause .pad-set')].filter((e) => getComputedStyle(e).display !== 'none').length`);
   check(s.pause, '+：暫停選單');
-  check(rows === 3, '暫停選單有手把那三列', rows);
+  check(rows === 5, '暫停選單有手把那幾列（攝影模式、速度、反轉、震動、字）', rows);
   await press(9);
   await sleep(300);
   check(!(await st()).pause, '+ 再按：收起');
+
+  // 暫停選單用十字鍵：打開時焦點在「繼續」，往下是「攝影模式」，A 進完整攝影模式，B 離開
+  const focusText = () => ev(`(document.activeElement?.closest('label') || document.activeElement)?.textContent?.trim() || ''`);
+  await press(9);
+  await sleep(350);
+  let f = await focusText();
+  check(/繼續/.test(f), '打開暫停選單：焦點在「繼續」', f);
+  await press(13);
+  f = await focusText();
+  check(/攝影模式/.test(f), '十字鍵往下：攝影模式', f);
+  await press(1);
+  await sleep(500);
+  s = await st();
+  check(s.photo && !s.quick, 'A：進完整攝影模式');
+  await press(0);
+  await sleep(400);
+  check(!(await st()).photo, 'B：離開攝影模式');
+  // 滑桿：往下走到「手把鏡頭速度」，十字鍵往右調大一格
+  await press(9);
+  await sleep(350);
+  for (let i = 0; i < 10 && !/手把鏡頭速度/.test(await focusText()); i++) await press(13);
+  const sens0 = await ev(`JSON.parse(localStorage.getItem('pad')).sens`);
+  await press(15);
+  const sens1 = await ev(`JSON.parse(localStorage.getItem('pad')).sens`);
+  check(sens1 > sens0, '滑桿：十字鍵往右調大', `${sens0} → ${sens1}`);
+  await press(15);
+  await press(14);
+  await press(14);
+  await press(0);
+  await sleep(350);
+  check(!(await st()).pause, 'B：收起暫停選單');
+
+  // 跳起來落地：手把震一下
+  await ev('window.__rumbles = []; 1');
+  await press(3);
+  await sleep(1200);
+  const rum = await ev('window.__rumbles');
+  check(rum.length >= 1, 'X 跳、落地時震一下', JSON.stringify(rum));
 
   // ZL 按住：舉相機（沒帶相機是空拍機）；ZR：拍；放開 ZL：放下
   await ev(`window.__shots = 0; { const ph = __g.photo, f = ph.shoot.bind(ph); ph.shoot = (...a) => { window.__shots++; return f(...a); }; } 1`);
@@ -137,6 +175,40 @@ try {
   await press(0);
   await sleep(400);
   check(!(await st()).photo, 'B：放下');
+
+  // 帶燭火乙式：舉起來對準心鎖住；右搖桿轉開焦點不跑；按下右搖桿、R 都重新對焦；十字鍵右是直橫
+  await ev(`import('/js/camera/cameras.js').then((m) => { m.carry('bulb'); return 1; })`);
+  await ev('__fakePad.set(6, 1)');
+  await sleep(900);
+  const fd = () => ev(`(() => { const ph = __g.photo; return { d: ph.depthAt(0, 0), f: ph.focusD, up: ph.upright, lock: ph.gear?.focus }; })()`);
+  const near = (c) => Math.abs(1 / c.d - 1 / c.f) < 0.035;
+  const c0 = await fd();
+  check(c0.lock === 'lock' && near(c0), '舉起燭火乙式：對到準心、鎖住', `${c0.d.toFixed(2)} / ${c0.f.toFixed(2)}`);
+  await ev('__fakePad.axes([0, 0, 1, 0])');
+  await sleep(600);
+  await ev('__fakePad.axes([0, 0, 0, 0])');
+  await sleep(500);
+  const c1 = await fd();
+  check(Math.abs(c1.f - c0.f) < 0.01, '右搖桿轉開：焦點不跑', `準心底下 ${c1.d.toFixed(2)}，焦點 ${c1.f.toFixed(2)}`);
+  await press(11);
+  await sleep(700);
+  const c2 = await fd();
+  check(near(c2), '按下右搖桿：重新對焦', `${c2.d.toFixed(2)} / ${c2.f.toFixed(2)}`);
+  await ev('__fakePad.axes([0, 0, -1, 0])');
+  await sleep(700);
+  await ev('__fakePad.axes([0, 0, 0, 0])');
+  await sleep(500);
+  await press(5);
+  await sleep(700);
+  const c3 = await fd();
+  check(near(c3), 'R：也能重新對焦', `${c3.d.toFixed(2)} / ${c3.f.toFixed(2)}`);
+  await press(15);
+  const c4 = await fd();
+  check(c4.up !== c3.up, '十字鍵右：直橫', `${c3.up} → ${c4.up}`);
+  await press(15);
+  await ev('__fakePad.set(6, 0)');
+  await sleep(400);
+  await ev(`import('/js/camera/cameras.js').then((m) => { m.carry(null); return 1; })`);
 
   // 滑鼠一動：換回滑鼠（body.pad 拿掉），越肩留著
   await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 400, y: 300 });

@@ -15,6 +15,7 @@ import { readMirrorCard } from './mirrorcard.js';
 import { encodeFace } from '../avatar/looks.js';
 import { getSave, savePrint } from './progress.js';
 import { dockR, hugMedia, panelW, uiScale } from '../controls/ui.js';
+import { sfx, thing } from '../audio/ui-voices.js';
 import { album, canPick, canShare, discard, folderName, hourMark, KINDS, LABS, labOk, loadAlbum, pickFolder, putBack, saveChosen, saveTip, seen, shareChosen, toLab, visible } from '../camera/album.js';
 import { pref, setPref } from './prefs.js';
 
@@ -121,6 +122,9 @@ export class Pack {
 
   // page：'album' 相簿、'save' 存讀檔；沒給就開上次那頁
   open(page) {
+    // 皮扣解開＋金線碰一下；開著時按 B 換頁也會走到這裡，那時是換分頁的聲音
+    if (this.card.hidden) { thing('leather', 0.32); sfx('tap'); }
+    else if (page && page !== this.page) sfx('tab', { i: page === 'album' ? 0 : 1 });
     if (page) this.page = page;
     this.card.hidden = false;
     this.btn.classList.add('on');
@@ -136,6 +140,7 @@ export class Pack {
   }
 
   close() {
+    if (!this.card.hidden) thing('leather', 0.22, 0.85);   // 扣上，低一點、輕一點
     this.card.hidden = true;
     this.btn.classList.remove('on');
     clearInterval(this.watch);
@@ -231,6 +236,7 @@ export class Pack {
       c.removeEventListener('pointerup', up);
       c.removeEventListener('pointercancel', up);
       c.classList.remove('dragging');
+      if (Math.hypot(at.x - r.left, at.y - r.top) > 4) sfx('land');   // 真的拖動過才算放下
       const off = { dx: Math.round(at.x - window.innerWidth / 2), dy: Math.round(at.y - window.innerHeight / 2) };
       setPref('packAt', off);
     };
@@ -384,6 +390,7 @@ export class Pack {
     this.busy = false;
     if (where == null) return this.albumFoot();
     this.chosen.clear();
+    sfx('seal');
     this.rest = album().filter(visible);
     const n = this.rest.length;
     this.note(where ? `存好了，${keep.length} 張在「${where}」` : `存好了 ${keep.length} 張`, n ? 'rest' : '', `剩下 ${n} 張也丟掉`);
@@ -393,7 +400,9 @@ export class Pack {
   async share() {
     const list = [...this.chosen].filter(visible);
     if (!list.length || this.busy) return;
-    if (await shareChosen(list)) this.note(`分享出去了，${list.length} 張還在相簿`);
+    if (!(await shareChosen(list))) return;
+    sfx('confirm');
+    this.note(`分享出去了，${list.length} 張還在相簿`);
   }
 
   async send(lab) {
@@ -401,6 +410,7 @@ export class Pack {
     if (!send.length || this.busy) return;
     send.forEach((it) => this.chosen.delete(it));
     await toLab(send, lab);
+    sfx('confirm');
     this.note(`交給${LABS[lab].who}了，已經洗好。走到${LABS[lab].name}找他拿`);
   }
 
@@ -408,6 +418,7 @@ export class Pack {
   async drop(list) {
     if (!list.length || this.busy || this.dropping) return;
     this.dropping = true;
+    sfx('down');
     const was = list.filter((it) => this.chosen.has(it));
     list.forEach((it) => this.chosen.delete(it));
     const undo = (this.noted?.act === 'undo' && this.undo) || [];
@@ -421,6 +432,7 @@ export class Pack {
   async undrop() {
     const undo = this.undo;
     if (!undo || this.dropping) return;
+    sfx('up');
     this.note('');
     this.dropping = true;
     for (const { out, was } of undo.reverse()) {
@@ -438,6 +450,7 @@ export class Pack {
     const now = performance.now(), twice = this.tap?.it === it && now - this.tap.t < 400;
     this.tap = twice ? null : { it, t: now };
     this.chosen.has(it) ? this.chosen.delete(it) : this.chosen.add(it);
+    if (!twice) sfx('tap');   // 點兩下是看大圖，那時出紙的聲音
     b.classList.toggle('on', this.chosen.has(it));
     if (this.noted?.act === 'rest') this.note('');   // 開始挑下一批，「剩下的也丟掉」就收掉
     this.albumFoot();
@@ -448,6 +461,7 @@ export class Pack {
   chooseAll() {
     const all = album().filter((it) => it.state !== 'lab'), every = all.every((it) => this.chosen.has(it));
     for (const it of all) every ? this.chosen.delete(it) : this.chosen.add(it);
+    sfx('tap');
     for (const c of this.card.querySelectorAll('.ph-cell[data-i]')) c.classList.toggle('on', this.chosen.has(album()[+c.dataset.i]));
     if (this.noted?.act === 'rest') this.note('');
     this.albumFoot();
@@ -461,6 +475,7 @@ export class Pack {
     if (!this.viewer) this.buildView();
     this.viewing = it;
     if (this.viewer.hidden) {
+      thing('paper', 0.26);   // 照片拿起來
       this.viewer.hidden = false;
       addEventListener('keydown', this.viewKey, true);
     }
@@ -469,6 +484,7 @@ export class Pack {
 
   closeView() {
     if (!this.viewer || this.viewer.hidden) return;
+    thing('paper', 0.14, 0.85);   // 照片放回去
     this.viewer.hidden = true;
     this.viewer.querySelector('video').pause();
     this.viewing = null;
@@ -540,6 +556,7 @@ export class Pack {
   step(d) {
     const list = album().filter(visible), it = list[list.indexOf(this.viewing) + d];
     if (!it) return;
+    thing('paper', 0.14);
     this.viewing = it;
     this.paintView();
   }
@@ -548,6 +565,7 @@ export class Pack {
     const it = this.viewing;
     if (!it) return;
     this.chosen.has(it) ? this.chosen.delete(it) : this.chosen.add(it);
+    sfx('tap');
     this.card.querySelector(`.ph-cell[data-i="${album().indexOf(it)}"]`)?.classList.toggle('on', this.chosen.has(it));
     if (this.noted?.act === 'rest') this.note('');
     this.albumFoot();
@@ -583,6 +601,7 @@ export class Pack {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.page) {
+      if (b.dataset.page !== this.page) sfx('tab', { i: b.dataset.page === 'album' ? 0 : 1 });
       this.page = b.dataset.page;
       this.render();
       return;
@@ -598,7 +617,7 @@ export class Pack {
       case 'rest': this.drop((this.rest || []).filter((it) => album().includes(it))); return;
       case 'lab': this.send(b.dataset.lab); return;
       case 'dir': pickFolder().then(() => this.albumFoot()); return;
-      case 'code': this.withCode = b.dataset.v === '1'; this.render(); return;
+      case 'code': if (this.withCode !== (b.dataset.v === '1')) sfx('tap'); this.withCode = b.dataset.v === '1'; this.render(); return;
       case 'selfie':
         if (!this.events.canSelfie()) return;
         this.close();
@@ -654,6 +673,7 @@ export class Pack {
         this.events.onTryOn(tryOn({ ...L, face: face('bottom') }));
         return 'look';
       }
+      sfx('fail');
       alert('這張圖上讀不到存檔。可能被裁掉、縮得太小，或不是鏡中的照片和海市的明信片');
       return null;
     } finally {

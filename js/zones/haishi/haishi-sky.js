@@ -7,6 +7,7 @@ import { AIR, glowPoints, uTime } from '../../core/scenery.js';
 import { mist, pools, ripples, smoke } from './haze.js';
 import { SHIP_PERIODS, brightStars, fishingFires, horizonShips, meteor, seaGlints, skyLanterns } from './distant.js';
 import { GRADE, GRADE_GLSL, HORIZON, TUNE, gradeCurvesOnly } from '../../core/grade.js';
+import { DOT_GLSL, trackPixelRatio } from '../../core/stardots.js';
 import { AREA, ORIGINAL, SEA } from './haishi-map.js';
 import { TOWN_X0, TOWN_X1, terrain, tz } from './haishi-terrain.js';
 
@@ -172,7 +173,7 @@ export function starField(n) {
 // 水裡的星跟從天井抬頭看到的是同一批。一次繪製，只算池子佔到的那些像素；離得遠就整池退成黑水
 export const CAP = 0.62;   // 小圖涵蓋頭頂多少弧度：天井最斜看得到約 0.55，水面晃動再留一點
 // 小圖不畫光斑（池子把那一小塊天放大七八倍，光斑會糊成一團），一格只記一顆星：
-// 第一張是星在格子裡的位置、亮度、閃的相位，第二張是顏色和像素大小。水裡照像素畫點，放多大都是細細一顆
+// 第一張是星在格子裡的位置、亮度、閃的相位，第二張是顏色和像素大小。水裡畫實心不發光的點（stardots.js），放多大都是細細一顆
 export function starCap(field, lists, size) {
   const A = new Uint8Array(size * size * 4), B = new Uint8Array(size * size * 4), c = new THREE.Color();
   // 一顆星：照方向投到小圖上（以天頂為中心、離天頂的角度當半徑），記進它落的那一格。同一格撞到兩顆，留亮的
@@ -211,7 +212,7 @@ export function waterMirror(o, dome, field, lists, size) {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       ...dome.material.uniforms,
-      uCapA: { value: capA }, uCapB: { value: capB }, uFade: field.material.uniforms.uFade, uPr: field.material.uniforms.uPr, uTime,
+      uCapA: { value: capA }, uCapB: { value: capB }, uFade: field.material.uniforms.uFade, uTime,
       uC: { value: new THREE.Vector3(o.x, o.y, o.z) }, uR: { value: o.r }, uOcY: { value: o.ocY }, uOcR: { value: o.ocR },
       uRoof: { value: new THREE.Vector3(0.045, 0.06, 0.085) },   // 輸出的顏色直接用，不經過色彩空間轉換；暗藍不用純黑
       uRain: AIR.rain,
@@ -223,9 +224,9 @@ export function waterMirror(o, dome, field, lists, size) {
         vW = w.xyz;
         gl_Position = projectionMatrix * viewMatrix * w;
       }`,
-    fragmentShader: GRADE_GLSL + SKY_EDGE_GLSL + `
+    fragmentShader: GRADE_GLSL + SKY_EDGE_GLSL + DOT_GLSL + `
       uniform vec3 uLow; uniform vec3 uTop; uniform vec3 uBand; uniform vec3 uMilk; uniform float uStars; uniform float uDeep;
-      uniform sampler2D uCapA; uniform sampler2D uCapB; uniform float uFade; uniform float uPr; uniform float uTime;
+      uniform sampler2D uCapA; uniform sampler2D uCapB; uniform float uFade; uniform float uTime;
       uniform vec3 uC; uniform float uR; uniform float uOcY; uniform float uOcR; uniform vec3 uRoof; uniform float uRain;
       varying vec3 vW;
       ${CLOUD_GLSL}
@@ -234,7 +235,7 @@ export function waterMirror(o, dome, field, lists, size) {
         q += dot(q, q.yxz + 33.33);
         return fract((q.xxy + q.yzz) * q.zyx);
       }
-      // 真的星：g 是小圖上的格子座標，fw 是一個像素跨幾格。查附近九格，照像素畫點；大顆的多一圈光，光圈不出一格
+      // 真的星：g 是小圖上的格子座標，fw 是一個像素跨幾格。星在格子裡哪裡都可能，查附近九格；不閃、沒有光圈，大顆的只是點大一點
       vec3 capStars(vec2 g, float fw) {
         vec3 acc = vec3(0.0);
         vec2 id = floor(g);
@@ -243,15 +244,15 @@ export function waterMirror(o, dome, field, lists, size) {
           vec4 a = texture2D(uCapA, (c + 0.5) / ${size}.0);
           if (a.b == 0.0) continue;
           vec4 b = texture2D(uCapB, (c + 0.5) / ${size}.0);
-          float dc = length(g - c - a.rg), r = dc / fw, s = b.a * 4.0 * uPr;
-          float k = exp(-r * r / (s * s)) + 0.25 * smoothstep(1.4, 2.6, b.a * 4.0) * exp(-r / (s * 1.6)) * smoothstep(1.0, 0.5, dc);
-          acc += b.rgb * a.b * 3.0 * k * (0.7 + 0.3 * sin(uTime * 2.2 + a.a * 6.2832));
+          acc += b.rgb * a.b * 3.0 * starDot(length(g - c - a.rg) / fw, clamp(b.a * 5.0, 1.4, 2.8));
         }
         return acc;
       }
       // 舊光：天上已經看不到的淡星，沉在水底下不同深度。u 是那一層的格子座標，一格最多一顆；
-      // px 是星點的像素大小（淺的那層對不到焦，糊成軟軟的一點），一個像素塞好幾格的時候就淡掉，不閃成雜訊
-      vec3 oldLight(vec2 u, float fw, float px, float occ, float seed, vec3 tint) {
+      // dia 是點的直徑（CSS 像素），一個 CSS 像素塞好幾格的時候就淡掉，不閃成雜訊
+      vec3 oldLight(vec2 u, float fw, float dia, float occ, float seed, vec3 tint) {
+        float fade = smoothstep(0.7, 0.25, fw * uPr);
+        if (fade <= 0.0) return vec3(0.0);
         vec3 acc = vec3(0.0);
         vec2 id = floor(u), f = u - id;
         for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
@@ -259,10 +260,10 @@ export function waterMirror(o, dome, field, lists, size) {
           vec3 h = hash3(c + seed);
           if (h.z > occ) continue;
           vec3 e = hash3(c.yx * 1.7 + seed + 7.0);
-          float m = e.x * e.x * e.x, r = length(f - vec2(i, j) - (0.1 + 0.8 * h.xy)) / fw, s = px * (0.7 + 0.9 * m) * uPr;
-          acc += mix(tint, vec3(1.0, 0.94, 0.86), e.z * e.z * 0.5) * (0.25 + 0.75 * m) * exp(-r * r / (s * s)) * (0.75 + 0.25 * sin(uTime * (0.4 + e.y) + e.y * 40.0));
+          float m = e.x * e.x * e.x, r = length(f - vec2(i, j) - (0.1 + 0.8 * h.xy)) / fw;
+          acc += mix(tint, vec3(1.0, 0.94, 0.86), e.z * e.z * 0.5) * (0.35 + 0.65 * m) * starDot(r, dia * (0.7 + 0.6 * m));
         }
-        return acc * smoothstep(0.7, 0.25, fw);
+        return acc * fade;
       }
       void main() {
         vec2 p = vW.xz - uC.xz;
@@ -308,12 +309,12 @@ export function waterMirror(o, dome, field, lists, size) {
           #include <colorspace_fragment>
           vec3 sky = gradeCurvesOut(gl_FragColor.rgb);
           // 星星跟天上的星點一樣直接疊上去，不過曲線。舊光四層（手機三層，最深的星塵不畫）：越深越密、越小、越冷
-          vec3 st = capStars(g, fwG) * 1.4;
+          vec3 st = capStars(g, fwG);
           #define LAYER(D, K, PX, OCC, SEED, TINT, GAIN) st += GAIN * oldLight((p / D + T) * K + SEED, K * max(length(px / D + tx), length(py / D + ty)), PX, OCC, SEED, TINT);
-          LAYER(0.9, 2.4, 2.6, 0.35, 17.0, vec3(0.80, 0.84, 0.90), 0.3)
-          LAYER(2.6, 9.0, 1.2, 0.5, 41.0, vec3(0.72, 0.80, 0.92), 0.6)
-          LAYER(8.0, 28.0, 0.8, 0.7, 83.0, vec3(0.60, 0.72, 0.95), 0.55)
-          ${size < 512 ? '' : 'LAYER(20.0, 70.0, 0.6, 0.8, 131.0, vec3(0.55, 0.68, 0.95), 0.4)'}
+          LAYER(0.9, 2.4, 2.4, 0.35, 17.0, vec3(0.80, 0.84, 0.90), 0.5)
+          LAYER(2.6, 9.0, 1.8, 0.5, 41.0, vec3(0.72, 0.80, 0.92), 0.65)
+          LAYER(8.0, 28.0, 1.5, 0.7, 83.0, vec3(0.60, 0.72, 0.95), 0.6)
+          ${size < 512 ? '' : 'LAYER(20.0, 70.0, 1.2, 0.8, 131.0, vec3(0.55, 0.68, 0.95), 0.45)'}
           sky += st * uFade;
           col = mix(uRoof, sky * 0.85, open);
         }
@@ -324,6 +325,7 @@ export function waterMirror(o, dome, field, lists, size) {
       }`,
     fog: false,
   });
+  mat.uniforms.uPr = trackPixelRatio(mat);
   const m = new THREE.Mesh(new THREE.CircleGeometry(o.r, 48).rotateX(-Math.PI / 2), mat);
   m.position.set(o.x, o.y, o.z);
   return m;

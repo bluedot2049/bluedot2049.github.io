@@ -6,6 +6,7 @@
 // 繼續、滑鼠靈敏度和上下反轉、越肩的視野廣度和魚眼、介面大小、切走時繼續播聲音、按鍵一覽。Esc 也收換裝鏡子、作品資訊、看畫的大圖。
 // （V 越肩、E 互動、中鍵標記在 player.js；P 攝影、Q 閃光、~ 日期、F 直橫在 photo.js；T 說話、G 標記、X 吹哨在 party.js；1–5 表情在 main.js）
 import { setUiSize, uiSize } from './ui.js';
+import { sfx, thing } from '../audio/ui-voices.js';
 import { emoteSVG } from '../social/emotes.js';
 import { setPref } from '../save/prefs.js';
 
@@ -109,11 +110,19 @@ export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote 
   // ───────── Esc 暫停選單 ─────────
   const menu = $('pause');
   let shownAt = 0;
-  const hide = () => menu.classList.remove('show');
+  // 暫停：世界停住是往下、回來是往上
+  const hide = () => {
+    if (menu.classList.contains('show')) sfx('up');
+    menu.classList.remove('show');
+  };
   const show = () => {
+    if (!menu.classList.contains('show')) sfx('down');
     shownAt = performance.now();
     menu.classList.add('show');
   };
+  // 滑桿一格一格的棘輪（跟衣櫃的滑桿同一個），勾選碰一下
+  menu.addEventListener('input', (e) => { if (e.target.type === 'range') thing('dial', 0.24); });
+  menu.addEventListener('change', (e) => { if (e.target.type === 'checkbox') sfx('tap'); });
   // 玩家自己按 Esc 放開的才跳；程式為了面板放開的不跳
   document.addEventListener('pointerlockchange', () => {
     if (player.locked) hide();
@@ -124,6 +133,7 @@ export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote 
     if (!b) return;
     hide();
     if (b.dataset.act === 'resume' && player.shoulder && !player.padOn) player.lock();
+    if (b.dataset.act === 'photo' && !photo.active) photo.enter();
   });
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && menu.classList.contains('show') && performance.now() - shownAt > 300) hide();
