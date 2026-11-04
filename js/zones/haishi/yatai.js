@@ -143,8 +143,8 @@ export function yatai(bucket, signs, R, o) {
   const post = 2.27 - H;
   for (const sx of [-0.98, 0.98]) for (const sz of [-0.42, 0.48]) k.box(0.07, post, 0.07, DARK, sx, y + H + post / 2, sz);
   addRoof(top, 0, y + 2.26, 0.03, 2.7, 1.6, 0.45, { tile, lift: 0.14, ridge: 1.35 });
-  // 暖簾：屋簷底下一排短布，兩色交錯
-  for (let i = 0; i < 4; i++) top.box(0.48, 0.38, 0.02, i % 2 ? color : shadeOf(color), -0.75 + i * 0.5, y + 2.04, 0.74);
+  // 暖簾：屋簷底下一排短布，兩色交錯，從上緣掛著會輕輕晃（fade.js 的 sway）
+  for (let i = 0; i < 4; i++) top.box(0.48, 0.38, 0.02, i % 2 ? color : shadeOf(color), -0.75 + i * 0.5, y + 2.04, 0.74, { hang: [-0.75 + i * 0.5, y + 2.23, 0.74] });
   // 屋簷下的燈泡和兩角的紅燈籠
   top.ball(0.07, '#fff2c8', 0, y + 2.05, 0.15, { glow: true });
   top.light(0, y + 2.05, 0.15, '#ffd8a0', 1.2);

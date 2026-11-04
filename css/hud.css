@@ -246,7 +246,7 @@ body.desk #guide.show { animation-name: guide-mid; }
   top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right));
   display: flex; gap: 8px; align-items: center;
   transition: opacity .3s;
-  /* 按的時候手指滑一點，瀏覽器不會當成要捲頁面而把這一下取消（放開才按，見 ui.js） */
+  /* 按的時候手指滑一點，瀏覽器不會當成要捲頁面而把這一下取消（放開才按，見 touch.js） */
   touch-action: none;
 }
 #top-btns .icon-btn span { font-size: 14px; letter-spacing: .2em; margin-right: -.2em; }
@@ -481,7 +481,7 @@ body.touch #joy { display: block; }
   width: var(--seal); height: var(--seal); font-size: calc(var(--seal) * .34);
   touch-action: none;
 }
-/* 「跳」的內側，坐著時變成「起」 */
+/* 「跳」的內側：站著是「坐」，坐在地上是「躺」，躺著、坐椅子、坐在邊上是「起」（main.js 的 updateAction） */
 #sit-btn { width: var(--btn); height: var(--btn); font-size: calc(var(--btn) * .34); }
 body.touch .seal { display: block; }
 body.panel-open .seal { opacity: 0; pointer-events: none; }
@@ -510,6 +510,8 @@ body.sitting #sit-btn {
   opacity: 0; pointer-events: none;
 }
 #action-btn.show::before { animation: halo 2.4s ease-out infinite; }
+/* 第一次出現的動詞（main.js 的 fresh）：光暈急一點、多擴幾圈 */
+#action-btn.show.fresh::before { animation-duration: 1.2s; }
 @keyframes halo {
   0% { opacity: .8; transform: scale(1); }
   100% { opacity: 0; transform: scale(1.18, 1.3); }
@@ -584,8 +586,9 @@ body:not(.desk) #photo-btn svg { width: calc(var(--btn) * .44); height: calc(var
 body:not(.desk) #photo-btn .cam { width: calc(var(--btn) * .53); height: calc(var(--btn) * .53); }
 body:not(.desk) :is(#say-btn, #pack-btn, #emote-btn) svg { width: calc(var(--btn) * .42); height: calc(var(--btn) * .42); }
 body:not(.desk) #emote { align-items: center; }
-/* 表情點開時那一排會蓋到弧上其他按鈕，先讓它們退後 */
-body:not(.desk):has(#emote.open) :is(#sit-btn, #photo-btn, #say-btn, #pack-btn) { opacity: .2; pointer-events: none; }
+/* 表情點開時那一排會蓋到弧上其他按鈕，先讓它們退後。還是按得到：按下去表情那排就收起來（ui.js 的 bindEmotes），
+   以前擋掉時手指穿到畫面上，角色往按鈕底下走過去 */
+body:not(.desk):has(#emote.open) :is(#sit-btn, #photo-btn, #say-btn, #pack-btn) { opacity: .2; }
 body.flat :is(#photo-btn, #say-btn, #pack-btn) { display: none; }
 /* 行囊：外圈靠「坐」和相機那一側，照片拍完順手就開。開著時抽屜蓋在這裡，鈕先收起來，關掉用抽屜上的 ✕。
    換裝鏡子開著時拇指弧都收了，行囊鈕留著（請眼睛拍存檔要站在鏡子前開行囊）：直拿的抽屜蓋住整排，
@@ -615,6 +618,7 @@ body.joy-left:not(.desk) #action-btn { right: auto; left: calc(var(--joy-x) + va
 body:not(.desk) #action-btn :is(.a1, .a2) { display: none; }
 body:not(.desk) #action-btn .a0 { display: block; font-size: calc(var(--btn) * .3); font-weight: 600; letter-spacing: .08em; padding-left: .08em; line-height: 1; }
 body:not(.desk) #action-btn.show::before { animation-iteration-count: 1; }
+body:not(.desk) #action-btn.show.fresh::before { animation-iteration-count: 4; animation-duration: 1.2s; }
 
 /* 橫拿的手機：螢幕很矮，按鈕跟著高度縮，弧往內側攤平；表情一排往畫面內側展開 */
 @media (orientation: landscape) and (max-height: 500px) {
@@ -664,3 +668,33 @@ body.desk.shoulder #action-btn::after {
 @media (min-width: 900px) {
   body.desk.panel-open #top-btns, body.desk.panel-open #action-btn { left: calc((100vw / var(--ui, 1) - var(--panel-w)) / 2); }
 }
+
+/* ───────── 手把（gamepad.js；body.pad 是手把在用，body.pad-seen 是這一頁接過手把。規則在 docs/介面原則.md 第八節） ───────── */
+/* 準心照鎖滑鼠時那樣亮，看畫、照鏡子時收起；游標藏起來，滑鼠一動就回來 */
+body.pad.shoulder #reticle { opacity: .85; }
+body.pad.shoulder.aim-hot #reticle::after { opacity: .9; transform: scale(1); }
+body.pad.panel-open #reticle { opacity: 0; }
+body.pad #stage, body.pad #stage canvas { cursor: none; }
+/* 電腦的按鈕列淡掉（上面標的是鍵盤的字）；互動鍵左邊那顆換成手把的圖示（--pad-a，照牌子畫，padglyphs.js） */
+body.desk.pad #top-btns { opacity: .45; }
+body.desk.pad #action-btn::after, body.pad:not(.desk) #action-btn::after {
+  content: ''; position: absolute; right: calc(100% + 8px); top: 50%; width: 28px; height: 28px; margin-top: -14px;
+  background: var(--pad-a) center / contain no-repeat; border: 0; border-radius: 0; box-shadow: none;
+  pointer-events: none;
+}
+/* 手機、平板接著手把：觸控按鈕收起來，互動鍵移到下方中間、寫完整的字（跟電腦版同一個位置） */
+body.pad:not(.desk) :is(#joy, #jump-btn, #sit-btn, #photo-btn, #say-btn, #pack-btn, #emote, #emote-btn, #swap-btn) { opacity: 0; pointer-events: none; }
+body.pad:not(.desk) #action-btn {
+  left: 50%; right: auto; bottom: calc(var(--edge-b) + 10px);
+  width: auto; min-width: 104px; max-width: 160px; height: 60px; padding: 0 22px; border-radius: 999px;
+  transform: translateX(-50%) scale(.7); transform-origin: 50% 100%;
+}
+body.pad:not(.desk) #action-btn.show { transform: translateX(-50%); }
+body.pad:not(.desk) #action-btn .a0 { display: none; }
+body.pad:not(.desk) #action-btn .a1 { display: block; }
+body.pad:not(.desk) #action-btn .a2:not(:empty) { display: block; }
+/* 操作說明換成手把那一張；暫停選單的手把那幾列 */
+body.pad #guide :is(.for-desk, .for-touch), body:not(.pad) #guide .for-pad { display: none; }
+#pause .pad-set { display: none; }
+body.pad-seen #pause .pad-set { display: flex; }
+#pause .set select { font: inherit; font-size: 12.5px; letter-spacing: .04em; color: var(--text); background: rgba(16, 11, 9, .9); border: 1px solid rgba(232, 184, 106, .35); border-radius: 2px; padding: 2px 6px; accent-color: var(--gold); }

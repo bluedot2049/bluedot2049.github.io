@@ -40,9 +40,16 @@ export function roverModel(k) {
   k.box(0.22, 0.16, 0.3, '#d6d3cb', -0.5, 1.35, 1.15);
 }
 
-export function buildBurger({ coarse = false } = {}) {
+export function buildBurger({ coarse = false, fade = null } = {}) {
   const k = new Kit(null), kg = new Kit(null), R = rng('jinghai:burger');
-  const obstacles = [], solids = [];
+  const obstacles = [], solids = [], fadeKits = [];
+  // 擋住鏡頭時整組淡掉（jinghai.js 的 fade，fade.js 那套網點）。objs：跟著一起藏的獨立網格（螢幕的畫面、會轉的圓牌）
+  const fadeKit = (boxes) => {
+    const fk = new Kit(null);
+    fk.fid = fade ? fade(boxes) : 0;
+    fadeKits.push(fk);
+    return fk;
+  };
   const B = (kit, x0, y0, z0, x1, y1, z1, c, o) => kit.box(Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0), c, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, o);
   const block = (x0, z0, x1, z1) => obstacles.push({ x: (x0 + x1) / 2, z: (z0 + z1) / 2, hw: Math.abs(x1 - x0) / 2, hd: Math.abs(z1 - z0) / 2, a: 0 });
   const solid = (x0, y0, z0, x1, y1, z1) => solids.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), y0, y1, z0: Math.min(z0, z1), z1: Math.max(z0, z1) });
@@ -113,6 +120,8 @@ export function buildBurger({ coarse = false } = {}) {
   // 自動門：兩片玻璃推到兩邊
   for (const z of [31.2, 34.8]) B(kg, F.x1 - 0.12, 0, z - 0.75, F.x1 - 0.06, 3.2, z + 0.75, '#d8d2c6');
   B(k, F.x1 - 0.25, 3.2, 31.6, F.x1 + 0.05, 3.32, 34.4, PANEL);
+  // 門口連上面那段空的一起擋鏡頭（不擋人）：店小、天花板低，鏡頭從門鑽出去就隔著門框、雨遮往裡看，留在店裡
+  solid(F.x1 - 0.2, 0, 31.6, F.x1 + 0.2, 4.8, 34.4);
   // 屋頂和女兒牆；外面一圈番茄紅的細線
   B(k, F.x0, F.roof, F.z0, F.x1, F.roof + 0.4, F.z1, '#d9cfbe');
   solid(F.x0, F.roof - 0.1, F.z0, F.x1, F.top, F.z1);
@@ -122,8 +131,9 @@ export function buildBurger({ coarse = false } = {}) {
   }
   // 東邊的招牌帶：可可底、底下一條奶油色燈條，中間一顆咬月圓牌（跟高桿招牌同一張圖，見 jinghai.js）
   glowBox(F.x1 + 0.2, 4.8, F.z0 + 0.3, F.x1 + 0.24, 4.88, F.z1 - 0.3, '#fff3dc');
-  // 雨遮
+  // 雨遮：也擋鏡頭，站在門口時鏡頭壓到雨遮底下，不從上面隔著雨遮往下看
   SB(k, F.x1, 3.55, 30.4, F.x1 + 2.4, 3.8, 35.6, PANEL, 0.08);
+  solid(F.x1, 3.55, 30.4, F.x1 + 2.4, 3.8, 35.6);
   glowBox(F.x1 + 0.3, 3.53, 30.7, F.x1 + 2.2, 3.55, 35.3, '#fff1d8');
   // 屋頂上的機器：兩台空調（頂上一圈風扇）、廚房的排煙管、一支對著地球的小碟子
   for (const [x, z] of [[-26, 29], [-26, 37]]) {
@@ -135,21 +145,27 @@ export function buildBurger({ coarse = false } = {}) {
   earthDish(k, -16, F.roof + 0.4, 28, 0.9);
 
   // ---- 南邊：大螢幕對著降落坪 ----
+  // 從降落坪走步道時鏡頭常隔著它，擋住就淡掉（畫面那張網格由 jinghai.js 掛到 bill.fid 一起藏）
+  const bill = {};
   {
     const bx = -14.5, bz = 46.5, ry = Math.atan2(0 - bx, 62 - bz);
+    const bk = fadeKit([{ x: bx, z: bz, a: ry, hw: 5.4, hd: 0.8, y0: 0, y1: 9.1 }]);
+    bill.fid = bk.fid;
     for (const lx of [-3.4, 3.4]) {
       const [x, z] = rotXZ(bx, bz, ry, lx, -0.3);
-      k.cyl(0.2, 0.24, 3.2, STEELDK, x, 1.6, z, {}, 10);
+      bk.cyl(0.2, 0.24, 3.2, STEELDK, x, 1.6, z, {}, 10);
       obstacles.push({ x, z, hw: 0.3, hd: 0.3, a: 0 });
     }
     const [fx, fz] = rotXZ(bx, bz, ry, 0, -0.25);
-    k.add(softBox(10.2, 5.9, 0.4, 0.12), PANEL, fx, 5.95, fz, { ry });
+    bk.add(softBox(10.2, 5.9, 0.4, 0.12), PANEL, fx, 5.95, fz, { ry });
     const [sx, sz] = rotXZ(bx, bz, ry, 0, -0.04);
     ads.add('bill', 9.8, 5.5, [0, 6, 6, 0], sx, 5.95, sz, ry);
   }
   // ---- 高桿招牌：圓牌會慢慢轉（jinghai.js 的 update） ----
   const POLE = { x: -8.2, z: 44, h: 12.5, r: 1.7 };
-  k.cyl(0.22, 0.3, POLE.h, STEELDK, POLE.x, POLE.h / 2, POLE.z, {}, 12);
+  const pk = fadeKit([[POLE.x - 0.4, 0.4, POLE.z - 0.4, POLE.x + 0.4, POLE.h, POLE.z + 0.4], [POLE.x - 1.9, POLE.h - 0.9, POLE.z - 1.9, POLE.x + 1.9, POLE.h + 3.1, POLE.z + 1.9]]);
+  POLE.fid = pk.fid;
+  pk.cyl(0.22, 0.3, POLE.h, STEELDK, POLE.x, POLE.h / 2, POLE.z, {}, 12);
   k.cyl(0.6, 0.7, 0.4, PANEL, POLE.x, 0.2, POLE.z, {}, 12);
   obstacles.push({ x: POLE.x, z: POLE.z, hw: 0.5, hd: 0.5, a: 0 });
 
@@ -207,8 +223,8 @@ export function buildBurger({ coarse = false } = {}) {
   for (const [z, c] of [[37.65, TOMATO], [37.8, MUSTARD]]) k.cyl(0.04, 0.045, 0.22, c, -24.3, 1.01, z, {}, 8);
   k.box(0.3, 0.1, 0.3, '#86b94e', -23.9, 0.95, 37.7);
   for (let i = 0; i < 4; i++) k.box(0.16, 0.08, 0.16, KRAFT, -23.55, 0.95, 36.0 + i * 0.32);
-  // 排煙罩，底下一排保溫燈
-  SB(k, -25.1, 3.2, 26.4, -22.9, 3.9, 38.6, '#c9ced3', 0.1);
+  // 排煙罩，底下一排保溫燈。走進廚房時鏡頭壓在它的高度，擋住就淡掉
+  SB(fadeKit([[-25.2, 3.1, 26.3, -22.8, 4.0, 38.7]]), -25.1, 3.2, 26.4, -22.9, 3.9, 38.6, '#c9ced3', 0.1);
   glowBox(-24.6, 3.18, 26.8, -23.4, 3.2, 38.2, '#ffd9a8');
   for (let z = 27.5; z < 38; z += 2.5) k.light(-24, 3.0, z, '#ffc88c', 0.4);
   // 後牆：冰箱、架子、飲料機
@@ -250,11 +266,13 @@ export function buildBurger({ coarse = false } = {}) {
   for (let z = 27.5; z < 39; z += 2.6) glowBox(-28.5, F.roof - 0.03, z - 0.2, -25.5, F.roof, z + 0.2, '#fff4e0');
   // 桌子：北排三張、南排三張，每張兩把椅子；吊燈
   const TABLES = [[-18.4, 29.6], [-15.8, 29.6], [-13.2, 29.6], [-17, 38.6], [-14.6, 38.6], [-12.4, 38.6]];
+  // 吊燈：天花板低，鏡頭壓在燈的高度附近，擋住就淡掉
+  const lk = fadeKit(TABLES.map(([x, z]) => [x - 0.3, 2.6, z - 0.3, x + 0.3, F.roof, z + 0.3]));
   for (const [x, z] of TABLES) {
     table(x, z, false);
-    k.cyl(0.01, 0.01, 2.3, '#2a2a2e', x, F.roof - 1.15, z, {}, 4);
-    k.add(new THREE.SphereGeometry(0.22, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2), COCOA, x, 2.82, z, { rx: 0 });
-    k.add(new THREE.IcosahedronGeometry(0.1, 1), '#fff1d6', x, 2.8, z, { glow: true });
+    lk.cyl(0.01, 0.01, 2.3, '#2a2a2e', x, F.roof - 1.15, z, {}, 4);
+    lk.add(new THREE.SphereGeometry(0.22, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2), COCOA, x, 2.82, z, { rx: 0 });
+    lk.add(new THREE.IcosahedronGeometry(0.1, 1), '#fff1d6', x, 2.8, z, { glow: true });
     k.light(x, 2.75, z, '#ffe2b0', 0.5);
   }
 
@@ -391,7 +409,7 @@ export function buildBurger({ coarse = false } = {}) {
 
   // hear(kind, vol)：肉排落回煎台時出聲，zone-jinghai.js 接上 ambience
   const api = {
-    kit: k, glass: kg, obstacles, solids, ads, anim, board, logos: [wallLogo, bandLogo], pole: POLE,
+    kit: k, glass: kg, fadeKits, bill, obstacles, solids, ads, anim, board, logos: [wallLogo, bandLogo], pole: POLE,
     plan: { loops, still }, tick, hear: null,
     kiosks: KIOSK_X.map((x, i) => ({ x, z: KIOSK_Z, item: MENU[i] })), pickup: PICKUP,
   };
@@ -494,7 +512,8 @@ export function burgerCounter({ shop, harvest, player, ui, ambience, board }) {
         const d = Math.hypot(x - s.x, z - s.z);
         if (d > s.r || d >= bd) continue;
         const v = s.get();
-        if (v) { best = v; bd = d; }
+        // pos：互動鍵指著的東西在哪（player.js 讓角色先看過去）
+        if (v) { v.pos ??= { x: s.x, z: s.z }; best = v; bd = d; }
       }
       return best ? { v: best, d: bd } : null;
     },

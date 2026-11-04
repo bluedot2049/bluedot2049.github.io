@@ -197,11 +197,26 @@ async function pipe(bytes, stream) {
   const r = new Response(new Blob([bytes]).stream().pipeThrough(stream));
   return new Uint8Array(await r.arrayBuffer());
 }
-export const packFace = (cells) => pipe(cells, new CompressionStream('deflate-raw'));
+// 格子後面可以多 8 個位元組：兩個眼睛框各 x、y、寬、高（looks.js 的 decodeEyes，只有一個框時後四個是 0）。
+// 沒框的臉還是 4096 個，舊的照樣讀；解開來的格子帶著 .eyes，encodeFace 會接回臉碼
+export const packFace = (cells, eyes = cells.eyes) => {
+  if (!eyes?.length) return pipe(cells, new CompressionStream('deflate-raw'));
+  const all = new Uint8Array(4104);
+  all.set(cells.subarray(0, 4096));
+  eyes.slice(0, 2).forEach((e, i) => all.set([e.x, e.y, e.w, e.h], 4096 + i * 4));
+  return pipe(all, new CompressionStream('deflate-raw'));
+};
 export async function unpackFace(bytes) {
   try {
     const c = await pipe(bytes, new DecompressionStream('deflate-raw'));
-    return c.length === 4096 && c.every((v) => v <= 8) ? c : null;
+    if ((c.length !== 4096 && c.length !== 4104) || !c.subarray(0, 4096).every((v) => v <= 8)) return null;
+    const cells = c.slice(0, 4096);
+    if (c.length === 4104) {
+      const eyes = [];
+      for (let i = 4096; i < 4104; i += 4) if (c[i + 2] && c[i + 3] && c[i] + c[i + 2] <= 64 && c[i + 1] + c[i + 3] <= 64) eyes.push({ x: c[i], y: c[i + 1], w: c[i + 2], h: c[i + 3] });
+      if (eyes.length) cells.eyes = eyes;
+    }
+    return cells;
   } catch {
     return null;
   }

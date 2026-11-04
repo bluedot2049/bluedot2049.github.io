@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { Kit, rng, newBucket, mergeBucket } from '../../core/props.js';
 import { bucketObjects, uTime } from '../../core/scenery.js';
 import { footMask } from '../../core/footshadow.js';
+import { Fader } from '../../core/fade.js';
 import { makePathfinder } from '../../core/pathgrid.js';
 import { makeSkiff } from '../../scene/harbor.js';
 import { setGravity } from '../../avatar/character.js';
@@ -19,8 +20,9 @@ import { buildHQ, softBox, ATRIUM, CANTEEN, GALLERIA, CONTROL, STORE, CANOPY, EA
 import { buildBurger, BURGER, BURGER_LOT } from './jinghai-burger.js';
 import { buildBack, GREEN, FACTORY, BACK_LOT } from './jinghai-back.js';
 import { BRAND, logoTexture, orderBoard } from './jinghai-ads.js';
-import { buildStalls } from './jinghai-stalls.js';
+import { buildStalls, STALLS } from './jinghai-stalls.js';
 import { buildFloors } from './jinghai-floors.js';
+import { buildLift, LIFT } from './jinghai-lift.js';
 
 const deg = Math.PI / 180;
 // 碗的內面（碟形天線、傘形天線）：鏡射一份再把法線反過來。平滑著色看的是法線，只寫 sx: -1 的話內面的明暗會是反的
@@ -36,6 +38,8 @@ const WALK_C = { x: 12, z: 16 }, WALK_R = 125;    // 走得到多遠
 const BEND = 75, PLANET = 1500;                   // 離中心 BEND 公尺以外地面往下彎
 const GRAVITY = 0.32;                             // 月球上的重力是平常的幾倍（真的是六分之一，太飄了不好玩）
 const SUN = new THREE.Vector3(-0.6, 0.38, 0.7).normalize();       // 西南方，離地 22 度
+// 從太陽看過去的左右、上下（陰影鏡頭 lookAt 出來的那兩軸），陰影圖的格子沿這兩個方向排
+const SUN_X = new THREE.Vector3(0, 1, 0).cross(SUN).normalize(), SUN_Y = SUN.clone().cross(SUN_X);
 const EARTH = new THREE.Vector3(0, Math.sin(EARTH_EL * deg), -Math.cos(EARTH_EL * deg));
 
 const REGOLITH = '#b4ada1', REG_HI = '#c8c1b5', REG_LO = '#9b958b', REG_PATH = '#aaa49a';
@@ -119,10 +123,13 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
   meshes.push(near);
 
   // ---------- 總部、前台的速食店、後台、總部裡的小攤 ----------
-  const hq = buildHQ({ coarse }), burger = buildBurger({ coarse }), back = buildBack({ coarse }), stalls = buildStalls();
-  const obstacles = [...hq.obstacles, ...burger.obstacles, ...back.obstacles, ...stalls.obstacles], solids = [...hq.solids, ...burger.solids, ...back.solids, ...stalls.solids];
+  // 擋住鏡頭的東西淡掉（fade.js，跟海市、蜃樓同一套網點）：手扶梯、望遠鏡、長旗、亭子和鐘、排煙罩、咬月的大螢幕和高桿招牌。
+  // 牆、樓板還是擋鏡頭（solids），室內鏡頭不能整片淡掉
+  const fader = new Fader(false, { lead: 0.35 }), fade = (boxes, objs) => fader.add(boxes, objs);
+  const hq = buildHQ({ coarse, fade }), burger = buildBurger({ coarse, fade }), back = buildBack({ coarse }), stalls = buildStalls(), lift = buildLift();
+  const obstacles = [...hq.obstacles, ...burger.obstacles, ...back.obstacles, ...stalls.obstacles, ...lift.obstacles], solids = [...hq.solids, ...burger.solids, ...back.solids, ...stalls.solids];
   const bucket = newBucket();
-  for (const kit of [hq.kit, burger.kit, back.kit, stalls.kit]) kit.emit(bucket, 0, 0, 0);
+  for (const kit of [hq.kit, burger.kit, back.kit, stalls.kit, lift.kit, ...hq.fadeKits, ...burger.fadeKits]) kit.emit(bucket, 0, 0, 0);
 
   // ---------- 外面：降落坪、步道、月球車、大碟形天線、太陽能板、補給箱、石頭（老降落艇搬進大廳墊在望遠鏡底下了） ----------
   const k = new Kit(R), kf = new Kit(R);
@@ -223,7 +230,10 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
 
   // 合成網格：實心的會擋太陽、被影子照到；發光的、玻璃不擋
   // 靜海的房子用平滑著色：圓柱和小圓角看起來是圓的（別區是一面一面的）。方塊的法線本來就各面分開，看起來跟原本一樣；石頭還是有稜角
-  const parts = bucketObjects(bucket), softMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  fader.tag(bucket.lit);
+  fader.tag(bucket.glow);
+  fader.build();
+  const parts = bucketObjects(bucket), softMat = fader.patch(new THREE.MeshLambertMaterial({ vertexColors: true }));
   for (const m of parts) {
     if (m.isMesh && m.material.isMeshLambertMaterial) { m.material = softMat; m.castShadow = true; m.receiveShadow = true; meshes.push(m); }
     group.add(m);
@@ -236,7 +246,7 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
     m.receiveShadow = true;
     group.add(m);
   }
-  const glassGeo = mergeBucket([...hq.glass.lit, ...burger.glass.lit, ...back.glass.lit, ...stalls.glass.lit], false);
+  const glassGeo = mergeBucket([...hq.glass.lit, ...burger.glass.lit, ...back.glass.lit, ...stalls.glass.lit, ...lift.glass.lit], false);
   const glass = new THREE.Mesh(glassGeo, new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide }));
   glass.renderOrder = 1;
   group.add(glass);
@@ -244,7 +254,9 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
 
   // ---------- 咬月的螢幕和招牌 ----------
   // 廣告、菜單、點餐機：每種合成一個網格，著色器照時間換頁（jinghai-ads.js）
-  burger.ads.build(group, (list) => mergeBucket(list, false));
+  const adMeshes = burger.ads.build(group, (list) => mergeBucket(list, false));
+  // 大螢幕的畫面跟著架子一起藏
+  if (adMeshes.bill && burger.bill.fid) fader.units[burger.bill.fid].objs.push(adMeshes.bill);
   // 叫號螢幕：號碼由點餐那邊（burgerCounter）每幀給，沒有人點的時候也先畫一張
   const board = orderBoard(coarse);
   board.draw([], [], null);
@@ -282,7 +294,8 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
     if (s < 0) m.rotation.y = Math.PI;
     pole.add(m);
   }
-  group.add(pole, burger.anim, back.blades);
+  group.add(pole, burger.anim, back.blades, lift.car);
+  if (PL.fid) fader.units[PL.fid].objs.push(pole);
 
   // ---------- 天 ----------
   const sky = buildSky(group, { sunDir: SUN, earthDir: EARTH });
@@ -345,16 +358,37 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
   }
   const { findPath } = makePathfinder(walkable, -72, -62, 84, 100);
   // 樓上：大廳的迴廊、商店街二樓、手扶梯。walkable、groundY、尋路都多一個 y（現在腳下多高），照它找站在哪一層
-  const floors = buildFloors({ ground: { y: groundY, open, walk: walkable, findPath }, holes: stalls.holes });
-  // 鏡頭：不鑽進地面、牆、樓板和屋頂。沿著頭到鏡頭的線每 0.3 公尺看一次
-  const inSolid = (x, y, z) => nearSolid(x, z).some((s) => x > s.x0 && x < s.x1 && z > s.z0 && z < s.z1 && y > s.y0 - 0.25 && y < s.y1 + 0.25);
-  function camClip(a, b) {
-    const n = Math.ceil(a.distanceTo(b) / 0.3);
-    for (let i = Math.ceil(0.8 / 0.3); i <= n; i++) {
-      const t = i / n, x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t, z = a.z + (b.z - a.z) * t;
-      if (y < groundY(x, z) + 0.25 || inSolid(x, y, z)) return (i - 1) / n;
+  const floors = buildFloors({ ground: { y: groundY, open, walk: walkable, findPath }, holes: [...stalls.holes, ...hq.holes], lift });
+  // 鏡頭：不鑽進地面、牆、樓板、屋頂和玻璃。牆和樓板整條線跟盒子（往外撐 CAM_PAD）求交點：玻璃、欄杆只有幾公分厚，
+  // 以前每 0.3 公尺看一點會從中間漏過去，鏡頭跑到大樓外面，回頭被牆和隔壁的屋頂擋住。月面的起伏還是一段一段看。
+  // 離頭 CAM_NEAR 以內的不算（欄杆就在胸前時鏡頭照樣可以越過去），停在撞到的地方前面 CAM_GAP。
+  // pad 給 0 是問「真的看不看得到」（player.js 決定鏡頭要不要趕快往前），不是問鏡頭能不能放在那裡
+  const CAM_PAD = 0.2, CAM_NEAR = 0.8, CAM_GAP = 0.3;
+  const hitSolids = new Set();
+  function camClip(a, b, pad = CAM_PAD) {
+    const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, L = Math.hypot(dx, dy, dz);
+    if (L < CAM_NEAR) return 1;
+    hitSolids.clear();
+    for (let i = 0, n = Math.ceil(Math.hypot(dx, dz)); i <= n; i++) for (const s of nearSolid(a.x + (dx * i) / (n || 1), a.z + (dz * i) / (n || 1))) hitSolids.add(s);
+    let hit = L;
+    for (const s of hitSolids) {
+      let t0 = 0, t1 = L;
+      for (const [o, d, lo, hi] of [[a.x, dx, s.x0, s.x1], [a.y, dy, s.y0, s.y1], [a.z, dz, s.z0, s.z1]]) {
+        if (Math.abs(d) < 1e-9) { if (o <= lo - pad || o >= hi + pad) { t0 = L; break; } continue; }
+        let u = ((lo - pad - o) / d) * L, v = ((hi + pad - o) / d) * L;
+        if (u > v) [u, v] = [v, u];
+        t0 = Math.max(t0, u);
+        t1 = Math.min(t1, v);
+        if (t0 >= t1) break;
+      }
+      if (t0 < t1 && t1 > CAM_NEAR) hit = Math.min(hit, Math.max(t0, CAM_NEAR));
     }
-    return 1;
+    const n = Math.ceil(L / 0.3);
+    for (let i = Math.ceil(CAM_NEAR / 0.3); i <= n && (i / n) * L < hit; i++) {
+      const t = i / n;
+      if (a.y + dy * t < groundY(a.x + dx * t, a.z + dz * t) + 0.25) { hit = ((i - 1) / n) * L + CAM_GAP; break; }
+    }
+    return hit >= L ? 1 : Math.max(0, hit - CAM_GAP) / L;
   }
 
   // ---------- 光：太陽固定，陰影圖只有角色走遠才重畫。進到室內天光換成暖的 ----------
@@ -377,13 +411,21 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
   }
   // 人和海牛人腳下的影子扣地面的光，跟房子的影子一樣過調色（footshadow.js）：每一幀畫一張影子圖
   const foot = renderer && sun ? footMask(renderer, scene, { coarse }) : null;
-  // 在室內幾成：離房子的牆越近越往室內靠，走進門裡一兩公尺就是 1。天光和人潮聲照這個
+  // 在室內幾成：離房子的牆越近越往室內靠，走進門裡一兩公尺就是 1。天光和人潮聲照這個。
+  // 大廳和食堂、商店街、控制室是貼在一起的幾個盒子：室內要量到整片室內的邊，不是自己那個盒子的邊，
+  // 不然走過兩間之間的門，天光會在門口換回室外再換回來。往四周一圈一圈找第一個不在室內的點（SEAM 把接縫補起來）
+  const SEAM = 0.02, DIRS = Array.from({ length: 16 }, (_, i) => [Math.cos((i / 16) * Math.PI * 2), Math.sin((i / 16) * Math.PI * 2)]);
   const indoorness = (x, z) => {
     let d = Infinity;
-    for (const b of ROOMS) d = Math.min(d, Math.max(b.x0 - x, x - b.x1, b.z0 - z, z - b.z1));
+    if (indoor(x, z, SEAM)) {
+      d = -2.5;
+      out: for (let r = 0.25; r < 2.5; r += 0.25) for (const [cx, cz] of DIRS) if (!indoor(x + cx * r, z + cz * r, SEAM)) { d = -r; break out; }
+    } else for (const b of ROOMS) d = Math.min(d, Math.max(b.x0 - x, x - b.x1, b.z0 - z, z - b.z1));
     return smooth(1, -2.5, d);
   };
   const center = new THREE.Vector3(), lastCenter = new THREE.Vector3(1e9, 0, 0);
+  // 淡出要看得到的點：角色的頭、走到小攤前時攤子那一點、畫面正中央那條視線走到跟角色一樣深（跟海市一樣）
+  const eyes = [], eyeA = new THREE.Vector3(), eyeB = new THREE.Vector3(), eyeC = new THREE.Vector3(), fwd = new THREE.Vector3();
   let inside = -1, lastT = 0;
 
   const room = {
@@ -413,6 +455,8 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
   return {
     rooms: [room], paintings: [], mirror: null, outdoor: null, raycastTargets: meshes, env, shops: [],
     camDistMax: 34,
+    // 室內有天花板、樓板：鏡頭抬到頂還擋著就往下壓（player.js 的 desiredCamera），不貼到頭頂上
+    camDuck: true,
     spawn: { x: -1.4, z: 57.4, heading: Math.PI },
     exits, home: null, plan,
     // 點餐（zone-jinghai.js 的 crowd 接成攤販）：速食店、溫室收成台
@@ -438,12 +482,28 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
     },
     // 站在手扶梯斜的那段上被帶著走的速度（player.js）
     drift: floors.drift,
+    // 透明電梯（jinghai-lift.js）：zone-jinghai.js 把互動鍵接上
+    lift,
     crowdSpots: null,
     setCurrentRoom() {},
-    debug: { terrain, obstacles, solids },
-    update(t, cam, target, camera) {
+    debug: { terrain, obstacles, solids, fader },
+    // still：拍照中，擋住的東西一律不淡
+    update(t, cam, target, camera, still = false) {
       const dt = Math.min(0.1, Math.max(0, t - lastT));
       lastT = t;
+      lift.update(dt);
+      eyes.length = 0;
+      if (target) {
+        eyes.push(eyeA.set(target.x, target.y + 1.1, target.z));
+        const near = STALLS.find((st) => Math.abs(st.spot.y - target.y) < 1.5 && Math.hypot(st.spot.x - target.x, st.spot.z - target.z) < 3.5);
+        if (near) eyes.push(eyeB.set(near.spot.x, near.spot.y + 1.05, near.spot.z));
+        if (camera) {
+          camera.getWorldDirection(fwd);
+          const depth = (target.x - cam.x) * fwd.x + (target.y + 1.1 - cam.y) * fwd.y + (target.z - cam.z) * fwd.z;
+          if (depth > 0.5) eyes.push(eyeC.copy(cam).addScaledVector(fwd, depth));
+        }
+      }
+      fader.update(dt, cam, eyes, still || !target);
       uTime.value = t;
       sky.update(cam);
       pole.rotation.y = t * 0.35;
@@ -456,14 +516,18 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
         hemi.intensity = OUT.hi + (IN.hi - OUT.hi) * inside;
       }
       if (sun && target) {
-        // 陰影的範圍跟著角色，對齊 10 公尺的格子，走動時影子不會跟著游
+        // 陰影的範圍跟著角色，對齊 10 公尺的格子，走動時影子不會跟著游。
+        // 換格重畫時中心再對齊陰影圖的一格（從太陽看過去的那兩個方向）：沒對齊的話每走過一條格線，所有影子的邊都挪半格、整片閃一下
         center.set(Math.round(target.x / 10) * 10, 0, Math.round(target.z / 10) * 10);
         if (!lastCenter.equals(center)) {
+          lastCenter.copy(center);
+          const texel = (sun.shadow.camera.right - sun.shadow.camera.left) / sun.shadow.mapSize.x;
+          const a = Math.round(center.dot(SUN_X) / texel) * texel, b = Math.round(center.dot(SUN_Y) / texel) * texel;
+          center.set(0, 0, 0).addScaledVector(SUN_X, a).addScaledVector(SUN_Y, b).addScaledVector(SUN, lastCenter.dot(SUN));
           sun.position.copy(center).addScaledVector(SUN, 200);
           sun.target.position.copy(center);
           sun.target.updateMatrixWorld();
           if (renderer) renderer.shadowMap.needsUpdate = true;
-          lastCenter.copy(center);
         }
       }
       if (foot && camera) foot.update(camera);

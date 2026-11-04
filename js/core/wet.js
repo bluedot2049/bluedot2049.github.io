@@ -18,10 +18,19 @@ export const WET = {
   shine: 3,                          // 燈影多亮
   blur: 0.6,                         // 燈影多糊（燈光圖的第幾層小圖，彈得越遠再越糊）
   lamp: 2.4,                         // 燈大約掛在地面上多高：先照這個高度找，找到燈再照它真的高度對一次
+  now: 0,                            // 現在幾秒（rain.js 每幀寫），漣漪算年紀用
+  rip: Array.from({ length: 6 }, () => new THREE.Vector4(0, 0, -1e3, 0)),   // 踩水的漣漪：x、z、起的時刻、多大
 };
 
+let ripAt = 0;
+// 踩在濕的地上：在 (x, z) 起一圈漣漪（rain.js 的 splash 呼叫）。環形緩衝，滿了蓋掉最舊的
+export function wetRipple(x, z, k = 1) {
+  WET.rip[ripAt].set(x, z, WET.now, k);
+  ripAt = (ripAt + 1) % WET.rip.length;
+}
+
 export const WET_GLSL = `
-struct Wet { float amount; float q; vec4 box; sampler2D occ; sampler2D light; vec2 lightY; float darken; float sheen; float shine; float blur; float lamp; };
+struct Wet { float amount; float q; vec4 box; sampler2D occ; sampler2D light; vec2 lightY; float darken; float sheen; float shine; float blur; float lamp; float now; vec4 rip[6]; };
 uniform Wet uWet;
 float wetHash( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
 float wetNoise( vec2 p ) {
@@ -51,6 +60,14 @@ vec3 wetSurface( vec3 col, vec3 P ) {
 	vec3 V = normalize( P - cameraPosition );
 	float F = 0.02 + 0.98 * pow( 1.0 - max( dot( - V, N ), 0.0 ), 5.0 );
 	c += uGrade.airLin * F * uWet.sheen * m;
+	// 踩水（wetRipple）：腳邊一圈細細的亮邊往外擴，不到一秒散掉，很淡
+	for ( int i = 0; i < 6; i++ ) {
+		vec4 r = uWet.rip[ i ];
+		float age = uWet.now - r.z;
+		if ( age < 0.0 || age > 0.9 ) continue;
+		float x = distance( P.xz, r.xy ) - 0.06 - age * 0.38, k = 1.0 - age / 0.9;
+		c += uGrade.airLin * r.w * exp( - x * x * 260.0 ) * k * k * 0.35 * m;
+	}
 	// 燈影：往上彈的視線先在 lamp 公尺高的地方找燈，找到了照那盞燈真的高度再找一次；
 	// 太低（燈在腳下）或高出好幾公尺（上一層街的燈）的不算
 	if ( uWet.q > 0.5 && inside ) {

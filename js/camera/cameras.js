@@ -16,7 +16,7 @@ export const longTan = (mm) => 18 / mm;
 // 相機桌面板像機身上的銘牌：name 名字，spec 跟別台不一樣的地方（閃光、鏡頭、數位或底片），maker 哪裡哪家做的。怎麼用不寫，拿起來自己摸
 // focal：焦距（mm）。prime：定焦，不能變焦，想拍大一點就走近。
 // fstop：光圈，景深照它算，數字越小背景越糊。bokeh：畫面上把景深放大幾倍——這個世界多是平塗的色塊，照實算的景深幾乎看不出來。
-// focus：tap 點按對焦。
+// focus：auto 自動對焦，對焦點底下的東西一直對著（平常在準心，完整攝影模式點一下換位置），快慢照 af。
 // aspect：照片長寬比（橫拿），直拿就倒過來。
 // flash：閃光燈；bulb：閃一次要換一顆燈泡，換好之前不能拍；knob：快門旁那顆閃光開關長什麼樣（KNOBS）。hold：按住快門不放就一直曝光（B 快門），放開時才閃
 // develop：沖出來的樣子，跟 photo.js 的色調同一種寫法；halo：亮的地方暈開一點
@@ -30,7 +30,7 @@ export const CAMERAS = {
     name: '燭火乙式',
     spec: ['可開關閃光燈', '27mm 定焦鏡', '數位式'],
     maker: '海市火記光學製造',
-    focal: 27, prime: true, fstop: 1.4, bokeh: 4, focus: 'tap', aspect: 3 / 2,
+    focal: 27, prime: true, fstop: 1.4, bokeh: 4, focus: 'auto', aspect: 3 / 2,
     af: { time: 0.22, hunt: 0.1, priority: 'release' },   // 數位式：對得快、幾乎不找焦，快門不等人
     flash: { color: 0xfff1dc, power: 2.6, bulb: 1.6, knob: 'fan' },
     date: { knob: 'die', ink: 'burn' },

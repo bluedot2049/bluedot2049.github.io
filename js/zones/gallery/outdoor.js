@@ -10,7 +10,7 @@ import { buildLore } from './lore.js';
 import { buildTree } from './tree.js';
 import { REFLECT_LAYER } from '../../core/scenery.js';
 import { BW, DROP, JETTY_NAME, MEADOW, MEADOW_NAME, ORDER, PAV, SD, SEA_BED, SEA_LEVEL, SUN_DIR, SW, TD, TRAIL, TRAIL_W, TW } from './outdoor-map.js';
-import { buildSea, grass, groundMesh, makeTerrain, nearestOnLine, patch, seeds, smooth, vnoise } from './outdoor-ground.js';
+import { buildSea, grass, groundMesh, makeTerrain, meadowWade, nearestOnLine, patch, seeds, smooth, vnoise } from './outdoor-ground.js';
 import { bread, fruit, goblet, parkBench, pavilion } from './outdoor-props.js';
 import { bush, canopy, farTree, flowerBed } from './outdoor-plants.js';
 import { buildFar, buildSky } from './outdoor-sky.js';
@@ -390,6 +390,7 @@ export function buildOutdoor(room, h) {
     return dp < PAV.r + 3 && ramp ? Math.max(y, F - (dp - PAV.r) * 0.5) : y;
   };
 
+  let wadeT = -1;   // 上一幀的時間（草分開的 b 點照這個追）
   return {
     shell, sky, far, water, seats, host, groundY, camFloor,
     // 看得到海面的範圍：海灣起點往外一直到海的盡頭，左右放寬到整片海。鏡頭沒看到這塊就不用算倒影
@@ -399,6 +400,14 @@ export function buildOutdoor(room, h) {
       tree.update(t, cam, target);
       harbor.update(t);
       lore.update(t, target);
+      // 人走過草叢：草往兩邊分開（outdoor-ground.js 的 meadowWade），剛走過的路留一下才合回來；剛進來或被傳送就不劃開
+      if (target) {
+        const a = meadowWade.uWadeA.value, b = meadowWade.uWadeB.value, dt = wadeT < 0 ? 0 : t - wadeT;
+        a.set(target.x, 0, target.z);
+        if (wadeT < 0 || b.distanceTo(a) > 3) b.copy(a);
+        else b.lerp(a, 1 - Math.exp(-dt / 0.7));
+        wadeT = t;
+      }
     },
     table: { x: tableX, z: Z(tableRel), hw: 0.5, hd: tableLen / 2 },
     pavilion: { x: pc.x, z: pc.z, r: PAV.r },

@@ -13,6 +13,7 @@ import { Pack } from './save/pack.js';
 import { layoutBubbles } from './core/bubbles.js';
 import { UI, panelW, uiScale } from './controls/ui.js';
 import { bindJoystick } from './controls/joystick.js';
+import { bindTouch } from './controls/touch.js';
 import { Multiplayer, EMOTES } from './social/multiplayer.js';
 import * as TX from './core/textures.js';
 import { Ambience } from './audio/ambience.js';
@@ -33,6 +34,7 @@ import { installGrade, gradeAt, NEUTRAL } from './core/grade.js';
 import { Hollow } from './zones/gallery/hollow.js';
 import { PLACES } from './scene/places.js';
 import { bindDeskKeys } from './controls/deskkeys.js';
+import { bindGamepad, rumble } from './controls/gamepad.js';
 import { Beast } from './npc/beast.js';
 import { Guide } from './scene/guide.js';
 import { pref, setPref, dropPref } from './save/prefs.js';
@@ -75,12 +77,8 @@ function hasWebGL() {
 // 關掉右鍵選單和圖片拖曳，避免操作時跳出「另存圖片」
 // 拍好的照片要能長按存起來，那裡不擋
 document.addEventListener('contextmenu', (e) => { if (!e.target.closest('#ph-media')) e.preventDefault(); });
-// iOS 不一定遵守 touch-action，拖搖桿時會把整頁往下拉；只留抽屜、清單和攝影模式的選項列可以捲動
-// 萬一頁面已經被放大，就不擋，讓人能用雙指縮回來
-document.addEventListener('touchmove', (e) => {
-  if (window.visualViewport && window.visualViewport.scale > 1.01) return;
-  if (!e.target.closest('#sheet, #dress, #list, #ph-bar, #eye-card')) e.preventDefault();
-}, { passive: false });
+// 手機：按鈕放開就按（另一指按著搖桿也照樣按）、捲不動的地方不讓整頁被拖動（touch.js）
+bindTouch();
 // iOS 的雙指縮放整頁
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('dragstart', (e) => { if (e.target.tagName === 'IMG' && !e.target.closest('#ph-media')) e.preventDefault(); });
@@ -211,11 +209,20 @@ async function start() {
   // 光線、霧。畫廊有室內和戶外兩組，走出後門時在兩組之間漸變；只有一組的區域兩頭都用它
   const envs = Z.env(world);
   const ENV = (envs.length > 1 ? envs : [envs[0], envs[0]]).map((e) => ({ ...e, bg: new THREE.Color(e.bg), sky: new THREE.Color(e.sky), ground: new THREE.Color(e.ground), sun: new THREE.Color(e.sun) }));
-  let envT = -1;
-  function applyEnv(t) {
-    if (Math.abs(t - envT) < 0.002) return;
+  // 第三組（有的話）是室內再暗下來的一小塊（畫廊前廳）：k 是那一塊佔幾成，world.envDim(x, z) 給
+  let envT = -1, envK = 0;
+  const envMix = { bg: new THREE.Color(), sky: new THREE.Color(), ground: new THREE.Color(), sun: new THREE.Color(), dir: new THREE.Vector3() };
+  function mixEnv(a, d, k) {
+    for (const c of ['bg', 'sky', 'ground', 'sun']) envMix[c].copy(a[c]).lerp(d[c], k);
+    for (const n of ['near', 'far', 'hi', 'si']) envMix[n] = a[n] + (d[n] - a[n]) * k;
+    envMix.dir.copy(a.dir).lerp(d.dir, k);
+    return envMix;
+  }
+  function applyEnv(t, k = 0) {
+    if (Math.abs(t - envT) < 0.002 && Math.abs(k - envK) < 0.002) return;
     envT = t;
-    const [a, b] = ENV;
+    envK = k;
+    const a = ENV[2] && k > 0 ? mixEnv(ENV[0], ENV[2], k) : ENV[0], b = ENV[1];
     scene.background.copy(a.bg).lerp(b.bg, t);
     scene.fog.color.copy(scene.background);
     scene.fog.near = a.near + (b.near - a.near) * t;
@@ -239,8 +246,10 @@ async function start() {
   character.setCamera(carried());
   world.camTable?.setCarried(carried());
   scene.add(character.group);
-  character.onLand = (c) => ambience.footstep(c, 0, true);
+  character.onLand = (c) => { ambience.footstep(c, 0, true); world.onLand?.(c); rumble('land'); };
   character.onEmote = (c, e) => ambience.cheer(c, e);
+  // 每踩一步：有腳印的區域印一個（core/footprints.js，world.prints），區域自己要做的事（海市濕地的漣漪）在 world.onStep
+  character.onStep = (c, foot) => { world.prints?.stamp(c, foot); world.onStep?.(c, foot); };
   // 角色出來之前先站好的（畫廊的胖頭頭人）
   const { manatee = null, host = null } = Z.residents?.({ scene, world, shadowTex }) ?? {};
   // 大樹的樹洞：作者和網站消息。沒有大樹的區域什麼都不做
@@ -355,8 +364,12 @@ async function start() {
       ui.showDress();
       creator.open(look);
     },
-    onJump() {
-      mp?.jump();
+    onJump(k = 1) {
+      mp?.jump(k);
+    },
+    // 點了別人的角色：揮手
+    onTapOther() {
+      if (mp) sendEmote('👋');
     },
     onSit(on) {
       mp?.sendNow();
@@ -603,31 +616,51 @@ async function start() {
   const sitBtn = document.getElementById('sit-btn');
   sitBtn.addEventListener('click', () => player.toggleSit());
   const actionBtn = document.getElementById('action-btn');
-  actionBtn.addEventListener('click', () => player.action());
+  actionBtn.addEventListener('click', () => player.action(nearT));
   const actionLabel = actionBtn.querySelector('.a1');
   const actionShort = actionBtn.querySelector('.a0');
   // lens：有鏡頭對著自己（attention.js），按了就一直看著它，再按一次放掉
   // follow：走到帶路中的黑眼（自己的或隊友的）旁邊，按了跟著它走（scene/guide.js），底下小字是要去哪
   const LABELS = { painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來', lens: '看鏡頭', follow: '跟著' };
   // 手機的互動鍵是一顆小圓章，只放兩個字；沒列在這裡的取前兩個字
-  const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信', 看鏡頭: '看鏡', 不看了: '不看' };
-  let nearKey = null;
+  const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信', 看鏡頭: '看鏡', 不看了: '不看', 叫電梯: '叫梯', 上觀星台: '上樓', 回一樓: '下樓' };
+  // 剛走出範圍的那一下（走過攤位、動物走開）互動鍵先留著：手指可能已經在按的路上，按到了照原本的做（player.action 的 fallback）。
+  // 以前一出範圍就收，手指落在收起來的鈕上會穿到畫面，角色往鈕底下走過去
+  const ACTION_LINGER = 400;
+  let nearKey = null, nearT = null, lostAt = 0;
+  const seenVerbs = new Set(Array.isArray(pref('verbsSeen')) ? pref('verbsSeen') : []);
+  let freshT = 0;
   function updateAction() {
-    const t = player.actionTarget();
+    let t = player.actionTarget();
+    const now = performance.now();
+    if (t) { nearT = t; lostAt = 0; }
+    else if (nearT && !player.focus && !player.pending && now - (lostAt ||= now) < ACTION_LINGER) t = nearT;
+    else nearT = null;
     const key = t ? (t.kind === 'exit' ? `${t.p.title}:${t.p.label}` : t.kind === 'lens' ? `lens:${t.p.id}:${t.on}` : t.kind === 'follow' ? `follow:${t.p.id}:${t.p.title}` : t.kind === 'painting' || t.kind === 'pet' || t.kind === 'talk' ? t.p : t.kind) : null;
-    const sitting = player.sitCode !== 0;
-    if (sitting !== document.body.classList.contains('sitting')) {
+    // 「坐」印章：站著是坐、坐在地上是躺（再按一次躺下）、躺著或坐座位和邊上是起
+    const code = player.sitCode, sitting = code !== 0, seal = code === -1 ? '躺' : sitting ? '起' : '坐';
+    if (seal !== sitBtn.textContent) {
       document.body.classList.toggle('sitting', sitting);
-      sitBtn.textContent = sitting ? '起' : '坐';
-      sitBtn.setAttribute('aria-label', sitting ? '站起來' : '坐下');
+      sitBtn.textContent = seal;
+      sitBtn.setAttribute('aria-label', seal === '躺' ? '躺下' : sitting ? '站起來' : '坐下');
     }
     if (key === nearKey) return;
     nearKey = key;
     actionBtn.classList.toggle('show', !!t);
     if (!t) return;
+    // 新目標出現：角色先看它一眼（player.glance），玩家順著視線看到按鍵
+    if (t.ax != null && !player.sitting) player.glance = { x: t.ax, y: player.pos.y + (t.kind === 'pet' ? 0.3 : t.kind === 'painting' ? 1.4 : 1.1), z: t.az, t: 1.2 };
     actionLabel.textContent = (t.kind === 'talk' && t.p.actionLabel) || (t.kind === 'exit' && t.p.label) || (t.kind === 'lens' && t.on && '不看了') || LABELS[t.kind];
     actionShort.textContent = SHORT[actionLabel.textContent] || actionLabel.textContent.slice(0, 2);
     actionBtn.setAttribute('aria-label', actionLabel.textContent);
+    // 第一次出現的動詞：光暈多擴幾圈（這台裝置記得，prefs.js 的 verbsSeen），不另外寫教學
+    if (!seenVerbs.has(actionLabel.textContent)) {
+      seenVerbs.add(actionLabel.textContent);
+      setPref('verbsSeen', [...seenVerbs]);
+      actionBtn.classList.add('fresh');
+      clearTimeout(freshT);
+      freshT = setTimeout(() => actionBtn.classList.remove('fresh'), 5000);
+    }
     document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : t.kind === 'pet' || t.kind === 'talk' ? t.p.name : t.kind === 'exit' || t.kind === 'follow' ? t.p.title : '';
   }
 
@@ -728,7 +761,8 @@ async function start() {
         animals?.startle(o.pos.x, o.pos.z);
         lookAtOther(o.id, 1 + Math.random() * 0.6);
       },
-      onLand: (ch) => ambience.footstep(ch, 0, true),
+      onLand: (ch) => { ambience.footstep(ch, 0, true); world.onLand?.(ch); },
+      onStep: (ch, foot) => { world.prints?.stamp(ch, foot); world.onStep?.(ch, foot); },
       onEmote: (ch, e) => {
         ambience.cheer(ch, e);
         lookAtOther(otherOf(ch), 1.8 + Math.random());
@@ -770,11 +804,12 @@ async function start() {
     // 掛機：分頁看不到，或五分鐘沒碰任何東西，別人看到的自己頭上冒 ZZZ。切走時畫面馬上停，所以切的當下就先說
     let lastActive = performance.now();
     const awake = () => { lastActive = performance.now(); };
-    for (const ev of ['pointerdown', 'keydown', 'wheel']) window.addEventListener(ev, awake, { passive: true, capture: true });
+    for (const ev of ['pointerdown', 'keydown', 'wheel', 'padinput']) window.addEventListener(ev, awake, { passive: true, capture: true });
     checkAway = () => {
       const v = document.hidden || performance.now() - lastActive > 5 * 60000;
       mp.setAway(v);
       party.setAway(v);
+      character.asleep = v;   // 眼睛閉著（character.js 的眨眼那段）
     };
     document.addEventListener('visibilitychange', () => { awake(); checkAway(); });
     if (visitors) visitors.mp = mp;
@@ -831,7 +866,10 @@ async function start() {
   });
   photo.beast = beast;
   // 電腦的快捷鍵、Q 表情輪、Esc 暫停選單（表情要連上線才送得出去）
-  bindDeskKeys({ player, ui, photo, pack, ambience, emotes: EMOTES, emote: (e) => mp && sendEmote(e) });
+  const desk = bindDeskKeys({ player, ui, photo, pack, ambience, emotes: EMOTES, emote: (e) => mp && sendEmote(e) });
+  // 手把：每幀在主迴圈讀（tick），按鍵類的動作借電腦按鍵的規則；有動就送 padinput（閒置、掛機都聽它）
+  const pad = bindGamepad({ player, photo, ui, desk, party: () => party });
+  window.addEventListener('padinput', () => { lastInput = performance.now(); });
   const selfie = new Selfie({
     renderer, scene, camera, player, character, ambience, render: draw,
     resizeFX: (w, h) => fx?.setSize(w, h),
@@ -874,6 +912,8 @@ async function start() {
   guide.busy = () => photo.active || selfie.active || player.boarding;
   guide.onShip = (ex) => player.events.onExit(ex);
   player.actionables.push((x, z) => guide.target(x, z));
+  // 畫面上點得到的角色（player.tap）：自己（小跳、回頭看鏡頭）和在場的人（揮手）
+  player.tappable = () => [{ id: 'self', group: character.group }, ...(mp ? [...mp.others.values()].map((o) => ({ id: o.id, group: o.ch.group })) : [])];
   if (mp) {
     guide.mp = mp;
     mp.eye = () => guide.net();
@@ -918,7 +958,7 @@ async function start() {
       if (!params.has('debug')) return refOverlay(params.get('ref'));
       gradeDock({
         zone, renderer, scene, world, grade: !!grade, ref: params.get('ref'),
-        ENV, applyEnv: () => { const t = Math.max(0, envT); envT = -1; applyEnv(t); }, singleEnv: envs.length === 1,
+        ENV, applyEnv: () => { const t = Math.max(0, envT); envT = -1; applyEnv(t, envK); }, singleEnv: envs.length === 1,
       });
     });
   }
@@ -1068,6 +1108,7 @@ async function start() {
   function tick() {
     const dt = Math.min(clock.getDelta(), 0.05);
     ambience.listen(photo.active ? photo.pos : character.group.position, camera);
+    pad.poll(dt);
     player.update(dt);
     photo.update(dt);
     selfie.update(dt);
@@ -1097,6 +1138,8 @@ async function start() {
       else host.hush();
     }
     party?.update(dt);
+    // 手上的燈籠、蠟燭照在腳邊（海市，haze.js 的 handLamps）：自己和在場的人
+    world.handLamps?.update(mp ? [character, ...[...mp.others.values()].map((o) => o.ch)] : [character]);
     guide.update(dt);   // 黑眼：飛到哪、帶路、別人的黑眼、畫面邊的記號（照這一幀擺好的鏡頭投影）
     // 正走去渡口找別區的隊友：走到了就打開渡船卡；半路改走別處就算了
     if (ferryWalk && (player.goal !== ferryWalk.goal || !player.path.length)) {
@@ -1112,7 +1155,7 @@ async function start() {
     const view = photo.active ? photo.pos : player.pos;
     if (world.outdoor) {
       const t = world.outdoor.outdoorness(view.z);
-      applyEnv(t);
+      applyEnv(t, world.envDim?.(view.x, view.z) ?? 0);
       ambience.setLevel(t);
       const meadow = player.room === world.rooms.length - 1 && world.outdoor.inMeadow(player.pos.z);
       const spot = meadow ? world.outdoor.placeAt(player.pos.x, player.pos.z) : null;
@@ -1154,6 +1197,7 @@ function debugStats(renderer, quality) {
   renderer.info.autoReset = false;
   const el = document.createElement('div');
   el.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99;padding:4px 8px;font:11px/1.5 monospace;color:#cfe;background:#000a;white-space:pre;pointer-events:none';
+  el.dataset.dev = '';   // 截圖時 html.no-dev 藏起來（見 devtools.js）
   document.body.appendChild(el);
   let n = 0, sum = 0;
   return (dt) => {

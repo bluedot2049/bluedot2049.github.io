@@ -47,6 +47,7 @@ const CSS = `
 .gd canvas{display:block;margin:4px auto;background:#090b0f;border:1px solid #ffffff18;touch-action:none;cursor:crosshair;outline:none}
 .gd canvas:focus{border-color:#7fb8d088}
 .gd kbd{font:10px monospace;border:1px solid #ffffff33;border-radius:3px;padding:0 3px}
+html.no-dev .gd,html.no-dev [data-dev]{display:none!important}
 `;
 let styled = false;
 function injectStyle() {
@@ -170,6 +171,7 @@ export function refOverlay(src, host = null) {
   const img = document.createElement('img');
   img.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;z-index:98;opacity:0.5';
   img.hidden = !src;
+  img.dataset.dev = '';
   if (src) img.src = src;
   document.body.appendChild(img);
 
@@ -224,17 +226,19 @@ function envSection(host, ENV, apply, single, say) {
   }
   const line = h('div', 'line');
   if (!single) {
+    // 第三組起是室內再暗下來的小塊（畫廊前廳），用它的 name
+    const label = (i) => ENV[i].name ?? ['室內', '戶外'][i] ?? `第 ${i + 1} 組`;
     line.append(button('在調：室內', (e) => {
-      pick = pick ? 0 : 1;
-      e.target.textContent = pick ? '在調：戶外' : '在調：室內';
+      pick = (pick + 1) % ENV.length;
+      e.target.textContent = `在調：${label(pick)}`;
       for (const r of rows) r.sync();
-    }, '畫廊走出後門時在兩組之間漸變'));
+    }, '畫廊走出後門時在室內、戶外兩組之間漸變；前廳是室內再暗下來的那組'));
   }
   line.append(button('複製光線', () => {
     const e = ENV[pick];
     const hex = (k) => '0x' + e[k].getHexString();
     const d = e.dir;
-    const text = `{ bg: ${hex('bg')}, near: ${e.near}, far: ${e.far}, sky: ${hex('sky')}, ground: ${hex('ground')}, hi: ${e.hi}, sun: ${hex('sun')}, si: ${e.si}, dir: new THREE.Vector3(${[d.x, d.y, d.z].map((v) => +v.toFixed(2)).join(', ')}) }`;
+    const text = `{ ${e.name ? `name: '${e.name}', ` : ''}bg: ${hex('bg')}, near: ${e.near}, far: ${e.far}, sky: ${hex('sky')}, ground: ${hex('ground')}, hi: ${e.hi}, sun: ${hex('sun')}, si: ${e.si}, dir: new THREE.Vector3(${[d.x, d.y, d.z].map((v) => +v.toFixed(2)).join(', ')}) }`;
     navigator.clipboard?.writeText(text);
     console.log('env', text);
     say('光線已複製，貼回 zone-*.js 的 env（海市在 haishi.js）');

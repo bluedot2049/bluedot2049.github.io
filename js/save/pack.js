@@ -7,7 +7,7 @@
 // 選好的可以存下、丟掉、交給沖洗師傅（只有照片），Android 還能分享：
 // 存下的拿出相簿，沒選的留著；丟掉不先問，底下那行按「復原」就放回來。電腦上 Delete 丟掉選的。
 // 讀照片哪裡都能讀（鏡中的照片、海市的明信片）；存檔只有兩個地方：鏡子前請眼睛拍一張，或在海市照相館寄一張給自己。
-// 鈕右下的封蠟是魔法印泥：有照片交給師傅、還沒去拿時亮著。
+// 鈕右下的封蠟是魔法印泥：有照片交給師傅、還沒去拿，或拿回來還沒看過時亮著。
 // 存檔有沒有過期只寫在卡片裡，不亮、不催。上次存了什麼記在這台裝置上（packed），不放進存檔。
 import { decodeSave, decodeLook, tryOn, codeFrom, hasProgress, restoreSave } from './savecode.js';
 import { readPostcard } from './postcard.js';
@@ -15,7 +15,7 @@ import { readMirrorCard } from './mirrorcard.js';
 import { encodeFace } from '../avatar/looks.js';
 import { getSave, savePrint } from './progress.js';
 import { dockR, hugMedia, panelW, uiScale } from '../controls/ui.js';
-import { album, canPick, canShare, discard, folderName, hourMark, KINDS, LABS, labOk, loadAlbum, pickFolder, putBack, saveChosen, saveTip, shareChosen, toLab, visible } from '../camera/album.js';
+import { album, canPick, canShare, discard, folderName, hourMark, KINDS, LABS, labOk, loadAlbum, pickFolder, putBack, saveChosen, saveTip, seen, shareChosen, toLab, visible } from '../camera/album.js';
 import { pref, setPref } from './prefs.js';
 
 const ICONS = {
@@ -104,15 +104,15 @@ export class Pack {
     return m ? m.k !== savePrint() : hasProgress();
   }
 
-  // 有照片在師傅那裡等著拿
+  // 有照片在師傅那裡等著拿，或拿回來還沒看過
   get ready() {
-    return album().some((it) => it.state === 'lab');
+    return album().some((it) => it.state === 'lab' || it.fresh);
   }
 
   refresh() {
-    const ready = this.ready;
+    const ready = this.ready, lab = album().some((it) => it.state === 'lab');
     this.btn.classList.toggle('lit', ready);
-    this.btn.setAttribute('aria-label', ready ? '行囊，照片洗好了' : '行囊');
+    this.btn.setAttribute('aria-label', lab ? '行囊，照片洗好了' : ready ? '行囊，有新照片' : '行囊');
     if (!this.card.hidden) this.render();
     if (this.viewer && !this.viewer.hidden) this.paintView();
   }
@@ -143,6 +143,11 @@ export class Pack {
     this.closeView();
     for (const u of this.urls.values()) URL.revokeObjectURL(u);
     this.urls.clear();
+    // 剛才在相簿裡看到的新照片，收起的這一下才熄，翻的時候照樣亮著
+    this.looking?.disconnect();
+    this.looking = null;
+    if (this.shown?.size) seen([...this.shown]);
+    this.shown = null;
   }
 
   get floating() {
@@ -251,8 +256,22 @@ export class Pack {
     if (page !== 'album') return;
     const grid = this.card.querySelector('.album-grid');
     if (grid) grid.scrollTop = top;
+    this.watchFresh(grid);
     this.albumFoot();
     this.paintNote();
+  }
+
+  // 新照片的格子捲進畫面一半以上，就算看到了（記在 shown，收起行囊時才熄）
+  watchFresh(grid) {
+    this.looking?.disconnect();
+    this.looking = null;
+    const list = album(), cells = grid ? [...grid.querySelectorAll('.ph-cell[data-i]')].filter((c) => list[c.dataset.i]?.fresh) : [];
+    if (!cells.length) return;
+    this.shown ??= new Set();
+    this.looking = new IntersectionObserver((es) => {
+      for (const e of es) if (e.isIntersecting) this.shown.add(list[e.target.dataset.i]);
+    }, { root: grid, threshold: 0.5 });
+    for (const c of cells) this.looking.observe(c);
   }
 
   savePage(mirror) {
@@ -290,13 +309,15 @@ export class Pack {
     const note = '<p class="album-note" hidden></p>';
     if (!list.length) return '<p class="pack-how">還沒有照片。拍的照片、錄影、明信片、鏡中的照片都先收在這裡</p>' + note;
     const cells = list.map((it, i) => {
-      if (it.state === 'lab') return `<div class="ph-cell slip"><span>取件單</span><small>${LABS[it.lab]?.name ?? ''}</small></div>`;
+      if (it.state === 'lab') return `<div class="ph-cell slip"><i class="ink lit"></i><span>取件單</span><small>${LABS[it.lab]?.name ?? ''}</small></div>`;
       const on = this.chosen.has(it) ? ' on' : '';
       if (!visible(it)) return `<button class="ph-cell film${on}" data-i="${i}"><span>${hourMark(it.t)}</span><i class="chk"></i></button>`;
       const label = it.state === 'back' && LABS[it.lab] ? LABS[it.lab].style
         : it.kind === 'video' ? `${KINDS.video} ${clock(it.dur)}` : KINDS[it.kind];
       const tag = label ? `<b>${label}</b>` : '';
-      return `<button class="ph-cell${on}" data-i="${i}"><img src="${this.thumb(it.poster ?? it.blob)}" alt="" loading="lazy">${tag}<i class="chk"></i><i class="zoom" title="看大圖"></i></button>`;
+      // 等過的（師傅那裡拿回來的）左上角一顆印：新的亮著，看過剩淡印
+      const ink = it.fresh ? '<i class="ink lit"></i>' : it.state === 'back' ? '<i class="ink"></i>' : '';
+      return `<button class="ph-cell${on}" data-i="${i}"><img src="${this.thumb(it.poster ?? it.blob)}" alt="" loading="lazy">${tag}${ink}<i class="chk"></i><i class="zoom" title="看大圖"></i></button>`;
     }).join('');
     const labs = Object.entries(LABS).map(([id, L]) => `<button data-act="lab" data-lab="${id}" disabled>交給${L.name}</button>`).join('');
     return `<div class="album-sel"><span class="album-n"></span><button data-act="all">全選</button></div>

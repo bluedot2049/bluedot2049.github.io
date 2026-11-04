@@ -351,6 +351,7 @@ export class Multiplayer {
       const ch = this.claudes.has(m.id) ? new Lantern(this.shadowTex) : new Character(this.shadowTex, this.looks.get(m.id) || fallbackLook(m.id));
       ch.setCamera?.(this.cams.get(m.id));
       ch.onLand = this.events.onLand;
+      ch.onStep = this.events.onStep;
       ch.onEmote = this.events.onEmote;
       this.scene.add(ch.group);
       o = { id: m.id, ch, pos: new THREE.Vector3(m.x, 0, m.z), heading: m.h, speed: 0, verified: this.present.has(m.id), born: performance.now(), lens: null };
@@ -387,18 +388,18 @@ export class Multiplayer {
     }
   }
 
-  // 只送「跳了」這件事，高度由各自的畫面照同樣的重力算
-  jump() {
+  // 只送「跳了」這件事，高度由各自的畫面照同樣的重力算；k 是跳幾成高（點自己的小跳 0.55，平常不送）
+  jump(k = 1) {
     const now = performance.now();
     if (!this.active || now - this.lastJump < JUMP_GAP) return;
     this.lastJump = now;
-    this.channel.send({ type: 'broadcast', event: 'jump', payload: { id: this.id } });
+    this.channel.send({ type: 'broadcast', event: 'jump', payload: k < 1 ? { id: this.id, k } : { id: this.id } });
   }
 
   onJump(m) {
     const o = m && isId(m.id) ? this.others.get(m.id) : null;
     if (o && o.ch.group.visible) {
-      o.ch.jump();
+      o.ch.jump(m.k > 0 && m.k <= 1 ? m.k : 1);
       this.events.onJump?.(o);
     }
   }
@@ -619,7 +620,8 @@ export class Multiplayer {
       const world = this.player.world, seat = t.s > 0 ? world.outdoor.seats[t.s - 1] : null;
       o.pos.y = world.groundY(o.pos.x, o.pos.z, t.y ?? o.pos.y);
       o.ch.sitting = t.s !== 0;
-      if (t.s) o.ch.lift = seat ? seat.lift : 0.02;
+      if (t.s) o.ch.lift = seat ? seat.lift : t.s === -3 ? 0.3 : 0.02;   // -3 坐在邊上垂腳（player.sitCode）
+      o.ch.lying = t.s === -2;
       if (t.f !== o.ch.foodCode) o.ch.setFoodCode(t.f);
       o.ch.setAim?.(t.a ? { grip: t.a - 1, pitch: t.q } : null);
       this.updateLens(o, dt);
@@ -637,6 +639,7 @@ export class Multiplayer {
       }
       g.position.copy(o.pos);
       g.rotation.y = o.heading;
+      o.ch.asleep = !!t.w;   // 掛機的人眼睛閉著
       o.ch.update(dt, t.s ? 0 : o.speed);
       if (o.speed > 0.05 || o.ch.busy) moving = true;
       // 掛機：頭上冒 ZZZ。換成燈籠或換了樣子，角色會重做，Z 跟著搬過去

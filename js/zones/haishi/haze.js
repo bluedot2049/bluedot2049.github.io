@@ -170,6 +170,33 @@ export function pools(list, gain = 1) {
   return finish(g, mat, 3);
 }
 
+// 手上的燈籠、蠟燭照在腳邊的光：跟 pools 同一套畫法，位置每幀改。n 個，給自己和在場的人；沒拿燈的收到地底
+export function handLamps(n = 4) {
+  const mesh = pools(Array.from({ length: n }, () => ({ x: 0, y: -1e3, z: 0, r: 1.3, color: '#ffa060', a: 0.35 })), 1.8);
+  const pos = mesh.geometry.attributes.aPos, rad = mesh.geometry.attributes.aR;
+  pos.setUsage(THREE.DynamicDrawUsage);
+  rad.setUsage(THREE.DynamicDrawUsage);
+  const SIZE = { lantern: 1.3, candle: 0.7 };
+  return {
+    mesh,
+    // chars：角色們（Character），拿著燈的前 n 個照在腳邊
+    update(chars) {
+      let i = 0;
+      for (const ch of chars) {
+        if (i >= n) break;
+        const r = ch?.look && SIZE[ch.look.hand];
+        if (!r || !ch.group.visible) continue;
+        const p = ch.group.position;
+        pos.setXYZ(i, p.x, p.y + 0.03, p.z);
+        rad.setX(i++, r);
+      }
+      for (; i < n; i++) pos.setY(i, -1e3);
+      pos.needsUpdate = true;
+      rad.needsUpdate = true;
+    },
+  };
+}
+
 // 海面上的燈影：碼頭和棧橋的燈籠倒映在水上，一條一條往外拉長、斷斷續續地晃。
 // 每條平貼在水面，從燈的正下方往 +z（海那邊）拉出去
 export function ripples(list, sea) {

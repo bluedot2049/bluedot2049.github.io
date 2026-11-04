@@ -412,12 +412,16 @@ export function adScreens({ coarse = false } = {}) {
       g.applyMatrix4(_m.compose(new THREE.Vector3(x, y, z), _q.setFromEuler(_e), new THREE.Vector3(1, 1, 1)));
       kinds[kind].list.push(g);
     },
+    // 回傳每一種的網格（{ bill, menu, ... }），要跟著別的東西一起藏的（大螢幕跟著架子淡掉）拿得到
     build(group, merge) {
-      for (const K of Object.values(kinds)) {
+      const out = {};
+      for (const [name, K] of Object.entries(kinds)) {
         if (!K.list.length) continue;
         const mesh = new THREE.Mesh(merge(K.list), slideMaterial(atlas(K.draw, K.cols, K.rows, K.cw, K.ch), K.cols, K.rows));
         group.add(mesh);
+        out[name] = mesh;
       }
+      return out;
     },
   };
 }

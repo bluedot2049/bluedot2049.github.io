@@ -5,6 +5,7 @@ import { buildJinghai } from './jinghai.js';
 import { buildManatees } from './manatees.js';
 import { burgerCounter } from './jinghai-burger.js';
 import { stallCounter } from './jinghai-stalls.js';
+import { liftCounter } from './jinghai-lift.js';
 import { buildGuests } from './jinghai-guests.js';
 import { ATRIUM, CANTEEN, CONTROL, STORE, LEVELS } from './jinghai-hq.js';
 import { BURGER } from './jinghai-burger.js';
@@ -27,7 +28,7 @@ export function build(scene, { coarse, params, renderer }) {
 const mid = (b) => ({ x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2 });
 export function guide() {
   return [
-    { id: 'atrium', name: '大廳', tag: '汽水吧', x: 0, z: ATRIUM.z1 - 6, place: '大廳' },
+    { id: 'atrium', name: '大廳', tag: '透明電梯', x: 0, z: ATRIUM.z1 - 6, place: '大廳' },
     { id: 'canteen', name: '食堂', ...mid(CANTEEN), place: '食堂' },
     { id: 'galleria', name: '商店街', tag: '冰淇淋', x: 24, z: 0, place: '商店街' },
     { id: 'store', name: '百貨公司', x: STORE.x0 - 2, z: 4, r: 8 },   // 百貨公司裡面進不去、商店街盡頭中間也擋著：站在門口南邊那條走道上
@@ -49,13 +50,20 @@ export function env(world) {
 export function crowd({ scene, world, shadowTex, coarse, params, ambience, player, ui }) {
   const burger = burgerCounter({ shop: world.burger, harvest: world.harvest, player, ui, ambience, board: world.burger.orderBoard });
   const stalls = stallCounter({ player, ui, ambience });
+  // 透明電梯：站進車廂按一下就走，另一站門口按「叫電梯」
+  const lift = liftCounter({ lift: world.lift, player });
   world.burger.hear = (kind, vol) => ambience?.voice(kind, vol);
-  // 兩邊一起當一個攤販：離得近的那個
+  world.lift.hear = (kind, vol) => ambience?.voice(kind, vol);
+  // 幾邊一起當一個攤販：離得近的那個
   const vendors = {
     list: [],
     nearest(x, z) {
-      const a = burger.nearest(x, z), b = stalls.nearest(x, z);
-      return !a ? b : !b ? a : a.d <= b.d ? a : b;
+      let best = null;
+      for (const c of [burger, stalls, lift]) {
+        const n = c.nearest(x, z);
+        if (n && (!best || n.d < best.d)) best = n;
+      }
+      return best;
     },
     blocks: () => false,
     seatBusy: () => false,

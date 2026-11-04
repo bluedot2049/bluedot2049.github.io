@@ -11,8 +11,8 @@
 // 越肩鎖住滑鼠時另有「舉相機」（quick）：右鍵按住舉起來、左鍵快門，放開右鍵一幀切回肩後；短按右鍵是一直舉著，再按一次放下。
 // 舉起和放下時按著的走路鍵接著算，人不會停一下。
 // 帶相機是手持取景，沒帶就是畫廊的眼睛當空拍機飛出去（WASD 飛、E/Q 升降、Shift 快）。介面全收起來，拍好收進相簿（album.js），最後在行囊選片。
-// 舉相機的對焦像攝影師的「背鍵對焦」：舉起來時相機朝準心對到的那一點看、對焦在那裡，然後鎖住，怎麼重新構圖都不跑；
-// R 對準心重新對焦，按住一直追焦、放開鎖住；Shift+滾輪是手動對焦環。對焦快慢、等不等焦照相機的 af。
+// 對焦只有一條：對焦點底下的東西一直對著。對焦點平常在準心（畫面正中間），完整攝影模式點一下換到那裡；
+// 舉起來時相機朝準心剛才對到的那一點看，接著瞄到哪對到哪。快慢、找焦、等不等焦照相機的 af，沒有要按的鍵。
 // 舉著時滾輪換高低（蹲低、眼高、舉高），中鍵切自拍；Q 閃光、~ 日期、L 看鏡、F 直橫（攝影模式裡都能按）。舉起和切自拍時先黑一下（darken）。相機的快門、閃光、日期、看鏡照樣顯示，標上按鍵。
 // 看鏡（lookOn）：開著時自己的頭一直看著鏡頭，關著就隨意看（attention.js）。鏡頭的位置和方向由 lensInfo 給別人和自己的頭
 import * as THREE from 'three';
@@ -28,6 +28,9 @@ import { MARKS, markURL } from './marks.js';
 import { dof, dofK } from '../core/dof.js';
 import { addPhoto, canShare, discard, saveChosen, saveTip, shareChosen } from './album.js';
 import { pref, setPref, dropPref } from '../save/prefs.js';
+import { onFreshTouch } from '../controls/touch.js';
+import { padName, faceName } from '../controls/padglyphs.js';
+import { rumble } from '../controls/gamepad.js';
 
 const ASPECTS = [
   { label: '螢幕', r: 0 },
@@ -64,6 +67,8 @@ const GRIPS = ['蹲低', '眼高', '舉高', '自拍'];
 const HOLD_MS = 280, MAX_EXPOSE = 10;
 const GEAR_KEY = 'photoGear';
 const WALK_KEYS = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']);
+// 自動對焦：隔幾秒量一次對焦點底下多遠、差多少（屈光度，1/公尺）才轉過去、轉了多少才嗶一聲報距離
+const AF_EVERY = 0.12, AF_SLACK = 0.03, AF_BEEP = 0.3;
 // 長曝光：每幀先把亮部撐開再加起來，燈籠拖出的光痕才不會灰灰的，最後再壓回來
 const EXPAND = 0.9;
 const QUAD_VERT = /* glsl */ `
@@ -162,6 +167,8 @@ export class PhotoMode {
     this.dateOn = 0;                        // 日期印記，0 年月日、1 不印、2 月日（0、1 跟以前的開、關一樣）
     this.focusD = 3;                        // 對焦的距離（公尺）
     this.af = null;                         // 正在對焦 { from, to, t }
+    this.afPoint = null;                    // 對焦點在畫面上的位置 { x, y }；null 是正中間（準心）
+    this.afCheck = 0;                       // 隔多久再量一次對焦點底下多遠
     this.bulbAt = 0;                        // 燈泡換好的時間（performance.now）
     this.pressing = null;                   // 按著快門還沒放開 { timer }
     this.expo = null;                       // 長曝光中
@@ -311,7 +318,7 @@ export class PhotoMode {
   exit() {
     if (!this.active) return;
     const quick = this.quick;
-    this.afHold = false;
+    this.afPoint = null;
     this.pendingShot = false;
     this.aimTarget = null;
     clearTimeout(this.afTimer);
@@ -492,11 +499,14 @@ export class PhotoMode {
 
   // 第一次舉相機、第一次放空拍機時說一下怎麼操作（介面都收起來了，用右上的小提示）
   quickHint() {
-    const key = this.gear ? 'held' : 'drone';
+    const pad = document.body.classList.contains('pad'), lb = document.body.dataset.padLabels || null;
+    const key = (pad ? 'pad-' : '') + (this.gear ? 'held' : 'drone');
     this.told ??= {};
     if (this.told[key]) return;
     this.told[key] = true;
-    if (this.gear) this.ui.toast('舉起就對準心對焦鎖定，左鍵拍照', 'R 重新對焦，按住追焦　Shift＋滾輪手動對焦　放開右鍵放下');
+    if (pad && this.gear) this.ui.toast(`準心對著的會自己對焦，${padName(7, lb)} 拍照`, `十字鍵上下換高低　${faceName(3, lb)} 自拍　放開 ${padName(6, lb)} 放下`);
+    else if (pad) this.ui.toast('空拍機：左搖桿飛、十字鍵上下升降', `${padName(7, lb)} 拍照　十字鍵左右變焦　放開 ${padName(6, lb)} 收回`);
+    else if (this.gear) this.ui.toast('準心對著的會自己對焦，左鍵拍照', '滾輪換高低　中鍵自拍　放開右鍵放下');
     else this.ui.toast('空拍機：WASD 飛、E / Q 升降', '左鍵拍照　滾輪變焦　F 直橫　放開右鍵收回　短按右鍵一直飛');
   }
 
@@ -784,13 +794,20 @@ export class PhotoMode {
     };
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
+    // 放開沒送到的手指清掉，跟走路時的拖鏡頭一樣（player.js、touch.js）
+    const forget = (id) => {
+      if (!pts.delete(id)) return;
+      if (pts.size < 2) pinch = null;
+      if (pts.size === 0) multi = false;
+    };
+    el.addEventListener('lostpointercapture', (e) => forget(e.pointerId));
+    onFreshTouch(() => { for (const [id, p] of pts) if (!p.mouse) forget(id); });
     el.addEventListener('wheel', (e) => {
       if (!this.active) return;
       e.preventDefault();
-      // 舉相機：滾輪換高低，Shift+滾輪是手動對焦環
-      if (this.gear && this.quick) e.shiftKey ? this.focusRing(e.deltaY) : this.gripWheel(e.deltaY);
-      // 帶著相機：滾輪是手動對焦環（定焦鏡；之後有變焦鏡的相機就 Shift+滾輪對焦）
-      else if (this.gear) this.gear.prime || e.shiftKey ? this.focusRing(e.deltaY) : this.primeNote();
+      // 舉相機：滾輪換高低。完整攝影模式帶著定焦鏡不能變焦，提醒走近退後
+      if (this.gear && this.quick) this.gripWheel(e.deltaY);
+      else if (this.gear) this.primeNote();
       else if (this.pushing()) this.push(Math.exp(e.deltaY * 0.0015));
       else this.zoomBy(this.fov * (1 + e.deltaY * 0.001));
     }, { passive: false });
@@ -816,11 +833,9 @@ export class PhotoMode {
       if (e.code === 'Backquote' && this.gear?.date) return e.repeat || this.toggleDate();
       if (e.key === 'l' || e.key === 'L') return e.repeat || this.toggleLook();
       if ((e.key === 'f' || e.key === 'F') && !this.studio) return e.repeat || this.turn();
-      if ((e.key === 'r' || e.key === 'R') && this.gear) return e.repeat || (this.quick ? this.refocusButton(true) : this.focusAt(window.innerWidth / 2, window.innerHeight / 2));
       this.keys.add(e.key.toLowerCase());
     });
     window.addEventListener('keyup', (e) => {
-      if ((e.key === 'r' || e.key === 'R') && this.afHold) this.refocusButton(false);
       if (e.key === ' ' && this.holdable()) this.shutterUp();
       this.keys.delete(e.key.toLowerCase());
     });
@@ -830,6 +845,32 @@ export class PhotoMode {
   setJoystick(x, y) {
     this.joy.x = x;
     this.joy.y = y;
+  }
+
+  // ───────── 手把（gamepad.js）─────────
+
+  // 右搖桿：這一幀轉多少（弧度），望遠時轉得細，跟滑鼠一樣
+  padLook(dyaw, dpitch) {
+    if (!this.active || this.studio || (!dyaw && !dpitch)) return;
+    const k = Math.min(1, this.fov / 60);
+    this.aimYaw -= dyaw * k;
+    this.aimPitch = THREE.MathUtils.clamp(this.aimPitch - dpitch * k, -1.5, 1.5);
+  }
+
+  // 空拍機：十字鍵上下是升降（-1～1），按下左搖桿加速
+  padFly(u, fast) {
+    this.padU = u;
+    this.padFast = fast;
+  }
+
+  // 快門：舉相機時跟左鍵一樣，完整攝影模式跟空白鍵一樣，長曝光都是按住；cancel 是手把斷了，長曝光不算
+  shutter(down, cancel = false) {
+    if (!this.active) return;
+    if (cancel) return this.shutterUp(true);
+    if (this.result) return;
+    if (this.quick) return this.quickShutter(down);
+    if (down) this.holdable() ? this.shutterDown() : this.press();
+    else if (this.holdable()) this.shutterUp();
   }
 
   zoom(fov) {
@@ -1009,10 +1050,10 @@ export class PhotoMode {
     const k = this.keys;
     let f = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
     let s = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
-    const u = (k.has('e') ? 1 : 0) - (k.has('q') ? 1 : 0) + this.lift;
+    const u = (k.has('e') ? 1 : 0) - (k.has('q') ? 1 : 0) + this.lift + (this.padU || 0);
     const jm = Math.hypot(this.joy.x, this.joy.y);
     if (jm > 0.12) { f = -this.joy.y; s = this.joy.x; }
-    const fast = k.has('shift') ? 3 : 1;
+    const fast = k.has('shift') || this.padFast ? 3 : 1;
     // 平平地往前後左右走，不跟著抬頭低頭往天上飛；升降另外按，改的是離地高度，越高升得越快
     const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
     if (u) this.setHeight(this.height + u * (0.6 + this.height * 0.6) * fast * dt);
@@ -1122,16 +1163,13 @@ export class PhotoMode {
     this.applyLens();
     if (this.needAF) {
       this.needAF = false;
-      // 舉相機：從原本的焦距轉到準心那一點，照這台相機的速度找焦，對好就鎖住
-      if (tgt && this.gear.focus === 'tap') this.afTo(this.aimDist, window.innerWidth / 2, window.innerHeight / 2);
+      this.afCheck = AF_EVERY;
+      // 舉相機：從原本的焦距轉到準心那一點，照這台相機的速度找焦
+      if (tgt && this.gear.focus === 'auto') this.afTo(this.aimDist, window.innerWidth / 2, window.innerHeight / 2, true);
       else this.focusD = this.depthAt(0, 0);
     }
     this.aimTarget = null;
-    // 中鍵按住：一直追著畫面中間對焦，放開就鎖在最後的距離
-    if (this.afHold && !this.af && (this.afCheck = (this.afCheck || 0) - dt) <= 0) {
-      this.afCheck = 0.25;
-      if (Math.abs(1 / this.depthAt(0, 0) - 1 / this.focusD) > 0.1) this.focusAt(window.innerWidth / 2, window.innerHeight / 2);
-    }
+    this.followFocus(dt);
 
     // 對焦環轉向要的距離：在屈光度上轉，近的地方轉得細、遠的一下就到；快到時多轉一點再退回來，像在找焦
     const af = this.af;
@@ -1142,7 +1180,7 @@ export class PhotoMode {
       if (af.t >= 1) {
         this.focusD = af.to;
         this.af = null;
-        this.focused();
+        this.focused(af.big);
       }
     }
     dof.focus = this.focusD;
@@ -1172,40 +1210,33 @@ export class PhotoMode {
     return d === Infinity ? 80 : d;
   }
 
-  // 點一下對焦：對焦框跳到點的地方，對焦環慢慢轉過去
+  // 完整攝影模式點一下：對焦點換到點的地方，之後一直對著那裡底下的東西（followFocus）
   focusAt(x, y) {
     const fr = this.frame;
-    if (x < fr.x || x > fr.x + fr.w || y < fr.y || y > fr.y + fr.h || this.gear.focus !== 'tap') return;
-    this.afTo(this.depthAt((x / window.innerWidth) * 2 - 1, 1 - (y / window.innerHeight) * 2), x, y);
+    if (x < fr.x || x > fr.x + fr.w || y < fr.y || y > fr.y + fr.h || this.gear.focus !== 'auto') return;
+    this.afPoint = { x, y };
+    this.afCheck = AF_EVERY;
+    this.afTo(this.depthAt((x / window.innerWidth) * 2 - 1, 1 - (y / window.innerHeight) * 2), x, y, true);
   }
 
-  // 對焦到距離 d，對焦框放在 (x, y)
-  afTo(d, x, y) {
-    this.af = { from: this.focusD, to: d, t: 0 };
+  // 對焦點底下的東西一直對著：隔一下量一次多遠，差得夠多就照這台相機的快慢轉過去。
+  // 轉到一半換了目標，從現在的焦距接著轉；舉相機時對焦點固定在準心
+  followFocus(dt) {
+    if (this.gear.focus !== 'auto' || (this.afCheck -= dt) > 0) return;
+    this.afCheck = AF_EVERY;
+    const W = window.innerWidth, H = window.innerHeight, p = (!this.quick && this.afPoint) || { x: W / 2, y: H / 2 };
+    const d = this.depthAt((p.x / W) * 2 - 1, 1 - (p.y / H) * 2);
+    if (Math.abs(1 / d - 1 / (this.af ? this.af.to : this.focusD)) > AF_SLACK) this.afTo(d, p.x, p.y);
+  }
+
+  // 對焦到距離 d，對焦框放在 (x, y)。big：這一串轉了不少（或是舉起、點了才開始的），對到時嗶一聲、報距離；跟著小晃動的不出聲
+  afTo(d, x, y, loud = false) {
+    const big = loud || !!this.af?.big || Math.abs(1 / d - 1 / this.focusD) > AF_BEEP;
+    this.af = { from: this.focusD, to: d, t: 0, big };
     const el = this.$('#ph-af');
     Object.assign(el.style, { left: x + 'px', top: y + 'px' });
     el.className = 'hunt';
     clearTimeout(this.afTimer);
-  }
-
-  // 手動對焦環：在屈光度上轉，近處轉得細、遠處一下就到。往前轉對遠、往後轉對近
-  focusRing(dy) {
-    if (this.gear.focus !== 'tap') return this.primeNote();
-    this.af = null;
-    this.afHold = false;
-    this.pendingShot = false;
-    this.focusD = 1 / THREE.MathUtils.clamp(1 / this.focusD + dy * 0.002, 1 / 80, 1 / 0.3);
-    clearTimeout(this.afTimer);
-    this.$('#ph-af').className = '';
-    this.showZoom(`手動對焦 ${dist(this.focusD)}`);
-  }
-
-  // 舉著相機時 R：按一下對準心重新對焦；按住一直追焦，放開鎖住
-  refocusButton(down) {
-    if (!this.active || !this.quick || !this.gear) return;
-    this.afHold = down;
-    this.afCheck = 0.25;
-    if (down) this.focusAt(window.innerWidth / 2, window.innerHeight / 2);
   }
 
   // 舉著相機時滾輪：往上舉高、往下蹲低，到頭就停；一格換一段，觸控板一滑送很多次也只換一段。自拍時不理
@@ -1234,8 +1265,7 @@ export class PhotoMode {
     this.snapHand = true;
     this.darken();
     this.refresh();
-    clearTimeout(this.selfieAF);
-    this.selfieAF = setTimeout(() => { if (this.active && this.quick && this.gear) this.focusAt(window.innerWidth / 2, window.innerHeight / 2); }, 120);
+    this.afCheck = AF_EVERY;   // 手先轉到位，下一次量的時候自己對過去
   }
 
   // 眼睛貼上觀景窗：舉起相機、切自拍時鏡頭一下換了位置，墨色蓋住一下再淡開，不硬切。只蓋在畫面上，不進照片
@@ -1257,16 +1287,19 @@ export class PhotoMode {
     this.refresh();
   }
 
-  // 對到焦：嗶兩聲，框停住，過一下淡掉。鎖住以後轉動鏡頭焦距也不變，可以先對焦再構圖
-  focused() {
+  // 對到焦：框停住（舉相機時一直留著，完整攝影模式過一下淡掉）。轉得多才嗶一聲、報距離，跟著小晃動的不吵
+  focused(big = false) {
     const el = this.$('#ph-af');
     if (el.className === 'hunt') {
       el.className = 'lock';
-      // 舉相機時對焦框留著，表示焦點鎖住了；按住中鍵追焦時不用一直閃
       if (!this.quick) this.afTimer = setTimeout(() => { el.className = ''; }, 1300);
     }
-    if (!this.afHold) this.ambience.voice('focus', 0.35);
-    this.showZoom(this.quick && !this.afHold ? `對焦鎖定 ${dist(this.focusD)}` : `對焦 ${dist(this.focusD)}`);
+    const now = performance.now();
+    if (big && now - (this.beepT || 0) > 500) {
+      this.beepT = now;
+      this.ambience.voice('focus', 0.35);
+      this.showZoom(`對焦 ${dist(this.focusD)}`);
+    }
     // 對好才放快門的相機：剛才按了快門，現在拍
     if (this.pendingShot) {
       this.pendingShot = false;
@@ -1469,6 +1502,7 @@ export class PhotoMode {
   // 閃過了：啪一聲，鏡頭前飄過一陣煙，接著換燈泡
   fired() {
     this.ambience.voice('flash', 0.7);
+    rumble('flash');
     this.onFlash?.();
     const bulb = this.gear.flash.bulb;
     if (!bulb) return;
@@ -1625,6 +1659,7 @@ export class PhotoMode {
     const rare = dry || this.postcard ? null : this.rareShot(fire);
     // 快門聲在畫大圖之前就發：手機畫一張要卡一下，放在後面會比按下去晚。閃光的聲音在 fired()
     if (!dry && !fire) this.ambience.voice(this.studio ? 'oldshutter' : this.gear ? 'shutter' : 'blink', 0.5);
+    if (!dry && !fire) rumble('shutter');
     const fr = this.frame, r = this.renderer, cam = this.camera;
     const W = window.innerWidth, H = window.innerHeight;
     // 長邊：電腦 3840、手機 2560，不超過顯示卡能畫的大小

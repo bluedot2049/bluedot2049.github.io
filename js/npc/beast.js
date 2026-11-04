@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { buildBeast, BODY_Y, HORN_TIPS, PRINTS } from './beast-models.js';
 import { judgeShot } from './beast-judge.js';
 import { hash, seedOf, serverNow, syncTime } from '../core/servertime.js';
+import { rumble } from '../controls/gamepad.js';
 
 const SLOT = 60e3;              // 一格一分鐘
 const CHANCE = 1 / 120;         // 一格抽中的機率
@@ -305,6 +306,8 @@ export class Beast {
       const dx = b.x - ear.x, dz = b.z - ear.z, d = Math.hypot(dx, b.y - ear.y, dz);
       const vol = kind === 'omen' ? 0.5 * Math.max(0.16, 1 - d / 150) : 0.55 * Math.max(0.1, 1 - d / 60);
       am.voice(kind, vol, am.panOf(dx, dz, d), pitch);
+      // 手把跟著鈴聲震一下：前兆在 150 公尺內、現身在 60 公尺內才震
+      if ((kind === 'omen' && d < 150) || (kind === 'beast' && d < 60)) rumble(kind);
       if (kind !== 'leap') this.attention?.notice('beast', (o) => !!(this.sight && o.copy(this.sight)), { kind: 'thing', dur: 2.2 });
     }
   }

@@ -11,7 +11,7 @@
   3. 生成 css/alchemy-font.css (供網頁直接 @font-face 引用，網址帶字型的雜湊，改字後不會讀到舊的快取)
   4. 生成 js/core/alchemy-glyphs.js：有哪些字，房間名稱缺字時整句改用一般字型
   5. 每個字重跑一次留白檢查
-  6. 掃一遍地名（js 裡帶 subtitle 的 name、rooms 的 room.json），列出還沒造的字
+  6. 掃一遍地名（js 裡帶 subtitle 的 name、rooms 的 room.json）和手機印章上的字（.seal），列出還沒造的字
 """
 import hashlib
 import json
@@ -131,18 +131,40 @@ def place_names():
     return names
 
 
-def check_place_names():
-    missing = {}
-    for name in sorted(place_names()):
+def seal_texts():
+    """手機印章（css/hud.css 的 .seal）上的字：index.html 裡 .seal 按鈕的字，加上 js 裡 seal = … 那行換上去的字（main.js 坐的那顆：坐、躺、起）"""
+    texts = set(re.findall(r'class="seal"[^>]*>([^<]+)<', (ROOT / 'index.html').read_text(encoding='utf-8')))
+    pat = re.compile(r"\bseal = ([^;\n]+)")
+    for f in (ROOT / 'js').rglob('*.js'):
+        for expr in pat.findall(f.read_text(encoding='utf-8')):
+            texts.update(re.findall(r"'([^']+)'", expr))
+    return texts
+
+
+def lacking(names):
+    """{名稱: 缺的字}，只列有缺字的"""
+    out = {}
+    for name in sorted(names):
         lack = ''.join(dict.fromkeys(c for c in name if HANZI.match(c) and c not in GLYPH_REGISTRY))
         if lack:
-            missing[name] = lack
+            out[name] = lack
+    return out
+
+
+def check_place_names():
+    missing = lacking(place_names())
     if missing:
         print(f"[!] 地名缺字（這些名稱會整句用一般字型）：")
         for name, lack in missing.items():
             print(f"    {name}：缺 {lack}")
     else:
         print("[OK] 地名的字都造過了")
+    # 印章是一個字一顆，缺的字退回一般字型（.seal 的 font-family 後面接 var(--font)），字畫在 buttons.py
+    missing = lacking(seal_texts())
+    if missing:
+        print(f"[!] 印章缺字（會退回一般字型，補在 tools/font_engine/buttons.py）：{''.join(dict.fromkeys(''.join(missing.values())))}")
+    else:
+        print("[OK] 印章的字都造過了")
 
 def main():
     print(f"[*] 開始編譯煉金體字型庫...")

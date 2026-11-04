@@ -10,6 +10,7 @@ import { HEADS, rod } from './heads.js';
 import { HAT_COLORS, HAIR_COLORS, SKINS, CLOTH, FACE, FACE_INK, raceOf, sizes, sanitizeLook, lookKey, decodeFace } from './looks.js';
 import { strapModel, cameraModel } from '../camera/cameras.js';
 import { HIP, HOODED, HAND_POSE, bodyGeo, armGeo, legGeo, capeGeo, capeAt, wingGeo, wingAt, hasWings, tailGeo, tailAt, handGeo, hood } from './clothes.js';
+import { BREEZE } from '../core/weather.js';
 
 function mat(color) {
   return new THREE.MeshLambertMaterial({ color, flatShading: true });
@@ -28,7 +29,19 @@ const PET_TIME = 2.4;      // 摸動物摸多久
 const ARM_OUT = 0.28;
 const NECK = 0.8;          // 頭的原點（脖子）離腳底多高，身高另外整個縮放
 const SIT_TIME = 0.8;      // 坐下或站起來花幾秒
+const LIE_TIME = 0.9;      // 從坐著躺下去（或坐起來）花幾秒
 const SEAT_BUTT = 0.3;     // 屁股（褲子）底部離身體原點多高，clothes.js 的 hip() 從這裡開始
+const PRE_JUMP = 0.09;     // 起跳前蹲多久
+const LAND_TIME = 0.22;    // 落地沉一下多久
+const BLINK_DOWN = 0.07, BLINK_UP = 0.12;   // 眨眼：閉上、睜開各多久
+// 左手垂著的東西跟著手盪多少（負的是氣球這種拖在後面的）、擺的快慢（每秒弧度，沒寫的是 6）、擺長（公尺）
+const SWING = { lantern: 1, fish: 0.9, staff: 0.35, baguette: 0.3, flower: 0.5, boba: 0.25, candle: 0.2, flask: 0.3, teacup: 0.12, brush: 0.2, balloon: -0.6 };
+const SWING_W = { balloon: 2.2 };
+const SWING_L = 0.3;
+// 右手壓住帽子的手勢（armR 的 x、y、z）：手舉到頭旁邊，帽子再往手那邊低下去
+const HAT_ARM = [-3.0, 0, 0.42];
+const clampTo = (v, m) => Math.min(m, Math.max(-m, v));
+const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const WHITE = '#f4f2ec', GOLD = '#d4a54a';
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -128,6 +141,27 @@ function decalGeo(m) {
 
 const INK_RGB = FACE_INK.map((c) => (c ? [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)) : null));
 
+// 畫的臉的著色器：框住的眼睛（uEye，貼圖座標 x0 y0 x1 y1）照 uBlink 往框的中線壓扁，壓到框外的像素不畫（底下的皮膚露出來），
+// 再照 uLook 整框平移一點（瞟一眼）。沒框就跟原本一樣。接在 Lambert 材質的 map_fragment 那一段
+const FACE_GLSL_HEAD = 'uniform vec4 uEye[2]; uniform int uEyeN; uniform float uBlink; uniform vec2 uLook;\n';
+const FACE_GLSL_MAP = `
+#ifdef USE_MAP
+  vec2 fuv = vMapUv;
+  for (int i = 0; i < 2; i++) {
+    if (i >= uEyeN) break;
+    vec4 e = uEye[i];
+    if (fuv.x < e.x || fuv.x > e.z || fuv.y < e.y || fuv.y > e.w) continue;
+    float cy = 0.5 * (e.y + e.w);
+    vec2 p = vec2(fuv.x, cy + (fuv.y - cy) / max(0.06, 1.0 - uBlink)) - uLook;
+    if (p.y < e.y || p.y > e.w) discard;
+    fuv = clamp(p, e.xy, e.zw);
+    break;
+  }
+  vec4 sampledDiffuseColor = texture2D( map, fuv );
+  diffuseColor *= sampledDiffuseColor;
+#endif
+`;
+
 // 戴帽子時讓開頭髮：lift 帽子往上抬多少、grow 放大幾倍；top 是頭髮頂多高（鏡子取景用）。沒寫的照原本的帽子
 const HAIR_FIT = { afro: { lift: 0.17, grow: 1.4, top: 0.6 }, buns: { lift: 0.03, grow: 1.12, top: 0.46 }, spiky: { top: 0.52 } };
 // 戴頭套、頭盔時頭髮收進去，大頭髮只留貼著頭的那一層
@@ -174,8 +208,9 @@ function hair(k, style, c, hat = false) {
   }
 }
 
-// 五官：照臉的表面一個一個貼上去。眼睛、眉毛、鼻子、嘴巴的位置都從眼睛的高度往下排
-function features(k, L, race, S, m, skin) {
+// 五官：照臉的表面一個一個貼上去。眼睛、眉毛、鼻子、嘴巴的位置都從眼睛的高度往下排。
+// 眼睛另外放進兩個零件（ke 眼白、閉著的線、眼皮；kp 眼珠），Character 掛在自己的關節上：眨眼整組壓扁，看東西時眼珠先溜過去
+function features(k, ke, kp, L, race, S, m, skin) {
   const fs = race.fs ?? 1, ink = race.ink || '#1a120c', base = race.base || skin;
   const hc = race.hair ? hex(HAIR_COLORS[L.hairC]) : '#3a2a22';
   const ey = race.ey + S.fy, ex = race.ex * S.eg;
@@ -184,24 +219,25 @@ function features(k, L, race, S, m, skin) {
   const zAt = (x, y, lift = 0) => surf(m, x, y) + lift;
 
   const eyeOf = (s) => ({ x: s * ex, y: ey + (s < 0 ? S.odd * 0.03 : 0), r: S.es * fs * (s < 0 ? 1 + S.odd * 0.9 : 1 - S.odd * 0.45) });
-  const white = (e, r = 0.055) => put(r * e.r, '#ffffff', e.x, e.y, 0, { sz: 0.5 });
-  const pupil = (e, dx = 0, dy = 0, r = 0.028) => put(r * e.r, ink, e.x + dx * e.r, e.y + dy * e.r, 0.016 * e.r * (r / 0.028), { sz: 0.5 });
+  const white = (e, r = 0.055) => ke.ball(r * e.r, '#ffffff', e.x, e.y, surf(m, e.x, e.y), { sz: 0.5 });
+  const pupil = (e, dx = 0, dy = 0, r = 0.028) => kp.ball(r * e.r, ink, e.x + dx * e.r, e.y + dy * e.r, surf(m, e.x + dx * e.r, e.y + dy * e.r) + 0.016 * e.r * (r / 0.028), { sz: 0.5 });
+  const dot = (r, x, y) => kp.ball(r, ink, x, y, surf(m, x, y));
   const style = L.eyes === 'base' ? (race.own ? null : 'dot') : L.eyes;
   for (const s of style === 'one' ? [0] : [-1, 1]) {
     const e = s ? eyeOf(s) : { x: 0, y: ey + 0.01, r: S.es * fs * 1.4 };
     switch (style) {
-      case 'dot': case 'three': put(0.026 * e.r, ink, e.x, e.y); break;
+      case 'dot': case 'three': dot(0.026 * e.r, e.x, e.y); break;
       case 'big': case 'one': white(e); pupil(e); break;
-      case 'line': k.torus(0.03 * e.r, 0.007 * e.r, Math.PI, ink, e.x, e.y - 0.01 * e.r, zAt(e.x, e.y, 0.003)); break;
+      case 'line': ke.torus(0.03 * e.r, 0.007 * e.r, Math.PI, ink, e.x, e.y - 0.01 * e.r, zAt(e.x, e.y, 0.003)); break;
       case 'sleepy':
         white(e, 0.05);
         pupil(e, 0, -0.012, 0.02);
-        k.box(0.11 * e.r, 0.05 * e.r, 0.03 * e.r, base, e.x, e.y + 0.022 * e.r, zAt(e.x, e.y, 0.012 * e.r));
+        ke.box(0.11 * e.r, 0.05 * e.r, 0.03 * e.r, base, e.x, e.y + 0.022 * e.r, zAt(e.x, e.y, 0.012 * e.r));
         break;
       case 'cross': white(e); pupil(e, -s * 0.022); break;
     }
   }
-  if (style === 'three') put(0.026 * S.es * fs, ink, 0, ey + 0.08 * fs);
+  if (style === 'three') dot(0.026 * S.es * fs, 0, ey + 0.08 * fs);
 
   const by = ey + (0.035 + 0.03 * S.es) * fs, bc = race.hair ? hc : ink;
   switch (L.brows) {
@@ -302,16 +338,18 @@ function glasses(k, L, race, S, m) {
   }
 }
 
+// 頭：臉、頭髮、眼鏡、頭套合成一個網格；眼睛另外兩個（眼白、眼珠）。回傳 { head, eyes, pupils }，沒有的是 null
 function headGeo(L, race, S, skin) {
-  const m = faceMap(race);
-  return build((k) => {
+  const m = faceMap(race), ke = new Kit(null), kp = new Kit(null);
+  const head = build((k) => {
     HEADS[race.head](k, skin, mix(skin, '#f8f0e4', 0.55));
     const hooded = HOODED.includes(L.one);
     if (race.hair) hair(k, hooded ? TUCKED[L.hair] ?? L.hair : L.hair, hex(HAIR_COLORS[L.hairC]), !hooded && L.hat !== 'none');
-    if (!L.face || L.keep) features(k, L, race, S, m, skin);
+    if (!L.face || L.keep) features(k, ke, kp, L, race, S, m, skin);
     glasses(k, L, race, S, m);
     hood(k, L, race);
   });
+  return { head, eyes: mergeBucket(ke.lit, false), pupils: mergeBucket(kp.lit, false) };
 }
 
 // 每種帽子從帽緣往上多高，照鏡子取景用
@@ -513,6 +551,18 @@ export class Character {
     this.decal = new THREE.Mesh(EMPTY, this.faceMat);
     this.decal.visible = false;
     head.add(this.decal);
+    // 畫的臉上框起來的眼睛（looks.js 的 decodeEyes）：著色器照 uBlink 把框裡壓扁、照 uLook 平移一點。
+    // 每個角色自己一組 uniform，程式三者共用（onBeforeCompile 一樣就同一個程式）
+    this.faceU = { uEye: { value: [new THREE.Vector4(), new THREE.Vector4()] }, uEyeN: { value: 0 }, uBlink: { value: 0 }, uLook: { value: new THREE.Vector2() } };
+    this.faceMat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, this.faceU);
+      sh.fragmentShader = FACE_GLSL_HEAD + sh.fragmentShader.replace('#include <map_fragment>', FACE_GLSL_MAP);
+    };
+    // 眼睛：自己一個關節掛在眼睛的高度，眨眼是整組往中線壓扁；眼珠再一個網格，看東西時先溜過去、頭再跟上
+    this.eyes = new THREE.Group();
+    head.add(this.eyes);
+    this.eyesMesh = mesh(this.eyes);
+    this.pupilMesh = mesh(this.eyes);
     // 太空衣的頭盔：半透明的玻璃球罩住整顆頭
     this.glassMat = new THREE.MeshLambertMaterial({ color: 0xd8ecff, transparent: true, opacity: 0.28, depthWrite: false });
     this.glass = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), this.glassMat);
@@ -543,12 +593,15 @@ export class Character {
     this.footL = pivot(HIP);
     this.footR = pivot(HIP);
     this.limbs = [this.armL, this.armR, this.footL, this.footR].map(mesh);
-    // 左手拿的東西：每一幀抵銷手臂的轉動，一直保持直立。右手留給點心
+    // 左手拿的東西：每一幀抵銷手臂的轉動，一直保持直立。右手留給點心。
+    // 底下再掛一層 handSwing：垂著的東西（燈籠、魚）跟著手的加速度盪（update 的最後）
     this.handG = new THREE.Group();
     this.handG.position.y = -0.33;
     this.handG.rotation.order = 'ZXY';
     this.armL.add(this.handG);
-    this.handMesh = mesh(this.handG);
+    this.handSwing = new THREE.Group();
+    this.handG.add(this.handSwing);
+    this.handMesh = mesh(this.handSwing);
     this.handK = 0;
 
     const shadow = footShadow(new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9)), shadowTex);
@@ -574,11 +627,34 @@ export class Character {
     this.sitting = false;
     this.sitP = 0;                 // 坐下的進度：0 站著、1 坐好，站起來時倒著走
     this.lift = 0;                 // 坐的地方離地多高
+    this.lying = false;            // 坐在地上再躺下去（player.toggleSit）
+    this.lieP = 0;                 // 躺的進度：0 坐著、1 躺平
+    this.jumpK = 1;                // 這一跳多高（點自己的小跳是 0.55）
     this.food = 0;                 // 手上的點心種類，0 是空手
     this.bites = 0;
     this.foodMesh = null;
     this.holdK = 0;
     this.biteT = 0;
+    this.preT = 0;                 // 起跳前蹲著的倒數
+    this.landT = 0;                // 落地沉一下的倒數
+    this.landA = 1;                // 這一次落地沉多重
+    this.windK = 0;                // 風吹在身上的強度（慢慢追天氣）
+    this.hatK = 0;                 // 右手壓著帽子的程度
+    this.rainK = 0;                // 淋雨縮肩的程度
+    this.tilt = 0;                 // 頭要歪多少（看畫時 player 設）
+    this.tiltK = 0;
+    this.blink = 0;                // 眼睛閉了多少：0 睜開、1 閉上
+    this.blinkA = -1;              // 這一次眨眼進行到哪（秒），-1 沒在眨
+    this.blinkT = 1 + Math.random() * 3;   // 下一次眨眼倒數
+    this.asleep = false;           // 掛機：眼睛閉著（main.js、multiplayer.js 設）
+    this.lookX = this.lookY = 0;   // 眼珠往哪偏
+    this.swX = this.swZ = this.swVX = this.swVZ = 0;   // 手上東西的擺角和角速度
+    this.hp = new THREE.Vector3();
+    this.hpPrev = new THREE.Vector3();
+    this.hv = new THREE.Vector3();
+    this.hvPrev = new THREE.Vector3();
+    this.hdv = new THREE.Vector3();
+    this.hpOk = this.hvOk = false;
     this.key = null;
     this.setLook(look);
   }
@@ -592,7 +668,13 @@ export class Character {
     const race = raceOf(L), S = sizes(L), skin = hex(SKINS[L.skin]), W = S.W;
     this.S = S;
     swap(this.torso, bodyGeo(L, W));
-    swap(this.headMesh, headGeo(L, race, S, skin));
+    const hg = headGeo(L, race, S, skin), eyeY = race.ey + S.fy;
+    swap(this.headMesh, hg.head);
+    // 眼睛的關節放在眼睛的高度（壓扁才是往中線壓），零件的座標扣掉這一段
+    swap(this.eyesMesh, hg.eyes?.translate(0, -eyeY, 0));
+    swap(this.pupilMesh, hg.pupils?.translate(0, -eyeY, 0));
+    this.eyes.position.y = eyeY;
+    this.eyeR = 0.06 * S.es * (race.fs ?? 1);   // 眼珠最多偏這麼遠（乘上 lookX、lookY）
     this.head.scale.setScalar(S.hs);
 
     // 戴了頭套或頭盔就不戴帽子
@@ -641,7 +723,11 @@ export class Character {
       this.faceRace = race.id;
       swap(this.decal, decalGeo(faceMap(race)));
     }
-    this.paintFace(decodeFace(L.face));
+    const cells = decodeFace(L.face);
+    this.paintFace(cells);
+    this.setEyeFrames(cells?.eyes || []);
+    this.swingK = SWING[L.hand] || 0;
+    this.swingW = SWING_W[L.hand] || 6;
 
     // 照鏡子時鏡頭要知道臉和頭頂在哪
     // 頭頂算到帽尖。舉高的雨傘、氣球不算，手機上要全身入鏡，傘頂切掉一點沒關係
@@ -694,6 +780,13 @@ export class Character {
     }
     this.faceTex.needsUpdate = true;
     this.decal.visible = any && this.decal.geometry !== EMPTY;
+  }
+
+  // 畫的臉上哪幾格是眼睛（looks.js 的 decodeEyes）：換成貼圖座標給著色器。貼圖是上下顛倒存的（跟 paintFace 一樣），列數要反過來
+  setEyeFrames(eyes) {
+    const u = this.faceU;
+    u.uEyeN.value = Math.min(2, eyes.length);
+    eyes.slice(0, 2).forEach((e, i) => u.uEye.value[i].set(e.x / FACE, 1 - (e.y + e.h) / FACE, (e.x + e.w) / FACE, 1 - e.y / FACE));
   }
 
   dispose() {
@@ -775,10 +868,11 @@ export class Character {
     else this.hold(kind, bites);
   }
 
-  // 已經在空中就不再跳，回傳有沒有起跳
-  jump() {
-    if (this.airborne) return false;
-    this.jumpV = JUMP_V;
+  // 已經在空中（或正蹲著準備跳）就不再跳，回傳有沒有起跳。先蹲 PRE_JUMP 秒才離地（update 裡），自己和別人的角色走同一段，看起來同步
+  jump(k = 1) {
+    if (this.airborne || this.preT > 0) return false;
+    this.preT = PRE_JUMP;
+    this.jumpK = k;
     return true;
   }
 
@@ -798,7 +892,7 @@ export class Character {
 
   // 還有動畫在播（跳躍、表情），主迴圈不能降幀
   get busy() {
-    return this.airborne || !!this.act || this.biteT > 0 || this.sitP !== (this.sitting ? 1 : 0);
+    return this.airborne || this.preT > 0 || this.landT > 0 || !!this.act || this.biteT > 0 || this.sitP !== (this.sitting ? 1 : 0) || this.lieP !== (this.lying ? 1 : 0);
   }
 
   update(dt, speed) {
@@ -806,22 +900,27 @@ export class Character {
     const walking = speed > 0.1;
     const target = walking ? 1 : 0;
     this.walk = (this.walk ?? 0) + (target - (this.walk ?? 0)) * Math.min(1, dt * 8);
+    // 原地轉身：腳跟著踏小步（手不擺），不會整個人滑著轉。一幀轉了快一個直角是被搬動（傳送、瞬間轉向），不算
+    const yaw = this.group.rotation.y, dYaw = this.lastYaw == null ? 0 : wrapAngle(yaw - this.lastYaw);
+    this.lastYaw = yaw;
+    const turning = !walking && !this.sitP && !this.airborne && Math.abs(dYaw) < 1.4 ? Math.min(0.4, Math.abs(dYaw) / Math.max(dt, 1e-3) / 5) : 0;
+    this.turnW = (this.turnW ?? 0) + (turning - (this.turnW ?? 0)) * Math.min(1, dt * 10);
     const was = this.phase;
-    this.phase += dt * (4 + speed * 3.5) * this.walk;
+    this.phase += dt * ((4 + speed * 3.5) * this.walk + 6 * this.turnW * (1 - this.walk));
     // 兩腳張到最開的那一刻算踩到地，交給 onStep 出聲（海市路人的木屐）
     if (this.onStep && this.walk > 0.5 && !this.airborne && !this.sitP) {
       const n = Math.floor(this.phase / Math.PI - 0.5);
       if (n !== Math.floor(was / Math.PI - 0.5)) this.onStep(this, n & 1);
     }
 
-    const s = Math.sin(this.phase), w = this.walk;
-    this.body.position.y = Math.abs(s) * 0.06 * w;
+    const s = Math.sin(this.phase), w = this.walk, wf = Math.max(w, this.turnW);
+    this.body.position.y = Math.abs(s) * 0.06 * wf;
     this.body.rotation.x = 0.08 * w;
     this.body.rotation.z = s * 0.04 * w;
     this.armL.rotation.x = s * 0.7 * w;
     this.armR.rotation.x = -s * 0.7 * w;
-    this.footL.rotation.x = -s * 0.45 * w;
-    this.footR.rotation.x = s * 0.45 * w;
+    this.footL.rotation.x = -s * 0.45 * wf;
+    this.footR.rotation.x = s * 0.45 * wf;
     this.footL.position.z = this.footR.position.z = 0;
 
     // 站著時輕輕呼吸，帽子跟著晃
@@ -848,6 +947,73 @@ export class Character {
     this.armL.position.z = this.armR.position.z = 0;
     this.footL.position.y = this.footR.position.y = HIP;
 
+    // 起跳前先蹲一下（膝蓋一沉、身體前傾、手往後甩），蹲完才離地；升空時手舉起來，過了最高點慢慢放下；
+    // 落地再沉一下，手微微張開。沉的量疊在走路的身體上，後面坐下、拿東西那幾層照樣蓋得過
+    if (this.preT > 0) {
+      this.preT = Math.max(0, this.preT - dt);
+      if (this.preT === 0) this.jumpV = JUMP_V * this.jumpK;
+    }
+    if (this.landT > 0) this.landT = Math.max(0, this.landT - dt);
+    const crouch = this.preT > 0 ? Math.sin((1 - this.preT / PRE_JUMP) * Math.PI * 0.5) : 0;
+    const land = this.landT > 0 ? Math.sin((1 - this.landT / LAND_TIME) * Math.PI) * this.landA : 0;
+    const dip = crouch * 0.07 + land * 0.06;
+    if (dip > 0) {
+      this.body.position.y -= dip;
+      this.body.scale.y *= 1 - dip * 0.6;
+      this.body.rotation.x += crouch * 0.12 + land * 0.1;
+      this.armL.rotation.x += crouch * 0.6;
+      this.armR.rotation.x += crouch * 0.6;
+      this.armL.rotation.z -= land * 0.3;
+      this.armR.rotation.z += land * 0.3;
+      this.hat.position.y -= dip * 0.3;
+    }
+    if (this.jumpV > 0) {
+      const r = Math.min(1, this.jumpV / JUMP_V) * 0.9;
+      this.armL.rotation.x -= r;
+      this.armR.rotation.x -= r;
+    }
+
+    // 風穿在身上（core/weather.js 的 BREEZE，有天氣的區域每幀寫）：往風裡傾，披風、圍巾順風飄，帽子被吹得晃、陣風最高點往上跳一下。
+    // 風夠大、右手空著（沒點心、沒表情、沒舉相機、沒坐著）就壓住帽子；手要給別的事用時先放開，跟舉相機前先收手上的東西同一個順序；
+    // 手騰不出來的時候帽子晃得更凶。坐著不傾。天氣照伺服器時間算、手上的狀態本來就同步，所以每個人畫面上看到的一樣
+    const Bz = BREEZE, wind = Bz.wind * (0.3 + 0.7 * Bz.gust);
+    this.windK += (wind - this.windK) * Math.min(1, dt * 3);
+    const wk = this.windK;
+    // 壓帽子只在陣風最高點（大雨、風沙時一陣一陣的），平常的風只是吹得晃；門檻進出不同，陣風邊緣不會抖
+    const canHold = wk > 0.01 && !this.food && !this.act && !this.aim && this.aimP <= 0 && this.biteT <= 0 && this.sitP <= 0 && !this.asleep && this.hatMesh.visible;
+    const wantHat = canHold && wk > (this.hatK > 0.5 ? 0.45 : 0.6) ? 1 : 0;
+    this.hatK += (wantHat - this.hatK) * Math.min(1, dt / (wantHat ? 0.25 : 0.16));
+    if (wk > 0.005) {
+      const c = Math.cos(yaw), sn = Math.sin(yaw), lx = Bz.x * c - Bz.z * sn, lz = Bz.x * sn + Bz.z * c;   // 風在身體座標往哪吹
+      const t = this.time, ph = (this.swayPh ??= Math.random() * 100);
+      const fl = Math.sin(t * 7.3 + ph) * 0.5 + Math.sin(t * 11.1 + ph * 1.7) * 0.3;   // 抖
+      const upright = 1 - this.sitP, loose = 1 - this.hatK;
+      this.body.rotation.x -= lz * 0.1 * wk * upright;
+      this.body.rotation.z += lx * 0.08 * wk * upright;
+      this.cape.rotation.x += (Math.max(0, -lz) * 0.9 + 0.15 + fl * 0.12) * wk;
+      this.cape.rotation.z = (lx * 0.5 + fl * 0.05) * wk;
+      this.scarfTail.rotation.x += (Math.max(0, -lz) * 0.8 + fl * 0.15) * wk;
+      this.scarfTail.rotation.z = (lx * 0.6 + fl * 0.1) * wk;
+      this.hat.rotation.z += (lx * 0.25 + fl * 0.12) * wk * loose;
+      this.hat.rotation.x = -lz * 0.2 * wk * loose;
+      this.hat.position.y += Math.max(0, fl) * 0.03 * wk * loose * Bz.gust;
+    } else this.cape.rotation.z = this.scarfTail.rotation.z = this.hat.rotation.x = 0;
+    if (this.hatK > 0.001) {
+      const R = this.armR.rotation, hk = smooth(this.hatK);
+      R.x += (HAT_ARM[0] - R.x) * hk;
+      R.y += (HAT_ARM[1] - R.y) * hk;
+      R.z += (HAT_ARM[2] - R.z) * hk;
+      this.hat.rotation.z -= 0.3 * hk;   // 帽子被壓得往手那邊低下去
+    }
+    // 下雨沒帶傘：縮肩、微微前傾（頭低下去在視線那段），傘本身在 rain.js 另外畫
+    const rk = Bz.rain > 0.05 && this.look.hand !== 'umbrella' && this.sitP <= 0 && !this.asleep ? Math.min(1, Bz.rain * 2) : 0;
+    this.rainK += (rk - this.rainK) * Math.min(1, dt / 1.2);
+    if (this.rainK > 0.001) {
+      this.body.rotation.x += 0.06 * this.rainK;
+      this.armL.rotation.z += 0.07 * this.rainK;
+      this.armR.rotation.z -= 0.07 * this.rainK;
+    }
+
     // 坐下的過程：身體前傾、雙手往後撐，屁股坐下去，再把腳伸到前面、手放到腿上、往後靠。
     // 站起來時同一段倒著播
     this.sitP = clamp01(this.sitP + (this.sitting ? dt : -dt) / SIT_TIME);
@@ -867,6 +1033,17 @@ export class Character {
       B.x += (0.35 * brace - 0.06 * tuck - B.x) * k;
     }
     const sk = lower;
+    // 躺下（坐在地上再按一次「坐」，player.toggleSit）：以腳為軸往後躺平，腿伸直、手攤開一點；站起來倒著播。
+    // 整個人要抬到背貼著地（在下面的 up 裡加）
+    this.lieP = clamp01(this.lieP + (this.lying ? dt : -dt) / LIE_TIME);
+    const lie = smooth(this.lieP);
+    if (lie > 0) {
+      const L = this.armL.rotation, R = this.armR.rotation, B = this.body.rotation;
+      B.x += (-1.42 - B.x) * lie;
+      for (const f of [this.footL, this.footR]) f.rotation.x += (-0.12 - f.rotation.x) * lie;
+      L.x += (0.2 - L.x) * lie; L.y += (0 - L.y) * lie; L.z += (-0.6 - L.z) * lie;
+      R.x += (0.2 - R.x) * lie; R.y += (0 - R.y) * lie; R.z += (0.6 - R.z) * lie;
+    }
 
     // 左手拿著東西：垂著的照樣小幅擺動，拿在胸前的手往前抬，雨傘這種舉過頭
     this.handK += ((this.handPose ? 1 : 0) - this.handK) * Math.min(1, dt * 8);
@@ -900,6 +1077,9 @@ export class Character {
       this.jumpV -= gravity * dt;
       this.jumpY = Math.max(0, this.jumpY + this.jumpV * dt);
       if (this.jumpY === 0) {
+        // 落地沉一下：掉得越快沉越重（月球慢慢飄下來就輕）
+        this.landA = Math.min(1.3, Math.max(0.35, -this.jumpV / JUMP_V));
+        this.landT = LAND_TIME;
         this.jumpV = 0;
         this.onLand?.(this);
       }
@@ -909,7 +1089,7 @@ export class Character {
     // 坐地上時整個人再往下沉，腿從屁股伸出去才會貼著地
     const hop = this.lift > 0.2 ? Math.sin(lower * Math.PI) * 0.1 : 0;
     // 坐椅子：褲子底部在身體座標 0.3，抬到剛好貼著椅面（lift 是椅面高度）
-    const up = this.jumpY + (this.lift > 0.2 ? this.lift - SEAT_BUTT : -0.24) * lower + hop;
+    const up = this.jumpY + (this.lift > 0.2 ? this.lift - SEAT_BUTT : -0.24) * lower + hop + 0.44 * lie;
     this.group.position.y += up;
     // 影子留在地面，越高越小
     this.shadow.position.y = 0.012 - up;
@@ -934,6 +1114,11 @@ export class Character {
       u?.uSun.value.set(1, 1, 0, 0);
       u?.uFoot.value.set(0.5, 0.5, 1 / CONTACT, 1 / CONTACT);
     }
+    // 躺著：影子跟著身體往後拉長（沙島的太陽影子另外算，不動）
+    if (lie > 0 && !(sun.len > 0)) {
+      this.shadow.position.z = -0.7 * lie;
+      this.shadow.scale.y *= 1 + 1.4 * lie;
+    }
 
     if (this.act) this.pose(dt, Math.max(w, sk));
     this.aimPose(dt);
@@ -957,10 +1142,66 @@ export class Character {
       this.head.rotation.order = 'YXZ';
       this.head.rotation.y = this.headYaw + sy;
       this.head.rotation.x -= (this.headPitch + sp) * (1 - this.aimP);
+      // 淋雨低頭；看畫看了一會兒頭微微歪一下（player 設 tilt）
+      this.head.rotation.x += 0.12 * this.rainK * (1 - this.aimP);
+      this.tiltK += (this.tilt - this.tiltK) * Math.min(1, dt * 2.5);
+      this.head.rotation.z = this.tiltK;
+    }
+    // 眨眼：隔幾秒眨一下，偶爾連眨兩下；閉得快、睜得慢；掛機時閉著。各自的畫面自己眨，不送給別人
+    if (this.asleep) this.blink = Math.min(1, this.blink + dt * 3);
+    else if (this.blinkA >= 0) {
+      const t = (this.blinkA += dt);
+      this.blink = t < BLINK_DOWN ? t / BLINK_DOWN : Math.max(0, 1 - (t - BLINK_DOWN) / BLINK_UP);
+      if (t >= BLINK_DOWN + BLINK_UP) { this.blinkA = -1; this.blink = 0; }
+    } else {
+      this.blink = Math.max(0, this.blink - dt * 3);
+      if ((this.blinkT -= dt) <= 0) { this.blinkA = 0; this.blinkT = Math.random() < 0.15 ? 0.3 : 2.5 + Math.random() * 4; }
+    }
+    this.eyes.scale.y = 1 - 0.88 * this.blink;
+    // 眼珠先溜過去、頭再跟上：要看的方向跟頭現在的角度差多少，眼珠就往那邊偏多少（畫的臉是整個框平移一點）
+    if (this.pupilMesh.visible || this.faceU.uEyeN.value) {
+      const gy = this.gaze != null ? clampTo(this.gaze - (this.headYaw ?? 0), 0.6) : 0;
+      const gp = this.gaze != null ? clampTo((this.gazeP || 0) - (this.headPitch ?? 0), 0.4) : 0;
+      this.lookX += (gy * 0.6 - this.lookX) * Math.min(1, dt * 12);
+      this.lookY += (gp * 0.6 - this.lookY) * Math.min(1, dt * 12);
+      this.pupilMesh.position.set(this.lookX * this.eyeR, this.lookY * this.eyeR, 0);
+      this.faceU.uBlink.value = this.blink;
+      this.faceU.uLook.value.set(this.lookX * 0.03, this.lookY * 0.03);
     }
     // 手上的東西抵銷手臂的轉動，不管手怎麼擺都直立
     const A = this.armL.rotation;
     this.handG.rotation.set(-A.x, -A.y, -A.z);
+    // 左手垂著的東西（燈籠、魚、長棍）跟著手的加速度盪：起步往後翻、停下往前盪、轉身畫一道弧，氣球反過來拖在後面。
+    // 用上一幀畫出來的手的位置量速度，一幀之內速度跳多少就當成一下推力（起步、停下是瞬間的，不除以 dt 才不會算出天文數字）；
+    // 跳太多的是傳送，不算
+    if (this.swingK && this.handMesh.visible) {
+      const e = this.handG.matrixWorld.elements, p = this.hp.set(e[12], e[13], e[14]);
+      if (this.hpOk) {
+        const v = this.hv.subVectors(p, this.hpPrev).divideScalar(Math.max(dt, 1e-3));
+        if (this.hvOk) {
+          const dv = this.hdv.subVectors(v, this.hvPrev);
+          if (dv.lengthSq() < 36) {
+            const c = Math.cos(yaw), sn = Math.sin(yaw), dx = dv.x * c - dv.z * sn, dz = dv.x * sn + dv.z * c;
+            this.swVX += (dz * this.swingK) / SWING_L;
+            this.swVZ -= (dx * this.swingK) / SWING_L;
+          }
+        }
+        this.hvPrev.copy(v);
+        this.hvOk = true;
+      }
+      this.hpPrev.copy(p);
+      this.hpOk = true;
+      const W = this.swingW, D = 0.6 * W;
+      this.swVX -= (W * W * this.swX + D * this.swVX) * dt;
+      this.swVZ -= (W * W * this.swZ + D * this.swVZ) * dt;
+      this.swX = clampTo(this.swX + this.swVX * dt, 0.7);
+      this.swZ = clampTo(this.swZ + this.swVZ * dt, 0.7);
+      this.handSwing.rotation.set(this.swX, 0, this.swZ);
+    } else if (this.hpOk) {
+      this.swX = this.swZ = this.swVX = this.swVZ = 0;
+      this.handSwing.rotation.set(0, 0, 0);
+      this.hpOk = this.hvOk = false;
+    }
   }
 
   // 舉相機：進度前段把手上的東西縮小收起來（自拍只收右手的點心，左手的照拿），後段才把手抬起來。

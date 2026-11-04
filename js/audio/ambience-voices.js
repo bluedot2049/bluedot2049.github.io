@@ -88,6 +88,20 @@ export function air(ctx, out, noise, t, pts, attack, dur, peak, Q = 0.7, type = 
   src.stop(t + dur + 0.02);
 }
 
+// 摩擦（布、紙、印泥）：濾波往下掃（越擦越慢、越暗），底下先切掉 low 以下（雜訊偏粉紅、低頻很多，只用低通會變成轟一聲），加一點纖維的顫動 shake。
+// 往上掃像拉鍊、帶通共振窄（Q 超過 1）會留一條亮的頻帶，兩個都會尖（2026-11-04 布和紙被說太硬太尖）
+export function rub(ctx, out, noise, t, from, to, attack, dur, peak, { type = 'lowpass', Q = 0.5, low = 300, shake = 0.22 } = {}) {
+  const src = ctx.createBufferSource(), f = biquad(ctx, type, from, Q), v = ctx.createGain();
+  src.buffer = noise;
+  f.frequency.setValueAtTime(from, t);
+  f.frequency.exponentialRampToValueAtTime(to, t + dur);
+  v.gain.value = 1;
+  if (shake) lfo(ctx, t, dur, 16 + Math.random() * 10, shake, v.gain);
+  src.connect(biquad(ctx, 'highpass', low, 0.5)).connect(f).connect(envelope(ctx, t, attack, dur, peak)).connect(v).connect(out);
+  src.start(t, Math.random() * 7);
+  src.stop(t + dur + 0.02);
+}
+
 // 很低的一記，只聽得到壓力、聽不出音高
 export function sub(ctx, out, t, freq, attack, dur, peak) {
   osc(ctx, 'sine', t, dur, [[0, freq], [dur, freq * 0.8]]).connect(envelope(ctx, t, attack, dur, peak)).connect(out);

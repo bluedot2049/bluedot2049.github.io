@@ -5,7 +5,7 @@
 // 拱頂鼓出半顆眼球，就是鏡子前幫人拍照的那顆（eye.js），平常閉著。人走到鏡子前，它睜開看人
 import * as THREE from 'three';
 import { Kit, newBucket } from '../../core/props.js';
-import { bucketObjects, uTime } from '../../core/scenery.js';
+import { bucketObjects } from '../../core/scenery.js';
 
 const W = 0.8, H = 1.75, Y0 = 0.22;   // 鏡面寬、高、下緣離地
 const FB = 0.1, FD = 0.1;             // 木框寬、厚
@@ -73,50 +73,60 @@ function glassTexture() {
 
 // 鏡子裡的星：跟星廟的水鏡同一個做法，不用反射相機，鏡面自己算。
 // 視線穿過鏡面繼續往裡走，在不同深度碰到一層一層的星（鏡子裡的像本來就是這樣：前面多遠，裡面就多深）。
-// 每層一格最多一顆，照像素畫細點，不畫光斑；一層裡少數亮、大多很暗，越深越小越暗越冷。
+// 每層一格最多一顆，星是實心的小點，不發光、不閃：沒有光暈，邊上只留一個像素的反鋸齒；一層裡少數亮、大多很暗，越深越小越暗越冷。
+// 點的大小照畫面上的點（CSS 像素）算，手機和電腦看起來一樣大。最亮的也壓在泛光的門檻底下，電腦高畫質不會暈開。
 // 平均撒滿會像雪花，所以深的幾層沿一條斜斜往裡退的星河聚集：星河在每一層的位置不同，走動時整條跟著錯開。
-// 只算鏡面佔到的那些像素；手機少最深那層
+// 只算鏡面佔到的那些像素
 const DEPTHS = [
-  // 深度、格子邊長（公尺）、像素大小、多少格有星、亂數種子、顏色、亮度
-  [0.45, 0.22, 1.25, 0.16, 17, [0.95, 0.92, 0.88], 1.0],
-  [1.5, 0.15, 1.0, 0.22, 41, [0.8, 0.84, 0.95], 0.6],
-  [5.0, 0.12, 0.85, 0.3, 83, [0.65, 0.74, 0.98], 0.38],
-  [16.0, 0.1, 0.7, 0.4, 131, [0.55, 0.66, 1.0], 0.22],
+  // 深度、格子邊長（公尺）、點的直徑（CSS 像素）、多少格有星、亂數種子、顏色、亮度
+  [0.45, 0.22, 2.0, 0.16, 17, [0.95, 0.92, 0.88], 0.8],
+  [1.5, 0.15, 1.6, 0.22, 41, [0.8, 0.84, 0.95], 0.55],
+  [5.0, 0.12, 1.3, 0.3, 83, [0.65, 0.74, 0.98], 0.4],
+  [16.0, 0.1, 1.1, 0.4, 131, [0.55, 0.66, 1.0], 0.28],
 ];
 const f1 = (v) => v.toFixed(3);
+const bufSize = new THREE.Vector2();
 function glassMaterial(map) {
-  const coarse = matchMedia('(pointer: coarse)').matches;
-  const layers = coarse ? DEPTHS.slice(0, 3) : DEPTHS;
   const m = new THREE.MeshBasicMaterial({ map, transparent: true });
-  const uPr = { value: Math.min(window.devicePixelRatio, 2) };
+  // 一個 CSS 像素等於幾個畫的像素。不能用螢幕的 devicePixelRatio：手機實際只畫 1～1.5 倍再放大（quality.js），
+  // 照 2 倍算點會大一圈又被放糊。拍照時整張重畫成大圖，照大圖跟視窗的比例放大，照片裡的星跟畫面上一樣大
+  const uPr = { value: 1 };
+  m.onBeforeRender = (r) => {
+    const t = r.getRenderTarget(), s = t ? bufSize.set(t.width, t.height) : r.getDrawingBufferSize(bufSize);
+    uPr.value = Math.max(r.getPixelRatio(), s.x / window.innerWidth, s.y / window.innerHeight);
+  };
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.uTime = uTime;
     sh.uniforms.uPr = uPr;
     sh.vertexShader = 'varying vec2 vP; varying vec3 vSee;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
       vP = position.xy;
       vSee = position - (inverse(modelMatrix) * vec4(cameraPosition, 1.0)).xyz;`);
-    sh.fragmentShader = `uniform float uTime; uniform float uPr; varying vec2 vP; varying vec3 vSee;
+    sh.fragmentShader = `uniform float uPr; varying vec2 vP; varying vec3 vSee;
       vec3 hash3(vec2 p) {
         vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
         q += dot(q, q.yxz + 33.33);
         return fract((q.xxy + q.yzz) * q.zyx);
       }
-      // 一層星：q 是視線在這一層碰到的位置（公尺），D 深度、C 格子邊長，fw 是一個像素跨幾格。
-      // 一格不到八個像素就開始淡：鏡子在畫面上小，深的那幾層會擠成雜訊
-      vec3 deepStars(vec2 q, float D, float C, float fw, float px, float occ, float seed, vec3 tint) {
+      // 一層星：q 是視線在這一層碰到的位置（公尺），D 深度、C 格子邊長，fw 是一個畫的像素跨幾格，dia 點的直徑（CSS 像素）。
+      // 一格不到八個點（CSS 像素）就開始淡：鏡子在畫面上小，深的那幾層會擠成雜訊
+      vec3 deepStars(vec2 q, float D, float C, float fw, float dia, float occ, float seed, vec3 tint) {
+        float fade = smoothstep(0.35, 0.12, fw * uPr);
+        if (fade <= 0.0) return vec3(0.0);
         vec3 acc = vec3(0.0);
-        vec2 u = q / C + seed, id = floor(u), f = u - id;
+        // 星心落在格子的 0.1~0.9、點不到半格大，只要看自己這格和靠過去的那三格
+        vec2 u = q / C + seed, id = floor(u), f = u - id, o = step(0.5, f) * 2.0 - 1.0;
         // 星河：一條斜的帶子，越深越往左偏、越寬
         float band = mix(1.0, 0.3 + 1.4 * exp(-pow(dot(q - vec2(0.06 - 0.035 * D, 1.1), vec2(0.94, -0.33)) / (0.16 + 0.05 * D), 2.0)), smoothstep(0.5, 5.0, D));
-        for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
-          vec2 c = id + vec2(i, j);
+        for (int j = 0; j <= 1; j++) for (int i = 0; i <= 1; i++) {
+          vec2 k = vec2(i, j) * o, c = id + k;
           vec3 h = hash3(c + seed);
           if (h.z > occ * band) continue;
           vec3 e = hash3(c.yx * 1.7 + seed + 7.0);
-          float m = e.x * e.x * e.x, r = length(f - vec2(i, j) - (0.1 + 0.8 * h.xy)) / fw, s = px * (0.8 + 0.7 * m) * uPr;
-          acc += mix(tint, vec3(1.0, 0.94, 0.86), e.z * e.z * 0.5) * (0.12 + 0.88 * m) * exp(-r * r / (s * s)) * (0.85 + 0.15 * sin(uTime * (0.4 + e.y) + e.y * 40.0));
+          // r 離星心幾個畫的像素、rad 半徑；比一個像素還小的點照面積變暗，不會因為反鋸齒那一圈反而變大
+          float m = e.x * e.x * e.x, r = length(f - k - (0.1 + 0.8 * h.xy)) / fw, rad = 0.5 * dia * (0.7 + 0.6 * m) * uPr;
+          float cov = clamp(rad + 0.5 - r, 0.0, 1.0) * min(1.0, 4.0 * rad * rad);
+          acc += mix(tint, vec3(1.0, 0.94, 0.86), e.z * e.z * 0.5) * (0.15 + 0.85 * m) * cov;
         }
-        return acc * smoothstep(0.35, 0.12, fw);
+        return acc * fade;
       }
       ` + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
       {
@@ -127,11 +137,11 @@ function glassMaterial(map) {
         float e = min(min(${f1(W / 2)} - abs(vP.x), vP.y - ${f1(Y0)}), vP.y > ${f1(AC)} ? ${f1(W / 2)} - length(vP - vec2(0.0, ${f1(AC)})) : 9.0);
         vec3 st = vec3(0.0);
         #define LAYER(D, C, PX, OCC, SEED, TINT, GAIN) st += GAIN * deepStars(vP + D * T, D, C, max(length(px + D * tx), length(py + D * ty)) / C, PX, OCC, SEED, TINT);
-        ${layers.map(([d, c, p, o, sd, t, g]) => `LAYER(${f1(d)}, ${f1(c)}, ${f1(p)}, ${f1(o)}, ${f1(sd)}, vec3(${t.map(f1)}), ${f1(g)})`).join('\n        ')}
+        ${DEPTHS.map(([d, c, p, o, sd, t, g]) => `LAYER(${f1(d)}, ${f1(c)}, ${f1(p)}, ${f1(o)}, ${f1(sd)}, vec3(${t.map(f1)}), ${f1(g)})`).join('\n        ')}
         diffuseColor.rgb = diffuseColor.rgb * (0.3 + 0.7 * smoothstep(0.0, 0.16, e)) + st * smoothstep(0.0, 0.04, e);
       }`);
   };
-  m.customProgramCacheKey = () => 'mirror-depth' + layers.length;
+  m.customProgramCacheKey = () => 'mirror-dots';
   return m;
 }
 

@@ -78,15 +78,16 @@ export function makeShops({ obstacles, towers, anchors, keep = [] }) {
 
     // 店面：門前一張櫃台；井邊那圈再搭一片條紋布棚、兩根鐵柱，前緣掛打孔鐵牌。k 是房子自己的 Kit（跟房子一起淡）。
     // 回傳布棚那一塊的範圍（世界座標的斜放盒子），擋住鏡頭時也算這間房子
-    house(k, h, info, i) {
+    // kc：櫃台和貨品放另一個 Kit（shenlou.js 不給它淡出編號）。房子、布棚擋住鏡頭時淡掉，櫃台不跟著不見
+    house(k, h, info, i, kc = k) {
       if (!h.shop) return null;
       const R = rng('shenlou:shop:' + i), W = h.w / 2, D0 = h.d0 / 2, { door } = info, deep = h.shop === 'plaza';
       const kind = KINDS[Math.floor(R() * KINDS.length)];
       const L = Math.min(2.4, 2 * D0 - 0.9), zc = Math.max(-(D0 - L / 2 - 0.3), Math.min(D0 - L / 2 - 0.3, door.z));
       const out = deep ? 1.8 : 1.05, cx = -W - (deep ? 1.25 : 0.78), keep = -W - (deep ? 0.55 : 0.32), Wd = L + 0.6;
-      k.add(softPrism(rectXZ(0.46, L), 0.92, 0.12, 0.06, 1), EARTH, cx, 0, zc);
-      k.box(0.6, 0.06, L + 0.12, LINTEL, cx, 0.95, zc);
-      goods(k, kind.goods, cx, 0.98, zc, L - 0.3, R);
+      kc.add(softPrism(rectXZ(0.46, L), 0.92, 0.12, 0.06, 1), EARTH, cx, 0, zc);
+      kc.box(0.6, 0.06, L + 0.12, LINTEL, cx, 0.95, zc);
+      goods(kc, kind.goods, cx, 0.98, zc, L - 0.3, R);
       // 布棚：從牆上斜斜伸出來，條紋三條一組，前緣一條垂邊
       const yw = door.h + 0.5, yo = door.h + (deep ? 0.05 : 0.2), x1 = -W - out, slope = Math.atan2(yw - yo, out);
       const n = 5, sw = (Wd - (n - 1) * 0.06) / n;
@@ -101,8 +102,8 @@ export function makeShops({ obstacles, towers, anchors, keep = [] }) {
         for (const s of [-1, 1]) {
           if (R() < 0.4) continue;
           const z = zc + s * (L / 2 + 0.2);
-          if (R() < 0.5) { k.ball(0.22, R() < 0.5 ? CLAY : CLAY_DK, cx, 0.26, z, { sy: 1.2 }); k.cyl(0.09, 0.12, 0.12, CLAY_DK, cx, 0.55, z, {}, 8); }
-          else k.box(0.42, 0.36, 0.36, WOOD, cx, 0.18, z, { ry: (R() - 0.5) * 0.4 });
+          if (R() < 0.5) { kc.ball(0.22, R() < 0.5 ? CLAY : CLAY_DK, cx, 0.26, z, { sy: 1.2 }); kc.cyl(0.09, 0.12, 0.12, CLAY_DK, cx, 0.55, z, {}, 8); }
+          else kc.box(0.42, 0.36, 0.36, WOOD, cx, 0.18, z, { ry: (R() - 0.5) * 0.4 });
         }
         sign(k, kind.name, x1 - 0.06, yo - 0.42, zc, -1);
         for (const s of [-1, 1]) bar(k, [x1 - 0.06, yo - 0.32, zc + s * 0.25], [x1 - 0.06, yo - 0.1, zc + s * 0.25], 0.02, IRON_DK);

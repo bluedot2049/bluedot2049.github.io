@@ -5,6 +5,7 @@
 // 淡掉是在著色器裡丟掉一部分像素（網點），不用半透明：合併成一大塊的網格不用拆，前後也不會排錯。
 // 鏡頭本身不再被房子推來推去，距離和斜度都照玩家拖的。lead 是提早淡：照角色和鏡頭的速度往前推一點時間，那時會擋住的先淡（海市、蜃樓都開）
 import * as THREE from 'three';
+import { uTime } from './scenery.js';
 
 const FADED = 0.22;   // 擋住時留下幾成像素，看得出輪廓
 const SPEED = 4;      // 淡出、淡回的速度（每秒）
@@ -13,6 +14,23 @@ const ROOM_SPEED = 2; // 畫廊整間房出現、消失：0.5 秒
 
 // 每個像素一個 0～1 的亂數，淡到多少就留下多少像素
 const DITHER = 'fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))))';
+
+// 掛著的東西輕輕晃（sway，海市）：Kit 零件帶 hang 掛點的（燈籠、暖簾）照掛點以下多深位移。
+// 風順著風向偏一點、抖一點（uSway：xz 是方向乘風力、w 風力）；人走過（uPass：xy 放那個人的 x、z，z 是時刻，w 是腳底高度）附近的晃一下，一兩秒停。
+// 掛點比那個人的腳高 3.6 公尺以上（屋頂上）、或在他腳下（下面一層街）的不晃；海市的街一層層爬上山，要跟人的高度比，不能跟世界高度比
+const SWAY_PARS = 'attribute vec3 aHang; attribute float aHangK; uniform vec4 uSway; uniform vec4 uPass; uniform float uSwayT;';
+const SWAY_VERT = `
+if (aHangK > 0.0) {
+  float drop = max(0.0, aHang.y - transformed.y);
+  float ph = fract(sin(dot(aHang.xz, vec2(12.9898, 78.233))) * 43758.5453) * 6.2832;
+  vec2 sw = uSway.xz * (0.08 + 0.05 * sin(uSwayT * 2.1 + ph)) + vec2(sin(uSwayT * 1.3 + ph), cos(uSwayT * 1.7 + ph)) * 0.012 * uSway.w;
+  vec2 dp = aHang.xz - uPass.xy;
+  float age = uSwayT - uPass.z;
+  float rel = aHang.y - uPass.w;
+  float near = (1.0 - smoothstep(0.5, 1.6, length(dp))) * exp(-age * 1.6) * step(-1.0, rel) * (1.0 - step(3.6, rel));
+  sw += normalize(dp + vec2(1e-3, 0.0)) * sin(uSwayT * 5.5 + ph) * 0.045 * near;
+  transformed.xz += sw * drop;
+}`;
 
 // 斜放的盒子（蜃樓的房子順著半徑轉）：b.rot 記中心和角度，點先轉進盒子自己的座標再比，轉法跟蜃樓的擋路方塊一樣
 const _p = { x: 0, y: 0, z: 0 }, _q = { x: 0, y: 0, z: 0 };
@@ -50,13 +68,26 @@ function inside(p, b, pad) {
 export class Fader {
   // gate：畫廊的家具用。網點平常不編進去，有一組在淡才打開（discard 的代價見 RoomFader 的說明）
   // lead：提早淡幾秒。角色和鏡頭照現在的速度再走這麼久，那時會擋住的也先淡，走到房子後面時房子已經淡下去了
-  constructor(gate = false, { lead = 0 } = {}) {
+  // sway：掛著的東西（零件帶 hang 掛點）在著色器裡輕輕晃，風和人走過都會（海市開）
+  constructor(gate = false, { lead = 0, sway = false } = {}) {
     this.units = [null];   // 0 號是不會淡的東西
     this.gate = gate;
     this.mats = [];
     this.on = false;
     this.lead = lead;
     this.track = null;
+    this.sway = sway;
+    this.swayU = sway ? { uSway: { value: new THREE.Vector4() }, uPass: { value: new THREE.Vector4(0, 0, -1e3, 0) }, uSwayT: uTime } : null;
+  }
+
+  // 風往哪吹（單位向量）、多大（0 到 1）：掛著的東西順風偏
+  wind(x, z, k) {
+    this.swayU?.uSway.value.set(x * k, 0, z * k, k);
+  }
+
+  // 有人走過 (x, z)，腳底在 y：附近掛著的東西晃一下。還沒人走過時時刻是 -1e3，衰減完就是 0
+  pass(x, y, z) {
+    this.swayU?.uPass.value.set(x, z, uTime.value, y);
   }
 
   // boxes：這一組佔的範圍，可以好幾塊；objs：跟著一起藏的獨立物件（牌樓的匾）。回傳的編號給 Kit 的 fid
@@ -77,6 +108,13 @@ export class Fader {
     for (const g of list) {
       const n = g.attributes.position.count;
       g.setAttribute('aFid', new THREE.BufferAttribute(new Float32Array(n).fill(g.userData.fid || 0), 1));
+      // 會晃的：每個頂點記掛點；不會晃的全零（屬性要每個零件都有，合併才接得起來）
+      if (this.sway) {
+        const h = g.userData.hang, p = new Float32Array(n * 3);
+        if (h) for (let i = 0; i < n; i++) p.set(h, i * 3);
+        g.setAttribute('aHang', new THREE.BufferAttribute(p, 3));
+        g.setAttribute('aHangK', new THREE.BufferAttribute(new Float32Array(n).fill(h ? 1 : 0), 1));
+      }
     }
   }
 
@@ -86,7 +124,7 @@ export class Fader {
     this.data = new Uint8Array(n * 4).fill(255);
     this.tex = new THREE.DataTexture(this.data, n, 1);
     this.tex.needsUpdate = true;
-    this.uniforms = { uFadeTex: { value: this.tex }, uFadeN: { value: n } };
+    this.uniforms = { uFadeTex: { value: this.tex }, uFadeN: { value: n }, ...(this.swayU || {}) };
   }
 
   // 材質各複製一份，加上照編號丟像素的那幾行
@@ -97,11 +135,14 @@ export class Fader {
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\nattribute float aFid; uniform sampler2D uFadeTex; uniform float uFadeN; varying float vFade;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFade = texture2D(uFadeTex, vec2((aFid + 0.5) / uFadeN, 0.5)).r;');
+      if (this.sway) sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\n' + SWAY_PARS)
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + SWAY_VERT);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', '#include <common>\nvarying float vFade;')
         .replace('void main() {', `void main() {\n${this.gate ? '#ifdef PROP_FADE\n' : ''}if (vFade < 0.996 && vFade <= ${DITHER}) discard;${this.gate ? '\n#endif' : ''}`);
     };
-    m.customProgramCacheKey = () => (this.gate ? 'prop-fade' : 'haishi-fade');
+    m.customProgramCacheKey = () => (this.gate ? 'prop-fade' : 'haishi-fade') + (this.sway ? '-sway' : '');
     if (this.gate) this.mats.push(m);
     return m;
   }

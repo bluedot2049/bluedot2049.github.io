@@ -7,6 +7,7 @@ export const PREFS = {
   muted: { kind: 'flag', init: false },          // ambience.js：靜音
   bgAudio: { kind: 'flag', init: true },         // ambience.js：切走時繼續播（只有電腦）
   mouse: { kind: 'json' },                       // player.js、deskkeys.js：滑鼠 { sens, invert }
+  pad: { kind: 'json' },                         // gamepad.js：手把 { sens, invert, labels }，labels 是按鍵上印的字 'nintendo'／'xbox'／'ps'
   shoulder: { kind: 'flag', init: false },       // player.js：越肩
   view: { kind: 'json' },                        // player.js：越肩的廣度和魚眼 { fov, fish }
   tidy: { kind: 'flag', init: false },           // ui.js：收起上排的按鈕
@@ -25,6 +26,7 @@ export const PREFS = {
   eyeSeen: { kind: 'json' },                     // guide.js：黑眼帶路去過的地方，照區域記
   eyeOn: { kind: 'json' },                       // guide.js：黑眼現在叫出來了（1）
   eyeTold: { kind: 'json' },                     // guide.js：說過一次怎麼用（1）
+  verbsSeen: { kind: 'json' },                   // main.js：互動鍵出現過哪些動詞（第一次出現光暈多擴幾圈）
 };
 
 export function pref(key) {

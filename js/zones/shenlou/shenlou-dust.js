@@ -10,8 +10,8 @@
 import * as THREE from 'three';
 import { uTime } from '../../core/scenery.js';
 import { quadStreaks, driftStep, fitScreen, qualityOf } from '../../core/weatherfx.js';
-import { GRADE, GRADE_VERT, TUNE, WEATHER, gradeUniforms } from '../../core/grade.js';
-import { Dust } from '../../core/weather.js';
+import { GRADE, GRADE_VERT, GRADE_GLSL, TUNE, WEATHER, gradeUniforms } from '../../core/grade.js';
+import { Dust, BREEZE } from '../../core/weather.js';
 
 const COUNT = { low: 300, mid: 800, high: 1800 };   // 起風沙時最多幾粒；平常大約六成、沙停兩成多
 const BOX = new THREE.Vector3(24, 8, 24);           // 沙粒的盒子：跟著鏡頭，往看的方向推出去三成，背後不浪費
@@ -27,6 +27,74 @@ const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const smooth = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 const ratio = (hex) => { const r = new THREE.Color(REF), c = new THREE.Color(hex); return new THREE.Color(c.r / r.r, c.g / r.g, c.b / r.b); };
 const T_HAZE = ratio(HAZE), T_STORM = ratio(STORM), T_CALM = ratio(CALM);
+
+// 落地揚起的一小團沙：幾片面向鏡頭的小方塊從落點往外飄、變大、淡掉，不到一秒散完。add(x, y, z) 叫一次冒 PUFF_N 片，
+// 環形緩衝最多 PUFF_MAX 片。霧和調色照 haze.js 的霧團那樣自己接 grade.js
+const PUFF_N = 5, PUFF_MAX = 20, PUFF_LIFE = 0.8;
+const WORLD = 'cameraPosition + ( vec4( mv.xyz, 0.0 ) * viewMatrix ).xyz';
+function puffMesh() {
+  const plane = new THREE.PlaneGeometry(1, 1), g = new THREE.InstancedBufferGeometry();
+  g.index = plane.index;
+  g.setAttribute('position', plane.attributes.position);
+  g.setAttribute('uv', plane.attributes.uv);
+  const at = new THREE.InstancedBufferAttribute(new Float32Array(PUFF_MAX * 4), 4), dir = new THREE.InstancedBufferAttribute(new Float32Array(PUFF_MAX * 2), 2);
+  at.setUsage(THREE.DynamicDrawUsage);
+  dir.setUsage(THREE.DynamicDrawUsage);
+  for (let i = 0; i < PUFF_MAX; i++) at.setW(i, -1e3);
+  g.setAttribute('aAt', at);
+  g.setAttribute('aDir', dir);
+  g.instanceCount = PUFF_MAX;
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uTime, uColor: { value: new THREE.Color('#c8aa80') }, ...gradeUniforms() },
+    vertexShader: GRADE_VERT + `
+      uniform float uTime;
+      attribute vec4 aAt; attribute vec2 aDir;
+      varying vec2 vUv; varying float vA; varying float vFog;
+      void main() {
+        float age = (uTime - aAt.w) / ${PUFF_LIFE};
+        vUv = uv;
+        if (age < 0.0 || age > 1.0) { vA = 0.0; vFog = 0.0; gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+        float e = 1.0 - (1.0 - age) * (1.0 - age);
+        vec3 c = aAt.xyz + vec3(aDir.x, 0.0, aDir.y) * e * 0.55 + vec3(0.0, 0.08 + e * 0.22, 0.0);
+        vec4 mv = modelViewMatrix * vec4(c, 1.0);
+        mv.xy += position.xy * (0.16 + e * 0.5);
+        vA = (1.0 - age) * (1.0 - age) * 0.5;
+        vFog = gradeFog(${WORLD});
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: GRADE_GLSL + `
+      uniform vec3 fogColor; uniform vec3 uColor;
+      varying vec2 vUv; varying float vA; varying float vFog;
+      void main() {
+        vec2 p = (vUv - 0.5) * 2.0;
+        float a = pow(max(0.0, 1.0 - dot(p, p)), 1.6) * vA;
+        if (a < 0.004) discard;
+        gl_FragColor = vec4(uColor, a);
+        #include <colorspace_fragment>
+        if (uGrade.on > 0.5) gl_FragColor.rgb = gradeSurface(gl_FragColor.rgb, vFog);
+      }`,
+    transparent: true, depthWrite: false, fog: true,
+  });
+  const m = new THREE.Mesh(g, mat);
+  m.frustumCulled = false;
+  m.renderOrder = 4;
+  let next = 0;
+  return {
+    mesh: m,
+    add(x, y, z) {
+      for (let i = 0; i < PUFF_N; i++) {
+        const a = (i / PUFF_N) * Math.PI * 2 + Math.random() * 0.8, r = 0.6 + Math.random() * 0.6;
+        at.setXYZW(next, x + Math.cos(a) * 0.08, y, z + Math.sin(a) * 0.08, uTime.value);
+        dir.setXY(next, Math.cos(a) * r, Math.sin(a) * r);
+        next = (next + 1) % PUFF_MAX;
+      }
+      at.needsUpdate = true;
+      dir.needsUpdate = true;
+    },
+    // 沙的顏色跟著這一刻的光：地面色偏亮一點
+    tint(ground, light) { mat.uniforms.uColor.value.copy(ground).lerp(light, 0.12).multiplyScalar(1.08); },
+  };
+}
 
 // 沙粒：一粒一個四邊形，順著風拉成一條，頭（往前飛的那端）濃、尾巴淡。三種飛速各自累積被吹了多遠（CPU 照風速積分，繞著盒子取餘數）
 function grainMesh(max) {
@@ -134,6 +202,8 @@ export function buildDust({ scene, world, renderer, quality, coarse, params }) {
   const level = () => qualityOf(quality, coarse);
   const mesh = grainMesh(COUNT.high), u = mesh.material.uniforms;
   scene.add(mesh);
+  const puffs = puffMesh();
+  scene.add(puffs.mesh);
   const flow = {
     uSandNoise: { value: GRADE.noise }, uSandDir: { value: WIND.clone().normalize() }, uSandFlow: { value: new THREE.Vector3() },
     uSandAmt: { value: 0 }, uSandTown: { value: new THREE.Vector2(world.townR ?? 48, 0.35) },
@@ -157,10 +227,18 @@ export function buildDust({ scene, world, renderer, quality, coarse, params }) {
     weather,
     haze: 0,    // 塵比沙停濃多少：0 是沙停、1 是平常以上（天空球、太陽圓盤用）
     storm: 0,   // 風沙到什麼程度
+    // 落地揚一小團沙（main.js 的 onLand → zone-shenlou.js）
+    puff(p) { puffs.add(p.x, p.y, p.z); },
     // s：shenlou.js 的 sky()；cam、floor：鏡頭位置、角色腳下多高；camera 照到多遠在這裡改
     update(dt, s, cam, floor, camera) {
       const w = weather.update(), L = w.level;
       const calm = 1 - smooth(0.06, 0.45, L), st = smooth(0.55, 0.95, L), haze = 1 - calm;
+      // 風給角色（披風、帽子、壓帽子）：方向跟沙一樣，大小跟塵走，一陣一陣照 gust
+      BREEZE.x = dir.x;
+      BREEZE.z = dir.z;
+      BREEZE.wind = w.wind;
+      BREEZE.gust = w.gust;
+      BREEZE.rain = 0;
       dust.haze = haze;
       dust.storm = st;
       // 霧：風沙、沙停兩組色調照濃淡換過去（grade.js 照天氣的分區）
@@ -172,6 +250,7 @@ export function buildDust({ scene, world, renderer, quality, coarse, params }) {
       out.sky.copy(s.sky).lerp(out.bg, 0.15 + 0.35 * haze + 0.3 * st);
       out.ground.copy(s.ground).multiply(tint);
       out.light.copy(s.light).lerp(storm.copy(STORM_SUN), 0.15 * haze + 0.45 * st);
+      puffs.tint(out.ground, out.light);
       out.si = s.si * (1 - 0.15 * haze - 0.45 * st);
       out.hi = s.hi * (1 + 0.1 * haze + 0.15 * st);
       out.near = s.near;

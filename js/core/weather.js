@@ -21,6 +21,11 @@ const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const smooth = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 const climate = (zone) => (Object.hasOwn(CLIMATES, zone) ? CLIMATES[zone] : null);
 
+// 這一區現在吹的風，給角色用（avatar/character.js：往風裡傾、披風圍巾帽子順風，風大右手壓帽子，下雨縮肩）：
+// x、z 是風往哪吹（單位向量），wind 風多大、gust 這一陣多強、rain 雨量，都是 0 到 1。
+// 有天氣的區域每幀寫（haishi/rain.js、shenlou/shenlou-dust.js），沒天氣的區域一直是零。照伺服器時間算，每個人畫面上的風一樣
+export const BREEZE = { x: 0, z: 0, wind: 0, gust: 0, rain: 0 };
+
 // 第 k 格從哪一刻開始（往後錯開最多半格）、下不下、多大
 const startOf = (seed, k) => k * SLOT + hash(seed, k, 1) * SLOT * 0.5;
 const rains = (seed, k, c) => hash(seed, k, 2) < c.chance;

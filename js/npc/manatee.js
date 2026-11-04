@@ -16,10 +16,13 @@ const SKIN = 0x91abb0;
 const SAY_TIME = 3500, GREET_DIST = 3.5, NEAR = 6;
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 // 身體輪廓 [高度, 半寬]，取自遊戲專案 character_model.gd 的 PROFILE。靜海的海牛人（zones/jinghai/manatees.js）也用這個身形
+// 0.95 以上是一段橢圓弧（高 0.36、寬 0.378），頭頂圓圓的不收尖
 export const PROFILE = [
   [0.12, 0.0], [0.15, 0.2], [0.21, 0.3], [0.3, 0.355], [0.4, 0.37], [0.52, 0.35], [0.61, 0.338],
-  [0.71, 0.362], [0.83, 0.385], [0.95, 0.378], [1.06, 0.345], [1.16, 0.282], [1.24, 0.19], [1.295, 0.085], [1.31, 0.0],
+  [0.71, 0.362], [0.83, 0.385], [0.95, 0.378], [1.06, 0.36], [1.15, 0.314], [1.22, 0.25], [1.27, 0.173], [1.3, 0.089], [1.31, 0.0],
 ];
+// 豆子前後的厚度（對寬度的比例）
+export const DEPTH = 0.9;
 const FACE_Y = 0.91, FACE_W = 0.6, FACE_H = 0.62, TOP_Y = 1.31;
 // 被拍：鏡頭多遠內算數、臉佔畫面高度多少以上算對著他、對到多久才打碼、移開多久才收（跟 attention.js 的「被拍」一樣）
 const NOTICE = 12, MIN_SIZE = 0.1, SEEN_IN = 0.4, SEEN_OUT = 1.5, LENS_QUIET = 6;
@@ -156,9 +159,9 @@ export class Manatee {
 
     const skin = mat(SKIN), black = mat(0x0b0b10, { side: THREE.DoubleSide }), wood = mat(0x2a1a16);
 
-    // 頭身一體的豆子，前後略扁
+    // 頭身一體的豆子，前後薄一點
     const bean = new THREE.Mesh(new THREE.LatheGeometry(PROFILE.map(([y, r]) => new THREE.Vector2(r, y)).reverse(), 20), skin);
-    bean.scale.z = 0.76;
+    bean.scale.z = DEPTH;
     body.add(bean);
 
     // 臉：a ω a 畫在一張畫布上，貼在豆子正面的一片弧形。只有這一層
@@ -178,7 +181,7 @@ export class Manatee {
       facePatch(),
       new THREE.MeshLambertMaterial({ map: tex, flatShading: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })
     );
-    face.scale.z = 0.76;
+    face.scale.z = DEPTH;
     body.add(face);
     // 被拍：lenses 回所有鏡頭（自己的相機、畫廊的眼睛、別人的），forced 是鏡子自拍那種沒鏡頭資料也算在拍的時候，clip 是牆的遮擋
     this.lenses = () => [];
@@ -199,7 +202,7 @@ export class Manatee {
       const th = Math.PI + (i - 3) * 0.38;
       const s = new THREE.Mesh(spike, black);
       const h = 0.5 + (1 - Math.abs(i - 3) / 3) * 0.12;
-      s.position.set(Math.sin(th) * 0.4, 1.12, Math.cos(th) * 0.34);
+      s.position.set(Math.sin(th) * 0.4, 1.12, Math.cos(th) * 0.4);
       s.rotation.x = -Math.cos(th) * 0.25;
       s.rotation.z = Math.sin(th) * 0.25;
       s.scale.y = h * 1.4;

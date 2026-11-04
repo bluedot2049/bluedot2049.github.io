@@ -218,10 +218,13 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
     lamps.glows.push({ x: h.x + c * v.x - s * v.z, y: v.y, z: h.z + s * v.x + c * v.z, color: VIAL, size: 0.9 });
     iron.house(k, h, info, i);
     water.house(k, h, info);
-    const awning = shopKit.house(k, h, info, i);
+    // 櫃台和貨品另一個 Kit、不淡：以前跟房子同一組，房子擋住鏡頭一淡，攤子也淡成兩成網點，遠看整個不見
+    const kc = new Kit(RH);
+    const awning = shopKit.house(k, h, info, i, kc);
     // 擋住鏡頭的範圍：房子本身，開店的再加布棚那一塊（櫃台矮，不算）
     k.fid = fade([{ x: h.x, z: h.z, a: -h.th, hw: h.w / 2 + 0.1, hd: h.d / 2 + 0.1, y0: 0, y1: info.rb + 0.6 }, ...(awning ? [awning] : [])]);
     k.emit(bucket, h.x, h.z, -h.th);
+    kc.emit(bucket, h.x, h.z, -h.th);
     obstacles.push({ x: h.x, z: h.z, hw: h.w / 2, hd: h.d0 / 2, hd1: h.d1 / 2, a: -h.th });
   }
 
@@ -331,9 +334,12 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
   }
   // 頂下的管子、水龍頭跟頂蓋一起淡掉
   iron.arcade(arcadeK, AR);
-  shopKit.arcade(arcadeK, AR);
+  // 拱廊兩側的店面另一個 Kit、不淡：拱頂擋住鏡頭淡掉時，櫃台和貨品照樣看得到
+  const arcadeShops = new Kit(RS);
+  shopKit.arcade(arcadeShops, AR);
   arcadeK.fid = fade([[-AR.x - 0.5, AR.y - 0.9, AR.z0, AR.x + 0.5, AR.y + 0.3, AR.z1], [-AR.x - 0.5, 0, AR.z0, -AR.x, AR.y, AR.z1], [AR.x, 0, AR.z0, AR.x + 0.5, AR.y, AR.z1]]);
   arcadeK.emit(bucket, 0, 0, 0);
+  arcadeShops.emit(bucket, 0, 0, 0);
 
   // ---------- 布棚市集：東邊偏北的街，正對第十一影的太陽，晷針的影子躺在街心。靛藍和赭黃的布剪成一條一條橫過街，三條一組，條和條中間留縫 ----------
   // 先照街自己的座標蓋（x 沿著街往外、z 橫過街），最後整組轉到街的方向；攤子擋路的方塊跟著轉
@@ -348,12 +354,13 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
       }
       x += 1.3 + RM() * 1.1;
     }
-    // 攤位：廢鐵攤，鐵台子上堆零件、後面一個掛架（shenlou-iron.js）
+    // 攤位：廢鐵攤，鐵台子上堆零件、後面一個掛架（shenlou-iron.js）。放另一個 Kit，布棚淡掉時攤子照樣在
+    const ks = new Kit(k.R);
     const n0 = obstacles.length;
     let n = 0;
     for (let x = 21; x < TOWN_R - 4; x += 6) {
       for (const s of [-1, 1]) {
-        iron.stall(k, x + (s > 0 ? 1.5 : 0), s * 2.2, s, n++);
+        iron.stall(ks, x + (s > 0 ? 1.5 : 0), s * 2.2, s, n++);
         obstacles.push({ x: x + (s > 0 ? 1.5 : 0), z: s * 2.2, hw: 0.8, hd: 0.5, a: 0 });
       }
     }
@@ -367,6 +374,7 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
     // 布棚那一層擋住才淡，攤子不淡
     k.fid = fade([{ x: Math.cos(MKT) * 29.4, z: Math.sin(MKT) * 29.4, a: rot, hw: 10.2, hd: 3.4, y0: 3.9, y1: 5.3 }]);
     k.emit(bucket, 0, 0, rot);
+    ks.emit(bucket, 0, 0, rot);
   }
 
   // ---------- 井口一圈刻度：晷針的影子每一影倒向哪裡，那裡的地上就嵌一條深色的 I 石；靠井那頭一塊石牌，I 碼刻第幾影（羅馬數字）。
@@ -811,6 +819,7 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
       // 塵（shenlou-dust.js）：a 是被這一刻的塵調過的霧色和光線，方向、時辰照舊看 s
       const a = this.dust?.update(dt, s, cam, target ? target.y : cam.y - 2, camera) ?? s;
       const hz = this.dust?.haze ?? 0, st = this.dust?.storm ?? 0;
+      this.prints?.setLife(35 - 26 * st);   // 腳印（zone-shenlou.js）：風沙時沙很快填平
       // 人的影子跟著太陽拉長（character.js 讀 sunShadow）；夜裡照常是圓影
       const sh = Math.hypot(s.dir.x, s.dir.z);
       sunShadow.len = s.day && s.dir.y > 0.08 && sh > 1e-4 ? Math.min(6, sh / s.dir.y) : 0;

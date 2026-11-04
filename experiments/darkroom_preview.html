@@ -1,0 +1,770 @@
+<!doctype html>
+<!-- © 2026 bluedot2049《煉金畫廊》。暗房調色台：調沖洗師傅的配方（js/camera/darkroom.js 的 LABS）。讀這台瀏覽器的相簿（還沒洗的那些）或丟圖檔進來，拉滑桿看結果，按「複製配方」整段貼回 LABS。
+     洗的引擎跟遊戲同一支（darkroom.js），看到的就是師傅洗出來的。用 http://localhost:8000/experiments/darkroom_preview.html 打開；?demo 自己生三張假照片。只做電腦版 -->
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>暗房調色台</title>
+<script type="importmap">{ "imports": { "three": "../vendor/three.module.min.js" } }</script>
+<style>
+  :root { --bg: #17120e; --panel: #201913; --line: rgba(232, 184, 106, .22); --line-soft: rgba(232, 184, 106, .1); --gold: #e8b86a; --gold-hi: #f6dba6; --text: #efe3cf; --muted: #a8977c; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.5 "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif; overflow: hidden; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { background: #2a211a; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+  button:hover { border-color: var(--gold); }
+  button.on { background: #4a3618; border-color: var(--gold); color: var(--gold-hi); }
+  button.primary { background: #5a4220; border-color: var(--gold); color: var(--gold-hi); }
+  button:disabled { opacity: .45; cursor: default; }
+  select, input[type=text] { background: #15100c; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+  #bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); height: 46px; }
+  #bar b { color: var(--gold-hi); font-size: 15px; margin-right: 4px; }
+  #bar .sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
+  #bar #info { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+  main { display: flex; height: calc(100% - 46px); }
+  #stage { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+  #view { flex: 1 1 auto; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; background: #0e0b08; overflow: hidden; }
+  #view.zoom { display: block; overflow: auto; }
+  #view[hidden], #gridview[hidden] { display: none; }
+  #gl { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; }
+  #view.zoom #gl { max-width: none; max-height: none; }
+  #splitwrap { position: absolute; pointer-events: none; }
+  #splitline { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid rgba(255, 255, 255, .75); box-shadow: 0 0 0 1px rgba(0, 0, 0, .5); }
+  #hint { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; color: var(--muted); pointer-events: none; font-size: 15px; }
+  #view.drop::after { content: "放開就收進來"; position: absolute; inset: 12px; border: 2px dashed var(--gold); border-radius: 10px; display: grid; place-items: center; color: var(--gold-hi); font-size: 18px; background: rgba(23, 18, 14, .6); }
+  #gridview { flex: 1 1 auto; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 10px; padding: 10px; background: #0e0b08; align-content: start; }
+  #gridview figure { margin: 0; cursor: pointer; }
+  #gridview canvas { display: block; width: 100%; height: auto; border-radius: 4px; }
+  #gridview figcaption { color: var(--muted); font-size: 12px; padding: 3px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #strip { flex: 0 0 auto; display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-top: 1px solid var(--line); background: var(--panel); overflow-x: auto; min-height: 84px; }
+  #strip .th { position: relative; flex: 0 0 auto; width: 96px; height: 64px; padding: 0; border-radius: 4px; overflow: hidden; background: #000; border: 2px solid transparent; }
+  #strip .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #strip .th.on { border-color: var(--gold); }
+  #strip .th span { position: absolute; left: 0; right: 0; bottom: 0; font-size: 10px; line-height: 1.3; padding: 1px 4px; background: rgba(0, 0, 0, .55); color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+  #strip .th i { position: absolute; right: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: rgba(0, 0, 0, .6); color: #fff; font: 12px/16px sans-serif; text-align: center; font-style: normal; display: none; }
+  #strip .th:hover i { display: block; }
+  #strip .th small { position: absolute; left: 3px; top: 2px; font-size: 9px; color: var(--gold-hi); background: rgba(0, 0, 0, .55); padding: 0 3px; border-radius: 3px; }
+  #strip #open { flex: 0 0 auto; height: 64px; }
+  #strip .note { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  #side { flex: 0 0 392px; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; overflow-x: hidden; }
+  #hist { width: 100%; height: 120px; display: block; background: #110d0a; border-bottom: 1px solid var(--line); }
+  details { border-bottom: 1px solid var(--line-soft); }
+  summary { cursor: pointer; padding: 7px 12px; color: var(--gold); font-weight: 600; user-select: none; list-style: none; display: flex; align-items: center; gap: 6px; }
+  summary::before { content: "▸"; font-size: 11px; color: var(--muted); }
+  details[open] summary::before { content: "▾"; }
+  summary .mini { margin-left: auto; font-weight: 400; font-size: 11px; color: var(--muted); }
+  .body { padding: 2px 12px 10px; }
+  .row { display: grid; grid-template-columns: 76px 1fr 54px; align-items: center; gap: 8px; height: 26px; }
+  .row label { color: var(--muted); cursor: default; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row label:hover { color: var(--text); }
+  .row.changed label { color: var(--gold-hi); }
+  .row input[type=range] { width: 100%; height: 18px; margin: 0; accent-color: var(--gold); cursor: pointer; }
+  .row input[type=range].temp { background: linear-gradient(90deg, #3c6fd6, #999, #e9b43c); border-radius: 3px; height: 4px; appearance: none; }
+  .row input[type=range].tint { background: linear-gradient(90deg, #3cb04a, #999, #d548c9); border-radius: 3px; height: 4px; appearance: none; }
+  .row input[type=range].temp::-webkit-slider-thumb, .row input[type=range].tint::-webkit-slider-thumb { appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--gold-hi); border: 1px solid #000; }
+  .row input[type=number] { width: 54px; background: #15100c; border: 1px solid var(--line-soft); border-radius: 4px; padding: 1px 4px; text-align: right; font-variant-numeric: tabular-nums; }
+  .row input[type=number]::-webkit-inner-spin-button { opacity: .4; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+  .tabs { display: flex; gap: 4px; margin: 2px 0 6px; }
+  .tabs button { padding: 2px 9px; font-size: 12px; border-radius: 10px; }
+  .toggle { display: flex; gap: 6px; margin: 4px 0; align-items: center; }
+  .toggle span { color: var(--muted); width: 76px; }
+  #curve { display: block; width: 256px; height: 256px; background: #110d0a; border: 1px solid var(--line-soft); border-radius: 4px; cursor: crosshair; margin: 4px auto; outline: none; }
+  #curve:focus { border-color: var(--gold); }
+  .curvehelp { color: var(--muted); font-size: 11px; text-align: center; }
+  .wheels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .wheel { text-align: center; }
+  .wheel h4 { margin: 0 0 4px; font-weight: 400; color: var(--muted); font-size: 12px; }
+  .wheel canvas { display: block; width: 100px; height: 100px; margin: 0 auto; border-radius: 50%; cursor: crosshair; }
+  .wheel .val { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; height: 16px; }
+  .wheel .row { grid-template-columns: 1fr 44px; height: 22px; margin-top: 2px; }
+  #recipe { width: 100%; height: 190px; resize: vertical; background: #110d0a; border: 1px solid var(--line-soft); border-radius: 4px; color: #d9c9a8; font: 11px/1.45 ui-monospace, Consolas, monospace; padding: 6px; white-space: pre; overflow: auto; }
+  #toast { position: fixed; left: 16px; bottom: 100px; background: rgba(40, 30, 20, .95); border: 1px solid var(--gold); color: var(--gold-hi); padding: 8px 14px; border-radius: 8px; z-index: 9; pointer-events: none; transition: opacity .3s; }
+  #toast[hidden] { display: block; opacity: 0; }
+  kbd { font: 11px ui-monospace, monospace; background: #2a211a; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+</style>
+</head>
+<body>
+<header id="bar">
+  <b>暗房調色台</b>
+  <select id="lab" title="哪一位師傅的配方"></select>
+  <label>風格 <input type="text" id="style" size="5" title="相簿裡照片角落寫的字"></label>
+  <span class="sep"></span>
+  <button id="copy" class="primary" title="整段複製，貼回 js/camera/darkroom.js 的 LABS">複製配方</button>
+  <button id="paste" title="貼 LABS 的一段、COLORAWA 的 .rawapreset 內容、或純設定 JSON">貼上</button>
+  <button id="file" title="COLORAWA 存的 .rawapreset 或 .json">載入調色檔</button><input type="file" id="fileIn" accept=".rawapreset,.json,application/json" hidden>
+  <button id="revert" title="丟掉草稿，回到 darkroom.js 檔案裡寫的">回到檔案裡的</button>
+  <button id="reset" title="全部歸零（不調色）">全部歸零</button>
+  <span class="sep"></span>
+  <button id="before" title="按住看原片，鍵盤 B 也行">原片</button>
+  <button id="split" title="左邊原片、右邊洗好的，拖分界線">對切</button>
+  <button id="zoom" title="看實際像素（顆粒、質感要這樣看）">1:1</button>
+  <button id="grid" title="收進來的照片全部用這個配方一起看">同看</button>
+  <span id="info"></span>
+</header>
+<main>
+  <section id="stage">
+    <div id="view">
+      <canvas id="gl"></canvas>
+      <div id="splitwrap" hidden><div id="splitline"></div></div>
+      <div id="hint">把照片丟進來，或按下面的「打開檔案」。相簿裡還沒洗的照片會自己出現</div>
+    </div>
+    <div id="gridview" hidden></div>
+    <div id="strip">
+      <button id="open">＋ 打開檔案</button><input type="file" id="openIn" accept="image/*" multiple hidden>
+      <span class="note" id="stripnote"></span>
+    </div>
+  </section>
+  <aside id="side">
+    <canvas id="hist" width="784" height="240"></canvas>
+    <div id="panels"></div>
+    <details id="out" open><summary>貼回 LABS 的樣子</summary><div class="body"><textarea id="recipe" readonly spellcheck="false"></textarea></div></details>
+  </aside>
+</main>
+<div id="toast" hidden></div>
+<script type="module">
+  import { Darkroom, DEFAULTS, LABS, HSL_KEYS, fullSettings, trimSettings, formatRecipe, curveLUT, hasWebGL2, develop } from '../js/camera/darkroom.js';
+  import { loadAlbum, album } from '../js/camera/album.js';
+
+  const $ = (s) => document.querySelector(s);
+  const P = new URLSearchParams(location.search);
+  const clone = (v) => JSON.parse(JSON.stringify(v));
+  const get = (o, path) => path.split('.').reduce((a, k) => a[k], o);
+  const set = (o, path, v) => { const ks = path.split('.'), last = ks.pop(); ks.reduce((a, k) => a[k], o)[last] = v; };
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  let toastT;
+  const toast = (msg) => { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2600); };
+
+  if (!hasWebGL2()) { $('#hint').textContent = '這個瀏覽器沒有 WebGL2，開不了暗房'; throw new Error('no webgl2'); }
+
+  // ───────── 師傅們：檔案裡的 LABS 加上這台存的草稿（新加的師傅也存在草稿裡） ─────────
+  const DRAFT = 'darkroom-draft:';
+  const labs = {};
+  for (const [id, L] of Object.entries(LABS)) labs[id] = { name: L.name, who: L.who, style: L.style, settings: fullSettings(L.settings) };
+  const drafted = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k?.startsWith(DRAFT)) continue;
+    try {
+      const d = JSON.parse(localStorage.getItem(k)), id = k.slice(DRAFT.length);
+      labs[id] = { name: d.name ?? labs[id]?.name ?? id, who: d.who ?? labs[id]?.who ?? '', style: d.style ?? labs[id]?.style ?? '', settings: fullSettings(d.settings || {}) };
+      drafted.push(id);
+    } catch {}
+  }
+  let labId = Object.keys(labs)[0], S = labs[labId].settings;
+
+  // ───────── 引擎、照片 ─────────
+  const engine = new Darkroom($('#gl'));
+  const gridEngine = new Darkroom();   // 同看用，自己一張畫布
+  const photos = [];                   // { name, bitmap, small, url, from }
+  let cur = null, view = 0, split = 0.5, gridOn = false, holding = false;
+
+  async function addPhoto(blob, name, from) {
+    let bitmap;
+    try { bitmap = await createImageBitmap(blob); } catch { toast(`讀不了 ${name}`); return null; }
+    const k = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
+    const small = k < 1 ? await createImageBitmap(bitmap, { resizeWidth: Math.round(bitmap.width * k), resizeHeight: Math.round(bitmap.height * k), resizeQuality: 'high' }) : bitmap;
+    const p = { name, bitmap, small, url: URL.createObjectURL(blob), from };
+    photos.push(p);
+    const b = el('button', 'th');
+    const img = new Image();
+    img.src = p.url;
+    img.alt = '';
+    b.append(img, el('span', '', name));
+    if (from) b.append(el('small', '', from));
+    const x = el('i', '', '×');
+    x.title = '拿掉';
+    b.append(x);
+    b.onclick = (e) => (e.target === x ? remove(p) : select(p));
+    p.el = b;
+    $('#strip').insertBefore(b, $('#open'));
+    stripNote();
+    if (!cur) select(p);
+    else if (gridOn) scheduleGrid();
+    return p;
+  }
+  function remove(p) {
+    const i = photos.indexOf(p);
+    if (i < 0) return;
+    photos.splice(i, 1);
+    p.el.remove();
+    URL.revokeObjectURL(p.url);
+    if (cur === p) { cur = null; if (photos.length) select(photos[Math.min(i, photos.length - 1)]); else { $('#hint').hidden = false; engine.release(); $('#info').textContent = ''; } }
+    stripNote();
+    if (gridOn) scheduleGrid();
+  }
+  function stripNote() { $('#stripnote').textContent = photos.length ? '' : '也可以把圖檔直接拖進畫面'; }
+  function select(p) {
+    cur = p;
+    for (const q of photos) q.el.classList.toggle('on', q === p);
+    engine.setImage(p.bitmap);
+    $('#hint').hidden = true;
+    $('#info').textContent = `${p.name}　${p.bitmap.width}×${p.bitmap.height}`;
+    applyZoom();
+    invalidate();
+  }
+  // 1:1 是照片一個像素對螢幕一個像素（高解析螢幕 CSS 的 px 要除掉）
+  function applyZoom() {
+    const on = $('#view').classList.contains('zoom');
+    $('#gl').style.width = on && cur ? cur.bitmap.width / (devicePixelRatio || 1) + 'px' : '';
+  }
+
+  // ───────── 畫 ─────────
+  let dirty = false, histT = 0, recipeT = 0, draftT = 0, gridT = 0;
+  function invalidate() { if (dirty) return; dirty = true; requestAnimationFrame(frame); }
+  function frame() {
+    dirty = false;
+    if (!cur) return;
+    engine.render(S, { view: holding ? 1 : view, split });
+    placeSplit();
+    if (!histT) histT = setTimeout(() => { histT = 0; drawHist(); }, 70);
+    if (!recipeT) recipeT = setTimeout(() => { recipeT = 0; showRecipe(); }, 150);
+    clearTimeout(draftT);
+    draftT = setTimeout(saveDraft, 500);
+    if (gridOn) scheduleGrid();
+  }
+  function scheduleGrid() { clearTimeout(gridT); gridT = setTimeout(drawGrid, 120); }
+  function drawGrid() {
+    const g = $('#gridview');
+    if (!gridOn) return;
+    for (const p of photos) {
+      if (!p.cell) {
+        const f = el('figure'), c = el('canvas');
+        f.append(c, el('figcaption', '', p.name));
+        f.onclick = () => { select(p); $('#grid').click(); };
+        p.cell = f;
+        p.cellCanvas = c;
+      }
+      if (p.cell.parentNode !== g) g.append(p.cell);
+      gridEngine.setImage(p.small);
+      gridEngine.render(S);
+      const c = p.cellCanvas;
+      if (c.width !== p.small.width || c.height !== p.small.height) { c.width = p.small.width; c.height = p.small.height; }
+      c.getContext('2d').drawImage(gridEngine.canvas, 0, 0);
+    }
+    for (const f of [...g.children]) if (!photos.some((p) => p.cell === f)) f.remove();
+    gridEngine.release();
+  }
+  let lastHist = null;
+  function drawHist() {
+    const h = cur && engine.histogram(S);
+    lastHist = h;
+    const c = $('#hist'), ctx = c.getContext('2d'), W = c.width, H = c.height;
+    ctx.clearRect(0, 0, W, H);
+    if (!h) { curve?.draw(); return; }
+    // 最高的格子不算 0 和 255（剪掉的那兩根會把別的壓扁）
+    let max = 1;
+    for (let i = 1; i < 255; i++) max = Math.max(max, h.r[i], h.g[i], h.b[i]);
+    const area = (arr, fill) => {
+      ctx.beginPath();
+      ctx.moveTo(0, H);
+      for (let i = 0; i < 256; i++) ctx.lineTo(i / 255 * W, H - Math.min(1, arr[i] / max) * (H - 8));
+      ctx.lineTo(W, H);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+    };
+    ctx.globalCompositeOperation = 'lighter';
+    area(h.r, 'rgba(230, 70, 60, .55)');
+    area(h.g, 'rgba(70, 200, 90, .5)');
+    area(h.b, 'rgba(70, 110, 240, .55)');
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = 'rgba(255, 245, 225, .7)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < 256; i++) ctx[i ? 'lineTo' : 'moveTo'](i / 255 * W, H - Math.min(1, h.l[i] / max) * (H - 8));
+    ctx.stroke();
+    // 兩端剪掉多少
+    const n = 128 * 128, lo = h.l[0] / n, hi = h.l[255] / n;
+    ctx.fillStyle = 'rgba(232, 184, 106, .8)';
+    ctx.font = '20px sans-serif';
+    if (lo > 0.002) ctx.fillText(`黑 ${(lo * 100).toFixed(1)}%`, 10, 26);
+    if (hi > 0.002) { const t = `白 ${(hi * 100).toFixed(1)}%`; ctx.fillText(t, W - 10 - ctx.measureText(t).width, 26); }
+    curve?.draw();
+  }
+  function placeSplit() {
+    const wrap = $('#splitwrap');
+    wrap.hidden = view !== 2 || holding || !cur;
+    if (wrap.hidden) return;
+    const r = $('#gl').getBoundingClientRect(), v = $('#view').getBoundingClientRect();
+    Object.assign(wrap.style, { left: r.left - v.left + $('#view').scrollLeft + 'px', top: r.top - v.top + $('#view').scrollTop + 'px', width: r.width + 'px', height: r.height + 'px' });
+    $('#splitline').style.left = split * 100 + '%';
+  }
+
+  // ───────── 歷史（Ctrl+Z / Ctrl+Y）、草稿 ─────────
+  const undos = [], redos = [];
+  let snap = JSON.stringify(S);
+  function commit() {
+    const now = JSON.stringify(S);
+    if (now === snap) return;
+    undos.push(snap);
+    if (undos.length > 120) undos.shift();
+    redos.length = 0;
+    snap = now;
+  }
+  function replace(settings) {
+    labs[labId].settings = S = fullSettings(settings);
+    snap = JSON.stringify(S);
+    refreshAll();
+    invalidate();
+  }
+  function undo() { if (!undos.length) return; redos.push(JSON.stringify(S)); replace(JSON.parse(undos.pop())); }
+  function redo() { if (!redos.length) return; undos.push(JSON.stringify(S)); replace(JSON.parse(redos.pop())); }
+  function saveDraft() {
+    const L = labs[labId];
+    try { localStorage.setItem(DRAFT + labId, JSON.stringify({ name: L.name, who: L.who, style: L.style, settings: trimSettings(S) })); } catch {}
+  }
+  function showRecipe() {
+    const L = labs[labId];
+    $('#recipe').value = formatRecipe(labId, { ...L, settings: S });
+  }
+
+  // ───────── 面板 ─────────
+  const refreshers = [];
+  function refreshAll() { for (const f of refreshers) f(); }
+  function panel(title, open = true, mini = '') {
+    const d = el('details'), s = el('summary', '', title);
+    d.open = open;
+    if (mini) s.append(el('span', 'mini', mini));
+    d.append(s);
+    const body = el('div', 'body');
+    d.append(body);
+    $('#panels').append(d);
+    return body;
+  }
+  // 一條滑桿：拉的時候即時畫，放開記一步；滾輪一格一步；點兩下名字歸零
+  function slider(parent, path, label, min, max, step = 1, cls = '') {
+    const row = el('div', 'row'), lab = el('label', '', label), range = el('input'), num = el('input');
+    range.type = 'range';
+    range.min = min; range.max = max; range.step = step;
+    if (cls) range.className = cls;
+    num.type = 'number';
+    num.min = min; num.max = max; num.step = step;
+    const dflt = get(DEFAULTS, path);
+    const show = () => { const v = get(S, path); range.value = v; num.value = step < 1 ? (+v).toFixed(2) : v; row.classList.toggle('changed', v !== dflt); };
+    range.oninput = () => { set(S, path, +range.value); show(); invalidate(); };
+    range.onchange = () => commit();
+    num.onchange = () => { set(S, path, clamp(+num.value || 0, min, max)); show(); invalidate(); commit(); };
+    lab.ondblclick = () => { set(S, path, dflt); show(); invalidate(); commit(); };
+    row.onwheel = (e) => { e.preventDefault(); set(S, path, clamp(+(get(S, path) - Math.sign(e.deltaY) * step).toFixed(2), min, max)); show(); invalidate(); commit(); };
+    row.append(lab, range, num);
+    parent.append(row);
+    refreshers.push(show);
+    return row;
+  }
+  function toggle(parent, label, options, getter, setter) {
+    const t = el('div', 'toggle'), span = el('span', '', label);
+    t.append(span);
+    const btns = options.map(([v, text]) => {
+      const b = el('button', '', text);
+      b.onclick = () => { setter(v); refreshAll(); invalidate(); commit(); };
+      t.append(b);
+      return [v, b];
+    });
+    refreshers.push(() => { const v = getter(); for (const [x, b] of btns) b.classList.toggle('on', x === v); });
+    parent.append(t);
+  }
+
+  const light = panel('光');
+  slider(light, 'exposure', '曝光', -5, 5, 0.01);
+  slider(light, 'contrast', '對比', -100, 100);
+  slider(light, 'highlights', '亮部', -100, 100);
+  slider(light, 'shadows', '陰影', -100, 100);
+  slider(light, 'whites', '白色', -100, 100);
+  slider(light, 'blacks', '黑色', -100, 100);
+
+  const color = panel('色彩');
+  slider(color, 'temperature', '色溫', -100, 100, 1, 'temp');
+  slider(color, 'tint', '色調', -100, 100, 1, 'tint');
+  slider(color, 'vibrance', '自然飽和度', -100, 100);
+  slider(color, 'saturation', '飽和度', -100, 100);
+  toggle(color, '黑白', [[false, '彩色'], [true, '黑白']], () => S.isBW, (v) => (S.isBW = v));
+
+  // 曲線：RGB 總曲線和紅綠藍各一條；點一下加點、拖、點兩下拿掉、方向鍵微調
+  const curveBody = panel('曲線');
+  const CH = [['rgb', 'RGB', '#f3e9d6'], ['red', '紅', '#ff6b6b'], ['green', '綠', '#6bdc8a'], ['blue', '藍', '#6b9bff']];
+  const curve = (() => {
+    const tabs = el('div', 'tabs');
+    let ch = 'rgb', sel = -1, drag = false;
+    const tabBtns = CH.map(([id, text]) => { const b = el('button', '', text); b.onclick = () => { ch = id; sel = -1; refreshTabs(); draw(); }; tabs.append(b); return [id, b]; });
+    const reset = el('button', '', '重設這條');
+    reset.style.marginLeft = 'auto';
+    reset.onclick = () => { S.curves[ch] = [[0, 0], [255, 255]]; sel = -1; draw(); invalidate(); commit(); };
+    tabs.append(reset);
+    const refreshTabs = () => { for (const [id, b] of tabBtns) b.classList.toggle('on', id === ch); };
+    refreshTabs();
+    const c = el('canvas');
+    c.id = 'curve';
+    c.tabIndex = 0;
+    const dpr = Math.min(2, devicePixelRatio || 1);
+    c.width = c.height = 256 * dpr;
+    const ctx = c.getContext('2d');
+    const pts = () => S.curves[ch];
+    const toC = (p) => [p[0] * dpr, (255 - p[1]) * dpr];
+    function draw() {
+      const W = c.width;
+      ctx.clearRect(0, 0, W, W);
+      // 直方圖當底
+      const h = lastHist && (ch === 'rgb' ? lastHist.l : lastHist[ch[0]]);
+      if (h) {
+        let max = 1;
+        for (let i = 1; i < 255; i++) max = Math.max(max, h[i]);
+        ctx.beginPath();
+        ctx.moveTo(0, W);
+        for (let i = 0; i < 256; i++) ctx.lineTo(i / 255 * W, W - Math.min(1, h[i] / max) * W * 0.85);
+        ctx.lineTo(W, W);
+        ctx.fillStyle = 'rgba(232, 184, 106, .13)';
+        ctx.fill();
+      }
+      ctx.strokeStyle = 'rgba(232, 184, 106, .18)';
+      ctx.lineWidth = dpr;
+      for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(i * W / 4, 0); ctx.lineTo(i * W / 4, W); ctx.moveTo(0, i * W / 4); ctx.lineTo(W, i * W / 4); ctx.stroke(); }
+      ctx.beginPath(); ctx.moveTo(0, W); ctx.lineTo(W, 0); ctx.stroke();
+      const lut = curveLUT(pts()), col = CH.find(([id]) => id === ch)[2];
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath();
+      for (let x = 0; x < 256; x++) ctx[x ? 'lineTo' : 'moveTo'](x * dpr, (255 - lut[x]) * dpr);
+      ctx.stroke();
+      pts().forEach((p, i) => {
+        const [x, y] = toC(p);
+        ctx.beginPath();
+        ctx.arc(x, y, (i === sel ? 6 : 4.5) * dpr, 0, Math.PI * 2);
+        ctx.fillStyle = i === sel ? '#fff' : col;
+        ctx.fill();
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = dpr;
+        ctx.stroke();
+      });
+    }
+    const pos = (e) => { const r = c.getBoundingClientRect(); return [clamp(Math.round((e.clientX - r.left) / r.width * 255), 0, 255), clamp(Math.round(255 - (e.clientY - r.top) / r.height * 255), 0, 255)]; };
+    const hit = (x, y) => { let best = -1, d = 12; pts().forEach((p, i) => { const dd = Math.hypot(p[0] - x, p[1] - y); if (dd < d) { d = dd; best = i; } }); return best; };
+    const move = (i, x, y) => {
+      const p = pts(), n = p.length;
+      if (i === 0 || i === n - 1) x = p[i][0];
+      else x = clamp(x, p[i - 1][0] + 1, p[i + 1][0] - 1);
+      p[i] = [x, y];
+    };
+    c.onpointerdown = (e) => {
+      c.focus();
+      const [x, y] = pos(e);
+      let i = hit(x, y);
+      if (i < 0) {
+        const p = pts();
+        if (p.some((q) => Math.abs(q[0] - x) < 2)) return;
+        p.push([x, y]);
+        p.sort((a, b) => a[0] - b[0]);
+        i = p.findIndex((q) => q[0] === x);
+      }
+      sel = i;
+      drag = true;
+      c.setPointerCapture(e.pointerId);
+      draw();
+      invalidate();
+    };
+    c.onpointermove = (e) => { if (!drag) return; const [x, y] = pos(e); move(sel, x, y); draw(); invalidate(); };
+    c.onpointerup = c.onpointercancel = () => { if (drag) { drag = false; commit(); } };
+    c.ondblclick = (e) => {
+      const [x, y] = pos(e), i = hit(x, y), p = pts();
+      if (i > 0 && i < p.length - 1) { p.splice(i, 1); sel = -1; draw(); invalidate(); commit(); }
+    };
+    c.onkeydown = (e) => {
+      if (sel < 0) return;
+      const k = e.shiftKey ? 10 : 1, p = pts()[sel];
+      const d = { ArrowUp: [0, k], ArrowDown: [0, -k], ArrowLeft: [-k, 0], ArrowRight: [k, 0] }[e.key];
+      if (!d) return;
+      e.preventDefault();
+      move(sel, clamp(p[0] + d[0], 0, 255), clamp(p[1] + d[1], 0, 255));
+      draw();
+      invalidate();
+      commit();
+    };
+    curveBody.append(tabs, c, el('div', 'curvehelp', '點一下加點、拖著走、點兩下拿掉；選了點可用方向鍵（Shift 一次 10）'));
+    refreshers.push(draw);
+    return { draw };
+  })();
+
+  // 混色器：八種顏色各自的色相、飽和度、明度
+  const mixer = panel('混色器 HSL', false);
+  const HSL_NAMES = { red: '紅', orange: '橙', yellow: '黃', green: '綠', aqua: '青', blue: '藍', purple: '紫', magenta: '洋紅' };
+  const HSL_DOT = { red: '#e8453c', orange: '#ef8f2e', yellow: '#e9d33c', green: '#49b84f', aqua: '#3cc1c7', blue: '#3f6fe0', purple: '#8d4fd6', magenta: '#d6479f' };
+  {
+    const tabs = el('div', 'tabs'), groups = {};
+    const props = [['hue', '色相'], ['sat', '飽和度'], ['lum', '明度']];
+    let prop = 'hue';
+    const btns = props.map(([p, text]) => { const b = el('button', '', text); b.onclick = () => { prop = p; show(); }; tabs.append(b); return [p, b]; });
+    mixer.append(tabs);
+    for (const [p] of props) {
+      const g = el('div');
+      groups[p] = g;
+      for (const k of HSL_KEYS) {
+        const row = slider(g, `hsl.${k}.${p}`, HSL_NAMES[k], -100, 100);
+        const dot = el('i', 'dot');
+        dot.style.background = HSL_DOT[k];
+        row.querySelector('label').prepend(dot);
+      }
+      mixer.append(g);
+    }
+    const show = () => { for (const [p, b] of btns) { b.classList.toggle('on', p === prop); groups[p].hidden = p !== prop; } };
+    show();
+  }
+
+  // 色彩分級：三個色輪
+  const grading = panel('色彩分級');
+  {
+    const wheels = el('div', 'wheels');
+    for (const [key, label] of [['shadows', '陰影'], ['midtones', '中間調'], ['highlights', '高光']]) {
+      const w = el('div', 'wheel');
+      w.append(el('h4', '', label));
+      const c = el('canvas');
+      const dpr = Math.min(2, devicePixelRatio || 1), N = 100 * dpr, R = N / 2 - 2 * dpr;
+      c.width = c.height = N;
+      const ctx = c.getContext('2d');
+      // 底圖畫一次：角度是色相、半徑是飽和度
+      const disc = document.createElement('canvas');
+      disc.width = disc.height = N;
+      const dctx = disc.getContext('2d'), img = dctx.createImageData(N, N);
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        const dx = x - N / 2 + 0.5, dy = y - N / 2 + 0.5, d = Math.hypot(dx, dy), i = (y * N + x) * 4;
+        if (d > R + 1) continue;
+        const h = ((Math.atan2(-dy, dx) * 180 / Math.PI) + 360) % 360, s = Math.min(1, d / R), l = 0.5;
+        const q = l * (1 + s), p = 2 * l - q, f = (t) => { if (t < 0) t += 1; if (t > 1) t -= 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 0.5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+        img.data[i] = f(h / 360 + 1 / 3) * 255; img.data[i + 1] = f(h / 360) * 255; img.data[i + 2] = f(h / 360 - 1 / 3) * 255;
+        img.data[i + 3] = 255 * clamp(R + 1 - d, 0, 1);
+      }
+      dctx.putImageData(img, 0, 0);
+      const val = el('div', 'val');
+      const g = () => S.colorGrading[key];
+      function draw() {
+        ctx.clearRect(0, 0, N, N);
+        ctx.drawImage(disc, 0, 0);
+        ctx.strokeStyle = 'rgba(0, 0, 0, .35)';
+        ctx.lineWidth = dpr;
+        ctx.beginPath(); ctx.arc(N / 2, N / 2, R * 0.5, 0, Math.PI * 2); ctx.stroke();
+        const { hue, sat } = g(), a = hue * Math.PI / 180, r = sat / 100 * R, x = N / 2 + Math.cos(a) * r, y = N / 2 - Math.sin(a) * r;
+        ctx.beginPath(); ctx.arc(x, y, 5 * dpr, 0, Math.PI * 2);
+        ctx.fillStyle = sat ? '#fff' : 'rgba(255,255,255,.5)'; ctx.fill();
+        ctx.strokeStyle = '#000'; ctx.stroke();
+        val.textContent = sat ? `${Math.round(hue)}°　${Math.round(sat)}%` : '—';
+      }
+      let drag = false;
+      const pick = (e) => {
+        const r = c.getBoundingClientRect(), dx = (e.clientX - r.left) / r.width * N - N / 2, dy = (e.clientY - r.top) / r.height * N - N / 2;
+        g().hue = Math.round(((Math.atan2(-dy, dx) * 180 / Math.PI) + 360) % 360);
+        g().sat = Math.round(Math.min(1, Math.hypot(dx, dy) / R) * 100);
+        draw();
+        invalidate();
+      };
+      c.onpointerdown = (e) => { drag = true; c.setPointerCapture(e.pointerId); pick(e); };
+      c.onpointermove = (e) => { if (drag) pick(e); };
+      c.onpointerup = c.onpointercancel = () => { if (drag) { drag = false; commit(); } };
+      c.ondblclick = () => { g().hue = 0; g().sat = 0; draw(); invalidate(); commit(); };
+      w.append(c, val);
+      slider(w, `colorGrading.${key}.lum`, '明度', -100, 100);
+      w.querySelector('.row label').remove();
+      wheels.append(w);
+      refreshers.push(draw);
+    }
+    grading.append(wheels, el('div', 'curvehelp', '色輪：角度是色相、離中心多遠是飽和度；點兩下歸零。底下那條是明度'));
+  }
+
+  const fx = panel('效果');
+  slider(fx, 'dehaze', '去霾', -100, 100);
+  slider(fx, 'clarity', '清晰度', -100, 100);
+  slider(fx, 'texture', '質感', -100, 100);
+  slider(fx, 'vignette', '暗角', -100, 100);
+  slider(fx, 'grainAmount', '顆粒', 0, 100);
+  slider(fx, 'grainSize', '顆粒大小', 10, 100);
+  slider(fx, 'grainRoughness', '粗糙度', 0, 100);
+  toggle(fx, '顆粒樣式', [['digital', '數位'], ['film', '底片']], () => S.grainStyle, (v) => (S.grainStyle = v));
+
+  const calib = panel('校準', false, '感光元件的底色');
+  slider(calib, 'calibration.shadowsTint', '陰影色調', -100, 100);
+  slider(calib, 'calibration.redHue', '紅：色相', -100, 100);
+  slider(calib, 'calibration.redSat', '紅：飽和度', -100, 100);
+  slider(calib, 'calibration.greenHue', '綠：色相', -100, 100);
+  slider(calib, 'calibration.greenSat', '綠：飽和度', -100, 100);
+  slider(calib, 'calibration.blueHue', '藍：色相', -100, 100);
+  slider(calib, 'calibration.blueSat', '藍：飽和度', -100, 100);
+
+  // ───────── 標題列 ─────────
+  const labSel = $('#lab');
+  function fillLabs() {
+    labSel.innerHTML = '';
+    for (const [id, L] of Object.entries(labs)) { const o = el('option', '', `${L.name}（${L.who}）`); o.value = id; labSel.append(o); }
+    const o = el('option', '', '＋ 新的師傅…');
+    o.value = '+';
+    labSel.append(o);
+    labSel.value = labId;
+  }
+  function switchLab(id) {
+    labId = id;
+    S = labs[id].settings;
+    snap = JSON.stringify(S);
+    undos.length = redos.length = 0;
+    $('#style').value = labs[id].style;
+    labSel.value = id;
+    refreshAll();
+    invalidate();
+    showRecipe();
+  }
+  labSel.onchange = () => {
+    if (labSel.value !== '+') return switchLab(labSel.value);
+    const id = (prompt('這位師傅的代號（英文，LABS 裡的鍵，例如 shenlou）') || '').trim();
+    if (!/^[a-z][a-z0-9_]*$/i.test(id) || labs[id]) { labSel.value = labId; return toast(labs[id] ? '已經有這位了' : '代號要英文開頭'); }
+    const name = prompt('店名（相簿按鈕上寫「交給＋店名」）', '沙島暗房') || '暗房';
+    const who = prompt('師傅怎麼稱呼', '洗照片師傅') || '師傅';
+    const style = prompt('風格名（照片角落的字）', '沙金') || '';
+    labs[id] = { name, who, style, settings: fullSettings({}) };
+    fillLabs();
+    switchLab(id);
+    saveDraft();
+  };
+  $('#style').oninput = () => { labs[labId].style = $('#style').value; showRecipe(); clearTimeout(draftT); draftT = setTimeout(saveDraft, 500); };
+
+  $('#copy').onclick = async () => {
+    const text = formatRecipe(labId, { ...labs[labId], settings: S });
+    $('#recipe').value = text;
+    try { await navigator.clipboard.writeText(text); toast('已複製，貼回 js/camera/darkroom.js 的 LABS，取代同一位師傅那一段'); } catch { $('#recipe').select(); toast('剪貼簿擋住了，下面那段自己選起來複製'); }
+  };
+  // 貼上：LABS 的一段（haishi: {…}）、COLORAWA 的 .rawapreset 內容、或純設定物件都收
+  function parseRecipe(text) {
+    text = text.trim().replace(/,\s*$/, '');
+    let v = null;
+    try { v = JSON.parse(text); } catch {
+      try { v = Function('"use strict"; return (' + text + ')')(); } catch {
+        try { v = Function('"use strict"; return ({' + text + '})')(); } catch {}
+      }
+    }
+    if (!v || typeof v !== 'object') return null;
+    if (v.settings) return v;
+    const keys = Object.keys(v);
+    if (keys.length === 1 && v[keys[0]]?.settings) return { id: keys[0], ...v[keys[0]] };
+    if (['exposure', 'curves', 'hsl', 'colorGrading', 'contrast', 'temperature'].some((k) => k in v)) return { settings: v };
+    return null;
+  }
+  function applyRecipe(r, how) {
+    if (!r) return toast('看不懂這段，要 LABS 的一段、.rawapreset 或設定 JSON');
+    commit();
+    const L = labs[labId];
+    if (r.style) L.style = r.style;
+    if (r.name && how === 'paste') L.name = r.name;
+    if (r.who) L.who = r.who;
+    $('#style').value = L.style;
+    undos.push(snap);
+    replace(r.settings);
+    fillLabs();
+    toast(how === 'file' ? `載入了調色檔${r.name ? `「${r.name}」` : ''}` : '貼上了');
+  }
+  $('#paste').onclick = async () => {
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch {}
+    if (!/[{]/.test(text)) text = prompt('貼上 LABS 的一段、.rawapreset 的內容或設定 JSON') || '';
+    if (text) applyRecipe(parseRecipe(text), 'paste');
+  };
+  $('#file').onclick = () => $('#fileIn').click();
+  $('#fileIn').onchange = () => {
+    const f = $('#fileIn').files[0];
+    if (!f) return;
+    f.text().then((t) => applyRecipe(parseRecipe(t), 'file'));
+    $('#fileIn').value = '';
+  };
+  $('#revert').onclick = () => {
+    const base = LABS[labId];
+    if (!base) return toast('這位師傅還沒寫進檔案，沒有可以回去的版本');
+    undos.push(JSON.stringify(S));
+    labs[labId].style = base.style;
+    $('#style').value = base.style;
+    replace(base.settings);
+    try { localStorage.removeItem(DRAFT + labId); } catch {}
+    toast('回到 darkroom.js 裡寫的了');
+  };
+  $('#reset').onclick = () => { undos.push(JSON.stringify(S)); replace({}); };
+  const hold = (on) => { if (holding === on) return; holding = on; $('#before').classList.toggle('on', on); invalidate(); };
+  $('#before').onpointerdown = (e) => { hold(true); $('#before').setPointerCapture(e.pointerId); };
+  $('#before').onpointerup = $('#before').onpointercancel = () => hold(false);
+  $('#split').onclick = () => { view = view === 2 ? 0 : 2; $('#split').classList.toggle('on', view === 2); invalidate(); };
+  $('#zoom').onclick = () => { const on = $('#view').classList.toggle('zoom'); $('#zoom').classList.toggle('on', on); applyZoom(); placeSplit(); };
+  $('#grid').onclick = () => {
+    gridOn = !gridOn;
+    $('#grid').classList.toggle('on', gridOn);
+    $('#view').hidden = gridOn;
+    $('#gridview').hidden = !gridOn;
+    if (gridOn) drawGrid();
+  };
+  $('#view').addEventListener('pointerdown', (e) => {
+    if (view !== 2 || !cur) return;
+    const r = $('#gl').getBoundingClientRect();
+    const at = (ev) => { split = clamp((ev.clientX - r.left) / r.width, 0, 1); invalidate(); };
+    at(e);
+    const mv = (ev) => at(ev), up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); };
+    addEventListener('pointermove', mv);
+    addEventListener('pointerup', up);
+  });
+  $('#view').addEventListener('scroll', placeSplit);
+  addEventListener('resize', () => { placeSplit(); });
+  addEventListener('keydown', (e) => {
+    if (e.target.matches('input:not([type=range]), textarea, select')) return;
+    if (e.key === 'b' || e.key === 'B') hold(true);
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
+  });
+  addEventListener('keyup', (e) => { if (e.key === 'b' || e.key === 'B') hold(false); });
+
+  // ───────── 照片進來：打開檔案、拖進來、相簿、?demo ─────────
+  $('#open').onclick = () => $('#openIn').click();
+  $('#openIn').onchange = () => { for (const f of $('#openIn').files) addPhoto(f, f.name, ''); $('#openIn').value = ''; };
+  addEventListener('dragover', (e) => { e.preventDefault(); $('#view').classList.add('drop'); });
+  addEventListener('dragleave', (e) => { if (!e.relatedTarget) $('#view').classList.remove('drop'); });
+  addEventListener('drop', (e) => {
+    e.preventDefault();
+    $('#view').classList.remove('drop');
+    for (const f of e.dataTransfer.files) if (f.type.startsWith('image/')) addPhoto(f, f.name, '');
+  });
+
+  // 假照片：戶外的粉橘夕陽、海市的藍夜、月球的綠，各有天地、幾個形狀、一點雜訊，看得出調色動了什麼
+  function fakePhoto(w, h, which) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const g = c.getContext('2d');
+    const C = [['#f6b48a', '#f4d0b0', '#e8a0a8', '#6a8a5a', '#fff2d8'], ['#1a2050', '#6a4a7a', '#2a1a28', '#20182a', '#f3b47a'], ['#3b4a3c', '#9fb98a', '#6a7a60', '#2a2e26', '#e8e4d0']][which];
+    const sky = g.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, C[0]); sky.addColorStop(0.55, C[1]); sky.addColorStop(0.56, C[2]); sky.addColorStop(1, C[3]);
+    g.fillStyle = sky;
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = C[4];
+    g.beginPath(); g.arc(w * 0.72, h * 0.3, Math.min(w, h) * 0.09, 0, Math.PI * 2); g.fill();
+    for (let i = 0; i < 9; i++) {
+      g.fillStyle = `hsl(${(which * 120 + i * 37) % 360} 45% ${30 + (i % 4) * 12}%)`;
+      g.fillRect(w * (0.05 + i * 0.1), h * (0.5 + (i % 3) * 0.1), w * 0.07, h * (0.15 + (i % 2) * 0.1));
+    }
+    const grey = g.createLinearGradient(0, 0, w, 0);
+    for (let i = 0; i <= 10; i++) grey.addColorStop(i / 10, `rgb(${i * 25.5} ${i * 25.5} ${i * 25.5})`);
+    g.fillStyle = grey;
+    g.fillRect(0, h * 0.92, w, h * 0.08);
+    const d = g.getImageData(0, 0, w, h);
+    for (let i = 0; i < d.data.length; i += 4) { const n = (Math.random() - 0.5) * 10; d.data[i] += n; d.data[i + 1] += n; d.data[i + 2] += n; }
+    g.putImageData(d, 0, 0);
+    return new Promise((res) => c.toBlob(res, 'image/jpeg', 0.92));
+  }
+  const ready = (async () => {
+    if (P.has('demo')) {
+      const list = [[1920, 1080, 0], [1920, 1080, 1], [1080, 1920, 2]];
+      for (const [i, [w, h, k]] of list.entries()) await addPhoto(await fakePhoto(w, h, k), `假照片-${['夕陽', '藍夜', '月球'][k]}.jpg`, '假');
+    }
+    try {
+      await loadAlbum();
+      for (const it of album()) if (!it.kind && it.state !== 'back' && it.blob) await addPhoto(it.blob, it.name, it.state === 'lab' ? '取件單' : it.film ? '底片' : '相簿');
+    } catch {}
+  })();
+
+  fillLabs();
+  switchLab(labId);
+  if (drafted.length) toast(`載入了上次的草稿（${drafted.join('、')}）；「回到檔案裡的」可以丟掉`);
+  // 無頭測試用
+  window.__dark = { engine, labs, LABS, photos, develop, ready, get S() { return S; }, get cur() { return cur; }, replace, trimSettings, parseRecipe, applyRecipe, formatRecipe };
+</script>
+</body>
+</html>

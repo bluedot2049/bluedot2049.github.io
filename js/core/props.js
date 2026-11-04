@@ -69,6 +69,7 @@ export class Kit {
     _m.compose(_p.set(x, y, z), _q, _s.set(o.sx || 1, o.sy || 1, o.sz || 1));
     g.applyMatrix4(_m);
     if (o.ao === false) g.userData.noAO = true;
+    if (o.hang) g.userData.hang = o.hang;   // 掛點 [x, y, z]（這個 Kit 的座標）：海市的燈籠、暖簾照這點晃（fade.js 的 sway）
     (o.glow ? this.glow : this.lit).push(g);
     return this;
   }
@@ -86,10 +87,18 @@ export class Kit {
   // 套用擺放位置，把零件倒進桶子。有 fid 的零件記下編號（海市擋住鏡頭時整組淡掉）
   emit(bucket, x, z, rotY) {
     _m.makeRotationY(rotY).setPosition(x, 0, z);
-    if (this.fid) for (const g of [...this.lit, ...this.glow]) g.userData.fid = this.fid;
+    const v = new THREE.Vector3();
+    for (const g of [...this.lit, ...this.glow]) {
+      if (this.fid) g.userData.fid = this.fid;
+      // 掛點跟著零件一起搬到世界座標
+      const h = g.userData.hang;
+      if (h) {
+        v.set(h[0], h[1], h[2]).applyMatrix4(_m);
+        g.userData.hang = [v.x, v.y, v.z];
+      }
+    }
     for (const g of this.lit) bucket.lit.push(g.applyMatrix4(_m));
     for (const g of this.glow) bucket.glow.push(g.applyMatrix4(_m));
-    const v = new THREE.Vector3();
     for (const [src, dst] of [[this.glows, bucket.glows], [this.puffs, bucket.puffs], [this.pools, bucket.pools]]) {
       for (const l of src) {
         v.set(l.x, l.y, l.z).applyMatrix4(_m);

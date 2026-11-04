@@ -8,10 +8,12 @@
 // 鎖著時點不到按鈕：按住 Alt 暫時叫出游標，放開鎖回去；面板自己打開時放開，關掉後一走路就鎖回去（按鈕的快捷鍵在 main.js）。
 import * as THREE from 'three';
 import { dockR, panelW, WORKS_OPEN } from './ui.js';
+import { onFreshTouch } from './touch.js';
 import { lens, fitSource, unbend } from '../core/lens.js';
 import { pref, setPref } from '../save/prefs.js';
 
 const SPEED = 2.6;
+const EDGE_LIFT = 0.3;   // 坐在邊上垂腳：屁股就在地面的高度（跟 character.js 的 SEAT_BUTT 一樣），腿垂到邊外
 const DRAG_THRESHOLD = 8;
 const DIST_MIN = 4, DIST_MAX = 20;
 // 俯角往下拉到 PITCH_LOW 時鏡頭已經貼近地面，再往下拉就改成抬頭往上看，一路看到天頂
@@ -20,8 +22,12 @@ const ZENITH = 1.52;
 const SWIPE_MIN = 40;
 // 鏡頭追目標的時間：跟著角色、看畫照鏡子
 const FOLLOW_T = 0.2, VIEW_T = 0.32;
+// 有天花板的區域（camDuck）穿過窄門時，牆把鏡頭推到身邊：鏡頭現在的位置還看得到頭，就用這麼久慢慢靠過去
+const PULL_T = 0.7;
 // 被山坡、石階擋住時鏡頭最多往上抬幾度（弧度），抬到這裡還擋著才往前推
 const CLIP_LIFT = 0.7;
+// 上面有天花板的區域（camDuck）鏡頭最低壓到哪：從頭看出去的仰角（弧度），比頭略低一點
+const DUCK_LOW = -0.05;
 // 照鏡子時繞著自己轉：俯角範圍、離注視點的遠近、角度追手指的快慢、放手後還滑多久
 const ORB_LOW = -0.3, ORB_HIGH = 1.2, ORB_NEAR = 0.45, ORB_FAR = 6.5, ORB_ZOOM = [0.3, 1.8];
 const ORB_EASE = 7, ORB_COAST = 0.22;
@@ -37,6 +43,8 @@ const SH_TURN_EASE = 0.22, SH_YAW_T = 0.24, SH_PITCH_T = 0.28, SH_DIST_T = 0.3, 
 const SH_COAST = 0.16, SH_COAST_MAX = 0.45, SH_EASE = 0.6;
 // 滑鼠鎖定時：每移動一像素轉幾弧度、只吃掉抖動的平滑（秒）、上下快到頂時開始變鈍的範圍（弧度）和到頂時剩幾成靈敏度
 const SH_MOUSE = 0.0022, SH_MOUSE_T = 0.04, SH_PITCH_EASE = 0.1, SH_PITCH_EASE_MIN = 0.45;
+// 手把（gamepad.js）轉鏡頭時鏡頭角度追視線的時間（秒）：柔順交給轉速那層的緩衝，這裡只比滑鼠鬆一點，不然會慢半拍、容易暈
+const PAD_LOOK_T = 0.08;
 // 越肩走路的起步和停下（秒）
 const SH_ACCEL_T = 0.14, SH_DECEL_T = 0.11;
 // 越肩和手持相機的高度另外慢慢跟（秒）：石階是一階一階踩上去的，跟緊了每一階都把畫面頂一下；一下差超過這麼多公尺（瞬移）直接跟過去
@@ -97,8 +105,12 @@ export class Player {
     this.camDist = defaultDist();
     this.distMax = world.camDistMax ?? DIST_MAX;   // 海市可以拉得比較遠，看得到整座山城
     this.shoulder = false;          // 越肩；遠近和俯仰跟一般跟拍分開記
-    this.shoulderOk = !matchMedia('(pointer: coarse)').matches;   // 越肩先只給電腦，手機之後再做
+    this.coarse = matchMedia('(pointer: coarse)').matches;
+    this.shoulderOk = !this.coarse;   // 手機、平板只有接著手把時才有越肩（padLink）
     this.shoulder = this.shoulderOk && pref('shoulder');
+    this.pad = { x: 0, y: 0 };      // 手把左搖桿（gamepad.js），-1 ~ 1：跟 WASD 一樣前後走、左右平移，推多少走多快
+    this.padOn = false;             // 手把在用：直接控制視角（準心、PAD_LOOK_T），不鎖滑鼠
+    this.padForced = false;         // 越肩是接上手把才開的（手機拔掉手把要關回去）
     document.body.classList.toggle('shoulder', this.shoulder);
     this.shDist = shDefaultDist();
     this.shPitch = SH_PITCH_DEFAULT;
@@ -175,6 +187,9 @@ export class Player {
     this.actionables = [];          // 別的模組掛上來的互動：(x, z) => { kind, p, d } 或 null，按了呼叫 p.act()（黑眼的「跟著」，scene/guide.js）
     this.marker = this.makeMarker();
     this.markerT = 1;
+    this.lookBackT = 0;             // 點了自己：還要回頭看鏡頭幾秒
+    this.lastAct = null;            // 上一幀互動鍵挑到的目標（挑的時候讓它一點，不會跳來跳去）
+    this.tappable = null;           // () => [{ id, group }]：畫面上點得到的角色（自己和別人，main.js 給）
     this.moving = true;
     this.paused = false;            // 攝影模式：不接輸入，鏡頭交給 photo.js
     this.camAim = null;             // 攝影模式中舉相機的樣子 { grip, pitch }，送給別人看（photo.js 每幀填）
@@ -312,6 +327,15 @@ export class Player {
     };
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
+    // 記著的手指其實早就放開了（放開沒送到，見 touch.js）：留著的話下一根手指會被當成雙指縮放，點地面、拖鏡頭全都沒反應
+    const forget = (id) => {
+      if (!pts.delete(id)) return;
+      if (pts.size < 2) pinch = null;
+      if (pts.size === 0) multi = false;
+      el.classList.remove('dragging');
+    };
+    el.addEventListener('lostpointercapture', (e) => forget(e.pointerId));
+    onFreshTouch(() => { for (const [id, p] of pts) if (!p.mouse) forget(id); });
     el.addEventListener('wheel', (e) => {
       if (this.paused) return;
       e.preventDefault();
@@ -406,7 +430,7 @@ export class Player {
 
   // 鎖回去要在按鍵或點擊的當下才行（瀏覽器規定）。看畫、照鏡子時只有走路鍵才算，走路本來就會離開
   tryRelock(moving = false) {
-    if (!this.relock || this.locked || !this.shoulder || this.paused || this.cursorWanted?.()) return;
+    if (this.padOn || !this.relock || this.locked || !this.shoulder || this.paused || this.cursorWanted?.()) return;
     if ((this.focus?.camPos || this.focus?.orb) && !moving) return;
     this.relock = false;
     this.lock();
@@ -460,11 +484,12 @@ export class Player {
     d.yaw = d.pitch = 0;
   }
 
-  setShoulder(on) {
+  // save 為假：手把開的越肩，只算這個分頁，不寫設定、不鎖滑鼠
+  setShoulder(on, save = true) {
     on = on && this.shoulderOk;
     this.shoulder = on;
     document.body.classList.toggle('shoulder', on);   // 操作說明換成越肩那一張
-    if (on && matchMedia('(pointer: fine)').matches) this.lock();   // 按 F 或點按鈕的當下就鎖，不用再點一下畫面
+    if (on && save && matchMedia('(pointer: fine)').matches) this.lock();   // 按 F 或點按鈕的當下就鎖，不用再點一下畫面
     this.easeT = SH_EASE;
     this.freeLook = false;
     this.sh.yaw = this.camYaw;
@@ -472,7 +497,7 @@ export class Player {
     this.sh.dist = this.shDist;
     this.sh.reach = null;
     this.shVel = {};
-    setPref('shoulder', on);
+    if (save) setPref('shoulder', on);
     this.onShoulder?.(on);
   }
 
@@ -587,6 +612,13 @@ export class Player {
       this.attn.toggle(lens);
       return;
     }
+    // 點到角色：自己的小跳一下回頭看鏡頭（hop），別人的揮手（main.js）
+    const who = this.pickCharacter(cx, cy);
+    if (who) {
+      if (who.id === 'self') this.hop();
+      else this.events.onTapOther?.(who.id);
+      return;
+    }
     const hit = this.pick(cx, cy);
     if (!hit) return;
     this.events.onInput('tap');
@@ -603,6 +635,8 @@ export class Player {
     this.walkTo(t.x, t.z, t.y);
     this.marker.position.set(t.x, this.world.groundY(t.x, t.z, t.y) + 0.03, t.z);
     this.markerT = 0;
+    // 先看再走：頭先瞄一眼落點，身體才轉過去（updateGaze）
+    this.glance = { x: t.x, y: this.marker.position.y + 0.15, z: t.z, t: 0.8 };
   }
 
   // 依螢幕比例算出看畫的鏡頭距離，以及角色站的位置（盡量站在鏡頭後面，不擋畫）
@@ -792,6 +826,57 @@ export class Player {
     if (x || y) this.events.onInput('joy');
   }
 
+  // ───────── 手把（gamepad.js）─────────
+
+  // 左搖桿：已經扣掉死區、壓到 1 以內
+  setPad(x, y) {
+    this.pad.x = x;
+    this.pad.y = y;
+    if (x || y) this.events.onInput('joy');
+  }
+
+  // 右搖桿：每秒轉幾弧度（gamepad.js 算好曲線和緩衝）。上下快到頂時變鈍，跟滑鼠一樣；
+  // 照鏡子時是繞著自己轉；看畫時不動（推左搖桿才退開）
+  padLook(yawRate, pitchRate, dt) {
+    if (!yawRate && !pitchRate) return;
+    if (this.focus?.orb) {
+      const k = 9 / Math.max(this.dom.clientWidth, this.dom.clientHeight);
+      return this.mirrorOrbit((yawRate * dt) / k, (pitchRate * dt) / k, true);
+    }
+    if (this.focus?.camPos) return;
+    this.camYaw -= yawRate * dt;
+    let dp = pitchRate * dt;
+    if (this.shoulder) {
+      const room = dp > 0 ? SH_PITCH[1] - this.shPitch : this.shPitch - SH_PITCH[0];
+      dp *= SH_PITCH_EASE_MIN + (1 - SH_PITCH_EASE_MIN) * THREE.MathUtils.clamp(room / SH_PITCH_EASE, 0, 1);
+      this.shPitch = THREE.MathUtils.clamp(this.shPitch + dp, ...SH_PITCH);
+    } else this.camPitch = THREE.MathUtils.clamp(this.camPitch + dp, PITCH_MIN, PITCH_MAX);
+    this.lookHold = 1.2;
+    this.events.onInput('drag');
+  }
+
+  setPadOn(on) {
+    this.padOn = on;
+    if (on) return;
+    this.pad.x = this.pad.y = 0;
+    if (!this.locked) document.body.classList.remove('aim-hot');
+  }
+
+  // 手把接著就是越肩。手機、平板本來沒有越肩，接上才開、拔掉關回去；電腦換回滑鼠也留在越肩（V 照樣能切）。都不寫設定
+  padLink(on) {
+    if (on) {
+      this.shoulderOk = true;
+      if (!this.shoulder) {
+        this.padForced = true;
+        this.setShoulder(true, false);
+      }
+    } else if (this.coarse) {
+      if (this.padForced) this.setShoulder(false, false);
+      this.padForced = false;
+      this.shoulderOk = false;
+    }
+  }
+
   // 附近有畫、角色在畫的正面時，回傳那幅畫（給「看畫」按鈕用）
   nearbyPainting() {
     if (!WORKS_OPEN || this.focus || this.pending) return null;
@@ -816,26 +901,79 @@ export class Player {
     return this.focus?.kind === 'seat' || this.focus?.kind === 'ground';
   }
 
-  // 傳給別人的坐姿：0 沒坐、-1 坐在地上、i + 1 坐在第 i 個座位
+  // 傳給別人的坐姿：0 沒坐、-1 坐在地上、-2 躺著、-3 坐在邊上垂腳、i + 1 坐在第 i 個座位
   get sitCode() {
     if (this.focus?.kind === 'seat') return this.focus.seat + 1;
-    return this.focus?.kind === 'ground' ? -1 : 0;
+    if (this.focus?.kind !== 'ground') return 0;
+    return this.focus.lying ? -2 : this.focus.edge ? -3 : -1;
   }
 
-  // 「坐」按鈕和 C 鍵：坐著就站起來；旁邊有座位就坐座位，沒有就原地坐在地上
+  // 「坐」按鈕和 C 鍵：旁邊有座位就坐座位；站在邊上（碼頭、台階、井口）就面朝外坐下垂腳；都沒有就原地坐在地上。
+  // 坐在地上再按一次是躺下；躺著、坐邊上、坐座位再按就站起來
   toggleSit() {
     if (this.boarding) return;
     this.events.onInput('tap');
-    if (this.sitting) return this.exitFocus();
+    if (this.sitting) {
+      const f = this.focus;
+      if (f.kind === 'ground' && !f.lying && !f.edge && this.character.sitP >= 1) {
+        f.lying = true;
+        this.character.lying = true;
+        this.events.onSit?.(true);
+        return;
+      }
+      return this.exitFocus();
+    }
     if (this.character.airborne) return;
     const t = this.actionTarget();
     if (t?.kind === 'seat') return this.goTo(this.planSeat(t.p));
     this.exitFocus();
     this.stop();
-    this.focus = { kind: 'ground', n: { x: -Math.sin(this.heading), z: -Math.cos(this.heading) } };
-    this.character.lift = 0.02;
+    const e = this.findEdge();
+    if (e) {
+      this.pos.x = e.x;
+      this.pos.z = e.z;
+      this.heading = e.h;
+      this.focus = { kind: 'ground', edge: true, n: { x: -Math.sin(e.h), z: -Math.cos(e.h) } };
+      this.character.lift = EDGE_LIFT;
+    } else {
+      this.focus = { kind: 'ground', n: { x: -Math.sin(this.heading), z: -Math.cos(this.heading) } };
+      this.character.lift = 0.02;
+    }
     this.character.sitting = true;
     this.events.onSit?.(true);
+  }
+
+  // 腳邊有沒有可以垂腳坐的邊：往八個方向探半公尺，走不過去而且那邊的地面低一大截（或是水）才算；面向的方向優先。
+  // 回傳屁股放的位置和面向（邊上再退一點），沒有回 null
+  findEdge() {
+    const w = this.world, y = this.pos.y, R = 0.5;
+    let best = null, bd = -2;
+    for (let i = 0; i < 8; i++) {
+      const a = this.heading + (i / 8) * Math.PI * 2, sx = Math.sin(a), cz = Math.cos(a);
+      const x = this.pos.x + sx * R, z = this.pos.z + cz * R;
+      if (w.walkable(x, z, y)) continue;
+      const gy = w.groundY(x, z, y);
+      if (Number.isFinite(gy) && gy > y - 0.4) continue;
+      const facing = Math.cos(a - this.heading);
+      if (facing > bd) { bd = facing; best = { a, sx, cz }; }
+    }
+    if (!best) return null;
+    let lo = 0, hi = R;
+    for (let k = 0; k < 6; k++) {
+      const m = (lo + hi) / 2;
+      if (w.walkable(this.pos.x + best.sx * m, this.pos.z + best.cz * m, y)) lo = m;
+      else hi = m;
+    }
+    const d = Math.max(0, lo - 0.08);
+    return { x: this.pos.x + best.sx * d, z: this.pos.z + best.cz * d, h: best.a };
+  }
+
+  // 點了自己的角色：小跳一下、回頭看鏡頭兩秒。別人畫面上也是小跳（multiplayer 的 jump 帶 k）
+  hop() {
+    if (this.boarding || this.sitting || !this.character.jump(0.55)) return;
+    this.events.onInput('tap');
+    this.events.onJump?.(0.55);
+    this.lookBackT = 2;
   }
 
   // 上船：從碼頭跳進繫在旁邊的渡船（harbor.js 的 makeSkiff），坐在艙底面向船頭。
@@ -880,58 +1018,89 @@ export class Player {
     }
     if (this.focus || this.pending) return null;
     const x = this.pos.x, z = this.pos.z, list = [];
+    // 每一個候選：kind、d 多遠，ax、az 是那樣東西在哪（挑的時候看面向；main.js 讓角色先看它一眼）
     const p = this.nearbyPainting();
-    if (p) list.push({ kind: 'painting', p, d: Math.hypot(x - p.wall.x, z - p.wall.z) });
+    if (p) list.push({ kind: 'painting', p, d: Math.hypot(x - p.wall.x, z - p.wall.z), ax: p.wall.x, az: p.wall.z });
     const m = this.world.mirror;
     if (m) {
       const dx = x - m.x, dz = z - m.z, d = Math.hypot(dx, dz);
-      if (dx * m.n.x + dz * m.n.z > 0.3 && d < 3) list.push({ kind: 'mirror', d });
+      if (dx * m.n.x + dz * m.n.z > 0.3 && d < 3) list.push({ kind: 'mirror', d, ax: m.x, az: m.z });
     }
     const ct = this.world.camTable;
     if (ct) {
       // 量到桌子邊緣的距離，站在桌子前面那一側才算
       const dx = x - ct.x, dz = z - ct.z, lx = dx * ct.along.x + dz * ct.along.z, lz = dx * ct.n.x + dz * ct.n.z;
       const d = Math.hypot(Math.max(0, Math.abs(lx) - ct.hw), Math.max(0, lz - ct.hd));
-      if (lz > 0 && d < 1.3) list.push({ kind: 'cameras', d });
+      if (lz > 0 && d < 1.3) list.push({ kind: 'cameras', d, ax: ct.x, az: ct.z });
     }
     const gs = this.world.guideSign;
     if (gs) {
       const d = Math.hypot(x - gs.x, z - gs.z);
-      if (d < gs.r) list.push({ kind: 'guide', d });
+      if (d < gs.r) list.push({ kind: 'guide', d, ax: gs.x, az: gs.z });
     }
     const out = this.world.outdoor;
     if (out && this.room === this.world.rooms.length - 1) {
       out.seats.forEach((st, i) => {
         if (this.visitors?.seatBusy(i)) return;
         const d = Math.min(Math.hypot(x - st.x, z - st.z), Math.hypot(x - st.ax, z - st.az));
-        if (d < 1.3) list.push({ kind: 'seat', p: i, d });
+        if (d < 1.3) list.push({ kind: 'seat', p: i, d, ax: st.x, az: st.z });
       });
       const t = out.table, d = Math.hypot(Math.max(0, Math.abs(x - t.x) - t.hw), Math.max(0, Math.abs(z - t.z) - t.hd));
-      if (d < 1.5) list.push({ kind: 'table', d: d + 0.2 });
+      if (d < 1.5) list.push({ kind: 'table', d: d + 0.2, ax: t.x, az: t.z });
       const ho = out.hollow;
       if (ho) {
         const dh = Math.hypot(x - ho.x, z - ho.z);
-        if (dh < 2.2) list.push({ kind: 'hollow', d: dh });
+        if (dh < 2.2) list.push({ kind: 'hollow', d: dh, ax: ho.x, az: ho.z });
       }
     }
     const an = this.animals?.nearest(x, z);
-    if (an) list.push({ kind: 'pet', p: an.a, d: an.d });
+    if (an) list.push({ kind: 'pet', p: an.a, d: an.d, ax: an.a.pos.x, az: an.a.pos.z });
     const vi = this.visitors?.nearest(x, z);
-    if (vi) list.push({ kind: 'talk', p: vi.v, d: vi.d });
+    if (vi) list.push({ kind: 'talk', p: vi.v, d: vi.d, ax: vi.v.pos.x, az: vi.v.pos.z });
     for (const ex of this.world.exits || []) {
       const d = Math.hypot(x - ex.x, z - ex.z);
-      if (d < ex.r) list.push({ kind: 'exit', p: ex, d });
+      if (d < ex.r) list.push({ kind: 'exit', p: ex, d, ax: ex.x, az: ex.z });
     }
     for (const f of this.actionables) {
       const t = f(x, z);
       if (t) list.push(t);
     }
-    if (list.length) return list.reduce((a, b) => (b.d < a.d ? b : a));
+    if (list.length) {
+      // 挑一個：面對著的比近的優先（照方向折扣距離），剛才那個再讓一點，站在兩樣東西中間字才不會跳來跳去
+      const hx = Math.sin(this.heading), hz = Math.cos(this.heading), last = this.lastAct;
+      let best = null, bs = Infinity;
+      for (const t of list) {
+        let s = t.d;
+        if (t.ax != null) {
+          const dx = t.ax - x, dz = t.az - z, l = Math.hypot(dx, dz) || 1;
+          s *= 1.3 - 0.3 * Math.max(0, (dx * hx + dz * hz) / l);
+        }
+        if (last && last.kind === t.kind && last.p === t.p) s *= 0.8;
+        if (s < bs) { bs = s; best = t; }
+      }
+      this.lastAct = best;
+      return best;
+    }
+    this.lastAct = null;
     return ch.food ? { kind: 'eat' } : null;
   }
 
-  action() {
-    const t = this.actionTarget();
+  // 畫面上 (cx, cy) 點到哪個角色：回傳 tappable 裡那一筆（{ id, group }，自己是 'self'），沒點到回 null。main.js 給 tappable
+  pickCharacter(cx, cy) {
+    const list = this.tappable?.() || [];
+    if (!list.length) return null;
+    const rect = this.dom.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((cx - rect.left) / rect.width) * 2 - 1, -((cy - rect.top) / rect.height) * 2 + 1);
+    this.raycaster.setFromCamera(unbend(ndc), this.camera);
+    const hit = this.raycaster.intersectObjects(list.map((e) => e.group), true).find((h) => h.object.visible)?.object;
+    if (!hit) return null;
+    for (const e of list) for (let o = hit; o; o = o.parent) if (o === e.group) return e;
+    return null;
+  }
+
+  // fallback：手機互動鍵剛收起來的那一下，main.js 留著的上一個目標。手指已經按下去了，照那個做
+  action(fallback = null) {
+    const t = this.actionTarget() ?? (this.focus || this.pending ? null : fallback);
     if (!t) return;
     this.events.onInput('tap');
     const ch = this.character;
@@ -994,6 +1163,7 @@ export class Player {
     if (hadView) this.camYaw = Math.atan2(n.x, n.z);
     if (wasSitting) {
       this.character.sitting = false;
+      this.character.lying = false;
       this.events.onSit?.(false);
     }
   }
@@ -1098,17 +1268,39 @@ export class Player {
         };
         // 二分找最少要抬多少
         // 區域可以寫 camLift 改最多抬多少：鏡宮有天花板，抬了反而撞上去，給 0 就是直接往前移
-        let lo = 0, hi = this.world.camLift ?? CLIP_LIFT;
+        let lo = 0, hi = this.world.camLift ?? CLIP_LIFT, turn = hi, near = 0.15;
         if (this.world.camClip(head, lifted(hi)) >= 1) {
           for (let i = 0; i < 8; i++) {
             const m = (lo + hi) / 2;
             if (this.world.camClip(head, lifted(m)) < 1) lo = m;
             else hi = m;
           }
+          turn = hi;
+        } else if (this.world.camDuck) {
+          // 區域寫了 camDuck（靜海的室內）：抬到頂還擋著，表示上面是天花板、樓板、雨遮，改往下壓到剛好鑽得過去。
+          // 以前沿著抬到頂的方向往前移，鏡頭貼到頭頂上往下看，看不到前面
+          let a = 0, b = e0 - DUCK_LOW;
+          if (b > 0 && this.world.camClip(head, lifted(-b)) >= 1) {
+            for (let i = 0; i < 8; i++) {
+              const m = (a + b) / 2;
+              if (this.world.camClip(head, lifted(-m)) < 1) a = m;
+              else b = m;
+            }
+            turn = -b;
+          } else {
+            // 壓也壓不過（牆在背後、上面又有樓板）：從最低到抬到頂試九個角度，挑看得最遠的（差不多遠挑最接近原本的），
+            // 停在撞到的地方前面。不留最少 0.15 的距離：迴廊、商店街二樓牆就在背後，留了會把鏡頭推進牆裡
+            let far = -1;
+            for (let i = 0; i <= 8; i++) {
+              const t = -b + ((hi + b) * i) / 8, c = this.world.camClip(head, lifted(t));
+              if (c > far + 0.01 || (c > far - 0.01 && Math.abs(t) < Math.abs(turn))) { far = Math.max(far, c); turn = t; }
+            }
+            near = 0;
+          }
         }
-        outPos.copy(lifted(hi));
+        outPos.copy(lifted(turn));
         const clip = this.world.camClip(head, outPos);
-        if (clip < 1) outPos.lerpVectors(head, outPos, Math.max(clip, 0.15));
+        if (clip < 1) outPos.lerpVectors(head, outPos, Math.max(clip, near));
       }
     }
     // 鏡頭不鑽進地面，也不退進樹林裡
@@ -1132,10 +1324,13 @@ export class Player {
     let yaw = 0, pitch = 0, pid = null;
     const aim = this.camAim, eye = this.paused && (!aim || aim.grip === 4);
     const free = !this.paused && (!this.focus || this.focus.kind === 'seat') && !this.boarding;
-    if (eye || free) {
+    // 點了自己（hop）：回頭看鏡頭兩秒
+    const back = this.lookBackT > 0;
+    if (back) this.lookBackT -= dt;
+    if (eye || free || back) {
       const cam = this.camera.position, ex = cam.x - this.pos.x, ez = cam.z - this.pos.z;
       const rel = wrapAngle(this.camYaw - Math.PI - this.heading), a = Math.abs(rel);
-      if (eye) this.gazeBack = true;
+      if (eye || back) this.gazeBack = true;
       else if (this.gazeBack ? a < GAZE_FRONT : a > GAZE_BACK) this.gazeBack = !this.gazeBack;
       if (this.gazeBack) {
         yaw = wrapAngle(Math.atan2(ex, ez) - this.heading);
@@ -1147,6 +1342,7 @@ export class Player {
         pitch = this.shoulder ? -this.sh.pitch : Math.max(0, PITCH_LOW - this.camPitch);
       }
     }
+    let at = null;
     if (this.attn) {
       // 有沒有在操作：轉鏡頭、拉遠近、走路都算
       const sig = this.camYaw + this.camPitch * 3 + this.camDist * 7 + this.shPitch * 11 + this.shDist * 13;
@@ -1157,12 +1353,29 @@ export class Player {
       const selfie = this.paused && aim?.grip === 3;
       const mode = eye || selfie ? 'own' : !free ? 'off' : this.shoulder ? 'shoulder' : this.gazeBack ? 'front' : this.stillT > GAZE_IDLE ? 'idle' : 'back';
       const head = this.gazeHead.set(this.pos.x, this.pos.y + this.character.dims.faceY, this.pos.z);
-      const at = this.attn.update(dt, { mode, head, heading: this.heading, cam: this.camera.position, moving: this.speed > 0.1, now: performance.now() / 1000 });
+      at = this.attn.update(dt, { mode, head, heading: this.heading, cam: this.camera.position, moving: this.speed > 0.1, now: performance.now() / 1000 });
       if (at) {
         const dx = at.point.x - head.x, dz = at.point.z - head.z;
         yaw = wrapAngle(Math.atan2(dx, dz) - this.heading);
         pitch = Math.atan2(at.point.y - head.y, Math.hypot(dx, dz));
         pid = at.pid;
+      }
+    }
+    // 先看再走：剛點了地面，頭先瞄一眼落點（tap 設的 glance）；照路線走快到轉角時，先看向下一段。沒在看別的東西、不是越肩才這樣
+    if (!at && free && !eye && !this.shoulder) {
+      let g = null;
+      if (this.glance && (this.glance.t -= dt) > 0) g = this.glance;
+      else if (this.path.length >= 2 && this.speed > 0.05) {
+        const a = this.path[0], b = this.path[1];
+        if (Math.hypot(a.x - this.pos.x, a.y - this.pos.z) < 2.2) g = { x: b.x, y: this.pos.y + 0.9, z: b.y };
+      }
+      if (g) {
+        const hy = this.pos.y + this.character.dims.faceY, dx = g.x - this.pos.x, dz = g.z - this.pos.z;
+        const ry = wrapAngle(Math.atan2(dx, dz) - this.heading);
+        if (Math.abs(ry) <= SH_GAZE + 0.3) {
+          yaw = ry;
+          pitch = Math.atan2(g.y - hy, Math.hypot(dx, dz));
+        }
       }
     }
     this.gaze = THREE.MathUtils.clamp(yaw, -SH_GAZE, SH_GAZE);
@@ -1218,7 +1431,7 @@ export class Player {
     if (this.locked) {
       if (!this.shoulder || (this.paused && !this.holdLock) || this.focus?.camPos || this.focus?.orb || this.cursorWanted?.()) this.unlock();
       else this.aimHover();
-    }
+    } else if (this.padOn && this.shoulder && !this.paused && !this.focus?.camPos && !this.focus?.orb) this.aimHover();
     let vx = 0, vz = 0;
     const k = this.keys;
     const fwd = (k.has('w') || k.has('arrowup') || this.mouseRun ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
@@ -1228,6 +1441,9 @@ export class Player {
     let mf = fwd, ms = side, mag = fwd || side ? 1 : 0;
     const jm = Math.hypot(this.joy.x, this.joy.y);
     if (jm > 0.15) { mf = -this.joy.y; ms = this.joy.x; mag = Math.min(1, (jm - 0.15) / 0.75); }
+    // 手把左搖桿：死區在 gamepad.js 扣過了；越肩時左右是平移（跟 A、D 一樣），轉向交給右搖桿
+    const pm = Math.hypot(this.pad.x, this.pad.y);
+    if (pm > 0) { mf = -this.pad.y; ms = this.pad.x; mag = Math.min(1, pm); }
     // 越肩：鍵盤 A/D 是平移，轉向交給滑鼠；搖桿左右還是轉身（手機之後再調）。往後是倒退著走，慢一點
     let back = 1;
     this.bodyRel = 0;
@@ -1371,6 +1587,14 @@ export class Player {
     if (this.focus?.kind === 'pet' && !ch.act) this.exitFocus();   // 摸完了
     ch.group.position.copy(this.pos);
     ch.group.rotation.y = this.heading;
+    // 看畫看了一會兒，頭微微歪一下，過一陣子再正回來；每張畫歪的方向隨機
+    const fp = this.focus?.kind === 'painting' ? this.focus : null;
+    if (fp !== this.tiltFocus) {
+      this.tiltFocus = fp;
+      this.tiltT = 0;
+      this.tiltSign = Math.random() < 0.5 ? -1 : 1;
+    } else if (fp) this.tiltT += dt;
+    ch.tilt = fp && this.tiltT > 1.5 && this.tiltT < 8 ? this.tiltSign * 0.09 : 0;
     this.updateGaze(dt);
     ch.update(dt, this.speed);
 
@@ -1382,8 +1606,9 @@ export class Player {
         const sh = this.sh;
         sh.dt = dt;
         // 滑鼠鎖定時滑鼠本身就是連續的，只留一點點平滑，不然會覺得鏡頭黏、慢半拍
-        damp(sh, 'yaw', sh.yaw + wrapAngle(this.camYaw - sh.yaw), this.shVel, this.locked ? SH_MOUSE_T : SH_YAW_T, dt);
-        damp(sh, 'pitch', this.shPitch, this.shVel, this.locked ? SH_MOUSE_T : SH_PITCH_T, dt);
+        // 手把的轉速已經帶了緩衝，鏡頭只比滑鼠鬆一點
+        damp(sh, 'yaw', sh.yaw + wrapAngle(this.camYaw - sh.yaw), this.shVel, this.locked ? SH_MOUSE_T : this.padOn ? PAD_LOOK_T : SH_YAW_T, dt);
+        damp(sh, 'pitch', this.shPitch, this.shVel, this.locked ? SH_MOUSE_T : this.padOn ? PAD_LOOK_T : SH_PITCH_T, dt);
         damp(sh, 'dist', this.shDist, this.shVel, SH_DIST_T, dt);
         if (Math.abs(wrapAngle(this.camYaw - sh.yaw)) + Math.abs(this.shPitch - sh.pitch) + Math.abs(this.shDist - sh.dist) > 1e-4) settling = true;
       }
@@ -1392,6 +1617,12 @@ export class Player {
       // 剛走到鏡前慢慢滑進取景；開始自己轉以後角度已經有緩動，鏡頭跟緊一點，不然繞圈時會從角色身上切過去
       // 越肩離得近，跟緊一點；剛切換越肩時慢慢滑過去
       let T = this.focus?.orb?.touched ? FOLLOW_T : this.focus?.camPos ? VIEW_T : this.shoulder ? SH_POS_T : FOLLOW_T;
+      // 靜海這種有天花板的區域：走過控制室那種窄門，頭一過門檻，想要的位置就從門外跳到門裡的牆邊，鏡頭一下往前衝好幾公尺。
+      // 鏡頭現在的位置還看得到頭（隔著門口，貼著門框也算：camClip 第三個參數 0 是不留鏡頭的邊），就慢慢靠過去；真的被牆擋住了才照平常的快慢追
+      if (this.world.camDuck && !this.focus && !this.shoulder && this.world.camClip) {
+        const head = this.headPos.set(this.pos.x, this.pos.y + 1.2, this.pos.z);
+        if (dPos.distanceToSquared(head) + 1 < this.camPos.distanceToSquared(head) && this.world.camClip(head, this.camPos, 0) >= 1) T = PULL_T;
+      }
       // 剛切換越肩：一開始慢慢滑，越接近越跟緊，鬆緊是漸變的，中途不會突然一緊
       if (this.easeT > 0) {
         this.easeT = Math.max(0, this.easeT - dt);

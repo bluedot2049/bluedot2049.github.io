@@ -10,8 +10,8 @@ import * as THREE from 'three';
 import { AIR, uTime } from '../../core/scenery.js';
 import { quadStreaks, driftStep, fitScreen, qualityOf } from '../../core/weatherfx.js';
 import { GRADE_VERT, TUNE, WEATHER, gradeUniforms } from '../../core/grade.js';
-import { WET } from '../../core/wet.js';
-import { Weather } from '../../core/weather.js';
+import { WET, wetRipple } from '../../core/wet.js';
+import { Weather, BREEZE } from '../../core/weather.js';
 import { uDock } from './distant.js';
 import { SEA } from './haishi-map.js';
 
@@ -295,6 +295,11 @@ export function buildRain({ scene, world, renderer, quality, coarse, params }) {
     cover: (x, y, z) => Math.max(0, topAt(x, z) - y - 0.3),
     // 踩在 (x, y, z) 的地上濕到什麼程度：最上面那一面才淋得到
     wetAt: (x, y, z) => (Math.abs(topAt(x, z) - y) < 0.45 ? weather.wet : 0),
+    // 踩在濕的石板上：腳下起一圈漣漪（wet.js 的 wetRipple；水聲在 rain-sound.js 的 step）。main.js 每踩一步呼叫（world.onStep）
+    splash(ch) {
+      const p = ch.group.position;
+      if (rain.wetAt(p.x, p.y, p.z) > 0.3) wetRipple(p.x, p.z, 0.8);
+    },
     get brolly() {
       const ch = rain.player?.character;
       return ch?.look?.hand === 'umbrella' && ch.group.visible ? ch : null;
@@ -304,11 +309,18 @@ export function buildRain({ scene, world, renderer, quality, coarse, params }) {
       AIR.veil.value = w.cloud;
       AIR.rain.value = w.rain;
       uDock.value = w.dock;
+      // 風給角色（披風、帽子、縮肩）：海風的方向，陣風照時間起伏（雨絲的著色器另外照位置算，不必對得一樣）
+      BREEZE.x = WIND.x;
+      BREEZE.z = WIND.y;
+      BREEZE.wind = w.wind;
+      BREEZE.rain = w.rain;
+      BREEZE.gust = 0.15 + 0.85 * Math.pow(0.5 + 0.5 * Math.sin(uTime.value * 0.5 + 1), 4);
       // 雨天的色調：雲一來就換過去六成，真的下了再換滿；雨後的色調跟著地濕
       WEATHER.rain = w.cloud * (0.6 + 0.4 * smooth(0, 0.35, w.rain));
       WEATHER.wet = w.wet;
       WET.amount = w.wet;
       WET.q = level() === 'low' ? 0 : 1;
+      WET.now = uTime.value;
       const n = w.rain > 0.003 ? Math.round((COUNT[level()] ?? COUNT.mid) * Math.min(1, 0.3 + w.rain)) : 0;
       mesh.visible = n > 0;
       mesh.geometry.instanceCount = n;

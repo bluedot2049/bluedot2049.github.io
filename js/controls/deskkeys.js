@@ -55,24 +55,33 @@ export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote 
     return `<i style="left:calc(50% + ${(Math.cos(a) * WHEEL_R).toFixed(1)}px);top:calc(50% + ${(Math.sin(a) * WHEEL_R).toFixed(1)}px)">${emoteSVG(m)}</i>`;
   }).join('');
   const slots = [...wheel.children];
-  let open = false, vx = 0, vy = 0, pick = -1;
+  let open = false, vx = 0, vy = 0, pick = -1, last = null;
   const choose = () => {
     const d = Math.hypot(vx, vy);
     pick = d < WHEEL_DEAD ? -1 : Math.round((Math.atan2(vy, vx) + Math.PI / 2) / ((Math.PI * 2) / emotes.length) + emotes.length) % emotes.length;
     slots.forEach((s, i) => s.classList.toggle('on', i === pick));
   };
-  const close = (send) => {
-    if (!open) return;
-    open = false;
-    wheel.classList.remove('show');
-    if (send && pick >= 0) emote(emotes[pick]);
-  };
-  window.addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() !== 'q' || e.repeat || open || photo.active || typing(e) || !emote) return;
+  const openWheel = () => {
+    if (open || photo.active || !emote) return false;
     open = true;
     vx = vy = 0;
     choose();
     wheel.classList.add('show');
+    return true;
+  };
+  // send：true 送撥到的那個；'again' 沒撥就再送一次上次的（手把短按 L）；false 不送
+  const close = (send) => {
+    if (!open) return;
+    open = false;
+    wheel.classList.remove('show');
+    const e = pick >= 0 ? emotes[pick] : send === 'again' ? last : null;
+    if (!send || !e) return;
+    last = e;
+    emote(e);
+  };
+  window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() !== 'q' || e.repeat || typing(e)) return;
+    openWheel();
   });
   window.addEventListener('keyup', (e) => { if (e.key.toLowerCase() === 'q') close(true); });
   window.addEventListener('blur', () => close(false));
@@ -114,7 +123,7 @@ export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote 
     const b = e.target.closest('button');
     if (!b) return;
     hide();
-    if (b.dataset.act === 'resume' && player.shoulder) player.lock();
+    if (b.dataset.act === 'resume' && player.shoulder && !player.padOn) player.lock();
   });
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && menu.classList.contains('show') && performance.now() - shownAt > 300) hide();
@@ -179,4 +188,25 @@ export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote 
   const away = menu.querySelector('.away input');
   away.checked = ambience.background;
   away.addEventListener('change', () => ambience.setBackground(away.checked));
+
+  // 手把（gamepad.js）借用的：B 要知道有沒有東西開著才送 Esc（什麼都沒開時送 Esc 會叫出暫停選單）；
+  // + 開關暫停選單，別的東西開著時先不開（B 先收）；按住 L 的表情輪，右搖桿給方向（-1～1）
+  return {
+    busy: () => busy() || pack.isOpen,
+    paused: () => menu.classList.contains('show'),
+    togglePause() {
+      if (menu.classList.contains('show')) hide();
+      else if (!busy() && !pack.isOpen) show();
+    },
+    wheel: {
+      open: openWheel,
+      aim(x, y) {
+        if (!open) return;
+        vx = x * WHEEL_R;
+        vy = y * WHEEL_R;
+        choose();
+      },
+      close,
+    },
+  };
 }

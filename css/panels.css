@@ -208,19 +208,19 @@ body:not(.desk) #pack-card .album-grid { flex: 0 1 auto; min-height: 0; }
 }
 @media (prefers-reduced-motion: reduce) { body:not(.desk) #pack-card { animation: none; } }
 /* 封蠟是魔法印泥：平常是乾掉的暗赭紅；有東西還沒存，就從裡面亮起來，像灰裡的炭火慢慢呼吸。只往裡亮，不往外發光 */
-.seal-wax, #pack-btn .ink {
+.seal-wax, #pack-btn .ink, .ph-cell .ink {
   background: #6a2c22; border-radius: 52% 48% 55% 45% / 46% 56% 44% 54%;
 }
 .seal-wax {
   width: 38px; height: 38px;
   box-shadow: inset 0 0 0 6px #6a2c22, inset 0 0 0 7.5px #4e2018;
 }
-.seal-wax.lit, #pack-btn.lit .ink, body.desk.tidy:has(#pack-btn.lit) #more-btn .ink {
+.seal-wax.lit, #pack-btn.lit .ink, body.desk.tidy:has(#pack-btn.lit) #more-btn .ink, .ph-cell .ink.lit {
   background: radial-gradient(circle at 46% 52%, #f0a050 0, #d0602e 34%, #8a3424 72%);
   animation: ember 3.6s ease-in-out infinite;
 }
 .seal-wax.lit { box-shadow: inset 0 0 0 6px rgba(138, 52, 36, .55), inset 0 0 0 7.5px #5a2219; }
-.seal-wax.lit::after, #pack-btn.lit .ink::after, body.desk.tidy:has(#pack-btn.lit) #more-btn .ink::after {
+.seal-wax.lit::after, #pack-btn.lit .ink::after, body.desk.tidy:has(#pack-btn.lit) #more-btn .ink::after, .ph-cell .ink.lit::after {
   content: ""; position: absolute; inset: 0; border-radius: inherit;
   background:
     radial-gradient(circle at 32% 38%, rgba(255, 214, 150, .9) 0 .8px, transparent 1.4px),
@@ -232,7 +232,7 @@ body:not(.desk) #pack-card .album-grid { flex: 0 1 auto; min-height: 0; }
 .seal-wax { position: relative; }
 @keyframes ember { 0%, 100% { filter: brightness(.82) saturate(.9); } 50% { filter: brightness(1.12) saturate(1.05); } }
 @keyframes ember-grain { 0% { opacity: .2; } 33% { opacity: .9; } 66% { opacity: .45; } }
-@media (prefers-reduced-motion: reduce) { .seal-wax.lit, #pack-btn.lit .ink, .seal-wax.lit::after, #pack-btn.lit .ink::after { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .seal-wax.lit, #pack-btn.lit .ink, .seal-wax.lit::after, #pack-btn.lit .ink::after, .ph-cell .ink.lit, .ph-cell .ink.lit::after { animation: none; } }
 #pack-btn { position: relative; }
 #pack-btn .ink { display: none; }
 #pack-btn.lit .ink, body.desk.tidy:has(#pack-btn.lit) #more-btn .ink { display: block; position: absolute; right: 3px; bottom: 3px; width: 10px; height: 10px; box-shadow: 0 0 0 1.5px rgba(20, 14, 10, .85); }
@@ -295,6 +295,9 @@ body.desk .album-grid { grid-template-columns: repeat(auto-fill, minmax(128px, 1
   }
   .ph-cell .zoom:hover { border-color: var(--gold-hi); background-color: rgba(16, 11, 9, .9); }
 }
+/* 相簿格子左上的印泥：等過的照片才有。亮著＝新的；看過剩一個淡印 */
+.ph-cell .ink { position: absolute; left: 5px; top: 5px; width: 11px; height: 11px; opacity: .5; box-shadow: 0 0 0 1.5px rgba(20, 14, 10, .7); }
+.ph-cell .ink.lit { opacity: 1; }
 .ph-cell.film span { font-size: 18px; letter-spacing: .15em; color: rgba(246, 219, 166, .75); }
 .ph-cell.slip { cursor: var(--cur-default); background: repeating-linear-gradient(-45deg, #2a1d14 0 6px, #241910 6px 12px); border-style: dashed; }
 .ph-cell.slip span { font-size: 13px; letter-spacing: .2em; color: var(--text); }
@@ -388,6 +391,8 @@ body.desk #album-view .av-close { top: max(14px, calc(var(--mt, 0px) / var(--ui,
 .inks button.eraser { background: transparent; border: 1px dashed var(--muted); }
 .inks button.on { box-shadow: 0 0 0 2px #1d140e, 0 0 0 3.5px var(--gold); }
 .pad-tools .chips button { height: 30px; padding: 0 10px; font-size: 12px; }
+.pad-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.pad-note:empty { display: none; }
 /* 矮一點的手機：抽屜拉高一點，圓章、小格縮小，圖卡至少看得到兩排 */
 @media (orientation: portrait) and (max-height: 740px) {
   :root { --dress-h: 60vh; }

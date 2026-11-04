@@ -7,11 +7,10 @@
 import * as THREE from 'three';
 import { Kit, rng, mergeBucket } from '../../core/props.js';
 import { footShadow } from '../../core/footshadow.js';
-import { PROFILE, radiusAt } from '../../npc/manatee.js';
+import { PROFILE, DEPTH, radiusAt } from '../../npc/manatee.js';
 import { timeline, at } from '../../npc/timeline.js';
 
 const SKIN = '#91abb0', INK = '#2a2722', TONGUE = '#d98a85', BLUSH = '#e8a59c', MOUTH = '#5b2b2b';
-const DEPTH = 0.76;                     // 豆子前後壓扁
 const SEG = 16;                         // 身體一圈切幾刀（平滑著色，16 刀看起來就是圓的）
 const NECK = 0.78;                      // 衣服的領口：再上去是頭，臉在正面上半
 const FACE = { y: 1.0, h: 0.42, w: 0.56 };
@@ -81,9 +80,9 @@ function badge(k, strap, stripe) {
   onFront(k, flat(0.08, 0.02), stripe, 0.13, NECK - 0.15, 0.036);
 }
 function cap(k, c, brim = true) {
-  k.cyl(0.22, 0.25, 0.09, c, 0, 1.235, 0, { sz: DEPTH * 1.1 }, 10);
-  k.cyl(0.2, 0.22, 0.03, c, 0, 1.29, 0, { sz: DEPTH * 1.1 }, 10);
-  if (brim) k.box(0.26, 0.016, 0.12, '#22252c', 0, 1.2, 0.23);
+  k.cyl(0.22, 0.25, 0.09, c, 0, 1.265, 0, { sz: DEPTH * 1.1 }, 10);
+  k.cyl(0.2, 0.22, 0.03, c, 0, 1.32, 0, { sz: DEPTH * 1.1 }, 10);
+  if (brim) k.box(0.26, 0.016, 0.12, '#22252c', 0, 1.23, 0.25 * DEPTH * 1.1 + 0.02);
 }
 
 const NAVY = '#2c3248', SHIRT = '#efede6', TIE = '#30333f';
@@ -121,8 +120,8 @@ const OUTFITS = {
     band(k, 0.12, 0.72, 0.03, '#e6e2d6', [-0.9, 1.8]);
     limbs(k, '#f2f0ea', '#5a5d66');
     onFront(k, flat(0.16, 0.04), '#c0453a', 0, NECK - 0.02, 0.034);
-    k.cyl(0.19, 0.17, 0.2, '#f4f2ec', 0, 1.33, 0, { sz: DEPTH * 1.15 }, 10);
-    k.add(new THREE.IcosahedronGeometry(0.23, 1), '#f7f5ef', 0, 1.48, 0, { sy: 0.55, sz: DEPTH * 1.2 });
+    k.cyl(0.19, 0.17, 0.2, '#f4f2ec', 0, 1.36, 0, { sz: DEPTH * 1.15 }, 10);
+    k.add(new THREE.IcosahedronGeometry(0.23, 1), '#f7f5ef', 0, 1.51, 0, { sy: 0.55, sz: DEPTH * 1.2 });
   },
   // 接待和警衛：深藍外套、金釦子、白領，大盤帽
   usher(k) {
@@ -133,7 +132,7 @@ const OUTFITS = {
     collar(k, '#f2efe6');
     for (const y of [0.66, 0.56, 0.46]) onFront(k, disc(0.014), '#d2ad5a', 0, y, 0.034);
     cap(k, '#283454');
-    k.add(disc(0.03), '#d2ad5a', 0, 1.24, 0.22 * DEPTH * 1.1 + 0.01);
+    k.add(disc(0.03), '#d2ad5a', 0, 1.27, 0.235 * DEPTH * 1.1 + 0.006);
   },
   // 外勤：厚厚的白色作業服，脖子一圈銀環（沒有頭盔），背後背包貼金箔，胸前一個控制盒
   crew(k) {
@@ -158,8 +157,8 @@ const OUTFITS = {
     limbs(k, '#4a3027', '#3a2a22');
     collar(k, '#f6ecd6');
     onFront(k, disc(0.035), '#e8b13a', 0.13, 0.66, 0.03);
-    k.cyl(0.235, 0.25, 0.07, '#f6ecd6', 0, 1.22, 0, { sz: DEPTH * 1.1 }, 10);
-    k.box(0.3, 0.016, 0.16, '#f6ecd6', 0, 1.19, 0.25);
+    k.cyl(0.235, 0.25, 0.07, '#f6ecd6', 0, 1.25, 0, { sz: DEPTH * 1.1 }, 10);
+    k.box(0.3, 0.016, 0.16, '#f6ecd6', 0, 1.22, 0.25 * DEPTH * 1.1 + 0.04);
   },
   // 便服：芥末黃毛背心配白襯衫
   vest(k) {
@@ -186,8 +185,8 @@ const OUTFITS = {
     band(k, 0.4, NECK, 0.024, '#b5603f');
     band(k, 0.4, 0.45, 0.032, '#9c4f33');
     limbs(k, '#b5603f', '#4a6488');
-    k.add(new THREE.IcosahedronGeometry(0.25, 1), '#e2c06e', 0, 1.24, 0, { sy: 0.45, sz: DEPTH * 1.08 });
-    k.add(new THREE.IcosahedronGeometry(0.06, 0), '#f3eee2', 0, 1.36, 0);
+    k.add(new THREE.IcosahedronGeometry(0.25, 1), '#e2c06e', 0, 1.27, 0, { sy: 0.45, sz: DEPTH * 1.08 });
+    k.add(new THREE.IcosahedronGeometry(0.06, 0), '#f3eee2', 0, 1.39, 0);
   },
   // 坐辦公室的：炭灰西裝外套敞開、白襯衫、酒紅領帶，識別證夾在口袋上
   office(k) {
@@ -212,8 +211,8 @@ const OUTFITS = {
     limbs(k, '#8a8478', '#4b4a46');
     onFront(k, new THREE.BoxGeometry(0.08, 0.1, 0.05), '#5a4634', 0.17, 0.38, 0.05);
     onFront(k, new THREE.BoxGeometry(0.03, 0.12, 0.03), '#9aa1a8', -0.15, 0.4, 0.06);
-    k.add(new THREE.SphereGeometry(0.25, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), '#e2b13a', 0, 1.2, 0, { sy: 0.7, sz: DEPTH * 1.12 });
-    k.cyl(0.27, 0.27, 0.02, '#e2b13a', 0, 1.2, 0.02, { sz: DEPTH * 1.2 }, 12);
+    k.add(new THREE.SphereGeometry(0.25, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), '#e2b13a', 0, 1.23, 0, { sy: 0.7, sz: DEPTH * 1.12 });
+    k.cyl(0.27, 0.27, 0.02, '#e2b13a', 0, 1.23, 0.02, { sz: DEPTH * 1.2 }, 12);
   },
 };
 
@@ -894,7 +893,7 @@ export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience
             q.setFromEuler(e);
             sc.setScalar(a.scale);
             held.compose(p, q, sc);
-            off.makeTranslation(0, 0.6, 0.42);
+            off.makeTranslation(0, 0.6, 0.46);
             m.setMatrixAt(ti, m4.multiplyMatrices(held, off));
           } else if (carry === 'table') {
             // 坐著吃：餐盤放在面前的桌上

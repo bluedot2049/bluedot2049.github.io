@@ -6,6 +6,7 @@ import { buildDust } from './shenlou-dust.js';
 import { WindSound } from './shenlou-wind.js';
 import { LANDMARKS } from './shenlou-iron.js';
 import { ALCHEMY } from './shenlou-alchemy.js';
+import { Footprints } from '../../core/footprints.js';
 
 // 蜃樓的空氣和調色（grade.js）：空氣裡一直有一層塵，五十公尺外就退一半，一百五十公尺外整片進天邊的顏色。
 // 塵貼著地面最濃（falloff），塔頂和晷針的上半截浮在塵上面；霧團被風吹著走（drift），朝太陽那一側整片發亮（scatter）。
@@ -27,6 +28,8 @@ export const grade = {
 export function build(scene, { coarse, params, renderer, quality }) {
   const world = buildShenlou(scene, { coarse, params, renderer });
   world.dust = buildDust({ scene, world, renderer, quality, coarse, params });
+  // 腳印（core/footprints.js）：沙上每一步都留，風沙時很快被填平（shenlou.js 每幀照塵調 life）。井裡不留
+  world.prints = new Footprints(scene, { color: '#6a5438', alpha: 0.32, life: 35, ok: (x, z, y) => y > -3 });
   return world;
 }
 
@@ -38,6 +41,7 @@ export function env(world) {
 // 還沒有背景音樂；路人和攤販也還沒有。風聲跟著塵走（shenlou-wind.js）
 export function crowd({ world, ambience }) {
   if (world.dust) ambience.beds.push(new WindSound(world.dust, world.townR));
+  world.onLand = (ch) => world.dust?.puff?.(ch.group.position);   // 跳下來落地揚一小團沙（shenlou-dust.js）
   return {};
 }
 

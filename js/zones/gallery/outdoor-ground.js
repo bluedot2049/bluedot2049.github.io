@@ -8,6 +8,10 @@ import { BW, DROP, MEADOW, ORDER, SD, SEA_BED, SEA_LEVEL, SUN_DIR, SW, TD, TW } 
 
 export const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
+// 人走過草叢：a 是現在腳下，b 是慢慢跟上來的落後一點的位置（outdoor.js 每幀改），草離 a 到 b 這一段越近彎得越開，
+// 剛走過的路留一下才合回去。做法跟汀的 ting-marsh.js 一樣
+export const meadowWade = { uWadeA: { value: new THREE.Vector3(1e4, 0, 1e4) }, uWadeB: { value: new THREE.Vector3(1e4, 0, 1e4) } };
+
 export const hash = (x, z) => { const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453; return s - Math.floor(s); };
 export const vnoise = (x, z) => {
   const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz;
@@ -250,20 +254,33 @@ export function grass(terrain, z0, count, uTime, skip) {
   // 草葉的法線一律朝上，每片的光照都一樣，在頂點上算就夠了（跟每個像素算結果相同）。雙面也不翻法線，草才不會一半亮一半黑
   const mat = vertexLit({
     side: THREE.DoubleSide,
-    uniforms: { uTime },
+    uniforms: { uTime, ...meadowWade },
     head: `uniform float uTime;
-      attribute float bend;`,
+      uniform vec3 uWadeA, uWadeB;
+      attribute float bend;
+      // 草根在 base，回傳往哪邊彎、彎多少（0～1）
+      vec2 wade(vec2 base) {
+        vec2 ab = uWadeA.xz - uWadeB.xz;
+        float k = clamp(dot(base - uWadeB.xz, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0);
+        vec2 d = base - (uWadeB.xz + ab * k);
+        float dist = length(d);
+        return d / max(dist, 1e-3) * (1.0 - smoothstep(0.12, 0.7, dist)) * mix(0.4, 1.0, k);
+      }`,
     move: `
         float gust = sin(uTime * 0.6 + position.x * 0.08 - position.z * 0.12) * 0.6 + 0.4;
         float sway = sin(uTime * 1.9 + position.x * 0.45 + position.z * 0.3) * 0.5 + gust;
         float b = bend * bend;
         transformed.x += sway * 0.16 * b;
         transformed.z += sway * 0.06 * b;
-        transformed.y -= abs(sway) * 0.04 * b;`,
+        transformed.y -= abs(sway) * 0.04 * b;
+        // 人走過：葉尖往兩邊分開、壓低一點
+        vec2 push = wade(position.xz) * b;
+        transformed.xz += push * 0.22;
+        transformed.y -= dot(push, push) * 0.12;`,
   });
-  // 風最多把葉尖吹開 0.16，包圍球放大一點就不會被誤裁，背對草原時整片草不用畫
+  // 風最多把葉尖吹開 0.16、人走過再推 0.22，包圍球放大一點就不會被誤裁，背對草原時整片草不用畫
   geo.computeBoundingSphere();
-  geo.boundingSphere.radius += 0.3;
+  geo.boundingSphere.radius += 0.5;
   return new THREE.Mesh(geo, mat);
 }
 

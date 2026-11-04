@@ -79,8 +79,12 @@ export function houseKit(c) {
   const noren = (kk, x, y, z, w, color, len = 0.6) => {
     const n = Math.max(2, Math.round(w / 0.45)), sw = w / n;
     kk.cyl(0.02, 0.02, w + 0.1, DARK, x, y + 0.02, z, { rz: Math.PI / 2 }, 4);
-    for (let i = 0; i < n; i++) kk.box(sw - 0.03, len, 0.02, i % 2 ? color : shade(color, 0.04), x - w / 2 + sw * (i + 0.5), y - len / 2, z, { color2: shade(color, -0.06) });
-    kk.add(new THREE.CircleGeometry(Math.min(0.13, sw * 0.4), 10), CREAM, x, y - len * 0.45, z + 0.015, { ao: false });
+    // 每片布從上緣掛著（hang），風吹、人走過會輕輕晃（fade.js 的 sway）
+    for (let i = 0; i < n; i++) {
+      const px = x - w / 2 + sw * (i + 0.5);
+      kk.box(sw - 0.03, len, 0.02, i % 2 ? color : shade(color, 0.04), px, y - len / 2, z, { color2: shade(color, -0.06), hang: [px, y, z] });
+    }
+    kk.add(new THREE.CircleGeometry(Math.min(0.13, sw * 0.4), 10), CREAM, x, y - len * 0.45, z + 0.015, { ao: false, hang: [x, y, z] });
   };
   // 一扇窗：grid 格子窗、round 圓窗、octa 八角窗、slit 細長窗。s 是這間房子的手，ry 是窗面朝的方向
   const opening = (kk, kind, x, y, z, s, lit, ry = 0) => {

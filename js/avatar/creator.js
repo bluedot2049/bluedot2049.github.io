@@ -88,6 +88,7 @@ const PAD = 256;           // 畫布像素，一格 4 像素
 const UNDO = 30;
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 const label = (title) => `<div class="dress-label">${title}</div>`;
+const clampCell = (v, max) => Math.min(max, Math.max(0, v));
 
 export class Creator {
   constructor(events) {
@@ -105,6 +106,9 @@ export class Creator {
     this.ink = 1;
     this.brush = 1;
     this.sym = true;
+    this.frames = [];       // 畫的臉上眼睛的框（looks.js 的 decodeEyes），最多兩個
+    this.eyeMode = false;   // 畫臉工具正在框眼睛
+    this.eyeDrag = null;
     this.undo = [];
     this.nav.innerHTML = MENU.map((t) => `<button class="med" data-tab="${t.id}"><span>${icon(t.id)}</span>${t.name}</button>`).join('')
       + `<i></i><button class="med-mini" data-act="dice" aria-label="骰子">${icon('dice')}</button><button class="med-mini" data-act="reset" aria-label="重來">${icon('reset')}</button>`;
@@ -127,6 +131,8 @@ export class Creator {
     this.hint = null;
     this.look = { ...look };
     this.cells = decodeFace(look.face) || new Uint8Array(FACE * FACE);
+    this.frames = this.cells.eyes ? [...this.cells.eyes] : [];
+    this.eyeMode = false;
     this.undo = [];
     this.show(this.tab);
   }
@@ -135,6 +141,7 @@ export class Creator {
     this.look = L;
     if (rerender) {
       this.cells = decodeFace(L.face) || new Uint8Array(FACE * FACE);
+      this.frames = this.cells.eyes ? [...this.cells.eyes] : [];
       this.render();
     }
     this.events.onChange(L);
@@ -242,7 +249,9 @@ export class Creator {
               <button data-act="undo">復原</button>
               <button data-act="clear">清掉</button>
               <button data-act="keep">留著五官</button>
+              <button data-act="eyes">眼睛</button>
             </div>
+            <p class="pad-note"></p>
           </div>
         </div>`;
       case 'hat': return (HOODED.includes(L.one) ? `<p class="dress-note">穿著${optionName('one', L.one)}，帽子先收起來了<button data-act="unone">脫掉</button></p>` : '') + this.tiles('hat');
@@ -347,6 +356,7 @@ export class Creator {
         return;
       }
       case 'sym': this.sym = !this.sym; break;
+      case 'eyes': this.toggleEyes(); break;
       case 'undo':
         if (this.undo.length) {
           this.cells = this.undo.pop();
@@ -357,6 +367,7 @@ export class Creator {
       case 'clear':
         this.snapshot();
         this.cells = new Uint8Array(FACE * FACE);
+        this.frames = [];
         this.refresh();
         this.commit();
         break;
@@ -376,17 +387,20 @@ export class Creator {
     };
     cv.addEventListener('pointerdown', (e) => {
       cv.setPointerCapture(e.pointerId);
+      if (this.eyeMode) return this.eyeDown(cell(e));
       this.snapshot();
       last = cell(e);
       this.stroke(last, last);
     });
     cv.addEventListener('pointermove', (e) => {
+      if (this.eyeMode) return this.eyeMove(cell(e));
       if (!last) return;
       const p = cell(e);
       this.stroke(last, p);
       last = p;
     });
     const end = () => {
+      if (this.eyeMode) return this.eyeUp();
       if (!last) return;
       last = null;
       this.commit();
@@ -404,7 +418,10 @@ export class Creator {
     q('[data-brush]').forEach((b) => b.classList.toggle('on', +b.dataset.brush === this.brush));
     q('[data-act="sym"]').forEach((b) => b.classList.toggle('on', this.sym));
     q('[data-act="keep"]').forEach((b) => b.classList.toggle('on', !!this.look.keep));
+    q('[data-act="eyes"]').forEach((b) => b.classList.toggle('on', this.eyeMode));
     q('[data-act="undo"]').forEach((b) => b.classList.toggle('off', !this.undo.length));
+    const note = this.body.querySelector('.pad-note');
+    if (note) note.textContent = this.eyeMode ? '框住你畫的眼睛，角色會照著眨眼、瞟一眼。按在框裡拖著走，按在框外重新框一個。' : '';
   }
 
   snapshot() {
@@ -436,8 +453,70 @@ export class Creator {
   }
 
   commit() {
-    this.look = { ...this.look, face: encodeFace(this.cells) };
+    this.look = { ...this.look, face: encodeFace(this.cells, this.frames) };
     this.events.onChange(this.look);
+  }
+
+  // ---------- 眼睛框 ----------
+  // 畫的臉程式不知道哪幾格是眼睛，玩家自己框：按「眼睛」進框選模式，兩個框先放在原本眼睛的位置，拖到自己畫的眼睛上；
+  // 按在框外是重新框一個（放開才算，換掉離它最近的那個），開著左右對稱另一邊跟著。框存在臉碼後面（looks.js 的 encodeEyes）
+
+  toggleEyes() {
+    this.eyeMode = !this.eyeMode;
+    if (this.eyeMode && !this.frames.length) {
+      const u = PAD / FACE, w = 10, h = 8;
+      this.frames = this.guide.eyes.map(([x, y]) => ({ x: clampCell(Math.round(x / u - w / 2), FACE - w), y: clampCell(Math.round(y / u - h / 2), FACE - h), w, h }));
+      this.commit();
+    }
+    this.drawPad();
+  }
+
+  frameAt(c) {
+    return this.frames.findIndex((f) => c[0] >= f.x && c[0] < f.x + f.w && c[1] >= f.y && c[1] < f.y + f.h);
+  }
+
+  eyeDown(c) {
+    c = [clampCell(c[0], FACE - 1), clampCell(c[1], FACE - 1)];
+    const i = this.frameAt(c);
+    this.eyeDrag = { c, i, from: i >= 0 ? { ...this.frames[i] } : null, rect: null };
+  }
+
+  eyeMove(c) {
+    const d = this.eyeDrag;
+    if (!d) return;
+    c = [clampCell(c[0], FACE - 1), clampCell(c[1], FACE - 1)];
+    if (d.i >= 0) {
+      const f = d.from;
+      this.frames[d.i] = { x: clampCell(f.x + c[0] - d.c[0], FACE - f.w), y: clampCell(f.y + c[1] - d.c[1], FACE - f.h), w: f.w, h: f.h };
+    } else {
+      const x0 = Math.min(d.c[0], c[0]), y0 = Math.min(d.c[1], c[1]);
+      d.rect = { x: x0, y: y0, w: Math.max(d.c[0], c[0]) - x0 + 1, h: Math.max(d.c[1], c[1]) - y0 + 1 };
+    }
+    this.drawPad();
+  }
+
+  eyeUp() {
+    const d = this.eyeDrag;
+    this.eyeDrag = null;
+    if (!d) return;
+    let i = d.i;
+    if (i < 0) {
+      const r = d.rect;
+      if (!r || r.w < 2 || r.h < 2) return this.drawPad();
+      if (this.frames.length < 2) i = this.frames.push(r) - 1;
+      else {
+        const cx = r.x + r.w / 2, mid = (f) => f.x + f.w / 2;
+        i = Math.abs(mid(this.frames[0]) - cx) <= Math.abs(mid(this.frames[1]) - cx) ? 0 : 1;
+        this.frames[i] = r;
+      }
+    }
+    if (this.sym) {
+      const f = this.frames[i], m = { x: FACE - f.x - f.w, y: f.y, w: f.w, h: f.h };
+      if (this.frames.length < 2) this.frames.push(m);
+      else this.frames[1 - i] = m;
+    }
+    this.drawPad();
+    this.commit();
   }
 
   // 底圖：這個種族的頭從正面看的樣子，越前面越亮，再標出眼睛原本的位置
@@ -474,6 +553,15 @@ export class Creator {
     for (let v = 1; v < FACE_INK.length; v++) {
       g.fillStyle = FACE_INK[v];
       for (let i = 0; i < this.cells.length; i++) if (this.cells[i] === v) g.fillRect((i % FACE) * u, Math.floor(i / FACE) * u, u, u);
+    }
+    // 眼睛框：金色虛線，框選模式亮一點；正在拉的那個也畫
+    const boxes = this.eyeDrag?.rect ? [...this.frames, this.eyeDrag.rect] : this.frames;
+    if (boxes.length) {
+      g.setLineDash([4, 3]);
+      g.lineWidth = 1.5;
+      g.strokeStyle = this.eyeMode ? 'rgba(212, 165, 74, .95)' : 'rgba(212, 165, 74, .45)';
+      for (const f of boxes) g.strokeRect(f.x * u + 0.75, f.y * u + 0.75, f.w * u - 1.5, f.h * u - 1.5);
+      g.setLineDash([]);
     }
   }
 }

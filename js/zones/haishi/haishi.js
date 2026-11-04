@@ -23,6 +23,8 @@ import { buildBoats } from './haishi-boats.js';
 import { buildPlants } from './haishi-plants.js';
 import { buildTemple } from './haishi-temple.js';
 import { buildLatrine } from './latrine.js';
+import { handLamps } from './haze.js';
+import { BREEZE } from '../../core/weather.js';
 export { SHOPS, CARTS } from './haishi-map.js';
 
 export function buildHaishi(scene, { coarse = false } = {}) {
@@ -35,8 +37,8 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   const farLamps = [];   // 上星廟那條路的燈：遠遠看是一串會閃的小點（glowPoints 的 far）
   const solid = (x0, x1, z0, z1, top, ground = false) => solids.push({ x0, x1, z0, z1, top, ground });
   const pick = (arr) => arr[Math.floor(R() * arr.length)];
-  // 擋住視線時會淡掉的東西，一組一組登記（見 fade.js）
-  const fader = new Fader(false, { lead: 0.35 });
+  // 擋住視線時會淡掉的東西，一組一組登記（見 fade.js）；sway：掛著的燈籠、暖簾順著風、人走過時輕輕晃
+  const fader = new Fader(false, { lead: 0.35, sway: true });
   // 一塊轉了 rot 的長方體換成世界座標的範圍：本地 x 在 lx0~lx1、z 在 lz0~lz1，中心放在 (cx, cz)
   const wbox = (cx, cz, rot, lx0, lx1, y0, y1, lz0, lz1) => {
     const c = Math.cos(rot), s = Math.sin(rot), xs = [], zs = [];
@@ -49,9 +51,10 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   // ---------- 燈籠、欄杆 ----------
   // 燈籠、灌木、小花數量多，都用二十面的多面體：燈籠不打光看不出稜角，灌木本來就是有稜角的畫風
   const lantern = (kk, x, y, z, s = 1, color = LAMP, hi = LAMP_HI) => {
-    kk.cyl(0.07 * s, 0.09 * s, 0.06 * s, DARK, x, y + 0.27 * s, z, {}, 6);
-    kk.rock(0.22 * s, color, x, y, z, { glow: true, sy: 1.25, color2: hi });
-    kk.cyl(0.08 * s, 0.06 * s, 0.05 * s, DARK, x, y - 0.29 * s, z, {}, 6);
+    const hang = [x, y + 0.3 * s, z];   // 掛點在頂上的小蓋子，整顆照這點晃（fade.js 的 sway）
+    kk.cyl(0.07 * s, 0.09 * s, 0.06 * s, DARK, x, y + 0.27 * s, z, { hang }, 6);
+    kk.rock(0.22 * s, color, x, y, z, { glow: true, sy: 1.25, color2: hi, hang });
+    kk.cyl(0.08 * s, 0.06 * s, 0.05 * s, DARK, x, y - 0.29 * s, z, { hang }, 6);
     kk.light(x, y, z, '#ff8a50', 0.9 * s);
   };
   // 一串燈籠：從 a 拉到 b，中間微微下垂。大多是紅的，偶爾夾一顆黃的、白的
@@ -295,6 +298,10 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   // 月亮被雲遮住：圓盤慢慢褪成雲的顏色（天邊的霧色），雲厚了就整個藏起來
   const MOON = moon.material.color.clone(), cloudy = new THREE.Color();
   const eyes = [], eyeA = new THREE.Vector3(), eyeB = new THREE.Vector3(), eyeC = new THREE.Vector3(), fwd = new THREE.Vector3();
+  // 手上的燈籠照在腳邊（haze.js 的 handLamps）：自己和在場的人，main.js 每幀餵角色進來
+  const lamps = handLamps(4);
+  group.add(lamps.mesh);
+  const passAt = new THREE.Vector3(1e4, 0, 1e4);   // 上一次告訴掛著的東西「有人走過」的位置
 
   const room = {
     index: 0, id: 'haishi', data: { name: '海市', subtitle: 'Fata Morgana', paintings: [] },
@@ -307,6 +314,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     // 鎮上每一盞燈（{ x, y, z, color, size }）：下雨時畫燈光圖用（rain.js）
     lamps: bucket.glows,
     rain: null,
+    handLamps: lamps,
     // 鏡頭可以拉到很遠，整座山城收進畫面
     camDistMax: 46,
     // 下船的地方：長棧橋的盡頭，離小船幾步，面向山上的鎮子
@@ -366,6 +374,12 @@ export function buildHaishi(scene, { coarse = false } = {}) {
         }
       }
       fader.update(dt, cam, eyes, still || !target);
+      // 掛著的燈籠、暖簾：順著風晃（BREEZE，rain.js 每幀寫）；人走過附近的晃一下（站著不動就不再推）
+      fader.wind(BREEZE.x, BREEZE.z, BREEZE.wind * (0.3 + 0.7 * BREEZE.gust));
+      if (target && (Math.abs(target.x - passAt.x) > 0.03 || Math.abs(target.z - passAt.z) > 0.03)) {
+        passAt.set(target.x, 0, target.z);
+        fader.pass(target.x, target.y, target.z);
+      }
       uTime.value = t;
       sky.position.copy(cam);
       if (target) starFade += (0.25 + 0.75 * smooth(11, 19, target.y) - starFade) * Math.min(1, dt * 1.5);

@@ -81,30 +81,6 @@ function actionHTML(p, contact) {
   return '';
 }
 
-// 手機：另一指還按著搖桿時，瀏覽器把這一下當成雙指手勢，按鈕亮了卻不送 click。
-// 改成手指放開就自己按；原本的 click 如果跟著來，吃掉，免得按兩次
-function tapOnRelease(root) {
-  let down = null, fired = null;
-  root.addEventListener('pointerdown', (e) => {
-    const b = e.pointerType === 'touch' && e.target.closest('button');
-    down = b ? { b, id: e.pointerId, x: e.clientX, y: e.clientY } : null;
-  });
-  root.addEventListener('pointerup', (e) => {
-    const d = down;
-    down = null;
-    if (!d || d.id !== e.pointerId || d.b.disabled || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 14) return;
-    fired = { b: d.b, t: performance.now() };
-    d.b.click();
-  });
-  root.addEventListener('pointercancel', () => { down = null; });
-  root.addEventListener('click', (e) => {
-    if (!e.isTrusted || !fired || performance.now() - fired.t > 600 || !fired.b.contains(e.target)) return;
-    fired = null;
-    e.stopImmediatePropagation();
-    e.preventDefault();
-  }, true);
-}
-
 export class UI {
   constructor(gallery) {
     this.gallery = gallery;
@@ -143,9 +119,6 @@ export class UI {
       tidy(on);
       setPref('tidy', on);
     });
-    tapOnRelease($('#top-btns'));
-    // 手機的行囊鈕在拇指弧上，不在那排裡（電腦上面已經排進去了）
-    if (!$('#top-btns').contains($('#pack-btn'))) tapOnRelease($('#pack-btn'));
     $('#sheet-close').addEventListener('click', () => { this.hidePainting(); this.onClose?.(); });
     $('#dress-close').addEventListener('click', () => { this.hideDress(); this.onClose?.(); });
     $('#cams-close').addEventListener('click', () => { this.hideCams(); this.onClose?.(); });
@@ -369,6 +342,11 @@ export class UI {
       onPick(list[i]);
     }));
     $('#emote-btn').addEventListener('click', () => box.classList.toggle('open'));
+    // 手機：開著時按別的地方就收起來，點畫面、按弧上退到後面的鈕都算，那一下照樣算數（hud.css 那幾顆只淡掉、不擋）。
+    // 搖桿不算：雙手拿的時候一邊走一邊挑表情。電腦照舊，按表情鈕才收
+    if (!key) document.addEventListener('pointerdown', (e) => {
+      if (box.classList.contains('open') && !box.contains(e.target) && !e.target.closest('#joy')) box.classList.remove('open');
+    }, true);
     box.hidden = false;
   }
 

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>手把測試</title>
+  <!-- 拿真的手把調手感：原始數值、死區圈、搖桿外圈的形狀、右搖桿換算成的轉速、牌子、震動試按。死區和曲線用遊戲自己的（js/controls/gamepad.js） -->
+  <style>
+    html, body { margin: 0; background: #1c1814; color: #e9e0cc; font-family: "Noto Serif TC", serif; }
+    main { max-width: 1000px; margin: 0 auto; padding: 18px 16px 48px; }
+    h1 { margin: 0; font-size: 17px; font-weight: 600; color: #c9a86e; }
+    .note { font-size: 13px; opacity: .65; margin-top: 4px; }
+    #step { font-size: 28px; font-weight: 700; margin: 14px 0 4px; color: #fff3d6; }
+    .row { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 14px; align-items: flex-end; }
+    canvas { background: #120f0d; border-radius: 8px; }
+    .cap { font-size: 12px; opacity: .6; text-align: center; }
+    #btns { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 4px; margin-top: 12px; font-size: 12px; }
+    #btns div { background: #2a241e; border-radius: 4px; padding: 3px; text-align: center; }
+    #btns div.on { background: #e8b86a; color: #1b1714; }
+    .bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .bar button { padding: 7px 12px; border: 1px solid #5a4e3e; border-radius: 6px; background: #2a241e; color: inherit; font: inherit; font-size: 14px; cursor: pointer; }
+    #face svg { width: 56px; height: 56px; vertical-align: middle; }
+    pre { font: 12px/1.5 Consolas, monospace; white-space: pre-wrap; background: #120f0d; padding: 10px; border-radius: 8px; margin-top: 12px; color: #cfc2ae; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>手把測試</h1>
+  <div class="note">按手把上任何一顆鍵開始（瀏覽器在這一頁被按過之前看不到手把）。不要按 Home，Windows 會跳出 Xbox Game Bar。</div>
+  <div id="step">按任何一顆鍵</div>
+  <div id="face"></div>
+  <div class="row">
+    <div><canvas id="ls" width="220" height="220"></canvas><div class="cap">左搖桿：灰點原始、金點扣過死區，金線是推過的外圈</div></div>
+    <div><canvas id="rs" width="220" height="220"></canvas><div class="cap">右搖桿</div></div>
+    <div><canvas id="tr" width="150" height="220"></canvas><div class="cap">扳機 ZL、ZR</div></div>
+  </div>
+  <div id="btns"></div>
+  <div class="bar">
+    <button type="button" data-rumble="80,1,0.3">快門：短一下</button>
+    <button type="button" data-rumble="160,0.5,0.5">落地</button>
+    <button type="button" data-rumble="400,0.7,0.7">長 0.4 秒</button>
+    <button type="button" id="rim-reset">外圈重畫</button>
+  </div>
+  <pre id="info">還沒讀到手把</pre>
+</main>
+<script type="module">
+  import { stick, curve, PAD_TUNE } from '../js/controls/gamepad.js';
+  import { faceSVG, faceName } from '../js/controls/padglyphs.js';
+
+  const $ = (id) => document.getElementById(id);
+  const BINS = 72;
+  let pi = null, labels = null, prev = [], cells = [], lastTs = 0;
+  const gaps = [], rim = { L: new Array(BINS).fill(0), R: new Array(BINS).fill(0) };
+  let rumbleNote = '';
+
+  // 名字認得出來的直接用，認不出的（XInput 通用名字、8BitDo 的 X 模式）等按「印著 A 的那顆」
+  const known = (id) => (/054c|dualsense|dualshock|wireless controller|playstation/i.test(id) ? 'ps' : /057e|pro controller|joy-?con|nintendo/i.test(id) ? 'nintendo' : /045e/i.test(id) && !/xinput/i.test(id) ? 'xbox' : null);
+
+  function draw(c, raw, done, bins) {
+    const W = c.canvas.width, r = W / 2 - 14, cx = W / 2;
+    c.clearRect(0, 0, W, W);
+    c.strokeStyle = '#4a3e34';
+    c.beginPath(); c.arc(cx, cx, r, 0, Math.PI * 2); c.stroke();
+    c.strokeRect(cx - r, cx - r, 2 * r, 2 * r);
+    c.beginPath(); c.arc(cx, cx, r * PAD_TUNE.dead, 0, Math.PI * 2); c.stroke();
+    c.strokeStyle = '#c9a86e';
+    c.beginPath();
+    bins.forEach((m, k) => {
+      const a = ((k + 0.5) / BINS) * 2 * Math.PI - Math.PI, x = cx + Math.cos(a) * m * r, y = cx + Math.sin(a) * m * r;
+      if (k) c.lineTo(x, y); else c.moveTo(x, y);
+    });
+    c.closePath(); c.stroke();
+    c.fillStyle = '#8a7c6a';
+    c.beginPath(); c.arc(cx + raw[0] * r, cx + raw[1] * r, 5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#e8b86a';
+    c.beginPath(); c.arc(cx + done[0] * r, cx + done[1] * r, 4, 0, Math.PI * 2); c.fill();
+  }
+
+  function frame() {
+    const list = [...(navigator.getGamepads?.() ?? [])].filter(Boolean);
+    if (pi === null && list.length) {
+      const g = list[0];
+      pi = g.index;
+      labels = known(g.id);
+      prev = g.buttons.map((b) => b.pressed);
+      $('btns').innerHTML = g.buttons.map((_, i) => `<div>#${i}</div>`).join('');
+      cells = [...$('btns').children];
+      $('step').textContent = labels ? '' : '按一下印著 A 的那顆（PlayStation 按 ✕）';
+    }
+    const g = list.find((p) => p.index === pi);
+    if (g) {
+      const on = g.buttons.map((b) => b.pressed);
+      if (!labels && (on[0] && !prev[0] || on[1] && !prev[1])) {
+        labels = on[1] ? 'nintendo' : 'xbox';
+        $('step').textContent = `A 在${on[1] ? '右邊' : '下面'}：${labels === 'nintendo' ? '任天堂' : 'Xbox'}的字`;
+      }
+      prev = on;
+      if (g.timestamp !== lastTs) { if (lastTs) gaps.push(g.timestamp - lastTs); lastTs = g.timestamp; if (gaps.length > 600) gaps.shift(); }
+      const a = g.axes, L = stick(a[0], a[1]), R = stick(a[2], a[3]);
+      for (const [k, x, y] of [['L', a[0] || 0, a[1] || 0], ['R', a[2] || 0, a[3] || 0]]) {
+        const m = Math.hypot(x, y), b = Math.floor(((Math.atan2(y, x) + Math.PI) / (2 * Math.PI)) * BINS) % BINS;
+        if (m > rim[k][b]) rim[k][b] = m;
+      }
+      draw($('ls').getContext('2d'), [a[0] || 0, a[1] || 0], L, rim.L);
+      draw($('rs').getContext('2d'), [a[2] || 0, a[3] || 0], R, rim.R);
+      const t = $('tr').getContext('2d'), H = 220;
+      t.clearRect(0, 0, 150, H);
+      [g.buttons[6]?.value ?? 0, g.buttons[7]?.value ?? 0].forEach((v, k) => {
+        t.strokeStyle = '#4a3e34'; t.strokeRect(20 + k * 64, 12, 40, H - 40);
+        t.fillStyle = '#e8b86a'; t.fillRect(20 + k * 64, 12 + (H - 40) * (1 - v), 40, (H - 40) * v);
+        t.fillStyle = '#a8957a'; t.font = '12px Consolas'; t.fillText(v.toFixed(3), 20 + k * 64, H - 8);
+      });
+      cells.forEach((d, i) => d.classList.toggle('on', !!on[i] || (g.buttons[i]?.value ?? 0) > 0.5));
+      $('face').innerHTML = labels ? [1, 0, 3, 2].map((p) => faceSVG(p, labels)).join(' ') : '';
+      const s = [...gaps].sort((x, y) => x - y), med = s.length ? s[Math.floor(s.length / 2)] : 0;
+      const deg = (v) => Math.round((curve(v) * PAD_TUNE.yaw * 180) / Math.PI);
+      const diag = (bins) => Math.max(...[9, 27, 45, 63].map((k) => bins[k])).toFixed(3);
+      $('info').textContent = [
+        `名字：${g.id}`,
+        `mapping：${g.mapping || '（空，不是標準排法）'}　鍵 ${g.buttons.length}　軸 ${g.axes.length}　震動：${g.vibrationActuator ? (g.vibrationActuator.effects ?? [g.vibrationActuator.type]).join('、') : '沒有'}`,
+        `字：${labels ? `${labels}（確認是 ${faceName(labels === 'nintendo' ? 1 : 0, labels)}）` : '還不知道'}`,
+        `左搖桿 原始 ${(a[0] || 0).toFixed(3)}, ${(a[1] || 0).toFixed(3)}　扣過死區 ${L[0].toFixed(3)}, ${L[1].toFixed(3)}　外圈斜推最多 ${diag(rim.L)}`,
+        `右搖桿 原始 ${(a[2] || 0).toFixed(3)}, ${(a[3] || 0).toFixed(3)}　扣過死區 ${R[0].toFixed(3)}, ${R[1].toFixed(3)}　外圈斜推最多 ${diag(rim.R)}`,
+        `右搖桿換成轉速（越肩、速度 100%、還沒加速）：左右 ${deg(R[0])}°/秒　上下 ${Math.round(deg(R[1]) * PAD_TUNE.pitch)}°/秒`,
+        `更新間隔：中位數 ${med.toFixed(1)} 毫秒`,
+        rumbleNote,
+      ].filter(Boolean).join('\n');
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // 震動：網頁在最前面時才會真的震；被別的視窗蓋住時瀏覽器也回 complete
+  for (const b of document.querySelectorAll('[data-rumble]')) b.addEventListener('click', async () => {
+    const g = pi !== null && navigator.getGamepads()[pi], [ms, strong, weak] = b.dataset.rumble.split(',').map(Number);
+    if (!g?.vibrationActuator) { rumbleNote = '震動：這支手把在這個瀏覽器沒有震動'; return; }
+    try { rumbleNote = `震動：${await g.vibrationActuator.playEffect('dual-rumble', { startDelay: 0, duration: ms, strongMagnitude: strong, weakMagnitude: weak })}`; }
+    catch (e) { rumbleNote = `震動：${e.name} ${e.message}`; }
+  });
+  $('rim-reset').addEventListener('click', () => { rim.L.fill(0); rim.R.fill(0); });
+  addEventListener('gamepaddisconnected', (e) => { if (e.gamepad.index === pi) { pi = null; $('step').textContent = '手把斷線了，重新接上、按一下'; } });
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>

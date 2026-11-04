@@ -5,9 +5,12 @@
 // 存下（pack.js 的相簿、信物卡）只照裝置走，跟哪台相機無關：iPhone 叫分享選單，點「儲存影像」進照片 App；
 // Android 一張一個檔下載；電腦 Chrome、Edge 寫進挑好的資料夾，其他瀏覽器一張下載、多張打包成 zip。
 // 存下的就從相簿拿出來，沒選的留著；不要的自己丟掉，丟掉的放得回來。Android 另外可以分享，分享出去的照樣留在相簿。
-// 選幾張交給沖洗師傅（LABS）：當下就洗好，可是要本人走到那間相館找師傅（vendors.js 的 lab）才拿得回來，拿回來的套上師傅固定的色彩風格。
+// 選幾張交給沖洗師傅（LABS）：當下就洗好，可是要本人走到那間相館找師傅（vendors.js 的 lab）才拿得回來，拿回來的套上師傅固定的色彩風格（配方和洗的引擎在 darkroom.js）。
 // 只有照片能交給師傅；信物不行，濾鏡會蓋到存檔碼。底片機（cameras.js 的 film）拍的在相簿只看得到拍攝時辰，一定要交給師傅才看得到。
+// 拿回來的是新的（fresh）：格子上的印泥亮著，打開相簿看到了、收起行囊才熄成淡印（seen）。
 import { CAMERAS } from './cameras.js';
+import { LABS, develop } from './darkroom.js';
+export { LABS };
 
 const DB = 'gallery-photos', DIR = 'dir', WAIT = 'wait', STORE = 'album', KEY = 'photos';
 const UA = navigator.userAgent;
@@ -29,16 +32,6 @@ export const labOk = (it) => it.state === 'shot' && !it.kind;
 export const rareShot = (it) => !!it.rare && it.pressed == null && visible(it) && !it.kind;
 export const pressOk = (it) => rareShot(it) && it.cam !== 'eye';
 let items = [], dir = null, ready = null, persisted = false;
-
-// 沖洗師傅：每一位一種固定的色彩風格。filter 先套，tint 一層一層用混合模式疊上去，最後顆粒和暗角
-export const LABS = {
-  haishi: {
-    name: '海市暗房', who: '洗照片師傅', style: '夜藍',
-    filter: 'saturate(.78) contrast(1.12) brightness(1.04)',
-    tint: [['soft-light', '#24566a', 0.55], ['screen', '#f3b47a', 0.07]],
-    grain: 0.09, vig: 0.5,
-  },
-};
 
 const HOURS = '子丑寅卯辰巳午未申酉戌亥';
 export const hourMark = (t) => HOURS[Math.floor(((new Date(t).getHours() + 1) % 24) / 2)] + '時';
@@ -173,50 +166,21 @@ export async function collect(lab) {
     try { it.blob = await develop(it.blob, L); } catch {}
     it.state = 'back';
     it.film = false;
+    it.fresh = true;
     await put(it);
   }
   if (got.length) changed();
   return got.length;
 }
 
-async function develop(blob, L) {
-  const bmp = await createImageBitmap(blob), W = bmp.width, H = bmp.height;
-  const c = document.createElement('canvas');
-  c.width = W;
-  c.height = H;
-  const ctx = c.getContext('2d');
-  ctx.filter = L.filter;
-  ctx.drawImage(bmp, 0, 0);
-  ctx.filter = 'none';
-  for (const [mode, color, a] of L.tint) {
-    ctx.globalCompositeOperation = mode;
-    ctx.globalAlpha = a;
-    ctx.fillStyle = color;
-    ctx.fillRect(0, 0, W, H);
+// 看過了：新的那幾張印泥熄掉
+export async function seen(list) {
+  const done = list.filter((it) => it.fresh && items.includes(it));
+  for (const it of done) {
+    delete it.fresh;
+    await put(it);
   }
-  // 顆粒：一小塊雜訊鋪滿，用 overlay 疊
-  const n = document.createElement('canvas');
-  n.width = n.height = 128;
-  const nx = n.getContext('2d'), d = nx.createImageData(128, 128);
-  for (let i = 0; i < d.data.length; i += 4) {
-    const v = Math.random() * 255;
-    d.data[i] = d.data[i + 1] = d.data[i + 2] = v;
-    d.data[i + 3] = 255;
-  }
-  nx.putImageData(d, 0, 0);
-  ctx.globalCompositeOperation = 'overlay';
-  ctx.globalAlpha = L.grain;
-  ctx.fillStyle = ctx.createPattern(n, 'repeat');
-  ctx.fillRect(0, 0, W, H);
-  const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.hypot(W, H) / 2);
-  g.addColorStop(0, 'rgba(10,8,12,0)');
-  g.addColorStop(1, `rgba(10,8,12,${L.vig})`);
-  ctx.globalCompositeOperation = 'multiply';
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
-  bmp.close?.();
-  return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej()), 'image/jpeg', 0.92));
+  if (done.length) changed();
 }
 
 // ───────── 選片存下 ─────────

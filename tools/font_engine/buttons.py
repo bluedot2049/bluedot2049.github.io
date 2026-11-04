@@ -1,4 +1,4 @@
-"""按鈕上的字：手機的「跳」「坐」印章（css/hud.css 的 .seal），坐著時「坐」換成「起」
+"""按鈕上的字：手機的「跳」「坐」印章（css/hud.css 的 .seal）。坐的那顆照姿勢換字：站著「坐」、坐在地上「躺」、躺著或坐椅子「起」（main.js）
 
 字小（約 16–20px），用 Text 字重。寫法跟 places.py 一樣：左右結構用 compose，其他整字畫。
 """
@@ -12,6 +12,7 @@ BUTTON_GLYPHS: Dict[str, List[Tuple[str, Any]]] = {}
 G = BUTTON_GLYPHS
 
 G['跳'] = compose('⿰足兆')
+G['躺'] = compose('⿰身尚')
 
 # 上面兩個人（捺收成點），土的豎從兩人中間穿上來
 G['坐'] = [bar((32, 8), (10, 46)), bar((23, 28), (36, 44)),

@@ -11,6 +11,7 @@ import { optionName } from '../../avatar/looks.js';
 import { bindPress, latest } from '../../save/pressdesk.js';
 import { buildRain } from './rain.js';
 import { RainSound } from './rain-sound.js';
+import { Footprints } from '../../core/footprints.js';
 
 // 一上岸就放。rest：播完停幾秒（最少、最多）再從頭放，中間只剩海、人潮和雨
 export const bgm = { src: 'assets/audio/haishi.m4a', from: 'haishi', rest: [40, 120] };
@@ -71,6 +72,8 @@ export function guide(world) {
 export function build(scene, { coarse, params, renderer, quality }) {
   const world = buildHaishi(scene, { coarse });
   world.rain = buildRain({ scene, world, renderer, quality, coarse, params });
+  // 腳印（core/footprints.js）：下過雨的石板上才留，十幾秒乾掉
+  world.prints = new Footprints(scene, { color: '#141008', alpha: 0.45, life: 18, ok: (x, z, y) => world.rain.wetAt(x, y, z) > 0.3 });
   return world;
 }
 
@@ -101,6 +104,7 @@ export function crowd({ scene, world, shadowTex, player, camera, ambience, coars
     const sound = new RainSound(rain);
     ambience.beds.push(sound);
     ambience.wetStep = (ch, out, t) => sound.step(ambience, ch, out, t);
+    world.onStep = (ch) => rain.splash(ch);   // 濕的石板上每踩一步一圈漣漪
   }
   // 星潮報：印好的聲音；下街報攤那疊最上面，有你的報紙就換成你那一份
   bindPress({ ambience });

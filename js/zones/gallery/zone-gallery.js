@@ -20,8 +20,10 @@ export const bgm = { src: StudyNight, from: '02-nigredo' };
 // 調色（grade.js）：linear 是霧照 env 的線性霧，只調顏色；色調「畫廊01」在 tones.js。?debug 時右上角可以即時調，「複製」貼回這裡
 export const grade = { linear: 1, tone: '畫廊01' };
 
-export function build(scene, { gallery }) {
-  return buildWorld(scene, gallery);
+// 前廳的舞台光：電腦（中、高畫質）放三盞真的燈，低畫質以上有光柱裡的浮塵；手機只有地上的光池和光柱（vestibule-light.js）
+export function build(scene, { gallery, coarse, quality }) {
+  const level = quality?.level ?? 'mid';
+  return buildWorld(scene, gallery, { lights: !coarse && level !== 'low', motes: level !== 'low' });
 }
 
 // 白獸（beast.js）可能出現的地方：place 是登報時的地名（不用房間的名字），room 是第幾間（那間藏起來時牠也藏起來，戶外是最後一間）
@@ -61,11 +63,13 @@ export function guide(world) {
   return list;
 }
 
-// 室內和戶外的光線、霧。走出後門時在兩組之間漸變
+// 室內和戶外的光線、霧。走出後門時在兩組之間漸變。
+// 第三組是前廳：室內那組壓暗、天光偏冷紫，只剩鏡子、相機桌、胖頭人三處亮（vestibule-light.js）；走過前廳出口退回室內那組（world.envDim）
 export function env() {
   return [
     { bg: 0x241a1c, near: 16, far: 38, sky: 0xfff0dc, ground: 0x70524a, hi: 1.9, sun: 0xffcf98, si: 1.3, dir: new THREE.Vector3(4, 8, 3) },
     { bg: HORIZON, near: 28, far: 170, sky: 0xffc4b8, ground: 0x8c6e5c, hi: 1.6, sun: 0xffa868, si: 1.9, dir: SUN_DIR.clone().multiplyScalar(-1).setY(0.45).multiplyScalar(10) },
+    { name: '前廳', bg: 0x1d1519, near: 16, far: 38, sky: 0xc8bce8, ground: 0x3a2c40, hi: 0.8, sun: 0xffc890, si: 0.35, dir: new THREE.Vector3(4, 8, 3) },
   ];
 }
 
@@ -74,6 +78,7 @@ export function residents({ scene, world, shadowTex }) {
   const spot = world.findWalkable(2.0, -5.6, 0, -2) || { x: 2.0, z: -5.6 };
   const manatee = new Manatee(shadowTex, spot.x, spot.z);
   scene.add(manatee.group);
+  world.stage?.follow(manatee);
   world.rooms[0].obstacles.push({ x: spot.x, z: spot.z, hw: 0.4, hd: 0.4, rot: 0 });
   const host = world.outdoor ? new Manatee(shadowTex, world.outdoor.host.x, world.outdoor.host.z, TABLE_LINES) : null;
   if (host) scene.add(host.group);
