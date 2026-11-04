@@ -26,11 +26,18 @@ export const FIELDS = [
   { key: 'padKeys', init: () => null, read: padKeys, code: { tag: 'p', iris: false, enc: (v) => (v ? v.map((n) => n.toString(16)).join('') : ''), dec: (s) => (/^[0-9a-f]{16}$/.test(s) ? padKeys([...s].map((c) => parseInt(c, 16))) : null) } },
   // 電腦換過的按鍵（controls/keymap.js）：每個換過的功能 6 個十六進位字，沒換過是 null。跟手把的一樣跟著存檔照片走、不進眼紋
   { key: 'deskKeys', init: () => null, read: deskKeys, code: { tag: 'k', iris: false, enc: (v) => v || '', dec: (s) => deskKeys(s) } },
+  // 前廳胖頭的教學（zones/gallery/ask.js）：tour 是做過的事（mirror 照過鏡子、photo 拍過照、out 走出後門、各區的 zone 名字、shy 被他拒拍過），
+  // asked 是問過他哪幾題（ASK 的 id）。跟著這個人走，但不進存檔碼：換了裝置只是題目又亮起來
+  { key: 'tour', init: () => [], read: words },
+  { key: 'asked', init: () => [], read: words },
 ];
 // 0–15 每個剛好出現一次才算；跟沒換一樣的也當成沒換
 function padKeys(v) {
   if (!Array.isArray(v) || v.length !== 16 || new Set(v).size !== 16 || !v.every((n) => Number.isInteger(n) && n >= 0 && n < 16)) return null;
   return v.some((n, i) => n !== i) ? v : null;
+}
+function words(v) {
+  return Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.length <= 16).slice(0, 64) : [];
 }
 function deskKeys(v) {
   return typeof v === 'string' && v.length && v.length <= 600 && /^([0-9a-f]{6})+$/.test(v) ? v : null;
@@ -65,6 +72,14 @@ export function putSave(patch) {
   try { localStorage.setItem('save', JSON.stringify(s)); } catch {}
   // 行囊（pack.js）聽這個，看封蠟要不要亮
   if (typeof dispatchEvent === 'function') dispatchEvent(new Event('savechange'));
+}
+
+// tour 記一件做過的事；記過的不再寫。回傳這次是不是第一次
+export function markTour(id) {
+  const t = getSave().tour;
+  if (t.includes(id)) return false;
+  putSave({ tour: [...t, id] });
+  return true;
 }
 
 // 現在這台裝置上有沒有東西，蓋掉之前要先問

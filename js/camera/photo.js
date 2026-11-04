@@ -261,6 +261,7 @@ export class PhotoMode {
     if (this.active) return;
     this.postcard = postcard;
     this.quick = quick;
+    this.handoff = quick || (this.coarse && this.player.shoulder && !studio && !postcard);   // 放下時越肩接著相機的方向
     this.sticky = false;
     this.player.holdLock = quick;
     const p = this.player, cam = this.camera;
@@ -327,8 +328,8 @@ export class PhotoMode {
     clearTimeout(this.afTimer);
     this.$('#ph-af').className = '';
     this.$('#ph-dark').className = '';   // 留著的話，下次打開攝影模式動畫會重播一次
-    // 手持舉相機放下時，越肩接著相機最後瞄的方向和高低（像射擊遊戲放下瞄準）；走路鍵交回去，人不停
-    if (quick && this.gear) {
+    // 手持舉相機放下時，越肩接著相機最後瞄的方向和高低（像射擊遊戲放下瞄準）；走路鍵交回去，人不停。手機橫拿越肩收起相機也是
+    if (this.handoff && this.gear) {
       const p = this.player;
       if (this.grip === 3) p.camYaw = p.heading + Math.PI;
       else {
@@ -426,7 +427,19 @@ export class PhotoMode {
     tick();
   }
 
-  toggle() { this.active ? this.exit() : this.enter(); }
+  // 手機橫拿越肩點相機鈕：跟電腦舉相機一樣先瞄準再舉（準心對到的那一點），放下時越肩接著相機最後的方向（exit 的 handoff）
+  toggle() {
+    if (this.active) return this.exit();
+    if (this.coarse && this.player.shoulder && !this.player.focus) this.aimFirst();
+    this.enter();
+  }
+
+  // 先瞄準再舉：記下準心（畫面正中間）對到的那一點，舉起來時相機朝那裡、對焦在那裡；什麼都沒對到就當 30 公尺外
+  aimFirst() {
+    if (!carried()) return;
+    const h = this.pickAt(0, 0), cam = this.camera;
+    this.aimTarget = h ? h.point.clone() : cam.position.clone().addScaledVector(cam.getWorldDirection(new THREE.Vector3()), 30);
+  }
 
   // 鏡頭在哪、朝哪、多廣：送給別人判斷有沒有被拍、畫出畫廊的眼睛（multiplayer.js），自己的頭也照這個看鏡頭（attention.js）。
   // kind 0 是手上的相機，1 是畫廊的眼睛；studio 是照相館架好的鏡頭（不送給別人）
@@ -469,11 +482,7 @@ export class PhotoMode {
       }
       const f = this.player.focus;
       if (!this.player.shoulder || (f && f.kind !== 'seat')) return;   // 坐著可以舉，看畫照鏡子時不行
-      // 先瞄準再舉：記下準心（畫面正中間）對到的那一點，舉起來時相機朝那裡、對焦在那裡；什麼都沒對到就當 30 公尺外
-      if (carried()) {
-        const h = this.pickAt(0, 0), cam = this.camera;
-        this.aimTarget = h ? h.point.clone() : cam.position.clone().addScaledVector(cam.getWorldDirection(new THREE.Vector3()), 30);
-      }
+      this.aimFirst();
       this.enter({ quick: true });
       this.aimAt = now;
       return;

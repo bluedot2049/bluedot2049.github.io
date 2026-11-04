@@ -177,13 +177,16 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
     mouse = 0;
     player.padLink(true);
     if (asking) return;
-    // 第一次用手把：跳出手把版的操作說明（問 A 的那句先等答了）
-    if (!opt.told) {
-      opt.told = true;
-      keep();
-      ui.guide(true);
-    }
-    soundHint();
+    firstTell();
+  }
+
+  // 第一次用手把：底下那行說最基本的幾顆（全部的在暫停選單的「手把按鍵」），講完才說聲音的事。問 A 的那句先等答了
+  function firstTell() {
+    if (opt.told) return soundHint();
+    opt.told = true;
+    keep();
+    ui.hint(`左搖桿走路　右搖桿轉視角　${padBtn(3)} 跳　${padBtn(2)} 坐　${padBtn(-1)} 互動`, 6000);
+    setTimeout(soundHint, 6200);
   }
 
   // 手把的鍵不算使用者手勢，聲音解不開：還沒出聲時說一次，點一下畫面或按個鍵盤就好（靜音的不說）
@@ -221,14 +224,7 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
     asking = false;
     glyph();
     ui.hint(`好，${faceName(i, labels)} 在${i === E ? '右邊' : '下面'}，之後都照這樣`, 2500);
-    setTimeout(() => {
-      if (!opt.told) {
-        opt.told = true;
-        keep();
-        ui.guide(true);
-      }
-      soundHint();
-    }, 2600);
+    setTimeout(firstTell, 2600);
   }
 
   // 拔掉、沒電：連一直舉著的相機也放下

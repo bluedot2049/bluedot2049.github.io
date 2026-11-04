@@ -37,7 +37,7 @@ const ICONS = {
 };
 const icon = (id) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[id]}</svg>`;
 
-// 三層選單。view：鏡頭看臉還是看全身。paint：最下面那排顏色改哪幾個欄位（主色、副色），when 不成立就不顯示
+// 三層選單。view：鏡頭一律全身，'face' 的那幾頁換過去時角色轉回正面（player.js frameMirror）。paint：最下面那排顏色改哪幾個欄位（主色、副色），when 不成立就不顯示
 const has = (k, none = 'none') => (L) => L[k] !== none;
 const bare = (L) => L.one === 'none';
 const MENU = [

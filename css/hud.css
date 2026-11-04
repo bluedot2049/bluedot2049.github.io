@@ -98,14 +98,14 @@ body.desk #toast .t2 { font-size: 22px; margin-top: 12px; }
 }
 #hint.show { opacity: 1; }
 
-/* 進門以後的操作說明：門口告示（.notice）同一張卡，這裡只管位置和裡面多出來的東西。
-   手機橫拿靠左、垂直置中，不擋住畫面中間的角色；直式貼底，房間外那片空的地方剛好放得下；電腦放正中（在下面） */
-#guide {
+/* 門邊立牌那張（能在哪裡玩）和問胖頭的題目卡：門口告示（.notice）同一張卡，這裡只管位置和裡面多出來的東西。
+   手機橫拿靠左、垂直置中，不擋住畫面中間的角色；直式貼底，房間外那片空的地方剛好放得下；電腦在下面 */
+#guide, #ask {
   position: fixed; left: calc(24px + env(safe-area-inset-left)); top: 50%; z-index: 25;
   display: none; transform: translateY(-50%);
   background: rgba(16, 11, 9, .94); box-shadow: var(--shadow);
 }
-#guide.show { display: flex; animation: guide-in .4s ease-out both; }
+:is(#guide, #ask).show { display: flex; animation: guide-in .4s ease-out both; }
 @keyframes guide-in { from { opacity: 0; transform: translateY(calc(-50% + 6px)); } }
 #guide .keys { list-style: none; margin: 0; padding: 0; }
 #guide .keys li {
@@ -118,40 +118,65 @@ body.desk #toast .t2 { font-size: 22px; margin-top: 12px; }
 #guide .keys li:nth-child(3) { animation-delay: .12s; }
 #guide .keys li:nth-child(4) { animation-delay: .18s; }
 #guide .keys li:nth-child(5) { animation-delay: .24s; }
-#guide .keys kbd {
+:is(#guide, #ask) kbd {
   min-width: 20px; padding: 0 5px; text-align: center;
   font: 11.5px/1.6 var(--latin); letter-spacing: .04em; color: var(--text);
   border: 1px solid rgba(232, 184, 106, .35); border-radius: 2px;
 }
+:is(#guide, #ask) .btn kbd { color: inherit; }
 body.touch #guide .for-desk, body:not(.touch) #guide .for-touch { display: none; }
-body.shoulder #guide .for-free, body:not(.shoulder) #guide .for-shoulder { display: none; }
-/* 越肩那張比較長：行距收一點，矮的螢幕可以捲 */
-#guide { max-height: calc(100vh / var(--ui, 1) - 24px); overflow-y: auto; }
-#guide .for-shoulder li { padding: 6px 0; }
-#guide .again { font-size: 12.5px; letter-spacing: .08em; color: var(--muted); }
-/* 「下次不用顯示」：跟門口告示待辦後面的方框同一款，勾了填金色 */
-#guide .skip { display: flex; align-items: center; gap: 10px; font-size: 12.5px; letter-spacing: .08em; color: var(--muted); cursor: var(--cur-pointer); }
-#guide .skip input { position: absolute; opacity: 0; pointer-events: none; }
-#guide .skip i { width: 9px; height: 9px; border: 1px solid var(--gold-lo); }
-#guide .skip input:checked + i { background: var(--gold); border-color: var(--gold); }
-#guide .skip input:focus-visible + i { outline: 1px solid var(--gold-hi); outline-offset: 2px; }
+/* 中間那條小標（支援）：跟告示的副標同一種字 */
+#guide .part { margin-top: 2px; font-size: 12.5px; letter-spacing: .12em; color: var(--muted); }
+/* 矮的螢幕可以捲 */
+:is(#guide, #ask) { max-height: calc(100vh / var(--ui, 1) - 24px); overflow-y: auto; }
+/* 題目：一列一題，前面一顆魔法印泥（沒問過的亮著，panels.css 的封蠟同一款），電腦後面寫 1–9 */
+#ask .asks { list-style: none; margin: 0; padding: 0; }
+#ask .asks button {
+  width: 100%; display: grid; grid-template-columns: 9px 1fr auto; align-items: center; gap: 12px; padding: 9px 0;
+  background: none; border: 0; border-bottom: 1px solid rgba(232, 184, 106, .1); border-radius: 0;
+  font: inherit; font-size: 13.5px; letter-spacing: .06em; color: var(--text); text-align: left; cursor: var(--cur-pointer);
+  animation: row-in .45s ease-out both;
+}
+#ask .asks li:nth-child(2) button { animation-delay: .04s; }
+#ask .asks li:nth-child(3) button { animation-delay: .08s; }
+#ask .asks li:nth-child(4) button { animation-delay: .12s; }
+#ask .asks li:nth-child(5) button { animation-delay: .16s; }
+#ask .asks li:nth-child(n+6) button { animation-delay: .2s; }
+#ask .asks button:not(.fresh) { color: var(--muted); }
+#ask .asks button:hover, #ask .asks button:focus-visible { color: var(--gold-hi); outline: none; }
+#ask .asks kbd { color: var(--muted); border-color: rgba(232, 184, 106, .2); }
+#ask .ink { position: relative; width: 9px; height: 9px; }
 @media (orientation: portrait) {
-  #guide {
+  #guide, #ask {
     left: 16px; right: 16px; top: auto; bottom: calc(16px + env(safe-area-inset-bottom));
     width: auto; max-width: 420px; margin: 0 auto; transform: none;
   }
-  #guide.show { animation-name: guide-up; }
+  :is(#guide, #ask).show { animation-name: guide-up; }
+  /* 題目卡在手機上蓋住拇指那排：互動鍵、搖桿都在卡片底下，開著時只聽卡片 */
+  #ask { max-height: 62vh; }
 }
 @keyframes guide-up { from { opacity: 0; transform: translateY(6px); } }
-/* 電腦：停下來看的卡放正中，跟暫停選單同一個位置（靠左在寬螢幕上離畫面中心太遠） */
+/* 電腦：立牌那張停下來看，放正中，跟暫停選單同一個位置；題目卡是小卡，長在胖頭旁邊（ask.js 每幀寫 --cx、--cy：卡片左上角） */
 body.desk #guide { left: 50%; transform: translate(-50%, -50%); }
 body.desk #guide.show { animation-name: guide-mid; }
 @keyframes guide-mid { from { opacity: 0; transform: translate(-50%, calc(-50% + 6px)); } }
+body.desk #ask { left: var(--cx, 50%); top: var(--cy, 30%); right: auto; bottom: auto; transform: none; width: 300px; }
+body.desk #ask.show { animation-name: guide-up; }
 @media (orientation: landscape) and (max-height: 560px) {
-  #guide .keys li { padding: 6px 0; }
-  #guide .again { display: none; }
+  #guide .keys li, #ask .asks button { padding: 6px 0; }
 }
-@media (prefers-reduced-motion: reduce) { #guide.show, #guide .keys li { animation: none; } }
+@media (prefers-reduced-motion: reduce) { :is(#guide, #ask).show, #guide .keys li, #ask .asks button { animation: none; } }
+
+/* 胖頭指著畫面上的按鈕（ask.js 的 beckon）：外圈一道金光往外擴，跟互動鍵的光暈同一種，亮幾下就停 */
+.beckon { position: relative; border-color: var(--gold) !important; color: var(--gold-hi) !important; }
+.beckon::before {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit; border: 1px solid var(--gold);
+  pointer-events: none; animation: halo 1.2s ease-out 4;
+}
+/* 對話框底下那行小字：鍵和動詞（胖頭嘴裡不說按鍵，鍵只寫在這裡） */
+.speech .note {
+  display: block; margin-top: 3px; font-size: 11.5px; font-weight: 600; letter-spacing: .1em; color: #7a5a30;
+}
 
 /* 樹洞：作者銘牌、作者的話、航路（搭船能去的地方）。跟挑相機一樣是一個停下來看的模式：角色站在洞口，卡片在畫面正中；地方多了只捲航路那一段 */
 #hollow {
@@ -162,6 +187,8 @@ body.desk #guide.show { animation-name: guide-mid; }
 }
 #hollow.show { display: flex; animation: hollow-in .4s ease-out both; }
 @keyframes hollow-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 6px)); } }
+/* 銘牌和作者的話包在 .who：直拿、電腦不算一層，照樣跟航路一條往下排；橫拿才收成左邊一欄（下面的 media） */
+#hollow .who { display: contents; }
 /* 銘牌：細金框兩層、四角菱形，上面「開發者」，中間簽名（assets/signature.svg），下面「十三」（assets/shisan.svg），都是象牙墨、不發光 */
 #hollow .plate { position: relative; flex: none; padding: 12px 14px 14px; border: 1px solid rgba(232, 184, 106, .3); }
 #hollow .plate::before { content: ""; position: absolute; inset: 3px; border: 1px solid rgba(232, 184, 106, .1); pointer-events: none; }
@@ -212,12 +239,35 @@ body.desk #guide.show { animation-name: guide-mid; }
 /* 手機鍵盤打開（hollow.js 量 visualViewport 給 --kb）：卡片置中在鍵盤上面那一塊，銘牌和作者的話先收起來 */
 #hollow.kb { top: calc((100% - var(--kb)) / 2); max-height: calc(100% - var(--kb) - 16px); }
 #hollow.kb .plate, #hollow.kb .words { display: none; }
-/* 手機橫拿：矮，銘牌縮小、卡片高度貼著畫面 */
+/* 手機橫拿：矮，排成兩欄。左邊銘牌和作者的話，右邊航路撐滿高度、多了自己捲，按鈕在右下（拇指弧那一邊）。
+   留話時寫字的框佔右欄上面那兩格；叫出鍵盤時左欄收起，只剩右欄。
+   卡片寬，一定疊到搖桿、拇指弧和上排，開著時那些先退掉（跟側欄開著一樣），不從卡片邊上露半顆；點畫面照樣收卡片 */
 @media (orientation: landscape) and (max-height: 560px) {
-  #hollow { top: calc(50% - 28px); max-height: calc(100% - 88px); gap: 8px; padding: 12px 16px 10px; }
-  #hollow .plate { padding: 6px 10px 8px; }
-  #hollow .plate .sig { width: 70%; margin: 2px auto 0; }
-  #hollow .plate .name { width: 56px; }
+  #hollow {
+    top: 50%; width: min(640px, calc(100% - 2 * max(16px, env(safe-area-inset-left), env(safe-area-inset-right))));
+    max-height: calc(100% - 32px); padding: 14px 18px 12px;
+    grid-template: "who lead" auto "who routes" minmax(0, 1fr) "who foot" auto / 196px minmax(0, 1fr);
+    gap: 8px 20px;
+  }
+  #hollow.show { display: grid; }
+  body:not(.desk):has(#hollow.show) :is(#joy, #swap-btn, #top-btns, #jump-btn, #sit-btn, #photo-btn, #emote, #emote-btn, #say-btn, #pack-btn, #action-btn) {
+    opacity: 0; pointer-events: none;
+  }
+  #hollow .who {
+    grid-area: who; display: flex; flex-direction: column; justify-content: center; gap: 14px;
+    padding-right: 20px; border-right: 1px solid rgba(232, 184, 106, .12);
+  }
+  #hollow .plate { padding: 10px 12px 12px; }
+  #hollow .plate .sig { margin: 6px 0 2px; }
+  #hollow .plate .name { width: 60px; }
+  #hollow .words { font-size: 13.5px; letter-spacing: .14em; text-align: center; }
+  #hollow .lead { grid-area: lead; }
+  #hollow .routes { grid-area: routes; }
+  #hollow .letter { grid-column: 2; grid-row: 1 / 3; }
+  #hollow .foot { grid-area: foot; }
+  #hollow.kb { grid-template: "routes" minmax(0, 1fr) "foot" auto / minmax(0, 1fr); }
+  #hollow.kb .who { display: none; }
+  #hollow.kb .letter { grid-area: routes; }
 }
 @media (prefers-reduced-motion: reduce) { #hollow.show, #hollow .routes > li { animation: none; } }
 
@@ -341,6 +391,10 @@ body.photo #eye-mark { display: none; }
 #reticle::after { content: ''; position: absolute; left: 50%; top: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; border: 1px solid var(--gold); opacity: 0; transform: scale(.5); transition: opacity .2s, transform .25s; }
 body.locked #reticle { opacity: .85; }
 body.locked.aim-hot #reticle::after { opacity: .9; transform: scale(1); }
+/* 手機橫拿越肩：準心一直在，對到的東西點它本身就好（亮不亮照樣是 player.aimHover）；面板開著收起 */
+body.touch.shoulder #reticle { opacity: .85; }
+body.touch.shoulder.aim-hot #reticle::after { opacity: .9; transform: scale(1); }
+body.touch.panel-open #reticle { opacity: 0; }
 body.photo #reticle { display: none; }
 /* 舉相機拍的照片存好：左下角閃一下縮圖和存到哪裡 */
 .snapsave { position: fixed; left: calc(18px + env(safe-area-inset-left)); bottom: calc(18px + env(safe-area-inset-bottom)); z-index: 30; display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 6px; background: rgba(16, 11, 9, .86); border: 1px solid rgba(232, 184, 106, .35); border-radius: 2px; font-size: 12.5px; letter-spacing: .08em; color: var(--text); pointer-events: none; animation: snapsave-in .45s ease-out both; transition: opacity .5s, transform .5s; }
@@ -627,17 +681,25 @@ body:not(.desk):has(#emote.open) :is(#sit-btn, #photo-btn, #say-btn, #pack-btn) 
 body.flat :is(#photo-btn, #say-btn, #pack-btn) { display: none; }
 /* 行囊：外圈靠「坐」和相機那一側，照片拍完順手就開。開著時抽屜蓋在這裡，鈕先收起來，關掉用抽屜上的 ✕。
    換裝鏡子開著時拇指弧都收了，行囊鈕留著（請眼睛拍存檔要站在鏡子前開行囊）：直拿的抽屜蓋住整排，
-   鈕站到抽屜上緣、拇指那一邊，跟著抽屜滑上去；橫拿和平板的鏡子是右邊的側欄，拇指弧也在右邊時往左讓出側欄 */
+   鈕站到抽屜上緣、拇指那一邊，跟著抽屜滑上去；橫拿和平板的鏡子是右邊的側欄、搖桿也收了，
+   鈕不管搖桿在哪邊都到左下角（「跳」在左邊時的位置），放大成「跳」那一號，在原地冒出來 */
 body:not(.desk) #pack-btn {
   transition: opacity .3s, left .4s cubic-bezier(.2, .8, .2, 1), right .4s cubic-bezier(.2, .8, .2, 1), bottom .4s cubic-bezier(.2, .8, .2, 1), border-color .2s, color .2s, background .2s;
 }
 body:not(.desk) #pack-btn.on { opacity: 0; pointer-events: none; }
 body:not(.desk):has(#dress.open) #pack-btn { --a: 90deg; --r: calc(var(--dress-h) + 12px - var(--jy) + var(--w) / 2); }
 @media (min-width: 900px), (orientation: landscape) and (max-height: 500px) {
-  body:not(.desk):has(#dress.open) #pack-btn { --a: var(--a-pack); --r: var(--r2); }
-  body.joy-left:not(.desk):has(#dress.open) #pack-btn { --a: 0deg; --r: calc(var(--panel-w) + 16px - var(--jx) + var(--w) / 2); }
+  body:not(.desk):has(#dress.open) #pack-btn {
+    --w: var(--seal);
+    left: max(16px, var(--safe-l)); right: auto; bottom: var(--edge-b);
+    width: var(--seal); min-width: var(--seal); height: var(--seal);
+    transition: opacity .3s, border-color .2s, color .2s, background .2s;
+    animation: pack-pop .35s cubic-bezier(.3, 1.4, .5, 1) backwards;
+  }
+  body:not(.desk):has(#dress.open) #pack-btn svg { width: calc(var(--seal) * .42); height: calc(var(--seal) * .42); }
 }
-@media (prefers-reduced-motion: reduce) { body:not(.desk) #pack-btn { transition: opacity .3s; } }
+@keyframes pack-pop { from { opacity: 0; transform: scale(.7); } }
+@media (prefers-reduced-motion: reduce) { body:not(.desk) #pack-btn { transition: opacity .3s; animation: none !important; } }
 /* 360 寬的手機：互動鍵跟搖桿擠過來，22.5° 只剩 3px，往「坐」那邊轉一點，每一顆都還隔 10px 以上 */
 @media (orientation: portrait) and (max-width: 370px) { body:not(.desk) { --a-pack: 18deg; } }
 

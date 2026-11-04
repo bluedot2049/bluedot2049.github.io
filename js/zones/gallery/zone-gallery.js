@@ -12,6 +12,7 @@ import { TD } from './outdoor-map.js';
 import { StudyNight } from '../../audio/study.js';
 import { VestibuleSound } from './vestibule-sound.js';
 import { CAMERAS, SOON } from '../../camera/cameras.js';
+import { Ask } from './ask.js';
 
 // 背景音樂「星盤夜讀」（study.js，現場合成）：走進「歡迎光臨煉金畫廊」那間才開始放，往後的房間和戶外一路放著。
 // 那間一進門就是落地擺鐘，滴答聲從那裡來
@@ -95,6 +96,11 @@ export function residents({ scene, world, shadowTex }) {
   const host = world.outdoor ? new Manatee(shadowTex, world.outdoor.host.x, world.outdoor.host.z, TABLE_LINES) : null;
   if (host) scene.add(host.group);
   return { manatee, host };
+}
+
+// 前廳胖頭的教學（ask.js）：走近時說下一步、按「問」打開題目卡、轉身用魔杖指方向。main.js 建好黑眼以後叫這裡
+export function ask(ctx) {
+  return ctx.manatee ? new Ask(ctx) : null;
 }
 
 // 動物和不定期搭船來看畫的冒險者

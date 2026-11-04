@@ -37,6 +37,157 @@
 - 哈哈 拍不到
 - 這個不能拍
 
+### NEXT　前廳那位走近時說下一步：mirror 還沒照鏡子、camera 還沒拿相機、out 還沒走出後門、back 從別區回來（zones/gallery/ask.js）
+
+#### mirror
+
+- 鏡子那邊可以換衣服哈哈
+- 先去鏡子前面看看
+
+#### camera
+
+- 相機在桌上 拿去
+- 桌上的相機可以帶走
+
+#### out
+
+- 往裡面走 後門出去有船
+- 後門出去 船在那邊
+
+#### back
+
+- 回來啦
+- 回來啦哈哈
+
+### DONE　在前廳做完一步
+
+- 讚
+- 讚哈哈
+- 不錯喔
+
+### ASK　按「問」的題目：q 玩家問的、a 他回的；need 做過那件事才出現、carry 帶著相機時換的回答
+
+#### here
+
+- q：這裡是哪
+- a：畫廊啊 往裡面走 後門出去有船
+- to：exit
+
+#### dress
+
+- q：怎麼換衣服
+- a：站到鏡子前面的毯子上
+- to：mirror
+
+##### key
+
+- interact
+- 照鏡子
+
+#### camera
+
+- q：相機怎麼用
+- a：桌上的拿一台 掛著走
+- to：cameras
+
+##### key
+
+- interact
+- 挑相機
+
+##### carry
+
+- a：拍我看看啊
+- to：#photo-btn
+
+###### key
+
+- raise
+- 舉相機
+
+###### tease
+
+- true
+
+#### lost
+
+- q：迷路怎麼辦
+- a：叫黑眼 它記得路
+- to：#eye-btn
+
+##### key
+
+- eye
+- 黑眼
+
+#### photos
+
+- q：照片去哪了
+- a：都在行囊裡 要的自己存下來
+- to：#pack-btn
+
+##### key
+
+- pack
+- 行囊
+- need：photo
+
+#### soul
+
+- q：鏡子裡那隻眼睛
+- a：它會幫你拍一張 那張留好 換手機拿那張回來
+- to：mirror
+- need：mirror
+
+#### friends
+
+- q：可以跟朋友一起嗎
+- a：走到他旁邊按同行 就一起走了
+- to：#party-btn
+
+##### key
+
+- party
+- 同行
+
+#### ferry
+
+- q：船會去哪
+- a：那面牆上的海報 都是船會到的地方
+- to：exit
+- need：out
+
+#### film
+
+- q：底片怎麼洗
+- a：海市有暗房師傅 拿去給他
+- need：haishi
+
+#### shy
+
+- q：為什麼不給拍
+- a：哈哈 秘密
+- need：shy
+
+#### who
+
+- q：你是誰
+- a：我是胖頭 這裡的管家哈哈
+
+#### env
+
+- q：這裡能用什麼玩
+- a：牌子上寫著 自己看哈哈
+- to：sign
+
+##### env
+
+- true
+
+### AFTER_SHOT　叫你拍他、照片收進去以後
+
+- 照片在行囊裡哈哈
+
 ## 畫廊・大樹的樹洞
 
 資料：`js/zones/gallery/hollow-lines.js`。人走近就從洞口叫一聲，每次換一種語氣；投了紙條應一聲（zones/gallery/hollow.js）

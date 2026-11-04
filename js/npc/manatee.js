@@ -187,6 +187,10 @@ export class Manatee {
     this.lenses = () => [];
     this.forced = () => false;
     this.clip = null;
+    this.onShy = null;   // 剛說了「不給拍」：(鏡頭的 id)，前廳的教學聽（ask.js）
+    this.greet = null;   // 走近時要說的另外挑：回傳 [話, 底下的小字] 或 null 照原本的招呼（ask.js）
+    this.aim = null;     // 轉身用魔杖指的方向 { x, z, t }，x 是 null 只舉一下魔杖（指畫面上的按鈕）
+    this.lift = 0;
     this.seen = new Map();
     this.mosaic = false;
     this.drawT = 0;
@@ -268,13 +272,26 @@ export class Manatee {
     this.hideTimer = 0;
   }
 
-  // 漫畫對話框：彈出後停 SAY_TIME 毫秒，再淡出
-  say(text) {
+  // 漫畫對話框：彈出後停 SAY_TIME 毫秒，再淡出；話長的照字數多停一點。
+  // note 是底下一行小字（按鍵和動詞），他嘴裡不說按鍵，鍵只寫在這裡；有小字的多停一下
+  say(text, note = '') {
     clearTimeout(this.hideTimer);
     this.bubble.textContent = text;
+    if (note) {
+      const n = document.createElement('small');
+      n.className = 'note';
+      n.textContent = note;
+      this.bubble.append(n);
+    }
     this.bubble.classList.add('show');
     this.talking = true;
-    this.hideTimer = setTimeout(() => { this.bubble.classList.remove('show'); this.talking = false; }, SAY_TIME);
+    const ms = Math.max(SAY_TIME, 1800 + [...text].length * 160) + (note ? 1500 : 0);
+    this.hideTimer = setTimeout(() => { this.bubble.classList.remove('show'); this.talking = false; }, ms);
+  }
+
+  // 轉身朝 (x, z) 舉起魔杖，secs 秒後轉回來看人。x 給 null：原地舉一下（指的是畫面上的按鈕）
+  point(x, z, secs = 2.8) {
+    this.aim = { x, z, t: secs };
   }
 
   hush() {
@@ -296,7 +313,7 @@ export class Manatee {
         s.out = 0;
         if (!s.on && s.in >= SEEN_IN) {
           s.on = true;
-          if (this.time > s.quiet) { s.quiet = this.time + LENS_QUIET; this.say(pick(NO_PHOTO)); }
+          if (this.time > s.quiet) { s.quiet = this.time + LENS_QUIET; this.say(pick(NO_PHOTO)); this.onShy?.(L.id); }
         }
       } else {
         s.in = 0;
@@ -354,15 +371,19 @@ export class Manatee {
     const dist = Math.hypot(dx, dz);
     if (dist < GREET_DIST && !this.greeted) {
       this.greeted = true;
-      this.say(pick(this.lines));
+      const line = this.greet?.();
+      if (line) this.say(line[0], line[1]);
+      else this.say(pick(this.lines));
     } else if (dist > GREET_DIST + 3) {
       this.greeted = false;
     }
     if (this.bubble.classList.contains('show')) this.placeBubble(camera);
     this.refreshFace(dt);
     const near = dist < 6;
-    if (near || look) {
-      const want = near ? Math.atan2(dx, dz) : Math.atan2(look.x - g.position.x, look.z - g.position.z);
+    if (this.aim && (this.aim.t -= dt) <= 0) this.aim = null;
+    const aim = this.aim?.x != null ? this.aim : null;
+    if (aim || near || look) {
+      const want = aim ? Math.atan2(aim.x - g.position.x, aim.z - g.position.z) : near ? Math.atan2(dx, dz) : Math.atan2(look.x - g.position.x, look.z - g.position.z);
       let d = want - this.heading;
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
@@ -372,6 +393,9 @@ export class Manatee {
     const breath = Math.sin(this.time * 2.2);
     this.body.scale.y = 1 + breath * 0.015;
     this.armL.rotation.x = Math.sin(this.time * 1.3) * 0.05;
+    // 指東西：拿魔杖那隻手往前抬平，冰晶朝那個方向
+    this.lift += ((this.aim ? 1 : 0) - this.lift) * Math.min(1, dt * 6);
+    this.armR.rotation.x = -0.9 - this.lift * 0.75;
     this.ice.rotation.y = this.time * 1.5;
     const s = 1 + Math.sin(this.time * 3) * 0.1;
     this.ice.scale.set(s, 1.6 * s, s);

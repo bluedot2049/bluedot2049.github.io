@@ -12,7 +12,6 @@ export const PREFS = {
   view: { kind: 'json' },                        // player.js：越肩的廣度和魚眼 { fov, fish }
   tidy: { kind: 'flag', init: false },           // ui.js：收起上排的按鈕
   uiSize: { kind: 'num', init: 1 },              // ui.js：介面大小
-  guideOff: { kind: 'flag', init: false },       // ui.js：不再顯示操作說明
   entered: { kind: 'flag', init: false },        // ui.js：推過前門了
   joySwap: { kind: 'flag', init: false },        // main.js：搖桿換邊
   packSize: { kind: 'json' },                    // pack.js：行囊卡的大小 { w, h }

@@ -7,7 +7,7 @@ import { Character } from './avatar/character.js';
 import { addMirrorLight, setMirrorLight, setStageLight } from './avatar/mirrorlight.js';
 import { Attention } from './avatar/attention.js';
 import { sanitizeLook, randomPreset } from './avatar/looks.js';
-import { getSave, putSave } from './save/progress.js';
+import { getSave, putSave, markTour } from './save/progress.js';
 import { decodeLook, decodeSave, tryOn, hasProgress, restoreSave } from './save/savecode.js';
 import { Creator } from './avatar/creator.js';
 import { Pack } from './save/pack.js';
@@ -277,12 +277,13 @@ async function start() {
   let mp = null;
   let party = null;   // 組隊同行（party.js），有連線才有
   let guide = null;   // 黑眼帶路（scene/guide.js），攝影模式建好以後才建
+  let ask = null;   // 前廳胖頭的教學（zones/gallery/ask.js），畫廊才有
   let checkAway = null;   // 看自己是不是掛機中，有連線才有
   let studio = null;   // 海市信差站的照相館（studio.js），畫廊沒有
   let place = null;   // 戶外現在在哪裡：null 是陽台，否則是草原或棧橋盡頭的地名
   let sitHinted = false, mirrorTurnHinted = false;
 
-  // 捏角色：每改一下就套到角色身上、存起來、告訴別人，鏡頭照目前那一頁取景
+  // 捏角色：每改一下就套到角色身上、存起來、告訴別人，鏡頭重取全身（換到臉那幾頁角色轉回正面）
   let dressView = 'face';
   const visH = () => (panelW() || !ui.panel ? 1 : 1 - (ui.panel.offsetHeight * uiScale()) / window.innerHeight);
   const frameMirror = () => player.frameMirror(dressView, visH());
@@ -315,16 +316,11 @@ async function start() {
   const atMirror = () => player.focus?.kind === 'mirror' && ui.dress.classList.contains('open');
   const pack = new Pack({
     canSelfie: atMirror,
-    // 請鏡子裡的眼睛拍一張：面板先收起來，鏡頭退到看全身，拍完再打開
+    // 請鏡子裡的眼睛拍一張：面板先收起來，全身照整個畫面重新取景（拉近過的退回全身在 selfie.start），拍完再打開
     onSelfie(withCode) {
-      const back = dressView;
-      dressView = 'body';
       ui.hideDress();
       frameMirror();
-      if (!selfie.start(withCode)) {
-        dressView = back;
-        ui.showDress();
-      }
+      if (!selfie.start(withCode)) ui.showDress();
     },
     onTryOn(L) {
       if (atMirror()) creator.set(L, true);
@@ -366,10 +362,11 @@ async function start() {
       ui.hideHint();
       ui.hideGuide();
       hollow.close();
+      ask?.close();
     },
-    // 門邊的問號立牌：再看一次操作說明
+    // 門邊的問號立牌：能在哪裡玩、支援什麼
     onGuide() {
-      ui.guide(true);
+      ui.guide();
     },
     // 聽樹洞：原地打開卡片，人和鏡頭都不動
     onHollow() {
@@ -394,7 +391,7 @@ async function start() {
       mp?.sendNow();
       if (on && !sitHinted) {
         sitHinted = true;
-        ui.hint(coarse ? '推搖桿或點地面就會站起來' : '走動或點地面就會站起來', 4000);
+        ui.hint(coarse ? (player.shoulder ? '推搖桿就會站起來' : '推搖桿或點地面就會站起來') : '走動或點地面就會站起來', 4000);
       }
     },
     onFood() {
@@ -639,7 +636,8 @@ async function start() {
   const actionShort = actionBtn.querySelector('.a0');
   // lens：有鏡頭對著自己（attention.js），按了就一直看著它，再按一次放掉
   // follow：走到帶路中的黑眼（自己的或隊友的）旁邊，按了跟著它走（scene/guide.js），底下小字是要去哪
-  const LABELS = { painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來', lens: '看鏡頭', follow: '跟著' };
+  // ask：站在前廳胖頭旁邊，按了打開題目卡（zones/gallery/ask.js）
+  const LABELS = { ask: '問', painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來', lens: '看鏡頭', follow: '跟著' };
   // 手機的互動鍵是一顆小圓章，只放兩個字；沒列在這裡的取前兩個字
   const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信', 看鏡頭: '看鏡', 不看了: '不看', 叫電梯: '叫梯', 上觀星台: '上樓', 回一樓: '下樓' };
   // 剛走出範圍的那一下（走過攤位、動物走開）互動鍵先留著：手指可能已經在按的路上，按到了照原本的做（player.action 的 fallback）。
@@ -679,14 +677,14 @@ async function start() {
       clearTimeout(freshT);
       freshT = setTimeout(() => actionBtn.classList.remove('fresh'), 5000);
     }
-    document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : t.kind === 'pet' || t.kind === 'talk' ? t.p.name : t.kind === 'exit' || t.kind === 'follow' ? t.p.title : '';
+    document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : t.kind === 'pet' || t.kind === 'talk' || t.kind === 'ask' ? t.p.name : t.kind === 'exit' || t.kind === 'follow' ? t.p.title : '';
   }
 
   // 越肩鎖住滑鼠時，作品面板、清單、行囊、說明卡、樹洞、報社的稿紙和報紙、打字框打開就把游標還回來
   player.cursorWanted = () => {
     const b = document.body.classList;
     return b.contains('panel-open') || b.contains('chatting') || !document.getElementById('pack-card').hidden
-      || !!document.querySelector('#list.open, #guide.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show') || !!document.activeElement?.closest?.('input, textarea');
+      || !!document.querySelector('#list.open, #guide.show, #ask.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show') || !!document.activeElement?.closest?.('input, textarea');
   };
   // 第一次鎖住滑鼠時提一下怎麼點按鈕
   let lockTold = false;
@@ -711,6 +709,13 @@ async function start() {
   // 越肩視角開關，player.js 記住上次的選擇；F 鍵切換時按鈕也跟著變
   const shoulderBtn = document.getElementById('shoulder-btn');
   shoulderBtn.hidden = !player.shoulderOk;
+  // 手機、平板橫拿才有越肩：轉直拿收起按鈕、退回一般視角，轉回來照設定（player.fitShoulder）
+  player.onShoulderOk = (ok) => { shoulderBtn.hidden = !ok; };
+  if (coarse) {
+    const fit = () => player.fitShoulder();
+    screen.orientation?.addEventListener?.('change', fit);
+    addEventListener('resize', fit);
+  }
   const shoulderLabel = (on) => {
     shoulderBtn.classList.toggle('on', on);
     shoulderBtn.setAttribute('aria-pressed', on);
@@ -928,6 +933,16 @@ async function start() {
   guide.busy = () => photo.active || selfie.active || player.boarding;
   guide.onShip = (ex) => player.events.onExit(ex);
   player.actionables.push((x, z) => guide.target(x, z));
+  // 前廳胖頭的教學（zones/gallery/ask.js）：走近說下一步，站在他旁邊互動鍵是「問」。泡泡底下那行小字照現在的操作方式寫鍵
+  const PAD_OF = { interact: -1, raise: 6, pack: 8, eye: 5, party: 14 };
+  ask = Z.ask?.({
+    manatee, world, player, camera, back: params.has('from'), openEnv: () => ui.guide(),
+    keyOf: (id) => (pad.active ? padBtn(PAD_OF[id]) : coarse ? '' : key(id)),
+  }) ?? null;
+  if (ask) player.actionables.push((x, z) => ask.target(x, z));
+  // 做過的事（progress.js 的 tour）：來過哪一區、拍過照。前廳胖頭照這個決定說什麼、題目長出哪幾題
+  markTour(zone);
+  addEventListener('photoadd', (e) => { if (!e.detail?.kind?.endsWith('-save')) markTour('photo'); });
   // 畫面上點得到的角色（player.tap）：自己（小跳、回頭看鏡頭）和在場的人（揮手）
   player.tappable = () => [{ id: 'self', group: character.group }, ...(mp ? [...mp.others.values()].map((o) => ({ id: o.id, group: o.ch.group })) : [])];
   if (mp) {
@@ -1012,16 +1027,15 @@ async function start() {
   setTimeout(() => precompile(renderer, scene, camera, world, true), 0);
   entered.then(() => {
     guide.ready = true;   // 上次沒收起來的黑眼：進門、上岸以後才蹦出來
-    // 從歸門回來的（from=door）也是從前門進來，只是不再跳操作說明
+    // 從歸門回來的（from=door）也是從前門進來，只是不再跳操作提示；第一次進門的等門關上、房名跳完才出提示
     const homeDoor = params.get('from') === 'door', byDoor = world.frontDoor && (!params.has('from') || homeDoor), at = performance.now();
     if (byDoor) world.frontDoor.shut(0.15);
     if (byDoor) ui.toast(world.rooms[0].data.name, world.rooms[0].data.subtitle);
     if (params.has('photo')) photo.enter();
-    else if (byDoor && !homeDoor) setTimeout(() => { if (lastInput < at) ui.guide(); }, 2600);
     // 鍵照換過的寫（keymap.js、gamepad.js）
-    else if (!homeDoor) setTimeout(() => ui.hint(pad.active ? `左搖桿走路　右搖桿轉視角　${padBtn(3)} 跳　${padBtn(2)} 坐${zone === 'gallery' ? `　${padBtn(-1)} 看畫` : ''}`
-      : coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿或點地面走路　拖曳轉視角`
-      : `點地面或 ${['fwd', 'left', 'back', 'right'].map((id) => key(id)).join('')} 走路　拖曳轉視角　${key('jump')} 跳　${key('sit')} 坐${zone === 'gallery' ? `　${key('interact')} 看畫` : ''}`, 6000));
+    else if (!homeDoor) setTimeout(() => (byDoor && lastInput > at) || ui.hint(pad.active ? `左搖桿走路　右搖桿轉視角　${padBtn(3)} 跳　${padBtn(2)} 坐${zone === 'gallery' ? `　${padBtn(-1)} 看畫` : ''}`
+      : coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿${player.shoulder ? '走路　另一邊拖曳轉視角' : '或點地面走路　拖曳轉視角'}`
+      : `點地面或 ${['fwd', 'left', 'back', 'right'].map((id) => key(id)).join('')} 走路　拖曳轉視角　${key('jump')} 跳　${key('sit')} 坐${zone === 'gallery' ? `　${key('interact')} 看畫` : ''}`, 6000), byDoor ? 2600 : 0);
   });
 
   // 挑相機時鏡頭差不多就在自己頭的高度，帽子、頭上的東西會擋在桌上那台前面：鏡頭飛過去時自己淡掉，離開再淡回來。
@@ -1144,6 +1158,7 @@ async function start() {
     vendors?.update(dt, player, camera);
     for (const w of walkers) w.update(dt, player);
     manatee?.update(dt, player.pos.x, player.pos.z, camera);
+    ask?.update();
     hollow.update(dt, clock.elapsedTime, player.pos, camera);
     flashFx.update(dt);
     if (world.camTable) {

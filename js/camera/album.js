@@ -94,6 +94,8 @@ export async function addPhoto(blob, { name, cam, quiet = false, ...more }) {
     navigator.storage?.persist?.().catch(() => {});   // 請瀏覽器別自己清掉
   }
   changed();
+  // 剛拍的這一張（前廳胖頭的教學聽：main.js 記「拍過照」、ask.js 叫你拍他之後補一句）
+  dispatchEvent(new CustomEvent('photoadd', { detail: it }));
   const n = `${items.filter((x) => x.state !== 'lab').length} 張`;
   if (!quiet) flash(it.film ? null : it.poster ?? blob, it.film ? `${hourMark(it.t)}・收進底片` : it.rare ? `拍到白獸・收進相簿 ${n}` : `收進相簿・${n}`);
   return it;

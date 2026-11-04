@@ -5,7 +5,7 @@
 
 // 會蓋在畫面上、要用手把點的那些。新的跳出介面加在這裡
 const LAYERS = [
-  '#pause.show', '#padmap.show', '#keymap.show', '#ph-result:not([hidden])', '#album-view:not([hidden])', '#viewer.open', '#press.show', '#hollow.show', '#guide.show',
+  '#pause.show', '#padmap.show', '#keymap.show', '#ph-result:not([hidden])', '#album-view:not([hidden])', '#viewer.open', '#press.show', '#hollow.show', '#guide.show', '#ask.show',
   '#eye-card.open', '#cams.open', '#ferry.open', '.studio-card:not([hidden])', '#pack-card:not([hidden])', '#chat:not([hidden])',
   '#dress.open', '#sheet.open', '#list.open',
 ].join(', ');

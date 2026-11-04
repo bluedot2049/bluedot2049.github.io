@@ -26,7 +26,7 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
   const Q = 'z=gallery&q=mid&debug&crowd=0&beast=0&rain=0&dust=0.5&from=haishi';
   await b.load(Q);
-  await ev(`localStorage.clear(); localStorage.setItem('entered', '1'); localStorage.setItem('guideOff', '1'); sessionStorage.clear(); 1`);
+  await ev(`localStorage.clear(); localStorage.setItem('entered', '1'); sessionStorage.clear(); 1`);
   check(await b.load(Q), '畫廊載入');
   await sleep(1200);
   await ev(`(() => { const p = __g.player, j = p.jump.bind(p), s = p.toggleSit.bind(p); window.__jumps = 0; window.__sits = 0;
@@ -35,8 +35,8 @@ try {
   const n = () => ev(`({ j: __jumps, s: __sits })`);
   const st = () => ev(`(() => ({ pause: document.getElementById('pause').classList.contains('show'), card: document.getElementById('keymap').classList.contains('show'),
     listen: document.querySelector('#keymap .km-slot.listen kbd')?.textContent || '', hint: document.getElementById('hint').textContent,
-    keys: (JSON.parse(localStorage.getItem('save')) || {}).deskKeys ?? null, jumpKbd: document.querySelector('#guide .for-free [data-kb="jump"]').textContent,
-    sitKbd: document.querySelector('#guide .for-free [data-kb="sit"]').textContent, act: document.getElementById('action-btn').dataset.key,
+    keys: (JSON.parse(localStorage.getItem('save')) || {}).deskKeys ?? null, jumpKbd: document.querySelector('#keymap .km-slot[data-a="jump"][data-s="0"] kbd').textContent,
+    sitKbd: document.querySelector('#keymap .km-slot[data-a="sit"][data-s="0"] kbd').textContent, act: document.getElementById('action-btn').dataset.key,
     photo: __g.photo.active }))()`);
 
   await tap('Space');
@@ -57,7 +57,7 @@ try {
   s = await st();
   // 存檔：第 4 個功能（跳），J 是 CODES 的第 9 個（存成 10 = 0a），第二格空
   check(s.keys === '040a00' && /「跳」改成 J/.test(s.hint), '按 J：跳改成 J，記進存檔', `${s.keys}　${s.hint}`);
-  check(s.jumpKbd === 'J', '操作說明上「跳」寫 J', s.jumpKbd);
+  check(s.jumpKbd === 'J', '換鍵卡上「跳」寫 J', s.jumpKbd);
   // 撞到：坐改成 J，跳拿坐原本的 C
   await click('#keymap .km-slot[data-a="sit"][data-s="0"]');
   await tap('KeyJ');
@@ -134,7 +134,7 @@ try {
   await sleep(200);
   await click('#keymap .km-reset');
   s = await st();
-  check(s.keys === null && s.jumpKbd === '空白鍵' && s.act === 'E', '換回原本的：存檔裡沒有按鍵、說明寫回空白鍵', JSON.stringify([s.keys, s.jumpKbd, s.act]));
+  check(s.keys === null && s.jumpKbd === '空白鍵' && s.act === 'E', '換回原本的：存檔裡沒有按鍵、「跳」寫回空白鍵', JSON.stringify([s.keys, s.jumpKbd, s.act]));
   await tap('Escape');
   await sleep(300);
   await tap('Escape');

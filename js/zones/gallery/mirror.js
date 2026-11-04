@@ -324,15 +324,17 @@ export function buildMirrorRug() {
   const m = new THREE.MeshLambertMaterial({ map: tex.map, emissive: '#ffffff', emissiveMap: tex.emissiveMap, emissiveIntensity: 0 });
   const mesh = new THREE.Mesh(geo, m);
 
-  // who：角色站在哪裡（世界座標）。站在毯子上就慢慢亮起來，離開慢慢暗回去
-  let on = 0, t = 0;
+  // who：角色站在哪裡（世界座標）。站在毯子上就慢慢亮起來，離開慢慢暗回去。
+  // 胖頭用魔杖指過來（beckon）：沒人站上去也亮幾秒，亮得快一點
+  let on = 0, t = 0, call = 0;
   function update(dt, who) {
     t += dt;
+    call = Math.max(0, call - dt);
     const dx = who.x - mesh.position.x, dz = who.z - mesh.position.z, ry = mesh.rotation.y, c = Math.cos(ry), sn = Math.sin(ry);
     const lx = dx * c - dz * sn, lz = dx * sn + dz * c;
-    const inside = Math.abs(lx) < r + 0.15 && lz > RUG_Z0 - 0.15 && lz < RUG_Z0 + RUG_L + 0.15;
-    on += ((inside ? 1 : 0) - on) * (1 - Math.exp(-dt * (inside ? 0.9 : 0.6)));
+    const inside = Math.abs(lx) < r + 0.15 && lz > RUG_Z0 - 0.15 && lz < RUG_Z0 + RUG_L + 0.15, lit = inside || call > 0;
+    on += ((lit ? 1 : 0) - on) * (1 - Math.exp(-dt * (inside ? 0.9 : lit ? 2.4 : 0.6)));
     m.emissiveIntensity = on * (0.5 + 0.15 * Math.sin(t * 1.3));
   }
-  return { mesh, update, get glow() { return on; } };
+  return { mesh, update, beckon(secs) { call = secs; }, get glow() { return on; } };
 }

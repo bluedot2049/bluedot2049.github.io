@@ -547,7 +547,7 @@ export function buildCamTable(x, z, rot) {
     group.add(cell);
   }
 
-  let looking = -1, carried = null, t = 0, first = true;
+  let looking = -1, carried = null, t = 0, first = true, call = 0, callK = 0;
   return {
     group, x, z, rot,
     n: { x: Math.sin(rot), z: Math.cos(rot) },
@@ -575,15 +575,19 @@ export function buildCamTable(x, z, rot) {
       for (const sl of slots) if (Math.abs(lx - sl.local.x) < GAP / 2) return sl.glow || 0;
       return 0;
     },
+    // 胖頭用魔杖指過來：開放的那幾格（帶走的也算）一起亮幾秒
+    beckon(secs) { call = secs; },
     update(dt) {
       const a = 1 - Math.exp(-dt * 6);
       t += dt;
+      call = Math.max(0, call - dt);
+      callK += ((call > 0 ? 1 : 0) - callK) * (1 - Math.exp(-dt * 3));
       for (let i = 0; i < slots.length; i++) {
         const sl = slots[i];
         const lit = sl.id && !SOON[sl.id] && sl.id !== carried;
         // 第一幀就是該有的樣子，之後換相機才慢慢亮、慢慢暗
         sl.glow = first ? +!!lit : sl.glow + ((lit ? 1 : 0) - sl.glow) * (1 - Math.exp(-dt * (lit ? 0.9 : 0.6)));
-        sl.ink.emissiveIntensity = sl.glow * (0.85 + 0.2 * Math.sin(t * 1.3 + i * 1.7));
+        sl.ink.emissiveIntensity = sl.glow * (0.85 + 0.2 * Math.sin(t * 1.3 + i * 1.7)) + (sl.id && !SOON[sl.id] ? callK * 0.6 : 0);
         if (!sl.holder) continue;
         const want = i === looking ? 1 : 0;
         if (Math.abs(want - sl.lift) < 1e-4) continue;

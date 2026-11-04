@@ -120,8 +120,9 @@ export class Pack {
 
   get isOpen() { return !this.card.hidden; }
 
-  // page：'album' 相簿、'save' 存讀檔；沒給就開上次那頁
+  // page：'album' 相簿、'save' 存讀檔；沒給就開上次那頁，站在鏡子前打開先給存讀檔（存檔只在那裡拍得到）
   open(page) {
+    if (!page && this.card.hidden && this.events.canSelfie()) page = 'save';
     // 皮扣解開＋金線碰一下；開著時按 B 換頁也會走到這裡，那時是換分頁的聲音
     if (this.card.hidden) { thing('leather', 0.32); sfx('tap'); }
     else if (page && page !== this.page) sfx('tab', { i: page === 'album' ? 0 : 1 });

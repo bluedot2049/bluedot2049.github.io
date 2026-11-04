@@ -12,7 +12,9 @@ installDom();
 // 每一筆：title 文件裡的標題、file 資料檔、note 什麼時候說（給人看的）、keys 要列哪幾個匯出，和每個的說明
 const SOURCES = [
   { title: '畫廊・前廳的胖頭頭人、陽台長桌的主人', file: 'js/npc/manatee-lines.js', note: '站著不走，玩家走近才說話（npc/manatee.js）。名字在 npc/names.js',
-    keys: { GREETINGS: '走近時', TABLE_LINES: '長桌主人請人吃東西', SURPRISED: '被嚇到', NO_PHOTO: '鏡頭剛對上他時（同一個鏡頭一陣子內不重複）' } },
+    keys: { GREETINGS: '走近時', TABLE_LINES: '長桌主人請人吃東西', SURPRISED: '被嚇到', NO_PHOTO: '鏡頭剛對上他時（同一個鏡頭一陣子內不重複）',
+      NEXT: '前廳那位走近時說下一步：mirror 還沒照鏡子、camera 還沒拿相機、out 還沒走出後門、back 從別區回來（zones/gallery/ask.js）',
+      DONE: '在前廳做完一步', ASK: '按「問」的題目：q 玩家問的、a 他回的；need 做過那件事才出現、carry 帶著相機時換的回答', AFTER_SHOT: '叫你拍他、照片收進去以後' } },
   { title: '畫廊・大樹的樹洞', file: 'js/zones/gallery/hollow-lines.js', note: '人走近就從洞口叫一聲，每次換一種語氣；投了紙條應一聲（zones/gallery/hollow.js）',
     keys: { CALLS: '叫人過來：先照 w 抽一類（多國話、動物叫法、沒有字的聲音、古裝腔），再從那一類抽一句，不跟上一句一樣', GOT: '收到紙條' } },
   { title: '畫廊・搭船來的訪客', file: 'js/npc/visitor-lines.js',

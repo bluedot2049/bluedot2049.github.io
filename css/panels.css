@@ -198,29 +198,29 @@ body:not(.desk) #pack-card .album-grid { flex: 0 1 auto; min-height: 0; }
   }
   body:not(.desk) #pack-card::before { right: auto; bottom: 0; width: 1px; height: auto; background: var(--gold); opacity: 1; }
   body:not(.desk) #pack-card::after { left: -4px; top: 50%; margin: -3.5px 0 0; }
-  /* 拇指弧在左邊（搖桿換到右邊）：側欄跟著到左邊，金線換到右緣 */
-  body:not(.desk):not(.joy-left) #pack-card { left: 0; right: auto; padding-left: calc(16px + env(safe-area-inset-left)); padding-right: 18px; animation-name: pack-in-l; }
-  body:not(.desk):not(.joy-left) #pack-card::before { left: auto; right: 0; }
-  body:not(.desk):not(.joy-left) #pack-card::after { left: auto; right: -4px; }
+  /* 拇指弧在左邊（搖桿換到右邊）：側欄跟著到左邊，金線換到右緣。換裝鏡子開著時照樣在右邊，蓋在鏡子的側欄上，角色不被擋 */
+  body:not(.desk):not(.joy-left):not(:has(#dress.open)) #pack-card { left: 0; right: auto; padding-left: calc(16px + env(safe-area-inset-left)); padding-right: 18px; animation-name: pack-in-l; }
+  body:not(.desk):not(.joy-left):not(:has(#dress.open)) #pack-card::before { left: auto; right: 0; }
+  body:not(.desk):not(.joy-left):not(:has(#dress.open)) #pack-card::after { left: auto; right: -4px; }
   body:not(.desk) #pack-card .album-grid { flex: 1 1 auto; max-height: none; align-content: start; }
   /* 側欄窄，存讀檔兩顆並排小字會斷行，改成上下 */
   body:not(.desk) #pack-card .pack-acts { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) { body:not(.desk) #pack-card { animation: none; } }
 /* 封蠟是魔法印泥：平常是乾掉的暗赭紅；有東西還沒存，就從裡面亮起來，像灰裡的炭火慢慢呼吸。只往裡亮，不往外發光 */
-.seal-wax, #pack-btn .ink, .ph-cell .ink {
+.seal-wax, #pack-btn .ink, .ph-cell .ink, #ask .ink {
   background: #6a2c22; border-radius: 52% 48% 55% 45% / 46% 56% 44% 54%;
 }
 .seal-wax {
   width: 38px; height: 38px;
   box-shadow: inset 0 0 0 6px #6a2c22, inset 0 0 0 7.5px #4e2018;
 }
-.seal-wax.lit, #pack-btn.lit .ink, body.desk.tidy:has(#pack-btn.lit) #more-btn .ink, .ph-cell .ink.lit {
+.seal-wax.lit, #pack-btn.lit .ink, body.desk.tidy:has(#pack-btn.lit) #more-btn .ink, .ph-cell .ink.lit, #ask .fresh .ink {
   background: radial-gradient(circle at 46% 52%, #f0a050 0, #d0602e 34%, #8a3424 72%);
   animation: ember 3.6s ease-in-out infinite;
 }
 .seal-wax.lit { box-shadow: inset 0 0 0 6px rgba(138, 52, 36, .55), inset 0 0 0 7.5px #5a2219; }
-.seal-wax.lit::after, #pack-btn.lit .ink::after, body.desk.tidy:has(#pack-btn.lit) #more-btn .ink::after, .ph-cell .ink.lit::after {
+.seal-wax.lit::after, #pack-btn.lit .ink::after, body.desk.tidy:has(#pack-btn.lit) #more-btn .ink::after, .ph-cell .ink.lit::after, #ask .fresh .ink::after {
   content: ""; position: absolute; inset: 0; border-radius: inherit;
   background:
     radial-gradient(circle at 32% 38%, rgba(255, 214, 150, .9) 0 .8px, transparent 1.4px),

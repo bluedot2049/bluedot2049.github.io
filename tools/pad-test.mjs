@@ -36,7 +36,7 @@ try {
   // 來過的人（不跳門口的告示）、說明卡關著；手把的設定清空，從第一次接上開始
   const Q = 'z=gallery&q=mid&debug&crowd=0&beast=0&rain=0&dust=0.5&from=haishi';
   await b.load(Q);
-  await ev(`localStorage.clear(); localStorage.setItem('entered', '1'); localStorage.setItem('guideOff', '1'); sessionStorage.clear(); 1`);
+  await ev(`localStorage.clear(); localStorage.setItem('entered', '1'); sessionStorage.clear(); 1`);
   check(await b.load(Q), '畫廊載入');
   await sleep(1200);
   const press = async (i, ms = 120) => { await ev(`__fakePad.set(${i}, 1)`); await sleep(ms); await ev(`__fakePad.set(${i}, 0)`); await sleep(150); };
@@ -154,7 +154,7 @@ try {
   check(rum.length >= 1, 'X 跳、落地時震一下', JSON.stringify(rum));
 
   // 換鍵：暫停選單 → 手把按鍵，選「跳」、按 B：跳換到 B、返回換到 X；存進存檔碼，不進眼紋；換回原本的
-  const map = () => ev(`(() => { const m = document.getElementById('padmap'); return { show: m.classList.contains('show'), listen: m.querySelector('.listen kbd')?.textContent || '', keys: (JSON.parse(localStorage.getItem('save')) || {}).padKeys ?? null, jumpName: document.querySelector('#guide [data-pad-face="3"]').textContent }; })()`);
+  const map = () => ev(`(() => { const m = document.getElementById('padmap'); return { show: m.classList.contains('show'), listen: m.querySelector('.listen kbd')?.textContent || '', keys: (JSON.parse(localStorage.getItem('save')) || {}).padKeys ?? null, jumpName: document.querySelector('.g-gear [data-pad-face="3"]').textContent }; })()`);
   await press(9);
   await sleep(350);
   for (let i = 0; i < 12 && !/手把按鍵/.test(await focusText()); i++) await press(13);
@@ -176,7 +176,7 @@ try {
   s = await st();
   check(JSON.stringify(m.keys) === JSON.stringify([3, 1, 2, 0, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]), '按 B：跳和返回對調，記進存檔', JSON.stringify(m.keys));
   check(/「跳」換到 B/.test(s.hint), '提示說換到哪裡', s.hint);
-  check(m.jumpName === 'B', '操作說明上「跳」寫 B', m.jumpName);
+  check(m.jumpName === 'B', '畫面上寫著那顆（data-pad-face="3"，攝影提示的「自拍」）跟著寫 B', m.jumpName);
   const codes = await ev(`Promise.all([import('/js/save/savecode.js'), import('/js/save/progress.js')]).then(([c, p]) => { const all = c.encodeSave(), eye = c.encodeSave(p.getSave(), { closet: false, face: false, iris: true }); return { all, eye, back: c.decodeSave(all)?.padKeys }; })`);
   check(/~p=3120456789abcdef/.test(codes.all) && JSON.stringify(codes.back) === JSON.stringify(m.keys), '存檔碼帶著按鍵、讀得回來', codes.all.slice(-30));
   check(!/~p=/.test(codes.eye), '眼紋不帶按鍵');

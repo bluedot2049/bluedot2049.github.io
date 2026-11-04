@@ -381,19 +381,16 @@ export class UI {
     $('#hint').classList.remove('show');
   }
 
-  // 操作說明卡。進門時呼叫的（again 為假）勾過「下次不用顯示」就不出來；門邊的問號立牌打開的（again）一定出來。
-  // 開著的時候 Enter、空白鍵是「確認」，先攔下來，角色不會同時去看畫、跳起來；方框有焦點時空白鍵照樣是勾選。
-  // 走動、轉鏡頭也會收掉（main.js 的 onInput）。收掉時照方框記下來，沒勾的話下次進門還會出現
-  guide(again = false) {
+  // 門邊問號立牌那張卡：能在哪裡玩、支援什麼（問胖頭「這裡能用什麼玩」也會打開）。
+  // 開著的時候 Enter、空白鍵、Esc 是「確認」，先攔下來，角色不會同時去看畫、跳起來。走動、轉鏡頭也會收掉（main.js 的 onInput）
+  guide() {
     const el = $('#guide');
-    const off = pref('guideOff');
-    if ((off && !again) || el.classList.contains('show')) return;
-    el.querySelector('.skip input').checked = off;
+    if (el.classList.contains('show')) return;
     el.classList.add('show');
+    el.scrollTop = 0;
     this.guideKey = (e) => {
-      if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Escape') return;
       e.stopPropagation();
-      if (e.key === ' ' && e.target.closest?.('.skip')) return;
       e.preventDefault();
       this.hideGuide();
     };
@@ -405,7 +402,6 @@ export class UI {
     if (!el.classList.contains('show')) return;
     el.classList.remove('show');
     removeEventListener('keydown', this.guideKey, true);
-    setPref('guideOff', el.querySelector('.skip input').checked);
   }
 
   // 平面清單：舊手機或不想走動的人，直接看全部作品
