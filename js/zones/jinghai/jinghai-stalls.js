@@ -22,7 +22,8 @@ export function buildStalls() {
   const obstacles = [], solids = [], holes = [];
   const B = (kit, x0, y0, z0, x1, y1, z1, c, o) => kit.box(Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0), c, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, o);
   const SB = (x0, y0, z0, x1, y1, z1, c, r) => k.add(softBox(Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0), r), c, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
-  const solid = (x0, y0, z0, x1, y1, z1) => solids.push({ x0, x1, y0, y1, z0, z1 });
+  // 兩攤都在樓上：deck，在頭頂上時不擋鏡頭（jinghai.js 的 camClip）
+  const solid = (x0, y0, z0, x1, y1, z1) => solids.push({ x0, x1, y0, y1, z0, z1, deck: true });
 
   // ---------- 冰淇淋車：商店街一進來，車頭朝西對著大廳 ----------
   {

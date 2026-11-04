@@ -27,8 +27,9 @@ const CLIP_LIFT = 0.7;
 // 上面有天花板的區域（camDuck）鏡頭最低壓到哪：從頭看出去的仰角（弧度），比頭略低一點
 const DUCK_LOW = -0.05;
 // 照鏡子時繞著自己轉：俯角範圍、離注視點的遠近、角度追手指的快慢、放手後還滑多久
-// 照鏡子：tZoom 1 是全身剛好裝滿，拉近到 0.3 視線一路移到臉上，拉遠最多再留一點邊
-const ORB_LOW = -0.3, ORB_HIGH = 1.2, ORB_NEAR = 0.45, ORB_FAR = 14, ORB_ZOOM = [0.3, 1.35];
+// 照鏡子的遠近是一條：tZoom 是離全身取景的幾倍，1 是全身剛好裝滿，focus.zf 是臉剛好裝滿（視線也一路從身體中間移到臉上）。
+// 臉再往前最多湊到 ORB_CLOSE 倍，全身再往後最多 ORB_ZOOM_FAR 倍
+const ORB_LOW = -0.3, ORB_HIGH = 1.2, ORB_NEAR = 0.45, ORB_FAR = 14, ORB_CLOSE = 0.6, ORB_ZOOM_FAR = 1.3;
 // 照鏡子的鏡頭：長焦（人不變形、背景安靜），退到鏡子裡面拍；站在長毯上離鏡子這麼遠
 const MIRROR_FOV = 30, MIRROR_STAND = 1.75;
 const ORB_EASE = 7, ORB_COAST = 0.22;
@@ -545,16 +546,18 @@ export class Player {
     }
   }
 
-  // 照鏡子時拖曳是繞著自己轉，不離開鏡子。角度先記在目標上，鏡頭慢慢追過去；放手時照最後的速度再滑一段
+  // 照鏡子時左右拖曳是角色原地轉身，鏡頭不動，背景跟著不動；上下拖曳照舊抬高、壓低鏡頭。
+  // 轉的方向跟平常鏡頭繞著角色轉時角色在畫面上的轉法一樣（鏡頭繞 +a ＝ 角色轉 −a），手指的習慣不用換。
+  // 角度先記在目標上，身體慢慢追過去；放手時照最後的速度再轉一段，像轉台
   mirrorOrbit(dx, dy, mouse) {
     const o = this.focus.orb, now = performance.now();
     const k = (mouse ? 9 : 5.5) / Math.max(this.dom.clientWidth, this.dom.clientHeight);
     const s = mouse ? 1 : -1;
-    const dYaw = -dx * k * s, dPitch = dy * k * s;
-    o.tYaw += dYaw;
+    const dSpin = dx * k * s, dPitch = dy * k * s;
+    o.tSpin += dSpin;
     o.tPitch = THREE.MathUtils.clamp(o.tPitch + dPitch, ORB_LOW - 1.5, ORB_HIGH + 1.5);
     const gap = Math.max(8, now - o.last);
-    o.vYaw += (dYaw / gap - o.vYaw) * 0.5;
+    o.vSpin += (dSpin / gap - o.vSpin) * 0.5;
     o.vPitch += (dPitch / gap - o.vPitch) * 0.5;
     o.last = now;
     o.touched = true;
@@ -564,9 +567,9 @@ export class Player {
   mirrorFling() {
     const o = this.focus?.orb;
     if (!o || performance.now() - o.last > 80) return;
-    o.tYaw += o.vYaw * ORB_COAST * 1000;
+    o.tSpin += o.vSpin * ORB_COAST * 1000;
     o.tPitch += o.vPitch * ORB_COAST * 1000;
-    o.vYaw = o.vPitch = 0;
+    o.vSpin = o.vPitch = 0;
   }
 
   // 縮放的距離：照鏡子時縮的是鏡子的取景
@@ -577,7 +580,7 @@ export class Player {
 
   set zoomDist(d) {
     if (this.focus?.orb) {
-      this.focus.orb.tZoom = THREE.MathUtils.clamp(d, ...ORB_ZOOM);
+      this.focus.orb.tZoom = THREE.MathUtils.clamp(d, (this.focus.zf ?? 1) * ORB_CLOSE, ORB_ZOOM_FAR);
       this.focus.orb.touched = true;
     } else if (this.shoulder) this.shDist = THREE.MathUtils.clamp(d, ...SH_DIST);
     else this.camDist = THREE.MathUtils.clamp(d, DIST_MIN, this.distMax);
@@ -674,43 +677,35 @@ export class Player {
     const stand = this.world.findWalkable(m.x + n.x * MIRROR_STAND, m.z + n.z * MIRROR_STAND, this.pos.x, this.pos.z) || { x: this.pos.x, z: this.pos.z };
     return {
       kind: 'mirror', n, stand,
-      orb: { yaw: 0, pitch: 0, zoom: 1, tYaw: 0, tPitch: 0, tZoom: 1, vYaw: 0, vPitch: 0, last: 0, touched: false },
+      orb: { yaw: 0, pitch: 0, zoom: 1, tYaw: 0, tPitch: 0, tZoom: 1, spin: 0, tSpin: 0, vSpin: 0, vPitch: 0, last: 0, touched: false },
       ...this.mirrorBody({ x: stand.x, y: this.pos.y, z: stand.z }, n, panelW() ? 1 : 0.55),
       fadeTarget: new THREE.Vector3(stand.x, 0, stand.z),
     };
   }
 
   // 全身取景：帽尖上面留一點、腳下露一點地毯，剛好裝進沒被面板蓋住的那一塊（畫面中心已經挪到那一塊的中間，見 main.js applyViewOffset）。
-  // 鏡頭稍微往下看。faceY 是拉近時視線移過去的高度
+  // 鏡頭稍微往下看。faceY、zf：拉近到臉剛好裝滿時，視線的高度和離全身取景的幾倍
   mirrorBody(p, n, visH) {
     const d = this.character.dims, tanV = Math.tan(THREE.MathUtils.degToRad(MIRROR_FOV / 2)) * visH;
     const top = p.y + d.topY + 0.12, bot = p.y - 0.12, mid = (top + bot) / 2;
-    const D = ((top - bot) / 2 / tanV) * 1.04;
+    const D = ((top - bot) / 2 / tanV) * 1.04, F = (d.headH * 1.7) / 2 / tanV;
     return {
       camPos: new THREE.Vector3(p.x - n.x * D, mid + D * 0.07, p.z - n.z * D),
       look: new THREE.Vector3(p.x, mid, p.z),
-      faceY: p.y + d.faceY + d.headH * 0.12,
+      faceY: p.y + d.faceY + d.headH * 0.18,
+      zf: Math.min(0.9, F / D),
     };
   }
 
-  // 捏角色時的取景：body 從鏡子看全身，face 湊到臉前面。visH 是畫面沒被面板蓋住的比例
-  // 角色變高、頭變大時重算一次，頭頂不會跑出畫面
+  // 捏角色時的取景：臉和全身是同一條遠近上的兩點（mirrorBody），換頁只是滑到那一點，之後拉近拉遠一路連著。visH 是畫面沒被面板蓋住的比例。
+  // 角色變高、頭變大時重算一次，頭頂不會跑出畫面；轉到的角度留著，換到「臉」那頁才轉回正面（往近的那邊轉）
   frameMirror(mode, visH) {
     const f = this.focus;
     if (f?.kind !== 'mirror') return;
-    const dims = this.character.dims, n = f.n, p = this.pos;
-    // 換到臉或全身時遠近回到預設，轉到的角度留著
-    if (f.mode && f.mode !== mode) f.orb.tZoom = 1;
+    Object.assign(f, this.mirrorBody(this.pos, f.n, visH));
+    if (f.mode !== mode) f.orb.tZoom = mode === 'face' ? f.zf : 1;
+    if (f.mode !== mode && mode === 'face') f.orb.tSpin = Math.round(f.orb.spin / (Math.PI * 2)) * Math.PI * 2;
     f.mode = mode;
-    if (mode === 'face') {
-      // 臉：鏡頭可以退到鏡子裡，不用再卡在鏡面前面
-      const tanV = Math.tan(THREE.MathUtils.degToRad(MIRROR_FOV / 2)) * visH;
-      const d = Math.max(0.7, (dims.headH * 1.7) / 2 / tanV);
-      const y = p.y + dims.faceY + dims.headH * 0.18;
-      f.camPos = new THREE.Vector3(p.x - n.x * d, y, p.z - n.z * d);
-      f.look = new THREE.Vector3(p.x, y, p.z);
-      f.faceY = null;
-    } else Object.assign(f, this.mirrorBody(p, n, visH));
   }
 
   // 挑相機：站在桌前，鏡頭從角色前面斜斜地往下看著第 i 個位置；換位置時鏡頭滑過去
@@ -844,7 +839,7 @@ export class Player {
   }
 
   // 右搖桿：每秒轉幾弧度（gamepad.js 算好曲線和緩衝）。上下快到頂時變鈍，跟滑鼠一樣；
-  // 照鏡子時是繞著自己轉；看畫時不動（推左搖桿才退開）
+  // 照鏡子時左右是轉身、上下是鏡頭高低；看畫時不動（推左搖桿才退開）
   padLook(yawRate, pitchRate, dt) {
     if (!yawRate && !pitchRate) return;
     if (this.focus?.orb) {
@@ -1226,12 +1221,11 @@ export class Player {
   mirrorCamera(outPos, outLook) {
     const f = this.focus, o = f.orb;
     const ox = f.camPos.x - f.look.x, oy = f.camPos.y - f.look.y, oz = f.camPos.z - f.look.z;
-    // 全身那一頁拉近時，視線從身體中間一路移到臉上：拉到最近剛好是半身帶臉，不會停在肚子
+    // 從全身拉近時，視線從身體中間一路移到臉上，拉到臉那一點剛好是臉；不會停在肚子
     let c = f.look;
     if (f.faceY != null) {
-      const t = THREE.MathUtils.smoothstep(o.zoom, ORB_ZOOM[0], 1);
       c = this.orbLook.copy(f.look);
-      c.y = f.faceY + (f.look.y - f.faceY) * t;
+      c.y = f.faceY + (f.look.y - f.faceY) * THREE.MathUtils.smoothstep(o.zoom, f.zf, 1);
     }
     const h = Math.hypot(ox, oz), r = Math.hypot(h, oy);
     const a = Math.atan2(ox, oz) + o.yaw;
@@ -1251,6 +1245,7 @@ export class Player {
     o.yaw += (o.tYaw - o.yaw) * k;
     o.pitch += (o.tPitch - o.pitch) * k;
     o.zoom += (o.tZoom - o.zoom) * k;
+    o.spin += (o.tSpin - o.spin) * k;   // 轉身只動角色，不算鏡頭在動
     return Math.abs(o.tYaw - o.yaw) + Math.abs(o.tPitch - o.pitch) + Math.abs(o.tZoom - o.zoom) > 1e-4;
   }
 
@@ -1377,6 +1372,13 @@ export class Player {
         pitch = Math.atan2(at.point.y - head.y, Math.hypot(dx, dz));
         pid = at.pid;
       }
+    }
+    // 照鏡子轉了身：頭轉回去看鏡子裡的自己（鏡面上跟眼睛一樣高的那一點，就是正對鏡子），轉到快背對了只能越過肩膀看；
+    // 整個背對就放棄、看前面。自拍時眼睛接手（上面的 own）
+    if (!at && this.focus?.kind === 'mirror' && !this.paused) {
+      const n = this.focus.n, rel = wrapAngle(Math.atan2(-n.x, -n.z) - this.heading);
+      yaw = Math.abs(rel) < SH_GAZE + 0.9 ? rel : 0;
+      pitch = 0;
     }
     // 先看再走：剛點了地面，頭先瞄一眼落點（tap 設的 glance）；照路線走快到轉角時，先看向下一段。沒在看別的東西、不是越肩才這樣
     if (!at && free && !eye && !this.shoulder) {
@@ -1590,7 +1592,7 @@ export class Player {
     // 鎖定時按住右鍵：身體保持原來的方向。走路照身體的方向，身體若再照走的方向轉，繞過家具時兩邊會互相帶著越轉越偏
     else if (this.shoulder && this.freeLook && this.locked) want = null;
     else if (this.speed > 0.05) want = Math.atan2(mx, mz);
-    else if (this.focus) want = Math.atan2(-this.focus.n.x, -this.focus.n.z);
+    else if (this.focus) want = Math.atan2(-this.focus.n.x, -this.focus.n.z) + (this.focus.orb?.spin ?? 0);   // 照鏡子轉了身就照轉的角度
     if (want === null) this.bodyVel = {};
     else if (this.shoulder) {
       const b = { h: this.heading };

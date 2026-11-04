@@ -278,7 +278,7 @@ async function start() {
   let checkAway = null;   // 看自己是不是掛機中，有連線才有
   let studio = null;   // 海市信差站的照相館（studio.js），畫廊沒有
   let place = null;   // 戶外現在在哪裡：null 是陽台，否則是草原或棧橋盡頭的地名
-  let sitHinted = false;
+  let sitHinted = false, mirrorTurnHinted = false;
 
   // 捏角色：每改一下就套到角色身上、存起來、告訴別人，鏡頭照目前那一頁取景
   let dressView = 'face';
@@ -375,6 +375,10 @@ async function start() {
     onArriveMirror() {
       ui.showDress();
       creator.open(look);
+      if (!mirrorTurnHinted) {
+        mirrorTurnHinted = true;
+        ui.hint('拖曳可以轉身', 3500);
+      }
     },
     onJump(k = 1) {
       mp?.jump(k);

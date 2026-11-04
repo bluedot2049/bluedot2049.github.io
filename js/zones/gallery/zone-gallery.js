@@ -71,7 +71,7 @@ export function env() {
     { bg: HORIZON, near: 28, far: 170, sky: 0xffc4b8, ground: 0x8c6e5c, hi: 1.6, sun: 0xffa868, si: 1.9, dir: SUN_DIR.clone().multiplyScalar(-1).setY(0.45).multiplyScalar(10) },
     { name: '前廳', bg: 0x1d1519, near: 16, far: 38, sky: 0xc8bce8, ground: 0x3a2c40, hi: 0.8, sun: 0xffc890, si: 0.35, dir: new THREE.Vector3(4, 8, 3) },
     // 第四組是照鏡子：背景再暗一階，自己身上另外打鏡前光（avatar/mirrorlight.js），人從背景跳出來
-    { name: '鏡前', bg: 0x19121a, near: 16, far: 38, sky: 0xbdb2dc, ground: 0x30243a, hi: 0.62, sun: 0xffc890, si: 0.25, dir: new THREE.Vector3(4, 8, 3) },
+    { name: '鏡前', bg: 0x19121a, near: 16, far: 38, sky: 0xd6cbe6, ground: 0x4a3a44, hi: 0.85, sun: 0xffc890, si: 0.25, dir: new THREE.Vector3(4, 8, 3) },
   ];
 }
 

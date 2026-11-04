@@ -124,7 +124,7 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
 
   // ---------- 總部、前台的速食店、後台、總部裡的小攤 ----------
   // 擋住鏡頭的東西淡掉（fade.js，跟海市、蜃樓同一套網點）：手扶梯、望遠鏡、長旗、亭子和鐘、排煙罩、咬月的大螢幕和高桿招牌，還有牆（一面一組，見下面）。
-  // 樓板、屋頂、天花板還是擋鏡頭（solids）：鏡頭不會鑽到樓上去，室內整片也不會淡掉
+  // 屋頂、天花板還是擋鏡頭（solids）：鏡頭不會跑到屋外，室內整片也不會淡掉。樓上的地板在頭頂上時不擋、淡掉（jinghai-hq.js 的 deck）
   const fader = new Fader(false, { lead: 0.35 }), fade = (boxes, objs) => fader.add(boxes, objs);
   const hq = buildHQ({ coarse, fade }), burger = buildBurger({ coarse, fade }), back = buildBack({ coarse }), stalls = buildStalls(), lift = buildLift();
   const obstacles = [...hq.obstacles, ...burger.obstacles, ...back.obstacles, ...stalls.obstacles, ...lift.obstacles], solids = [...hq.solids, ...burger.solids, ...back.solids, ...stalls.solids];
@@ -379,7 +379,9 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
   const floors = buildFloors({ ground: { y: groundY, open, walk: walkable, findPath }, holes: [...stalls.holes, ...hq.holes], lift });
   // 鏡頭：不鑽進地面、樓板、屋頂、天花板和欄杆的玻璃（牆不擋，擋住時淡掉）。整條線跟盒子（往外撐 CAM_PAD）求交點：玻璃、欄杆只有幾公分厚，
   // 以前每 0.3 公尺看一點會從中間漏過去，鏡頭跑到大樓外面，回頭被牆和隔壁的屋頂擋住。月面的起伏還是一段一段看。
-  // 離頭 CAM_NEAR 以內的不算（欄杆就在胸前時鏡頭照樣可以越過去），停在撞到的地方前面 CAM_GAP
+  // 離頭 CAM_NEAR 以內的不算（欄杆就在胸前時鏡頭照樣可以越過去），停在撞到的地方前面 CAM_GAP。
+  // 樓上的地板和欄杆（deck）比頭高的不擋，擋住時淡掉：以前一樓往上看，鏡頭穿過迴廊的樓板就被壓到樓板底下
+  // （player.js 的 camDuck）。自己站的那層還是擋，鏡頭不鑽到腳下的樓板底下
   const CAM_PAD = 0.2, CAM_NEAR = 0.8, CAM_GAP = 0.3;
   const hitSolids = new Set();
   function camClip(a, b) {
@@ -389,6 +391,7 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
     for (let i = 0, n = Math.ceil(Math.hypot(dx, dz)); i <= n; i++) for (const s of nearSolid(a.x + (dx * i) / (n || 1), a.z + (dz * i) / (n || 1))) hitSolids.add(s);
     let hit = L;
     for (const s of hitSolids) {
+      if (s.deck && s.y0 > a.y) continue;
       let t0 = 0, t1 = L;
       for (const [o, d, lo, hi] of [[a.x, dx, s.x0, s.x1], [a.y, dy, s.y0, s.y1], [a.z, dz, s.z0, s.z1]]) {
         if (Math.abs(d) < 1e-9) { if (o <= lo - CAM_PAD || o >= hi + CAM_PAD) { t0 = L; break; } continue; }
