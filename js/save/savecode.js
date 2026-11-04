@@ -94,13 +94,14 @@ function unpackUnlocked(s) {
 // 有 code 的欄位（progress.js 的 FIELDS）：相機這些
 const EXTRA = SAVE_FIELDS.filter((f) => f.code);
 
-// extras：要不要帶後面那些欄位（鏡中照片的眼紋空間很小，不帶）
-export function encodeSave(save = getSave(), { closet = true, face = true, extras = true } = {}) {
+// extras：要不要帶後面那些欄位；iris：印在鏡中照片的眼紋（空間很小），code 寫了 iris: false 的不帶
+export function encodeSave(save = getSave(), { closet = true, face = true, extras = true, iris = false } = {}) {
   const parts = [save.look ? lookBody(sanitizeLook(save.look), face) : '', packUnlocked(save.unlocked)];
   const visits = Object.entries(save.visits).filter(([, d]) => /^\d{4}-\d{2}-\d{2}$/.test(d)).map(([id, d]) => `${id}:${d.replace(/-/g, '')}`);
   parts.push(visits.join(','));
   if (closet) for (const c of save.closet) parts.push(c ? lookBody(sanitizeLook(c), face) : '');
   if (extras) for (const f of EXTRA) {
+    if (iris && f.code.iris === false) continue;
     const v = f.code.enc(save[f.key]);
     if (v) parts.push(`${f.code.tag}=${v}`);
   }

@@ -4,11 +4,12 @@
 // 電腦另外支援 WASD / 方向鍵，E 或 Enter 互動，滑鼠中鍵標記地點（同行時）。
 // 越肩（V 鍵或上排按鈕）：鏡頭在右肩後面，視線就是前進方向，不點地板走路。
 // 電腦點一下畫面把滑鼠鎖進來（Esc 放開）：移動滑鼠直接轉視角、身體跟著轉，A/D 平移，畫面中間的準心對準東西按左鍵。
-// 右鍵按住舉相機、左鍵快門（photo.js 接 onAim、onShutter、onPausedLook），像射擊遊戲的開鏡。
+// 右鍵按住舉相機、左鍵快門（照 keymap.js 的按鍵表，photo.js 聽；轉相機接 onPausedLook），像射擊遊戲的開鏡。
 // 鎖著時點不到按鈕：按住 Alt 暫時叫出游標，放開鎖回去；面板自己打開時放開，關掉後一走路就鎖回去（按鈕的快捷鍵在 main.js）。
 import * as THREE from 'three';
 import { dockR, panelW, WORKS_OPEN } from './ui.js';
 import { onFreshTouch } from './touch.js';
+import { is } from './keymap.js';
 import { lens, fitSource, unbend } from '../core/lens.js';
 import { pref, setPref } from '../save/prefs.js';
 
@@ -33,6 +34,7 @@ const ORB_LOW = -0.3, ORB_HIGH = 1.2, ORB_NEAR = 0.45, ORB_FAR = 14, ORB_CLOSE =
 // 照鏡子的鏡頭：長焦（人不變形、背景安靜），退到鏡子裡面拍；站在長毯上離鏡子這麼遠
 const MIRROR_FOV = 30, MIRROR_STAND = 1.75;
 const ORB_EASE = 7, ORB_COAST = 0.22;
+const ORB_TILT = 0.06, ORB_TILT_K = 0.3, ORB_TILT_HOLD = 400;   // 照鏡子上下拖：只微微抬、壓（弧度上限、跟手的比例），放手或停手這麼多毫秒就彈回去
 
 const defaultDist = () => (window.innerWidth < window.innerHeight ? 12 : 9.5);
 
@@ -52,7 +54,8 @@ const SH_ACCEL_T = 0.14, SH_DECEL_T = 0.11;
 // 越肩和手持相機的高度另外慢慢跟（秒）：石階是一階一階踩上去的，跟緊了每一階都把畫面頂一下；一下差超過這麼多公尺（瞬移）直接跟過去
 const SH_STEP_T = 0.15, SH_STEP_SNAP = 1.5;
 // 面板關掉後按這些鍵就把滑鼠鎖回去
-const MOVE_KEYS = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ']);
+// 走路的四個功能（keymap.js 的 id）：按著的記在 keys 裡
+const MOVES = ['fwd', 'back', 'left', 'right'];
 // 視線（所有模式）：頭左右最多轉幾度、抬頭和低頭最多幾度；鏡頭繞到前面超過 GAZE_BACK 就改成看著鏡頭，回到 GAZE_FRONT 以內再看前方（中間重疊，交界不會來回甩）
 // 鏡頭在背後時，這麼多秒沒轉鏡頭、沒走路，頭就交給注意力東張西望（attention.js）
 const SH_GAZE = 1.2, GAZE_UP = 0.55, GAZE_DOWN = 0.4, GAZE_BACK = 2.05, GAZE_FRONT = 1.75, GAZE_IDLE = 4;
@@ -129,11 +132,7 @@ export class Player {
     this.peek = false;              // 按住 Alt 叫出游標中
     this.userUnlock = false;        // 剛才是玩家自己按 Esc 放開的（deskkeys.js 跳暫停選單）
     this.lookHook = null;           // 表情輪打開時，鎖定的滑鼠移動拿去選表情，不轉鏡頭
-    this.onPing = null;             // 滑鼠中鍵標記地點（主程式接到同行）
-    this.onAim = null;              // 鎖定時右鍵按下、放開：舉相機（photo.js）
-    this.onShutter = null;          // 舉著相機時左鍵按下、放開：快門
     this.onPausedLook = null;       // 舉著相機時移動滑鼠：轉相機
-    this.onMiddle = null;           // 舉著相機時中鍵按下、放開：切換自拍
     this.holdLock = false;          // 舉相機時攝影模式接手，滑鼠照樣鎖著
     this.mouseSens = 1;             // 滑鼠靈敏度倍數、上下反轉（暫停選單裡調）
     this.invertY = false;
@@ -238,17 +237,10 @@ export class Player {
       }
     });
 
-    // 鎖定時：右鍵舉相機；舉著時左鍵是快門，沒舉時左鍵點準心對到的東西。
-    // 已經按著一顆鍵再按（或放）另一顆，瀏覽器只送 pointermove（button 是變的那顆），所以三種事件都從這裡進來
+    // 鎖定時沒舉相機，左鍵點準心對到的東西（固定）。其他的鍵（右鍵舉相機、舉著時左鍵快門、中鍵標記和自拍）照按鍵表，
+    // keymap.js 當成虛擬的鍵送出去。已經按著一顆鍵再按（或放）另一顆，瀏覽器只送 pointermove（button 是變的那顆），所以三種事件都從這裡進來
     const lockedButton = (b, down) => {
-      if (b === 2) this.onAim?.(down);
-      else if (this.paused) {
-        if (b === 0) this.onShutter?.(down);
-        else if (b === 1) this.onMiddle?.(down);
-      }
-      else if (!down) return;
-      else if (b === 0) this.aimTap();
-      else if (b === 1) { const c = this.aimPoint(); this.onPing?.(c.x, c.y); }
+      if (b === 0 && down && !this.paused) this.aimTap();
     };
     const BIT = [1, 4, 2];   // e.button → e.buttons 的位元
 
@@ -260,10 +252,9 @@ export class Player {
         return;
       }
       if (this.paused) return;
-      // 中鍵：標記地點。擋掉預設，不會跳出捲動的圖示
+      // 中鍵：照按鍵表（預設是標記，keymap.js 送出去）。擋掉預設，不會跳出捲動的圖示
       if (e.button === 1) {
         e.preventDefault();
-        this.onPing?.(e.clientX, e.clientY);
         return;
       }
       // 右鍵按下就直接當成拖曳轉鏡頭，不會觸發走路
@@ -349,43 +340,44 @@ export class Player {
     window.addEventListener('keydown', (e) => {
       // 捏角色面板裡的按鈕和滑桿、隊伍的打字框自己吃鍵盤，不拿來走路（勾選方框不算，勾完還是可以直接走）
       if (this.paused || e.target.closest?.('#dress, input:not([type=checkbox]), textarea')) return;
-      // 按住 Alt：暫時叫出游標點按鈕，放開就鎖回去（射擊遊戲常見的做法）。擋掉預設，瀏覽器才不會跳去選單列
-      if (e.key === 'Alt') {
+      // 按住 Alt（叫出游標）：暫時叫出游標點按鈕，放開就鎖回去（射擊遊戲常見的做法）。擋掉預設，瀏覽器才不會跳去選單列
+      if (is(e, 'cursor')) {
         e.preventDefault();
         if (this.locked && !e.repeat) { this.peek = true; this.unlock(); }
         return;
       }
-      if (MOVE_KEYS.has(e.key.toLowerCase())) this.tryRelock(true);
-      // Enter、E：互動（看畫、照鏡子、摸動物、樹洞⋯）
-      if (e.key === 'Enter' || ((e.key === 'e' || e.key === 'E') && !e.repeat)) {
+      const move = MOVES.find((id) => is(e, id));
+      if (move || is(e, 'jump')) this.tryRelock(true);
+      // Enter、E（互動）：看畫、照鏡子、摸動物、樹洞⋯
+      if (e.key === 'Enter' || (is(e, 'interact') && !e.repeat)) {
         e.preventDefault();
         this.action();
         return;
       }
-      if (e.key === ' ') {
+      if (is(e, 'jump')) {
         e.preventDefault();
         this.jump();
         return;
       }
-      if (e.key === 'c' || e.key === 'C') {
+      if (is(e, 'sit')) {
         this.toggleSit();
         return;
       }
-      // V 切換越肩（像射擊遊戲切換第一、第三人稱）；?debug 時 Shift+V 印出鏡頭位置
-      if ((e.key === 'v' || e.key === 'V') && e.shiftKey && this.debug) {
+      // V（越肩）切換越肩（像射擊遊戲切換第一、第三人稱）；?debug 時 Shift+V 印出鏡頭位置
+      if (is(e, 'view') && e.shiftKey && this.debug) {
         this.logView();
         return;
       }
-      if (e.key === 'v' || e.key === 'V') {
+      if (is(e, 'view')) {
         if (!e.repeat) this.setShoulder(!this.shoulder);
         return;
       }
-      this.keys.add(e.key.toLowerCase());
+      if (move) this.keys.add(move);
       this.events.onInput('key');
     });
     window.addEventListener('keyup', (e) => {
-      this.keys.delete(e.key.toLowerCase());
-      if (e.key !== 'Alt') return;
+      for (const id of MOVES) if (is(e, id)) this.keys.delete(id);
+      if (!is(e, 'cursor')) return;
       e.preventDefault();
       if (!this.peek) return;
       this.peek = false;
@@ -546,7 +538,7 @@ export class Player {
     }
   }
 
-  // 照鏡子時左右拖曳是角色原地轉身，鏡頭不動，背景跟著不動；上下拖曳照舊抬高、壓低鏡頭。
+  // 照鏡子時左右拖曳是角色原地轉身，鏡頭不動，背景跟著不動；上下拖曳只讓鏡頭微微抬、壓，放手就彈回去（easeOrb）。
   // 轉的方向跟平常鏡頭繞著角色轉時角色在畫面上的轉法一樣（鏡頭繞 +a ＝ 角色轉 −a），手指的習慣不用換。
   // 角度先記在目標上，身體慢慢追過去；放手時照最後的速度再轉一段，像轉台
   mirrorOrbit(dx, dy, mouse) {
@@ -555,10 +547,9 @@ export class Player {
     const s = mouse ? 1 : -1;
     const dSpin = dx * k * s, dPitch = dy * k * s;
     o.tSpin += dSpin;
-    o.tPitch = THREE.MathUtils.clamp(o.tPitch + dPitch, ORB_LOW - 1.5, ORB_HIGH + 1.5);
+    o.tPitch = THREE.MathUtils.clamp(o.tPitch + dPitch * ORB_TILT_K, -ORB_TILT, ORB_TILT);
     const gap = Math.max(8, now - o.last);
     o.vSpin += (dSpin / gap - o.vSpin) * 0.5;
-    o.vPitch += (dPitch / gap - o.vPitch) * 0.5;
     o.last = now;
     o.touched = true;
     this.events.onInput('drag');
@@ -568,8 +559,8 @@ export class Player {
     const o = this.focus?.orb;
     if (!o || performance.now() - o.last > 80) return;
     o.tSpin += o.vSpin * ORB_COAST * 1000;
-    o.tPitch += o.vPitch * ORB_COAST * 1000;
-    o.vSpin = o.vPitch = 0;
+    o.tPitch = 0;
+    o.vSpin = 0;
   }
 
   // 縮放的距離：照鏡子時縮的是鏡子的取景
@@ -677,7 +668,7 @@ export class Player {
     const stand = this.world.findWalkable(m.x + n.x * MIRROR_STAND, m.z + n.z * MIRROR_STAND, this.pos.x, this.pos.z) || { x: this.pos.x, z: this.pos.z };
     return {
       kind: 'mirror', n, stand,
-      orb: { yaw: 0, pitch: 0, zoom: 1, tYaw: 0, tPitch: 0, tZoom: 1, spin: 0, tSpin: 0, vSpin: 0, vPitch: 0, last: 0, touched: false },
+      orb: { yaw: 0, pitch: 0, zoom: 1, tYaw: 0, tPitch: 0, tZoom: 1, spin: 0, tSpin: 0, vSpin: 0, last: 0, touched: false },
       ...this.mirrorBody({ x: stand.x, y: this.pos.y, z: stand.z }, n, panelW() ? 1 : 0.55),
       fadeTarget: new THREE.Vector3(stand.x, 0, stand.z),
     };
@@ -839,7 +830,7 @@ export class Player {
   }
 
   // 右搖桿：每秒轉幾弧度（gamepad.js 算好曲線和緩衝）。上下快到頂時變鈍，跟滑鼠一樣；
-  // 照鏡子時左右是轉身、上下是鏡頭高低；看畫時不動（推左搖桿才退開）
+  // 照鏡子時左右是轉身、上下只微微抬壓、放開彈回；看畫時不動（推左搖桿才退開）
   padLook(yawRate, pitchRate, dt) {
     if (!yawRate && !pitchRate) return;
     if (this.focus?.orb) {
@@ -1241,6 +1232,7 @@ export class Player {
     if (!o) return false;
     const c = f.look, e0 = Math.atan2(f.camPos.y - c.y, Math.hypot(f.camPos.x - c.x, f.camPos.z - c.z));
     o.tPitch = THREE.MathUtils.clamp(o.tPitch, ORB_LOW - e0, ORB_HIGH - e0);
+    if (o.tPitch && performance.now() - o.last > ORB_TILT_HOLD) o.tPitch = 0;   // 手把放開、手指停住、觸控被取消：一樣彈回去
     const k = Math.min(1, dt * ORB_EASE);
     o.yaw += (o.tYaw - o.yaw) * k;
     o.pitch += (o.tPitch - o.pitch) * k;
@@ -1453,8 +1445,8 @@ export class Player {
     } else if (this.padOn && this.shoulder && !this.paused && !this.focus?.camPos && !this.focus?.orb) this.aimHover();
     let vx = 0, vz = 0;
     const k = this.keys;
-    const fwd = (k.has('w') || k.has('arrowup') || this.mouseRun ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
-    const side = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
+    const fwd = (k.has('fwd') || this.mouseRun ? 1 : 0) - (k.has('back') ? 1 : 0);
+    const side = (k.has('right') ? 1 : 0) - (k.has('left') ? 1 : 0);
 
     // 鍵盤和搖桿都換算成相對鏡頭的方向
     let mf = fwd, ms = side, mag = fwd || side ? 1 : 0;

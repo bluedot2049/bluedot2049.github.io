@@ -224,7 +224,7 @@ export class Manatee {
     this.armR = arm(1);
     this.armL.rotation.z = -0.35;
     this.armR.rotation.z = 0.2;
-    this.armR.rotation.x = -0.9;   // 右手舉著魔杖
+    this.armR.rotation.x = -0.9;   // 左手舉著魔杖
 
     // 魔杖與冰晶
     const wand = new THREE.Group();

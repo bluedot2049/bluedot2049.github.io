@@ -422,30 +422,48 @@ body.desk .ph-alt-track { height: 150px; }
 body.desk .ph-alt-step { position: relative; }
 body.desk .ph-alt-step::after {
   content: attr(data-key); position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%);
-  font: 600 11px/1 var(--latin); color: var(--gold-hi);
+  font: 600 11px/1 var(--latin); color: var(--gold-hi); white-space: nowrap;
 }
+body.pad .ph-alt-step { position: relative; }
+body.pad .ph-alt-step::after { content: attr(data-padkey); position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); font: 600 11px/1 var(--latin); color: var(--gold-hi); white-space: nowrap; }
 body.desk #ph-exit { top: auto; right: calc(50% + 250px); bottom: calc(38px + env(safe-area-inset-bottom)); }
 
-/* 舉相機（越肩右鍵，只有電腦）：其他介面收起，手上相機的快門、閃光、日期照樣看得到，下面標按鍵，右邊是拿法；
-   滑鼠鎖著，只看不點 */
-.ph-tag, #ph-grip { display: none; }
-body.photo-quick.photo-gear #ph-shoot { display: flex !important; pointer-events: none; }
-body.photo-quick.photo-gear .ph-tag {
+/* 舉相機（越肩右鍵、手把 ZL）：其他介面收起，快門那一排照樣看得到（只看不點），右邊是拿法和其他的鍵。
+   空拍機一樣，只留快門和看鏡 */
+.ph-tag, #ph-grip, #ph-grip small { display: none; }
+body.photo-quick #ph-shoot { display: flex !important; pointer-events: none; }
+body.photo-quick :is(#ph-lens, #ph-record, .t-lens) { display: none !important; }
+/* 快門那排底下標鍵（電腦、手把，手機不標），每種攝影都有；.q 是舉著時、.f 是完整攝影模式時的快門 */
+body.photo:is(.desk, .pad) .ph-tag {
   display: block; position: absolute; top: calc(50% + 42px);
   font-style: normal; font-size: 11px; font-weight: 600; line-height: 1; letter-spacing: .05em;
-  text-align: center; white-space: nowrap; color: var(--gold-hi);
+  text-align: center; white-space: nowrap; color: var(--gold-hi); pointer-events: none;
 }
+.ph-tag b { font: inherit; }
+body:not(.photo-quick) .ph-tag .q, body.photo-quick .ph-tag .f { display: none; }
 .t-shutter { left: 0; width: 72px; }
 .t-flash { right: calc(100% + 18px); width: 56px; }
 .t-date { right: calc(100% + 86px); width: 64px; }
 .t-look { right: 0; width: 54px; }
-body.photo-quick #ph-flash[hidden] ~ .t-flash, body.photo-quick #ph-date[hidden] ~ .t-date { display: none; }
-body.photo-quick.photo-gear #ph-grip {
+body.pad .t-look { display: none !important; }
+body.photo #ph-flash[hidden] ~ .t-flash, body.photo #ph-date[hidden] ~ .t-date { display: none !important; }
+/* 離開鈕底下、鏡頭那排左邊（變焦） */
+body.photo:is(.desk, .pad) #ph-exit .t-exit { left: 50%; top: calc(100% + 6px); transform: translateX(-50%); }
+body.photo:is(.desk, .pad) .t-lens { top: 17px; right: calc(100% + 10px); transform: translateY(-50%); color: var(--muted); font-weight: normal; }
+body.photo-gear .t-lens { display: none !important; }
+body.photo-quick #ph-grip {
   display: flex; flex-direction: column; gap: 5px; position: absolute;
   left: calc(100% + 18px); top: 50%; transform: translateY(-50%); white-space: nowrap;
 }
+body.photo-quick.photo-gear #ph-grip .g-gear, body.photo-quick:not(.photo-gear) #ph-grip .g-drone { display: block; }
 #ph-grip b { font-size: 14px; font-weight: 600; letter-spacing: .2em; color: var(--gold-hi); }
 #ph-grip small { font-size: 11px; letter-spacing: .05em; color: var(--muted); }
+#ph-grip em { font-style: normal; color: var(--gold-hi); }
+/* 選項上的鍵（直橫）：名稱後面一個小字 */
+.ph-chip i { font: 600 10px/1 var(--latin); font-style: normal; color: var(--gold-hi); opacity: .8; }
+body:not(.desk):not(.pad) .ph-chip i { display: none; }
+/* 拍好的卡：好了旁邊寫收起的鍵 */
+#ph-done kbd { margin-left: 8px; padding: 0 5px; font: 11px/1.5 var(--latin); letter-spacing: .04em; color: var(--muted); border: 1px solid rgba(232, 184, 106, .3); border-radius: 2px; }
 
 /* 照相館（studio.js） */
 .studio-card {

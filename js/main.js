@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { Player } from './controls/player.js';
 import { Character } from './avatar/character.js';
-import { addMirrorLight, setMirrorLight } from './avatar/mirrorlight.js';
+import { addMirrorLight, setMirrorLight, setStageLight } from './avatar/mirrorlight.js';
 import { Attention } from './avatar/attention.js';
 import { sanitizeLook, randomPreset } from './avatar/looks.js';
 import { getSave, putSave } from './save/progress.js';
@@ -36,7 +36,8 @@ import { installGrade, gradeAt, NEUTRAL } from './core/grade.js';
 import { Hollow } from './zones/gallery/hollow.js';
 import { PLACES } from './scene/places.js';
 import { bindDeskKeys } from './controls/deskkeys.js';
-import { bindGamepad, rumble } from './controls/gamepad.js';
+import { bindGamepad, rumble, padBtn } from './controls/gamepad.js';
+import { is, key } from './controls/keymap.js';
 import { Beast } from './npc/beast.js';
 import { Guide } from './scene/guide.js';
 import { pref, setPref, dropPref } from './save/prefs.js';
@@ -111,14 +112,15 @@ function saveLook(L) {
   putSave({ look: L });
 }
 
-// world.fadeVariants：房間淡進淡出時用的那一組著色器（見 fade.js 的 RoomFader），打開再編一次
-async function precompile(renderer, scene, camera, world) {
+// world.fadeVariants：房間淡進淡出時用的那一組著色器（見 fade.js 的 RoomFader），打開再編一次。
+// toTexture：編畫進貼圖的那一份（越肩的廣角、景深、後製都先畫進貼圖，輸出的色彩空間不同，是另一組著色器）。
+// 藏起來的東西打開、換變體都在同一段同步的程式裡做完再還原，遊戲開始以後再編也不會被畫出來
+async function precompile(renderer, scene, camera, world, toTexture = false) {
   const hidden = [];
   scene.traverse((o) => { if (!o.visible) { hidden.push(o); o.visible = true; } });
-  const rt = new THREE.WebGLRenderTarget(1, 1);
+  const rt = toTexture ? new THREE.WebGLRenderTarget(1, 1) : null;
   const jobs = [];
   const compile = () => {
-    jobs.push(renderer.compileAsync(scene, camera));
     renderer.setRenderTarget(rt);
     jobs.push(renderer.compileAsync(scene, camera));
     renderer.setRenderTarget(null);
@@ -146,7 +148,7 @@ async function precompile(renderer, scene, camera, world) {
     for (const o of hidden) o.visible = false;
   }
   await Promise.all(jobs).catch(() => {});
-  rt.dispose();
+  rt?.dispose();
 }
 
 async function start() {
@@ -203,9 +205,9 @@ async function start() {
   sun.layers.enable(REFLECT_LAYER);
 
   // 有匯出調色的區域（zone-*.js 的 grade）在建場景之前換上高度霧和調色。?grade=0 看原本的霧。
-  // 沒匯出的區域在 ?debug 時裝一組不改畫面的（NEUTRAL），調色面板一樣打得開
+  // 沒匯出的區域在 ?debug 時裝一組不改畫面的（NEUTRAL），調色面板一樣打得開。會下雨的區域匯出 wet，材質才帶濕地面（wet.js）
   const grade = params.get('grade') === '0' ? null : Z.grade || (params.has('debug') ? NEUTRAL : null);
-  if (grade) installGrade(grade, scene);
+  if (grade) installGrade(grade, scene, !!Z.wet);
   const world = Z.build(scene, { gallery, coarse, params, renderer, quality });
 
   // 光線、霧。畫廊有室內和戶外兩組，走出後門時在兩組之間漸變；只有一組的區域兩頭都用它
@@ -691,10 +693,8 @@ async function start() {
   document.addEventListener('pointerlockchange', () => {
     if (!player.locked || lockTold) return;
     lockTold = true;
-    ui.toast('按住 Alt 叫出游標', 'Tab 行囊　Esc 暫停選單');
+    ui.toast(`按住 ${key('cursor')} 叫出游標`, `${key('pack')} 行囊　Esc 暫停選單`);
   });
-  // 中鍵標記地點：同行時才有
-  player.onPing = (x, y) => party?.markAt(x, y);
 
   // 聲音開關：戶外的風聲和動物叫聲共用，室內也有貓，所以一直都在
   const soundBtn = document.getElementById('sound-btn');
@@ -829,9 +829,9 @@ async function start() {
     };
     document.addEventListener('visibilitychange', () => { awake(); checkAway(); });
     if (visitors) visitors.mp = mp;
-    // 電腦：數字鍵 1–5 送表情
+    // 電腦：數字鍵 1–5（表情一到五，keymap.js）送表情
     window.addEventListener('keydown', (e) => {
-      const i = e.key.length === 1 ? '12345'.indexOf(e.key) : -1;
+      const i = [1, 2, 3, 4, 5].findIndex((n) => is(e, 'emote' + n));
       if (i >= 0) sendEmote(EMOTES[i]);
     });
   }
@@ -948,7 +948,7 @@ async function start() {
 
   // 趁載入畫面先把所有著色器編好。不然第一次走出後門要一口氣編幾十個，
   // Windows 的瀏覽器編得特別慢，畫面會凍住一兩秒。
-  // 藏起來的房間、戶外、海面先全部打開；海面倒影畫進貼圖時用的是另一組著色器，也一起編
+  // 藏起來的房間、戶外、海面先全部打開。畫進貼圖的那一份（海面倒影、越肩、景深）跟這份一樣多，收掉讀取畫面時才編，見下面 entered
   await window.loadbar?.mark('built');
   await precompile(renderer, scene, camera, world);
   if (fxJob) {
@@ -1007,6 +1007,9 @@ async function start() {
   fullscreenButton(coarse);
   // 進門以後：前門在背後闔上，跳出這間房的名字，再跳操作說明卡（已經先動起來的人就不打擾，下次進門再出現）。
   // 搭船回來、直接開海市的，還是底下那行操作提示。不能 await，下面還要開始畫
+  // 畫進貼圖的那一份著色器：讀取條滿了才編，讀取畫面少等一半。第一次來的人正在看門邊的告示；來過的人門正在打開、光蓋著畫面，
+  // 這時候主執行緒卡一下看不出來（門的動畫交給合成器）
+  setTimeout(() => precompile(renderer, scene, camera, world, true), 0);
   entered.then(() => {
     guide.ready = true;   // 上次沒收起來的黑眼：進門、上岸以後才蹦出來
     // 從歸門回來的（from=door）也是從前門進來，只是不再跳操作說明
@@ -1015,7 +1018,10 @@ async function start() {
     if (byDoor) ui.toast(world.rooms[0].data.name, world.rooms[0].data.subtitle);
     if (params.has('photo')) photo.enter();
     else if (byDoor && !homeDoor) setTimeout(() => { if (lastInput < at) ui.guide(); }, 2600);
-    else if (!homeDoor) setTimeout(() => ui.hint(coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿或點地面走路　拖曳轉視角` : `點地面或 WASD 走路　拖曳轉視角　空白鍵跳躍　C 坐下${zone === 'gallery' ? '　Enter 看畫' : ''}`, 6000));
+    // 鍵照換過的寫（keymap.js、gamepad.js）
+    else if (!homeDoor) setTimeout(() => ui.hint(pad.active ? `左搖桿走路　右搖桿轉視角　${padBtn(3)} 跳　${padBtn(2)} 坐${zone === 'gallery' ? `　${padBtn(-1)} 看畫` : ''}`
+      : coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿或點地面走路　拖曳轉視角`
+      : `點地面或 ${['fwd', 'left', 'back', 'right'].map((id) => key(id)).join('')} 走路　拖曳轉視角　${key('jump')} 跳　${key('sit')} 坐${zone === 'gallery' ? `　${key('interact')} 看畫` : ''}`, 6000));
   });
 
   // 挑相機時鏡頭差不多就在自己頭的高度，帽子、頭上的東西會擋在桌上那台前面：鏡頭飛過去時自己淡掉，離開再淡回來。
@@ -1201,6 +1207,8 @@ async function start() {
     gradeAt(dt, view.x, view.z);
     if (photo.active) world.update(clock.elapsedTime, photo.pos, photo.fadeTarget(), camera, true);
     else world.update(clock.elapsedTime, player.camPos, player.fadeTarget(), camera);
+    // 站進前廳的光池，那盞燈照在自己身上（手機沒有真的燈才有，見 vestibule-light.js 的 lightOn）
+    setStageLight(world.stage?.lightOn(player.pos), camera);
     // 牆上的色塊畫：視差跟著鏡頭，站在畫前不動才醒；拍照時醒的程度停著
     world.updatePaintings?.(camera.position, photo.active ? null : player.pos, player.focus?.kind === 'painting' ? player.focus.p : null);
     frame++;

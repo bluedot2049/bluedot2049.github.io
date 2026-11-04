@@ -16,6 +16,8 @@ import { Eye } from '../camera/eye.js';
 import { bend } from '../core/lens.js';
 import { uiScale, panelW, dockR } from '../controls/ui.js';
 import { pref, setPref } from '../save/prefs.js';
+import { is, key } from '../controls/keymap.js';
+import { padBtn } from '../controls/gamepad.js';
 
 const LEAD = 3.2;       // 帶路時飛在角色前面幾公尺（沿著路量）
 const PEEK = 2.4;       // 眼珠看的地方再往前幾公尺：快到轉角就先看下一段
@@ -298,7 +300,7 @@ export class Guide {
       e.preventDefault();
       e.stopImmediatePropagation();
     };
-    if (k === 'm' || k === 'M') {
+    if (is(e, 'eye')) {
       if (e.repeat || this.busy() || document.querySelector('#pause.show, #loading:not(.done)')) return;
       stop();
       this.press('key');
@@ -311,7 +313,7 @@ export class Guide {
     } else if (k.length === 1 && k >= '1' && k <= '9') {
       stop();
       this.choose(+k - 1);
-    } else if (k === '0') {
+    } else if (is(e, 'eyeOff')) {
       stop();
       if (this.on) this.turnOff();
     } else if (k in STEP) {
@@ -355,7 +357,7 @@ export class Guide {
     this.chase = null;
     if (!load(KEY_TOLD, 0)) {
       save(KEY_TOLD, 1);
-      this.ui.hint(this.coarse ? '走近黑眼按「跟著」，角色就自己走過去' : '走近黑眼按 E，角色就自己跟著走', 5000);
+      this.ui.hint(document.body.classList.contains('pad') ? `走近黑眼按 ${padBtn(-1)}，角色就自己跟著走` : this.coarse ? '走近黑眼按「跟著」，角色就自己走過去' : `走近黑眼按 ${key('interact')}，角色就自己跟著走`, 5000);
     }
   }
 

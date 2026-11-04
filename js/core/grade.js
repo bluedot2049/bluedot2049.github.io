@@ -247,7 +247,8 @@ const VERTEX = `#ifdef USE_FOG
 	vFogWorld = cameraPosition + ( vec4( mvPosition.xyz, 0.0 ) * viewMatrix ).xyz;
 #endif`;
 
-const PARS_FRAGMENT = `#ifdef USE_FOG
+// wet：會下雨的區域（zone 匯出 wet）才接濕地面那一段（wet.js）。它很長，每個材質都編一次，不下雨的區域不帶，讀取時著色器編得快一點
+const PARS_FRAGMENT = (wet) => `#ifdef USE_FOG
 	uniform vec3 fogColor;
 	varying float vFogDepth;
 	varying vec3 vFogWorld;
@@ -258,16 +259,16 @@ const PARS_FRAGMENT = `#ifdef USE_FOG
 		uniform float fogFar;
 	#endif
 	${GRADE_GLSL}
-	${WET_GLSL}
+	${wet ? WET_GLSL : ''}
 #endif`;
 
 // 霧在 colorspace 之後才上：直接畫上螢幕時這裡已經是 sRGB，畫進後製的貼圖時還是線性的（gradeSurface 自己會分）。
 // 下過雨的區域，吃光的材質先濕（wet.js），再調色、混霧。朝太陽那一側的霧比較亮（scatter，沒開時是 0）
-const FRAGMENT = `#ifdef USE_FOG
+const FRAGMENT = (wet) => `#ifdef USE_FOG
 	if ( uGrade.on > 0.5 ) {
-		#ifdef LAMBERT
+		${wet ? `#ifdef LAMBERT
 			if ( uWet.amount > 0.0 ) gl_FragColor.rgb = wetSurface( gl_FragColor.rgb, vFogWorld );
-		#endif
+		#endif` : ''}
 		float gradeF = gradeHeightFog( vFogWorld ), gradeA = gradeAir( vFogWorld );
 		#ifndef FOG_EXP2
 			if ( uGrade.linear > 0.5 ) { gradeF = smoothstep( fogNear, fogFar, vFogDepth ); gradeA = 0.0; }
@@ -457,17 +458,19 @@ export function matchesFile(text) {
 
 // 要在第一個材質編譯前呼叫（main.js 在建場景之前）。內建材質的參數是從 ShaderLib 複製出來的，
 // 純物件不會被深拷貝，所以每個材質的 uGrade 都指向同一個 GRADE。preset 是 zone-*.js 匯出的 grade。
-// scene：每次畫這個場景之前抄一次它的霧色（室內外漸變時霧色會變）
-export function installGrade(preset = {}, scene = null) {
+// scene：每次畫這個場景之前抄一次它的霧色（室內外漸變時霧色會變）。wet：這一區會下雨（海市），材質才帶濕地面
+export function installGrade(preset = {}, scene = null, wet = false) {
   loadSet(preset);
   fileSet = split(preset);
   GRADE.on = 1;
   installed = true;
   Object.assign(THREE.ShaderChunk, {
-    fog_pars_vertex: PARS_VERTEX, fog_vertex: VERTEX, fog_pars_fragment: PARS_FRAGMENT, fog_fragment: FRAGMENT,
+    fog_pars_vertex: PARS_VERTEX, fog_vertex: VERTEX, fog_pars_fragment: PARS_FRAGMENT(wet), fog_fragment: FRAGMENT(wet),
   });
   for (const lib of Object.values(THREE.ShaderLib)) {
-    if (lib.fragmentShader.includes('fog_fragment')) Object.assign(lib.uniforms, { uGrade: { value: GRADE }, uWet: { value: WET } });
+    if (!lib.fragmentShader.includes('fog_fragment')) continue;
+    lib.uniforms.uGrade = { value: GRADE };
+    if (wet) lib.uniforms.uWet = { value: WET };
   }
   if (scene) {
     syncFog(scene);

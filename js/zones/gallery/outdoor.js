@@ -278,10 +278,12 @@ export function buildOutdoor(room, h) {
       const x = HILL.x0 + i * HILL.s, rel = HILL.r0 + j * HILL.s, z = Z(rel);
       const e = Math.hypot(x / MEADOW.rx, (rel - MEADOW.c) / MEADOW.rz);
       if (e < 0.9 || e > 3 || Math.hypot(x - pc.x, z - pc.z) < PAV.r + 1) continue;
-      if (Math.abs(x - JETTY.x) < JETTY.hw + 0.8 && rel > JETTY.r0 + 1) continue;   // 棧橋比海灘高，只能從橋頭上去
+      const y = heightAt(x, z);
+      // 棧橋前段貼著草地，從旁邊也踩得上去；往海灘那段橋面比地面高一截，橋邊留空，只能從橋上走
+      if (Math.abs(x - JETTY.x) < JETTY.hw + 0.8 && rel > JETTY.r0 + 1 && y < G - 0.15) continue;
       let v = 1 - smooth(0.02, 0.08, forest(x, z));
       if (v <= 0) continue;
-      const y = heightAt(x, z), slope = Math.hypot(heightAt(x + 0.5, z) - heightAt(x - 0.5, z), heightAt(x, z + 0.5) - heightAt(x, z - 0.5));
+      const slope = Math.hypot(heightAt(x + 0.5, z) - heightAt(x - 0.5, z), heightAt(x, z + 0.5) - heightAt(x, z - 0.5));
       v *= 1 - smooth(0.5, 0.62, slope);   // 每公尺高多少
       v *= smooth(G - 0.35, G - 0.2, y);    // 海灘往下就不走了
       v *= 1 - smooth(2.7, 2.95, e);

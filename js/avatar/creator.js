@@ -61,7 +61,7 @@ const MENU = [
     { id: 'shoes', name: '鞋子', view: 'body', paint: ['shoeC'], when: has('shoes', 'bare') },
     { id: 'neck', name: '脖子', view: 'body', paint: ['neckC'], when: has('neck') },
     { id: 'back', name: '背上', view: 'body', paint: ['backC'], when: has('back') },
-    { id: 'hand', name: '左手', view: 'body', paint: ['handC'], when: has('hand') },
+    { id: 'hand', name: '右手', view: 'body', paint: ['handC'], when: has('hand') },
   ] },
   { id: 'closet', name: '衣櫃', view: 'body', subs: [] },
 ];

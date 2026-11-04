@@ -23,6 +23,8 @@ export const grade = {
   tone: '海市藍夜01',
   regions: [{ name: '雨後', weather: 'wet', tone: '海市雨後' }, { name: '雨', weather: 'rain', tone: '海市雨夜' }],
 };
+// 會下雨：材質帶濕地面那一段著色器（wet.js，main.js 裝調色時看這個）。不下雨的區域不寫，著色器編得快
+export const wet = true;
 
 // 白獸（beast.js）可能出現的地方，place 是登報時的地名
 export const beast = {

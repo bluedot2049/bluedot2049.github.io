@@ -55,7 +55,7 @@ function rng(seed) {
 
 // ---------- 衣櫃 ----------
 // 本地人、外地人穿什麼在 cast.js（personLook）
-// 停在哪一攤之後手上會多什麼：左手的東西（look.hand），或右手邊走邊咬的點心（Character 的 FOODS 編號）
+// 停在哪一攤之後手上會多什麼：右手的東西（look.hand），或左手邊走邊咬的點心（Character 的 FOODS 編號）
 const SHOP_HAND = { bakery: 'baguette', lanterns: 'lantern', tea: 'teacup', fish: 'fish', candle: 'candle', herbs: 'flower', glass: 'flask' };
 const CART_HAND = { squid: 'squid', oden: 'teacup' };
 const CART_FOOD = { tanghulu: 3, potato: 1, baozi: 1, takoyaki: 1 };
@@ -249,7 +249,7 @@ function makeTrip(roads, spots, i, k, start, up, ferryIn) {
     }
     // 一律往自己行進方向的同一側偏：走相反方向的人自然分在兩邊。走得快的靠內側（偏得少），慢的靠外側，超車才不會穿過去
     const speed = 0.85 + R() * 0.4, pair = R() < 0.3, lane = 0.3 + ((1.25 - speed) / 0.4) * 0.7;
-    // 手上拿什麼：第一個買得到東西的攤位決定左手；沒買東西、又要往燈巷以上走的，有些人自己提一盞燈籠
+    // 手上拿什麼：第一個買得到東西的攤位決定右手；沒買東西、又要往燈巷以上走的，有些人自己提一盞燈籠
     let hand = 'none', handT = 0, foodKind = 0, foodT = 0;
     const people = [];
     for (let p = 0; p < (pair ? 2 : 1); p++) {

@@ -367,13 +367,48 @@ body.desk .snapsave { left: auto; right: calc(50% + 320px); bottom: calc(24px + 
 #pause .size b, #pause .view b { margin-left: 8px; font-weight: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
 #pause .saves b { font-weight: normal; color: var(--muted); }
 #pause .saves .btn { min-height: 30px; padding: 0 12px; font-size: 12.5px; letter-spacing: .08em; }
-#pause .keys { list-style: none; margin: 0; padding: 0; }
-#pause .keys li { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid rgba(232, 184, 106, .1); font-size: 12.5px; letter-spacing: .06em; color: var(--muted); }
-#pause .keys li > span:last-child { display: flex; gap: 4px; }
+/* 手把按鍵（gamepad.js）：暫停選單點進去的那一張，同一種卡、同一個位置。換過的那顆字亮一點，等按鍵的那列呼吸 */
+#padmap { position: fixed; left: 50%; top: 50%; z-index: 27; display: none; width: 380px; max-height: calc(100vh / var(--ui, 1) - 24px); overflow-y: auto; transform: translate(-50%, -50%); background: rgba(16, 11, 9, .94); box-shadow: var(--shadow); }
+#padmap.show { display: flex; animation: pause-in .25s ease-out both; }
+#padmap .pm-list { display: flex; flex-direction: column; }
+#padmap .pm-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; padding: 6px 2px; font: inherit; font-size: 12.5px; letter-spacing: .06em; text-align: left; color: var(--text); background: none; border: 0; border-bottom: 1px solid rgba(232, 184, 106, .1); cursor: var(--cur-pointer); }
+#padmap .pm-row small { display: block; margin-top: 1px; font-size: 11px; color: var(--muted); }
+#padmap kbd { flex: none; padding: 0 6px; font: 11px/1.6 var(--latin); letter-spacing: .04em; color: var(--muted); border: 1px solid rgba(232, 184, 106, .3); border-radius: 2px; }
+#padmap .pm-row.moved kbd { color: var(--gold-hi); border-color: rgba(232, 184, 106, .6); }
+#padmap .pm-row.listen kbd { color: var(--gold-hi); border-color: var(--gold); animation: pm-wait 1s ease-in-out infinite alternate; }
+@keyframes pm-wait { to { background: rgba(232, 184, 106, .16); } }
+#padmap .pm-foot { display: flex; gap: 8px; margin-top: 4px; }
+#padmap .pm-foot .btn { flex: 1; width: auto; min-height: 42px; margin-top: 0; }
+/* 寬的畫面排兩欄（左邊右手四顆和肩鍵、右邊搖桿按下、十字鍵、中間小鍵），不用捲 */
+@media (min-width: 700px) {
+  #padmap { width: 620px; max-width: calc(100vw / var(--ui, 1) - 24px); }
+  #padmap .pm-list { display: grid; grid-template-rows: repeat(8, auto); grid-auto-flow: column; column-gap: 28px; }
+}
+/* 鍵盤滑鼠（keymap.js）：同一種卡。三組（走動、相機、介面）照寬度排一到三欄，每列名字和兩格鍵 */
+#keymap { position: fixed; left: 50%; top: 50%; z-index: 27; display: none; width: 380px; max-width: calc(100vw / var(--ui, 1) - 24px); max-height: calc(100vh / var(--ui, 1) - 24px); overflow-y: auto; transform: translate(-50%, -50%); background: rgba(16, 11, 9, .94); box-shadow: var(--shadow); }
+#keymap.show { display: flex; animation: pause-in .25s ease-out both; }
+#keymap .km-list { columns: 1; column-gap: 28px; }
+#keymap section { break-inside: avoid; margin-bottom: 10px; }
+#keymap h3 { margin: 0 0 2px; font-size: 11px; font-weight: normal; letter-spacing: .3em; color: var(--gold); }
+#keymap .km-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; border-bottom: 1px solid rgba(232, 184, 106, .1); font-size: 12.5px; letter-spacing: .06em; color: var(--text); }
+#keymap .km-row > span { flex: 1; white-space: nowrap; }
+#keymap .km-slot { flex: none; width: 58px; padding: 0; background: none; border: 0; cursor: var(--cur-pointer); }
+#keymap .km-slot kbd { display: block; padding: 0 4px; font: 11px/1.7 var(--latin); letter-spacing: .02em; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); border: 1px solid rgba(232, 184, 106, .3); border-radius: 2px; }
+#keymap .km-slot.moved kbd { color: var(--gold-hi); border-color: rgba(232, 184, 106, .6); }
+#keymap .km-slot.listen kbd { color: var(--gold-hi); border-color: var(--gold); animation: pm-wait 1s ease-in-out infinite alternate; }
+@media (hover: hover) { #keymap .km-slot:hover kbd { border-color: var(--gold); } }
+#keymap .km-foot { display: flex; gap: 8px; }
+#keymap .km-foot .btn { flex: 1; width: auto; min-height: 42px; margin-top: 0; }
+#keymap kbd:not(.km-slot kbd) { padding: 0 5px; font: 11px/1.5 var(--latin); color: var(--muted); border: 1px solid rgba(232, 184, 106, .3); border-radius: 2px; }
+@media (min-width: 760px) { #keymap { width: 700px; } #keymap .km-list { columns: 2; } }
+@media (min-width: 1100px) { #keymap { width: 980px; } #keymap .km-list { columns: 3; } }
 /* 鎖住滑鼠時按鈕點不到：整排淡一點，每顆底下標快捷鍵（按住 Alt 叫出游標時照常） */
 body.desk.locked #top-btns { opacity: .6; }
 body.desk.locked #top-btns [data-key] { position: relative; }
 body.desk.locked #top-btns [data-key]::after { content: attr(data-key); position: absolute; left: 50%; bottom: -15px; transform: translateX(-50%); font-size: 10px; line-height: 1; letter-spacing: .05em; color: var(--gold-hi); white-space: nowrap; pointer-events: none; }
+/* 手把在用：有對應的鍵的那幾顆底下標手把的鍵（gamepad.js 的 data-pad-attr） */
+body.pad #top-btns [data-padkey] { position: relative; }
+body.pad #top-btns [data-padkey]::after { content: attr(data-padkey); position: absolute; left: 50%; bottom: -15px; transform: translateX(-50%); font: 600 10px/1 var(--latin); letter-spacing: .04em; color: var(--gold-hi); white-space: nowrap; pointer-events: none; }
 
 /* 在線人數：一顆微亮的金點 */
 #online {
@@ -655,9 +690,9 @@ body.desk #action-btn {
 body.desk #action-btn.show { transform: translateX(-50%); }
 body.desk #hint { bottom: auto; top: calc(18px + env(safe-area-inset-top)); }
 body.desk:has(#ph-rec:not([hidden])) #hint { top: calc(58px + env(safe-area-inset-top)); }
-/* 越肩時點不到按鈕：互動鍵左邊標一顆 E 鍵帽 */
-body.desk.shoulder #action-btn::after {
-  content: 'E'; position: absolute; right: calc(100% + 10px); top: 50%; width: 24px; height: 24px; margin-top: -12px;
+/* 互動鍵左邊一顆鍵帽，寫互動的鍵（keymap.js 換 data-key）。越肩時點不到按鈕全靠它，一般視角也照樣標 */
+body.desk #action-btn::after {
+  content: attr(data-key); position: absolute; right: calc(100% + 10px); top: 50%; min-width: 24px; height: 24px; margin-top: -12px; padding: 0 5px; white-space: nowrap;
   display: flex; align-items: center; justify-content: center;
   font: 600 12px/1 var(--latin); color: var(--gold-hi);
   background: rgba(16, 11, 9, .82); border: 1px solid rgba(232, 184, 106, .55); border-radius: 4px;
@@ -695,8 +730,14 @@ body.pad:not(.desk) #action-btn .a1 { display: block; }
 body.pad:not(.desk) #action-btn .a2:not(:empty) { display: block; }
 /* 操作說明換成手把那一張；暫停選單的手把那幾列 */
 body.pad #guide :is(.for-desk, .for-touch), body:not(.pad) #guide .for-pad { display: none; }
-#pause .pad-set { display: none; }
-body.pad-seen #pause .pad-set { display: flex; }
+#pause .pad-set, #pause .desk-set { display: none; }
+body.pad-seen #pause .pad-set, body.desk #pause .desk-set { display: flex; }
+/* 按鍵提示寫兩份：.on-kb 鍵盤滑鼠（電腦、沒在用手把），.on-pad 手把（在用時）。手機不接手把兩種都不出現 */
+body:not(.desk) .on-kb, body.pad .on-kb, body:not(.pad) .on-pad { display: none !important; }
+/* 鍵帽上的數字：Cormorant 只有舊式數字（0 像 o、1 像 ı），鍵帽裡的 0–9 跟系統的 Times New Roman 借；金色主按鈕上的鍵帽跟著字色，不然看不到 */
+@font-face { font-family: "KeyNum"; src: local("Times New Roman"), local("TimesNewRomanPSMT"), local("Songti TC"); unicode-range: U+0030-0039; }
+kbd, #action-btn, .ph-alt-step { --latin: "KeyNum", "Cormorant Garamond", "Noto Serif TC", "Songti TC", serif; }
+:is(#pause, #keymap, #padmap) .btn.primary kbd { color: inherit; border-color: currentColor; opacity: .55; letter-spacing: .04em; }
 /* 十字鍵在面板裡的焦點（padnav.js）：金線框 */
 body.pad .pad-focus { outline: 1.5px solid var(--gold-hi); outline-offset: 3px; }
 body.pad input[type=range].pad-focus { outline-offset: 6px; }

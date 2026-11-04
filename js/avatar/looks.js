@@ -76,7 +76,7 @@ export const OPTIONS = {
   one: [['none', '不穿'], ['dino', '恐龍裝'], ['panda', '熊貓裝'], ['banana', '香蕉裝'], ['astronaut', '太空衣'], ['yukata', '浴衣']],
   neck: [['scarf', '圍巾'], ['none', '沒有'], ['tie', '領帶'], ['bowtie', '領結'], ['necklace', '項鍊'], ['lei', '花環'], ['bell', '鈴鐺'], ['towel', '毛巾']],
   back: [['pouch', '腰包'], ['none', '沒有'], ['backpack', '背包'], ['schoolbag', '書包'], ['satchel', '郵差包'], ['guitar', '吉他'], ['sword', '大劍'], ['quiver', '箭筒'], ['wingA', '天使翅膀'], ['wingB', '蝙蝠翅膀'], ['wingC', '蝴蝶翅膀'], ['tail', '尾巴'], ['shell', '龜殼']],
-  // 左手拿的東西。右手留著拿點心，之後探索世界撿東西也用右手
+  // 右手拿的東西。左手留著拿點心，之後探索世界撿東西也用左手
   hand: [['none', '空手'], ['staff', '法杖'], ['umbrella', '雨傘'], ['balloon', '氣球'], ['book', '魔法書'], ['flower', '花'], ['boba', '珍奶'], ['chicken', '雞排'], ['selfie', '自拍棒'], ['spatula', '鍋鏟'],
     ['lantern', '燈籠'], ['candle', '蠟燭'], ['fish', '魚'], ['brush', '大畫筆'], ['flask', '燒瓶'], ['frame', '畫框'], ['scope', '望遠鏡'], ['baguette', '法國麵包'], ['teacup', '茶杯'], ['squid', '烤魷魚']],
 };
@@ -90,7 +90,7 @@ const COUNTS = {
 
 // ---------- 海市攤販送的東西 ----------
 // 不在這張表裡的，鏡子裡一開始就有。表裡的要去海市跟那一攤聊天才拿得到，記在這台裝置的瀏覽器裡
-// 沒寫條件的，聊天就送；need：左手要拿著那樣東西來換；night：要在街上冷清的時候；again：第一次只記下來，隔天再來才送。ask 是還沒滿足時攤販講的話
+// 沒寫條件的，聊天就送；need：右手要拿著那樣東西來換；night：要在街上冷清的時候；again：第一次只記下來，隔天再來才送。ask 是還沒滿足時攤販講的話
 export const GIFTS = {
   tailor: { who: '裁縫', line: '這幾件你拿去穿穿看', items: [['one', 'yukata'], ['outer', 'haori'], ['bottom', 'hakama'], ['shoes', 'geta']] },
   junk: { who: '舊貨攤', line: '嘰咕 這兩個送你 不能退喔', items: [['back', 'shell'], ['shoes', 'odd']] },

@@ -247,14 +247,14 @@ class Visitor {
     R.x += (-0.7 + Math.sin(t * 3.1) * 0.35 - R.x) * chat;
     L.x += (-0.25 + Math.sin(t * 2.3 + 1) * 0.15 - L.x) * chat;
     r.body.rotation.z += Math.sin(t * 1.7) * 0.04 * chat;
-    // 吃：右手拿著，隔一陣子送到嘴邊
+    // 吃：左手拿著，隔一陣子送到嘴邊
     r.food.visible = this.act === 'eat' && this.actW > 0.3;
     if (eat) {
       const bite = Math.max(0, Math.sin(t * 1.4)) ** 6;
       R.x += (-0.95 - 1.1 * bite - R.x) * eat;
       R.y += (-0.5 * bite - R.y) * eat;
     }
-    // 彈琴：琴從背上拿到胸前，左手托琴頸，右手在琴身上撥
+    // 彈琴：琴從背上拿到胸前，右手托琴頸，左手在琴身上撥
     if (r.lute) {
       const b = r.luteBack, f = play;
       r.lute.position.set(lerp(b.x, 0.04, f), lerp(b.y, 0.6, f), lerp(b.z, 0.27 * this.L.W + 0.05, f));
@@ -263,11 +263,11 @@ class Visitor {
       R.x += (-0.55 + Math.sin(t * 9) * 0.12 - R.x) * play; R.z += (-0.35 - R.z) * play;
       r.body.rotation.z += Math.sin(t * 2.2) * 0.05 * play;
     }
-    // 釣魚：右手往前舉著竿，另一手扶著
+    // 釣魚：左手往前舉著竿，另一手扶著
     R.x += (-0.38 + Math.sin(t * 0.8) * 0.04 - R.x) * fish;
     L.x += (-0.45 - L.x) * fish; L.z += (0.35 - L.z) * fish;
     if (r.rod) r.rod.visible = this.act !== 'eat';
-    // 素描：左手拿本子在胸前，右手在本子上畫
+    // 素描：右手拿本子在胸前，左手在本子上畫
     L.x += (-1.15 - L.x) * sketch; L.z += (0.5 - L.z) * sketch;
     R.x += (-1.0 + Math.sin(t * 5) * 0.08 - R.x) * sketch; R.z += (-0.3 + Math.sin(t * 3.3) * 0.06 - R.z) * sketch;
     if (r.letter) r.letter.visible = this.act === 'chat' && this.actW > 0.3;

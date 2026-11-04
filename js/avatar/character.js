@@ -34,11 +34,11 @@ const SEAT_BUTT = 0.3;     // 屁股（褲子）底部離身體原點多高，cl
 const PRE_JUMP = 0.09;     // 起跳前蹲多久
 const LAND_TIME = 0.22;    // 落地沉一下多久
 const BLINK_DOWN = 0.07, BLINK_UP = 0.12;   // 眨眼：閉上、睜開各多久
-// 左手垂著的東西跟著手盪多少（負的是氣球這種拖在後面的）、擺的快慢（每秒弧度，沒寫的是 6）、擺長（公尺）
+// 右手垂著的東西跟著手盪多少（負的是氣球這種拖在後面的）、擺的快慢（每秒弧度，沒寫的是 6）、擺長（公尺）
 const SWING = { lantern: 1, fish: 0.9, staff: 0.35, baguette: 0.3, flower: 0.5, boba: 0.25, candle: 0.2, flask: 0.3, teacup: 0.12, brush: 0.2, balloon: -0.6 };
 const SWING_W = { balloon: 2.2 };
 const SWING_L = 0.3;
-// 右手壓住帽子的手勢（armR 的 x、y、z）：手舉到頭旁邊，帽子再往手那邊低下去
+// 左手壓住帽子的手勢（armR 的 x、y、z）：手舉到頭旁邊，帽子再往手那邊低下去
 const HAT_ARM = [-3.0, 0, 0.42];
 const clampTo = (v, m) => Math.min(m, Math.max(-m, v));
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -593,7 +593,7 @@ export class Character {
     this.footL = pivot(HIP);
     this.footR = pivot(HIP);
     this.limbs = [this.armL, this.armR, this.footL, this.footR].map(mesh);
-    // 左手拿的東西：每一幀抵銷手臂的轉動，一直保持直立。右手留給點心。
+    // 右手拿的東西：每一幀抵銷手臂的轉動，一直保持直立。左手留給點心。
     // 底下再掛一層 handSwing：垂著的東西（燈籠、魚）跟著手的加速度盪（update 的最後）
     this.handG = new THREE.Group();
     this.handG.position.y = -0.33;
@@ -639,7 +639,7 @@ export class Character {
     this.landT = 0;                // 落地沉一下的倒數
     this.landA = 1;                // 這一次落地沉多重
     this.windK = 0;                // 風吹在身上的強度（慢慢追天氣）
-    this.hatK = 0;                 // 右手壓著帽子的程度
+    this.hatK = 0;                 // 左手壓著帽子的程度
     this.rainK = 0;                // 淋雨縮肩的程度
     this.tilt = 0;                 // 頭要歪多少（看畫時 player 設）
     this.tiltK = 0;
@@ -757,7 +757,7 @@ export class Character {
     this.camG.position.copy(this.camHang);
   }
 
-  // 舉相機（攝影模式）：a = { grip, pitch }，null 是放下。grip：0 蹲低、1 眼高、2 舉高、3 自拍（右手伸長、相機轉過來），
+  // 舉相機（攝影模式）：a = { grip, pitch }，null 是放下。grip：0 蹲低、1 眼高、2 舉高、3 自拍（左手伸長、相機轉過來），
   // 4 沒帶相機時雙手在臉前比一個取景框。pitch 是抬頭的角度。舉起來之前先把手上的東西收起來，放下之後才拿出來
   setAim(a) {
     this.aim = a;
@@ -974,7 +974,7 @@ export class Character {
     }
 
     // 風穿在身上（core/weather.js 的 BREEZE，有天氣的區域每幀寫）：往風裡傾，披風、圍巾順風飄，帽子被吹得晃、陣風最高點往上跳一下。
-    // 風夠大、右手空著（沒點心、沒表情、沒舉相機、沒坐著）就壓住帽子；手要給別的事用時先放開，跟舉相機前先收手上的東西同一個順序；
+    // 風夠大、左手空著（沒點心、沒表情、沒舉相機、沒坐著）就壓住帽子；手要給別的事用時先放開，跟舉相機前先收手上的東西同一個順序；
     // 手騰不出來的時候帽子晃得更凶。坐著不傾。天氣照伺服器時間算、手上的狀態本來就同步，所以每個人畫面上看到的一樣
     const Bz = BREEZE, wind = Bz.wind * (0.3 + 0.7 * Bz.gust);
     this.windK += (wind - this.windK) * Math.min(1, dt * 3);
@@ -1045,7 +1045,7 @@ export class Character {
       R.x += (0.2 - R.x) * lie; R.y += (0 - R.y) * lie; R.z += (0.6 - R.z) * lie;
     }
 
-    // 左手拿著東西：垂著的照樣小幅擺動，拿在胸前的手往前抬，雨傘這種舉過頭
+    // 右手拿著東西：垂著的照樣小幅擺動，拿在胸前的手往前抬，雨傘這種舉過頭
     this.handK += ((this.handPose ? 1 : 0) - this.handK) * Math.min(1, dt * 8);
     if (this.handPose && this.handK > 0.001) {
       const A = this.armL.rotation, hk = this.handK;
@@ -1054,7 +1054,7 @@ export class Character {
       if (this.handPose !== 'hang') A.z += (-0.1 - A.z) * hk;
     }
 
-    // 拿著點心時右手舉在胸前，咬一口時送到嘴邊
+    // 拿著點心時左手舉在胸前，咬一口時送到嘴邊
     this.holdK += ((this.food ? 1 : 0) - this.holdK) * Math.min(1, dt * 8);
     if (this.holdK > 0.001) {
       const R = this.armR.rotation;
@@ -1171,7 +1171,7 @@ export class Character {
     // 手上的東西抵銷手臂的轉動，不管手怎麼擺都直立
     const A = this.armL.rotation;
     this.handG.rotation.set(-A.x, -A.y, -A.z);
-    // 左手垂著的東西（燈籠、魚、長棍）跟著手的加速度盪：起步往後翻、停下往前盪、轉身畫一道弧，氣球反過來拖在後面。
+    // 右手垂著的東西（燈籠、魚、長棍）跟著手的加速度盪：起步往後翻、停下往前盪、轉身畫一道弧，氣球反過來拖在後面。
     // 用上一幀畫出來的手的位置量速度，一幀之內速度跳多少就當成一下推力（起步、停下是瞬間的，不除以 dt 才不會算出天文數字）；
     // 跳太多的是傳送，不算
     if (this.swingK && this.handMesh.visible) {
@@ -1204,7 +1204,7 @@ export class Character {
     }
   }
 
-  // 舉相機：進度前段把手上的東西縮小收起來（自拍只收右手的點心，左手的照拿），後段才把手抬起來。
+  // 舉相機：進度前段把手上的東西縮小收起來（自拍只收左手的點心，右手的照拿），後段才把手抬起來。
   // 放下時同一段倒著走：先放下手，東西最後才長回來。東西只是藏起來，咬到第幾口都還在
   aimPose(dt) {
     this.aimP = clamp01(this.aimP + (this.aim ? dt : -dt) / AIM_TIME);
@@ -1298,7 +1298,7 @@ export class Character {
         this.hat.position.y += Math.max(0, Math.sin(Math.min(1, t / 0.35) * Math.PI)) * 0.1 * kb;
         break;
       case 'pet': {
-        // 右手來回順毛
+        // 左手來回順毛
         const s = Math.sin(t * 6) * 0.18;
         if (a.high) arms(L.x, L.z, -1.9 + s, 0.12);
         else {

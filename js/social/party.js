@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { PLACES } from '../scene/places.js';
 import { bend } from '../core/lens.js';
+import { is } from '../controls/keymap.js';
 
 const MAX = 4;               // 一隊最多幾個人
 const NEAR = 6;              // 多遠以內的人收得到邀請
@@ -207,20 +208,19 @@ export class Party {
     this.bindChat();
     player.onTap = (cx, cy) => this.tapMark(cx, cy);
     window.addEventListener('pointermove', (e) => { this.mouse = { x: e.clientX, y: e.clientY }; }, { passive: true });
-    // 電腦：T 或 Enter 打字、G 在滑鼠指的地方做標記、X 吹哨。用 capture 搶在動作鍵前面看一眼身邊有沒有東西可按
+    // 電腦：T（說話）或 Enter 打字、G 或中鍵（標記）在滑鼠指的地方做標記、X（吹哨）吹哨，鍵照 keymap.js。用 capture 搶在動作鍵前面看一眼身邊有沒有東西可按
     window.addEventListener('keydown', (e) => {
       if (e.repeat || e.target.closest?.('input, textarea, #dress') || this.busy()) return;
-      const k = e.key.toLowerCase();
       // Enter 本來是動作鍵（看畫、照鏡子⋯），身邊有東西可以按時照舊，沒有的時候才開打字框
-      if ((k === 't' || (k === 'enter' && !this.player.actionTarget())) && this.together) {
+      if ((is(e, 'talk') || (e.key === 'Enter' && !this.player.actionTarget())) && this.together) {
         e.preventDefault();
         this.openChat();
-      } else if (k === 'g' && this.together) {
+      } else if (is(e, 'mark') && this.together) {
         // 越肩鎖住滑鼠時標在準心上
         const at = this.player.locked ? this.player.aimPoint() : this.mouse;
         if (at) this.markAt(at.x, at.y);
         else this.arm();
-      } else if (k === 'x' && this.together) this.call();
+      } else if (is(e, 'whistle') && this.together) this.call();
     }, true);
   }
 

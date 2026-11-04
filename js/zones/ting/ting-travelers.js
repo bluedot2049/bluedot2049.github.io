@@ -4,7 +4,7 @@
 // 誰在哪一班下車、等哪一班、坐哪個位子、長什麼樣子，全由時刻表（ting-lines.js）和班次編號雜湊出來，每位玩家看到的一樣，不用傳資料。
 // 先下後上：要上車的人等下車的人走出來才一個一個走過去。等車的位子每邊分兩組，單號班和雙號班下來的人各用一組，不會搶同一個位子；
 // 少數人錯過一班，多等一輪。每邊另有一位等很久的人坐在長椅中間（有的打瞌睡），大約十分鐘換一個，月台很少空著。
-// 近處用完整的角色（手機 7 個、電腦 9 個），遠處兩個簡單的形狀。一半的人右手提一只小皮箱，停下來就放在腳邊；從靜海來的偶爾穿太空衣，從蜃樓來的多半披沙色的斗篷。
+// 近處用完整的角色（手機 7 個、電腦 9 個），遠處兩個簡單的形狀。一半的人左手提一只小皮箱，停下來就放在腳邊；從靜海來的偶爾穿太空衣，從蜃樓來的多半披沙色的斗篷。
 // main.js 把它當成這一區走來走去的人（walkers），每幀呼叫 update(dt, player)。角色池、遠處的人形、讓路、轉頭在 npc/crowdkit.js
 import * as THREE from 'three';
 import { presetLook, sanitizeLook, RACES, SLIDERS, CLOTH, SKINS } from '../../avatar/looks.js';
@@ -389,7 +389,7 @@ export class Travelers {
     ch.lift = p.spot.lift || 0;
     ch.sitting = q.sit;
     ch.update(dt, q.walking ? Math.min(1.5, moved / Math.max(dt, 1e-3)) : 0);
-    // 小皮箱：走路時提在右手（手不太甩，箱子保持直的），停下來放在腳邊；坐著放在膝蓋前面
+    // 小皮箱：走路時提在左手（手不太甩，箱子保持直的），停下來放在腳邊；坐著放在膝蓋前面
     const vm = e.valise;
     vm.visible = !!p.valise && q.alpha > 0.4;
     if (vm.visible) {

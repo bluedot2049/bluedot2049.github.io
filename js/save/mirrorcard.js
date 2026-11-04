@@ -70,8 +70,8 @@ export const capacity = { iris: codeCapacity(IRIS.length, ECC_IRIS), band: codeC
 const enc = new TextEncoder(), dec = new TextDecoder();
 const FACES = 4;   // 身上那套、衣櫃三套
 
-// 眼紋：身上這套和拿到的東西（不含各攤日子，日子可能很長）
-const irisPayload = (save) => enc.encode(encodeSave({ ...save, visits: {} }, { closet: false, face: false }));
+// 眼紋：身上這套和拿到的東西（不含各攤日子，日子可能很長；也不含手把按鍵這種只放鏡框的）
+const irisPayload = (save) => enc.encode(encodeSave({ ...save, visits: {} }, { closet: false, face: false, iris: true }));
 
 // 存檔文字裡有很多重複的日子和代號，壓過再印
 const pipe = async (bytes, stream) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());

@@ -12,7 +12,8 @@
 export const SAVE_V = 1;
 // 每個欄位：init 沒有時的值；read 把存檔裡的東西整理成合法的值（壞掉的當成沒有）；
 // print 算不算進封蠟的指紋（pack.js：改了這些才算「有東西沒存」，各攤的日子天天變，不算）；
-// code 怎麼寫進存檔碼：tag 是碼裡的短名（一個字母，不能跟別的重複），enc 回傳空字串就不寫，dec 讀不懂回傳 init 的值。
+// code 怎麼寫進存檔碼：tag 是碼裡的短名（一個字母，不能跟別的重複），enc 回傳空字串就不寫，dec 讀不懂回傳 init 的值；
+// iris: false 不印進鏡中照片的眼紋（眼紋只剩二十幾個位元組，只放最要緊的，鏡框照樣有）。
 // 前四個是存檔碼的固定欄位（照位置排，只能往後加），有 code 的接在後面、照名字找，舊的碼沒有那一段就是沒有
 export const FIELDS = [
   { key: 'look', init: () => null, read: (v) => (v && typeof v === 'object' ? v : null), print: true },
@@ -21,7 +22,19 @@ export const FIELDS = [
   { key: 'visits', init: () => ({}), read: (v) => (v && typeof v === 'object' ? v : {}) },
   // 帶在身上的相機（cameras.js 的 id）：換裝置也跟著走
   { key: 'camera', init: () => null, read: (v) => (typeof v === 'string' ? v : null), code: { tag: 'c', enc: (v) => v || '', dec: (s) => (/^[a-z0-9]{1,16}$/i.test(s) ? s : null) } },
+  // 手把換過的按鍵（gamepad.js）：16 顆的對調表，沒換過是 null。使用者要它跟著存檔照片走，所以不放 prefs；改了不算「有東西沒存」
+  { key: 'padKeys', init: () => null, read: padKeys, code: { tag: 'p', iris: false, enc: (v) => (v ? v.map((n) => n.toString(16)).join('') : ''), dec: (s) => (/^[0-9a-f]{16}$/.test(s) ? padKeys([...s].map((c) => parseInt(c, 16))) : null) } },
+  // 電腦換過的按鍵（controls/keymap.js）：每個換過的功能 6 個十六進位字，沒換過是 null。跟手把的一樣跟著存檔照片走、不進眼紋
+  { key: 'deskKeys', init: () => null, read: deskKeys, code: { tag: 'k', iris: false, enc: (v) => v || '', dec: (s) => deskKeys(s) } },
 ];
+// 0–15 每個剛好出現一次才算；跟沒換一樣的也當成沒換
+function padKeys(v) {
+  if (!Array.isArray(v) || v.length !== 16 || new Set(v).size !== 16 || !v.every((n) => Number.isInteger(n) && n >= 0 && n < 16)) return null;
+  return v.some((n, i) => n !== i) ? v : null;
+}
+function deskKeys(v) {
+  return typeof v === 'string' && v.length && v.length <= 600 && /^([0-9a-f]{6})+$/.test(v) ? v : null;
+}
 // 版本 n 轉成 n+1：{ 1: (s) => ({ ...s, v: 2, 新欄位: 從舊欄位算 }) }
 const MIGRATIONS = {};
 

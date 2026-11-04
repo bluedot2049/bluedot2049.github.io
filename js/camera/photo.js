@@ -30,8 +30,8 @@ import { dof, dofK } from '../core/dof.js';
 import { addPhoto, canShare, discard, saveChosen, saveTip, shareChosen } from './album.js';
 import { pref, setPref, dropPref } from '../save/prefs.js';
 import { onFreshTouch } from '../controls/touch.js';
-import { padName, faceName } from '../controls/padglyphs.js';
-import { rumble } from '../controls/gamepad.js';
+import { rumble, padKey, padPair, padBtn } from '../controls/gamepad.js';
+import { is, key } from '../controls/keymap.js';
 
 const ASPECTS = [
   { label: '螢幕', r: 0 },
@@ -67,7 +67,11 @@ const _fwd = new THREE.Vector3(), _want = new THREE.Vector3();   // 每一幀算
 const GRIPS = ['蹲低', '眼高', '舉高', '自拍'];
 const HOLD_MS = 280, MAX_EXPOSE = 10;
 const GEAR_KEY = 'photoGear';
-const WALK_KEYS = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']);
+// 按著的鍵記功能（keymap.js 的 id）：走路的四個跟 player.js 共用，舉起、放下時接過去
+const WALK_KEYS = new Set(['fwd', 'back', 'left', 'right']);
+const HELD = ['fwd', 'back', 'left', 'right', 'up', 'down', 'fast'];
+// 提示裡寫走路的四個鍵（換過鍵照換過的）
+const wasd = () => ['fwd', 'left', 'back', 'right'].map((id) => key(id)).join('');
 // 一直跟著對（focus 'follow'）：隔幾秒量一次對焦點底下多遠、差多少（屈光度，1/公尺）才轉過去、轉了多少才嗶一聲報距離
 const AF_EVERY = 0.12, AF_SLACK = 0.03, AF_BEEP = 0.3;
 const canFocus = (g) => g?.focus === 'lock' || g?.focus === 'follow';
@@ -185,10 +189,7 @@ export class PhotoMode {
     this.bindUI();
     this.bindInput();
     // 越肩鎖住滑鼠時 player.js 把右鍵、左鍵、滑鼠移動轉過來；玩家按 Esc 放開滑鼠就放下相機
-    player.onAim = (down) => this.aimButton(down);
-    player.onShutter = (down) => this.quickShutter(down);
     player.onPausedLook = (dx, dy) => this.quickLook(dx, dy);
-    player.onMiddle = (down) => down && this.toggleSelfie();
     document.addEventListener('pointerlockchange', () => {
       if (this.quick && this.active && !player.locked && player.userUnlock) this.exit();
     });
@@ -313,8 +314,8 @@ export class PhotoMode {
     if (quick) this.quickHint();
     else if (studio) this.setStudio(studio);
     else if (postcard) this.ui.hint('拍一張做成明信片，拍好就能寄出去', 6000);
-    else if (gear) this.ui.hint(this.coarse ? '搖桿走路　拖曳轉身　點一下對焦　按住快門慢慢曝光' : 'WASD 走路　拖曳轉身　點一下對焦　空白鍵拍照，按住不放慢慢曝光' + (this.gear.flash ? '　Q 閃光' : '') + '　F 直橫', 6000);
-    else this.ui.hint(this.coarse ? '拖曳轉頭　雙指變焦　點兩下靠近　點一下收起按鈕' : 'WASD 移動　E / Q 升降　拖曳轉頭　滾輪變焦　點兩下靠近　空白鍵拍照　H 收起按鈕', 6000);
+    else if (gear) this.ui.hint(this.padHint() ?? (this.coarse ? '搖桿走路　拖曳轉身　點一下對焦　按住快門慢慢曝光' : `${wasd()} 走路　拖曳轉身　點一下對焦　${key('shutter', 1)} 拍照，按住慢慢曝光` + (this.gear.flash ? `　${key('flash')} 閃光` : '') + `　${key('turn')} 直橫`), 6000);
+    else this.ui.hint(this.padHint() ?? (this.coarse ? '拖曳轉頭　雙指變焦　點兩下靠近　點一下收起按鈕' : `${wasd()} 移動　${key('up')} ${key('down')} 升降　拖曳轉頭　滾輪變焦　點兩下靠近　${key('shutter', 1)} 拍照　${key('bare')} 收起按鈕`), 6000);
   }
 
   exit() {
@@ -455,7 +456,7 @@ export class PhotoMode {
     const b = this.$('#ph-look');
     b.classList.toggle('on', this.lookOn);
     b.setAttribute('aria-pressed', this.lookOn);
-    b.title = (this.lookOn ? '一直看著鏡頭' : '隨意看，偶爾瞄一眼') + (this.coarse ? '' : '（L）');
+    b.title = (this.lookOn ? '一直看著鏡頭' : '隨意看，偶爾瞄一眼') + (this.coarse ? '' : `（${key('look')}）`);
   }
 
   // 右鍵：按下舉起來、放開放下；按一下就放（短於 0.25 秒）是一直舉著，再按一次才放下
@@ -502,17 +503,26 @@ export class PhotoMode {
   // 第一次舉相機、第一次放空拍機時說一下怎麼操作（介面都收起來了，用右上的小提示）
   quickHint() {
     const pad = document.body.classList.contains('pad'), lb = document.body.dataset.padLabels || null;
-    const key = (pad ? 'pad-' : '') + (this.gear ? 'held' : 'drone');
+    const told = (pad ? 'pad-' : '') + (this.gear ? 'held' : 'drone');
     this.told ??= {};
-    if (this.told[key]) return;
-    this.told[key] = true;
+    if (this.told[told]) return;
+    this.told[told] = true;
     const lock = this.gear?.focus === 'lock';
-    if (pad && this.gear && lock) this.ui.toast(`舉起就對準心對焦鎖定，${padName(7, lb)} 拍照`, `按下右搖桿或 ${padName(5, lb)} 重新對焦　十字鍵上下換高低　${faceName(3, lb)} 自拍`);
-    else if (pad && this.gear) this.ui.toast(`準心對著的會自己對焦，${padName(7, lb)} 拍照`, `十字鍵上下換高低　${faceName(3, lb)} 自拍　放開 ${padName(6, lb)} 放下`);
-    else if (pad) this.ui.toast('空拍機：左搖桿飛、十字鍵上下升降', `${padName(7, lb)} 拍照　十字鍵左右變焦　放開 ${padName(6, lb)} 收回`);
-    else if (this.gear && lock) this.ui.toast('舉起就對準心對焦鎖定，左鍵拍照', 'R 重新對焦　滾輪換高低　中鍵自拍　放開右鍵放下');
-    else if (this.gear) this.ui.toast('準心對著的會自己對焦，左鍵拍照', '滾輪換高低　中鍵自拍　放開右鍵放下');
-    else this.ui.toast('空拍機：WASD 飛、E / Q 升降', '左鍵拍照　滾輪變焦　F 直橫　放開右鍵收回　短按右鍵一直飛');
+    // 鍵照換過的寫：手把 gamepad.js 的 padKey，鍵盤滑鼠 keymap.js 的 key
+    if (pad && this.gear && lock) this.ui.toast(`舉起就對焦鎖定　${padKey(7, lb)} 拍照`, `${padKey(11, lb)}或 ${padKey(5, lb)} 重新對焦　${padPair(12, 13, lb)}高低　${padKey(3, lb)} 自拍`);
+    else if (pad && this.gear) this.ui.toast(`準心對著的自己對焦　${padKey(7, lb)} 拍照`, `${padPair(12, 13, lb)}高低　${padKey(3, lb)} 自拍　放開 ${padKey(6, lb)} 放下`);
+    else if (pad) this.ui.toast(`空拍機：左搖桿飛　${padPair(12, 13, lb)}升降`, `${padKey(7, lb)} 拍照　${padPair(14, 15, lb)}變焦　放開 ${padKey(6, lb)} 收回`);
+    else if (this.gear && lock) this.ui.toast(`舉起就對焦鎖定　${key('shutter')} 拍照`, `${key('refocus')} 重新對焦　滾輪 高低　${key('selfie')} 自拍　放開 ${key('raise')} 放下`);
+    else if (this.gear) this.ui.toast(`準心對著的自己對焦　${key('shutter')} 拍照`, `滾輪 高低　${key('selfie')} 自拍　放開 ${key('raise')} 放下`);
+    else this.ui.toast(`空拍機：${wasd()} 飛　${key('up')} ${key('down')} 升降`, `${key('shutter')} 拍照　滾輪 變焦　${key('turn')} 直橫　放開 ${key('raise')} 收回，短按一直飛`);
+  }
+
+  // 完整攝影模式剛打開時上緣那行，手把在用時寫手把的鍵；沒在用回傳 null
+  padHint() {
+    if (!document.body.classList.contains('pad')) return null;
+    const lb = document.body.dataset.padLabels || null;
+    if (this.gear) return `左搖桿走　右搖桿轉身　${padKey(7, lb)} 拍照，按住慢慢曝光` + (this.gear.flash ? `　${padKey(2, lb)} 閃光` : '') + `　${padKey(15, lb)} 直橫　${padBtn(-2)} 離開`;
+    return `左搖桿飛　${padPair(12, 13, lb)}升降　${padPair(14, 15, lb)}變焦　${padKey(7, lb)} 拍照　${padBtn(-2)} 離開`;
   }
 
   // 帶著相機時，拿相機拍和畫廊的眼睛（相機照樣掛在身上，拍得到自己帶著它）在攝影模式裡直接換，不用先退出
@@ -540,7 +550,9 @@ export class PhotoMode {
       { k: 'turn', label: '方向', gear: true, opts: ['橫拿', '直拿'], get: () => this.upright, set: (i) => { this.upright = i; } },
       { k: 'pose', label: '相機', carry: true, opts: ['掛著', '舉起來'], get: () => this.pose, set: (i) => { this.pose = i; }, note: '舉起來是朝自己面對的方向拍' },
     ];
-    chips.innerHTML = this.chips.map((c) => `<button class="ph-chip" data-k="${c.k}"><span>${c.label}</span><b></b></button>`).join('');
+    // 直橫（帶相機是「方向」、空拍機是「比例」）後面寫鍵：鍵盤照按鍵表，手把帶相機是十字鍵右、空拍機是 R
+    const turnKey = (c) => (c.k === 'turn' || c.k === 'aspect' ? `<i class="on-kb" data-kb="turn">F</i><i class="on-pad" data-pad-btn="${c.k === 'turn' ? 15 : 5}"></i>` : '');
+    chips.innerHTML = this.chips.map((c) => `<button class="ph-chip" data-k="${c.k}"><span>${c.label}</span><b></b>${turnKey(c)}</button>`).join('');
     for (const c of this.chips) {
       c.el = chips.querySelector(`[data-k="${c.k}"]`);
       c.b = c.el.querySelector('b');
@@ -610,8 +622,8 @@ export class PhotoMode {
     knob.hidden = !g?.flash;
     knob.classList.toggle('on', on);
     knob.setAttribute('aria-pressed', on);
-    knob.title = (on ? '閃光開著' : '閃光關著') + (g?.flash?.bulb ? '，閃一次要換一顆燈泡' : '') + (this.coarse ? '' : '（Q）');
-    this.$('#ph-grip b').textContent = GRIPS[this.grip];
+    knob.title = (on ? '閃光開著' : '閃光關著') + (g?.flash?.bulb ? '，閃一次要換一顆燈泡' : '') + (this.coarse ? '' : `（${key('flash')}）`);
+    this.$('#ph-grip b').textContent = g ? GRIPS[this.grip] : '空拍機';
     const die = this.dieFace(), dated = this.dated(), year = dated && this.dateOn === 0;
     die.hidden = !g?.date;
     die.classList.toggle('on', dated);
@@ -686,10 +698,10 @@ export class PhotoMode {
   // 高度尺：拖軌道直接到想要的高度，點刻度跳到常用的高度，按住兩端慢慢升降（電腦也可以按 E / Q）
   bindAlt() {
     const alt = this.$('#ph-alt');
-    alt.innerHTML = `<button class="ph-alt-step" data-v="1" data-key="E" aria-label="升高" title="升高（E）">▲</button>`
+    alt.innerHTML = `<button class="ph-alt-step" data-v="1" data-key="E" data-kb-attr="up" data-pad-attr="12" aria-label="升高" title="升高（E）">▲</button>`
       + `<div class="ph-alt-track">${ALT_MARKS.map(([label, h]) => `<button class="ph-alt-mark" data-h="${h}" style="--s:${altAt(h)}">${label}</button>`).join('')}`
       + `<i class="ph-alt-knob"><b></b></i></div>`
-      + `<button class="ph-alt-step" data-v="-1" data-key="Q" aria-label="降低" title="降低（Q）">▼</button>`;
+      + `<button class="ph-alt-step" data-v="-1" data-key="Q" data-kb-attr="down" data-pad-attr="13" aria-label="降低" title="降低（Q）">▼</button>`;
     this.altKnob = alt.querySelector('.ph-alt-knob');
     for (const b of alt.querySelectorAll('.ph-alt-step')) {
       const v = +b.dataset.v;
@@ -817,8 +829,16 @@ export class PhotoMode {
       else this.zoomBy(this.fov * (1 + e.deltaY * 0.001));
     }, { passive: false });
 
+    // 鍵盤和滑鼠的鍵都照按鍵表（keymap.js）：右鍵舉相機、左鍵和空白鍵快門、中鍵自拍是預設，滑鼠的鍵當成虛擬的鍵送來
+    const typing = (e) => !!e.target.closest?.('input:not([type=checkbox]):not([type=range]), textarea');
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'p' || e.key === 'P') {
+      if (typing(e)) return;
+      if (is(e, 'raise')) {
+        e.preventDefault();
+        if (!e.repeat) this.aimButton(true);
+        return;
+      }
+      if (is(e, 'photo')) {
         if (!this.result) this.toggle();
         return;
       }
@@ -828,22 +848,25 @@ export class PhotoMode {
         return;
       }
       if (e.key === 'Escape') return this.exit();
-      if (e.key === ' ') {
+      // 舉著相機（鎖著滑鼠）照舉相機的快門走（對好才放的相機會等）；完整攝影模式按住不放慢慢曝光
+      if (is(e, 'shutter')) {
         e.preventDefault();
-        if (!e.repeat) this.holdable() ? this.shutterDown() : this.press();
+        if (!e.repeat) this.quick ? this.quickShutter(true) : this.holdable() ? this.shutterDown() : this.press();
         return;
       }
-      if (e.key === 'h' || e.key === 'H') return this.showControls(document.body.classList.contains('photo-bare'));
-      if ((e.key === 'q' || e.key === 'Q') && this.gear?.flash) return e.repeat || this.toggleFlash();
-      if (e.code === 'Backquote' && this.gear?.date) return e.repeat || this.toggleDate();
-      if (e.key === 'l' || e.key === 'L') return e.repeat || this.toggleLook();
-      if ((e.key === 'f' || e.key === 'F') && !this.studio) return e.repeat || this.turn();
-      if ((e.key === 'r' || e.key === 'R') && this.gear) return e.repeat || this.refocus();
-      this.keys.add(e.key.toLowerCase());
+      if (is(e, 'bare')) return this.showControls(document.body.classList.contains('photo-bare'));
+      if (is(e, 'flash') && this.gear?.flash) return e.repeat || this.toggleFlash();
+      if (is(e, 'date') && this.gear?.date) return e.repeat || this.toggleDate();
+      if (is(e, 'selfie') && this.gear) return e.repeat || this.toggleSelfie();
+      if (is(e, 'look')) return e.repeat || this.toggleLook();
+      if (is(e, 'turn') && !this.studio) return e.repeat || this.turn();
+      if (is(e, 'refocus') && this.gear) return e.repeat || this.refocus();
+      for (const id of HELD) if (is(e, id)) this.keys.add(id);
     });
     window.addEventListener('keyup', (e) => {
-      if (e.key === ' ' && this.holdable()) this.shutterUp();
-      this.keys.delete(e.key.toLowerCase());
+      if (is(e, 'raise')) this.aimButton(false);
+      if (is(e, 'shutter')) this.quick ? this.quickShutter(false) : this.holdable() && this.shutterUp();
+      for (const id of HELD) if (is(e, id)) this.keys.delete(id);
     });
     window.addEventListener('blur', () => { this.keys.clear(); this.lift = 0; this.shutterUp(true); });
   }
@@ -1054,12 +1077,12 @@ export class PhotoMode {
     }
     if (this.gear) return this.updateHeld(dt);
     const k = this.keys;
-    let f = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
-    let s = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
-    const u = (k.has('e') ? 1 : 0) - (k.has('q') ? 1 : 0) + this.lift + (this.padU || 0);
+    let f = (k.has('fwd') ? 1 : 0) - (k.has('back') ? 1 : 0);
+    let s = (k.has('right') ? 1 : 0) - (k.has('left') ? 1 : 0);
+    const u = (k.has('up') ? 1 : 0) - (k.has('down') ? 1 : 0) + this.lift + (this.padU || 0);
     const jm = Math.hypot(this.joy.x, this.joy.y);
     if (jm > 0.12) { f = -this.joy.y; s = this.joy.x; }
-    const fast = k.has('shift') || this.padFast ? 3 : 1;
+    const fast = k.has('fast') || this.padFast ? 3 : 1;
     // 平平地往前後左右走，不跟著抬頭低頭往天上飛；升降另外按，改的是離地高度，越高升得越快
     const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
     if (u) this.setHeight(this.height + u * (0.6 + this.height * 0.6) * fast * dt);
@@ -1143,8 +1166,8 @@ export class PhotoMode {
       this.aimPitch = this.pitch = Math.asin(THREE.MathUtils.clamp(dy / len, -1, 1));
       this.aimDist = len;
     }
-    let f = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
-    let s = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
+    let f = (k.has('fwd') ? 1 : 0) - (k.has('back') ? 1 : 0);
+    let s = (k.has('right') ? 1 : 0) - (k.has('left') ? 1 : 0);
     if (Math.hypot(this.joy.x, this.joy.y) > 0.12) { f = -this.joy.y; s = this.joy.x; }
     const m = Math.min(1, Math.hypot(f, s)), a = Math.atan2(s, f);
     // 自拍時 W 是角色往前走（鏡頭在前面跟著退），像拿自拍棒邊走邊拍

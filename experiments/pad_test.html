@@ -44,7 +44,7 @@
   <pre id="info">還沒讀到手把</pre>
 </main>
 <script type="module">
-  import { stick, curve, PAD_TUNE } from '../js/controls/gamepad.js';
+  import { stick, curve, lookAxes, PAD_TUNE } from '../js/controls/gamepad.js';
   import { faceSVG, faceName } from '../js/controls/padglyphs.js';
 
   const $ = (id) => document.getElementById(id);
@@ -113,7 +113,7 @@
       cells.forEach((d, i) => d.classList.toggle('on', !!on[i] || (g.buttons[i]?.value ?? 0) > 0.5));
       $('face').innerHTML = labels ? [1, 0, 3, 2].map((p) => faceSVG(p, labels)).join(' ') : '';
       const s = [...gaps].sort((x, y) => x - y), med = s.length ? s[Math.floor(s.length / 2)] : 0;
-      const deg = (v) => Math.round((curve(v) * PAD_TUNE.yaw * 180) / Math.PI);
+      const deg = (v) => Math.round((curve(v) * PAD_TUNE.yaw * 180) / Math.PI), look = lookAxes(R[0], R[1]);
       const diag = (bins) => Math.max(...[9, 27, 45, 63].map((k) => bins[k])).toFixed(3);
       $('info').textContent = [
         `名字：${g.id}`,
@@ -121,7 +121,7 @@
         `字：${labels ? `${labels}（確認是 ${faceName(labels === 'nintendo' ? 1 : 0, labels)}）` : '還不知道'}`,
         `左搖桿 原始 ${(a[0] || 0).toFixed(3)}, ${(a[1] || 0).toFixed(3)}　扣過死區 ${L[0].toFixed(3)}, ${L[1].toFixed(3)}　外圈斜推最多 ${diag(rim.L)}`,
         `右搖桿 原始 ${(a[2] || 0).toFixed(3)}, ${(a[3] || 0).toFixed(3)}　扣過死區 ${R[0].toFixed(3)}, ${R[1].toFixed(3)}　外圈斜推最多 ${diag(rim.R)}`,
-        `右搖桿換成轉速（越肩、速度 100%、還沒加速）：左右 ${deg(R[0])}°/秒　上下 ${Math.round(deg(R[1]) * PAD_TUNE.pitch)}°/秒`,
+        `右搖桿換成轉速（越肩、速度 100%、還沒加速、扣過軸向死區）：左右 ${deg(look[0])}°/秒　上下 ${Math.round(deg(look[1]) * PAD_TUNE.pitch)}°/秒`,
         `更新間隔：中位數 ${med.toFixed(1)} 毫秒`,
         rumbleNote,
       ].filter(Boolean).join('\n');

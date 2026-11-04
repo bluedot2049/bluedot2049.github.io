@@ -267,7 +267,7 @@ export function armGeo(L, right) {
     k.add(new THREE.CapsuleGeometry(0.06 * Math.sqrt(W), 0.24, 2, 6), sleeve, 0, -0.17, 0);
     k.cyl(0.068, 0.065, 0.1, L.armor === 'robe' ? GOLD : LEATHER, 0, -0.3, 0);
     k.ball(fist, L.c, 0, -0.38, 0);
-    // 法杖握在右手：杖腳快碰到地，頂端一顆發亮的水晶
+    // 法杖握在左手：杖腳快碰到地，頂端一顆發亮的水晶
     if (right && L.weapon === 'staff') {
       rod(k, [0, -0.85, 0.05], [0, 0.62, 0.05], 0.022, WOOD, { r2: 0.016 });
       k.torus(0.07, 0.014, Math.PI * 2, GOLD, 0, 0.64, 0.05);
@@ -297,7 +297,7 @@ export const luteGeo = () => once('lute', (k) => {
   k.box(0.05, 0.36, 0.03, '#5a3a20', 0, 0.32, 0.01);
   k.box(0.07, 0.1, 0.03, '#5a3a20', 0, 0.52, -0.02, { rx: -0.5 });
 });
-// 書和速寫本：拿在左手
+// 書和速寫本：拿在右手
 export const bookGeo = () => once('book', (k) => {
   k.box(0.17, 0.22, 0.05, '#6a2a2a', 0, 0, 0, { color2: '#8a3a30' });
   k.box(0.15, 0.2, 0.052, '#f0e6d0', 0.012, 0, 0);
@@ -307,7 +307,7 @@ export const padGeo = () => once('pad', (k) => {
   k.box(0.24, 0.17, 0.022, '#f4ecd8', 0, 0, 0.002);
   k.box(0.012, 0.012, 0.14, '#c8a040', 0.05, -0.02, 0.06, { rx: 0.3 });
 });
-// 釣竿：從右手往前上方伸出去
+// 釣竿：從左手往前上方伸出去
 export const ROD_TIP = [0, 0.62, 1.7];
 export const rodGeo = () => once('rod', (k) => {
   rod(k, [0, -0.42, -0.08], [0, ROD_TIP[1], ROD_TIP[2]], 0.016, '#6a4a2a', { r2: 0.006 });
