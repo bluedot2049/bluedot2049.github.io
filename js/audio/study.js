@@ -4,7 +4,9 @@
 // 樂器那一層（Rhodes、音盒、低音、鼓、回聲、殘響）每四小節用 OfflineAudioContext 算一段，邊播邊算下一段，
 // 音盒每段重新隨機走，所以不會重複；殘響尾巴跟下一段疊在一起播，接起來就是連續的。
 // 黑膠底噪、書房聲（羽毛筆、翻書）、走廊擺鐘的滴答聲是現場排的，擺鐘照角色離它多遠、在左在右。
-// 對外的樣子跟 <audio> 一樣（paused、play()、pause()），ambience.js 照背景音樂的方式管音量、靜音和切分頁
+// 對外的樣子跟 <audio> 一樣（paused、play()、pause()），ambience.js 照背景音樂的方式管音量、靜音和切分頁。
+// 小工具（音高、亂數、雜訊、節點）在 synthkit.js；這首是先在 OfflineAudioContext 算好再播，所以不繼承 Song
+import { R, mtof, pick, range, mix, whiteNoise, gainNode as gain, filterNode as filter } from './synthkit.js';
 
 export const BPM = 64, BEAT = 60 / BPM, BAR = BEAT * 4;
 // 擺鐘和音樂共用的拍子：從頁面載入算起第幾拍。擺鐘照這個擺，音樂開始時對齊下一拍
@@ -17,7 +19,6 @@ const AHEAD = 6;                  // 下一段離開始還有幾秒就先算
 const LOOK = 1;                   // 滴答聲和書房聲往前排幾秒
 const SWING = 0.3;
 const SUB = [0, 0.25 + SWING / 12, 0.5 + SWING / 6, 0.75 + SWING / 12];   // 一拍裡四個十六分音符的位置，反拍往後挪
-const mix = (v) => v * v * 1.3;
 const MIX = { keys: mix(0.45), bell: mix(0.6), bass: mix(0.28), drums: mix(0.55), vinyl: mix(0.42), foley: mix(0.79) };
 const MUSIC_GAIN = 2.1;           // 對到原本 gallery.m4a 的響度
 const VINYL_GAIN = 0.5, FOLEY_GAIN = 0.55;
@@ -33,25 +34,9 @@ const CHORDS = [
 ];
 const WALK = [-2, -1, -1, 0, 1, 1, 2];
 
-const R = Math.random;
-const mtof = (m) => 440 * 2 ** ((m - 69) / 12);
-const pick = (a) => a[Math.floor(R() * a.length)];
-const range = (a, b) => a + R() * (b - a);
 const at = (s) => (Math.floor(s / 4) + SUB[s % 4]) * BEAT;   // 一小節裡第 s 個十六分音符在第幾秒
 const chordOf = (bar) => CHORDS[Math.floor((bar % 8) / 2)];
 
-function gain(c, v) {
-  const g = c.createGain();
-  g.gain.value = v;
-  return g;
-}
-function filter(c, type, freq, Q = 0.7) {
-  const f = c.createBiquadFilter();
-  f.type = type;
-  f.frequency.value = freq;
-  f.Q.value = Q;
-  return f;
-}
 // 一個振盪器接一條音量包絡：attack 秒升到 peak，再以時間常數 tau 往零掉
 function ping(c, out, type, freq, t, peak, attack, tau, stop) {
   const o = c.createOscillator(), g = c.createGain();
@@ -78,12 +63,6 @@ function noiseHit(c, out, buf, t, peak, attack, tau, ...nodes) {
   s.start(t, R() * Math.max(0, buf.duration - len - 0.01));
   s.stop(t + len);
 }
-function whiteNoise(c, sec, rate) {
-  const b = c.createBuffer(1, Math.ceil(sec * rate), rate), d = b.getChannelData(0);
-  for (let i = 0; i < d.length; i++) d[i] = R() * 2 - 1;
-  return b;
-}
-
 // ---------- 樂器（在 OfflineAudioContext 裡算） ----------
 
 // 4 秒的殘響：雜訊往下掉，越後面越暗；左右聲道各自生成。只產生一次，每一段共用（取樣率都一樣）

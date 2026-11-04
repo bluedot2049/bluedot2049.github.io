@@ -7,12 +7,14 @@
 // 每一組人（一個人，或兩個人一起走）每五分鐘出門一趟：從門口或碼頭出來，逛一兩攤，走進另一扇門或回到船上。
 // 近處的人用完整的角色（手機最多 10 個、電腦 18 個），遠處的人是兩個簡單的形狀（身體、頭），提燈籠的那盞燈另外畫成光點。
 // 路人不擋玩家：玩家靠近就往旁邊讓一點。偶爾轉頭看玩家一眼，大部分時間只是路過，兩個人一起走的會轉頭看彼此。
-// 網址加 ?crowd=0.8 可以指定人潮（0 到 1），方便測試
+// 網址加 ?crowd=0.8 可以指定人潮（0 到 1），方便測試。
+// 角色池、遠處的人形、讓路、轉頭這些底座在 crowdkit.js，穿什麼在 cast.js；這裡只管海市的行程（路網、攤位、時間表）
 import * as THREE from 'three';
-import { Character } from '../avatar/character.js';
-import { sanitizeLook, presetLook, RACES, SLIDERS, CLOTH, SKINS } from '../avatar/looks.js';
+import { CLOTH, SKINS } from '../avatar/looks.js';
 import { glowPoints } from '../core/scenery.js';
 import { beastSight } from './beast.js';
+import { personLook } from './cast.js';
+import { hash, wrap, CharacterPool, FarFigures, dodgeFrom, easeOffset, turnHead, ghostStep } from './crowdkit.js';
 
 const _b = new THREE.Vector3();
 const SLOTS = 110, SLOTS_LOW = 60;   // 最多幾組人
@@ -41,19 +43,6 @@ export function busyAt(now) {
   return BUSY[i] + (BUSY[(i + 1) % 24] - BUSY[i]) * f;
 }
 
-// 幾個整數攪成 0 到 1 之間的數。連續的小整數（第 0、1、2 組人）也要打得很散，不然大家會同時出門
-const hash = (...n) => {
-  let h = 0x811c9dc5;
-  for (const v of n) {
-    h = Math.imul(h ^ (v | 0), 0x01000193);
-    h ^= h >>> 15;
-    h = Math.imul(h, 0x2c1b3c6d);
-    h ^= h >>> 12;
-    h = Math.imul(h, 0x297a2d39);
-    h ^= h >>> 15;
-  }
-  return (h >>> 0) / 4294967296;
-};
 function rng(seed) {
   let a = Math.floor(seed * 4294967296) | 0 || 1;
   return () => {
@@ -63,107 +52,9 @@ function rng(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 // ---------- 衣櫃 ----------
-// 本地人分四種：碼頭工、攤商、鎮民、老一輩。碼頭邊多碼頭工，山上多老一輩。種族不挑
-// 外地人：背包、夏威夷衫、運動鞋，全身中性色，只有一件亮的
-const LOCAL = {
-  hat: ['none', 'none', 'none', 'none', 'none', 'straw', 'straw'],
-  top: ['shirt', 'tee', 'tank', 'sweater', 'robe', 'shirt'],
-  bottom: ['pants', 'pants', 'shorts', 'skirt', 'hakama', 'robe'],
-  outer: ['none', 'none', 'none', 'haori', 'haori', 'apron', 'vest', 'mino'],
-  shoes: ['geta', 'geta', 'slippers', 'slippers', 'rainboots', 'boots'],
-  neck: ['none', 'none', 'none', 'towel', 'scarf'],
-  back: ['none', 'none', 'none', 'none', 'pouch', 'satchel'],
-};
-// 布的顏色用 CLOTH 的色號。一個人一個主色（大件）、一個底色（麻、洗舊的布，夜裡燈籠照得到），點綴最多一處、只在小件上
-// 藍染 5 19 24 22 25、薯莨 26 27 18、麻 28 29 23、柿澀 30、苔綠 31；點綴茜紅 32、薑黃 33
-const ROLES = {
-  dock: {
-    main: [5, 5, 19, 24, 24, 25, 22], base: [28, 29, 25],
-    look: { ...LOCAL, hat: ['none', 'none', 'straw', 'straw'], top: ['tank', 'tee', 'shirt', 'tank'], bottom: ['shorts', 'pants', 'pants'],
-      outer: ['none', 'none', 'none', 'mino', 'apron', 'vest'], shoes: ['rainboots', 'rainboots', 'slippers', 'geta'], neck: ['towel', 'towel', 'none'] },
-  },
-  shop: {
-    main: [26, 27, 27, 30, 31, 24, 5], base: [28, 29, 23],
-    look: { ...LOCAL, outer: ['apron', 'apron', 'apron', 'none', 'vest', 'haori'], top: ['shirt', 'shirt', 'sweater', 'tee'] },
-  },
-  town: { main: [5, 19, 24, 24, 26, 27, 31, 30], base: [28, 29, 23, 25], look: LOCAL },
-  elder: {
-    main: [26, 26, 27, 22, 18, 5, 31], base: [29, 23, 28],
-    look: { ...LOCAL, top: ['robe', 'robe', 'shirt', 'sweater'], bottom: ['hakama', 'hakama', 'robe', 'pants'],
-      outer: ['haori', 'haori', 'none', 'vest'], shoes: ['geta', 'geta', 'slippers'], neck: ['none', 'none', 'scarf'] },
-  },
-};
-// 在哪裡出沒 → 各種人的比例
-const ROLE_MIX = {
-  harbor: ['dock', 'dock', 'dock', 'dock', 'dock', 'dock', 'town', 'town', 'town', 'shop'],
-  mid: ['town', 'town', 'town', 'town', 'town', 'shop', 'shop', 'shop', 'dock', 'elder'],
-  upper: ['elder', 'elder', 'elder', 'elder', 'town', 'town', 'town', 'town', 'shop', 'shop'],
-};
-const ACCENT = [32, 33, 30];
-const SHOE_C = [18, 26, 27, 29], BAG_C = [27, 29, 23, 18], HAND_C = [33, 32, 28, 30];
-const LOCAL_HAIR = [0, 0, 1, 1, 1, 2], ELDER_HAIR = [1, 2, 4, 4], LOCAL_HAT = [2, 1, 6];
-// 外地人：衣服大多中性色，挑一件用亮色
-const PLAIN = [21, 22, 18, 23, 29, 26, 0];
-const BRIGHT = [8, 9, 11, 12, 13, 14, 15, 20, 3, 6];
-const OUTSIDE = {
-  hat: ['none', 'none', 'straw', 'wizard'],
-  top: ['hawaii', 'tee', 'hoodie', 'shirt'],
-  bottom: ['pants', 'shorts', 'track'],
-  outer: ['none', 'none', 'raincoat', 'cloak', 'cape'],
-  shoes: ['sneakers', 'boots', 'sneakers'],
-  neck: ['none', 'scarf', 'none'],
-  back: ['backpack', 'backpack', 'backpack', 'satchel'],
-};
-const FACE = {
-  eyes: ['base', 'base', 'dot', 'big', 'line', 'sleepy'], brows: ['none', 'none', 'thick', 'sad'], nose: ['none', 'none', 'ball', 'big'],
-  mouth: ['none', 'smile', 'smile', 'flat', 'pout', 'open'], mark: ['base', 'base', 'none', 'blush', 'stache', 'beard', 'mole', 'freckle'],
-  glasses: ['none', 'none', 'none', 'none', 'none', 'none', 'round'], hair: ['short', 'short', 'bald', 'comb', 'long', 'buns', 'spiky', 'afro'],
-};
-const COLOR_KEYS = ['topC', 'topC2', 'botC', 'botC2', 'outC', 'outC2', 'oneC', 'oneC2', 'shoeC', 'neckC', 'backC', 'handC'];
-
-// zone：harbor 走到碼頭的、upper 走到燈巷以上的、其他 mid
-export function personLook(R, local, hand, zone) {
-  const pick = (a) => a[Math.floor(R() * a.length)];
-  const race = RACES[Math.floor(R() * RACES.length)], L = presetLook(0);
-  const role = local ? ROLES[pick(ROLE_MIX[zone])] : null;
-  for (const [k, v] of Object.entries(role ? role.look : OUTSIDE)) L[k] = pick(v);
-  for (const [k, v] of Object.entries(FACE)) L[k] = pick(v);
-  L.race = race.id;
-  L.skin = R() < 0.6 && race.skin != null ? race.skin : Math.floor(R() * SKINS.length);
-  L.one = local && R() < 0.08 ? 'yukata' : 'none';
-  L.hand = hand;
-  if (role) {
-    const main = pick(role.main), base = pick(role.base);
-    let accent = R() < 0.4 ? pick(ACCENT) : -1;   // 這個人身上唯一的點綴，用掉就沒了
-    const spend = (fallback) => { const c = accent >= 0 ? accent : fallback; accent = -1; return c; };
-    if (L.outer !== 'none') Object.assign(L, { outC: main, outC2: base, topC: base, topC2: main, botC: R() < 0.6 ? main : pick(role.base) });
-    else Object.assign(L, { outC: main, outC2: base, topC: main, topC2: base, botC: base });
-    L.botC2 = L.botC === main ? base : main;
-    Object.assign(L, { oneC: main, oneC2: base, shoeC: pick(SHOE_C), backC: pick(BAG_C), handC: pick(HAND_C) });
-    L.topPat = pick(['plain', 'plain', 'plain', 'stripe', 'band']);
-    L.botPat = pick(['plain', 'plain', 'stripe']);
-    if (L.topPat === 'band') L.topC2 = spend(L.topC2);
-    L.neckC = L.neck === 'scarf' ? spend(main) : spend(base);
-    L.hairC = pick(role === ROLES.elder ? ELDER_HAIR : LOCAL_HAIR);
-    L.hatC = pick(LOCAL_HAT);
-  } else {
-    for (const k of COLOR_KEYS) L[k] = pick(PLAIN);
-    // 夏威夷衫本身就是那件亮的；其他人挑上衣、外套或背包其中一件
-    const loud = L.top === 'hawaii' ? 'topC' : pick(L.outer !== 'none' ? ['topC', 'outC', 'backC'] : ['topC', 'backC', 'backC']);
-    L[loud] = pick(BRIGHT);
-    L.handC = pick(HAND_C);
-    L.hairC = Math.floor(R() * 8);
-    L.hatC = Math.floor(R() * 8);
-    L.topPat = pick(['plain', 'plain', 'stripe', 'dot']);
-    L.botPat = pick(['plain', 'plain', 'stripe']);
-  }
-  for (const [k, , v] of SLIDERS) L[k] = Math.max(0, v + Math.floor(R() * 5) - 2);
-  return sanitizeLook(L);
-}
-
+// 本地人、外地人穿什麼在 cast.js（personLook）
 // 停在哪一攤之後手上會多什麼：左手的東西（look.hand），或右手邊走邊咬的點心（Character 的 FOODS 編號）
 const SHOP_HAND = { bakery: 'baguette', lanterns: 'lantern', tea: 'teacup', fish: 'fish', candle: 'candle', herbs: 'flower', glass: 'flask' };
 const CART_HAND = { squid: 'squid', oden: 'teacup' };
@@ -456,35 +347,16 @@ export class Passersby {
     this.trips = new Array(this.slots).fill(null);
     this.obstacles = world.debug.obstacles;
     this.state = new Map();   // 每個人在畫面上的小狀態：讓路的偏移、轉頭、淡入
-    // 完整的角色：一開始先建好，外觀之後換
-    this.pool = [];
-    for (let i = 0; i < (coarse ? POOL_LOW : POOL); i++) {
-      const ch = new Character(shadowTex, presetLook(i));
-      ch.group.visible = false;
-      // 只有穿木屐的人走路有聲音，喀、喀的是海市的街聲
-      ch.onStep = (c, foot) => c.look.shoes === 'geta' && ambience?.footstep(c, foot);
-      scene.add(ch.group);
-      this.pool.push({ ch, key: null });
-    }
+    // 完整的角色：一開始先建好，外觀之後換（crowdkit.js）。只有穿木屐的人走路有聲音，喀、喀的是海市的街聲
+    this.pool = new CharacterPool(scene, shadowTex, coarse ? POOL_LOW : POOL, (e) => {
+      e.ch.onStep = (c, foot) => c.look.shoes === 'geta' && ambience?.footstep(c, foot);
+    });
     // 遠處的人：身體一個形狀、頭一個形狀，各自一次畫完
     const max = this.slots * 2;
-    const mat = new THREE.MeshLambertMaterial({ flatShading: true });
-    this.bodies = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.16, 0.25, 0.85, 6).translate(0, 0.43, 0), mat, max);
-    this.heads = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.17, 0).translate(0, 1.04, 0), mat, max);
-    for (const m of [this.bodies, this.heads]) {
-      m.count = 0;
-      m.frustumCulled = false;
-      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      scene.add(m);
-    }
+    this.far = new FarFigures(scene, max);
     // 提燈籠的人手上那盞燈
     this.glows = glowPoints(Array.from({ length: max }, () => ({ x: 0, y: -50, z: 0, color: '#ffb060', size: 0 })));
     scene.add(this.glows);
-    this.m4 = new THREE.Matrix4();
-    this.q = new THREE.Quaternion();
-    this.v = new THREE.Vector3();
-    this.s = new THREE.Vector3();
-    this.c = new THREE.Color();
     this.at = { x: 0, z: 0, heading: 0, walking: false };
     this.hidden = false;      // 照相館拍照中：路人全部藏起來
   }
@@ -517,17 +389,14 @@ export class Passersby {
 
   // 注意力（attention.js）：近處畫成角色的路人都可以看，看他的臉。遠處那一片只是光點，不算
   lookables(push) {
-    for (const e of this.pool) {
-      const key = e.key, ch = e.ch;
-      if (key && ch.group.visible) push(`w${key}`, (o) => e.key === key && ch.group.visible && !!o.copy(ch.group.position).setY(ch.group.position.y + ch.dims.faceY), 'person', 0.9);
-    }
+    this.pool.lookables(push, 'w');
   }
 
   update(dt, player) {
     this.glows.visible = !this.hidden;
     if (this.hidden) {
-      for (const e of this.pool) { e.key = null; e.ch.group.visible = false; }
-      this.bodies.count = this.heads.count = 0;
+      this.pool.hideAll();
+      this.far.hide();
       if (this.hum) this.ambience?.murmur(...this.hum);   // 人藏起來了，近處的嗓子跟著停；遠的那一片照舊
       return;
     }
@@ -574,21 +443,18 @@ export class Passersby {
     this.ambience?.murmur(...this.hum, voices);
     // 近的先分到完整的角色
     const near = people.filter((q) => q.near).sort((a, b) => a.d - b.d).slice(0, this.pool.length);
-    const keep = new Set(near.map((q) => q.key));
-    for (const e of this.pool) if (e.key && !keep.has(e.key)) { e.key = null; e.ch.group.visible = false; }
+    this.pool.release(new Set(near.map((q) => q.key)));
     let rebuilt = 0;
     const shown = new Set();
     const cam = player.paused ? null : player.camera.position;   // 攝影模式拍到什麼就是什麼
     for (const q of near) {
-      let e = this.pool.find((x) => x.key === q.key);
+      let e = this.pool.find(q.key);
       if (!e) {
         if (rebuilt >= REBUILD) continue;
-        e = this.pool.find((x) => !x.key);
+        e = this.pool.take(q.key);
         if (!e) continue;
         e.ch.setLook(q.person.look);
         e.ch.hold(0);
-        e.key = q.key;
-        e.ch.group.visible = true;
         e.ch.group.position.set(q.x, q.y, q.z);
         e.ch.group.rotation.y = q.heading;
         // 步伐、呼吸、帽子晃動的相位各自隨機，一群人不會手腳一起擺
@@ -601,8 +467,9 @@ export class Passersby {
       shown.add(q.key);
     }
     // 其他人：遠處的簡單人形
-    let n = 0, g = 0;
+    let g = 0;
     const pos = this.glows.geometry.attributes.position, size = this.glows.geometry.attributes.aSize;
+    this.far.begin();
     for (const q of people) {
       const look = q.person.look;
       if (look.hand === 'lantern' && q.tt >= (q.p ? 0 : q.plan.handT)) {
@@ -612,21 +479,11 @@ export class Passersby {
       }
       if (shown.has(q.key)) continue;
       const bob = q.walking ? Math.abs(Math.sin(q.tt * 7 + q.i)) * 0.05 : 0, s = q.alpha;
-      this.q.setFromAxisAngle(this.v.set(0, 1, 0), q.heading);
-      this.m4.compose(this.v.set(q.fx, q.fy + bob, q.fz), this.q, this.s.set(s, s, s));
-      this.bodies.setMatrixAt(n, this.m4);
-      this.heads.setMatrixAt(n, this.m4);
-      this.bodies.setColorAt(n, this.c.setHex(CLOTH[look.outer !== 'none' ? look.outC : look.topC]));
-      this.heads.setColorAt(n, this.c.setHex(SKINS[look.skin]));
-      n++;
+      this.far.add(q.fx, q.fy + bob, q.fz, q.heading, s, s, s, CLOTH[look.outer !== 'none' ? look.outC : look.topC], SKINS[look.skin]);
     }
     for (let j = g; j < size.count; j++) size.setX(j, 0);
     pos.needsUpdate = size.needsUpdate = true;
-    this.bodies.count = this.heads.count = n;
-    for (const m of [this.bodies, this.heads]) {
-      m.instanceMatrix.needsUpdate = true;
-      if (m.instanceColor) m.instanceColor.needsUpdate = true;
-    }
+    this.far.end();
     // 不在畫面上的人，小狀態丟掉
     if (this.state.size > 300) {
       const live = new Set(people.map((q) => q.key));
@@ -673,9 +530,9 @@ export class Passersby {
     // 要讓開多少：玩家靠近往旁邊讓一點，加上跟別人互推的量；總量有上限，讓開的地方要站得住，站不住就少讓一點
     let tx = st.sx, tz = st.sz;
     if (q.d < DODGE) {
-      const rx = Math.cos(q.heading), rz = -Math.sin(q.heading), side = (P.x - q.x) * rx + (P.z - q.z) * rz > 0 ? -1 : 1, amt = (DODGE - q.d) * 0.7;
-      tx += rx * side * amt;
-      tz += rz * side * amt;
+      const [dx, dz] = dodgeFrom(q, P, DODGE);
+      tx += dx;
+      tz += dz;
     }
     const tl = Math.hypot(tx, tz);
     if (tl > PUSH_MAX) { tx *= PUSH_MAX / tl; tz *= PUSH_MAX / tl; }
@@ -688,10 +545,7 @@ export class Passersby {
       }
       if (!ok) tx = tz = 0;
     }
-    // 讓開的時候動作快一點，回到原位慢一點，不會一下推開一下彈回來
-    const rate = Math.hypot(tx, tz) >= Math.hypot(st.ox, st.oz) ? 7 : 2;
-    st.ox += (tx - st.ox) * Math.min(1, dt * rate);
-    st.oz += (tz - st.oz) * Math.min(1, dt * rate);
+    easeOffset(st, tx, tz, dt);
     const at = { x: q.x + st.ox, z: q.z + st.oz };
     this.clear(at);
     q.fx = at.x;
@@ -729,16 +583,14 @@ export class Passersby {
     } else if (q.plan.people.length > 1 && hash(q.i, Math.floor(now / 6)) < 0.35) {
       want = q.p ? 0.7 : -0.7;
     }
-    st.head += (Math.max(-0.9, Math.min(0.9, want)) - st.head) * Math.min(1, dt * 5);
-    ch.head.rotation.y = st.head;
+    ch.head.rotation.y = turnHead(st, want, dt, 5);
     // 擋在鏡頭前面就淡掉，走開了等一下再淡回來
     if (this.blocks(cam, P, at.x, q.fy, at.z)) st.blockHold = BLOCK_HOLD;
     else st.blockHold -= dt;
     const bw = st.blockHold > 0 ? BLOCK_ALPHA : 1;
     st.block = st.block < bw ? Math.min(bw, st.block + dt * BLOCK_SPEED) : Math.max(bw, st.block - dt * BLOCK_SPEED);
     // 從門口出來、走進門裡：慢慢浮現、慢慢淡掉
-    const a = q.alpha * st.block;
-    ch.setGhost(a > 0.98 ? 1 : Math.round(a * 20) / 20);
+    ch.setGhost(ghostStep(q.alpha * st.block));
   }
 
   // 站在 (x, y, z) 的人有沒有擋住鏡頭看玩家：貼著鏡頭，或站在鏡頭到玩家胸口那條線旁邊

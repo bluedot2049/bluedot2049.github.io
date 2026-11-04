@@ -6,7 +6,7 @@
 // 新相機加在 CAMERAS，模型加在 cameraModel，桌上的位置照 TABLE 的順序。
 import * as THREE from 'three';
 import { rod } from '../avatar/heads.js';
-import { getSave, putSave } from '../avatar/looks.js';
+import { getSave, putSave } from '../save/progress.js';
 import { drawGlyph, strokes } from '../core/glyphs.js';
 import { punch } from '../core/icode.js';
 

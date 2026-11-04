@@ -12,9 +12,11 @@
 import { decodeSave, decodeLook, tryOn, codeFrom, hasProgress, restoreSave } from './savecode.js';
 import { readPostcard } from './postcard.js';
 import { readMirrorCard } from './mirrorcard.js';
-import { encodeFace, getSave } from '../avatar/looks.js';
+import { encodeFace } from '../avatar/looks.js';
+import { getSave, savePrint } from './progress.js';
 import { dockR, hugMedia, panelW, uiScale } from '../controls/ui.js';
 import { album, canPick, canShare, discard, folderName, hourMark, KINDS, LABS, labOk, loadAlbum, pickFolder, putBack, saveChosen, saveTip, shareChosen, toLab, visible } from '../camera/album.js';
+import { pref, setPref } from './prefs.js';
 
 const ICONS = {
   orb: '<circle cx="12" cy="12" r="7.5"/><path d="M7.5 12c2.5-3 6.5-3 9 0-2.5 3-6.5 3-9 0z"/><circle cx="12" cy="12" r="1.2"/><path d="M18 6.5c1.5-1 2.8-1 3.5-.3"/>',
@@ -23,21 +25,16 @@ const ICONS = {
 const icon = (id) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[id]}</svg>`;
 const MIN_W = 360, MIN_H = 320;   // 電腦上拉右下角縮放，最小到這樣
 
-// 身上這套、衣櫃、拿到的東西合成一個指紋。各攤上次來的日子不算，那個天天在變。
-// 存檔的信物拍好時記一份（album.js 的 k），之後才存下也照拍的那一刻算
-export function savePrint() {
-  const s = getSave(), t = JSON.stringify([s.look, s.closet, s.unlocked]);
-  let h = 5381;
-  for (let i = 0; i < t.length; i++) h = (Math.imul(h, 33) + t.charCodeAt(i)) >>> 0;
-  return h.toString(36);
-}
+// 身上這套、衣櫃、拿到的東西合成一個指紋（progress.js 的 savePrint，print 的欄位）。photo.js、selfie.js 從這裡拿
+export { savePrint };
 function loadMark() {
-  try { const m = JSON.parse(localStorage.getItem('packed')); return m && typeof m.k === 'string' ? m : null; } catch { return null; }
+  const m = pref('packed');
+  return m && typeof m.k === 'string' ? m : null;
 }
 
 // 存檔的照片存下或寄出去的那一刻記下來，封蠟就熄了。k、t：那張照片拍的時候的指紋和時間
 export function markPacked(k = savePrint(), t = Date.now()) {
-  try { localStorage.setItem('packed', JSON.stringify({ k, t })); } catch {}
+  setPref('packed', { k, t });
   dispatchEvent(new Event('packed'));
 }
 
@@ -157,11 +154,9 @@ export class Pack {
   place() {
     const c = this.card, W = window.innerWidth, H = window.innerHeight;
     if (this.floating) {
-      let s = null;
-      try { s = JSON.parse(localStorage.getItem('packSize')); } catch {}
+      const s = pref('packSize');
       if (Number.isFinite(s?.w) && Number.isFinite(s?.h)) this.sizeTo(s.w, s.h);
-      let p = null;
-      try { p = JSON.parse(localStorage.getItem('packAt')); } catch {}
+      const p = pref('packAt');
       if (Number.isFinite(p?.dx) && Number.isFinite(p?.dy)) this.moveTo(W / 2 + p.dx, H / 2 + p.dy);
       else if (Number.isFinite(p?.x) && Number.isFinite(p?.y)) this.moveTo(p.x, p.y);   // 舊的存法：左上角在哪
       else {
@@ -211,7 +206,7 @@ export class Pack {
       c.removeEventListener('pointerup', up);
       c.removeEventListener('pointercancel', up);
       c.classList.remove('resizing');
-      try { localStorage.setItem('packSize', JSON.stringify(size)); } catch {}
+      setPref('packSize', size);
     };
     c.addEventListener('pointermove', move);
     c.addEventListener('pointerup', up);
@@ -232,7 +227,7 @@ export class Pack {
       c.removeEventListener('pointercancel', up);
       c.classList.remove('dragging');
       const off = { dx: Math.round(at.x - window.innerWidth / 2), dy: Math.round(at.y - window.innerHeight / 2) };
-      try { localStorage.setItem('packAt', JSON.stringify(off)); } catch {}
+      setPref('packAt', off);
     };
     c.addEventListener('pointermove', move);
     c.addEventListener('pointerup', up);

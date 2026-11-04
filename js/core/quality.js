@@ -4,6 +4,7 @@
 // low：解析度 1x、不加後製　mid：解析度 1x 到 2x 之間自動調、不加後製（手機預設）　high：最多 2x，加環境光遮蔽、泛光、抗鋸齒
 // 解析度會降也會升：看海的時候比較重，降下來；回到室內或轉開視線，穩定一陣子後再試著升回去。
 // 網址加 ?q=low / ?q=mid / ?q=high 可以強制指定，方便測試
+import { pref, setPref } from '../save/prefs.js';
 
 const LEVELS = ['low', 'mid', 'high'];
 const KEY = 'quality';
@@ -40,15 +41,12 @@ function guess(coarse) {
 }
 
 function load() {
-  try {
-    const s = JSON.parse(localStorage.getItem(KEY));
-    if (s && LEVELS.includes(s.level) && Date.now() - s.at < KEEP_DAYS * 864e5) return s;
-  } catch {}
-  return null;
+  const s = pref(KEY);
+  return s && LEVELS.includes(s.level) && Date.now() - s.at < KEEP_DAYS * 864e5 ? s : null;
 }
 
 function save(level, dpr) {
-  try { localStorage.setItem(KEY, JSON.stringify({ level, dpr, at: Date.now() })); } catch {}
+  setPref(KEY, { level, dpr, at: Date.now() });
 }
 
 export class Quality {

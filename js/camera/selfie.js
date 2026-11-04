@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { Eye } from './eye.js';
 import { makeMirrorCard, drawLids, PHOTO_W, PHOTO_H, CARD_W, LID_STRIP } from '../save/mirrorcard.js';
-import { getSave } from '../avatar/looks.js';
+import { getSave } from '../save/progress.js';
 import { savePrint } from '../save/pack.js';
 import { addPhoto, discard, saveChosen, saveTip } from './album.js';
 

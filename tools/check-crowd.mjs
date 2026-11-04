@@ -49,7 +49,7 @@ for (const hour of HOURS) {
         }
         stat.close += c; stat.stack += s; stat.nearBad += nb;
         if (c) stat.bad++;
-        const walkers = ps.pool.filter((e) => e.key && (e.ch.walk ?? 0) > 0.5);
+        const walkers = ps.pool.list.filter((e) => e.key && (e.ch.walk ?? 0) > 0.5);
         if (walkers.length >= 4) {
           let sx = 0, sz = 0;
           for (const e of walkers) { sx += Math.cos(e.ch.phase); sz += Math.sin(e.ch.phase); }

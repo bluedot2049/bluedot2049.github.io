@@ -20,11 +20,11 @@ window.inApp = (function () {
     }
     return null;
   }
-  // 有沒有東西：條件同 savecode.js 的 hasProgress（格式版本不對的存檔，looks.js 的 getSave 會清掉，也算沒有）
+  // 有沒有東西：條件同 save/progress.js 的 hasProgress（沒有版本號的存檔，getSave 會清掉，也算沒有）
   var progress = false;
   try {
     var s = JSON.parse(localStorage.getItem('save'));
-    progress = !!s && s.v === 1 && ((s.unlocked || []).length > 0 || (s.closet || []).some(Boolean));
+    progress = !!s && (s.v | 0) >= 1 && ((s.unlocked || []).length > 0 || (s.closet || []).some(Boolean));
   } catch (e) {}
   var out = { app: app, progress: progress, leave: null };
   if (app === 'LINE' && !tried) {

@@ -4,10 +4,11 @@
 // 雨絲是一條一條細細的四邊形，一次畫完：每一滴照種子放在一個跟著鏡頭的盒子裡往下掉，掉出盒子從另一頭接回來，CPU 每一幀只改幾個數。
 // 寬度照螢幕像素算（遠的不縮成亂閃的次像素）；雨絲本身很淡，經過燈籠附近才被照成一絲一絲的暖橘。
 // 遮雨圖：載入時從正上方拍一次整座鎮，記每一點最高的那一面多高。雨絲落到那一面就停（屋簷下、殿裡沒有雨），地面也照它分淋不淋得到，聲音問頭上有沒有東西也查它。
-// 燈光圖：每一盞燈從上往下點成一張小圖，記顏色、亮度和燈多高，雨絲和地上的燈影都查它。鎮子不會動，兩張圖畫一次就好
+// 燈光圖：每一盞燈從上往下點成一張小圖，記顏色、亮度和燈多高，雨絲和地上的燈影都查它。鎮子不會動，兩張圖畫一次就好。
+// 雨絲的幾何、跟著鏡頭的盒子、寬度照螢幕這些跟沙粒共用（core/weatherfx.js）
 import * as THREE from 'three';
-import { rng } from '../../core/props.js';
 import { AIR, uTime } from '../../core/scenery.js';
+import { quadStreaks, driftStep, fitScreen, qualityOf } from '../../core/weatherfx.js';
 import { GRADE_VERT, TUNE, WEATHER, gradeUniforms } from '../../core/grade.js';
 import { WET } from '../../core/wet.js';
 import { Weather } from '../../core/weather.js';
@@ -176,13 +177,7 @@ function lampTexture(lamps) {
 // 雨絲：一條一個四邊形，頭（往下掉的那端）亮、尾巴淡。三種落速各自累積往下掉了多遠（CPU 照雨量積分，繞著盒子取餘數），
 // 雨量變了不會整片跳。uBrolly 是撐著的傘：傘面以下、傘的半徑以內不落雨
 function streakMesh(max, topTex, lampTex) {
-  const g = new THREE.InstancedBufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, 0, 0, 1, 0, 0, -1, 1, 0, 1, 1, 0]), 3));
-  g.setIndex([0, 1, 2, 2, 1, 3]);
-  const R = rng('haishi-rain'), seeds = new Float32Array(max * 4);
-  for (let i = 0; i < seeds.length; i++) seeds[i] = R();
-  g.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seeds, 4));
-  g.instanceCount = 0;
+  const g = quadStreaks(max, 'haishi-rain');
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       uBox: { value: BOX }, uDropA: { value: new THREE.Vector3() }, uDropB: { value: new THREE.Vector3() }, uDropC: { value: new THREE.Vector3() },
@@ -267,7 +262,7 @@ export function buildRain({ scene, world, renderer, quality, coarse, params }) {
   WET.occ = topTex;
   WET.light = lampTex;
   WET.lightY.set(LAMP_Y[0], LAMP_Y[1]);
-  const level = () => quality?.level ?? (coarse ? 'mid' : 'high');
+  const level = () => qualityOf(quality, coarse);
   const mesh = streakMesh(COUNT.high, topTex, lampTex), u = mesh.material.uniforms;
   scene.add(mesh);
   // 調色台（?debug）登記：雨天、雨後的色調（tones.js）可以各自改這些，跟著天氣的權重混
@@ -285,7 +280,6 @@ export function buildRain({ scene, world, renderer, quality, coarse, params }) {
     { label: '光暈大小', key: 'halo', uniform: AIR.halo, kind: [0.5, 2.5, 0.01] },
   );
   const vel = new THREE.Vector3(), size = new THREE.Vector2(), drops = [[u.uDropA.value, 0.82], [u.uDropB.value, 1], [u.uDropC.value, 1.18]];
-  const wrap = (v) => v.set(((v.x % BOX.x) + BOX.x) % BOX.x, ((v.y % BOX.y) + BOX.y) % BOX.y, ((v.z % BOX.z) + BOX.z) % BOX.z);
 
   // 遮雨圖上 (x, z) 那一點最高的那一面，圖外面是 -Infinity
   function topAt(x, z) {
@@ -322,16 +316,12 @@ export function buildRain({ scene, world, renderer, quality, coarse, params }) {
       // 毛毛雨掉得慢、雨絲短，大雨快而長；風越大越斜
       const side = 0.4 + 1.6 * w.wind;
       vel.set(WIND.x * side, -(3.2 + 5.3 * w.rain), WIND.y * side);
-      for (const [v, k] of drops) wrap(v.addScaledVector(vel, dt * k));
+      driftStep(drops, vel, dt, BOX);
       u.uDir.value.copy(vel).normalize();
       u.uLen.value = vel.length() * SHUTTER * look.len.value;
       u.uAmt.value = 0.55 + 0.45 * w.rain;
       u.uGust.value = w.wind;
-      if (renderer) {
-        renderer.getDrawingBufferSize(size);
-        u.uView.value.copy(size).multiplyScalar(0.5);
-        u.uWidth.value = Math.min(4, Math.max(1.2, 1.25 * renderer.getPixelRatio() * look.width.value));
-      }
+      if (renderer) fitScreen(renderer, size, u, 1.25, look.width.value);
       const ch = rain.brolly;
       if (ch) {
         const p = ch.group.position;

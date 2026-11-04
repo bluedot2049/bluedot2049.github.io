@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import { Eye } from '../camera/eye.js';
 import { bend } from '../core/lens.js';
 import { uiScale, panelW, dockR } from '../controls/ui.js';
+import { pref, setPref } from '../save/prefs.js';
 
 const LEAD = 3.2;       // 帶路時飛在角色前面幾公尺（沿著路量）
 const PEEK = 2.4;       // 眼珠看的地方再往前幾公尺：快到轉角就先看下一段
@@ -31,8 +32,8 @@ const DROP = 2.5;       // 太靠近鏡頭時，看的那一點最多往下移�
 const STEP = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 2, ArrowUp: -2 };   // 方向鍵：清單是兩欄
 const KEY_SEEN = 'eyeSeen', KEY_ON = 'eyeOn', KEY_TOLD = 'eyeTold';
 
-const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
-const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const load = (k, d) => pref(k) ?? d;
+const save = (k, v) => setPref(k, v);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const typing = (e) => !!e.target.closest?.('#dress, input:not([type=checkbox]):not([type=range]), textarea');
 const clamp01 = (v) => Math.min(1, Math.max(0, v));

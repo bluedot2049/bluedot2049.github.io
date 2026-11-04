@@ -4,8 +4,10 @@
 // 鼓組就是汀站的車：鐵軌接縫的「喀噹、咕咚」跟著畫面上兩條線真的車走（ting-lines.js 的 carNow），車越近越清楚、從哪邊來聲音就在哪邊，
 // 車慢下來停進月台拍子就沒了，停著的時候是沒有拍子的間奏；開走前月台喇叭放一段發車旋律，一次比一次慢、一次比一次低，放六次換一段新的。
 // 車進站前一段聽不清的廣播。微風照孤櫻那陣風（ting-tree.js 的 gustAt），風來時風聲大、花瓣鐘響得密。偶爾一聲黃鶯、偶爾磁帶整個慢下來一下。
-// 平交道的鈴聲 preset 預設關著，這裡沒做。對外的樣子跟 <audio> 一樣（paused、play()、pause()），ambience.js 管音量和靜音
+// 平交道的鈴聲 preset 預設關著，這裡沒做。對外的樣子跟 <audio> 一樣（paused、play()、pause()），ambience.js 管音量和靜音。
+// 底座（play、pause、節點的小工具）在 audio/synthkit.js 的 Song，這裡只有這首曲子自己的聲層和事件
 import * as THREE from 'three';
+import { Song, R, range, pick, mtof, mix, impulse, whiteNoise } from '../../audio/synthkit.js';
 import { carNow } from './ting-lines.js';
 import { stationD } from './ting-station.js';
 import { gustAt } from './ting-tree.js';
@@ -13,7 +15,6 @@ import { gustAt } from './ting-tree.js';
 const BPM = 70, BEAT = 60 / BPM, BAR = BEAT * 4;
 const SWING = 0.28;
 const SUB = [0, 0.25 + SWING / 12, 0.5 + SWING / 6, 0.75 + SWING / 12];   // 一拍裡四個十六分音符的位置，反拍往後挪
-const mix = (v) => v * v * 1.3;
 const MIX = { keys: mix(0.6), chime: mix(0.55), train: mix(0.6), announce: mix(0.4), petals: mix(0.5), warbler: mix(0.45) };
 const OUT_GAIN = 1.15;                      // 對到星盤夜讀的響度
 const REVERB = 5.5;                         // 開闊的夜間月台
@@ -39,18 +40,11 @@ const PINGPONG = [[77, 73], [80, 77]];
 // 廣播合成的五個母音：三個共振峰（Hz）
 const VOWELS = [[800, 1200, 2500], [300, 2300, 3000], [350, 1300, 2400], [500, 1900, 2500], [500, 800, 2500]];
 
-const R = Math.random;
-const range = (a, b) => a + R() * (b - a);
-const pick = (a) => a[Math.floor(R() * a.length)];
-const mtof = (m) => 440 * 2 ** ((m - 69) / 12);
 const stepAt = (n) => Math.floor(n / 16) * BAR + (Math.floor((n % 16) / 4) + SUB[n % 4]) * BEAT;   // 第 n 個十六分音符在第幾秒
 
-export class DreamStation {
+export class DreamStation extends Song {
   constructor(ctx, out, amb) {
-    this.ctx = ctx;
-    this.amb = amb;
-    this.paused = true;
-    this.gen = 0;
+    super(ctx, out, amb);
     const c = ctx;
     // 總線：乾聲和殘響一起過輕度壓縮、8kHz 低通
     const comp = c.createDynamicsCompressor();
@@ -64,7 +58,7 @@ export class DreamStation {
     this.dry = this.gain(1);
     this.dry.connect(comp);
     this.verb = c.createConvolver();
-    this.verb.buffer = impulse(c, REVERB);
+    this.verb.buffer = impulse(c, REVERB, { slope: 0.1 });
     this.verb.connect(this.filter('lowpass', 4800)).connect(this.gain(0.5)).connect(comp);
     this.white = whiteNoise(c, 3);
     // 月台喇叭的飽和：tanh，小聲時幾乎不動、大聲才糊
@@ -74,21 +68,6 @@ export class DreamStation {
     this.tune = null;
   }
 
-  gain(v) { const g = this.ctx.createGain(); g.gain.value = v; return g; }
-  filter(type, freq, Q = 0.7) {
-    const f = this.ctx.createBiquadFilter();
-    f.type = type;
-    f.frequency.value = freq;
-    f.Q.value = Q;
-    return f;
-  }
-  panner(p) {
-    const c = this.ctx;
-    if (!c.createStereoPanner) return this.gain(1);
-    const n = c.createStereoPanner();
-    n.pan.value = Math.max(-1, Math.min(1, p));
-    return n;
-  }
   // 一個聲層的出口：音量照 mixer，乾聲進總線、一部分送殘響。tape 的聲層先過磁帶（鋼琴、低音、月台喇叭）
   layer(vol, send, tape) {
     const g = this.gain(vol);
@@ -96,85 +75,10 @@ export class DreamStation {
     if (send) g.connect(this.gain(send)).connect(tape ? this.tapeWet : this.sendBus);
     return g;
   }
-  osc(type, freq, t, stop, dest) {
-    const o = this.ctx.createOscillator();
-    o.type = type;
-    o.frequency.value = freq;
-    o.connect(dest);
-    o.start(t);
-    if (stop) {
-      o.stop(stop);
-      o.onended = () => o.disconnect();
-    } else this.keep.push(o);
-    return o;
-  }
-  lfo(freq, depth, ...params) {
-    const g = this.gain(depth);
-    for (const p of params) g.connect(p);
-    return this.osc('sine', freq, this.ctx.currentTime, 0, g);
-  }
-  noise(dest, offset = R() * 5) {
-    const s = this.ctx.createBufferSource();
-    s.buffer = this.amb.noise || this.white;
-    s.loop = true;
-    s.connect(dest);
-    s.start(0, offset);
-    this.keep.push(s);
-    return s;
-  }
-  // 一段雜訊，從 t 開始響 dur 秒
-  shot(dest, t, dur) {
-    const s = this.ctx.createBufferSource();
-    s.buffer = this.white;
-    s.loop = true;
-    s.connect(dest);
-    s.start(t, R() * 2);
-    s.stop(t + dur);
-    s.onended = () => s.disconnect();
-  }
-  // 一個音量包絡：attack 秒升到 peak，再以時間常數 tau 往零掉
-  env(dest, t, peak, attack, tau) {
-    const g = this.gain(0);
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(peak, t + attack);
-    g.gain.setTargetAtTime(0, t + attack, tau);
-    g.connect(dest);
-    return g;
-  }
-  ping(dest, type, f, t, peak, attack, tau, stop) {
-    return this.osc(type, f, t, stop ?? t + attack + tau * 7, this.env(dest, t, peak, attack, tau));
-  }
-  hit(dest, t, peak, tau, ...nodes) {
-    let n = this.env(dest, t, peak, 0.002, tau);
-    for (const x of nodes.reverse()) { x.connect(n); n = x; }
-    this.shot(n, t, tau * 7 + 0.01);
-  }
-
-  play() {
-    if (!this.paused) return Promise.resolve();
-    this.paused = false;
-    const gen = ++this.gen;
-    // 音訊還沒醒（剛 resume）時 currentTime 不會走，等它真的跑起來再開始
-    const begin = () => {
-      if (gen !== this.gen) return;
-      if (this.ctx.state !== 'running') { setTimeout(begin, 100); return; }
-      this.start();
-      this.timer = setInterval(() => this.tick(gen), 250);
-      this.tick(gen);
-    };
-    begin();
-    return Promise.resolve();
-  }
-
-  pause() {
-    this.paused = true;
-    this.gen++;
-    clearInterval(this.timer);
-    for (const s of this.keep || []) { try { s.stop(); } catch {} }
-    this.keep = [];
-    try { this.session?.disconnect(); this.sendBus?.disconnect(); this.tapeDry?.disconnect(); this.tapeWet?.disconnect(); } catch {}
-    this.session = this.sendBus = null;
-  }
+  // 一段雜訊：這首用自己的白雜訊（短一點的那段）
+  shot(dest, t, dur) { return super.shot(dest, t, dur, this.white, 2); }
+  // 暫停時跟著根一起拔掉的：磁帶
+  unplug() { this.tapeDry?.disconnect(); this.tapeWet?.disconnect(); }
 
   // 每次開始播都重新接一次：磁帶、月台喇叭、車和風的持續聲層，和各種事件的下一次時間
   start() {
@@ -521,23 +425,3 @@ export class DreamStation {
   }
 }
 
-// 殘響的脈衝：左右各一段雜訊，以指數曲線衰減，長 sec 秒到 -60dB
-function impulse(c, sec) {
-  const sr = c.sampleRate, len = Math.floor(sr * sec), buf = c.createBuffer(2, len, sr), tau = sec / 6.9;
-  for (let ch = 0; ch < 2; ch++) {
-    const d = buf.getChannelData(ch);
-    let lp = 0;
-    for (let i = 0; i < len; i++) {
-      const t = i / sr, k = Math.min(0.9, 0.25 + t * 0.1);   // 越後面越悶
-      lp = lp * k + (Math.random() * 2 - 1) * (1 - k);
-      d[i] = lp * Math.exp(-t / tau) * (i < sr * 0.02 ? i / (sr * 0.02) : 1);
-    }
-  }
-  return buf;
-}
-
-function whiteNoise(c, sec) {
-  const buf = c.createBuffer(1, Math.floor(c.sampleRate * sec), c.sampleRate), d = buf.getChannelData(0);
-  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-  return buf;
-}

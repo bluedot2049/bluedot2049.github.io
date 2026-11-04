@@ -3,6 +3,7 @@
 // 捏角色的資料：種族、五官、髮型、帽子、衣服用代號，顏色和滑桿用整數，自己畫的臉是一串壓縮過的格子。
 // 存在瀏覽器裡，也透過在線名單傳給別人，所以讀進來的資料一律先過 sanitizeLook。
 // 清單只能往後加，不要改代號或調換顏色的順序，舊存檔和別人的畫面才對得上。
+import { getSave, putSave } from '../save/progress.js';
 
 export const ROBES = [0x2f5d62, 0x7a3b2e, 0x3d5a2a, 0x5b3f78, 0x8a6a2f, 0x2a3f6b, 0x6b2a4a, 0x4a4a52];
 export const HAT_COLORS = [0x4a2f66, 0x2c3e50, 0x6b3a1f, 0x1f5a4a, 0x2b1f3d, 0x7a2a3a, 0x2f4a3a, 0x8a2a2a];
@@ -112,41 +113,8 @@ export const lockedBy = (k, id) => LOCKS.get(k + ':' + id);
 export const lockKeys = () => [...LOCKS.keys()];
 
 // ---------- 存檔 ----------
-// 身上的東西（造型、衣櫃、解鎖、各攤上次來的日子、帶的相機）合成一份，帶版本號。音量、操作習慣這些屬於裝置，不放這裡。
-// 版本不對或沒有存檔就整份重來：舊的 look／outfit／closet／unlocked 直接刪掉，大家像第一次來。
-// 以後格式改了，在 getSave 裡把舊版轉成新版再寫回，不要再清空
-const SAVE_V = 1;
-let saveCache = null;
-export function getSave() {
-  if (saveCache) return saveCache;
-  let s = null;
-  try { s = JSON.parse(localStorage.getItem('save')); } catch {}
-  const fresh = !s || typeof s !== 'object' || s.v !== SAVE_V;
-  if (fresh) {
-    try { for (const k of ['look', 'outfit', 'closet', 'unlocked']) localStorage.removeItem(k); } catch {}
-    s = {};
-  }
-  saveCache = {
-    v: SAVE_V,
-    look: s.look && typeof s.look === 'object' ? s.look : null,
-    closet: Array.isArray(s.closet) ? s.closet.slice(0, 3) : [],
-    unlocked: Array.isArray(s.unlocked) ? s.unlocked.filter((x) => typeof x === 'string') : [],
-    visits: s.visits && typeof s.visits === 'object' ? s.visits : {},
-    camera: typeof s.camera === 'string' ? s.camera : null,   // 帶在身上的相機（cameras.js）
-  };
-  if (fresh) {
-    putSave({});
-    // 請瀏覽器別隨便清掉（不保證有用）
-    try { navigator.storage?.persist?.(); } catch {}
-  }
-  return saveCache;
-}
-export function putSave(patch) {
-  const s = Object.assign(getSave(), patch);
-  try { localStorage.setItem('save', JSON.stringify(s)); } catch {}
-  // 行囊（pack.js）聽這個，看封蠟要不要亮
-  if (typeof dispatchEvent === 'function') dispatchEvent(new Event('savechange'));
-}
+// 進度存檔搬到 save/progress.js（欄位表、版本、封蠟的指紋）；這裡留著轉出口，舊的 import 路徑照舊能用
+export { getSave, putSave };
 
 export const unlockedSet = () => new Set(getSave().unlocked);
 

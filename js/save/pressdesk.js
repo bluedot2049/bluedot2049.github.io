@@ -6,7 +6,8 @@
 import { album, amend, canShare, keepFile, loadAlbum, pressOk, rareShot, saveTip, shareFile, visible } from '../camera/album.js';
 import { makePaper, pressReady, cleanPen, PRESS } from './press.js';
 import { portrait } from '../avatar/thumbs.js';
-import { getSave, sanitizeLook } from '../avatar/looks.js';
+import { sanitizeLook } from '../avatar/looks.js';
+import { getSave } from './progress.js';
 
 const DB = 'gallery-press', STORE = 'papers';
 let list = [], ready = null, sound = null, el = null, keys = null;

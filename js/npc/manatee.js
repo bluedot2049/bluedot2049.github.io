@@ -5,6 +5,8 @@
 import * as THREE from 'three';
 import { bend } from '../core/lens.js';
 import { rng } from '../core/props.js';
+import { GREETINGS, TABLE_LINES, SURPRISED, NO_PHOTO } from './manatee-lines.js';
+export { TABLE_LINES };
 
 function mat(color, extra = {}) {
   return new THREE.MeshLambertMaterial({ color, flatShading: true, ...extra });
@@ -12,11 +14,6 @@ function mat(color, extra = {}) {
 
 const SKIN = 0x91abb0;
 const SAY_TIME = 3500, GREET_DIST = 3.5, NEAR = 6;
-const GREETINGS = ['歡迎光臨哈哈', '歡迎光臨', '歡迎到處看看', '你好哈哈', '你好', '讚'];
-export const TABLE_LINES = ['要吃自己拿', '都可以吃', '桌上可以拿去吃', '你要吃東西嗎 這裡有', '要吃一點嗎'];
-const SURPRISED = ['天啊不是吧!', '蛤!'];
-// 鏡頭剛對上他時說的；同一個鏡頭 LENS_QUIET 秒內不重複
-const NO_PHOTO = ['不給拍哈哈', '拍不到的啦', '哈哈 拍不到', '這個不能拍'];
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 // 身體輪廓 [高度, 半寬]，取自遊戲專案 character_model.gd 的 PROFILE。靜海的海牛人（zones/jinghai/manatees.js）也用這個身形
 export const PROFILE = [

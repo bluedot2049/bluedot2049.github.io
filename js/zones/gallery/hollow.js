@@ -6,22 +6,15 @@
 // 卡片上按「留話」換成寫字頁，投進去的送到作者自己的 Google Apps Script，記進試算表、寄到作者 Gmail；不回信。投進去光閃一下、樹洞應一聲
 import { bend } from '../../core/lens.js';
 import { PLACES } from '../../scene/places.js';
+import { GOT, CALLS } from './hollow-lines.js';
 import * as THREE from 'three';
+import { pref, setPref } from '../../save/prefs.js';
 
 const CALL = 15, AWAY = 20, SAY_TIME = 3500;
 // 留話送去的地方（作者的 Apps Script 網頁應用程式網址）；空的就不出現「留話」
 const POST = 'https://script.google.com/macros/s/AKfycbzhCpY4QMKxYDCnVFJV88chPzGm-kzSiGOlw8cuivUGolvCwikGXL9uAUDlhOsyzbx-AA/exec';
 const GAP = 120000;   // 同一個人兩張紙條至少隔多久
 const PIC = 960;      // 附圖縮到長邊幾像素
-const GOT = ['收下了', '嗯', '咕嚕', '……收到', '好'];
-// 招呼：先照 w 抽一類，再從那一類抽一句，不跟上一句一樣
-const CALLS = [
-  { w: 4, lines: ['psst 這邊', 'おい こっち', '야 이리 와봐', '喂 過嚟呀', '來喔 緊來', 'Hé toi, viens', 'Psst… ven aquí', 'Komm mal her', 'Эй, сюда', 'Hoy, halika',
-    'Pssst. Vieni', 'Kom hier', 'Gel buraya', 'Vem cá', 'Njoo hapa', 'Chodź tu', 'Lại đây', 'Haere mai', 'تعال هنا', 'มานี่หน่อย', 'इधर आओ'] },
-  { w: 3, lines: ['哞 過來一下', '喵 這邊這邊', '呱 靠近點', '嘶 嘶 過來', '汪 這裡', '咩 來一下', '嗷 過來', '嘿嘿 過來看', '…… ……過來', '⟡ 接近 ⟡'] },
-  { w: 1.5, lines: ['噓——', '叩 叩', '咕咕', '♪～'] },
-  { w: 0.6, lines: ['客官 借一步說話', '近前來', '施主 請留步'] },
-];
 // 附圖先縮小成 jpeg 再送，原圖太大
 async function shrink(file) {
   const bmp = await createImageBitmap(file);
@@ -113,9 +106,7 @@ export class Hollow {
     const box = this.letter.querySelector('.body');
     const body = box.value.trim();
     if (!body) { this.note('還沒寫字'); return; }
-    let last = 0;
-    try { last = +localStorage.getItem('hollowSent') || 0; } catch {}
-    if (Date.now() - last < GAP) { this.note('樹洞還在收上一張，過一會兒再投'); return; }
+    if (Date.now() - pref('hollowSent') < GAP) { this.note('樹洞還在收上一張，過一會兒再投'); return; }
     this.sending = true;
     this.note('投進去……');
     let ok = false;
@@ -128,7 +119,7 @@ export class Hollow {
     } catch {}
     this.sending = false;
     if (!ok) { this.note('樹洞沒收到，等一下再投'); return; }
-    try { localStorage.setItem('hollowSent', String(Date.now())); } catch {}
+    setPref('hollowSent', Date.now());
     box.value = '';
     this.attach(null);
     this.close();

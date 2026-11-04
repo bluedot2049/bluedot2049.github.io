@@ -15,8 +15,9 @@ const INVITE_MS = 20000;   // 邀請放多久
 const sid = () => Math.random().toString(36).slice(2, 10);
 
 export class Studio {
-  constructor({ world, player, photo, passers }) {
-    Object.assign(this, { world, player, photo, passers });
+  // walkers：這一區走來走去的人（main.js 的 walkers），拍照時藏起來
+  constructor({ world, player, photo, walkers = [] }) {
+    Object.assign(this, { world, player, photo, walkers });
     this.mp = null;                 // 主程式連上線後填進來
     this.spots = world.studios;
     this.session = null;            // { sid, spot, host, ids }：這一場、哪個景、自己是不是開場的人、入鏡名單（照站位順序）
@@ -92,7 +93,7 @@ export class Studio {
     this.player.place(at.x, at.z, at.heading);
     this.mp?.sendNow();
     if (this.mp) this.mp.only = new Set(s.ids);
-    if (this.passers) this.passers.hidden = true;
+    for (const w of this.walkers) w.hidden = true;
     // mark：照片角落蓋的記號（marks.js 的名字），景點可以自己指定，沒寫就是海市的印
     const cam = { ...this.camera(spot, n), host: s.host, mark: spot.mark };
     if (this.photo.active) this.photo.setStudio(cam);
@@ -184,7 +185,7 @@ export class Studio {
   finish(closePhoto) {
     this.session = null;
     if (this.mp) this.mp.only = null;
-    if (this.passers) this.passers.hidden = false;
+    for (const w of this.walkers) w.hidden = false;
     if (closePhoto && this.photo.active) {
       if (this.photo.result) this.photo.setStudio(null);
       else this.photo.exit();

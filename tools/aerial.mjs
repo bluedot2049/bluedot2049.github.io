@@ -3,6 +3,7 @@
 //   node tools/aerial.mjs haishi          只拍海市
 //   node tools/aerial.mjs haishi 後山     只拍海市名字含「後山」的機位
 //   node tools/aerial.mjs --encode        不重拍，只把 tools/out/aerial/ 裡的原圖重新壓一次
+//   node tools/aerial.mjs --raw ting      驗收用：只拍、不壓、不放進 assets/（原圖在 tools/out/aerial/），改完美術拍一輪跟上次的對照
 // 機位：pos 鏡頭位置、look 看哪裡、fov 直的視角（度）、size 寬,高（橫的 1920,1080，直的 1080,2160）。
 // 用兩倍解析度畫（中畫質，無頭模式開高畫質是黑的），原圖存 tools/out/aerial/，再交給 ffmpeg 縮小、轉 AVIF/WebP，放進 assets/aerial/。
 // AVIF 用 10 位元：夜空是一大片很暗的漸層，8 位元會出現一圈一圈的色階。crf 30 以上燈籠和路燈柱就糊了
@@ -17,7 +18,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'tools/out/aerial');
 const WEB = path.join(ROOT, 'assets/aerial');
 const SHOTS = JSON.parse(fs.readFileSync(path.join(ROOT, 'tools/aerial-shots.json'), 'utf8'));
-const encodeOnly = process.argv.includes('--encode');
+const encodeOnly = process.argv.includes('--encode'), rawOnly = process.argv.includes('--raw');
 const [onlyZone, onlyName] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 // 瀏覽器照螢幕挑一張：橫的看寬度，直的看手機那條直畫面
 const WIDTHS = { wide: [1280, 1920, 2560], tall: [720, 1080, 1440] };
@@ -112,9 +113,10 @@ for (const { zone, shot } of picked) {
       g.player.camPos.copy(cam.position);
       g.player.pos.set(s.look[0], g.player.pos.y, s.look[2]);
     };
-    if (g.passers) {
-      g.passers.update = () => {};
-      for (const e of g.passers.pool) e.ch.group.visible = false;
+    for (const w of g.walkers || []) {
+      w.update = () => {};
+      w.hidden = true;
+      for (const e of w.pool?.list || w.pool || []) e.ch.group.visible = false;
     }
   })()`);
   // 讓海、霧、燈跑幾秒穩下來
@@ -130,7 +132,7 @@ for (const { zone, shot } of picked) {
   const file = path.join(OUT, `${zone}-${shot.name}.png`);
   fs.writeFileSync(file, Buffer.from(data.split(',')[1], 'base64'));
   console.log('拍好', path.relative(ROOT, file), await ev(`__g.renderer.domElement.width + 'x' + __g.renderer.domElement.height`));
-  encode(file, `${zone}-${shot.name}`, h > w);
+  if (!rawOnly) encode(file, `${zone}-${shot.name}`, h > w);
 }
 ws.close();
 edge.kill();

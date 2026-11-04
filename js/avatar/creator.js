@@ -5,7 +5,8 @@
 // 海市攤販送的東西還沒拿到前蓋紅印，點了會說去哪一攤拿。衣櫃頁放三套造型和拿到的東西（郵票冊）。
 // 存讀檔是行囊（pack.js），在右上角那排，不在這個面板裡。
 // 畫臉是 64 × 64 的格子，畫的途中直接更新角色臉上的貼圖，放開手才存起來、傳給別人。
-import { RACES, OPTIONS, SLIDERS, SKINS, HAT_COLORS, HAIR_COLORS, CLOTH, GIFTS, TINTED_HATS, FACE, FACE_INK, raceOf, randomLook, presetLook, sanitizeLook, encodeFace, decodeFace, unlockedSet, getSave, putSave, isOpen, lockedBy, optionName, HOODED } from './looks.js';
+import { RACES, OPTIONS, SLIDERS, SKINS, HAT_COLORS, HAIR_COLORS, CLOTH, GIFTS, TINTED_HATS, FACE, FACE_INK, raceOf, randomLook, presetLook, sanitizeLook, encodeFace, decodeFace, unlockedSet, isOpen, lockedBy, optionName, HOODED } from './looks.js';
+import { getSave, putSave } from '../save/progress.js';
 import { faceMap, TUCKED } from './character.js';
 import { cached, request } from './thumbs.js';
 

@@ -1,8 +1,9 @@
 // 冒煙測試：改完程式（尤其是搬檔、拆檔）跑一次，確認每一區都載得起來、沒有錯誤。
-//   node tools/smoke.mjs                 三個區域＋experiments 的預覽頁
+//   node tools/smoke.mjs                 每一區＋experiments 的預覽頁
 //   node tools/smoke.mjs --save base     指紋存成 tools/out/smoke-base.json
 //   node tools/smoke.mjs --diff base     跟存好的指紋比對，場景有任何不同就列出來
-// 每一區：無頭 Edge 開 ?q=mid&debug&crowd=0&beast=0&rain=0&dust=0.5（白獸不排、不下雨、塵固定在平常，畫面才固定），亂數固定成同一串，等載入畫面收掉，記下
+// 每一區：無頭 Edge 開 ?q=mid&debug&crowd=0&beast=0&rain=0&dust=0.5（白獸不排、不下雨、塵固定在平常，畫面才固定；海市、汀開著路人 crowd=1），亂數固定成同一串，等載入畫面收掉，記下
+//   路人指紋（海市、汀）：時鐘釘在同一刻，每一組人照時間表該在哪、面向哪、長什麼樣。整理路人程式時拿來比
 //   頁面錯誤、console.error、載不到的檔案（404）
 //   場景指紋：每種物件幾個、頂點總數、材質種類。同樣的亂數，搬檔前後應該一模一樣
 //   開場那一幀的 draw call 和三角形數（含水面反射），改效能時拿來比
@@ -19,7 +20,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'tools/out');
 const arg = (k) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : null; };
 const saveAs = arg('--save'), diffWith = arg('--diff');
-const ZONES = ['gallery', 'haishi', 'shenlou', 'ting', 'jinghai'];
+const ZONES = ['gallery', 'haishi', 'shenlou', 'ting', 'jinghai', 'jinggong'];
+// 有路人的區域開著路人跑（?crowd=1 人最多），另外記一份路人指紋：時間固定在同一刻，每一組人該在哪、長什麼樣。整理路人程式時拿來比
+const CROWD = { haishi: 1, ting: 1 };
 const PORT = 8173, DBG = 9373;
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.avif': 'image/avif', '.json': 'application/json', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.m4a': 'audio/mp4', '.webmanifest': 'application/manifest+json' };
@@ -89,7 +92,7 @@ for (const zone of ZONES) {
   // 測試用的瀏覽器每次都是新的：清掉存檔，大家都從第一次來開始
   await send('Network.clearBrowserCookies');
   await ev(`try { localStorage.clear(); } catch (e) {}`).catch(() => {});
-  await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/?z=${zone}&q=mid&debug&crowd=0&beast=0&rain=0&dust=0.5&from=${zone === 'gallery' ? 'haishi' : 'gallery'}` });
+  await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/?z=${zone}&q=mid&debug&crowd=${CROWD[zone] ?? 0}&beast=0&rain=0&dust=0.5&from=${zone === 'gallery' ? 'haishi' : 'gallery'}` });
   let ok = false;
   for (let i = 0; i < 240 && !ok; i++) {
     await sleep(250);
@@ -109,14 +112,37 @@ for (const zone of ZONES) {
     const list = [];
     const skip = (o) => { for (let p = o; p; p = p.parent) if (p.userData.character) return true; return false; };
     root.traverse((o) => { if (o.geometry?.attributes?.position && !skip(o)) {
-      // 頂點座標的校驗和：形狀、擺的位置（合併過的網格）有一點不同就會變。粒子（煙、光點）每幀在動，不算
-      const a = o.geometry.attributes.position.array;
+      // 頂點座標的校驗和：形狀、擺的位置（合併過的網格）有一點不同就會變。
+      // 每幀在動的不算：粒子（煙、光點）、線（汀站車頂的集電弓）、標成 DynamicDrawUsage 的（鏡宮每幀重追的反射）；數量照樣比
+      const pa = o.geometry.attributes.position, a = pa.array;
       let sum = 0;
-      if (!o.isPoints) for (let i = 0; i < a.length; i++) sum += a[i] * ((i % 7) + 1);
+      if (!o.isPoints && !o.isLine && pa.usage !== 35048) for (let i = 0; i < a.length; i++) sum += a[i] * ((i % 7) + 1);
       list.push(o.type + ':' + (o.name || o.parent?.name || '') + ':' + o.geometry.attributes.position.count + 'x' + (o.instanceMatrix?.count || 1) + ':' + sum.toFixed(2));
     } });
     return { kinds, mats, verts, list: list.sort() };
   })()`).catch((e) => (problems.push('指紋 ' + e.message), null)) : null;
+  // 路人指紋：把時鐘釘在同一刻，多跑幾幀讓每一組人都排好行程，記下每個人照時間表該站的位置、面向、外觀。
+  // 讓路的偏移（fx、fz）跟幀數有關，不記；只記時間表算出來的 x、z
+  if (ok && prints[zone] && CROWD[zone]) {
+    prints[zone].crowd = await ev(`(() => {
+      const g = __g, D = Date, old = D.now, t0 = D.UTC(2026, 10, 1, 12, 10);
+      const walkers = g.walkers || [g.passers].filter(Boolean), out = [];
+      D.now = () => t0;
+      try {
+        for (const w of walkers) {
+          if (!w.update) continue;
+          for (let i = 0; i < 60; i++) w.update(1 / 60, g.player);
+          for (const q of w.last || []) {
+            const s = JSON.stringify(q.person?.look || q.plan?.look || null) || '';
+            let h = 0;
+            for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0;
+            out.push([q.key ?? q.plan?.key, q.x.toFixed(2), q.z.toFixed(2), (q.heading ?? 0).toFixed(2), q.walking ? 1 : 0, (q.alpha ?? 1).toFixed(2), h.toString(36)].join(':'));
+          }
+        }
+      } finally { D.now = old; }
+      return out.sort();
+    })()`).catch((e) => (problems.push('路人指紋 ' + e.message), null));
+  }
   if (ok) {
     const png = await ev(`new Promise((res) => {
       const g = __g, after = g.photo.afterRender;
@@ -154,6 +180,12 @@ if (diffWith) {
     for (const k of new Set([...a.keys(), ...b.keys()])) if ((a.get(k) || 0) !== (b.get(k) || 0)) diff.push(`${k}  ${a.get(k) || 0} → ${b.get(k) || 0}`);
     console.log(diff.length ? `✗ ${zone} 指紋不同\n    ${diff.join('\n    ')}` : `✓ ${zone} 指紋一樣`);
     if (diff.length) bad++;
+    if (base[zone]?.crowd || prints[zone]?.crowd) {
+      const ca = count(base[zone]?.crowd), cb = count(prints[zone]?.crowd), cd = [];
+      for (const k of new Set([...ca.keys(), ...cb.keys()])) if ((ca.get(k) || 0) !== (cb.get(k) || 0)) cd.push(`${k}  ${ca.get(k) || 0} → ${cb.get(k) || 0}`);
+      console.log(cd.length ? `✗ ${zone} 路人指紋不同（${cd.length} 筆）\n    ${cd.slice(0, 12).join('\n    ')}` : `✓ ${zone} 路人指紋一樣（${(prints[zone]?.crowd || []).length} 人）`);
+      if (cd.length) bad++;
+    }
   }
 }
 ws.close();

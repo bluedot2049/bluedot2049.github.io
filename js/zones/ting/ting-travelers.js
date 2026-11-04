@@ -5,11 +5,11 @@
 // 先下後上：要上車的人等下車的人走出來才一個一個走過去。等車的位子每邊分兩組，單號班和雙號班下來的人各用一組，不會搶同一個位子；
 // 少數人錯過一班，多等一輪。每邊另有一位等很久的人坐在長椅中間（有的打瞌睡），大約十分鐘換一個，月台很少空著。
 // 近處用完整的角色（手機 7 個、電腦 9 個），遠處兩個簡單的形狀。一半的人右手提一只小皮箱，停下來就放在腳邊；從靜海來的偶爾穿太空衣，從蜃樓來的多半披沙色的斗篷。
-// main.js 把它當成這一區的路人（passers），每幀呼叫 update(dt, player)
+// main.js 把它當成這一區走來走去的人（walkers），每幀呼叫 update(dt, player)。角色池、遠處的人形、讓路、轉頭在 npc/crowdkit.js
 import * as THREE from 'three';
-import { Character } from '../../avatar/character.js';
 import { presetLook, sanitizeLook, RACES, SLIDERS, CLOTH, SKINS } from '../../avatar/looks.js';
 import { rng } from '../../core/props.js';
+import { hash, wrap, CharacterPool, FarFigures, dodgeFrom, easeOffset, turnHead, ghostStep } from '../../npc/crowdkit.js';
 import { signOf } from '../../scene/places.js';
 import { ENDS, LINES, SPOTS, STATION, doorFloor } from './ting-station.js';
 import { TREE } from './ting-marsh.js';
@@ -79,20 +79,6 @@ function travelerLook(R, from) {
 
 // ---------- 行程 ----------
 
-// 幾個整數攪成 0 到 1 之間的數。連續的班次編號也要打得很散
-const hash = (...n) => {
-  let h = 0x811c9dc5;
-  for (const v of n) {
-    h = Math.imul(h ^ (v | 0), 0x01000193);
-    h ^= h >>> 15;
-    h = Math.imul(h, 0x2c1b3c6d);
-    h ^= h >>> 12;
-    h = Math.imul(h, 0x297a2d39);
-    h ^= h >>> 15;
-  }
-  return (h >>> 0) / 4294967296;
-};
-const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const smooth01 = (t) => { const x = Math.min(1, Math.max(0, t)); return x * x * (3 - 2 * x); };
 
 // 第 li 條線第 k 班下來幾個人（不算等很久的那位）
@@ -237,30 +223,13 @@ export class Travelers {
     this.state = new Map();      // 每個人在畫面上的小狀態：讓路的偏移、轉頭
     this.cleaned = 0;
     this.hidden = false;
-    this.pool = [];
-    for (let i = 0; i < (coarse ? POOL_LOW : POOL); i++) {
-      const ch = new Character(shadowTex, presetLook(i));
-      ch.group.visible = false;
-      scene.add(ch.group);
-      const valise = new THREE.Mesh(valiseGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
-      valise.visible = false;
-      this.pool.push({ ch, key: null, valise });
-    }
+    // 完整的角色（crowdkit.js 的角色池），每一格多一只小皮箱
+    this.pool = new CharacterPool(scene, shadowTex, coarse ? POOL_LOW : POOL, (e) => {
+      e.valise = new THREE.Mesh(valiseGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+      e.valise.visible = false;
+    });
     // 遠處的人：身體一個形狀、頭一個形狀
-    const mat = new THREE.MeshLambertMaterial({ flatShading: true }), max = 24;
-    this.bodies = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.16, 0.25, 0.85, 6).translate(0, 0.43, 0), mat, max);
-    this.heads = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.17, 0).translate(0, 1.04, 0), mat, max);
-    for (const m of [this.bodies, this.heads]) {
-      m.count = 0;
-      m.frustumCulled = false;
-      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      scene.add(m);
-    }
-    this.m4 = new THREE.Matrix4();
-    this.q = new THREE.Quaternion();
-    this.v = new THREE.Vector3();
-    this.s = new THREE.Vector3();
-    this.c = new THREE.Color();
+    this.far = new FarFigures(scene, 24);
   }
 
   // 要搭第 b 條線第 kb 班的人，照上車的先後排好：離車門近的先上，走到門口的順序才不會亂
@@ -340,8 +309,8 @@ export class Travelers {
 
   update(dt, player) {
     if (this.hidden) {
-      for (const e of this.pool) { e.key = null; e.ch.group.visible = false; }
-      this.bodies.count = this.heads.count = 0;
+      this.pool.hideAll();
+      this.far.hide();
       return;
     }
     const now = Date.now() / 1000, P = player.pos, world = this.world;
@@ -355,15 +324,14 @@ export class Travelers {
     this.last = people;   // 量測用
     // 近的先分到完整的角色；換外觀要重建網格，一幀最多換一個
     const near = people.filter((q) => q.d < NEAR).sort((a, b) => a.d - b.d).slice(0, this.pool.length);
-    const keep = new Set(near.map((q) => q.plan.key));
-    for (const e of this.pool) if (e.key && !keep.has(e.key)) { e.key = null; e.ch.group.visible = false; }
+    this.pool.release(new Set(near.map((q) => q.plan.key)));
     let rebuilt = 0;
     const shown = new Set();
     for (const q of near) {
-      let e = this.pool.find((x) => x.key === q.plan.key);
+      let e = this.pool.find(q.plan.key);
       if (!e) {
         if (rebuilt >= 1) continue;
-        e = this.pool.find((x) => !x.key);
+        e = this.pool.take(q.plan.key);
         if (!e) continue;
         this.assign(e, q);
         rebuilt++;
@@ -372,23 +340,13 @@ export class Travelers {
       shown.add(q.plan.key);
     }
     // 其他人：遠處的簡單人形
-    let n = 0;
+    this.far.begin();
     for (const q of people) {
-      if (shown.has(q.plan.key) || q.alpha < 0.05 || n >= this.bodies.instanceMatrix.count) continue;
+      if (shown.has(q.plan.key) || q.alpha < 0.05) continue;
       const L = q.plan.look, s = q.alpha;
-      this.q.setFromAxisAngle(this.v.set(0, 1, 0), q.heading);
-      this.m4.compose(this.v.set(q.fx, q.fy + (q.sit ? 0.15 : 0), q.fz), this.q, this.s.set(s, q.sit ? s * 0.8 : s, s));
-      this.bodies.setMatrixAt(n, this.m4);
-      this.heads.setMatrixAt(n, this.m4);
-      this.bodies.setColorAt(n, this.c.setHex(CLOTH[L.one !== 'none' ? L.oneC : L.outer !== 'none' ? L.outC : L.topC]));
-      this.heads.setColorAt(n, this.c.setHex(SKINS[L.skin]));
-      n++;
+      this.far.add(q.fx, q.fy + (q.sit ? 0.15 : 0), q.fz, q.heading, s, q.sit ? s * 0.8 : s, s, CLOTH[L.one !== 'none' ? L.oneC : L.outer !== 'none' ? L.outC : L.topC], SKINS[L.skin]);
     }
-    this.bodies.count = this.heads.count = n;
-    for (const m of [this.bodies, this.heads]) {
-      m.instanceMatrix.needsUpdate = true;
-      if (m.instanceColor) m.instanceColor.needsUpdate = true;
-    }
+    this.far.end();
   }
 
   // 玩家擋在面前：往旁邊讓一點（坐著的不動），讓開的地方要站得住；之後慢慢回到原本的路上
@@ -396,14 +354,10 @@ export class Travelers {
     const st = this.stateOf(q.plan.key), world = this.world;
     let tx = 0, tz = 0;
     if (!q.sit && q.d < DODGE && q.alpha > 0.5) {
-      const rx = Math.cos(q.heading), rz = -Math.sin(q.heading), side = (P.x - q.x) * rx + (P.z - q.z) * rz > 0 ? -1 : 1, amt = (DODGE - q.d) * 0.7;
-      tx = rx * side * amt;
-      tz = rz * side * amt;
+      [tx, tz] = dodgeFrom(q, P, DODGE);
       if (!world.walkable(q.x + tx, q.z + tz)) tx = tz = 0;
     }
-    const rate = Math.hypot(tx, tz) >= Math.hypot(st.ox, st.oz) ? 7 : 2;
-    st.ox += (tx - st.ox) * Math.min(1, dt * rate);
-    st.oz += (tz - st.oz) * Math.min(1, dt * rate);
+    easeOffset(st, tx, tz, dt);
     q.fx = q.x + st.ox;
     q.fz = q.z + st.oz;
     q.fy = Math.max(world.groundY(q.fx, q.fz), doorFloor(q.fx, q.fz));
@@ -462,9 +416,8 @@ export class Travelers {
     } else if (q.watch && !p.sleepy && hash(Math.floor(p.seed * 1e6), Math.floor(now / 7)) < 0.4) {
       want = wrap((p.seed < 0.33 ? Math.atan2(TREE.x - q.fx, TREE.z - q.fz) : p.comeFrom) - G.rotation.y);
     }
-    st.head += (Math.max(-0.9, Math.min(0.9, want)) - st.head) * Math.min(1, dt * 4);
-    ch.head.rotation.y = st.head;
+    ch.head.rotation.y = turnHead(st, want, dt, 4);
     ch.head.rotation.x = p.sleepy && q.sit ? 0.3 + 0.06 * Math.sin(now * 0.55 + p.seed * 6) : 0;
-    ch.setGhost(q.alpha > 0.98 ? 1 : Math.round(q.alpha * 20) / 20);
+    ch.setGhost(ghostStep(q.alpha));
   }
 }

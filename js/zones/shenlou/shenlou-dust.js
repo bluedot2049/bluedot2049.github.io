@@ -5,10 +5,11 @@
 // 沙停的時候遠方沙丘裡的銅環才淡淡浮出來。光線：太陽被塵遮暗、帶橘，天光染成土色，影子跟著變淡。
 // 流沙：地面材質上一條一條細長的亮紋順著風跑（查 grade.js 那張雜訊圖，沒有多的網格），遠的淡掉，城牆裡弱一點。
 // 沙粒：一條一條很短的線，一次畫完。每一粒照種子放在一個跟著鏡頭的盒子裡被風吹著走，吹出盒子從另一頭接回來，CPU 每一幀只改幾個數。
-// 風小時是一點一點慢慢飄的塵，起風沙時拉成一道一道橫飛的線；朝太陽看的那些被照亮。數量照畫質，手機少一些
+// 風小時是一點一點慢慢飄的塵，起風沙時拉成一道一道橫飛的線；朝太陽看的那些被照亮。數量照畫質，手機少一些。
+// 沙粒的幾何、跟著鏡頭的盒子、寬度照螢幕這些跟雨絲共用（core/weatherfx.js）
 import * as THREE from 'three';
-import { rng } from '../../core/props.js';
 import { uTime } from '../../core/scenery.js';
+import { quadStreaks, driftStep, fitScreen, qualityOf } from '../../core/weatherfx.js';
 import { GRADE, GRADE_VERT, TUNE, WEATHER, gradeUniforms } from '../../core/grade.js';
 import { Dust } from '../../core/weather.js';
 
@@ -29,16 +30,8 @@ const T_HAZE = ratio(HAZE), T_STORM = ratio(STORM), T_CALM = ratio(CALM);
 
 // 沙粒：一粒一個四邊形，順著風拉成一條，頭（往前飛的那端）濃、尾巴淡。三種飛速各自累積被吹了多遠（CPU 照風速積分，繞著盒子取餘數）
 function grainMesh(max) {
-  const g = new THREE.InstancedBufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, 0, 0, 1, 0, 0, -1, 1, 0, 1, 1, 0]), 3));
-  g.setIndex([0, 1, 2, 2, 1, 3]);
-  const R = rng('shenlou-dust'), seeds = new Float32Array(max * 4);
-  for (let i = 0; i < max; i++) {
-    // 低的多、高的少：沙貼著地面被吹著跑，越高越稀
-    seeds.set([R(), R() ** 1.8, R(), R()], i * 4);
-  }
-  g.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seeds, 4));
-  g.instanceCount = 0;
+  // 低的多、高的少：沙貼著地面被吹著跑，越高越稀
+  const g = quadStreaks(max, 'shenlou-dust', (R) => [R(), R() ** 1.8, R(), R()]);
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       uBox: { value: BOX }, uFloor: { value: 0 }, uDriftA: { value: new THREE.Vector3() }, uDriftB: { value: new THREE.Vector3() }, uDriftC: { value: new THREE.Vector3() },
@@ -138,7 +131,7 @@ function sandFlow(mat, u) {
 // zone-shenlou.js 在建好蜃樓以後呼叫。world.sandMat 是沙地的材質，world.townR 是城牆多遠（公尺）
 export function buildDust({ scene, world, renderer, quality, coarse, params }) {
   const weather = new Dust('shenlou', params);
-  const level = () => quality?.level ?? (coarse ? 'mid' : 'high');
+  const level = () => qualityOf(quality, coarse);
   const mesh = grainMesh(COUNT.high), u = mesh.material.uniforms;
   scene.add(mesh);
   const flow = {
@@ -156,7 +149,6 @@ export function buildDust({ scene, world, renderer, quality, coarse, params }) {
 
   const dir = new THREE.Vector3(WIND.x, 0, WIND.y).normalize(), vel = new THREE.Vector3(), size = new THREE.Vector2();
   const drifts = [[u.uDriftA.value, 0.8], [u.uDriftB.value, 1], [u.uDriftC.value, 1.25]];
-  const wrap = (v) => v.set(((v.x % BOX.x) + BOX.x) % BOX.x, ((v.y % BOX.y) + BOX.y) % BOX.y, ((v.z % BOX.z) + BOX.z) % BOX.z);
   const tint = new THREE.Color(), storm = new THREE.Color();
   // 回傳給 shenlou.js 的光線：跟 sky() 一樣的幾樣，顏色換成這一刻塵裡的
   const out = { bg: new THREE.Color(), sky: new THREE.Color(), ground: new THREE.Color(), light: new THREE.Color(), hi: 1, si: 1, near: 0, far: 0 };
@@ -206,7 +198,7 @@ export function buildDust({ scene, world, renderer, quality, coarse, params }) {
       if (!mesh.visible) return out;
       vel.copy(dir).multiplyScalar(speed);
       vel.y = 0.25 * Math.sin(uTime.value * 0.7) * (0.3 + st);
-      for (const [v, k] of drifts) wrap(v.addScaledVector(vel, dt * k));
+      driftStep(drifts, vel, dt, BOX);
       u.uDir.value.copy(vel).normalize();
       u.uLen.value = speed * SHUTTER;
       u.uFloor.value = floor - 0.4;
@@ -214,11 +206,7 @@ export function buildDust({ scene, world, renderer, quality, coarse, params }) {
       u.uAmt.value = (0.3 + 0.25 * haze + 0.25 * st) * (1 - 0.75 * smooth(-0.5, -4, floor));
       u.uShade.value.copy(out.bg).multiplyScalar(0.72);
       u.uLit.value.copy(out.bg).multiplyScalar(1.05).add(storm.copy(out.light).multiplyScalar(0.18 * out.si));
-      if (renderer) {
-        renderer.getDrawingBufferSize(size);
-        u.uView.value.copy(size).multiplyScalar(0.5);
-        u.uWidth.value = Math.min(4, Math.max(1.2, 1.3 * renderer.getPixelRatio() * look.width.value));
-      }
+      if (renderer) fitScreen(renderer, size, u, 1.3, look.width.value);
       return out;
     },
   };

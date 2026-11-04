@@ -116,7 +116,7 @@ export function crowd({ scene, world, shadowTex, player, camera, ambience, coars
     top.material.map = tex;
     top.material.needsUpdate = true;
   });
-  return { vendors, passers, animals };
+  return { vendors, walkers: [passers], animals };
 }
 
 // 抵達：從碼頭開始，面向山城，鏡頭在角色背後
@@ -130,12 +130,5 @@ export function arrive({ player, world, params }) {
     player.camDist = 7;
     player.camPitch = 0.3;
     player.snapCamera();
-  }
-  // 測試用：?view=x,z,面向(度),鏡頭距離,俯角(度)，直接站到那裡看
-  const view = params.get('view')?.split(',').map(Number);
-  if (view?.length >= 2 && view.every(Number.isFinite)) {
-    player.camDist = view[3] ?? player.camDist;
-    player.camPitch = ((view[4] ?? 20) * Math.PI) / 180;
-    player.place(view[0], view[1], ((view[2] ?? 180) * Math.PI) / 180);
   }
 }

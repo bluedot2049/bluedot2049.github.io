@@ -22,9 +22,9 @@ export function env(world) {
   return [world.env];
 }
 
-// 還沒有住民。汀站有來換線的旅客：不說話，交給 main.js 的路人那一格（每幀呼叫 passers.update）
+// 還沒有住民。汀站有來換線的旅客：不說話，當成走來走去的人（walkers，main.js 每幀呼叫 update）
 export function crowd({ scene, world, shadowTex, coarse }) {
-  return { passers: new Travelers({ scene, world, shadowTex, coarse }) };
+  return { walkers: [new Travelers({ scene, world, shadowTex, coarse })] };
 }
 
 // 黑眼（scene/guide.js）帶得到的地方，去過才列，渡船 guide.js 自己加在第一個。id 只用小寫英文和數字（會送給別人）。
@@ -39,11 +39,4 @@ export function guide() {
 // 抵達：站在擱淺的船旁邊，面向北邊
 export function arrive({ player, world, params }) {
   player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
-  // 測試用：?view=x,z,面向(度),鏡頭距離,俯角(度)，直接站到那裡看
-  const view = params.get('view')?.split(',').map(Number);
-  if (view?.length >= 2 && view.every(Number.isFinite)) {
-    player.camDist = view[3] ?? player.camDist;
-    player.camPitch = ((view[4] ?? 20) * Math.PI) / 180;
-    player.place(view[0], view[1], ((view[2] ?? 180) * Math.PI) / 180);
-  }
 }

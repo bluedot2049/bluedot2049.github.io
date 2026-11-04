@@ -7,6 +7,7 @@
 // （V 越肩、E 互動、中鍵標記在 player.js；P 攝影、Q 閃光、~ 日期、F 直橫在 photo.js；T 說話、G 標記、X 吹哨在 party.js；1–5 表情在 main.js）
 import { setUiSize, uiSize } from './ui.js';
 import { emoteSVG } from '../social/emotes.js';
+import { setPref } from '../save/prefs.js';
 
 const typing = (e) => !!e.target.closest?.('#dress, input:not([type=checkbox]):not([type=range]), textarea');
 const HOTKEYS = { o: 'party-btn', h: 'more-btn' };
@@ -144,7 +145,7 @@ export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote 
   const keep = () => {
     player.mouseSens = +sens.value;
     player.invertY = inv.checked;
-    try { localStorage.setItem('mouse', JSON.stringify({ sens: player.mouseSens, invert: player.invertY })); } catch {}
+    setPref('mouse', { sens: player.mouseSens, invert: player.invertY });
   };
   sens.value = player.mouseSens;
   inv.checked = player.invertY;

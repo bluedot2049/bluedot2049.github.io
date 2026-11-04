@@ -19,13 +19,15 @@ import * as THREE from 'three';
 import { lens, fitSource, unbend, COVER } from '../core/lens.js';
 import { makePostcard, loadQR } from '../save/postcard.js';
 import { packFace } from '../save/filmcode.js';
-import { getSave, sanitizeLook, decodeFace } from '../avatar/looks.js';
+import { sanitizeLook, decodeFace } from '../avatar/looks.js';
+import { getSave } from '../save/progress.js';
 import { encodeLook, encodeSave } from '../save/savecode.js';
 import { savePrint } from '../save/pack.js';
 import { CAMERAS, carried, dateKnob, drawDate, eyeShutter, flashKnob, longTan, shutterKnob } from './cameras.js';
 import { MARKS, markURL } from './marks.js';
 import { dof, dofK } from '../core/dof.js';
 import { addPhoto, canShare, discard, saveChosen, saveTip, shareChosen } from './album.js';
+import { pref, setPref, dropPref } from '../save/prefs.js';
 
 const ASPECTS = [
   { label: '螢幕', r: 0 },
@@ -56,6 +58,7 @@ const ALT_MARKS = [['俯瞰', 8], ['眼高', 1.6], ['貼地', 0.3]];
 const altAt = (h) => Math.log(h / H_MIN) / Math.log(H_MAX / H_MIN);
 const MAX_REC = 60;   // 錄影最長秒數
 const KEY = 'photo';
+const _fwd = new THREE.Vector3(), _want = new THREE.Vector3();   // 每一幀算視線、目標用的，不每幀 new
 // 帶著相機時：拿法、按住快門多久算長曝光、長曝光最長幾秒。拿法和閃光每台相機各記各的
 const GRIPS = ['蹲低', '眼高', '舉高', '自拍'];
 const HOLD_MS = 280, MAX_EXPOSE = 10;
@@ -106,11 +109,8 @@ function noiseTile() {
 const REC_KEY = 'photoRec';
 function pickMime(desktop) {
   if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) return null;
-  let webmOnly = false;
-  try {
-    webmOnly = !!localStorage.getItem(REC_KEY);
-    if (webmOnly) localStorage.setItem(REC_KEY, 'webm');
-  } catch {}
+  const webmOnly = !!pref(REC_KEY);
+  if (webmOnly) setPref(REC_KEY, 'webm');
   const mp4 = ['video/mp4;codecs=avc1.64002a', 'video/mp4;codecs=avc1.4d002a', 'video/mp4;codecs=avc1', 'video/mp4'];
   const webm = ['video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm'];
   // 電腦版 Chrome 的 H.264 走顯卡硬體編碼，有些顯卡會直接讓分頁當掉（無痕、一般模式都會），所以電腦先錄 webm（軟體編碼）；手機和 Safari 照舊 mp4
@@ -118,10 +118,8 @@ function pickMime(desktop) {
   return list.find((m) => MediaRecorder.isTypeSupported?.(m)) || null;
 }
 function markRec(on) {
-  try {
-    if (on) localStorage.setItem(REC_KEY, 'rec');
-    else if (localStorage.getItem(REC_KEY) === 'rec') localStorage.removeItem(REC_KEY);
-  } catch {}
+  if (on) setPref(REC_KEY, 'rec');
+  else if (pref(REC_KEY) === 'rec') dropPref(REC_KEY);
 }
 
 export class PhotoMode {
@@ -188,31 +186,26 @@ export class PhotoMode {
   }
 
   load() {
-    const d = { aspect: 0, pose: 0, look: 0 };
-    try {
-      const s = JSON.parse(localStorage.getItem(KEY));
-      if (s && typeof s === 'object') {
-        for (const k of Object.keys(d)) if (typeof s[k] === typeof d[k]) d[k] = s[k];
-        d.aspect = Math.min(Math.max(0, d.aspect | 0), ASPECTS.length - 1);
-        d.pose = d.pose === 1 ? 1 : 0;
-        d.look = d.look === 1 ? 1 : 0;
-      }
-    } catch {}
+    const d = { aspect: 0, pose: 0, look: 0 }, s = pref(KEY);
+    if (s && typeof s === 'object') {
+      for (const k of Object.keys(d)) if (typeof s[k] === typeof d[k]) d[k] = s[k];
+      d.aspect = Math.min(Math.max(0, d.aspect | 0), ASPECTS.length - 1);
+      d.pose = d.pose === 1 ? 1 : 0;
+      d.look = d.look === 1 ? 1 : 0;
+    }
     return d;
   }
 
   save() {
     const { aspect, pose } = this, look = this.lookOn ? 1 : 0;
-    try { localStorage.setItem(KEY, JSON.stringify({ aspect, pose, look })); } catch {}
+    setPref(KEY, { aspect, pose, look });
     if (this.gear) this.saveGear();
   }
 
   // 每台相機各自記得的拿法、方向、閃光、日期印記
   gearPrefs() {
-    try {
-      const all = JSON.parse(localStorage.getItem(GEAR_KEY));
-      return all && typeof all === 'object' ? all : {};
-    } catch { return {}; }
+    const all = pref(GEAR_KEY);
+    return all && typeof all === 'object' ? all : {};
   }
 
   saveGear() {
@@ -220,7 +213,7 @@ export class PhotoMode {
     // 舉相機時中鍵切的自拍不記，下次舉起來還是原本的拿法
     const grip = this.quick && this.grip === 3 ? this.preSelfie ?? 1 : this.grip;
     all[this.gear.id] = { grip, upright: this.upright, flash: this.flashOn, date: this.dateOn };
-    try { localStorage.setItem(GEAR_KEY, JSON.stringify(all)); } catch {}
+    setPref(GEAR_KEY, all);
   }
 
   // 拿起相機：鏡頭回到角色手上，先對畫面中央的東西對一次焦
@@ -985,6 +978,8 @@ export class PhotoMode {
     const c = Math.cos(this.pitch);
     return out.set(-Math.sin(this.yaw) * c, Math.sin(this.pitch), -Math.cos(this.yaw) * c);
   }
+  // 鏡頭看的那一點：位置加上視線（每一幀都要，用共用的向量，不每幀 new）
+  lookPoint() { return this.forward(_fwd).add(this.pos); }
 
   // 每幀在 player.update 之後呼叫，鏡頭交給這裡擺
   update(dt) {
@@ -1006,7 +1001,7 @@ export class PhotoMode {
       this.pitch = this.aimPitch = st.pitch;
       this.fov = this.cur = st.fov;
       cam.position.copy(this.pos);
-      cam.lookAt(this.pos.clone().add(this.forward(new THREE.Vector3())));
+      cam.lookAt(this.lookPoint());
       this.applyLens();
       return;
     }
@@ -1024,7 +1019,7 @@ export class PhotoMode {
     if (f || s || u) this.fly = null;
     // 推鏡：沿著視線（含上下）走，剩下的距離慢慢走完
     if (Math.abs(this.dolly) > 1e-4) {
-      const step = this.dolly * (1 - Math.exp(-dt * 8)), fw = this.forward(new THREE.Vector3());
+      const step = this.dolly * (1 - Math.exp(-dt * 8)), fw = this.forward(_fwd);
       this.dolly -= step;
       this.dollyDone += step;
       this.pos.addScaledVector(fw, step);
@@ -1037,7 +1032,7 @@ export class PhotoMode {
       this.pos.z += (this.fly.z - this.pos.z) * a;
       if (Math.hypot(this.fly.x - this.pos.x, this.fly.z - this.pos.z) < 0.005) this.fly = null;
     }
-    const want = new THREE.Vector3(-sy * f + cy * s, 0, -cy * f - sy * s);
+    const want = _want.set(-sy * f + cy * s, 0, -cy * f - sy * s);
     if (want.lengthSq() > 1) want.normalize();
     want.multiplyScalar(SPEED * fast);
     // 起步和停下都慢慢來，錄起來才不會一頓一頓
@@ -1045,7 +1040,7 @@ export class PhotoMode {
     this.pos.addScaledVector(this.vel, dt);
 
     const mv = this.rec ? MOVES[this.move] : '手動';
-    if (mv === '推近') this.pos.addScaledVector(this.forward(new THREE.Vector3()), 0.55 * dt);
+    if (mv === '推近') this.pos.addScaledVector(this.forward(_fwd), 0.55 * dt);
     else if (mv === '升起') this.setHeight(this.height + 0.35 * dt);
     else if (mv === '橫移') { this.pos.x += cy * 0.6 * dt; this.pos.z -= sy * 0.6 * dt; }
     else if (mv === '搖鏡') this.aimYaw -= 0.1 * dt;
@@ -1075,7 +1070,7 @@ export class PhotoMode {
     this.pitch += (this.aimPitch - this.pitch) * t;
     const cam = this.camera;
     cam.position.copy(this.pos);
-    cam.lookAt(this.pos.clone().add(this.forward(new THREE.Vector3())));
+    cam.lookAt(this.lookPoint());
     this.cur = Math.abs(this.fov - this.cur) > 0.01 ? this.cur + (this.fov - this.cur) * t : this.fov;
     this.applyLens();
 
@@ -1117,13 +1112,13 @@ export class PhotoMode {
     ch.group.rotation.y = p.heading;
     const hx = -Math.sin(this.yaw), hz = -Math.cos(this.yaw), d = ch.dims, y = p.sh.y;
     const want = selfie
-      ? new THREE.Vector3(p.pos.x - hx * 0.9, y + d.faceY + 0.12, p.pos.z - hz * 0.9)
-      : new THREE.Vector3(p.pos.x + hx * 0.12, y + [d.faceY * 0.5, d.faceY, d.topY + 0.35][this.grip], p.pos.z + hz * 0.12);
+      ? _want.set(p.pos.x - hx * 0.9, y + d.faceY + 0.12, p.pos.z - hz * 0.9)
+      : _want.set(p.pos.x + hx * 0.12, y + [d.faceY * 0.5, d.faceY, d.topY + 0.35][this.grip], p.pos.z + hz * 0.12);
     if (this.needAF || this.snapHand) this.pos.copy(want);
     else this.pos.lerp(want, 1 - Math.exp(-dt * 18));
     this.snapHand = false;
     cam.position.copy(this.pos);
-    cam.lookAt(this.pos.clone().add(this.forward(new THREE.Vector3())));
+    cam.lookAt(this.lookPoint());
     this.applyLens();
     if (this.needAF) {
       this.needAF = false;

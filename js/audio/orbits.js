@@ -3,10 +3,12 @@
 // 靜海的背景音樂「寂靜軌道」：A Lydian、沒有拍子的宇宙 ambient，照根目錄的 寂靜軌道_preset.md 做。全部現場合成，不下載音檔。
 // 七顆行星各自照公轉週期敲自己的音，週期沒有公倍數，旋律不會重複；底下深空低鳴、星雲和弦每 40 秒換一次，
 // 再加太陽風、時有時無的脈衝星、電離層的哨聲和黎明合唱，偶爾一段倒放的鐘、質數信標、引力波啁啾。
-// 深空和星雲各自時而浮現、時而退場（不會同時消失）。對外的樣子跟 <audio> 一樣（paused、play()、pause()），ambience.js 管音量和靜音
+// 深空和星雲各自時而浮現、時而退場（不會同時消失）。對外的樣子跟 <audio> 一樣（paused、play()、pause()），ambience.js 管音量和靜音。
+// 底座（play、pause、節點的小工具）在 synthkit.js 的 Song，這裡只有這首曲子自己的聲層和事件
+import { Song, R, range, mtof, mix, impulse, whiteNoise } from './synthkit.js';
+
 const DRIFT = 0.65;                         // 整體時間倍率：越小越慢
 const CHORD = 26 / DRIFT, OVERLAP = 10;     // 和弦多久換一次、前後交疊幾秒
-const mix = (v) => v * v * 1.3;
 const MIX = { drone: mix(0.34), pad: mix(0.6), bells: mix(0.59), wind: mix(0.55), pulsar: mix(0.72), radio: mix(0.54), signals: mix(0.58) };
 const OUT_GAIN = 2.1;                       // 對到星盤夜讀的響度再小一點：這一區整體比較安靜
 const REVERB = 9, ECHO = 1.1;
@@ -23,16 +25,9 @@ const CHORDS = [
 const PLANETS = [[81, 6.1], [76, 8.3], [83, 10.7], [73, 13.9], [88, 17.3], [71, 22.9], [78, 29.3]];
 const PRIMES = [2, 3, 5, 7, 11, 13];
 
-const R = Math.random;
-const range = (a, b) => a + R() * (b - a);
-const mtof = (m) => 440 * 2 ** ((m - 69) / 12);
-
-export class SilentOrbits {
+export class SilentOrbits extends Song {
   constructor(ctx, out, amb) {
-    this.ctx = ctx;
-    this.amb = amb;
-    this.paused = true;
-    this.gen = 0;
+    super(ctx, out, amb);
     const c = ctx;
     // 總線：乾聲和殘響一起過輕度壓縮、9kHz 低通
     const comp = c.createDynamicsCompressor();
@@ -60,21 +55,6 @@ export class SilentOrbits {
     this.white = whiteNoise(c, 3);
   }
 
-  gain(v) { const g = this.ctx.createGain(); g.gain.value = v; return g; }
-  filter(type, freq, Q = 0.7) {
-    const f = this.ctx.createBiquadFilter();
-    f.type = type;
-    f.frequency.value = freq;
-    f.Q.value = Q;
-    return f;
-  }
-  panner(p) {
-    const c = this.ctx;
-    if (!c.createStereoPanner) return this.gain(1);
-    const n = c.createStereoPanner();
-    n.pan.value = Math.max(-1, Math.min(1, p));
-    return n;
-  }
   // 一個聲層的出口：音量照 mixer，乾聲進總線、一部分送殘響。session 是這一次播放的根，暫停時整串拔掉
   layer(vol, send) {
     const g = this.gain(vol);
@@ -82,60 +62,8 @@ export class SilentOrbits {
     if (send) g.connect(this.gain(send)).connect(this.sendBus);
     return g;
   }
-  osc(type, freq, t, stop, dest) {
-    const o = this.ctx.createOscillator();
-    o.type = type;
-    o.frequency.value = freq;
-    o.connect(dest);
-    o.start(t);
-    if (stop) {
-      o.stop(stop);
-      o.onended = () => o.disconnect();
-    } else this.keep.push(o);
-    return o;
-  }
-  // 慢慢擺動的 LFO：接到某個參數上，中心值不動、上下 depth
-  lfo(freq, depth, param, type = 'sine') {
-    const g = this.gain(depth);
-    g.connect(param);
-    return this.osc(type, freq, this.ctx.currentTime, 0, g);
-  }
-  noise(dest, offset = R() * 5) {
-    const s = this.ctx.createBufferSource();
-    s.buffer = this.amb.noise || this.white;
-    s.loop = true;
-    s.connect(dest);
-    s.start(0, offset);
-    this.keep.push(s);
-    return s;
-  }
-
-  play() {
-    if (!this.paused) return Promise.resolve();
-    this.paused = false;
-    const gen = ++this.gen;
-    // 音訊還沒醒（剛 resume）時 currentTime 不會走，等它真的跑起來再開始
-    const begin = () => {
-      if (gen !== this.gen) return;
-      if (this.ctx.state !== 'running') { setTimeout(begin, 100); return; }
-      this.start();
-      this.timer = setInterval(() => this.tick(gen), 250);
-      this.tick(gen);
-    };
-    begin();
-    return Promise.resolve();
-  }
-
-  pause() {
-    this.paused = true;
-    this.gen++;
-    clearInterval(this.timer);
-    for (const s of this.keep || []) { try { s.stop(); } catch {} }
-    this.keep = [];
-    // 還沒響完的短聲音跟著這一次的根一起拔掉
-    try { this.session?.disconnect(); this.sendBus?.disconnect(); this.bells?.disconnect(); } catch {}
-    this.session = this.sendBus = null;
-  }
+  // 暫停時跟著根一起拔掉的：行星的鐘
+  unplug() { this.bells?.disconnect(); }
 
   // 每次開始播都重新接一次：持續的聲層（深空、太陽風、星雲的濾波），和各種事件的下一次時間
   start() {
@@ -414,35 +342,4 @@ export class SilentOrbits {
     }
   }
 
-  // 一段雜訊，從 t 開始響 dur 秒
-  shot(dest, t, dur) {
-    const s = this.ctx.createBufferSource();
-    s.buffer = this.amb.noise || this.white;
-    s.loop = true;
-    s.connect(dest);
-    s.start(t, R() * 4);
-    s.stop(t + dur);
-    s.onended = () => s.disconnect();
-  }
-}
-
-// 殘響的脈衝：左右各一段雜訊，以指數曲線衰減，長 sec 秒到 -60dB
-function impulse(c, sec) {
-  const sr = c.sampleRate, len = Math.floor(sr * sec), buf = c.createBuffer(2, len, sr), tau = sec / 6.9;
-  for (let ch = 0; ch < 2; ch++) {
-    const d = buf.getChannelData(ch);
-    let lp = 0;
-    for (let i = 0; i < len; i++) {
-      const t = i / sr, k = Math.min(0.9, 0.25 + t * 0.08);   // 越後面越悶
-      lp = lp * k + (Math.random() * 2 - 1) * (1 - k);
-      d[i] = lp * Math.exp(-t / tau) * (i < sr * 0.02 ? i / (sr * 0.02) : 1);
-    }
-  }
-  return buf;
-}
-
-function whiteNoise(c, sec) {
-  const buf = c.createBuffer(1, Math.floor(c.sampleRate * sec), c.sampleRate), d = buf.getChannelData(0);
-  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-  return buf;
 }

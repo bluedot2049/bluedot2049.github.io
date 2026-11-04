@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { Player } from './controls/player.js';
 import { Character } from './avatar/character.js';
 import { Attention } from './avatar/attention.js';
-import { sanitizeLook, randomPreset, getSave, putSave } from './avatar/looks.js';
+import { sanitizeLook, randomPreset } from './avatar/looks.js';
+import { getSave, putSave } from './save/progress.js';
 import { decodeLook, decodeSave, tryOn, hasProgress, restoreSave } from './save/savecode.js';
 import { Creator } from './avatar/creator.js';
 import { Pack } from './save/pack.js';
@@ -34,6 +35,7 @@ import { PLACES } from './scene/places.js';
 import { bindDeskKeys } from './controls/deskkeys.js';
 import { Beast } from './npc/beast.js';
 import { Guide } from './scene/guide.js';
+import { pref, setPref, dropPref } from './save/prefs.js';
 
 // 世界分成幾個區域，一次只建一個，用 ?z= 指定，沒有寫就是畫廊。每個區域的內容寫在自己的 zone-*.js，用到才下載。
 // 換區域時整頁重新載入：瀏覽器一定會把上一個區域的記憶體收回去，手機才撐得住。
@@ -432,11 +434,15 @@ async function start() {
     },
   });
   scene.add(player.marker);
-  // 這一區走來走去的：畫廊有動物和搭船來看畫的冒險者，海市有攤販和路人
-  const { animals = null, visitors = null, vendors = null, passers = null } = Z.crowd({
+  // 這一區走來走去的：animals 動物、visitors 搭船來看畫的冒險者、vendors 攤販，這三種主程式認得（擋路、座位、互動鍵）；
+  // walkers 是其他只是走來走去的人（海市的路人、汀站的旅客、靜海的海牛人和旅客…）：每幀 update(dt, player)，
+  // 有 lookables 就登記給注意力，照相館拍照時 hidden 藏起來。新區域的住民寫成這樣就接得上，不用再改主程式
+  const cast = Z.crowd({
     scene, world, shadowTex, player, camera, ambience, host, coarse, params, ui,
     postcard: () => (studio ? studio.open() : photo.enter({ postcard: true })),
   });
+  const { animals = null, visitors = null, vendors = null } = cast;
+  const walkers = [...(cast.walkers ?? []), ...(cast.passers ? [cast.passers] : [])];
   const crowd = visitors || vendors;
   player.animals = animals;
   player.visitors = crowd;
@@ -444,7 +450,7 @@ async function start() {
   // 頭看哪裡（attention.js）：這一區的人、動物、東西登記進去；別人的人和鏡頭等連上線、自己的鏡頭等攝影模式建好再接（見下面）
   const attention = new Attention({ world, character });
   player.attn = attention;
-  for (const c of [animals, visitors, vendors, passers]) if (c?.lookables) attention.add((push) => c.lookables(push));
+  for (const c of [animals, visitors, vendors, ...walkers]) if (c?.lookables) attention.add((push) => c.lookables(push));
   // 胖頭頭人：頭身一體，臉大約在一公尺高
   for (const [k, m] of [['manatee', manatee], ['host', host]]) {
     if (m) attention.add((push) => m.group.visible && push(k, (o) => m.group.visible && !!o.copy(m.group.position).setY(m.group.position.y + 0.95), 'person', 1.1));
@@ -574,7 +580,7 @@ async function start() {
     ui.hint(next ? `帶著${CAMERAS[next].name}出門。按相機鈕拍照` : '放回桌上了。拍照時又是畫廊的眼睛，可以到處飛', 4000);
     showCams(f.slot);
   });
-  try { localStorage.removeItem('director'); } catch {}   // 導演運鏡拿掉了，舊的開關設定清掉
+  dropPref('director');   // 導演運鏡拿掉了，舊的開關設定清掉
   player.debug = params.has('debug');
 
   // 手機操作：搖桿走路，靠近畫作或鏡子時出現按鈕
@@ -582,14 +588,13 @@ async function start() {
   // 搖桿放哪一邊：直拿在右，單手拇指推；橫拿在左，跟一般雙手拿的遊戲一樣。換邊鈕把兩個方向都反過來，記住選擇
   if (coarse) {
     const land = matchMedia('(orientation: landscape)');
-    let swap = false;
-    try { swap = localStorage.getItem('joySwap') === '1'; } catch {}
+    let swap = pref('joySwap');
     const placeJoy = () => document.body.classList.toggle('joy-left', land.matches !== swap);
     placeJoy();
     land.addEventListener('change', placeJoy);
     document.getElementById('swap-btn').addEventListener('click', () => {
       swap = !swap;
-      try { localStorage.setItem('joySwap', swap ? '1' : '0'); } catch {}
+      setPref('joySwap', swap);
       placeJoy();
     });
   }
@@ -855,7 +860,7 @@ async function start() {
     ambience.voice(L.kind ? 'iris' : 'focus', 0.3 * Math.max(0, 1 - d / 12), ambience.panOf(dx, dz, Math.hypot(dx, dz)));
   };
   if (world.studios) {
-    studio = new Studio({ world, player, photo, passers });
+    studio = new Studio({ world, player, photo, walkers });
     studio.mp = mp;
     // ?studio=0：直接到第 0 個景（測試構圖用）
     if (params.has('studio')) setTimeout(() => studio.begin(+params.get('studio') || 0), 1500);
@@ -875,7 +880,7 @@ async function start() {
     guide.isMate = (id) => !!party && [...party.mates.values()].some((o) => o.s === id);
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, passers, quality, host, manatee, photo, studio, beast, guide };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, guide };
   const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass, dofPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
@@ -920,6 +925,13 @@ async function start() {
 
   // 抵達：站在哪裡、開場鏡頭怎麼走，每個區域自己定
   Z.arrive({ player, world, params, ui });
+  // 測試用，每一區都通：?view=x,z,面向(度),鏡頭距離,俯角(度)，直接站到那裡看
+  const view = params.get('view')?.split(',').map(Number);
+  if (view?.length >= 2 && view.every(Number.isFinite)) {
+    player.camDist = view[3] ?? player.camDist;
+    player.camPitch = ((view[4] ?? 20) * Math.PI) / 180;
+    player.place(view[0], view[1], ((view[2] ?? 180) * Math.PI) / 180);
+  }
   // 抵達用的參數用過就拿掉，重新整理時不會又跑去同一個地方
   if (params.has('from') || params.has('go') || params.has('via')) {
     const q = new URLSearchParams(location.search);
@@ -1067,7 +1079,7 @@ async function start() {
     animals?.update(dt);
     visitors?.update(dt);
     vendors?.update(dt, player, camera);
-    passers?.update(dt, player);
+    for (const w of walkers) w.update(dt, player);
     manatee?.update(dt, player.pos.x, player.pos.z, camera);
     hollow.update(dt, clock.elapsedTime, player.pos, camera);
     flashFx.update(dt);

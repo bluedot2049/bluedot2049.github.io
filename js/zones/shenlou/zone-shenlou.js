@@ -71,11 +71,4 @@ export function guide(world) {
 // 抵達：站在沙上的碼頭，面向北邊的城
 export function arrive({ player, world, params }) {
   player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
-  // 測試用：?view=x,z,面向(度),鏡頭距離,俯角(度)，直接站到那裡看
-  const view = params.get('view')?.split(',').map(Number);
-  if (view?.length >= 2 && view.every(Number.isFinite)) {
-    player.camDist = view[3] ?? player.camDist;
-    player.camPitch = ((view[4] ?? 20) * Math.PI) / 180;
-    player.place(view[0], view[1], ((view[2] ?? 180) * Math.PI) / 180);
-  }
 }

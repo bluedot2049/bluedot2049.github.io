@@ -4,6 +4,7 @@
 
 import { alchemyCovers } from '../core/alchemy-glyphs.js';
 import { emoteSVG, emoteName } from '../social/emotes.js';
+import { pref, setPref } from '../save/prefs.js';
 
 const $ = (s) => document.querySelector(s);
 
@@ -14,7 +15,7 @@ export const WORKS_OPEN = false;
 // 暫停選單的「介面大小」再乘上去，記在 uiSize。手機一律是 1，手機的大小在 hud.css 照畫面算。算好寫進 CSS 的 --ui（base.css）
 const SIZE_MIN = 0.8, SIZE_MAX = 1.5;
 let sizePick = 1, scale = 1;
-try { sizePick = Math.min(SIZE_MAX, Math.max(SIZE_MIN, +localStorage.getItem('uiSize') || 1)); } catch {}
+sizePick = Math.min(SIZE_MAX, Math.max(SIZE_MIN, pref('uiSize') || 1));
 export const uiScale = () => scale;
 export const uiSize = () => sizePick;
 
@@ -53,7 +54,7 @@ export function hugMedia(box, el) {
 // 暫停選單拉「介面大小」：存起來，發一次 resize 讓鏡頭、行囊、按鈕照新的大小重排
 export function setUiSize(k) {
   sizePick = Math.min(SIZE_MAX, Math.max(SIZE_MIN, k));
-  try { localStorage.setItem('uiSize', sizePick); } catch {}
+  setPref('uiSize', sizePick);
   dispatchEvent(new Event('resize'));
 }
 
@@ -136,11 +137,11 @@ export class UI {
       more.setAttribute('aria-label', text);
       more.title = text;
     };
-    try { tidy(localStorage.getItem('tidy') === '1'); } catch {}
+    tidy(pref('tidy'));
     more.addEventListener('click', () => {
       const on = !document.body.classList.contains('tidy');
       tidy(on);
-      try { localStorage.setItem('tidy', on ? '1' : '0'); } catch {}
+      setPref('tidy', on);
     });
     tapOnRelease($('#top-btns'));
     // 手機的行囊鈕在拇指弧上，不在那排裡（電腦上面已經排進去了）
@@ -402,8 +403,7 @@ export class UI {
   // 走動、轉鏡頭也會收掉（main.js 的 onInput）。收掉時照方框記下來，沒勾的話下次進門還會出現
   guide(again = false) {
     const el = $('#guide');
-    let off = false;
-    try { off = localStorage.getItem('guideOff') === '1'; } catch {}
+    const off = pref('guideOff');
     if ((off && !again) || el.classList.contains('show')) return;
     el.querySelector('.skip input').checked = off;
     el.classList.add('show');
@@ -422,7 +422,7 @@ export class UI {
     if (!el.classList.contains('show')) return;
     el.classList.remove('show');
     removeEventListener('keydown', this.guideKey, true);
-    try { localStorage.setItem('guideOff', el.querySelector('.skip input').checked ? '1' : '0'); } catch {}
+    setPref('guideOff', el.querySelector('.skip input').checked);
   }
 
   // 平面清單：舊手機或不想走動的人，直接看全部作品
@@ -513,7 +513,7 @@ export class UI {
         if (opened) return;
         opened = true;
         removeEventListener('keydown', key, true);
-        try { localStorage.setItem('entered', '1'); } catch {}
+        setPref('entered', true);
         this.onDoorOpen?.();
         const leaf = el.querySelector('.leaf'), from = getComputedStyle(leaf).transform, at = (d) => `perspective(600px) rotateY(${d}deg)`;
         for (const a of leaf.getAnimations()) a.cancel();

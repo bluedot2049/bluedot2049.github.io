@@ -63,16 +63,10 @@ export function crowd({ scene, world, shadowTex, coarse, params, ambience, playe
     update(dt, p, cam) { burger.update(dt, p, cam); stalls.update(dt, p, cam); },
   };
   if (params.get('crowd') === '0') return { vendors };
+  // 海牛人和旅客都是走來走去的人（walkers）：main.js 每幀 update，照相館拍照時 hidden
   const manatees = buildManatees(scene, { shadowTex, plan: world.plan, coarse, ambience, indoorness: world.indoorness, groundY: world.groundY });
   const guests = buildGuests(scene, { world, shadowTex, coarse });
-  const passers = {
-    get hidden() { return manatees.hidden; },
-    set hidden(v) { manatees.hidden = guests.hidden = v; },
-    list: null,
-    update(dt, p) { manatees.update(dt, p); guests.update(dt, p); },
-    lookables: (push) => guests.lookables(push),
-  };
-  return { vendors, passers };
+  return { vendors, walkers: [manatees, guests] };
 }
 
 // 抵達：站在降落坪上、渡船旁邊，面向北邊的總部和天上的地球
@@ -81,11 +75,4 @@ export function arrive({ player, world, params }) {
   player.camDist = 10;
   player.camPitch = (9 * Math.PI) / 180;
   player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
-  // 測試用：?view=x,z,面向(度),鏡頭距離,俯角(度)，直接站到那裡看
-  const view = params.get('view')?.split(',').map(Number);
-  if (view?.length >= 2 && view.every(Number.isFinite)) {
-    player.camDist = view[3] ?? player.camDist;
-    player.camPitch = ((view[4] ?? 20) * Math.PI) / 180;
-    player.place(view[0], view[1], ((view[2] ?? 180) * Math.PI) / 180);
-  }
 }

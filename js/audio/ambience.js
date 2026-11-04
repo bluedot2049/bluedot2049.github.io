@@ -4,6 +4,7 @@
 // 瀏覽器規定要等使用者點過畫面才能出聲，所以第一次點擊或按鍵時才建立。
 // 低頻壓掉、音量放輕、起伏放慢，聽起來是貼耳的空氣聲而不是轟轟的風
 import { CHEERS, EMOTE_BURST, EMOTE_HEAR, EMOTE_RATE, EMOTE_VOL, LAND_HEAR, LAND_VOL, MURMUR_DUCK, MURMUR_LAYERS, MURMUR_RMS, MURMUR_VOL, PENTA, SHOES, STEP_BURST, STEP_HEAR, STEP_RATE, STEP_VOL, VOICES, VOICE_LEN, VOICE_RMS, VOICE_VOL, biquad, loopOf, renderMurmur, silentWav } from './ambience-voices.js';
+import { pref, setPref } from '../save/prefs.js';
 const GUST_EVERY = 4;   // 每隔幾秒換一次風勢
 // 風聲和草葉聲的總音量。手機喇叭沒有低音，雜訊剛好落在它最響的中高頻，所以手機再壓低
 const COARSE = matchMedia('(pointer: coarse)').matches;
@@ -30,9 +31,9 @@ export class Ambience {
     this.leaving = false;    // 上船了：背景音樂淡出，之後不再淡回來（musicOut）
     this.beds = [];          // 某個地方自己的底聲（例如前廳的 vestibule-sound.js）：每一幀 update(this)，on 為真時音訊不睡，duck 是背景音樂要壓低幾成
     this.wetStep = null;     // 踩在濕地上多一聲水（海市的雨，rain-sound.js）：(角色, 出口, 時間)
-    try { this.muted = localStorage.getItem('muted') === '1'; } catch { this.muted = false; }
+    this.muted = pref('muted');
     // 切走時繼續播：電腦預設開，暫停選單可以關（setBackground）。手機切走是換 App 或鎖螢幕，一律不出聲
-    try { this.background = !COARSE && localStorage.getItem('bgAudio') !== '0'; } catch { this.background = !COARSE; }
+    this.background = !COARSE && pref('bgAudio');
     // 手機要在 touchend / click 這類「放開」的手勢裡才算使用者操作（iOS 的 pointerdown 不算），所以全部都聽。
     // 一直留著不拿掉：iOS 切到別的 App 回來會變成 interrupted，Safari 也不一定讓手勢以外的 resume() 生效，
     // 都要等下一次點畫面才救得回來
@@ -75,7 +76,7 @@ export class Ambience {
 
   setBackground(on) {
     this.background = !COARSE && on;
-    try { localStorage.setItem('bgAudio', on ? '1' : '0'); } catch {}
+    setPref('bgAudio', on);
     this.apply();
     this.awayTick();
   }
@@ -442,7 +443,7 @@ export class Ambience {
 
   setMuted(m) {
     this.muted = m;
-    try { localStorage.setItem('muted', m ? '1' : '0'); } catch {}
+    setPref('muted', m);
     if (!m) this.start();
     this.apply();
   }

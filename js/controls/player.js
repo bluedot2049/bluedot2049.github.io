@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { dockR, panelW, WORKS_OPEN } from './ui.js';
 import { lens, fitSource, unbend } from '../core/lens.js';
+import { pref, setPref } from '../save/prefs.js';
 
 const SPEED = 2.6;
 const DRAG_THRESHOLD = 8;
@@ -97,7 +98,7 @@ export class Player {
     this.distMax = world.camDistMax ?? DIST_MAX;   // 海市可以拉得比較遠，看得到整座山城
     this.shoulder = false;          // 越肩；遠近和俯仰跟一般跟拍分開記
     this.shoulderOk = !matchMedia('(pointer: coarse)').matches;   // 越肩先只給電腦，手機之後再做
-    try { this.shoulder = this.shoulderOk && localStorage.getItem('shoulder') === '1'; } catch {}
+    this.shoulder = this.shoulderOk && pref('shoulder');
     document.body.classList.toggle('shoulder', this.shoulder);
     this.shDist = shDefaultDist();
     this.shPitch = SH_PITCH_DEFAULT;
@@ -122,17 +123,17 @@ export class Player {
     this.holdLock = false;          // 舉相機時攝影模式接手，滑鼠照樣鎖著
     this.mouseSens = 1;             // 滑鼠靈敏度倍數、上下反轉（暫停選單裡調）
     this.invertY = false;
-    try {
-      const m = JSON.parse(localStorage.getItem('mouse') || 'null');
+    {
+      const m = pref('mouse');
       if (Number.isFinite(m?.sens)) this.mouseSens = THREE.MathUtils.clamp(m.sens, 0.3, 2.5);
       this.invertY = m?.invert === true;
-    } catch {}
+    }
     this.view = { ...SH_VIEW };     // 越肩的廣度和魚眼（暫停選單裡調）
-    try {
-      const v = JSON.parse(localStorage.getItem('view') || 'null');
+    {
+      const v = pref('view');
       if (Number.isFinite(v?.fov)) this.view.fov = THREE.MathUtils.clamp(v.fov, ...SH_FOV);
       if (Number.isFinite(v?.fish)) this.view.fish = THREE.MathUtils.clamp(v.fish, 0, 1);
-    } catch {}
+    }
     this.cursorWanted = null;       // 主程式：面板、打字框打開時要游標，放開鎖定
     this.mv = { x: 0, z: 0 };       // 越肩走路的速度（公尺／秒），帶起步和停下
     this.bodyRel = 0;               // 越肩平移、倒退時身體要轉離視線多少
@@ -471,7 +472,7 @@ export class Player {
     this.sh.dist = this.shDist;
     this.sh.reach = null;
     this.shVel = {};
-    try { localStorage.setItem('shoulder', on ? '1' : '0'); } catch {}
+    setPref('shoulder', on);
     this.onShoulder?.(on);
   }
 
@@ -497,7 +498,7 @@ export class Player {
   // 暫停選單改越肩的廣度、魚眼：鏡頭在 update 裡慢慢換過去
   setView(v) {
     Object.assign(this.view, v);
-    try { localStorage.setItem('view', JSON.stringify(this.view)); } catch {}
+    setPref('view', this.view);
   }
 
   // 視角和鏡頭變形套到鏡頭上：要彎時鏡頭畫一張比較廣的原圖，lens.js 再彎回畫面。攝影模式自己管，回來時呼叫這裡
