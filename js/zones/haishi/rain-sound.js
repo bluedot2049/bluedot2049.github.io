@@ -4,7 +4,7 @@
 // 全部現場合成（ambience.js 那份雜訊，加上自己撒的幾段小水滴聲），不下載音檔。聲音照站的地方變：躲到屋簷下沙沙變悶、滴答變近又變多；
 // 星廟殿裡幾乎聽不到（水鏡照舊無聲）。撐著傘多一層雨打傘面；踩在濕地上的腳步帶一點水聲（ambience.wetStep）。雨停了屋簷還滴一陣子。
 // 第一次聽到就已經在了，不淡入。下雨時背景音樂壓低一點（duck）。ambience.js 每一幀叫 update（ambience.beds）
-import { biquad, burst, envelope, osc, tone } from '../../audio/ambience-voices.js';
+import { biquad, burst, tone } from '../../audio/ambience-voices.js';
 import { AREA } from './haishi-map.js';
 
 const PHONE = matchMedia('(pointer: coarse)').matches;   // 手機喇叭沒有低音，雜訊剛好落在它最響的中高頻，壓低一點
@@ -134,12 +134,13 @@ export class RainSound {
     this.first = true;
   }
 
-  // 屋簷一滴：很短的一聲，音高往上滑（水珠落進水裡就是這樣），底下一點點敲的雜訊
+  // 屋簷一滴：先嗒一下打到水面，緊接著噗一聲，音高一開始就衝上去再停住（水珠落進水裡就是這樣）。
+  // 不要慢慢平均滑、也不要長：純音滑得慢又長就是鳥叫（ambience.js 的 bird），雨後一聲一聲單獨出來最像
   drip(amb, vol, pan) {
-    const ctx = amb.ctx, out = amb.out(vol, pan), t = ctx.currentTime + 0.02, f = 1100 + Math.random() * 1600, dur = 0.035 + Math.random() * 0.04;
-    osc(ctx, 'sine', t, dur, [[0, f], [dur, f * (1.4 + Math.random() * 0.5)]]).connect(envelope(ctx, t, 0.003, dur, 1)).connect(out);
-    burst(ctx, out, amb.noise, t, 0.012, 0.25, 'bandpass', 3500, 1.5);
-    amb.played(dur);
+    const ctx = amb.ctx, out = amb.out(vol, pan), t = ctx.currentTime + 0.02, f = 700 + Math.random() * 900, dur = 0.015 + Math.random() * 0.015;
+    burst(ctx, out, amb.noise, t, 0.012, 0.7, 'bandpass', 3500, 1.5);
+    tone(ctx, out, t + 0.004, dur, 1, 'sine', [[0, f], [dur * 0.25, f * 1.7], [dur, f * 1.9]]);
+    amb.played(dur + 0.004);
   }
 
   // 踩在濕地上：鞋子聲後面帶一聲短短的水聲（ambience.footstep 叫，out 已經照距離和左右調好）
