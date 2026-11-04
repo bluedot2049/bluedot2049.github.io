@@ -396,13 +396,26 @@ body.touch.shoulder #reticle { opacity: .85; }
 body.touch.shoulder.aim-hot #reticle::after { opacity: .9; transform: scale(1); }
 body.touch.panel-open #reticle { opacity: 0; }
 body.photo #reticle { display: none; }
-/* 舉相機拍的照片存好：左下角閃一下縮圖和存到哪裡 */
-.snapsave { position: fixed; left: calc(18px + env(safe-area-inset-left)); bottom: calc(18px + env(safe-area-inset-bottom)); z-index: 30; display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 6px; background: rgba(16, 11, 9, .86); border: 1px solid rgba(232, 184, 106, .35); border-radius: 2px; font-size: 12.5px; letter-spacing: .08em; color: var(--text); pointer-events: none; animation: snapsave-in .45s ease-out both; transition: opacity .5s, transform .5s; }
-.snapsave img { width: 96px; height: auto; display: block; border: 1px solid rgba(246, 219, 166, .6); }
-.snapsave.out { opacity: 0; transform: translateY(6px); }
-/* 電腦寬螢幕的左下角太遠，拍完眼睛掃不到：改在快門那排左邊，攝影模式的離開鈕再外側 */
-body.desk .snapsave { left: auto; right: calc(50% + 320px); bottom: calc(24px + env(safe-area-inset-bottom)); }
-@keyframes snapsave-in { 0% { opacity: 0; transform: translateY(8px) scale(.96); filter: brightness(2.2); } 35% { opacity: 1; filter: brightness(1.6); } 100% { transform: none; filter: none; } }
+/* 拍的照片收進相簿：右上角閃一下縮圖，底下寫存到哪裡（album.js 的 flash）。手機直拿排在攝影的選項列底下，
+   照片的高度讓開搖桿上面的高度尺；橫拿右上角是空的，貼上緣，高度讓開拇指弧上的鏡頭那排 */
+.snapsave {
+  position: fixed; right: calc(14px + env(safe-area-inset-right)); top: calc(66px + env(safe-area-inset-top)); z-index: 30;
+  padding: 6px 6px 5px; text-align: center; white-space: nowrap;
+  background: rgba(16, 11, 9, .86); border: 1px solid rgba(232, 184, 106, .35); border-radius: 2px;
+  font-size: 12.5px; line-height: 18px; letter-spacing: .08em; color: var(--text); pointer-events: none;
+  animation: snapsave-in .45s ease-out both; transition: opacity .5s, transform .5s;
+}
+.snapsave img { display: block; width: auto; height: auto; max-width: 112px; max-height: min(36vh, calc(100vh - 480px - env(safe-area-inset-top))); margin: 0 auto 5px; border: 1px solid rgba(246, 219, 166, .6); }
+.snapsave span { display: block; padding: 0 4px; }
+.snapsave.out { opacity: 0; transform: translateY(-6px); }
+@media (orientation: landscape) and (max-height: 500px) {
+  body:not(.desk) .snapsave { top: calc(14px + env(safe-area-inset-top)); }
+  body:not(.desk) .snapsave img { max-height: calc(100vh - 240px - env(safe-area-inset-top)); }
+}
+/* 電腦：取景框的右上角裡面，照片還在框裡的感覺。框比螢幕窄時貼著框、不貼螢幕邊（album.js 量好框離右緣、上緣多遠，寫進 --fr、--ft） */
+body.desk .snapsave { right: calc(var(--fr, 0px) / var(--ui, 1) + 18px); top: calc(var(--ft, 0px) / var(--ui, 1) + 18px); }
+body.desk .snapsave img { max-width: 120px; max-height: 160px; }
+@keyframes snapsave-in { 0% { opacity: 0; transform: translateY(-8px) scale(.96); filter: brightness(2.2); } 35% { opacity: 1; filter: brightness(1.6); } 100% { transform: none; filter: none; } }
 /* 表情輪：一圈細金線，五個表情排在圈上，撥到的那個放大亮起來 */
 #wheel { position: fixed; left: 50%; top: 50%; width: 240px; height: 240px; margin: -120px 0 0 -120px; border-radius: 50%; border: 1px solid rgba(232, 184, 106, .35); background: radial-gradient(rgba(16, 11, 9, .55), rgba(16, 11, 9, .2) 70%); pointer-events: none; opacity: 0; transform: scale(.9); transition: opacity .15s, transform .2s; z-index: 26; }
 #wheel.show { opacity: 1; transform: none; }

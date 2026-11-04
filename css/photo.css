@@ -1,16 +1,18 @@
 /* © 2026 bluedot2049《煉金畫廊》。未經授權禁止重製、改作或用於 AI 訓練，詳見 LICENSE。 */
 /* 攝影：取景框和控制列、閃光燈、照相館、拍好之後的結果、鏡子前請眼睛拍照。 */
 /* ───────── 攝影模式 ───────── */
-body.photo #top-btns, body.photo #action-btn, body.photo #jump-btn, body.photo #sit-btn, body.photo #say-btn, body.photo #pack-btn, body.photo #toast { display: none !important; }
+body.photo #top-btns, body.photo #action-btn, body.photo #jump-btn, body.photo #sit-btn, body.photo #say-btn, body.photo.desk #pack-btn, body.photo #toast { display: none !important; }
 body.photo #stage::after { display: none; }   /* 暗角改由取景框畫，存檔時才一致 */
 body.photo #joy, body.photo #emote { opacity: 1; }
 body.photo-hush .speech { opacity: 0 !important; }
 /* 手機：相機鈕留在原位變成收起（✕），右上角不另放離開鈕；表情讓出鏡頭鈕，退到外圈 */
 body.photo:not(.desk) #emote { --a: 90deg; --r: calc(var(--r1) * sin(var(--a-cam)) + var(--btn) + 58px); }
-body.photo.desk #photo-btn, body.photo:has(#ph-result:not([hidden])) #photo-btn { display: none; }
+/* 手機的行囊照樣在外圈（剛拍的馬上就能翻），站在原本看鏡的位置：360 寬的直拿平常讓互動鍵轉到 18°，攝影時互動鍵收了，回到 22.5° */
+body.photo:not(.desk) #pack-btn { --a: calc(var(--a-cam) / 2); }
+body.photo.desk #photo-btn, body.photo:has(#ph-result:not([hidden])) :is(#photo-btn, #pack-btn) { display: none; }
 body:not(.desk) #ph-exit { display: none; }
 body.photo-bare #ph-bar, body.photo-bare #ph-exit, body.photo-bare #ph-shoot, body.photo-bare #ph-alt,
-body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #emote, body.photo-bare #hint, body.photo-bare #photo-btn { display: none !important; }
+body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #emote, body.photo-bare #hint, body.photo-bare #photo-btn, body.photo-bare #pack-btn { display: none !important; }
 
 #ph-frame { position: fixed; z-index: 12; pointer-events: none; }
 #ph-frame.masked { box-shadow: 0 0 0 100vmax rgba(10, 6, 3, .62); outline: 1px solid rgba(246, 219, 166, .4); }
@@ -263,8 +265,9 @@ body.photo-rec #ph-record { border-color: #c4452d; }
 body.photo-rec #ph-record i { width: 18px; height: 18px; border-radius: 4px; }
 
 /* 看鏡：開著（.on）時自己的頭一直看著鏡頭（attention.js），關著就隨意看。
-   電腦排在快門那一排最右邊；手機跟閃光、日期同一組，在快門那一圈的外圈（錄影和收起中間）。
-   搖桿旁互動鍵的位置在空拍機時會壓到鏡頭那一排，窄的手機會蓋住「望遠」 */
+   電腦排在快門那一排最右邊；手機在拇指弧最底下那一排，閃光（錄影）的外側，下緣跟快門齊。外圈原本的位置讓給行囊，
+   往下一格、往內一點才讓得開它（--d，橫拿的弧壓扁了要多往內）；窄的直拿往搖桿擠時夾住，離閃光至少 8px、離搖桿 8px，
+   360 寬放不下兩邊各 8px，先顧閃光。搖桿旁互動鍵的位置在空拍機時會壓到鏡頭那一排，窄的手機會蓋住「望遠」 */
 #ph-look {
   display: flex; align-items: center; justify-content: center;
   width: 54px; height: 54px; padding: 0 0 0 .08em; border-radius: 50%;
@@ -278,12 +281,15 @@ body.photo-rec #ph-record i { width: 18px; height: 18px; border-radius: 4px; }
 }
 #ph-look:active { transform: scale(.92); }
 body:not(.desk) #ph-look {
-  --w: var(--btn); --r: var(--r2); --a: calc(var(--a-cam) / 2);
+  --w: var(--btn); --d: var(--r2);
+  --x: clamp(calc(var(--jx) + var(--r1) + var(--w) / 2 + 8px), calc(var(--jx) + var(--d) - var(--w) / 2), calc(100vw - var(--joy-x) - var(--joy) - 8px - var(--w)));
   position: fixed; z-index: 20; margin: 0; width: var(--w); height: var(--w); font-size: calc(var(--btn) * .3);
-  left: calc(var(--jx) + var(--r) * cos(var(--a)) - var(--w) / 2); right: auto;
-  bottom: calc(var(--jy) + var(--r) * sin(var(--a)) - var(--w) / 2);
+  left: var(--x); right: auto; bottom: var(--edge-b);
 }
-body.joy-left:not(.desk) #ph-look { left: auto; right: calc(var(--jx) + var(--r) * cos(var(--a)) - var(--w) / 2); }
+body.joy-left:not(.desk) #ph-look { left: auto; right: var(--x); }
+@media (orientation: landscape) and (max-height: 500px) {
+  body:not(.desk) #ph-look { --d: calc(var(--r2) + (var(--btn) + 10px) * .3); }
+}
 
 /* 閃光開關：長成相機的零件，不跟其他金線按鈕一樣。圖是 cameras.js 的 flashKnob 畫的；
    .on 扇子展開、燈泡亮著，.swap 是剛閃過、換燈泡（--swap 秒），邊上一圈走完就換好了。
