@@ -102,12 +102,19 @@ try {
   const body = Math.abs(Math.atan2(Math.sin(s.heading - Math.PI - s.yaw), Math.cos(s.heading - Math.PI - s.yaw)));
   check(body < 0.2, '身體轉向視線', body.toFixed(2));
 
-  // 搖桿那一側拖：不轉
+  // 搖桿外圈（拇指沒按準）拖：不轉
   s0 = s;
-  await drag([200, 120], [320, 120]);
+  await drag([joy[0], joy[1] - 80], [joy[0] + 100, joy[1] - 80]);
   await sleep(500);
   s = await st();
-  check(Math.abs(s.yaw - s0.yaw) < 0.01, '搖桿那一側拖：不轉視角', (s.yaw - s0.yaw).toFixed(3));
+  check(Math.abs(s.yaw - s0.yaw) < 0.01, '搖桿外圈拖：不轉視角', (s.yaw - s0.yaw).toFixed(3));
+
+  // 搖桿那一側、外圈以外拖：照樣轉
+  s0 = s;
+  await drag([200, 120], [320, 120]);
+  await sleep(900);
+  s = await st();
+  check(s.yaw - s0.yaw > 0.2, '搖桿旁邊往右拖：照樣轉視角', (s.yaw - s0.yaw).toFixed(2));
 
   // 左手拇指按在搖桿旁邊的畫面上不動，右手拖：照樣轉，不會變成捏合
   s0 = s;

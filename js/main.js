@@ -1034,7 +1034,7 @@ async function start() {
     if (params.has('photo')) photo.enter();
     // 鍵照換過的寫（keymap.js、gamepad.js）
     else if (!homeDoor) setTimeout(() => (byDoor && lastInput > at) || ui.hint(pad.active ? `左搖桿走路　右搖桿轉視角　${padBtn(3)} 跳　${padBtn(2)} 坐${zone === 'gallery' ? `　${padBtn(-1)} 看畫` : ''}`
-      : coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿${player.shoulder ? '走路　另一邊拖曳轉視角' : '或點地面走路　拖曳轉視角'}`
+      : coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿${player.shoulder ? '走路　拖曳轉視角' : '或點地面走路　拖曳轉視角'}`
       : `點地面或 ${['fwd', 'left', 'back', 'right'].map((id) => key(id)).join('')} 走路　拖曳轉視角　${key('jump')} 跳　${key('sit')} 坐${zone === 'gallery' ? `　${key('interact')} 看畫` : ''}`, 6000), byDoor ? 2600 : 0);
   });
 
