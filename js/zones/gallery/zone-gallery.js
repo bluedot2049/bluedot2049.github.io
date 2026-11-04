@@ -18,7 +18,17 @@ import { CAMERAS, SOON } from '../../camera/cameras.js';
 export const bgm = { src: StudyNight, from: '02-nigredo' };
 
 // 調色（grade.js）：linear 是霧照 env 的線性霧，只調顏色；色調「畫廊01」在 tones.js。?debug 時右上角可以即時調，「複製」貼回這裡
-export const grade = { linear: 1, tone: '畫廊01' };
+// regions：前廳（第一間 8×8，x ±4、z 0 到 −8）自己一組色調，往外漸變 1.5 公尺；其他房間和戶外照全區
+export const grade = {
+  linear: 1, tone: '畫廊01',
+  regions: [
+    {
+      name: '前廳', box: [-4, -8, 4, 0], fade: 1.5,
+      exposure: 0.64, desat: 0, keep: 0.75, cool: 0, sat: 1, vivid: 0, contrast: 1, glow: 1, shadow: '#000000', gain: '#ffffff',
+      curves: { l: [[0, 0], [0.1671, 0.2628], [1, 1]], r: [[0, 0], [0.1838, 0.1651], [0.3485, 0.3936], [1, 1]] },
+    },
+  ],
+};
 
 // 前廳的舞台光：電腦（中、高畫質）放三盞真的燈，低畫質以上有光柱裡的浮塵；手機只有地上的光池和光柱（vestibule-light.js）
 export function build(scene, { gallery, coarse, quality }) {
