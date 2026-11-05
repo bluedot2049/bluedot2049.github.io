@@ -208,12 +208,13 @@ export class Party {
     this.bindChat();
     player.onTap = (cx, cy) => this.tapMark(cx, cy);
     window.addEventListener('pointermove', (e) => { this.mouse = { x: e.clientX, y: e.clientY }; }, { passive: true });
-    // 電腦：T（說話）或 Enter 打字、G 或中鍵（標記）在滑鼠指的地方做標記、X（吹哨）吹哨，鍵照 keymap.js。用 capture 搶在動作鍵前面看一眼身邊有沒有東西可按
+    // 電腦：T（說話）或 Enter 打字、G 或中鍵（標記）在滑鼠指的地方做標記、X（吹哨）吹哨，鍵照 keymap.js。用 capture 搶在動作鍵前面
     window.addEventListener('keydown', (e) => {
       if (e.repeat || e.target.closest?.('input, textarea, #dress') || this.busy()) return;
-      // Enter 本來是動作鍵（看畫、照鏡子⋯），身邊有東西可以按時照舊，沒有的時候才開打字框
-      if ((is(e, 'talk') || (e.key === 'Enter' && !this.player.actionTarget())) && this.together) {
+      // 同行時 Enter 一律是打字，不管身邊有沒有東西可按（不然想說話卻吃掉食物、跟了隊友）；互動照樣按 E。攔下來，角色不會同時收到
+      if ((is(e, 'talk') || e.key === 'Enter') && this.together) {
         e.preventDefault();
+        e.stopImmediatePropagation();
         this.openChat();
       } else if (is(e, 'mark') && this.together) {
         // 越肩鎖住滑鼠時標在準心上

@@ -25,6 +25,7 @@ const COORD_LIMIT = 200;    // 畫廊遠小於這個範圍，超過的座標一�
 const EMOTE_GAP = 800;      // 自己送表情的最短間隔
 const JUMP_GAP = 400;       // 自己送跳躍的最短間隔
 const PET_GAP = 1500;       // 自己送摸動物的最短間隔
+const ANIMAL_GAP = 400;     // 同一隻動物同一種反應的最短間隔
 const FLASH_GAP = 1000;     // 別人的閃光最短間隔（燈泡要換），亂送的也只會一秒閃一次
 const LOOK_DELAY = 1000;    // 捏角色停手這麼久才送出，連點選項、拖滑桿不會一直送
 // Supabase 每條連線 30 秒內最多登記 5 次在線名單，超過會直接關掉頻道，之後誰都看不到誰。
@@ -171,7 +172,7 @@ export class Multiplayer {
     this.shadowTex = shadowTex;
     this.player = player;
     this.cfg = cfg;
-    this.events = events;           // { onCount(n), onReady(), onPet(other, i), onJump(other), onLand(character), onEmote(character, e), onFlash(character), onStudio(m), onParty(m), onGate(m) }
+    this.events = events;           // { onCount(n), onReady(), onPet(other, i, m), onAnimal(other, m), onJump(other), onLand(character), onEmote(character, e), onFlash(character), onStudio(m), onParty(m), onGate(m) }
     this.id = Math.random().toString(36).slice(2, 10);
     this.others = new Map();        // id -> { ch, pos, target, heading, seen, speed }
     this.present = new Set();       // 目前在線上的訪客 id（來自 presence）
@@ -188,6 +189,7 @@ export class Multiplayer {
     this.lastEmote = 0;
     this.lastJump = 0;
     this.lastPet = 0;
+    this.lastAnimal = new Map();
     this.lastTrack = -Infinity;
     this.only = null;               // 照相館拍照中：只畫入鏡的人（id 的 Set）
     this.away = false;              // 自己掛機中（main 每幀照分頁看不看得到、多久沒動設定）
@@ -214,6 +216,7 @@ export class Multiplayer {
       .on('broadcast', { event: 'emote' }, ({ payload }) => this.onEmote(payload))
       .on('broadcast', { event: 'jump' }, ({ payload }) => this.onJump(payload))
       .on('broadcast', { event: 'pet' }, ({ payload }) => this.onPet(payload))
+      .on('broadcast', { event: 'animal' }, ({ payload }) => this.onAnimal(payload))
       .on('broadcast', { event: 'flash' }, ({ payload }) => this.onFlash(payload))
       .on('broadcast', { event: 'studio' }, ({ payload }) => this.onStudio(payload))
       .on('broadcast', { event: 'party' }, ({ payload }) => this.onParty(payload))
@@ -417,17 +420,30 @@ export class Multiplayer {
     this.events.onFlash?.(o.ch);
   }
 
-  // 動物的行程每台算出來都一樣，摸了哪一隻只要傳編號
-  pet(i) {
+  // 動物的行程每台算出來都一樣，摸了哪一隻傳編號，加上牠在這邊的位置，別台先走過來再演
+  pet(i, x, z) {
     const now = performance.now();
     if (!this.active || now - this.lastPet < PET_GAP) return;
     this.lastPet = now;
-    this.channel.send({ type: 'broadcast', event: 'pet', payload: { id: this.id, a: i } });
+    this.channel.send({ type: 'broadcast', event: 'pet', payload: { id: this.id, a: i, x, z } });
   }
 
   onPet(m) {
     const o = m && isId(m.id) ? this.others.get(m.id) : null;
-    if (o && o.ch.group.visible && Number.isInteger(m.a)) this.events.onPet?.(o, m.a);
+    if (o && o.ch.group.visible && Number.isInteger(m.a)) this.events.onPet?.(o, m.a, m);
+  }
+
+  // 自己這邊引起的動物反應（animals.js 的 tell）：同一隻同一種反應隔一下才再送
+  animal(i, m) {
+    const now = performance.now(), key = `${i}:${m.k}`;
+    if (!this.active || now - (this.lastAnimal.get(key) || 0) < ANIMAL_GAP) return;
+    this.lastAnimal.set(key, now);
+    this.channel.send({ type: 'broadcast', event: 'animal', payload: { id: this.id, a: i, ...m } });
+  }
+
+  onAnimal(m) {
+    const o = m && isId(m.id) ? this.others.get(m.id) : null;
+    if (o && o.ch.group.visible && Number.isInteger(m.a) && typeof m.k === 'string') this.events.onAnimal?.(o, m);
   }
 
   // 在線名單上登記自己的樣子：新版看 l，舊版看 o

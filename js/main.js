@@ -404,7 +404,7 @@ async function start() {
       lastInput = performance.now();
     },
     onPet(a) {
-      mp?.pet(a.index);
+      mp?.pet(a.index, Math.round(a.pos.x * 100) / 100, Math.round(a.pos.z * 100) / 100);
       lastInput = performance.now();
     },
     // 搭船：先選去哪裡，再跳進碼頭邊的渡船坐好，船夫在船頭現身、燈亮起來，才轉到渡海畫面。
@@ -776,10 +776,12 @@ async function start() {
         ui.bindEmotes(EMOTES, sendEmote);
       },
       // 別人摸了動物：那位訪客的學徒也做出摸的動作
-      onPet(o, i) {
-        const a = animals?.remotePet(i, o);
+      onPet(o, i, m) {
+        const a = animals?.remote(i, o, { k: 'pet', x: m.x, z: m.z });
         if (a) o.ch.pet(a.spec.high);
       },
+      // 別人那邊的動物反應（走過去要摸、狗迎接、讓開）：這邊照著演
+      onAnimal: (o, m) => animals?.remote(m.a, o, m),
       onJump(o) {
         animals?.startle(o.pos.x, o.pos.z);
         lookAtOther(o.id, 1 + Math.random() * 0.6);
@@ -798,6 +800,10 @@ async function start() {
         lookAtOther(otherOf(ch), 1.2);
       },
     }, look);
+    if (animals) {
+      animals.selfId = mp.id;
+      animals.onTell = (a, m) => mp.animal(a.index, m);
+    }
     mp.claude = params.get('as') === 'claude';   // 開發時我進站拍照：在場的人看到的是燈籠
     mp.camera = carried();
     // 隊伍頻道不分區域，渡海換頁也接得回去
@@ -933,6 +939,7 @@ async function start() {
   // 攝影、自拍（照相館也是攝影模式）、上船時收起來；看畫、照鏡子、挑相機、聽樹洞時鏡頭被接管，也先收
   guide.blocked = () => photo.active || selfie.active || player.boarding || !!player.focus?.camPos;
   guide.busy = () => photo.active || selfie.active || player.boarding;
+  guide.quiet = () => (player.moving ? 0 : (performance.now() - lastInput) / 1000);   // 按著搖桿一直走不會再送輸入，走著就不算發呆
   guide.onShip = (ex) => player.events.onExit(ex);
   player.actionables.push((x, z) => guide.target(x, z));
   // 前廳胖頭的教學（zones/gallery/ask.js）：走近說下一步，站在他旁邊互動鍵是「問」。泡泡底下那行小字照現在的操作方式寫鍵

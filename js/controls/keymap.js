@@ -5,7 +5,7 @@
 // 滑鼠的鍵當成虛擬的鍵（Mouse0 左、Mouse1 中、Mouse2 右、Mouse3／Mouse4 側鍵），一樣送 keydown／keyup，聽的地方不用分滑鼠鍵盤。
 // 左右鍵只在鎖住滑鼠時算（沒鎖時是點畫面、拖曳），中鍵在畫面上、側鍵在哪裡都算。
 // 畫面上寫鍵的地方：JS 用 key('功能')；HTML 寫 data-kb="功能"（換字，「功能:1」是第二顆）、data-kb-attr="功能"（換 data-key 和 title 括號裡的鍵）。
-// 方向鍵一直能走、Enter 一直是互動和確認、Esc 一直是返回，不在表上。換鍵卡（暫停選單的「鍵盤滑鼠」）在下面的 bindKeymap
+// 方向鍵一直能走、Enter 一直是互動和確認（同行時是打字，party.js）、Esc 一直是返回，不在表上。換鍵卡（暫停選單的「鍵盤滑鼠」）在下面的 bindKeymap
 import { getSave, putSave } from '../save/progress.js';
 
 // 功能：[id, 名字, 在哪裡用, 預設的鍵]。在哪裡用：walk 走動、gear 舉著相機、drone 空拍機、cam 兩種相機、all 都算；同一個地方用到同一顆才算撞到。

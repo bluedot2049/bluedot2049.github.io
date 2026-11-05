@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import { JETTY } from '../scene/harbor.js';
 import { along, hash, wrapAngle } from './animals.js';
 import { bend } from '../core/lens.js';
+import { serverNow } from '../core/servertime.js';
 import { BOAT, EVENTS, HOST, LINES, NEXTS, ORIGINS, REGULARS, ROLE_LINES, VOICES } from './visitor-lines.js';
 import { BOAT_DIM, CHANCE, DECK_Y, DODGE, FOODS, GREET_R, HEAR, HIP, HOP, REGULAR_EVERY, SAY_GAP, SAY_MAX, SLOT, SPOTS, boatModel, boatTimes, buildRig, clamp01, fishingLine, foodGeo, lerp, looks, smooth, tag } from './visitor-models.js';
 
@@ -471,7 +472,7 @@ export class Visitors {
     this.tan = new THREE.Vector3();
     // ?visit：除錯用，這一段一定有船，而且從快靠岸的時候開始。?visit=1 到 5 指定哪一位熟客坐這一船
     if (force != null) {
-      const now = Date.now() / 1000, k = Math.floor(now / SLOT);
+      const now = serverNow() / 1000, k = Math.floor(now / SLOT);
       this.force = k;
       this.forceReg = REGULARS[+force - 1] || null;
       this.offset = k * SLOT + this.boatInfo.tIn - 15 - now;
@@ -721,7 +722,7 @@ export class Visitors {
 
   update(dt) {
     if (!this.dock) return;
-    const now = Date.now() / 1000 + this.offset, k = Math.floor(now / SLOT), c = now - k * SLOT;
+    const now = serverNow() / 1000 + this.offset, k = Math.floor(now / SLOT), c = now - k * SLOT;
     if (k !== this.k) {
       for (const v of this.list) v.dispose();
       this.list = [];

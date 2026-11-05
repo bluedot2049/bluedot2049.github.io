@@ -9,7 +9,8 @@ import { CONTACT, footShadow } from '../core/footshadow.js';
 import { HEADS, rod } from './heads.js';
 import { HAT_COLORS, HAIR_COLORS, SKINS, CLOTH, FACE, FACE_INK, raceOf, sizes, sanitizeLook, lookKey, decodeFace } from './looks.js';
 import { strapModel, cameraModel } from '../camera/cameras.js';
-import { HIP, HOODED, HAND_POSE, bodyGeo, armGeo, legGeo, capeGeo, capeAt, wingGeo, wingAt, hasWings, tailGeo, tailAt, handGeo, hood } from './clothes.js';
+import { HIP, HOODED, HAND_POSE, bodyGeo, armGeo, legGeo, capeGeo, capeAt, wingGeo, wingAt, hasWings, tailGeo, tailAt, hood } from './clothes.js';
+import { HandClear } from './handclear.js';
 import { BREEZE } from '../core/weather.js';
 
 function mat(color) {
@@ -655,6 +656,7 @@ export class Character {
     this.hvPrev = new THREE.Vector3();
     this.hdv = new THREE.Vector3();
     this.hpOk = this.hvOk = false;
+    this.clear = new HandClear(this);   // 手上的東西讓開帽子和身體、坐躺時放地上
     this.key = null;
     this.setLook(look);
   }
@@ -715,7 +717,7 @@ export class Character {
     this.flaps = hasWings(L);
     swap(this.tailMesh, tailGeo(L, skin));
     this.tail.position.set(...tailAt(W));
-    swap(this.handMesh, handGeo(L));
+    swap(this.handMesh, this.clear.setLook(L));
     this.handPose = HAND_POSE[L.hand] || null;
     this.hangCamera();
 
@@ -1048,7 +1050,8 @@ export class Character {
     // 右手拿著東西：垂著的照樣小幅擺動，拿在胸前的手往前抬，雨傘這種舉過頭
     this.handK += ((this.handPose ? 1 : 0) - this.handK) * Math.min(1, dt * 8);
     if (this.handPose && this.handK > 0.001) {
-      const A = this.armL.rotation, hk = this.handK;
+      // 放到地上（坐、躺）的途中手慢慢空下來
+      const A = this.armL.rotation, hk = this.handK * (1 - this.clear.down);
       const tx = this.handPose === 'up' ? -2.6 : this.handPose === 'hold' ? -0.75 : A.x * 0.4;
       A.x += (tx - A.x) * hk;
       if (this.handPose !== 'hang') A.z += (-0.1 - A.z) * hk;
@@ -1168,9 +1171,6 @@ export class Character {
       this.faceU.uBlink.value = this.blink;
       this.faceU.uLook.value.set(this.lookX * 0.03, this.lookY * 0.03);
     }
-    // 手上的東西抵銷手臂的轉動，不管手怎麼擺都直立
-    const A = this.armL.rotation;
-    this.handG.rotation.set(-A.x, -A.y, -A.z);
     // 右手垂著的東西（燈籠、魚、長棍）跟著手的加速度盪：起步往後翻、停下往前盪、轉身畫一道弧，氣球反過來拖在後面。
     // 用上一幀畫出來的手的位置量速度，一幀之內速度跳多少就當成一下推力（起步、停下是瞬間的，不除以 dt 才不會算出天文數字）；
     // 跳太多的是傳送，不算
@@ -1196,12 +1196,12 @@ export class Character {
       this.swVZ -= (W * W * this.swZ + D * this.swVZ) * dt;
       this.swX = clampTo(this.swX + this.swVX * dt, 0.7);
       this.swZ = clampTo(this.swZ + this.swVZ * dt, 0.7);
-      this.handSwing.rotation.set(this.swX, 0, this.swZ);
     } else if (this.hpOk) {
       this.swX = this.swZ = this.swVX = this.swVZ = 0;
-      this.handSwing.rotation.set(0, 0, 0);
       this.hpOk = this.hvOk = false;
     }
+    // 手上的東西抵銷手臂的轉動一直直立、讓開帽子和身體，轉角疊上擺盪（handclear.js）
+    this.clear.update(dt);
   }
 
   // 舉相機：進度前段把手上的東西縮小收起來（自拍只收左手的點心，右手的照拿），後段才把手抬起來。

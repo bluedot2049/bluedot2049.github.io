@@ -107,6 +107,8 @@ export class Eye {
       shell.add(ring);
     }
     body.add(this.upper, this.lower);
+    // 跟角色一樣收影子：有太陽影子的區域（月球）飛進陰影裡要跟著暗
+    g.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
 
     this.setOpen(0);
     this.setPupil(1);

@@ -29,6 +29,7 @@ export const PREFS = {
   eyeSeen: { kind: 'json' },                     // guide.js：黑眼帶路去過的地方，照區域記
   eyeOn: { kind: 'json' },                       // guide.js：黑眼現在叫出來了（1）
   eyeTold: { kind: 'json' },                     // guide.js：說過一次怎麼用（1）
+  eyeStay: { kind: 'json' },                     // guide.js：黑眼留在身邊（1）：帶到了、很久沒操作都不自己收
   verbsSeen: { kind: 'json' },                   // main.js：互動鍵出現過哪些動詞（第一次出現光暈多擴幾圈）
   tipsSeen: { kind: 'json' },                    // ui.js：教學提示 { 代號: 出現過幾次，或 'done' 做過了 }
 };

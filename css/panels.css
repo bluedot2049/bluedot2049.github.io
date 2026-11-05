@@ -556,7 +556,12 @@ body.desk .eye-go kbd {
 }
 #eye-note { margin: 12px 0 0; font-size: 12.5px; letter-spacing: .08em; color: var(--muted); }
 #eye-note:empty { display: none; }
-.eye-foot { display: flex; justify-content: flex-end; margin-top: 14px; }
+.eye-foot { display: flex; justify-content: flex-end; align-items: center; margin-top: 14px; }
+/* 留在身邊：左邊一個小方框，打開時框裡填金；收起黑眼還是在右邊 */
+#eye-stay { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; margin-right: auto; padding: 0 4px; background: none; border: 0; font: inherit; font-size: 13px; letter-spacing: .12em; color: var(--muted); cursor: var(--cur-pointer); }
+#eye-stay i { position: relative; width: 14px; height: 14px; border: 1px solid rgba(232, 184, 106, .5); border-radius: 2px; }
+#eye-stay[aria-checked="true"] { color: var(--text); }
+#eye-stay[aria-checked="true"] i::after { content: ''; position: absolute; inset: 3px; background: var(--gold); border-radius: 1px; }
 .eye-foot .btn { min-height: 40px; padding: 0 16px; font-size: 13.5px; letter-spacing: .16em; gap: 8px; }
 body.desk .eye-foot kbd { display: inline-block; padding: 0 5px; font: 11px/1.5 var(--latin); letter-spacing: .04em; color: var(--muted); border: 1px solid rgba(232, 184, 106, .3); border-radius: 2px; }
 body.desk #eye-card.panel {

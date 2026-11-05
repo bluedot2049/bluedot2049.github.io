@@ -667,8 +667,13 @@ export const HAND_POSE = {
   lantern: 'hold', candle: 'hold', fish: 'hang', brush: 'hold', flask: 'hold', frame: 'hold', scope: 'hold', baguette: 'hang', teacup: 'hold', squid: 'hold',
 };
 
-// 原點在手心，+y 朝上，+z 朝前
-export function handGeo(L) {
+// 坐下時先放到身邊地上的長東西；躺下時除了氣球全部放下（見 handclear.js）
+export const SIT_DOWN = ['staff', 'baguette'];
+// 放在地上時立著的，其他的橫躺
+export const STAND_DOWN = ['boba', 'candle', 'flask', 'teacup', 'lantern'];
+
+// 原點在手心，+y 朝上，+z 朝前。reach：雨傘、自拍棒拉長多少，舉高時才高過帽子（handclear.js 算）
+export function handGeo(L, reach = 0) {
   if (L.hand === 'none') return null;
   const c = col(L.handC);
   return build((k) => {
@@ -679,9 +684,9 @@ export function handGeo(L) {
         k.add(new THREE.OctahedronGeometry(0.05, 0), '#a8e8ff', 0, 1.04, 0, { sy: 1.6 });
         break;
       case 'umbrella':
-        rod(k, [0, -0.06, 0], [0, 0.72, 0], 0.01, '#2a2420');
-        k.add(new THREE.ConeGeometry(0.5, 0.2, 8), c, 0, 0.72, 0, { color2: mix(c, '#ffffff', 0.25) });
-        k.rock(0.015, '#2a2420', 0, 0.83, 0);
+        rod(k, [0, -0.06, 0], [0, 0.72 + reach, 0], 0.01, '#2a2420');
+        k.add(new THREE.ConeGeometry(0.5, 0.2, 8), c, 0, 0.72 + reach, 0, { color2: mix(c, '#ffffff', 0.25) });
+        k.rock(0.015, '#2a2420', 0, 0.83 + reach, 0);
         k.torus(0.03, 0.008, Math.PI, '#2a2420', 0.03, -0.06, 0, { rz: Math.PI });
         break;
       case 'balloon':
@@ -714,11 +719,14 @@ export function handGeo(L) {
         for (const [x, y] of [[-0.04, 0.2], [0.03, 0.12], [0.02, 0.26], [-0.03, 0.08]]) k.rock(0.02, '#a8682a', x, y, 0.065, { sz: 0.4 });
         k.box(0.12, 0.08, 0.04, '#f4f0e8', 0, 0.02, 0.04);
         break;
-      case 'selfie':
-        rod(k, [0, 0, 0], [0, 0.5, 0.3], 0.01, BLACK);
-        k.box(0.07, 0.13, 0.012, BLACK, 0, 0.56, 0.34, { rx: 0.5 });
-        k.box(0.06, 0.11, 0.004, '#5a7ab8', 0, 0.56, 0.334, { rx: 0.5 });
+      case 'selfie': {
+        // 伸縮桿：順著桿子的方向拉長
+        const y = reach * 0.857, z = reach * 0.514;
+        rod(k, [0, 0, 0], [0, 0.5 + y, 0.3 + z], 0.01, BLACK);
+        k.box(0.07, 0.13, 0.012, BLACK, 0, 0.56 + y, 0.34 + z, { rx: 0.5 });
+        k.box(0.06, 0.11, 0.004, '#5a7ab8', 0, 0.56 + y, 0.334 + z, { rx: 0.5 });
         break;
+      }
       case 'spatula':
         rod(k, [0, -0.06, 0], [0, 0.28, 0.02], 0.012, WOOD);
         k.box(0.1, 0.13, 0.008, METAL, 0, 0.36, 0.025);
