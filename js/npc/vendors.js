@@ -231,12 +231,10 @@ class Vendor {
       return;
     }
     // 街上冷清的時候（海市的人潮跟一般夜市反過來，晚上最冷清），有一半的機會講冷清時的話
-    if (this.spec.quiet && this.quiet?.() && Math.random() < 0.5) {
-      this.say(pick(this.spec.quiet));
-      return;
-    }
-    this.say(this.next());
-    if (this.spec.postcard) setTimeout(() => this.onPostcard?.(), 1200);
+    const quiet = this.spec.quiet && this.quiet?.() && Math.random() < 0.5;
+    this.say(quiet ? pick(this.spec.quiet) : this.next());
+    // 信差：講完那句照樣問要在哪裡拍，選單馬上開（以前冷清時會只講話不開、平常也要等一秒多）
+    if (this.spec.postcard) this.onPostcard?.();
   }
 
   next() {

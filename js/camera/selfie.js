@@ -10,6 +10,7 @@ import { makeMirrorCard, drawLids, PHOTO_W, PHOTO_H, CARD_W, LID_STRIP } from '.
 import { getSave } from '../save/progress.js';
 import { savePrint } from '../save/pack.js';
 import { addPhoto, discard, saveChosen, saveTip } from './album.js';
+import { GUIDE_LAYER } from '../core/scenery.js';
 
 const SETTLE = 0.7, RISE = 1.3, TICK = 0.8, BLINK = 0.24, BACK = 1.0;
 // 照片出來時，上面的大眼睛先閉著停一下，再睜開
@@ -151,6 +152,7 @@ export class Selfie {
     out.width = PHOTO_W;
     out.height = PHOTO_H;
     try {
+      cam.layers.disable(GUIDE_LAYER);   // 標記、站位拍不進照片
       r.setPixelRatio(1);
       r.setSize(PHOTO_W, PHOTO_H, false);
       this.resizeFX(PHOTO_W, PHOTO_H);
@@ -159,6 +161,7 @@ export class Selfie {
       this.render(0);
       out.getContext('2d').drawImage(r.domElement, 0, 0, PHOTO_W, PHOTO_H);
     } finally {
+      cam.layers.enable(GUIDE_LAYER);
       cam.aspect = W / H;
       cam.updateProjectionMatrix();
       r.setPixelRatio(dpr);

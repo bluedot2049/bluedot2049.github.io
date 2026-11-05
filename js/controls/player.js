@@ -12,6 +12,7 @@ import { onFreshTouch } from './touch.js';
 import { is } from './keymap.js';
 import { lens, fitSource, unbend } from '../core/lens.js';
 import { pref, setPref } from '../save/prefs.js';
+import { GUIDE_LAYER } from '../core/scenery.js';
 
 const SPEED = 2.6;
 const EDGE_LIFT = 0.3;   // 坐在邊上垂腳：屁股就在地面的高度（跟 character.js 的 SEAT_BUTT 一樣），腿垂到邊外
@@ -216,6 +217,7 @@ export class Player {
     );
     m.rotation.x = -Math.PI / 2;
     m.position.y = 0.03;
+    m.layers.set(GUIDE_LAYER);   // 拍不進照片
     return m;
   }
 

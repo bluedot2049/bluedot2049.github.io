@@ -27,6 +27,7 @@ import { savePrint } from '../save/pack.js';
 import { CAMERAS, carried, dateKnob, drawDate, eyeShutter, flashKnob, longTan, shutterKnob } from './cameras.js';
 import { MARKS, markURL } from './marks.js';
 import { dof, dofK } from '../core/dof.js';
+import { GUIDE_LAYER } from '../core/scenery.js';
 import { addPhoto, canShare, discard, onSnap, saveChosen, saveTip, shareChosen } from './album.js';
 import { pref, setPref, dropPref } from '../save/prefs.js';
 import { onFreshTouch } from '../controls/touch.js';
@@ -1639,6 +1640,7 @@ export class PhotoMode {
       sum: 0, t0: now, last: now,
     };
     document.body.classList.add('photo-expose');
+    this.camera.layers.disable(GUIDE_LAYER);   // 長曝光疊的是螢幕上的畫面，標記、站位在葉片開著時先收起來
     this.say('open', 0.5);   // 葉片停在開著，放開才闔（中間不出聲）
     this.onShot?.('o');      // 旁邊的人聽得到葉片開著，知道要站著別動（或故意走過去拖出殘影）
   }
@@ -1652,6 +1654,7 @@ export class PhotoMode {
     e.acc.dispose();
     e.grab.dispose();
     document.body.classList.remove('photo-expose');
+    this.camera.layers.enable(GUIDE_LAYER);
     this.tickTo(0);
   }
 
@@ -1783,6 +1786,7 @@ export class PhotoMode {
     const ctx = out.getContext('2d');
     const dpr = r.getPixelRatio();
     try {
+      cam.layers.disable(GUIDE_LAYER);   // 標記、站位拍不進照片
       r.setPixelRatio(1);
       // 景深的模糊圈照照片的大小算，取樣也多一點
       dof.long = Math.max(outW, outH);
@@ -1798,6 +1802,7 @@ export class PhotoMode {
       // 畫完馬上拷走，不然下一幀之前 WebGL 會把畫面清掉
       this.compose(ctx, r.domElement, 0, 0, outW, outH, outW, outH, k, Math.random());
     } finally {
+      cam.layers.enable(GUIDE_LAYER);
       if (fire) this.light(false);
       this.dofPass.hq = false;
       dof.long = wasLong;

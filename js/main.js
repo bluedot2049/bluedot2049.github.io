@@ -20,7 +20,7 @@ import * as TX from './core/textures.js';
 import { Ambience } from './audio/ambience.js';
 import { dressSound, paintSound } from './audio/wear-voices.js';
 import { bindUI } from './audio/ui-voices.js';
-import { ANIMAL_LAYER, REFLECT_LAYER } from './core/scenery.js';
+import { ANIMAL_LAYER, REFLECT_LAYER, GUIDE_LAYER } from './core/scenery.js';
 import { Quality } from './core/quality.js';
 import { createPostFX } from './core/postfx.js';
 import { PhotoMode } from './camera/photo.js';
@@ -251,6 +251,7 @@ async function start() {
 
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 400);
   camera.layers.enable(ANIMAL_LAYER);   // 動物只在圖層 1；海面反射的鏡頭只看 REFLECT_LAYER
+  camera.layers.enable(GUIDE_LAYER);    // 標記、站位：畫面上看得到，拍照時關掉
 
   // 只有一組光線的區域一開始就套上；兩組的每一幀照位置算（見 tick）
   if (envs.length === 1) applyEnv(0);

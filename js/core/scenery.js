@@ -9,6 +9,8 @@ import { GRADE_VERT, gradeUniforms } from './grade.js';
 // 動物只在這個圖層；海面反射的鏡頭只看 REFLECT_LAYER。從草原看海只映得到天空、遠山、山坡和坡上的樹，草地、家具、房子、人都不用多畫一次
 export const ANIMAL_LAYER = 1;
 export const REFLECT_LAYER = 2;
+// 只給人看、拍不進照片的東西（隊友的標記、拍照的站位、點地走路的落點）：主鏡頭平常看這層，按快門畫那一張時關掉（photo.js、selfie.js）
+export const GUIDE_LAYER = 3;
 
 export const uTime = { value: 0 };
 
