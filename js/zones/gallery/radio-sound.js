@@ -128,6 +128,7 @@ export class RadioSound {
       } else {
         this.failed = true;
         this.failAt = performance.now();
+        console.warn(`收音機連不上 ${this.cur.name}（錯誤 ${a.error?.code ?? '?'}：${a.error?.message || '沒有說明'}），${RETRY / 1000} 秒後再試`);
       }
     });
     const bq = (type, freq, Q, gain = 0) => {
@@ -231,8 +232,8 @@ export class RadioSound {
       n.pan.pan.setTargetAtTime(amb.panOf(p.dx, p.dz, p.d) * 0.8, t, 0.2);
     }
 
-    // 開著就讓位：在屋裡整個壓低，出了門慢慢放回來
-    const on = this.want, duck = this.power && !musicOff ? DUCK * clamp((REACH + 2 - p.P) / 14) : 0;
+    // 收到台才讓位：在屋裡整個壓低，出了門慢慢放回來；轉到兩台中間、連不上就不壓，不會兩邊都沒有
+    const on = this.want, duck = this.want && this.clarity > 0 ? DUCK * this.clarity * clamp((REACH + 2 - p.P) / 14) : 0;
     if (on !== this.on || Math.abs(duck - this.duck) > 0.04 || (duck === 0) !== (this.duck === 0)) {
       this.on = on;
       this.duck = duck;
