@@ -63,7 +63,6 @@
 
     // 轉台：指針滑過去，中間那段魔眼暗著
     let on = false, at = 0, dialF = DIAL_AT[0];
-    const tunedAt = (f) => Math.max(0, 1 - Math.min(...DIAL_AT.map((s) => Math.abs(s - f))) / 0.03);
     const apply = () => radios.forEach((r) => { r.setPower(on); r.setDial(dialF); });
     document.getElementById('power').onclick = (e) => { on = !on; e.target.textContent = on ? '關機' : '開機'; apply(); };
     document.getElementById('next').onclick = () => { at = (at + 1) % DIAL_AT.length; dialF = DIAL_AT[at]; apply(); };
@@ -96,7 +95,7 @@
     const clock = new THREE.Clock();
     renderer.setAnimationLoop(() => {
       const dt = Math.min(clock.getDelta(), 0.1);
-      for (const r of radios) { r.setTuned(tunedAt(r.dial())); r.update(dt); }
+      for (const r of radios) r.update(dt);
       c.update(dt, 0);
       place();
       renderer.render(scene, camera);

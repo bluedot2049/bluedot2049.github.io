@@ -33,6 +33,7 @@ export const PREFS = {
   verbsSeen: { kind: 'json' },                   // main.js：互動鍵出現過哪些動詞（第一次出現光暈多擴幾圈）
   tipsSeen: { kind: 'json' },                    // ui.js：教學提示 { 代號: 出現過幾次，或 'done' 做過了 }
   radio: { kind: 'json' },                       // radio-sound.js：前廳收音機 { on 開著, at 指針在刻度哪裡 0～1 }
+  radioAt: { kind: 'json' },                     // radio-card.js：收音機面板拖到哪 { desk|land|port: { dx, dy } }，左上角離畫面中心多遠
 };
 
 export function pref(key) {

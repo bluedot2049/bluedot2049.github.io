@@ -552,6 +552,7 @@ export class Ambience {
   musicOut(sec) {
     if (this.leaving) return;
     this.leaving = true;
+    this.leaveSec = sec;   // 收音機（radio-sound.js）照同樣的速度淡
     if (!this.bgm || !this.ctx) return;
     const g = this.bgmGain.gain, t = this.ctx.currentTime;
     g.cancelScheduledValues(t);

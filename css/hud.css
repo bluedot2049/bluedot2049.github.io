@@ -185,28 +185,59 @@ body.desk :is(#ask, #peek).show { animation-name: guide-up; }
 @media (prefers-reduced-motion: reduce) { :is(#guide, #ask, #peek).show, #guide .keys li, #ask .asks button { animation: none; } }
 
 /* 前廳收音機的面板（radio-card.js）：不是告示那張卡，是收音機本身的面板。位置跟問胖頭一樣（手機橫拿靠左、直拿貼底，電腦長在收音機旁邊）。
-   胡桃木框：細直紋＋一層寬紋，左上一道淡淡的反光；裡面一條黃銅邊的琥珀刻度窗（跟 radio.js 畫的刻度同一組色），紅指針照 --f。
+   深墨棕的木框（遊戲卡片的底色，木紋很淡）、內圈細金線、四角黃銅螺絲；裡面一條黃銅邊的琥珀刻度窗（跟 radio.js 畫的刻度同一組色），紅指針照 --f，底下一條門口讀取條的色票。
    關著刻度窗是暗的玻璃，開機從裡面亮起來（慢慢的，像燈絲熱起來）。兩顆電木旋鈕：一圈細齒、黃銅蓋、一條指示線，底下刻字；
-   電源鈕開關差一格，轉台鈕照 --f 轉。中間魔眼管：綠的扇面照 --tuned 合起來，對準了最亮。底下黃銅名牌刻台名（凹進去的字），旁邊一顆小銅鈕「好了」 */
+   電源鈕兩側刻關、開，旁邊一顆印泥指示燈；轉台鈕照 --f 轉。中間魔眼管開機整顆亮（前廳花牆葉尖的暖綠）。底下黃銅名牌刻台名（凹進去的字），旁邊一顆小銅鈕「好了」 */
 #radio {
   position: fixed; left: calc(24px + env(safe-area-inset-left)); top: 50%; z-index: 25;
   display: none; flex-direction: column; gap: 14px; transform: translateY(-50%);
-  width: 320px; max-width: calc(100vw - 32px); padding: 14px 16px 12px; border-radius: 10px;
+  width: 324px; max-width: calc(100vw - 32px); padding: 20px 22px 14px; border-radius: 10px;
   background:
-    linear-gradient(115deg, rgba(255, 220, 170, .1), transparent 28%, transparent 72%, rgba(0, 0, 0, .2)),
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, .1) 0 1px, transparent 1px 7px, rgba(255, 210, 160, .04) 7px 9px, transparent 9px 13px),
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, .08) 0 18px, transparent 18px 41px),
-    linear-gradient(180deg, #5a3520, #46291a 60%, #36200f);
-  border: 1px solid #22140b;
-  box-shadow: inset 0 1px 0 rgba(255, 220, 170, .18), inset 0 -2px 4px rgba(0, 0, 0, .45), 0 10px 30px rgba(0, 0, 0, .55);
+    linear-gradient(115deg, rgba(246, 219, 166, .07), transparent 30%, transparent 72%, rgba(0, 0, 0, .22)),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, .09) 0 1px, transparent 1px 7px, rgba(246, 219, 166, .025) 7px 9px, transparent 9px 13px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, .07) 0 18px, transparent 18px 41px),
+    linear-gradient(180deg, #3a2618, #2a1b12 60%, #1e130c);
+  border: 1px solid #120b07;
+  box-shadow: inset 0 1px 0 rgba(246, 219, 166, .12), inset 0 -2px 4px rgba(0, 0, 0, .45), 0 10px 30px rgba(0, 0, 0, .55);
   color: var(--text);
 }
 #radio.show { display: flex; animation: guide-in .4s ease-out both; }
+#radio::before, #radio::after { content: ''; position: absolute; pointer-events: none; }
+/* 內圈一道細金線（遊戲卡片的金線），內外各壓一道暗邊，像嵌進木頭裡 */
+#radio::before { inset: 5px; border-radius: 7px; border: 1px solid var(--line); box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), inset 0 0 0 1px rgba(0, 0, 0, .3); }
+/* 四角的黃銅螺絲：一字槽、左上亮右下暗，四顆槽的角度不一樣 */
+#radio::after {
+  inset: 0; border-radius: inherit;
+  --screw: #e6c98a 0 1px, #b08a45 1.6px, #5a3c18 2.6px, rgba(0, 0, 0, .4) 3.2px, transparent 3.8px;
+  background:
+    linear-gradient(35deg, transparent 44%, rgba(40, 24, 8, .85) 44% 56%, transparent 56%) 9px 9px / 6px 6px no-repeat,
+    linear-gradient(-20deg, transparent 44%, rgba(40, 24, 8, .85) 44% 56%, transparent 56%) calc(100% - 9px) 9px / 6px 6px no-repeat,
+    linear-gradient(80deg, transparent 44%, rgba(40, 24, 8, .85) 44% 56%, transparent 56%) 9px calc(100% - 9px) / 6px 6px no-repeat,
+    linear-gradient(-60deg, transparent 44%, rgba(40, 24, 8, .85) 44% 56%, transparent 56%) calc(100% - 9px) calc(100% - 9px) / 6px 6px no-repeat,
+    radial-gradient(circle at 12px 12px, var(--screw)),
+    radial-gradient(circle at calc(100% - 12px) 12px, var(--screw)),
+    radial-gradient(circle at 12px calc(100% - 12px), var(--screw)),
+    radial-gradient(circle at calc(100% - 12px) calc(100% - 12px), var(--screw));
+}
 #radio .dial {
   position: relative; height: 56px; border-radius: 3px; cursor: var(--cur-pointer); touch-action: none;
   background: linear-gradient(180deg, #e6bf78, #b8803e);
   box-shadow: 0 0 0 3px #a8803e, 0 0 0 4px #3a2414, 0 2px 0 4px rgba(0, 0, 0, .35), inset 0 2px 6px rgba(0, 0, 0, .5);
   filter: brightness(.42) saturate(.55); transition: filter 1.2s, box-shadow 1.2s;
+}
+/* 燈在刻度後面：中間最亮往兩邊退，開機慢慢浮出來 */
+#radio .dial::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity 1.4s;
+  background: radial-gradient(ellipse 70% 120% at 50% 70%, rgba(255, 246, 205, .55), rgba(255, 220, 150, .15) 55%, transparent 80%);
+}
+#radio.on .dial::before { opacity: 1; }
+/* 玻璃：上緣一道斜的反光、下緣一條細亮線、兩端壓暗，蓋在指針和台點上面 */
+#radio .dial::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background:
+    linear-gradient(172deg, rgba(255, 255, 255, .26), rgba(255, 255, 255, .07) 38%, transparent 39%),
+    linear-gradient(0deg, rgba(255, 245, 220, .25), transparent 2px),
+    linear-gradient(90deg, rgba(40, 22, 8, .35), transparent 9%, transparent 91%, rgba(40, 22, 8, .35));
 }
 #radio.on .dial {
   filter: none;
@@ -226,23 +257,53 @@ body.desk :is(#ask, #peek).show { animation-name: guide-up; }
 }
 #radio .dots button::before {
   content: ''; position: absolute; inset: 6px; border-radius: 50%;
-  background: radial-gradient(circle at 38% 32%, #e2c27e, #9a6a2a 70%); box-shadow: 0 1px 1px rgba(58, 36, 20, .6);
+  background: radial-gradient(circle at 38% 32%, #e2c27e, #9a6a2a 70%); box-shadow: 0 1px 1px rgba(58, 36, 20, .6), 0 0 0 1.5px rgba(58, 36, 20, .22);
+  transition: background .4s, box-shadow .4s;
 }
 #radio .dots button.at::before { background: radial-gradient(circle at 38% 32%, #fff3cf, #e0a850 70%); box-shadow: 0 0 6px rgba(255, 220, 140, .9); }
 #radio .needle {
   position: absolute; top: 3px; bottom: 3px; left: calc(var(--f, .12) * 100%); width: 2px; margin-left: -1px; pointer-events: none;
-  background: #a8321e; box-shadow: 1px 0 2px rgba(58, 20, 10, .5);
+  background: linear-gradient(90deg, #c2412a, #8e2614); box-shadow: 1px 0 2px rgba(58, 20, 10, .5); transition: box-shadow 1.2s;
 }
-#radio .row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; padding: 0 6px 16px; }
+#radio.on .needle { box-shadow: 1px 0 2px rgba(58, 20, 10, .5), 0 0 5px rgba(255, 110, 60, .45); }
+#radio .swatch { display: flex; height: 3px; margin: -2px 2px 0; opacity: .45; filter: saturate(.5); transition: opacity 1.2s, filter 1.2s; }
+#radio .swatch i { background: var(--c); }
+#radio.on .swatch { opacity: .9; filter: none; }
+#radio .row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; padding: 10px 14px 18px; }
 #radio .knob {
   --rot: 0deg; position: relative; width: 52px; height: 52px; padding: 0; border: 0; border-radius: 50%; cursor: var(--cur-pointer); touch-action: none;
   background:
+    radial-gradient(circle at 34% 26%, rgba(255, 228, 196, .2), transparent 42%),
     radial-gradient(circle, transparent 60%, rgba(0, 0, 0, .4) 61% 63%, transparent 64%),
     repeating-conic-gradient(from var(--rot), #3e281b 0 5deg, #24160e 5deg 10deg);
-  box-shadow: 0 3px 5px rgba(0, 0, 0, .55), inset 0 1px 1px rgba(255, 220, 180, .16);
+  box-shadow: 0 0 0 2px #7a5a2a, 0 0 0 3px #2a1a10, 0 4px 6px rgba(0, 0, 0, .55), inset 0 1px 1px rgba(255, 220, 180, .16);
   transition: transform .1s;
 }
 #radio .knob:active { transform: scale(.94); }
+#radio .knob .scale {
+  position: absolute; inset: -11px; z-index: -1; border-radius: 50%; pointer-events: none;
+  -webkit-mask: radial-gradient(circle, transparent 66%, #000 67% 80%, transparent 81%);
+  mask: radial-gradient(circle, transparent 66%, #000 67% 80%, transparent 81%);
+}
+/* 轉台鈕：300 度裡 11 條刻線，底下空著 */
+#radio .tune .scale { background: conic-gradient(from -151deg, rgba(232, 184, 106, .5) 0deg 2deg, transparent 2deg 30deg, rgba(232, 184, 106, .5) 30deg 32deg, transparent 32deg 60deg, rgba(232, 184, 106, .5) 60deg 62deg, transparent 62deg 90deg, rgba(232, 184, 106, .5) 90deg 92deg, transparent 92deg 120deg, rgba(232, 184, 106, .5) 120deg 122deg, transparent 122deg 150deg, rgba(232, 184, 106, .5) 150deg 152deg, transparent 152deg 180deg, rgba(232, 184, 106, .5) 180deg 182deg, transparent 182deg 210deg, rgba(232, 184, 106, .5) 210deg 212deg, transparent 212deg 240deg, rgba(232, 184, 106, .5) 240deg 242deg, transparent 242deg 270deg, rgba(232, 184, 106, .5) 270deg 272deg, transparent 272deg 300deg, rgba(232, 184, 106, .5) 300deg 302deg, transparent 302deg 360deg); }
+#radio .pwr .scale { display: none; }
+/* 電源鈕兩側刻「關」「開」，指示線指著哪個哪個亮金；右上一顆印泥指示燈，關著是乾掉的暗赭紅，開機從裡面亮成炭火 */
+#radio .pwr-wrap { position: relative; }
+#radio .pwr-wrap .off, #radio .pwr-wrap .on {
+  position: absolute; top: -12px; font-size: 11px; line-height: 1; color: rgba(181, 160, 132, .45);
+  text-shadow: 0 -1px 0 rgba(0, 0, 0, .65); transition: color .3s, text-shadow .3s; pointer-events: none;
+}
+#radio .pwr-wrap .off { left: -9px; }
+#radio .pwr-wrap .on { right: -9px; }
+#radio:not(.on) .pwr-wrap .off, #radio.on .pwr-wrap .on { color: var(--gold-hi); text-shadow: 0 -1px 0 rgba(0, 0, 0, .65), 0 0 6px rgba(232, 184, 106, .45); }
+#radio .pilot {
+  position: absolute; right: -16px; top: 22px; width: 11px; height: 11px; pointer-events: none;
+  background: #6a2c22; border-radius: 52% 48% 55% 45% / 46% 56% 44% 54%;
+  box-shadow: 0 0 0 1.5px rgba(20, 14, 10, .85), inset 0 1px 1px rgba(0, 0, 0, .4);
+  transition: background .6s;
+}
+#radio.on .pilot { background: radial-gradient(circle at 46% 52%, #ffc070 0, #f08040 34%, #a83c26 76%); box-shadow: 0 0 0 1.5px rgba(20, 14, 10, .85), 0 0 8px rgba(240, 140, 70, .55); }
 #radio .knob::before {
   content: ''; position: absolute; inset: 30%; border-radius: 50%;
   background: radial-gradient(circle at 38% 32%, #f0d390, #b08a45 55%, #6e5124); box-shadow: 0 1px 2px rgba(0, 0, 0, .5);
@@ -253,7 +314,8 @@ body.desk :is(#ask, #peek).show { animation-name: guide-up; }
 }
 #radio .knob::after {
   content: attr(data-l); position: absolute; left: 50%; top: calc(100% + 6px); transform: translateX(-50%);
-  font-size: 11px; letter-spacing: .3em; margin-right: -.3em; white-space: nowrap; color: rgba(232, 200, 140, .55); text-shadow: 0 -1px 0 rgba(0, 0, 0, .6);
+  font-size: 11px; letter-spacing: .3em; margin-right: -.3em; white-space: nowrap; color: var(--muted);
+  text-shadow: 0 -1px 0 rgba(0, 0, 0, .65), 0 1px 0 rgba(246, 219, 166, .06);
 }
 #radio .pwr { --rot: -50deg; }
 #radio.on .pwr { --rot: 40deg; }
@@ -261,17 +323,18 @@ body.desk :is(#ask, #peek).show { animation-name: guide-up; }
 #radio .tune i { transition: none; }
 #radio .eye {
   justify-self: center; width: 36px; height: 36px; padding: 3px; border-radius: 50%;
-  background: radial-gradient(circle at 40% 35%, #f0d390, #8a6a34 70%); box-shadow: 0 1px 3px rgba(0, 0, 0, .6);
+  position: relative; background: radial-gradient(circle at 40% 35%, #f0d390, #8a6a34 70%); box-shadow: 0 1px 3px rgba(0, 0, 0, .6), 0 0 0 1px #2a1a10;
+}
+#radio .eye::after {
+  content: ''; position: absolute; inset: 3px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(ellipse 45% 30% at 36% 26%, rgba(255, 255, 255, .45), transparent 70%), radial-gradient(circle, transparent 60%, rgba(0, 0, 0, .35));
 }
 #radio .eye i {
-  --w: calc((1 - var(--tuned, 0)) * 70deg + 8deg);
   display: block; width: 100%; height: 100%; border-radius: 50%;
-  background:
-    conic-gradient(from calc(-1 * var(--w)), #0b130d 0 calc(var(--w) * 2), transparent 0),
-    radial-gradient(circle, #d6ffe0 0 12%, #63e28d 30%, #1f7a3e 70%, #0d3a1d);
-  filter: brightness(.16) saturate(.3); transition: filter 1.2s;
+  background: radial-gradient(circle, #f2fadc 0 10%, #c6e08c 30%, #8fb85a 58%, #4c6e30 82%, #2c4220);
+  filter: brightness(.18) saturate(.35); transition: filter 1.2s, box-shadow 1.2s;
 }
-#radio.on .eye i { filter: brightness(calc(.5 + var(--tuned, 0) * .6)); }
+#radio.on .eye i { filter: none; box-shadow: 0 0 10px 1px rgba(170, 214, 110, .45); }
 /* 黃銅名牌和「好了」：跟燭火乙式的日期開關同一種舊金（髮絲紋、四角暗斑），字是凹進去的 */
 #radio .foot { display: flex; gap: 10px; align-items: stretch; }
 #radio .plate, #radio .enter {
@@ -285,10 +348,35 @@ body.desk :is(#ask, #peek).show { animation-name: guide-up; }
   box-shadow: inset 0 1px 1px rgba(245, 222, 180, .48), inset 0 -2px 3px rgba(50, 30, 10, .5), 0 2px 4px rgba(0, 0, 0, .4);
   text-shadow: 0 1px 0 rgba(255, 238, 205, .45);
 }
-#radio .plate { flex: 1; min-width: 0; display: flex; align-items: baseline; justify-content: center; gap: 7px; padding: 8px 8px; }
-#radio .name { font: 600 12px/1.2 var(--latin); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .3s; }
-#radio .by { font: 10.5px/1.2 var(--latin); letter-spacing: .08em; color: rgba(62, 40, 16, .75); text-decoration: none; }
-#radio .by:hover { text-decoration: underline; }
+#radio .plate {
+  flex: 1; min-width: 0; display: flex; align-items: baseline; justify-content: center; gap: 7px; padding: 8px 18px;
+  background:
+    radial-gradient(circle at 9px 50%, #f0d8a0 0 1px, #a07a3c 1.6px, #4a3010 2.4px, transparent 3px),
+    radial-gradient(circle at calc(100% - 9px) 50%, #f0d8a0 0 1px, #a07a3c 1.6px, #4a3010 2.4px, transparent 3px),
+    radial-gradient(ellipse at 6% 90%, rgba(66, 50, 22, .26), transparent 34%),
+    radial-gradient(ellipse at 96% 12%, rgba(66, 50, 22, .2), transparent 30%),
+    linear-gradient(118deg, transparent 6%, rgba(255, 238, 205, .25) 20%, transparent 34%, transparent 60%, rgba(255, 238, 205, .15) 76%, transparent 90%),
+    repeating-linear-gradient(0deg, rgba(255, 238, 205, .07) 0 1px, rgba(60, 36, 10, .08) 1px 2px),
+    linear-gradient(180deg, #cd9f5b, #ba8d4a 45%, #9c7036);
+}
+#radio .name {
+  font: 600 12px/1.2 var(--latin); letter-spacing: .14em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: #3a240c; text-shadow: 0 -1px 0 rgba(40, 24, 8, .35), 0 1px 0 rgba(255, 238, 205, .55); transition: opacity .3s;
+}
+/* 電台網站：會離開遊戲，不放在名牌上（太容易誤點）。面板最底下靠右一顆小鈕：刻在木頭上的淡字、細框、一個往外的箭頭，
+   看得出是「去外面」，但不跟上面的旋鈕搶。左邊淡淡寫著是哪家電台 */
+#radio .site {
+  align-self: flex-end; display: flex; align-items: center; gap: 10px; margin-top: -4px; padding: 0;
+  font-size: 11px; letter-spacing: .12em; color: rgba(232, 200, 140, .5); text-decoration: none; text-shadow: 0 -1px 0 rgba(0, 0, 0, .6);
+}
+#radio .site .by { font: 10.5px/1 var(--latin); letter-spacing: .06em; }
+#radio .site .go {
+  display: flex; align-items: center; gap: 5px; padding: 4px 8px 4px 9px;
+  border: 1px solid rgba(232, 200, 140, .28); border-radius: 2px; transition: color .2s, border-color .2s;
+}
+#radio .site svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+#radio .site:hover .go, #radio .site:focus-visible .go { color: rgba(240, 214, 160, .9); border-color: rgba(232, 200, 140, .6); }
+#radio .site:focus-visible { outline: none; }
 #radio .enter {
   flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px;
   font: inherit; font-size: 13px; letter-spacing: .2em; cursor: var(--cur-pointer); transition: transform .1s;
@@ -307,6 +395,10 @@ body.desk :is(#ask, #peek).show { animation-name: guide-up; }
 }
 body.desk #radio { left: var(--cx, 50%); top: var(--cy, 30%); right: auto; bottom: auto; transform: none; }
 body.desk #radio.show { animation-name: guide-up; }
+/* 拖木框可以搬（radio-card.js 的 drag）：拖過的照拖到的位置放，--mx、--my 是左上角，寬度先量好釘住（直拿本來左右撐滿）；點兩下木框回原本的位置 */
+#radio { touch-action: none; }
+body.desk #radio { cursor: var(--cur-grab); }
+body #radio.moved { left: var(--mx, 16px); top: var(--my, 16px); right: auto; bottom: auto; width: var(--mw, 324px); max-width: none; margin: 0; transform: none; animation-name: guide-up; }
 @media (prefers-reduced-motion: reduce) { #radio.show { animation: none; } #radio .dial, #radio .eye i { transition: none; } }
 
 /* 胖頭指著畫面上的按鈕（ask.js 的 beckon）：外圈一道金光往外擴，跟互動鍵的光暈同一種，亮幾下就停 */
