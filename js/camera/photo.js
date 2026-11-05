@@ -18,12 +18,10 @@
 // 看鏡（lookOn）：開著時自己的頭一直看著鏡頭，關著就隨意看（attention.js）。鏡頭的位置和方向由 lensInfo 給別人和自己的頭
 import * as THREE from 'three';
 import { lens, fitSource, unbend, COVER } from '../core/lens.js';
-import { makePostcard, loadQR, spreadFace, FILM_ORDER } from '../save/postcard.js';
-import { packFace } from '../save/filmcode.js';
-import { sanitizeLook, decodeFace } from '../avatar/looks.js';
+import { makePostcard, loadQR } from '../save/postcard.js';
+import { sanitizeLook, wearOnly } from '../avatar/looks.js';
 import { getSave } from '../save/progress.js';
-import { encodeLook, encodeSave } from '../save/savecode.js';
-import { savePrint } from '../save/pack.js';
+import { encodeLook } from '../save/savecode.js';
 import { CAMERAS, carried, dateKnob, drawDate, eyeShutter, flashKnob, longTan, shutterKnob } from './cameras.js';
 import { MARKS, markURL } from './marks.js';
 import { dof, dofK } from '../core/dof.js';
@@ -619,13 +617,6 @@ export class PhotoMode {
     this.$('#ph-again').addEventListener('click', () => this.retake());
     this.$('#ph-done').addEventListener('click', () => this.exit());
     this.$('#ph-result .save-tip').textContent = saveTip;
-    this.$('#ph-mode').addEventListener('click', (e) => {
-      const b = e.target.closest('button[data-mode]');
-      if (b && this.shot && b.dataset.mode !== this.cardMode) {
-        this.cardMode = b.dataset.mode;
-        this.postcardResult();
-      }
-    });
     this.$('#ph-frame .grain').style.backgroundImage = `url(${this.noise.toDataURL()})`;
     window.addEventListener('resize', () => this.active && this.refresh());
   }
@@ -1846,7 +1837,6 @@ export class PhotoMode {
     if (this.postcard) {
       this.ui.hint('照相師沖洗中…', { id: 'photo:develop', hold: true });
       this.shot = out;
-      this.cardMode = 'friend';
       this.postcardResult();
       return;
     }
@@ -1997,48 +1987,31 @@ export class PhotoMode {
 
   // ───────── 拍好之後 ─────────
 
-  // 明信片：郵票是存檔碼，照片四周的底片邊是自己畫的那張臉（郵票的 QR 放不下臉），一條放滿接下一條（postcard.js 的 spreadFace）。
-  // 寄給朋友：茜紅郵票只帶身上這套造型，有戴臉才印，先只用下緣，放不下四邊都用。寄給自己：藍染郵票帶整份進度（含衣櫃），四邊都有底片邊
+  // 明信片只印身上的衣服和配件（不帶存檔、種族、臉；存檔只在鏡中照片）：茜紅郵票是造型碼（looks.js 的 wearOnly），沒有底片邊。
+  // 讀回來是試穿，穿在讀的人自己身上：寄給朋友，或自己留著當衣櫃外的一套。更早的明信片（帶臉、寄給自己）照樣讀得回來
   async postcardResult() {
-    const mode = this.cardMode, save = getSave(), mine = mode === 'self';
     await loadQR();
-    const look = sanitizeLook(save.look), c = decodeFace(mine ? save.face : look.face);
-    const bytes = c ? await packFace(c) : new Uint8Array(0), sh = this.shot;
+    const sh = this.shot;
     if (!sh) return;
-    let films = null, lost = false;
-    for (const edges of mine ? [FILM_ORDER] : bytes.length ? [['bottom'], FILM_ORDER] : [[]]) if (!films) films = spreadFace(sh.width, sh.height, edges, bytes);
-    if (!films) {
-      // 四邊都放不下：底片邊印空的
-      films = Object.fromEntries((mine ? FILM_ORDER : ['bottom']).map((e) => [e, new Uint8Array(0)]));
-      lost = true;
-    }
-    const url = location.origin + location.pathname;
-    const qr = mine
-      ? { kind: 'save', text: url + '#save=' + encodeSave(save, { face: false }) }
-      : { kind: 'look', text: url + '#look=' + encodeLook(look, { face: false }) };
-    if (!this.shot || mode !== this.cardMode) return;   // 等的時候離開了或換了另一種
-    const card = makePostcard(this.shot, new Date(), { films, qr });
+    const qr = { kind: 'look', text: location.origin + location.pathname + '#look=' + encodeLook(wearOnly(sanitizeLook(getSave().look)), { face: false }) };
+    const card = makePostcard(sh, new Date(), { qr });
     const blob = await new Promise((ok) => card.toBlob(ok, 'image/jpeg', 0.92));
-    if (!blob || !this.shot || mode !== this.cardMode) return;
-    const name = `${mine ? '海市行囊' : '海市明信片'}-${stamp()}.jpg`;
-    this.showCard(blob, name, mine ? savePrint() : undefined);
+    if (!blob || this.shot !== sh) return;   // 等的時候離開了
+    this.showCard(blob, `海市明信片-${stamp()}.jpg`);
     this.ambience.voice('print', 0.35);
-    this.$('#ph-tip').textContent = lost || card.lost.length ? '臉太滿，沒有印上，其他都已印上。要連臉一起存，到前廳鏡前拍一張'
-      : mine ? '給自己的存檔。換裝置時，在行囊讀這張就能還原'
-      : canShare ? '按分享寄出。朋友掃郵票可試穿這一身'
-      : saveTip ? '按存下，在選單裡選收件人。朋友掃郵票可試穿這一身'
-      : '存下後寄給朋友。掃郵票可試穿這一身';
+    this.$('#ph-tip').textContent = canShare ? '郵票印著這身衣服。分享給朋友試穿，或自己留著，衣櫃外多收一套'
+      : saveTip ? '郵票印著這身衣服。按存下寄給朋友試穿，或自己留著，衣櫃外多收一套'
+      : '郵票印著這身衣服。存下寄給朋友試穿，或自己留著，衣櫃外多收一套';
   }
 
-  // 明信片一印好就收進相簿；換寄給朋友、寄給自己時，換下來的那張（還沒存下的）拿掉。k：寄給自己的存檔指紋
-  showCard(blob, name, k) {
-    const shot = this.shot, prev = this.result?.item;
+  // 明信片一印好就收進相簿
+  showCard(blob, name) {
+    const shot = this.shot;
     this.closeResult();
     this.shot = shot;
-    if (prev) discard([prev]);
     const url = URL.createObjectURL(blob);
     const r = (this.result = { blob, url, name, item: null });
-    addPhoto(blob, { name, cam: this.gear?.id || 'eye', kind: k ? 'postcard-save' : 'postcard', k, quiet: true }).then((it) => { r.item = it; });
+    addPhoto(blob, { name, cam: this.gear?.id || 'eye', kind: 'postcard', quiet: true }).then((it) => { r.item = it; });
     const box = this.$('#ph-media');
     box.innerHTML = '';
     const m = document.createElement('img');
@@ -2050,8 +2023,6 @@ export class PhotoMode {
     save.querySelector('span').textContent = '存下';
     this.$('#ph-result').hidden = false;
     this.ui.hideHint('photo:');
-    this.$('#ph-mode').hidden = false;
-    for (const b of this.$('#ph-mode').querySelectorAll('button')) b.setAttribute('aria-pressed', b.dataset.mode === this.cardMode);
   }
 
   closeResult() {

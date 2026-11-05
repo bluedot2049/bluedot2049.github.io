@@ -32,6 +32,7 @@ export const PREFS = {
   eyeStay: { kind: 'json' },                     // guide.js：黑眼留在身邊（1）：帶到了、很久沒操作都不自己收
   verbsSeen: { kind: 'json' },                   // main.js：互動鍵出現過哪些動詞（第一次出現光暈多擴幾圈）
   tipsSeen: { kind: 'json' },                    // ui.js：教學提示 { 代號: 出現過幾次，或 'done' 做過了 }
+  radio: { kind: 'json' },                       // radio-sound.js：前廳收音機 { on 開著, at 指針在刻度哪裡 0～1 }
 };
 
 export function pref(key) {

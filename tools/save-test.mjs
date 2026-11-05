@@ -3,6 +3,7 @@
 // 存檔搬家的測試：無頭 Edge 做存檔碼、鏡中照片、明信片（行囊、寄朋友），再讀回來比對；--make-old 先用現在的程式做一套樣本留著，改格式後還要讀得回來。
 //   node tools/save-test.mjs --make-old <名字>   做樣本到 tools/fixtures/save/<名字>/
 //   node tools/save-test.mjs                    做新的、讀回來，再把 tools/fixtures/save/ 底下每一套舊樣本讀一次
+//   node tools/save-test.mjs --limit [--dense]   存檔塞滿再一段段加長，看鏡中照片、明信片撐到哪裡
 import fs from 'node:fs';
 import path from 'node:path';
 import { openBrowser, ROOT, sleep } from './headless.mjs';
@@ -23,7 +24,76 @@ await b.send('Fetch.enable', { patterns: [{ urlPattern: '*/__blank.html' }] });
 await b.send('Page.navigate', { url: 'http://127.0.0.1:8791/__blank.html' });
 await sleep(800);
 
+// --limit：存檔塞到最滿（每樣都拿到、各攤都去過、換過按鍵；臉一般，--dense 畫得很滿），再加一個假欄位一段一段變長（假裝之後的紀念幣、道具），
+// 看鏡框什麼時候放不下臉、明信片 QR 變多大，原圖和縮過的圖（長邊 1280、JPEG 0.75，像傳 LINE）還讀不讀得回來
+if (args.includes('--limit')) {
+  const GROW = [0, 32, 64, 96, 128, 192, 256, 384, 512];
+  const setup = `(async () => {
+    let seed = 7; Math.random = () => ((seed = Math.imul(seed, 48271) % 2147483647) & 0xffffff) / 0x1000000;
+    const L = await import('/js/avatar/looks.js'), P = await import('/js/save/progress.js'), F = await import('/js/save/filmcode.js');
+    // 假欄位要在 savecode.js 載入前放進表裡（它載入時才挑有 code 的欄位）
+    P.FIELDS.push({ key: '__grow', init: () => '', read: (v) => (typeof v === 'string' ? v : ''), code: { tag: 'z', iris: false, enc: (v) => v || '', dec: (s) => s } });
+    // --dense 很滿的臉：左右不對稱，六十塊各種顏色疊上去。不然是一般的臉：對稱的圓臉框、兩隻眼、腮紅、嘴
+    const c = new Uint8Array(4096), put = (x, y, v) => { if (x >= 0 && x < 64 && y >= 0 && y < 64) c[y * 64 + x] = v; };
+    if (${args.includes('--dense')}) for (let n = 0; n < 60; n++) { const cx = Math.random() * 64, cy = Math.random() * 64, r = 2 + Math.random() * 7, v = 1 + (Math.random() * 8 | 0);
+      for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) if (Math.hypot(x - cx, y - cy) < r) put(x, y, v); }
+    else for (let y = 0; y < 64; y++) for (let x = 0; x < 32; x++) { const d = Math.hypot(x - 31.5, y - 32);
+      const v = Math.abs(d - 25) < 1 ? 1 : Math.hypot(x - 20.5, y - 25) < 3.2 ? 1 : Math.hypot(x - 16, y - 34) < 3 ? 5 : y === 40 + Math.round(Math.sin((x - 22) / 20 * Math.PI) * 3) && x > 21 ? 3 : 0;
+      if (v) { put(x, y, v); put(63 - x, y, v); } }
+    c.eyes = [{ x: 17, y: 22, w: 8, h: 7 }, { x: 39, y: 22, w: 8, h: 7 }];
+    const face = L.encodeFace(c);
+    const r = () => L.randomLook(L.presetLook(Math.random() * 4 | 0));
+    const a = { ...r(), face };
+    localStorage.clear();
+    P.putSave({ look: a, closet: [{ ...r(), face }, r(), r()], unlocked: L.lockKeys(), face, camera: 'candle',
+      visits: Object.fromEntries(Object.keys(L.GIFTS).map((k, i) => [k, '2026-' + (10 + i % 3) + '-' + String(1 + i * 2).padStart(2, '0')])),
+      padKeys: [1, 0, 3, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], deskKeys: Array.from({ length: 12 }, (_, i) => (0x100000 + i * 0x10101).toString(16)).join('') });
+    const ph = document.createElement('canvas'); ph.width = 930; ph.height = 1340;
+    const g = ph.getContext('2d'), gr = g.createLinearGradient(0, 0, 930, 1340); gr.addColorStop(0, '#6a4a7a'); gr.addColorStop(1, '#e0a070'); g.fillStyle = gr; g.fillRect(0, 0, 930, 1340);
+    window.__photo = ph;
+    return { face: face.length, packed: (await F.packFace(c)).length };
+  })()`;
+  const step = (n) => `(async () => {
+    const P = await import('/js/save/progress.js'), S = await import('/js/save/savecode.js'), M = await import('/js/save/mirrorcard.js');
+    const PC = await import('/js/save/postcard.js'), F = await import('/js/save/filmcode.js'), L = await import('/js/avatar/looks.js');
+    const B = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    P.putSave({ __grow: Array.from({ length: ${n} }, () => B[Math.random() * 64 | 0]).join('') });
+    const save = P.getSave(), url = location.origin + '/', text = url + '#save=' + S.encodeSave(save, { face: false });
+    // 鏡框連存檔都放不下時 makeMirrorCard 會出錯，記下來接著看明信片
+    const card = await M.makeMirrorCard(window.__photo, { save }).catch((e) => ({ err: e.message }));
+    await PC.loadQR();
+    const q = window.qrcode(0, 'L'); q.addData(text, 'Byte'); q.make();
+    const films = PC.spreadFace(930, 1340, PC.FILM_ORDER, await F.packFace(L.decodeFace(save.face)));
+    const pc = PC.makePostcard(window.__photo, new Date(2026, 10, 5), { films: films || Object.fromEntries(PC.FILM_ORDER.map((e) => [e, new Uint8Array(0)])), qr: { kind: 'save', text } });
+    // 存成 JPEG；shrink 是長邊縮到 1280、品質 0.75
+    const file = async (cv, shrink) => {
+      let o = cv;
+      if (shrink) { const k = Math.min(1, 1280 / Math.max(cv.width, cv.height)); o = document.createElement('canvas'); o.width = Math.round(cv.width * k); o.height = Math.round(cv.height * k); o.getContext('2d').drawImage(cv, 0, 0, o.width, o.height); }
+      return new File([await new Promise((ok) => o.toBlob(ok, 'image/jpeg', shrink ? 0.75 : 0.92))], 'x.jpg', { type: 'image/jpeg' });
+    };
+    // 讀回來：存檔（含假欄位）對不對、臉對不對
+    const mirror = async (shrink) => { if (card.err) return '做不出來'; const m = await M.readMirrorCard(await file(card.canvas, shrink)).catch(() => null);
+      return !m ? '讀不到' : !m.full ? '只有眼紋' : ((m.save.__grow || '') === save.__grow ? '存檔' : '存檔錯') + (m.save.face === save.face ? '＋臉' : '　沒臉'); };
+    const post = async (shrink) => { const r = await PC.readPostcard(await file(pc, shrink)).catch(() => null);
+      const sv = r?.text && S.decodeSave(S.codeFrom(r.text)), c = r && (await PC.joinFace(r.strips));
+      return (!sv ? '讀不到' : (sv.__grow || '') === save.__grow ? '存檔' : '存檔錯') + (c && L.encodeFace(c) === save.face ? '＋臉' : '　沒臉'); };
+    return { code: text.length, qr: (q.getModuleCount() - 17) / 4, lost: card.lost, filmLost: !films,
+      m: await mirror(false), ms: await mirror(true), p: await post(false), ps: await post(true), card: card.canvas ? card.canvas.width + 'x' + card.canvas.height : '-', pc: pc.width + 'x' + pc.height };
+  })()`;
+  console.log(args.includes('--dense') ? '很滿的臉' : '一般的臉', await b.ev(setup));
+  console.log('多出來　QR 字數　QR 版本　鏡中照片（原圖／縮過）　　　明信片（原圖／縮過）');
+  for (const n of GROW) {
+    const r = await b.ev(step(n)).catch((e) => ({ err: e.message.slice(0, 200) }));
+    if (r.err) { console.log(String(n).padStart(4), r.err); continue; }
+    console.log(`${String(n).padStart(4)} 字　${String(r.code).padStart(5)}　　v${String(r.qr).padEnd(3)}　　${r.m}／${r.ms}${r.lost ? '（印的時候就丟了臉）' : ''}　　${r.p}／${r.ps}${r.filmLost ? '（底片邊放不下臉）' : ''}`);
+    if (n === 0) console.log(`　　　　鏡中照片 ${r.card}、明信片 ${r.pc}`);
+  }
+  b.close();
+  process.exit(0);
+}
+
 // 頁面裡：三張臉（對稱的笑臉、不對稱的塗鴉、另一張對稱的），身上和衣櫃第一套同一張、第二套沒畫、第三套另一張
+// 身上那套穿著羽織、袴、龜殼（攤販送的），明信片讀的人沒拿到，要原封不動
 const SETUP = `(async () => {
   const L = await import('/js/avatar/looks.js'), P = await import('/js/save/progress.js');
   // 臉：圓臉框、兩隻眼、嘴。sym 左右對稱，odd 眨一隻眼、一邊有記號
@@ -37,7 +107,7 @@ const SETUP = `(async () => {
     c.eyes = [{ x: 17, y: 22, w: 8, h: 7 }, { x: 39, y: 22, w: 8, h: 7 }]; return c; };
   const sym = () => face(false), odd = () => face(true);
   const A = L.encodeFace(sym()), C = L.encodeFace(odd());
-  const a = { ...L.randomLook(L.presetLook(1)), face: A, keep: 1 }, b = L.randomLook(L.presetLook(2)), c = { ...L.randomLook(L.presetLook(3)), face: C };
+  const a = { ...L.randomLook(L.presetLook(1)), face: A, keep: 1, outer: 'haori', bottom: 'hakama', back: 'shell', one: 'none' }, b = L.randomLook(L.presetLook(2)), c = { ...L.randomLook(L.presetLook(3)), face: C };
   localStorage.clear();
   P.putSave({ look: a, closet: [{ ...a, topC: 3 }, b, c], unlocked: L.lockKeys().filter((_, i) => i % 3), visits: { fishwife: '2026-10-21' }, camera: 'candle' });
   window.__faces = { A, C };
@@ -104,11 +174,21 @@ const READ = (kind, data, faces) => `(async () => {
     const file = new File([blob], 'x.jpg', { type: 'image/jpeg' });
     window.confirm = () => true; window.alert = (m) => { r = 'alert ' + m; };
     const proto = PK.Pack.prototype, back = proto.restore;
-    let got = null;
+    // 讀的人：另一個種族、沒畫臉、什麼都還沒拿到。明信片只換衣服和配件，沒拿到的那件不動
+    const L = await import('/js/avatar/looks.js'), PC = await import('/js/save/postcard.js');
+    const me = L.sanitizeLook({ ...L.presetLook(3), race: 'cat', hand: 'staff', handC: 5 });
+    P.putSave({ look: me, face: '', unlocked: [] });
+    let got = null, worn = null;
     proto.restore = function (sv) { S.restoreSave(sv); got = shape(P.getSave()); };
-    const fake = Object.assign(Object.create(proto), { events: { onTryOn: (L) => { got = { tryOn: name(L.face) }; } }, close() {} });
+    const fake = Object.assign(Object.create(proto), { events: { onTryOn: (o) => { worn = o; } }, close() {} });
     await proto.read.call(fake, file);
     proto.restore = back;
+    if (worn) {
+      const sent = S.decodeLook(S.codeFrom((await PC.readPostcard(file)).text)), set = new Set();
+      const bad = Object.entries(L.WEAR).filter(([k, w]) => { const from = L.isOpen(k, sent[k], set) ? sent : me; return [k, ...w].some((f) => worn[f] !== from[f]); }).map(([k]) => k);
+      const kept = Object.keys(L.WEAR).filter((k) => !L.isOpen(k, sent[k], set));
+      got = { tryOn: { 種族: worn.race === me.race ? '自己的' : '換了', 臉: name(worn.face), 衣服: bad.length ? '不對 ' + bad.join(',') : '對', 沒拿到不動: kept.join(',') || '-' } };
+    }
     r = got ?? r;
   }
   return r;

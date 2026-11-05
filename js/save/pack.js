@@ -6,7 +6,7 @@
 // 相簿（album.js）：拍的照片、錄影、信物（鏡中的照片、明信片）都在這裡。點一下選、點兩下看大圖（大圖裡左右換張，也能選、丟掉）。
 // 選好的可以存下、丟掉、交給沖洗師傅（只有照片），Android 還能分享：
 // 存下的拿出相簿，沒選的留著；丟掉不先問，底下那行按「復原」就放回來。電腦上 Delete 丟掉選的。
-// 讀照片哪裡都能讀（鏡中的照片、海市的明信片）；存檔只有兩個地方：鏡子前請眼睛拍一張，或在海市照相館寄一張給自己。
+// 讀照片哪裡都能讀（鏡中的照片、海市的明信片）；存檔只有一個地方：鏡子前請眼睛拍一張。明信片只印衣服和配件，讀了穿在自己身上（更早寄給自己的那種照樣還原）。
 // 鈕右下的封蠟是魔法印泥：有照片交給師傅、還沒去拿，或拿回來還沒看過時亮著。
 // 存檔有沒有過期只寫在卡片裡，不亮、不催。上次存了什麼記在這台裝置上（packed），不放進存檔。
 import { decodeSave, decodeLook, tryOn, codeFrom, hasProgress, restoreSave, attachFaces } from './savecode.js';
@@ -283,7 +283,7 @@ export class Pack {
 
   savePage(mirror) {
     const how = mirror ? '請鏡中的眼睛拍一張，存檔印在照片上。換裝置時讀這張就能還原'
-      : '存檔：在前廳鏡前拍，或在海市照相館寄明信片給自己。讀取不限地點';
+      : '存檔：在前廳鏡前拍。海市明信片只印衣服，讀了穿在自己身上。讀取不限地點';
     return `<p class="pack-how">${how}</p>
       <div class="pack-acts">
         <button data-act="selfie"${mirror ? '' : ' disabled'}>${icon('orb')}<span>請眼睛拍一張<small>${!mirror ? '在鏡子前才拍得到' : this.withCode ? '印上存檔' : '只拍照片'}</small></span></button>
@@ -638,7 +638,7 @@ export class Pack {
   }
 
   // 先當鏡中的照片讀（眼紋、鏡框符文），讀不到再當海市的明信片（郵票、底片邊）。
-  // 鏡中的照片和明信片的行囊：整份還原（先問），臉接回戴著的那幾套（舊的每套一張，併成一張）。朋友寄的明信片：試穿，沒拿到的部位換回預設。
+  // 鏡中的照片和更早寄給自己的明信片：整份還原（先問），臉接回戴著的那幾套（舊的每套一張，併成一張）。明信片：只換衣服和配件，穿在自己身上，沒拿到的那件不動（savecode.js 的 tryOn）。
   // 回傳讀到什麼：'save'（要重新整理了）、'look'、null
   async read(file, b = null) {
     const small = b?.querySelector('small'), was = small?.textContent;
@@ -659,7 +659,7 @@ export class Pack {
       try { r = await readPostcard(file); } catch {}
       const code = r?.text && codeFrom(r.text);
       const face = (e) => (r.faces[e] ? encodeFace(r.faces[e]) : '');
-      // 新的：幾條底片邊接起來是一張臉；舊的行囊：一條一張（下緣身上那套，上、左、右衣櫃三套）
+      // 更早寄給自己的：幾條底片邊接起來是一張臉；再更早的一條一張（下緣身上那套，上、左、右衣櫃三套）
       const joined = async () => { const c = await joinFace(r.strips); return c ? encodeFace(c) : ''; };
       const sv = code && decodeSave(code), L = code && !sv && decodeLook(code);
       if (sv) {
@@ -670,7 +670,7 @@ export class Pack {
       }
       if (L) {
         this.close();
-        this.events.onTryOn(tryOn({ ...L, face: await joined() }));
+        this.events.onTryOn(tryOn(L));
         return 'look';
       }
       sfx('fail');

@@ -184,6 +184,131 @@ body.desk :is(#ask, #peek).show { animation-name: guide-up; }
 }
 @media (prefers-reduced-motion: reduce) { :is(#guide, #ask, #peek).show, #guide .keys li, #ask .asks button { animation: none; } }
 
+/* 前廳收音機的面板（radio-card.js）：不是告示那張卡，是收音機本身的面板。位置跟問胖頭一樣（手機橫拿靠左、直拿貼底，電腦長在收音機旁邊）。
+   胡桃木框：細直紋＋一層寬紋，左上一道淡淡的反光；裡面一條黃銅邊的琥珀刻度窗（跟 radio.js 畫的刻度同一組色），紅指針照 --f。
+   關著刻度窗是暗的玻璃，開機從裡面亮起來（慢慢的，像燈絲熱起來）。兩顆電木旋鈕：一圈細齒、黃銅蓋、一條指示線，底下刻字；
+   電源鈕開關差一格，轉台鈕照 --f 轉。中間魔眼管：綠的扇面照 --tuned 合起來，對準了最亮。底下黃銅名牌刻台名（凹進去的字），旁邊一顆小銅鈕「好了」 */
+#radio {
+  position: fixed; left: calc(24px + env(safe-area-inset-left)); top: 50%; z-index: 25;
+  display: none; flex-direction: column; gap: 14px; transform: translateY(-50%);
+  width: 320px; max-width: calc(100vw - 32px); padding: 14px 16px 12px; border-radius: 10px;
+  background:
+    linear-gradient(115deg, rgba(255, 220, 170, .1), transparent 28%, transparent 72%, rgba(0, 0, 0, .2)),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, .1) 0 1px, transparent 1px 7px, rgba(255, 210, 160, .04) 7px 9px, transparent 9px 13px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, .08) 0 18px, transparent 18px 41px),
+    linear-gradient(180deg, #5a3520, #46291a 60%, #36200f);
+  border: 1px solid #22140b;
+  box-shadow: inset 0 1px 0 rgba(255, 220, 170, .18), inset 0 -2px 4px rgba(0, 0, 0, .45), 0 10px 30px rgba(0, 0, 0, .55);
+  color: var(--text);
+}
+#radio.show { display: flex; animation: guide-in .4s ease-out both; }
+#radio .dial {
+  position: relative; height: 56px; border-radius: 3px; cursor: var(--cur-pointer); touch-action: none;
+  background: linear-gradient(180deg, #e6bf78, #b8803e);
+  box-shadow: 0 0 0 3px #a8803e, 0 0 0 4px #3a2414, 0 2px 0 4px rgba(0, 0, 0, .35), inset 0 2px 6px rgba(0, 0, 0, .5);
+  filter: brightness(.42) saturate(.55); transition: filter 1.2s, box-shadow 1.2s;
+}
+#radio.on .dial {
+  filter: none;
+  box-shadow: 0 0 0 3px #a8803e, 0 0 0 4px #3a2414, 0 2px 0 4px rgba(0, 0, 0, .35), inset 0 0 18px rgba(255, 236, 170, .6), 0 0 22px 4px rgba(240, 170, 80, .22);
+}
+/* 刻線：50 格，每 5 格一條長的，跟 3D 的刻度一樣從 5% 排到 95% */
+#radio .ticks {
+  position: absolute; left: 5%; right: 5%; top: 5px; height: 20px; border-right: 1.4px solid rgba(58, 36, 20, .8); pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, rgba(58, 36, 20, .9) 0 2px, transparent 2px 10%) 0 0 / 100% 20px no-repeat,
+    repeating-linear-gradient(90deg, rgba(58, 36, 20, .7) 0 1px, transparent 1px 2%) 0 0 / 100% 12px no-repeat;
+}
+#radio .dots { position: absolute; inset: 0; }
+#radio .dots button {
+  position: absolute; bottom: 4px; width: 22px; height: 22px; padding: 0; transform: translateX(-50%);
+  background: none; border: 0; border-radius: 50%; cursor: var(--cur-pointer);
+}
+#radio .dots button::before {
+  content: ''; position: absolute; inset: 6px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #e2c27e, #9a6a2a 70%); box-shadow: 0 1px 1px rgba(58, 36, 20, .6);
+}
+#radio .dots button.at::before { background: radial-gradient(circle at 38% 32%, #fff3cf, #e0a850 70%); box-shadow: 0 0 6px rgba(255, 220, 140, .9); }
+#radio .needle {
+  position: absolute; top: 3px; bottom: 3px; left: calc(var(--f, .12) * 100%); width: 2px; margin-left: -1px; pointer-events: none;
+  background: #a8321e; box-shadow: 1px 0 2px rgba(58, 20, 10, .5);
+}
+#radio .row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; padding: 0 6px 16px; }
+#radio .knob {
+  --rot: 0deg; position: relative; width: 52px; height: 52px; padding: 0; border: 0; border-radius: 50%; cursor: var(--cur-pointer); touch-action: none;
+  background:
+    radial-gradient(circle, transparent 60%, rgba(0, 0, 0, .4) 61% 63%, transparent 64%),
+    repeating-conic-gradient(from var(--rot), #3e281b 0 5deg, #24160e 5deg 10deg);
+  box-shadow: 0 3px 5px rgba(0, 0, 0, .55), inset 0 1px 1px rgba(255, 220, 180, .16);
+  transition: transform .1s;
+}
+#radio .knob:active { transform: scale(.94); }
+#radio .knob::before {
+  content: ''; position: absolute; inset: 30%; border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #f0d390, #b08a45 55%, #6e5124); box-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+}
+#radio .knob i {
+  position: absolute; left: calc(50% - 1.5px); top: 4px; width: 3px; height: 12px; border-radius: 2px;
+  background: #ece0c4; transform-origin: 50% 22px; transform: rotate(var(--rot)); transition: transform .3s cubic-bezier(.3, .8, .3, 1);
+}
+#radio .knob::after {
+  content: attr(data-l); position: absolute; left: 50%; top: calc(100% + 6px); transform: translateX(-50%);
+  font-size: 11px; letter-spacing: .3em; margin-right: -.3em; white-space: nowrap; color: rgba(232, 200, 140, .55); text-shadow: 0 -1px 0 rgba(0, 0, 0, .6);
+}
+#radio .pwr { --rot: -50deg; }
+#radio.on .pwr { --rot: 40deg; }
+#radio .tune { --rot: calc((var(--f, .12) * 300 - 150) * 1deg); }
+#radio .tune i { transition: none; }
+#radio .eye {
+  justify-self: center; width: 36px; height: 36px; padding: 3px; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #f0d390, #8a6a34 70%); box-shadow: 0 1px 3px rgba(0, 0, 0, .6);
+}
+#radio .eye i {
+  --w: calc((1 - var(--tuned, 0)) * 70deg + 8deg);
+  display: block; width: 100%; height: 100%; border-radius: 50%;
+  background:
+    conic-gradient(from calc(-1 * var(--w)), #0b130d 0 calc(var(--w) * 2), transparent 0),
+    radial-gradient(circle, #d6ffe0 0 12%, #63e28d 30%, #1f7a3e 70%, #0d3a1d);
+  filter: brightness(.16) saturate(.3); transition: filter 1.2s;
+}
+#radio.on .eye i { filter: brightness(calc(.5 + var(--tuned, 0) * .6)); }
+/* 黃銅名牌和「好了」：跟燭火乙式的日期開關同一種舊金（髮絲紋、四角暗斑），字是凹進去的 */
+#radio .foot { display: flex; gap: 10px; align-items: stretch; }
+#radio .plate, #radio .enter {
+  border: 1px solid rgba(90, 58, 24, .95); border-radius: 3px; color: #3e2810;
+  background:
+    radial-gradient(ellipse at 6% 90%, rgba(66, 50, 22, .26), transparent 34%),
+    radial-gradient(ellipse at 96% 12%, rgba(66, 50, 22, .2), transparent 30%),
+    linear-gradient(118deg, transparent 6%, rgba(255, 238, 205, .25) 20%, transparent 34%, transparent 60%, rgba(255, 238, 205, .15) 76%, transparent 90%),
+    repeating-linear-gradient(0deg, rgba(255, 238, 205, .07) 0 1px, rgba(60, 36, 10, .08) 1px 2px),
+    linear-gradient(180deg, #cd9f5b, #ba8d4a 45%, #9c7036);
+  box-shadow: inset 0 1px 1px rgba(245, 222, 180, .48), inset 0 -2px 3px rgba(50, 30, 10, .5), 0 2px 4px rgba(0, 0, 0, .4);
+  text-shadow: 0 1px 0 rgba(255, 238, 205, .45);
+}
+#radio .plate { flex: 1; min-width: 0; display: flex; align-items: baseline; justify-content: center; gap: 7px; padding: 8px 8px; }
+#radio .name { font: 600 12px/1.2 var(--latin); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .3s; }
+#radio .by { font: 10.5px/1.2 var(--latin); letter-spacing: .08em; color: rgba(62, 40, 16, .75); text-decoration: none; }
+#radio .by:hover { text-decoration: underline; }
+#radio .enter {
+  flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px;
+  font: inherit; font-size: 13px; letter-spacing: .2em; cursor: var(--cur-pointer); transition: transform .1s;
+}
+#radio .enter:active { transform: scale(.95); }
+#radio .enter kbd {
+  min-width: 20px; padding: 0 4px; text-align: center; font: 11px/1.5 var(--latin); letter-spacing: .04em;
+  color: inherit; border: 1px solid rgba(62, 40, 16, .5); border-radius: 2px;
+}
+@media (orientation: portrait) {
+  #radio {
+    left: 16px; right: 16px; top: auto; bottom: calc(16px + env(safe-area-inset-bottom));
+    width: auto; max-width: 420px; margin: 0 auto; transform: none;
+  }
+  #radio.show { animation-name: guide-up; }
+}
+body.desk #radio { left: var(--cx, 50%); top: var(--cy, 30%); right: auto; bottom: auto; transform: none; }
+body.desk #radio.show { animation-name: guide-up; }
+@media (prefers-reduced-motion: reduce) { #radio.show { animation: none; } #radio .dial, #radio .eye i { transition: none; } }
+
 /* 胖頭指著畫面上的按鈕（ask.js 的 beckon）：外圈一道金光往外擴，跟互動鍵的光暈同一種，亮幾下就停 */
 .beckon { position: relative; border-color: var(--gold) !important; color: var(--gold-hi) !important; }
 .beckon::before {

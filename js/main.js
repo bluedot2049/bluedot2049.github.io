@@ -11,6 +11,7 @@ import { getSave, putSave, markTour } from './save/progress.js';
 import { decodeLook, decodeSave, tryOn, hasProgress, restoreSave } from './save/savecode.js';
 import { Creator } from './avatar/creator.js';
 import { Pack } from './save/pack.js';
+import { pack as packCarry, unpack as unpackCarry } from './save/carry.js';
 import { layoutBubbles } from './core/bubbles.js';
 import { UI, panelW, uiScale } from './controls/ui.js';
 import { bindJoystick } from './controls/joystick.js';
@@ -263,6 +264,7 @@ async function start() {
   addMirrorLight(character.faceMat);
   let mirrorK = 0;   // 照鏡子幾成：鏡前光、照鏡子那組光線、鏡子那面牆藏不藏都照它
   character.setCamera(carried());
+  unpackCarry(character);   // 上一區手上拿著的點心（carry.js）
   world.camTable?.setCarried(carried());
   scene.add(character.group);
   character.onLand = (c) => { ambience.footstep(c, 0, true); world.onLand?.(c); rumble('land'); };
@@ -286,6 +288,7 @@ async function start() {
   let peek = null;    // 湊過來看隊友的照片（social/peek.js），有連線才有
   let guide = null;   // 黑眼帶路（scene/guide.js），攝影模式建好以後才建
   let ask = null;   // 前廳胖頭的教學（zones/gallery/ask.js），畫廊才有
+  let radio = null;   // 前廳的收音機（zones/gallery/radio-card.js），畫廊才有
   let checkAway = null;   // 看自己是不是掛機中，有連線才有
   let studio = null;   // 海市信差站的照相館（studio.js），畫廊沒有
   let place = null;   // 戶外現在在哪裡：null 是陽台，否則是草原或棧橋盡頭的地名
@@ -334,7 +337,7 @@ async function start() {
       if (atMirror()) creator.set(L, true);
       else {
         wear(L);
-        ui.hint('已換上明信片上的造型', 3000);
+        ui.hint('已換上明信片上的衣服', 3000);
       }
     },
   });
@@ -525,6 +528,7 @@ async function start() {
     q.set('from', zone);
     for (const [k, v] of Object.entries(extra)) q.set(k, v);
     party?.leaving(to);   // 隊友那邊等久一點、名牌寫「往哪裡」
+    packCarry(character);   // 手上的點心帶上船，到了再拿出來（carry.js）
     ambience.musicOut(0.8);   // 沒坐船（點清單的畫、走歸門）也別讓音樂在換頁時硬斷；坐船的早就在淡了
     const el = document.getElementById('loading');
     if (door) {
@@ -654,9 +658,10 @@ async function start() {
   // follow：走到帶路中的黑眼（自己的或隊友的）旁邊，按了跟著它走（scene/guide.js），底下小字是要去哪
   // ask：站在前廳胖頭旁邊，按了打開題目卡（zones/gallery/ask.js）
   // peek：站在剛用燭火乙式拍完的隊友旁邊，按了看他最後一張（social/peek.js）
-  const LABELS = { ask: '問', painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來', lens: '看鏡頭', follow: '跟著', peek: '看照片' };
+  // radio：站在前廳收音機前面，關著按就開機，再打開面板（zones/gallery/radio-card.js）
+  const LABELS = { ask: '問', painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來', lens: '看鏡頭', follow: '跟著', peek: '看照片', radio: '收音機' };
   // 手機的互動鍵是一顆小圓章，只放兩個字；沒列在這裡的取前兩個字
-  const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信', 看鏡頭: '看鏡', 不看了: '不看', 叫電梯: '叫梯', 上觀星台: '上樓', 回一樓: '下樓', 看照片: '照片' };
+  const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信', 看鏡頭: '看鏡', 不看了: '不看', 叫電梯: '叫梯', 上觀星台: '上樓', 回一樓: '下樓', 看照片: '照片', 收音機: '收音' };
   // 剛走出範圍的那一下（走過攤位、動物走開）互動鍵先留著：手指可能已經在按的路上，按到了照原本的做（player.action 的 fallback）。
   // 以前一出範圍就收，手指落在收起來的鈕上會穿到畫面，角色往鈕底下走過去
   const ACTION_LINGER = 400;
@@ -701,7 +706,7 @@ async function start() {
   player.cursorWanted = () => {
     const b = document.body.classList;
     return b.contains('panel-open') || b.contains('chatting') || !document.getElementById('pack-card').hidden
-      || !!document.querySelector('#list.open, #vol.open, #guide.show, #ask.show, #peek.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show') || !!document.activeElement?.closest?.('input, textarea');
+      || !!document.querySelector('#list.open, #vol.open, #guide.show, #ask.show, #peek.show, #radio.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show') || !!document.activeElement?.closest?.('input, textarea');
   };
   // 第一次鎖住滑鼠時提一下怎麼點按鈕
   let lockTold = false;
@@ -964,6 +969,8 @@ async function start() {
     keyOf: (id) => (pad.active ? padBtn(PAD_OF[id]) : coarse ? '' : key(id)),
   }) ?? null;
   if (ask) player.actionables.push((x, z) => ask.target(x, z));
+  radio = Z.radio?.({ world, ambience, player, camera }) ?? null;
+  if (radio) player.actionables.push((x, z) => radio.target(x, z));
   // 做過的事（progress.js 的 tour）：來過哪一區、拍過照。前廳胖頭照這個決定說什麼、題目長出哪幾題
   markTour(zone);
   addEventListener('photoadd', (e) => { const k = e.detail?.kind; if (!k?.endsWith('-save') && k !== 'mate') markTour('photo'); });
@@ -975,7 +982,7 @@ async function start() {
     guide.isMate = (id) => !!party && [...party.mates.values()].some((o) => o.s === id);
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, guide, creator, cues, peek };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, guide, creator, cues, peek, radio };
   const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass, dofPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
@@ -1185,6 +1192,7 @@ async function start() {
     manatee?.update(dt, player.pos.x, player.pos.z, camera);
     ask?.update();
     peek?.update();
+    radio?.update();
     hollow.update(dt, clock.elapsedTime, player.pos, camera);
     flashFx.update(dt);
     cues?.update(dt);

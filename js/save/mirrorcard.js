@@ -17,8 +17,10 @@ export const CARD_W = 1500, CARD_H = 2000;
 // 鏡面（照片）：左右兩邊、拱的圓心和半徑、下緣
 const WIN = { l: 285, r: 1215, cx: 750, cy: 865, R: 465, b: 1740 };
 export const PHOTO_W = WIN.r - WIN.l, PHOTO_H = WIN.b - (WIN.cy - WIN.R);
-// 鏡框：從鏡面往外 BAND 寬；符文從內緣 IN 開始，ROWS 列，每格 CELL
-const BAND = 110, IN = 10, ROWS = 12, CELL = 7.5;
+// 鏡框：從鏡面往外 BAND 寬；符文從內緣 IN 開始，ROWS 列，每格 CELL。
+// 2026-11-05 加寬加密（容量 533 → 986 位元組，臉和存檔都放得下）；之前印的照片是 OLD_FRAME，讀的時候兩種都試
+const FRAME = { BAND: 140, ROWS: 19, CELL: 6.4 }, OLD_FRAME = { BAND: 110, ROWS: 12, CELL: 7.5 };
+const { BAND, ROWS, CELL } = FRAME, IN = 10;
 // 眼睛：虹膜圓心、半徑；資料圈從 IRIS0 開始，每圈 RING 寬，弧長約 ARC
 const EYE = { x: 750, y: 215, R: 165 }, IRIS0 = 62, RING = 9, IRIS_RINGS = 11, ARC = 9;
 const ECC_IRIS = 0.3, ECC_BAND = 0.3;
@@ -47,7 +49,7 @@ function irisCells() {
 
 // 鏡框：一列一列從鏡面往外，每列沿著左邊往上、繞過拱頂、右邊往下、再沿下緣走回來。被眼睛蓋住的拱頂跳過
 const underEye = (x, y) => y < EYE.y + 190 && Math.abs(x - EYE.x) < 470;
-function bandCells() {
+function bandCells({ ROWS, CELL }) {
   const out = [];
   for (let row = 0; row < ROWS; row++) {
     const d = IN + (row + 0.5) * CELL;
@@ -63,7 +65,7 @@ function bandCells() {
   return out;
 }
 
-const IRIS = irisCells(), BANDC = bandCells();
+const IRIS = irisCells(), BANDC = bandCells(FRAME);
 export const capacity = { iris: codeCapacity(IRIS.length, ECC_IRIS), band: codeCapacity(BANDC.length, ECC_BAND) };
 
 // ---------- 要印的資料 ----------
@@ -668,15 +670,21 @@ function irisRadius(img, spot) {
 }
 
 // 鏡框左邊理想的樣子（橫著看，x 是卡片座標）：外面兩道細金線、鏡框外緣那一小段純金、符文（不比）、內緣那一小段純金，再進去是照片（不比）。
-// 右邊左右對稱。下緣同理（y 是卡片座標）：上面是照片和符文（不比）、外緣那一小段純金、再下面是黑的
-const SIDE = [], FOOT = [];
-for (let x = 100; x <= WIN.l + 1.5; x += 0.5) {
-  if (x >= 185 && x < 275) continue;
-  const v = Math.abs(x - (WIN.l - BAND - LINES[1][0])) <= LINES[1][1] / 2 || Math.abs(x - (WIN.l - BAND - LINES[0][0])) <= LINES[0][1] / 2
-    || (x >= WIN.l - BAND - 1.5 && x < 185) || x >= 275 ? 1 : 0;
-  SIDE.push([x, v], [CARD_W - x, v]);
+// 右邊左右對稱。下緣同理（y 是卡片座標）：上面是照片和符文（不比）、外緣那一小段純金、再下面是黑的。
+// 新舊鏡框各一份，連同各自的符文格子：讀的時候新的先試
+function frameShape(F) {
+  const { BAND, ROWS, CELL } = F, out = WIN.l - BAND, r0 = WIN.l - IN - ROWS * CELL, r1 = WIN.l - IN;
+  const SIDE = [], FOOT = [];
+  for (let x = out - 75; x <= WIN.l + 1.5; x += 0.5) {
+    if (x >= r0 && x < r1) continue;
+    const v = Math.abs(x - (out - LINES[1][0])) <= LINES[1][1] / 2 || Math.abs(x - (out - LINES[0][0])) <= LINES[0][1] / 2
+      || (x >= out - 1.5 && x < r0) || x >= r1 ? 1 : 0;
+    SIDE.push([x, v], [CARD_W - x, v]);
+  }
+  for (let y = WIN.b - 1.5; y <= WIN.b + BAND + 25; y += 0.5) if (y < WIN.b + IN || y >= WIN.b + IN + ROWS * CELL) FOOT.push([y, y <= WIN.b + BAND + 1.5 ? 1 : 0]);
+  return { ...F, SIDE, FOOT, cells: F === FRAME ? BANDC : bandCells(F) };
 }
-for (let y = WIN.b - 1.5; y <= WIN.b + BAND + 25; y += 0.5) if (y < WIN.b + IN || y >= WIN.b + IN + ROWS * CELL) FOOT.push([y, y <= WIN.b + BAND + 1.5 ? 1 : 0]);
+const FRAMES = [frameShape(FRAME), frameShape(OLD_FRAME)];
 
 // 一串取樣跟理想的樣子有多像（相關係數）。at(t) 把卡片座標換成取樣的值，出了圖是 NaN
 function corr(tpl, at) {
@@ -694,10 +702,10 @@ const lerp = (P, X) => {
   return i < 0 || i + 1 >= P.length ? NaN : P[i] + (P[i + 1] - P[i]) * (X - i);
 };
 
-// 從一個虹膜候選量出版面。對不齊（不像鏡框）回傳 null
+// 從一個虹膜候選量出版面，新舊鏡框各對一次，對得齊的帶著是哪一種（frame）。都對不齊（不像鏡框）回傳空的
 function alignTo(img, spot) {
   const { width: W, height: H, data: d } = img, gold = (x, y) => goldness(d, (y * W + x) * 4);
-  let s = spot.R / EYE.R, ox = spot.x - EYE.x * s, oy = spot.y - EYE.y * s;
+  const s = spot.R / EYE.R, oy = spot.y - EYE.y * s;
   // 兩邊直的那段：一列列取樣、平均成一條
   const P = new Float32Array(W);
   let rows = 0;
@@ -707,12 +715,17 @@ function alignTo(img, spot) {
     rows++;
     for (let X = 0; X < W; X++) P[X] += gold(X, Y);
   }
-  if (rows < 20) return null;
+  if (rows < 20) return [];
+  return FRAMES.map((frame) => alignFrame(img, spot, P, s, frame, gold)).filter(Boolean);
+}
+
+function alignFrame(img, spot, P, s, frame, gold) {
+  const { width: W, height: H } = img;
   // 縮放和左右位移：先粗後細。虹膜的圓心是左右的中線，換縮放時跟著它
   const cx = spot.x;
   let best = { c: -1 };
   const tryFit = (k, dx) => {
-    const c = corr(SIDE, (x) => lerp(P, cx + dx + (x - EYE.x) * k));
+    const c = corr(frame.SIDE, (x) => lerp(P, cx + dx + (x - EYE.x) * k));
     if (c > best.c) best = { c, k, dx };
   };
   for (let k = s * 0.92; k <= s * 1.08; k += s * 0.003) for (let dx = -20 * k; dx <= 20 * k; dx += 0.5) tryFit(k, dx);
@@ -720,7 +733,7 @@ function alignTo(img, spot) {
   for (let k = b0.k - s * 0.004; k <= b0.k + s * 0.004; k += s * 0.0005) for (let dx = b0.dx - 1; dx <= b0.dx + 1; dx += 0.1) tryFit(k, dx);
   if (best.c < 0.6) return null;
   s = best.k;
-  ox = cx + best.dx - EYE.x * s;
+  const ox = cx + best.dx - EYE.x * s;
   // 上下位移：下緣那一段，一行行取樣平均
   const Q = new Float32Array(H);
   for (let x = 330; x <= 1170; x += 5) {
@@ -731,18 +744,17 @@ function alignTo(img, spot) {
   let foot = { c: -1 };
   const oy0 = spot.y - EYE.y * s;
   for (let dy = -30 * s; dy <= 30 * s; dy += 0.25) {
-    const c = corr(FOOT, (y) => lerp(Q, oy0 + dy + y * s));
+    const c = corr(frame.FOOT, (y) => lerp(Q, oy0 + dy + y * s));
     if (c > foot.c) foot = { c, dy };
   }
   if (foot.c < 0.6) return null;
-  return { s, ox, oy: oy0 + foot.dy };
+  return { s, ox, oy: oy0 + foot.dy, frame, c: best.c + foot.c };
 }
 
-// 截圖可能的版面：每個虹膜候選對齊鏡框；對不齊的話至少照虹膜估一個（救得回眼紋）
+// 截圖可能的版面：每個虹膜候選對齊鏡框（對得比較像的那種先試）；對不齊的話至少照虹膜估一個（救得回眼紋）
 function* locate(img) {
   for (const spot of irisSpots(img)) {
-    const f = alignTo(img, spot);
-    if (f) yield f;
+    yield* alignTo(img, spot).sort((a, b) => b.c - a.c);
     const s = spot.R / EYE.R;
     yield { s, ox: spot.x - EYE.x * s, oy: spot.y - EYE.y * s };
   }
@@ -782,15 +794,21 @@ async function imageData(file) {
 export async function readMirrorCard(file) {
   const img = await imageData(file);
   for (const f of (function* () { yield* fits(img.width, img.height); yield* locate(img); })()) {
-    // 太小的圖格子糊在一起，不試
-    if (CELL * f.s < 2.2) continue;
+    // 太小的圖格子糊在一起，不試（舊鏡框的格子比較粗，眼紋也照它算）
+    if (OLD_FRAME.CELL * f.s < 2.2) continue;
     const ib = sample(img, IRIS, f, RING * 0.2);
     const core = ib && codeData(ib, ECC_IRIS);
     const save = core && decodeSave(dec.decode(core));
     if (!save) continue;
-    const bb = sample(img, BANDC, f, CELL * 0.18);
-    const band = bb && codeData(bb, ECC_BAND);
-    const full = band && (band[0] === 1 || band[0] === 2) && (await unpackBand(band));
+    // 鏡框：截圖對齊時知道是哪一種，不然新的先試、再試舊的
+    let full = null;
+    for (const F of f.frame ? [f.frame] : FRAMES) {
+      if (F.CELL * f.s < 2.2) continue;
+      const bb = sample(img, F.cells, f, F.CELL * 0.18);
+      const band = bb && codeData(bb, ECC_BAND);
+      full = band && (band[0] === 1 || band[0] === 2) && (await unpackBand(band));
+      if (full) break;
+    }
     if (!full) return { save, full: false };
     return { save: full, full: true };
   }

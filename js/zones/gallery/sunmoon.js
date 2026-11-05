@@ -27,8 +27,8 @@ const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const path = (pts, z = 0.04) => new THREE.CatmullRomCurve3(pts.map(([x, y, zz = z]) => V(x, y, zz)));
 const smooth = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
 
-// mirror、table：鏡子和相機桌在這面牆的哪裡（s）；len：牆多長
-export function buildSunMoon({ mirror: M, table: T, len }) {
+// mirror、table：鏡子和相機桌在這面牆的哪裡（s）；len：牆多長；corner：靠出口牆角那座葉山要不要放
+export function buildSunMoon({ mirror: M, table: T, len, corner = true }) {
   const R = rng('sunmoon');
   const pick = (a) => a[Math.floor(R() * a.length)].clone();
   const bl = T - BAN_W / 2, br = T + BAN_W / 2;      // 掛布左右兩邊
@@ -148,7 +148,8 @@ export function buildSunMoon({ mirror: M, table: T, len }) {
   tuft(V(br + 0.38, 0.98, 0.08), UP - 0.35, 0.9, 8, 0.52, 0.45);
 
   // 靠出口的牆角一座葉山：地上一排往上散的大叢，上面幾叢往外倒，腳下和半腰寬葉；牆角頂上垂下一叢；
-  // 幾支暖色的水晶花穗、幾顆暖色光球、幾把扇葉
+  // 幾支暖色的水晶花穗、幾顆暖色光球、幾把扇葉。corner: false 時照樣長（亂數順序不變）再整座收掉，那個牆角讓給收音機
+  const before = [blades, broads, fans, spires, orbs].map((a) => a.length);
   for (let i = 0; i < 4; i++) tuft(V(E + (i / 3 - 0.5) * EW * 1.5, 0.05, 0.15), UP + (i - 1.5) * 0.12, 1.2, 14, 0.95, 0.55);
   for (const [dx, y, dir] of [[-0.7, 0.95, 2.0], [-0.35, 1.2, 1.75], [0.0, 1.35, 1.57], [0.35, 1.2, 1.4], [0.7, 0.95, 1.15], [-0.2, 1.85, 1.8], [0.3, 1.85, 1.35]]) tuft(V(E + dx * EW, y, 0.1), dir, 0.95, 10, 0.68, 0.4);
   for (let i = 0; i < 3; i++) tuft(V(E + (i - 1) * EW * 0.7, 0.04, 0.24), UP, 1.45, 5, 0.5, 0.95, broads);
@@ -157,6 +158,7 @@ export function buildSunMoon({ mirror: M, table: T, len }) {
   for (const [dx, h, lean, i] of [[-0.62, 1.3, -0.1, 0], [-0.18, 1.75, -0.04, 1], [0.26, 1.55, 0.05, 2], [0.68, 1.25, 0.12, 0]]) addSpire(V(E + dx * EW, 0.45, 0.26), lean, h, 1, warm(i));
   for (const [dx, y, r, i] of [[-0.35, 0.85, 0.085, 1], [0.45, 1.15, 0.075, 0], [0.05, 2.15, 0.08, 2], [-0.6, 1.6, 0.065, 0]]) addOrb(V(E + dx * EW, y, 0.34), r, 1, warm(i));
   for (const [dx, y, dir] of [[-0.75, 1.25, 2.2], [0.8, 1.2, 0.95], [0.1, 2.35, 1.45]]) addFan(V(E + dx * EW, y, 0.12), dir, 0.46, 0.35);
+  if (!corner) [blades, broads, fans, spires, orbs].forEach((a, i) => { a.length = before[i]; });
 
   // 飄起來的光點：鏡子那頭淡紫、掛布那頭淡金
   const dots = [];
@@ -177,7 +179,7 @@ export function buildSunMoon({ mirror: M, table: T, len }) {
   return {
     group,
     // 擋路的兩叢：沿牆的 s、中心離牆多遠、沿牆和往外的半寬。world.js 換成世界座標，地上的影子也照這個
-    blocks: [{ s: Cx, d: 0.28, hw: 0.45, hd: 0.28 }, { s: E, d: 0.32, hw: EW, hd: 0.32 }],
+    blocks: [{ s: Cx, d: 0.28, hw: 0.45, hd: 0.28 }, ...(corner ? [{ s: E, d: 0.32, hw: EW, hd: 0.32 }] : [])],
     // moon：鏡前的毯子亮幾成；sun：腳下相機桌那一格亮幾成（0 到 1）。毯子那邊已經慢慢亮，這裡再順一下，走開時不會一下子熄掉
     update(dt, moon, sun) {
       const k = 1 - Math.exp(-dt * 1.6);

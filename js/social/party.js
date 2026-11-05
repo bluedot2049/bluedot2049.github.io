@@ -40,11 +40,9 @@ const MARK_GAP = 1500;
 const MARK_TIME = 5;         // 標記亮幾秒，最後一秒半淡掉
 const SPOT_TIME = 15;        // 拍照的站位記號亮幾秒，留時間給隊友走過去（拍的人說「好了」也會先收）
 const MARK_COLOR = '#a9763a'; // 畫面邊上指方向的小針，不分誰標的，一律暗金（base.css 的 --gold-lo）
-// 地上的標記、站位用亮金，圈不描邊；腳印墊一圈深色，亮地板上分得出來。只給人看，拍不進照片（GUIDE_LAYER）
+// 地上的標記、站位用亮金，不描邊。只給人看，拍不進照片（GUIDE_LAYER）
 const MARK_BEAM = '#e8b86a';  // 光柱（--gold）
 const MARK_CORE = '#f6dba6';  // 圈、腳印（--gold-hi）
-const MARK_EDGE = '#1c130d';  // 墊在底下寬一圈的描邊（--bg）
-const EDGE_ALPHA = 0.6;
 const SPOT_NEAR = 0.5;       // 走到站位這麼近、停下來，算站上去了
 const CALL_GAP = 3000;       // 自己吹哨的最短間隔
 const CALL_HEAR_GAP = 1500;  // 同一個隊友的哨音，間隔太短的不理
@@ -122,11 +120,11 @@ function beamTexture() {
   return beamTex;
 }
 
-// 標記和站位共用：mats 依序是亮的那一層（光柱或腳印）、圈、描邊（只有站位的腳印有），淡入淡出照這個順序
+// 標記和站位共用：mats 依序是亮的那一層（光柱或腳印）、圈，淡入淡出照這個順序
 function markKit() {
   const group = new THREE.Group(), mats = [], geos = [];
   const mat = (color, o) => {
-    // 一般疊色不用加亮：加亮疊不出暗的顏色，描邊會變成淡淡一層亮光
+    // 一般疊色不用加亮：加亮疊不出暗的顏色
     const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, fog: false, toneMapped: false, ...o });
     mats.push(m);
     return m;
@@ -135,7 +133,7 @@ function markKit() {
   return { group, mats, geos, mat, geo };
 }
 
-// 地上一圈，不墊描邊
+// 地上一圈
 function addRing(kit, r0, r1) {
   const ring = new THREE.Mesh(kit.geo(new THREE.RingGeometry(r0, r1, 40).rotateX(-Math.PI / 2)), kit.mat(MARK_CORE));
   ring.position.y = 0.04;
@@ -162,20 +160,17 @@ function makeMark() {
   return finish(kit, addRing(kit, 0.32, 0.4));
 }
 
-// 拍照的站位（cues.js 的「站這」）：地上一圈加一雙腳印，腳尖朝拍的人。不立光柱，跟一般標記分得開。
-// 腳印也墊描邊，比腳印大一圈
+// 拍照的站位（cues.js 的「站這」）：地上一圈加一雙腳印，腳尖朝拍的人。不立光柱，跟一般標記分得開
 function makeSpot(face) {
   const kit = markKit();
   const feet = new THREE.Group(), footMat = kit.mat(MARK_CORE);
   const foot = (rx, rz, seg) => kit.geo(new THREE.CircleGeometry(1, seg).scale(rx, rz, 1).rotateX(-Math.PI / 2));
   const sole = foot(0.055, 0.1, 20), heel = foot(0.042, 0.045, 16);
-  const soleEdge = foot(0.085, 0.13, 20), heelEdge = foot(0.072, 0.075, 16);
-  const ring = addRing(kit, 0.32, 0.38), edgeMat = kit.mat(MARK_EDGE);
+  const ring = addRing(kit, 0.32, 0.38);
   for (const sx of [-1, 1]) {
-    for (const [g, z, mt, order] of [[soleEdge, 0.04, edgeMat, 0], [heelEdge, -0.1, edgeMat, 0], [sole, 0.04, footMat, 1], [heel, -0.1, footMat, 1]]) {
-      const m = new THREE.Mesh(g, mt);
+    for (const [g, z] of [[sole, 0.04], [heel, -0.1]]) {
+      const m = new THREE.Mesh(g, footMat);
       m.position.set(sx * 0.09, 0, z);
-      m.renderOrder = order;
       feet.add(m);
     }
   }
@@ -1145,10 +1140,9 @@ export class Party {
         }
       }
       const a = Math.min(1, k.t / 0.3) * Math.min(1, (k.life - k.t) / 1.5);
-      const [beam, ring, edge] = k.mark.mats;
+      const [beam, ring] = k.mark.mats;
       beam.opacity = a * 0.9;
       ring.opacity = a * (0.7 + 0.3 * Math.sin(k.t * 4));
-      if (edge) edge.opacity = a * EDGE_ALPHA;
       const sc = 1 + 0.25 * Math.sin(k.t * 4);
       k.mark.ring.scale.set(sc, 1, sc);
       _v.set(k.x, k.y + 0.6, k.z);

@@ -36,7 +36,7 @@
    放大的元素裡 vw、vh 也會跟著放大，要寫成 calc(…vh / var(--ui, 1))；程式擺位置的 px 要除以 uiScale()。手機一律是 1 */
 :root { --ui: 1; }
 body.desk :is(#top-btns, #action-btn, #hint, #toast, #wheel, .snapsave,
-  #pack-card, #vol, #cams, #ferry, #eye-card, .studio-card, #chat, #pause, #padmap, #guide, #ask, #peek, #hollow, #sheet, #dress,
+  #pack-card, #vol, #cams, #ferry, #eye-card, .studio-card, #chat, #pause, #padmap, #guide, #ask, #peek, #radio, #hollow, #sheet, #dress,
   #ph-bar, #ph-shoot, #ph-alt, #ph-exit, #ph-rec, #ph-zoom,
   #viewer-close, #album-view .av-close, #album-view .av-step, #album-view .av-bar,
   #ph-result > :not(#ph-media), #press .press-card, #press .press-acts, #list) { zoom: var(--ui); }

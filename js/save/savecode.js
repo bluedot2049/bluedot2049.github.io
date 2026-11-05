@@ -9,7 +9,7 @@
 // 更早的碼沒有 f=：臉跟在每一套後面（造型.臉碼），或另外印成四張，讀進來併成一張（progress.js 的 mergeFaces）。
 // 最後兩個字元是校驗碼，只用來發現打錯字，不防作弊（這是單機收集）。
 
-import { RACES, OPTIONS, SLIDERS, decodeFace, sanitizeLook, presetLook, lockKeys, isOpen, unlockedSet } from '../avatar/looks.js';
+import { RACES, OPTIONS, SLIDERS, WEAR, decodeFace, sanitizeLook, presetLook, lockKeys, isOpen, unlockedSet } from '../avatar/looks.js';
 import { getSave, putSave, FIELDS as SAVE_FIELDS, hasProgress, mergeFaces } from './progress.js';
 export { hasProgress };
 
@@ -72,15 +72,12 @@ export function decodeLook(code) {
   return s?.[0] === 'A' ? bodyLook(s.slice(1)) : null;
 }
 
-// 試穿別人的造型：自己還沒拿到的部位換回預設。
-// 臉只能有一張：帶著別人畫的臉、自己也畫過的先問，不換就戴回自己的（身上這套原本有戴的話）
+// 試穿明信片、#look 上的一身：只換衣服和配件（looks.js 的 WEAR），種族、頭髮、五官、體型、畫的臉都是自己的。
+// 自己還沒拿到的那一件不動，連它的顏色也留著自己的
 export function tryOn(L) {
-  const set = unlockedSet(), base = presetLook(0), out = { ...L };
-  for (const k in OPTIONS) if (!isOpen(k, L[k], set)) out[k] = base[k];
-  const mine = getSave().face;
-  if (out.face && mine && out.face !== mine && !confirm('這一身帶著別人畫的臉。你只能有一張臉，換上的話，你畫的那張會被蓋掉。\n\n確定：連臉一起換\n取消：只換衣服，臉留著自己的'))
-    out.face = getSave().look?.face ? mine : '';
-  return out;
+  const set = unlockedSet(), raw = getSave().look, out = raw ? sanitizeLook(raw) : presetLook(0);
+  for (const [k, with_] of Object.entries(WEAR)) if (isOpen(k, L[k], set)) for (const f of [k, ...with_]) out[f] = L[f];
+  return sanitizeLook(out);
 }
 
 // ---------- 整份存檔 ----------
@@ -95,9 +92,10 @@ function packUnlocked(list) {
   }
   return s;
 }
+// 舊的碼比清單短：後來才加的那幾件是沒拿到（at 在碼外面是 -1，不擋的話每一位都是 1）
 function unpackUnlocked(s) {
   const keys = lockKeys(), out = [];
-  keys.forEach((k, i) => { if ((at(s, i / 6 | 0) >> (i % 6)) & 1) out.push(k); });
+  keys.forEach((k, i) => { if ((Math.max(0, at(s, i / 6 | 0)) >> (i % 6)) & 1) out.push(k); });
   return out;
 }
 

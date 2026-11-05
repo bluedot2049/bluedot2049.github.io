@@ -127,6 +127,17 @@ export function unlock(items) {
 }
 
 export const isOpen = (k, id, set) => !LOCKS.has(k + ':' + id) || set.has(k + ':' + id);
+// 衣服和配件：明信片、#look 只帶這些，每一樣連著它的顏色和花紋。種族、膚色、頭髮、五官、體型、畫的臉都不帶（savecode.js 的 tryOn）
+export const WEAR = {
+  hat: ['hatC'], glasses: [], top: ['topPat', 'topC', 'topC2'], bottom: ['botPat', 'botC', 'botC2'], outer: ['outC', 'outC2'],
+  one: ['oneC', 'oneC2'], shoes: ['shoeC'], neck: ['neckC'], back: ['backC'], hand: ['handC'],
+};
+// 只留衣服和配件，其他換成預設（印明信片用）
+export function wearOnly(L) {
+  const out = { ...presetLook(0), face: '', keep: 0 };
+  for (const [k, with_] of Object.entries(WEAR)) for (const f of [k, ...with_]) out[f] = L[f];
+  return sanitizeLook(out);
+}
 // 帽子顏色只套在這幾種帽子上，其他帽子有自己的顏色
 export const TINTED_HATS = ['wizard', 'propeller', 'party'];
 // 連身裝裡有頭套或頭盔的，穿了就不戴帽子

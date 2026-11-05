@@ -11,6 +11,7 @@ import { HORIZON, SUN_DIR } from './outdoor.js';
 import { TD } from './outdoor-map.js';
 import { StudyNight } from '../../audio/study.js';
 import { VestibuleSound } from './vestibule-sound.js';
+import { RadioCard } from './radio-card.js';
 import { CAMERAS, SOON } from '../../camera/cameras.js';
 import { Ask } from './ask.js';
 
@@ -101,6 +102,11 @@ export function residents({ scene, world, shadowTex }) {
 // 前廳胖頭的教學（ask.js）：走近時說下一步、按「問」打開題目卡、轉身用魔杖指方向。main.js 建好黑眼以後叫這裡
 export function ask(ctx) {
   return ctx.manatee ? new Ask(ctx) : null;
+}
+
+// 前廳的收音機（radio-card.js）：互動鍵「收音機」打開面板，聲音走 ambience.beds。main.js 建好角色、鏡頭以後叫這裡
+export function radio({ world, ambience, player, camera }) {
+  return world.radio ? new RadioCard({ world, ambience, player, camera }) : null;
 }
 
 // 動物和不定期搭船來看畫的冒險者

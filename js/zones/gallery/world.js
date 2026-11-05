@@ -13,6 +13,7 @@ import { buildGuideSign } from './guidesign.js';
 import { buildNoticeBoard } from './noticeboard.js';
 import { buildSunMoon } from './sunmoon.js';
 import { buildTravelPosters } from './travelposters.js';
+import { buildRadio } from './radio.js';
 import { buildVestibuleLight } from './vestibule-light.js';
 import { CLOCK_D, CLOCK_W, buildClock } from './clock.js';
 import { OUTDOOR_ROOM, buildOutdoor } from './outdoor.js';
@@ -28,7 +29,7 @@ import { DEFAULTS, DOOR_NEAR, DOOR_W, MARGIN, ROOM_NEAR, ROOM_TYPES, SEA_SPAN, S
 // opts.lights：前廳放不放真的燈（電腦）；opts.motes：光柱裡的浮塵（vestibule-light.js）
 export function buildWorld(scene, gallery, opts = {}) {
   const rooms = [], paintings = [], entries = [], raycastTargets = [];
-  let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null, noticeBoard = null, clock = null, mirrorTick = null, sunMoon = null, stage = null;
+  let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null, noticeBoard = null, clock = null, mirrorTick = null, sunMoon = null, stage = null, radio = null;
   // 照鏡子幾成（main.js 每一幀給，0 到 1）；鏡子那面牆的牆段，照鏡子時整段藏起來
   let mirrorK = 0, mirrorWall = null;
   let z = 0;
@@ -189,7 +190,7 @@ export function buildWorld(scene, gallery, opts = {}) {
       // 鏡子和相機桌這面牆的日與月（sunmoon.js）：一叢叢劍葉長滿這面牆，鏡子那頭冷色（月）、掛布那頭暖色（日），站上哪邊的毯子哪邊就亮。
       // 窗邊的牆角、中間那段、靠出口的牆角讓給花，原本的家具照樣做一次再丟
       sp.clear = [[0, 1.0], [2.2, 3.1], [5.7, sp.length]];
-      sunMoon = buildSunMoon({ mirror: s0, table: sc, len: sp.length });
+      sunMoon = buildSunMoon({ mirror: s0, table: sc, len: sp.length, corner: false });
       const w0 = sp.at(0), wrot = Math.atan2(w0.nx, w0.nz);
       sunMoon.group.position.set(w0.x, 0, w0.z);
       sunMoon.group.rotation.y = wrot;
@@ -200,6 +201,19 @@ export function buildWorld(scene, gallery, opts = {}) {
         room.obstacles.push({ x: bx, z: bz, hw: b.hw, hd: b.hd, rot: wrot });
         room.shadowSpots.push({ x: bx, z: bz, w: b.hw * 2, d: b.hd * 2, rot: wrot });
       }
+
+      // 相機桌和出口之間的牆角（原本是日月花牆那座葉山，先收起來）：落地收音機（radio.js），頂上一朵玫瑰
+      radio = buildRadio();
+      const rs = (sc + TABLE_W / 2 + sp.length) / 2 + 0.06, rq = sp.at(rs);
+      const rx = rq.x + rq.nx * (radio.d / 2 + 0.03), rz = rq.z + rq.nz * (radio.d / 2 + 0.03);
+      radio.group.position.set(rx, 0, rz);
+      radio.group.rotation.y = wrot;
+      room.group.add(radio.group);
+      radio.group.traverse((m) => { if (m.isMesh) sp.entry.tall.push(m); });
+      room.obstacles.push({ x: rx, z: rz, hw: radio.w / 2, hd: radio.d / 2, rot: wrot });
+      room.shadowSpots.push({ x: rx, z: rz, w: radio.w, d: radio.d, rot: wrot });
+      // 互動鍵和聲音要用的：在哪、正面朝哪（n）、沿牆的方向（along）、半寬半深
+      Object.assign(radio, { x: rx, z: rz, n: { x: rq.nx, z: rq.nz }, along: { x: rq.nz, z: -rq.nx }, hw: radio.w / 2, hd: radio.d / 2 });
 
       // 出口那面牆：門兩邊各兩張旅遊海報（travelposters.js），照渡船卡的順序從左排到右。牆下原本的家具照樣做一次再丟
       const back = boxSpan(room, 'back'), seg = back.length / 2 - DOOR_W / 2 - 0.22;
@@ -501,6 +515,7 @@ export function buildWorld(scene, gallery, opts = {}) {
     roomFader.update(dt);
     frontDoor?.update(dt);
     noticeBoard?.update(dt);
+    radio?.update(dt);
     clock?.update();
     mirrorTick?.(dt, target);
     if (sunMoon && rooms[0].group.visible) sunMoon.update(dt, mirror.rug.glow, camTable.glowAt(target.x, target.z));
@@ -549,5 +564,5 @@ export function buildWorld(scene, gallery, opts = {}) {
   // 搭船去別的區域：棧橋邊繫著的小划船
   const exits = outdoor?.ferry ? [{ ...outdoor.ferry, to: 'haishi', label: '搭船', title: '渡船' }] : [];
 
-  return { rooms, paintings, mirror, camTable, stage, frontDoor, guideSign, noticeBoard, sunMoon, clock, outdoor, exits, raycastTargets, roomIndexAt, envDim: (x, z) => stage?.dim(x, z) ?? 0, mirrorView: (k) => { mirrorK = k; }, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, updatePaintings, fadeVariants: (on) => roomFader.all(on), propVariants: (on) => propFader.turn(on) };
+  return { rooms, paintings, mirror, camTable, radio, stage, frontDoor, guideSign, noticeBoard, sunMoon, clock, outdoor, exits, raycastTargets, roomIndexAt, envDim: (x, z) => stage?.dim(x, z) ?? 0, mirrorView: (k) => { mirrorK = k; }, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, updatePaintings, fadeVariants: (on) => roomFader.all(on), propVariants: (on) => propFader.turn(on) };
 }

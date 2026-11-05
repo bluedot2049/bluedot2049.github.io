@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>電台試聽</title>
+  <!-- 外部網路電台接進 AudioContext 試聽：哪幾台開了 CORS 播得出來、轉台中間的雜訊、收音機喇叭的音色、走遠變小、隔牆變悶、背景音樂讓位。上網路的串流，不放進遊戲 -->
+  <style>
+    html, body { margin: 0; background: #1c1814; color: #e9e0cc; font-family: "Noto Serif TC", serif; }
+    main { max-width: 1000px; margin: 0 auto; padding: 18px 16px 48px; }
+    h1 { margin: 0; font-size: 17px; font-weight: 600; color: #c9a86e; }
+    .note { font-size: 13px; opacity: .65; margin-top: 4px; line-height: 1.6; }
+    .wrap { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; }
+    canvas { background: #120f0d; border-radius: 8px; touch-action: none; cursor: pointer; max-width: 100%; }
+    .side { flex: 1; min-width: 280px; }
+    .dial { position: relative; height: 54px; background: #120f0d; border-radius: 8px; margin-top: 4px; }
+    .dial .tick { position: absolute; top: 6px; width: 1px; height: 10px; background: #5a4e3e; }
+    .dial .st { position: absolute; top: 22px; transform: translateX(-50%); font-size: 11px; color: #a8987e; white-space: nowrap; }
+    .dial .needle { position: absolute; top: 2px; bottom: 2px; width: 2px; background: #e8b86a; transform: translateX(-1px); }
+    input[type=range] { width: 100%; margin: 8px 0 0; }
+    .list { margin-top: 12px; display: grid; gap: 4px; }
+    .list button { display: flex; justify-content: space-between; gap: 8px; text-align: left; padding: 6px 10px; border: 1px solid #3a3229; border-radius: 6px; background: #2a241e; color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+    .list button.on { border-color: #e8b86a; }
+    .list .s { opacity: .7; font-size: 12px; white-space: nowrap; }
+    .list .ok { color: #9fc98a; opacity: 1; }
+    .list .bad { color: #e08a6e; opacity: 1; }
+    .bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .bar label { display: flex; align-items: center; gap: 5px; font-size: 13px; padding: 5px 9px; border: 1px solid #3a3229; border-radius: 6px; background: #2a241e; cursor: pointer; }
+    .bar button { padding: 7px 12px; border: 1px solid #5a4e3e; border-radius: 6px; background: #2a241e; color: inherit; font: inherit; font-size: 14px; cursor: pointer; }
+    #meter { height: 6px; background: #120f0d; border-radius: 3px; margin-top: 12px; overflow: hidden; }
+    #meter div { height: 100%; width: 0; background: #c9a86e; }
+    pre { font: 12px/1.6 Consolas, monospace; white-space: pre-wrap; background: #120f0d; padding: 10px; border-radius: 8px; margin-top: 12px; color: #cfc2ae; }
+    a { color: #c9a86e; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>電台試聽</h1>
+  <div class="note">按「開機」之後拖地圖上的點走動。收音機在右邊房間，中間的牆有一個門。轉台旋鈕停在兩台中間只剩雜訊；連不上的台也只會剩雜訊。<br>
+    電台都是聽眾捐款養的：<a href="https://somafm.com" target="_blank">SomaFM</a>、<a href="https://radioparadise.com" target="_blank">Radio Paradise</a>、<a href="https://kexp.org" target="_blank">KEXP</a>。</div>
+  <div class="wrap">
+    <canvas id="map" width="460" height="300"></canvas>
+    <div class="side">
+      <div class="bar"><button id="power">開機</button></div>
+      <div class="dial" id="dial"><div class="needle" id="needle"></div></div>
+      <input type="range" id="tune" min="0" max="100" step="0.1" value="8">
+      <div id="meter"><div></div></div>
+      <div class="list" id="list"></div>
+      <div class="bar">
+        <label><input type="checkbox" id="spk" checked>喇叭音色</label>
+        <label><input type="checkbox" id="wall" checked>有牆</label>
+        <label><input type="checkbox" id="bgm">背景音樂</label>
+        <label><input type="checkbox" id="duck" checked>音樂讓位</label>
+      </div>
+      <pre id="info"></pre>
+    </div>
+  </div>
+</main>
+<script>
+// 刻度上的位置隨便排，間隔夠寬讓中間聽得到雜訊
+const STATIONS = [
+  { at: 8,  name: 'SomaFM Drone Zone',     url: 'https://ice1.somafm.com/dronezone-128-mp3' },
+  { at: 18, name: 'SomaFM Deep Space One', url: 'https://ice1.somafm.com/deepspaceone-128-mp3' },
+  { at: 27, name: 'SomaFM Groove Salad',   url: 'https://ice1.somafm.com/groovesalad-128-mp3' },
+  { at: 36, name: 'SomaFM Fluid',          url: 'https://ice1.somafm.com/fluid-128-mp3' },
+  { at: 45, name: 'SomaFM Lush',           url: 'https://ice1.somafm.com/lush-128-mp3' },
+  { at: 54, name: 'SomaFM Mission Control',url: 'https://ice1.somafm.com/missioncontrol-128-mp3' },
+  { at: 64, name: 'Radio Paradise Mellow', url: 'https://stream.radioparadise.com/mellow-128' },
+  { at: 73, name: 'Radio Paradise Global', url: 'https://stream.radioparadise.com/global-128' },
+  { at: 82, name: 'Radio Paradise Main',   url: 'https://stream.radioparadise.com/mp3-128' },
+  { at: 92, name: 'KEXP（有 DJ）',          url: 'https://kexp.streamguys1.com/kexp160.aac' },
+];
+const CLEAN = 0.8, WIDTH = 3.2;      // 刻度差多少內完全清楚、多少外只剩雜訊
+const ROOM = { w: 14, h: 9 }, RADIO = { x: 10.5, y: 4.5 };
+const WALL_X = 7, DOOR = [3.7, 5.3];  // 牆在 x=7，門在 y 3.7–5.3
+const PX = 460 / ROOM.w;
+
+const $ = id => document.getElementById(id);
+const me = { x: 3, y: 6.5 };
+let ctx = null, audio, nodes = {}, cur = null, pending = null, playedSec = 0;
+const status = new Map(STATIONS.map(s => [s, '未測']));
+
+// ---------- 刻度和清單 ----------
+for (let i = 0; i <= 100; i += 2) {
+  const t = document.createElement('div'); t.className = 'tick';
+  t.style.left = i + '%'; if (i % 10) t.style.height = '5px';
+  $('dial').appendChild(t);
+}
+STATIONS.forEach((s, i) => {
+  const l = document.createElement('div'); l.className = 'st'; l.style.left = s.at + '%';
+  l.textContent = i + 1; $('dial').appendChild(l);
+  const b = document.createElement('button');
+  b.innerHTML = `<span>${i + 1}　${s.name}</span><span class="s"></span>`;
+  b.onclick = () => { $('tune').value = s.at; onTune(); };
+  s.btn = b; $('list').appendChild(b);
+});
+function drawList() {
+  for (const s of STATIONS) {
+    const st = status.get(s), el = s.btn.querySelector('.s');
+    el.textContent = st;
+    el.className = 's' + (st === '有聲' ? ' ok' : /播不了|無聲/.test(st) ? ' bad' : '');
+    s.btn.classList.toggle('on', s === cur);
+  }
+}
+drawList();
+
+// ---------- 聲音 ----------
+function noiseBuffer() {
+  const b = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = b.getChannelData(0);
+  let pink = 0;
+  for (let i = 0; i < d.length; i++) { pink = pink * 0.9 + (Math.random() * 2 - 1) * 0.1; d[i] = (Math.random() * 2 - 1) * 0.6 + pink * 2; }
+  return b;
+}
+function boot() {
+  ctx = new AudioContext();
+  audio = new Audio(); audio.crossOrigin = 'anonymous'; audio.preload = 'none';
+  const src = ctx.createMediaElementSource(audio);
+  const N = nodes;
+
+  // 收音機喇叭：切掉低頻和高頻，中頻凸一點
+  N.hp = new BiquadFilterNode(ctx, { type: 'highpass', frequency: 170, Q: 0.8 });
+  N.lp = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 4800, Q: 0.9 });
+  N.pk = new BiquadFilterNode(ctx, { type: 'peaking', frequency: 1400, Q: 1, gain: 4 });
+  N.spk = new GainNode(ctx, { gain: 1 }); N.raw = new GainNode(ctx, { gain: 0 });
+  src.connect(N.hp).connect(N.pk).connect(N.lp).connect(N.spk);
+  src.connect(N.raw);
+  N.clear = new GainNode(ctx, { gain: 0 });        // 轉台清不清楚
+  N.spk.connect(N.clear); N.raw.connect(N.clear);
+  N.srcMeter = new AnalyserNode(ctx, { fftSize: 1024 });   // 判斷有沒有聲音（沒開 CORS 時這裡是零）
+  src.connect(N.srcMeter);
+
+  N.noise = new AudioBufferSourceNode(ctx, { buffer: noiseBuffer(), loop: true });
+  N.nbp = new BiquadFilterNode(ctx, { type: 'bandpass', frequency: 2200, Q: 0.6 });
+  N.nGain = new GainNode(ctx, { gain: 0 });
+  N.noise.connect(N.nbp).connect(N.nGain); N.noise.start();
+
+  N.bus = new GainNode(ctx); N.clear.connect(N.bus); N.nGain.connect(N.bus);
+  N.dLp = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: 18000, Q: 0.5 });
+  N.dGain = new GainNode(ctx, { gain: 0 });
+  N.pan = new StereoPannerNode(ctx);
+  N.out = new AnalyserNode(ctx, { fftSize: 1024 });
+  N.bus.connect(N.dLp).connect(N.dGain).connect(N.pan).connect(N.out).connect(ctx.destination);
+
+  // 代替遊戲背景音樂的長音和弦
+  N.bgm = new GainNode(ctx, { gain: 0 }); N.bgm.connect(ctx.destination);
+  for (const f of [146.8, 220, 277.2, 329.6]) {
+    const o = new OscillatorNode(ctx, { type: 'triangle', frequency: f, detune: (Math.random() - 0.5) * 8 });
+    const g = new GainNode(ctx, { gain: 0.05 }); o.connect(g).connect(N.bgm); o.start();
+  }
+
+  audio.addEventListener('playing', () => checkSound(cur));
+  audio.addEventListener('error', () => { if (cur) { status.set(cur, '播不了（連不上或沒開 CORS）'); drawList(); } });
+  onTune(); frame();
+}
+
+let checkToken = 0;
+function checkSound(s) {
+  const tok = ++checkToken, buf = new Float32Array(1024);
+  let n = 0, peak = 0;
+  status.set(s, '聽聽看…'); drawList();
+  const iv = setInterval(() => {
+    if (tok !== checkToken) return clearInterval(iv);
+    nodes.srcMeter.getFloatTimeDomainData(buf);
+    for (const v of buf) peak = Math.max(peak, Math.abs(v));
+    if (peak > 0.002) { status.set(s, '有聲'); drawList(); return clearInterval(iv); }
+    if (++n > 25) { status.set(s, '無聲（多半是 CORS）'); drawList(); clearInterval(iv); }
+  }, 100);
+}
+
+// ---------- 轉台 ----------
+function tuning() {
+  const v = +$('tune').value;
+  let best = null, d = 1e9;
+  for (const s of STATIONS) { const e = Math.abs(s.at - v); if (e < d) { d = e; best = s; } }
+  const clarity = Math.max(0, Math.min(1, 1 - (d - CLEAN) / (WIDTH - CLEAN)));
+  return { best: d < WIDTH ? best : null, clarity };
+}
+function onTune() {
+  $('needle').style.left = $('tune').value + '%';
+  if (!ctx) return;
+  const { best } = tuning();
+  // 停一下才換串流，轉過去的路上不要每台都連
+  clearTimeout(pending);
+  if (best !== cur) pending = setTimeout(() => switchTo(best), 350);
+}
+function switchTo(s) {
+  checkToken++;
+  cur = s;
+  if (!s) { audio.pause(); audio.removeAttribute('src'); audio.load(); }
+  else { audio.src = s.url; audio.play().catch(() => {}); status.set(s, '連線中…'); }
+  drawList();
+}
+$('tune').addEventListener('input', onTune);
+
+// ---------- 地圖 ----------
+const cv = $('map'), g = cv.getContext('2d');
+function occluded() {
+  if (!$('wall').checked) return false;
+  if ((me.x - WALL_X) * (RADIO.x - WALL_X) >= 0) return false;
+  const t = (WALL_X - me.x) / (RADIO.x - me.x), y = me.y + (RADIO.y - me.y) * t;
+  return y < DOOR[0] || y > DOOR[1];
+}
+function drawMap() {
+  g.clearRect(0, 0, cv.width, cv.height);
+  g.strokeStyle = '#3a3229';
+  for (let r = 2; r <= 14; r += 2) { g.beginPath(); g.arc(RADIO.x * PX, RADIO.y * PX, r * PX, 0, 7); g.stroke(); }
+  if ($('wall').checked) {
+    g.strokeStyle = '#8a7a62'; g.lineWidth = 4; g.beginPath();
+    g.moveTo(WALL_X * PX, 0); g.lineTo(WALL_X * PX, DOOR[0] * PX);
+    g.moveTo(WALL_X * PX, DOOR[1] * PX); g.lineTo(WALL_X * PX, ROOM.h * PX); g.stroke(); g.lineWidth = 1;
+  }
+  g.fillStyle = '#c9a86e'; g.fillRect(RADIO.x * PX - 9, RADIO.y * PX - 6, 18, 12);
+  g.fillStyle = occluded() ? '#8a9ab0' : '#fff3d6';
+  g.beginPath(); g.arc(me.x * PX, me.y * PX, 7, 0, 7); g.fill();
+  g.fillStyle = '#a8987e'; g.font = '12px serif';
+  g.fillText('收音機', RADIO.x * PX + 12, RADIO.y * PX + 4);
+  g.fillText('面朝上', 8, 16);
+}
+function moveTo(e) {
+  const r = cv.getBoundingClientRect();
+  me.x = Math.max(0.2, Math.min(ROOM.w - 0.2, (e.clientX - r.left) / r.width * ROOM.w));
+  me.y = Math.max(0.2, Math.min(ROOM.h - 0.2, (e.clientY - r.top) / r.height * ROOM.h));
+}
+let dragging = false;
+cv.addEventListener('pointerdown', e => { dragging = true; cv.setPointerCapture(e.pointerId); moveTo(e); });
+cv.addEventListener('pointermove', e => { if (dragging) moveTo(e); });
+cv.addEventListener('pointerup', () => dragging = false);
+
+// ---------- 每幀 ----------
+let last = performance.now();
+const outBuf = new Float32Array(1024);
+function frame() {
+  const now = performance.now(), dt = (now - last) / 1000; last = now;
+  const N = nodes, t = ctx.currentTime, T = 0.08;
+  const { clarity } = tuning();
+  const live = cur && status.get(cur) === '有聲' ? clarity : 0;   // 連不上就只剩雜訊
+
+  const dx = RADIO.x - me.x, dy = RADIO.y - me.y, d = Math.hypot(dx, dy);
+  const occ = occluded();
+  let gain = 1 / (1 + Math.pow(Math.max(0, d - 0.8) / 2.2, 1.6));
+  gain *= Math.max(0, Math.min(1, (14 - d) / 3));
+  let lp = 16000 * Math.exp(-d / 7);
+  if (occ) { gain *= 0.45; lp = Math.min(lp, 650); }
+  const spk = $('spk').checked;
+
+  N.spk.gain.setTargetAtTime(spk ? 1 : 0, t, T);
+  N.raw.gain.setTargetAtTime(spk ? 0 : 0.8, t, T);
+  N.clear.gain.setTargetAtTime(live, t, T);
+  N.nGain.gain.setTargetAtTime(0.02 + (1 - live) * 0.16, t, T);
+  N.dGain.gain.setTargetAtTime(gain, t, 0.15);
+  N.dLp.frequency.setTargetAtTime(Math.max(200, lp), t, 0.15);
+  N.pan.pan.setTargetAtTime(Math.max(-1, Math.min(1, dx / (d + 1))) * 0.7, t, 0.15);
+  const radioLoud = gain * live;
+  const bgm = $('bgm').checked ? 1 - ($('duck').checked ? 0.75 * Math.min(1, radioLoud * 1.6) : 0) : 0;
+  N.bgm.gain.setTargetAtTime(bgm, t, 0.4);
+
+  if (!audio.paused) playedSec += dt;
+  N.out.getFloatTimeDomainData(outBuf);
+  let rms = 0; for (const v of outBuf) rms += v * v; rms = Math.sqrt(rms / outBuf.length);
+  $('meter').firstChild.style.width = Math.min(100, rms * 400) + '%';
+
+  $('info').textContent =
+    `距離 ${d.toFixed(1)} m　${occ ? '隔著牆' : '看得到'}\n` +
+    `音量 ${(gain * 100).toFixed(0)}%　悶到 ${Math.round(lp)} Hz　清楚 ${(clarity * 100).toFixed(0)}%\n` +
+    `現在：${cur ? cur.name + '（' + status.get(cur) + '）' : '兩台中間'}\n` +
+    `已用流量約 ${(playedSec * 128 / 8 / 1024).toFixed(1)} MB（128kbps 算）`;
+  drawMap();
+  requestAnimationFrame(frame);
+}
+
+$('power').onclick = () => {
+  if (!ctx) { boot(); $('power').textContent = '關機'; return; }
+  if (ctx.state === 'running') { ctx.suspend(); audio.pause(); $('power').textContent = '開機'; }
+  else { ctx.resume(); if (cur) audio.play().catch(() => {}); $('power').textContent = '關機'; }
+};
+for (const id of ['wall']) $(id).addEventListener('change', drawMap);
+drawMap();
+</script>
+</body>
+</html>

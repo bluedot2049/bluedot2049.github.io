@@ -113,8 +113,8 @@ export class Creator {
     this.eyeDrag = null;
     this.undo = [];
     this.nav.innerHTML = MENU.map((t) => `<button class="med" data-tab="${t.id}"><span>${icon(t.id)}</span>${t.name}</button>`).join('')
-      + `<i></i><button class="med-mini" data-act="dice" aria-label="骰子">${icon('dice')}</button><button class="med-mini" data-act="reset" aria-label="重來">${icon('reset')}</button>`;
-    // 骰子、重來按了先問一次：小卡長在那顆鈕旁邊，點別的地方就當取消
+      + `<i></i><button class="med-mini" data-act="dice" aria-label="骰子">${icon('dice')}</button><button class="med-mini" data-act="reset" aria-label="預設">${icon('reset')}</button>`;
+    // 骰子、預設按了先問一次：小卡長在那顆鈕旁邊，點別的地方就當取消
     this.ask = document.createElement('div');
     this.ask.id = 'dress-ask';
     this.ask.hidden = true;
@@ -159,7 +159,7 @@ export class Creator {
   openAsk(act, btn) {
     if (this.asking === act && !this.ask.hidden) return this.closeAsk();
     this.asking = act;
-    this.ask.querySelector('p').textContent = act === 'dice' ? '整身重抽？' : '回到小學徒？';
+    this.ask.querySelector('p').textContent = act === 'dice' ? '整身重抽？' : '換回預設樣子？';
     this.ask.hidden = false;
     // 放在鈕的下面，左右夾在鏡子面板裡；下面放不下就放上面。手機橫拿時圓章排成左欄，改放在鈕的右邊
     const box = this.ask.offsetParent.getBoundingClientRect(), r = btn.getBoundingClientRect();
@@ -183,11 +183,11 @@ export class Creator {
     this.ask.hidden = true;
   }
 
-  // 骰子、重來：問過才做
+  // 骰子、預設：問過才做
   doAct(act) {
     const L = this.look;
     if (act === 'dice') this.set(randomLook(L, this.unlocked), true);
-    // 重來：回到一般的小學徒，衣服顏色和畫好的臉留著
+    // 預設：回到一般的小學徒，衣服顏色和畫好的臉留著
     else if (act === 'reset') {
       const P = presetLook(L.topC < 8 ? L.topC : 0);
       P.face = L.face;
