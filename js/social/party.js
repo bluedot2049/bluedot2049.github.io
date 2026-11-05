@@ -36,8 +36,9 @@ const SAY_MAX = 60;          // 一句最多幾個字
 const SAY_GAP = 1200;        // 自己送話的最短間隔
 const HEAR_GAP = 700;        // 同一個隊友的話，間隔太短的不理
 const MARK_GAP = 1500;
-const MARK_TIME = 10;        // 標記亮幾秒
-const SPOT_TIME = 90;        // 拍照的站位記號亮幾秒（拍的人說「好了」就收）
+const MARK_TIME = 5;         // 標記亮幾秒，最後一秒半淡掉
+const SPOT_TIME = 15;        // 拍照的站位記號亮幾秒，留時間給隊友走過去（拍的人說「好了」也會先收）
+const MARK_COLOR = '#a9763a'; // 標記、站位不分誰標的，一律暗金（base.css 的 --gold-lo）
 const SPOT_NEAR = 0.5;       // 走到站位這麼近、停下來，算站上去了
 const CALL_GAP = 3000;       // 自己吹哨的最短間隔
 const CALL_HEAR_GAP = 1500;  // 同一個隊友的哨音，間隔太短的不理
@@ -118,7 +119,8 @@ function beamTexture() {
 function makeMark(color) {
   const group = new THREE.Group(), mats = [];
   const mat = (o) => {
-    const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, toneMapped: false, ...o });
+    // 一般疊色不用加亮：加亮疊不出暗的顏色，暗金會變成淡淡一層亮光
+    const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, fog: false, toneMapped: false, ...o });
     mats.push(m);
     return m;
   };
@@ -142,7 +144,7 @@ function makeMark(color) {
 function makeSpot(color, face) {
   const group = new THREE.Group(), mats = [];
   const mat = () => {
-    const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, toneMapped: false });
+    const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, fog: false, toneMapped: false });
     mats.push(m);
     return m;
   };
@@ -944,7 +946,7 @@ export class Party {
   // 一人一個標記，新的換掉舊的。face 不是 null 就是拍照的站位，腳印朝這個方向
   showMark(m, x, y, z, face = null) {
     this.dropMark(m);
-    const spot = face !== null, color = new THREE.Color(this.colorOf(m));
+    const spot = face !== null, color = new THREE.Color(MARK_COLOR);
     const mark = spot ? makeSpot(color, face) : makeMark(color);
     mark.group.position.set(x, y, z);
     this.scene.add(mark.group);
@@ -1134,7 +1136,7 @@ export class Party {
       _v.set(k.x, k.y + 0.6, k.z);
       const e = this.edge(this.screen(_v));
       if (e) {
-        k.el = this.pin(k.el, this.colorOf(m), m);
+        k.el = this.pin(k.el, MARK_COLOR, m);
         k.el.classList.add('mark');
         this.put(k.el, 'edge', e.x, e.y, e.a, '');
         k.el.style.opacity = a;

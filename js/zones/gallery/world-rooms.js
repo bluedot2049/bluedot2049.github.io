@@ -459,7 +459,11 @@ export function furnish(room, R, set, noCat, tidy = false) {
     const pt = sp.at(sMid), rot = Math.atan2(pt.nx, pt.nz);
     const k = new Kit(R);
     buildWindow(k, 1.2, 1.3, 1.0, win.style);
-    k.emit(bucketFor(sp.entry, true), pt.x, pt.z, rot);
+    // 窗戶貼在牆上，牆降下時跟牆面、門框一起用網點淡掉（放進 full），不跟高家具變半透明：
+    // 不然牆都淡完了，窗框、玻璃、窗簾還留一層淡淡的方塊浮在房間裡（前廳就疊在鏡子旁那叢花上）
+    const wb = newBucket();
+    k.emit(wb, pt.x, pt.z, rot);
+    for (const o of bucketObjects(wb)) { sp.entry.full.push(o); room.group.add(o); }
     sp.occ.push([sMid - 1.0, sMid + 1.0]);
     // 光束
     const top = new THREE.Vector3(pt.x + pt.nx * 0.05, 2.25, pt.z + pt.nz * 0.05);

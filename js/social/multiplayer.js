@@ -308,7 +308,7 @@ export class Multiplayer {
 
   send(now) {
     const p = this.player;
-    // s：0 沒坐、-1 坐在地上、i + 1 坐在第 i 個座位；f：手上的點心
+    // s：0 沒坐、-1 坐在地上、-2 躺著、-3 坐在邊上垂腳、i + 1 坐在第 i 個座位；f：手上的點心
     // a：舉相機的拿法 + 1（0 是沒舉，5 是沒帶相機在比取景框），q：抬頭的角度，取到 0.05 才不會一直送；w：1 是掛機中
     // l、v：頭左右轉、抬頭低頭的角度（視線），取到 0.05
     // g：頭在看誰的臉或鏡頭（代號，自己的鏡頭就是自己），別人照自己畫面上那個人的位置算角度，眼神才對得上；沒有就照 l、v
@@ -341,7 +341,7 @@ export class Multiplayer {
     if (!isNum(m.x, COORD_LIMIT) || !isNum(m.z, COORD_LIMIT) || !isNum(m.h, 100) || !isNum(m.r, 100)) return;
     // 舊版網頁不會送這兩項，當作沒坐、空手
     const seats = this.player.world.outdoor?.seats || [];
-    m.s = Number.isInteger(m.s) && m.s >= -1 && m.s <= seats.length ? m.s : 0;
+    m.s = Number.isInteger(m.s) && m.s >= -3 && m.s <= seats.length ? m.s : 0;   // -2 躺、-3 坐邊上（player.sitCode）
     m.f = isFood(m.f) ? m.f : 0;
     m.a = Number.isInteger(m.a) && m.a >= 0 && m.a <= 5 ? m.a : 0;
     m.q = isNum(m.q, 2) ? m.q : 0;
