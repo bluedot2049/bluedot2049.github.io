@@ -5,6 +5,9 @@
 // key 直接就是 localStorage 的 key，舊的照舊讀得到；讀寫都包了 try，私密視窗、存不下也不會炸。哪裡在用寫在每一行後面
 export const PREFS = {
   muted: { kind: 'flag', init: false },          // ambience.js：靜音
+  vol: { kind: 'num', init: 1 },                 // ambience.js、volume.js：音量盤的「全部」，0 到 1
+  musicVol: { kind: 'num', init: 1 },            // 同上：音樂
+  fxVol: { kind: 'num', init: 1 },               // 同上：音效（環境聲也算）
   bgAudio: { kind: 'flag', init: true },         // ambience.js：切走時繼續播（只有電腦）
   mouse: { kind: 'json' },                       // player.js、deskkeys.js：滑鼠 { sens, invert }
   pad: { kind: 'json' },                         // gamepad.js：手把 { sens, invert, labels }，labels 是按鍵上印的字 'nintendo'／'xbox'／'ps'
@@ -13,7 +16,8 @@ export const PREFS = {
   tidy: { kind: 'flag', init: false },           // ui.js：收起上排的按鈕
   uiSize: { kind: 'num', init: 1 },              // ui.js：介面大小
   entered: { kind: 'flag', init: false },        // ui.js：推過前門了
-  joySwap: { kind: 'flag', init: false },        // main.js：搖桿換邊
+  joySide: { kind: 'text' },                     // main.js：搖桿在哪一邊 'L'／'R'，按過換邊鈕才記
+  joySwap: { kind: 'flag', init: false },        // main.js：舊的搖桿換邊（照直橫反過來），讀一次換成 joySide 就清掉
   packSize: { kind: 'json' },                    // pack.js：行囊卡的大小 { w, h }
   packAt: { kind: 'json' },                      // pack.js：行囊卡的位置 { dx, dy }（更早的是 { x, y }）
   packed: { kind: 'json' },                      // pack.js：存檔的照片存下的那一刻 { k, t }
@@ -26,6 +30,7 @@ export const PREFS = {
   eyeOn: { kind: 'json' },                       // guide.js：黑眼現在叫出來了（1）
   eyeTold: { kind: 'json' },                     // guide.js：說過一次怎麼用（1）
   verbsSeen: { kind: 'json' },                   // main.js：互動鍵出現過哪些動詞（第一次出現光暈多擴幾圈）
+  tipsSeen: { kind: 'json' },                    // ui.js：教學提示 { 代號: 出現過幾次，或 'done' 做過了 }
 };
 
 export function pref(key) {

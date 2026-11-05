@@ -61,6 +61,15 @@
 }
 .med-mini svg { width: 18px; height: 18px; }
 .med-mini:active { filter: brightness(.85); }
+/* 骰子、重來的確認卡：長在那顆鈕下面（位置 creator.js 算） */
+#dress-ask {
+  position: absolute; z-index: 5; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+}
+#dress-ask[hidden] { display: none; }
+#dress-ask p { margin: 0; font-size: 13px; letter-spacing: .08em; color: var(--text); white-space: nowrap; }
+#dress-ask .chips { flex-wrap: nowrap; }
+#dress-ask .chips button { height: 30px; padding: 0 12px; font-size: 12px; }
 /* 第二層：部位小格，一排左右滑 */
 #dress-subs { flex: 0 0 auto; display: flex; gap: 6px; padding: 12px 14px 0; overflow-x: auto; scrollbar-width: none; }
 #dress-subs::-webkit-scrollbar { display: none; }
@@ -136,6 +145,12 @@
   background: #a9763a; border: 0; border-radius: 3px; box-shadow: inset 0 0 0 1px #f6dba6; cursor: var(--cur-pointer);
 }
 .frame img { display: block; width: 100%; height: 100%; object-fit: contain; background: #2a1d15; }
+/* 這一套戴著畫的那張臉（一個人只有一張）：畫框右上角一枚小金牌 */
+.frame { position: relative; }
+.frame .face-tag {
+  position: absolute; top: 8px; right: 8px; padding: 1px 6px; font-style: normal; font-size: 10px; letter-spacing: .1em;
+  color: #2a1a0c; background: var(--gold-fill); border-radius: 999px; pointer-events: none;
+}
 .frame.empty { background: none; box-shadow: none; border: 1px dashed var(--line); font: inherit; font-size: 12px; letter-spacing: .15em; color: var(--muted); }
 .closet-slot small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; letter-spacing: .05em; color: var(--muted); }
 .closet-slot .store {
@@ -425,15 +440,18 @@ body.desk #album-view .av-close { top: max(14px, calc(var(--mt, 0px) / var(--ui,
     grid-template-columns: 62px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto;
   }
   #dress-tabs {
-    grid-column: 1; grid-row: 1 / -1; flex-direction: column; gap: 8px; overflow-y: auto; scrollbar-width: none;
+    grid-column: 1; grid-row: 1 / -1; flex-direction: column; gap: 5px; overflow-y: auto; scrollbar-width: none;
     padding: calc(10px + env(safe-area-inset-top)) 0 calc(10px + env(safe-area-inset-bottom));
     border-right: 1px solid var(--line-soft);
   }
   #dress-tabs::-webkit-scrollbar { display: none; }
+  /* ✕ 放在左欄最上面、圓章的上頭：右上角留給內容，衣櫃那頁沒有部位小格，畫框頂到最上面也不會被蓋住 */
+  #dress #dress-close { top: calc(10px + env(safe-area-inset-top)); left: 13px; right: auto; width: 36px; min-width: 36px; height: 36px; }
+  #dress-tabs { margin-top: calc(52px + env(safe-area-inset-top)); padding-top: 0; }
   .med { flex: 0 0 auto; width: 52px; gap: 3px; font-size: 10px; }
   .med-mini { margin-left: 0; }
-  .med span { width: 40px; height: 40px; }
-  #dress-subs { grid-column: 2; grid-row: 1; margin-right: 54px; padding: calc(10px + env(safe-area-inset-top)) 0 0 10px; }
+  .med span { width: 38px; height: 38px; }
+  #dress-subs { grid-column: 2; grid-row: 1; padding: calc(10px + env(safe-area-inset-top)) 0 0 10px; }
   #dress-subs button { flex-basis: 52px; height: 56px; }
   #dress-body { grid-column: 2; grid-row: 2; padding: 12px calc(12px + env(safe-area-inset-right)) 14px 10px; }
   #dress-paint { grid-column: 2; grid-row: 3; align-items: center; padding: 8px calc(12px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) 10px; }

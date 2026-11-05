@@ -704,25 +704,205 @@ export const CHEERS = {
 };
 
 // ---------- 人潮聲 ----------
-// 海市街上的人聲也是合成的，刻意不像任何一種語言：沒有子音，只有母音的哼聲，帶一點氣音。
+// 海市街上的人聲也是合成的，刻意不像任何一種語言：沒有詞，只有母音的哼聲，帶一點氣音。
 // 音高照海市的配樂（assets/audio/haishi.m4a）：曲子在 C 小調、B♭ 大調、F 大調、G 小調之間換，
 // 每一段都站得住的只有 B♭ C D F G，人聲只用這五個音，落在低低的音域。
 // 一句話大多停在同一個音，偶爾往旁邊挪一格，句尾往下收：聽起來是遠遠的人在講話，不是一群人在唱歌。
+// 一個人從頭到尾只用一組振盪器和濾波器，母音從這個字滑到下一個字，音節連得起來。
+// 字頭有很輕的起音：一頓、氣音、嘶聲、鼻音閉著嘴開出來。遠的人被濾掉高頻，只剩節奏，聽不出是哪一種語言。
+// 一句話慢慢往下走，第一或第二個字重一點長一點，偶爾句尾往上像在問。
+// 遠的那一片兩個人一組輪流講，聽的人偶爾嗯一聲，很少的時候笑幾聲；每個人各有遠近（越遠越悶越小聲），整片過一個短殘響。
 // 進海市時用 OfflineAudioContext 先算好幾段，之後循環播，手機不用一直開著幾百個振盪器。
+// 新舊對照、調整在 experiments/murmur_preview.html。
 // 聲音分遠近兩層：
 // 遠的是一片，拆成三段長度不同的循環，人越多疊越多段：人少聽得出句子之間的空檔，人多才連成一片。
 // 三段長度沒有公倍數，疊起來很久才會對到同一拍，聽不出在重複。
-// 近的是兩個單獨的嗓子，跟著最近在講話的路人走，人從身邊經過時聲音跟著他移，背景那一片不動
+// 近的是兩個單獨的嗓子，各講各的、不加殘響，跟著最近在講話的路人走，人從身邊經過時聲音跟著他移，背景那一片不動
 export const MURMUR_XF = 1.5;                   // 每段頭尾交疊幾秒，接起來聽不出縫
 export const MURMUR_SR = 22050;                 // 人聲用不到高頻，取樣率減半省記憶體
 export const MURMUR_LAYERS = [[11.3, 4], [8.9, 5], [7.1, 6]];   // 遠的三段：[一段幾秒, 幾個人]，第一段有人就開，後兩段人多才疊上去
-export const MURMUR_VOL = 0.22;
+export const MURMUR_VOL = 0.19;
 export const MURMUR_DUCK = 0.35;                // 人最多的時候，背景音樂壓低幾成
 export const MURMUR_RMS = 0.07;                 // 每段調到這個響度，三段全開跟一段 0.12 差不多大
 export const VOICE_LEN = 8.3;                   // 近處兩個嗓子共用一段，左聲道一個、右聲道一個
-export const VOICE_RMS = 0.1, VOICE_VOL = 0.3;
+export const VOICE_RMS = 0.1, VOICE_VOL = 0.26;
 export const MURMUR_NOTES = [87.31, 98, 116.54, 130.81, 146.83, 174.61];   // F2 G2 B♭2 C3 D3 F3
 export const VOWELS = [[700, 1200], [400, 2000], [300, 800], [500, 1500], [350, 2300], [600, 1000]];
+const PRE = { none: 0, nasal: 0, stop: 0.035, h: 0.05, s: 0.07 };   // 字頭佔掉多久嗓子才出來
+const ONSETS = [['none', 35], ['stop', 25], ['h', 15], ['nasal', 15], ['s', 10]];
+const NASAL = [260, 1000];   // 嘴還閉著的 m、n
+const onsetOf = () => {
+  let r = Math.random() * 100;
+  for (const [k, w] of ONSETS) if ((r -= w) < 0) return k;
+  return 'none';
+};
+
+// 短短的房間殘響：街上兩邊有牆，不是大廳
+function roomIR(ctx) {
+  const len = Math.floor(ctx.sampleRate * 0.8), ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = ir.getChannelData(c);
+    let lp = 0;
+    for (let i = 0; i < len; i++) {
+      const u = i / len;
+      lp += (Math.random() * 2 - 1 - lp) * (0.7 - 0.6 * u);
+      d[i] = lp * (1 - u) ** 3;
+    }
+  }
+  return ir;
+}
+
+// 一個人的嗓子：鋸齒波磨掉高頻 → 兩個母音共振峰 → 音量；同一份氣音一路混進母音，另一路是字頭
+function talker(ctx, breath, total, out, { root, tune, level, cut, pan }) {
+  const o = ctx.createOscillator(), voice = ctx.createGain(), f2g = ctx.createGain(), mix = ctx.createGain();
+  o.type = 'sawtooth';
+  voice.gain.value = 0;
+  f2g.gain.value = 0.6;
+  mix.gain.value = level;
+  const f1 = biquad(ctx, 'bandpass', 500, 5), f2 = biquad(ctx, 'bandpass', 1500, 7), src = o.connect(biquad(ctx, 'lowpass', 1400, 0.5));
+  src.connect(f1).connect(voice);
+  src.connect(f2).connect(f2g).connect(voice);
+  const air = ctx.createBufferSource(), a1 = biquad(ctx, 'bandpass', 500, 3), ag = ctx.createGain();
+  air.buffer = breath;
+  air.loop = true;
+  ag.gain.value = 0.6 + Math.random() * 0.5;   // 有的人氣音多一點
+  air.connect(a1).connect(ag).connect(voice);
+  const cons = biquad(ctx, 'bandpass', 1500, 1), cg = ctx.createGain();
+  cg.gain.value = 0;
+  air.connect(cons).connect(cg).connect(mix);
+  voice.connect(mix);
+  const tail = mix.connect(biquad(ctx, 'lowpass', cut, 0.5));
+  if (pan === null) tail.connect(out.node, 0, out.ch);
+  else if (ctx.createStereoPanner) {
+    const p = ctx.createStereoPanner();
+    p.pan.value = pan;
+    tail.connect(p).connect(out);
+  } else tail.connect(out);
+  o.start(0);
+  o.stop(total);
+  air.start(0, Math.random() * 1.5);
+  air.stop(total);
+
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const note = (deg) => MURMUR_NOTES[Math.max(0, Math.min(MURMUR_NOTES.length - 1, deg))] * tune;
+  const shape = (t, [a, b], tc) => {
+    f1.frequency.setTargetAtTime(a, t, tc);
+    a1.frequency.setTargetAtTime(a, t, tc);
+    f2.frequency.setTargetAtTime(b, t, tc);
+  };
+  const burst = (t, f, q, peak, up, dur) => {
+    cons.frequency.setValueAtTime(f, t);
+    cons.Q.setValueAtTime(q, t);
+    cg.gain.setValueAtTime(0, t);
+    cg.gain.linearRampToValueAtTime(peak, t + up);
+    cg.gain.linearRampToValueAtTime(0, t + dur);
+  };
+
+  // 排一串字，回傳講完的時間。每個字 { d 長度, on 字頭, vow 母音, f 音高, p 音量, end 字尾音高倍率, gap 跟下一個字隔多久, h 氣音字頭多大 }
+  // 下一個字沒有字頭（或是鼻音）就不收到零，直接滑過去
+  function say(t, list) {
+    const g = voice.gain, fq = o.frequency;
+    g.setValueAtTime(0, t);
+    fq.setValueAtTime(list[0].f, t);
+    for (let i = 0; i < list.length; i++) {
+      const s = list[i], next = list[i + 1], pre = PRE[s.on], tv = t + pre, P = s.p;
+      if (i) fq.linearRampToValueAtTime(s.f, tv + 0.04);
+      fq.linearRampToValueAtTime(s.f * (1 + (Math.random() - 0.5) * 0.012), tv + s.d * 0.5);   // 嗓子不會完全穩
+      fq.linearRampToValueAtTime(s.f * s.end, tv + s.d);
+      if (s.on === 'nasal') {
+        shape(tv, NASAL, 0.01);
+        shape(tv + 0.05, s.vow, 0.025);
+      } else shape(tv - 0.01, s.vow, i ? 0.03 : 0.005);
+      if (pre) g.setValueAtTime(0, tv);
+      if (s.on === 'stop') {
+        burst(tv, 1700 + Math.random() * 600, 1.2, P * 0.5, 0.004, 0.03);
+        g.linearRampToValueAtTime(P, tv + 0.012);
+      } else if (s.on === 'h') {
+        burst(t, s.vow[0] * 1.5, 1, P * (s.h ?? 0.45), 0.03, pre + 0.03);
+        g.linearRampToValueAtTime(P, tv + 0.05);
+      } else if (s.on === 's') {
+        burst(t, 2800 + Math.random() * 800, 2, P * 0.3, 0.04, pre + 0.01);
+        g.linearRampToValueAtTime(P, tv + 0.03);
+      } else if (s.on === 'nasal') {
+        g.linearRampToValueAtTime(P * 0.45, tv + 0.03);
+        g.linearRampToValueAtTime(P, tv + 0.08);
+      } else g.linearRampToValueAtTime(P, tv + (i ? 0.035 : 0.05));
+      g.linearRampToValueAtTime(P * 0.75, tv + s.d * 0.7);
+      const e = tv + s.d;
+      if (next && !PRE[next.on]) {
+        t = e + s.gap * 0.4;
+        g.linearRampToValueAtTime(P * 0.3, t);
+      } else {
+        g.linearRampToValueAtTime(0, e + 0.04);
+        t = e + 0.04 + s.gap;
+      }
+    }
+    return t;
+  }
+
+  return {
+    // 一句三到七個字：慢慢往下走，第一或第二個字重一點長一點，句尾往下收，偶爾往上像在問
+    sentence(t) {
+      const n = 3 + Math.floor(Math.random() * 5), stress = n > 3 && Math.random() < 0.4 ? 1 : 0;
+      const ask = Math.random() < 0.12, base = 0.15 + Math.random() * 0.08, list = [];
+      for (let i = 0; i < n; i++) {
+        const last = i === n - 1, u = i / (n - 1), hit = i === stress;
+        let deg = root;
+        if (last) deg = ask ? root + 1 : root - 1;
+        else if (hit && Math.random() < 0.4) deg = root + 1;
+        else if (Math.random() < 0.3) deg = root + (Math.random() < 0.5 ? -1 : 1);
+        list.push({
+          d: (0.12 + Math.random() * 0.14) * (hit ? 1.35 : 1) * (last ? 1.15 : 1),
+          on: i || Math.random() < 0.5 ? onsetOf() : 'none',
+          vow: pick(VOWELS), f: note(deg) * (1.02 - 0.05 * u),
+          p: base * (hit ? 1.2 : 1) * (0.85 + Math.random() * 0.15) * (1 - 0.15 * u),
+          end: last ? (ask ? 1.04 : 0.95) : 0.985, gap: Math.random() * 0.05,
+        });
+      }
+      return say(t, list);
+    },
+    // 聽的人嗯一聲，偶爾嗯兩聲
+    hum(t) {
+      const one = { d: 0.14 + Math.random() * 0.08, on: 'nasal', vow: [300, 800], f: note(root - 1), p: 0.08, end: 0.97, gap: 0.02 };
+      return say(t, Math.random() < 0.3 ? [{ ...one, f: note(root), end: 1 }, one] : [one]);
+    },
+    // 笑幾聲：氣音多、從高的地方一路往下
+    laugh(t) {
+      const n = 3 + Math.floor(Math.random() * 3), list = [];
+      for (let i = 0; i < n; i++) {
+        list.push({ d: 0.08 + Math.random() * 0.04, on: 'h', h: 0.8, vow: pick([[700, 1200], [600, 1000]]), f: note(root + 2 - Math.floor(i / 2)), p: 0.17 * (1 - 0.12 * i), end: 0.96, gap: 0.04 + Math.random() * 0.03 });
+      }
+      return say(t, list);
+    },
+  };
+}
+
+// 兩個人輪流講：講一兩句換人，聽的人偶爾嗯一聲；聊幾來回停一下
+function chat(x, y, total) {
+  for (let t = Math.random() * 4; t < total;) {
+    for (let k = 2 + Math.floor(Math.random() * 3); k-- && t < total;) {
+      let s = t, end = t;
+      for (let j = Math.random() < 0.35 ? 2 : 1; j-- && s < total;) {
+        end = x.sentence(s);
+        if (end - s > 1.1 && Math.random() < 0.3) y.hum(s + 0.3 + Math.random() * (end - s - 1));
+        s = end + 0.25 + Math.random() * 0.35;
+      }
+      const laugh = Math.random() < 0.1;
+      if (laugh) end = (Math.random() < 0.5 ? x : y).laugh(end + 0.1);
+      t = end + (!laugh && Math.random() < 0.15 ? -0.08 : 0.15 + Math.random() * 0.55);   // 偶爾搶一點話
+      [x, y] = [y, x];
+    }
+    t += 2.5 + Math.random() * 4;   // 人少的時候要聽得出空檔
+  }
+}
+
+// 一個人自己講：句子之間停久一點，偶爾接著講下一句，很少的時候笑
+function alone(p, total) {
+  for (let t = Math.random() * 3; t < total;) {
+    const end = Math.random() < 0.04 ? p.laugh(t) : p.sentence(t);
+    t = end + (Math.random() < 0.3 ? 0.3 + Math.random() * 0.3 : 1 + Math.random() * 3);
+  }
+}
 
 // 算一段 len 秒、talkers 個人在講話的聲音（多算 MURMUR_XF 秒給頭尾交疊）。
 // solo：每個人各佔一個聲道（第二個嗓子高一點），給近處的人用；不然每個人隨機放在左右，是遠遠的一片
@@ -730,59 +910,33 @@ export function renderMurmur(len, talkers, solo = false) {
   const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   if (!OAC) return Promise.resolve(null);
   const total = len + MURMUR_XF, ctx = new OAC(2, Math.ceil(total * MURMUR_SR), MURMUR_SR);
-  const pick = (a) => a[Math.floor(Math.random() * a.length)];
   const breath = ctx.createBuffer(1, MURMUR_SR * 2, MURMUR_SR), bd = breath.getChannelData(0);
   for (let i = 0; i < bd.length; i++) bd[i] = Math.random() * 2 - 1;
-  const merge = solo ? ctx.createChannelMerger(2) : null;
-  merge?.connect(ctx.destination);
-  for (let v = 0; v < talkers; v++) {
-    // 大多是低的四個音，四個人裡有一個高一點、小聲一點
-    const high = solo ? v === 1 : Math.random() < 0.25, root = high ? 4 + Math.floor(Math.random() * 2) : Math.floor(Math.random() * 4);
-    const tune = 2 ** ((Math.random() - 0.5) / 24);   // 每個人的嗓子差一點點，前後 25 音分，還聽得出在調上，不會疊成整齊的和弦
-    let pan;
-    if (solo) {
-      pan = ctx.createGain();
-      pan.connect(merge, 0, v);
-    } else {
-      // 遠的人左右拉開，聽起來是四周都有人，沒有特定方向
-      pan = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain();
-      if (pan.pan) pan.pan.value = (Math.random() - 0.5) * 1.8;
-      pan.connect(ctx.destination);
-    }
-    // 一句三到七個音節，句子之間停久一點
-    for (let t = Math.random() * 4; t < total;) {
-      const n = 3 + Math.floor(Math.random() * 5), peak = (0.15 + Math.random() * 0.08) * (high && !solo ? 0.7 : 1);
-      let deg = root;
-      for (let i = 0; i < n && t < total; i++) {
-        const d = 0.14 + Math.random() * 0.16, last = i === n - 1;
-        if (last) deg = Math.max(0, root - 1);
-        else if (Math.random() < 0.3) deg = Math.max(0, Math.min(MURMUR_NOTES.length - 1, root + (Math.random() < 0.5 ? -1 : 1)));
-        else deg = root;
-        const f = MURMUR_NOTES[deg] * tune;
-        const o = osc(ctx, 'sawtooth', t, d + 0.05, [[0, f], [d, f * (last ? 0.95 : 0.985)]]);   // 每個字尾巴往下掉一點，像說話
-        const g = ctx.createGain();
-        g.gain.setValueAtTime(0, t);
-        g.gain.linearRampToValueAtTime(peak, t + 0.04);
-        g.gain.linearRampToValueAtTime(peak * 0.7, t + d * 0.7);
-        g.gain.linearRampToValueAtTime(0, t + d + 0.05);
-        // 鋸齒波先磨掉高頻再過母音，第二個共振峰小聲一點，比較悶、比較不刺
-        const [f1, f2] = pick(VOWELS), src = o.connect(biquad(ctx, 'lowpass', 1400, 0.5)), f2g = ctx.createGain();
-        f2g.gain.value = 0.6;
-        src.connect(biquad(ctx, 'bandpass', f1, 5)).connect(g);
-        src.connect(biquad(ctx, 'bandpass', f2, 7)).connect(f2g).connect(g);
-        // 同一個母音的氣音，蓋掉一點音高感
-        const air = ctx.createBufferSource(), ag = ctx.createGain();
-        air.buffer = breath;
-        ag.gain.value = 0.9;
-        air.connect(biquad(ctx, 'bandpass', f1, 3)).connect(ag).connect(g);
-        air.start(t, Math.random() * 1.5);
-        air.stop(t + d + 0.06);
-        g.connect(pan);
-        t += d + 0.03 + Math.random() * 0.05;
-      }
-      t += 1 + Math.random() * 3;
-    }
+  let out;
+  if (solo) {
+    out = ctx.createChannelMerger(2);
+    out.connect(ctx.destination);
+  } else {
+    out = ctx.createGain();
+    const conv = ctx.createConvolver(), wet = ctx.createGain();
+    conv.buffer = roomIR(ctx);
+    wet.gain.value = 0.35;
+    out.connect(ctx.destination);
+    out.connect(conv).connect(wet).connect(ctx.destination);
   }
+  const people = [];
+  for (let v = 0; v < talkers; v++) {
+    const high = solo ? v === 1 : Math.random() < 0.25, far = solo ? 0 : Math.random();
+    people.push(talker(ctx, breath, total, solo ? { node: out, ch: v } : out, {
+      root: high ? 4 + Math.floor(Math.random() * 2) : Math.floor(Math.random() * 4),
+      tune: 2 ** ((Math.random() - 0.5) / 24),
+      level: (high && !solo ? 0.7 : 1) * (1 - 0.4 * far),
+      cut: solo ? 1800 : 1500 - 650 * far,
+      pan: solo ? null : (Math.random() - 0.5) * 1.8,
+    }));
+  }
+  if (solo) people.forEach((p) => alone(p, total));
+  else for (let v = 0; v < talkers; v += 2) people[v + 1] ? chat(people[v], people[v + 1], total) : alone(people[v], total);
   return new Promise((done) => {
     ctx.oncomplete = (e) => done(e.renderedBuffer);
     ctx.startRendering();

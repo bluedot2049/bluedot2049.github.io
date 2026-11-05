@@ -3,7 +3,7 @@
 /* ───────── 攝影模式 ───────── */
 body.photo #top-btns, body.photo #action-btn, body.photo #jump-btn, body.photo #sit-btn, body.photo #say-btn, body.photo.desk #pack-btn, body.photo #toast { display: none !important; }
 body.photo #stage::after { display: none; }   /* 暗角改由取景框畫，存檔時才一致 */
-body.photo #joy, body.photo #emote { opacity: 1; }
+body.photo #joy, body.photo #emote, body.photo #swap-btn { opacity: 1; }
 body.photo-hush .speech { opacity: 0 !important; }
 /* 手機：相機鈕留在原位變成收起（✕），右上角不另放離開鈕；表情讓出鏡頭鈕，退到外圈 */
 body.photo:not(.desk) #emote { --a: 90deg; --r: calc(var(--r1) * sin(var(--a-cam)) + var(--btn) + 58px); }
@@ -12,7 +12,7 @@ body.photo:not(.desk) #pack-btn { --a: calc(var(--a-cam) / 2); }
 body.photo.desk #photo-btn, body.photo:has(#ph-result:not([hidden])) :is(#photo-btn, #pack-btn) { display: none; }
 body:not(.desk) #ph-exit { display: none; }
 body.photo-bare #ph-bar, body.photo-bare #ph-exit, body.photo-bare #ph-shoot, body.photo-bare #ph-alt,
-body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #emote, body.photo-bare #hint, body.photo-bare #photo-btn, body.photo-bare #pack-btn { display: none !important; }
+body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #swap-btn, body.photo-bare #emote, body.photo-bare #hint, body.photo-bare #photo-btn, body.photo-bare #pack-btn { display: none !important; }
 
 #ph-frame { position: fixed; z-index: 12; pointer-events: none; }
 #ph-frame.masked { box-shadow: 0 0 0 100vmax rgba(10, 6, 3, .62); outline: 1px solid rgba(246, 219, 166, .4); }
@@ -105,14 +105,22 @@ body.desk .ph-chip span { color: var(--muted); }
 #ph-rec i { width: 8px; height: 8px; border-radius: 50%; background: #c4452d; animation: ph-blink 1s steps(2) infinite; }
 @keyframes ph-blink { 50% { opacity: .2; } }
 
+/* 距離、焦距、曝光秒數：不擋畫面正中間，像觀景窗邊上那條資訊列。
+   手機直拿由 photo.js 的 placeZoom 貼在取景框上緣或下緣外面；手機橫拿貼底，在搖桿和拇指弧中間；
+   電腦在下方選項那排上面，舉著相機（選項收起）時降到快門那排上面 */
 #ph-zoom {
   position: fixed; z-index: 20; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  padding: 6px 16px; border-radius: 999px;
+  padding: 5px 14px; border-radius: 999px; white-space: nowrap;
   background: var(--panel); border: 1px solid var(--line-soft);
-  font-family: var(--latin); font-size: 22px; font-weight: 600; color: var(--gold-hi);
+  font-family: var(--latin); font-size: 18px; font-weight: 600; color: var(--gold-hi);
   opacity: 0; transition: opacity .3s; pointer-events: none;
 }
 #ph-zoom.show { opacity: 1; }
+@media (orientation: landscape) and (max-height: 500px) {
+  body:not(.desk) #ph-zoom { top: auto; bottom: calc(var(--edge-b) + 8px); transform: translateX(-50%); }
+}
+body.desk #ph-zoom { top: auto; bottom: calc(206px + env(safe-area-inset-bottom)); transform: translateX(-50%); }
+body.desk.photo-quick #ph-zoom { bottom: calc(132px + env(safe-area-inset-bottom)); }
 
 /* 快門和錄影：手機在「跳」的位置（拇指弧的圓心），錄影往內排，相機的閃光、日期坐在弧上（見拇指弧那段）；
    鏡頭鈕在相機鈕（攝影時是收起）上面。搖桿換邊時整組跟著鏡像 */
@@ -329,10 +337,10 @@ body.joy-left:not(.desk) #ph-look { left: auto; right: var(--x); }
 @keyframes ph-puff { from { opacity: .8; transform: scale(.6); } to { opacity: 0; transform: translate(6px, -16px) scale(2.2); } }
 @keyframes ph-ring { to { stroke-dashoffset: 0; } }
 
-/* 日期開關：一塊舊金的銅板開個小窗，窗裡是青銅字模，刻著今天的日期（cameras.js 的 dateKnob）。
+/* 日期開關：一塊舊金的銅板開個小窗，窗裡一塊暗銅片鏤著今天日期的七段縫，後面點著燭火（cameras.js 的 dateKnob）。
    金板跟燭火乙式的快門同一種料、一樣用舊了，只是方的：髮絲橫著拉，細紋一種間距，再疊一層很淡的寬紋；光從左上來，左上、右下兩道斜的亮帶收斂著；
    四角和邊上積了暗斑。
-   不印時開了細縫的鐵蓋滑下來，縫裡透出暗字；.on 拉開印月日，.on.full 印年月日；.burn 是剛拍下去，小窗燒紅再暗回去 */
+   不印時開了細縫的鐵蓋滑下來，擋住火光，縫裡只看得到暗字；.on 拉開，縫裡透出橘紅的火光；.burn 是剛拍下去，火光燒亮再暗回去 */
 #ph-date {
   position: relative; width: 64px; height: 40px; padding: 0; border-radius: 5px; overflow: hidden;
   border: 1px solid rgba(90, 58, 24, .95);
@@ -352,21 +360,20 @@ body.joy-left:not(.desk) #ph-look { left: auto; right: var(--x); }
 #ph-date .sill { fill: none; stroke: #3e2810; stroke-width: .9; }
 #ph-date .sill.lo { stroke: rgba(240, 215, 170, .45); stroke-width: .6; }
 #ph-date .rivet { fill: #c39c5e; stroke: #4a3012; stroke-width: .5; }
-#ph-date .well { fill: #4a3a26; }
-#ph-date .die { fill: #1e140c; transition: fill .3s; }
-#ph-date .die.lo { fill: rgba(220, 190, 140, .35); transition: none; }
-#ph-date .die.sh { fill: rgba(12, 7, 3, .75); transition: none; }
-#ph-date.on .die:not(.lo, .sh) { fill: #e08a4a; }
-#ph-date .ymd, #ph-date.full .md { display: none; }
-#ph-date.full .ymd { display: inline; }
+#ph-date .well { fill: #3a2c1e; transition: fill .3s; }
+#ph-date.on .well { fill: #48301c; }
+#ph-date .edge { fill: rgba(220, 190, 140, .3); }
+#ph-date .slot { fill: rgba(16, 10, 5, .26); }
+#ph-date .lit { fill: #1a110a; transition: fill .3s, filter .3s; }
+#ph-date.on .lit { fill: #ffa44a; filter: drop-shadow(0 0 1.2px #ff4a14); }
 #ph-date .glow rect { fill: #ff8a3c; opacity: 0; }
 #ph-date.burn .glow rect { animation: ph-burn 1.4s ease-out both; }
-#ph-date.burn .die:not(.lo, .sh) { animation: ph-burn-die 1.4s ease-out both; }
+#ph-date.burn .lit { animation: ph-burn-lit 1.4s ease-out both; }
 #ph-date .lid { transition: transform .3s cubic-bezier(.3, .8, .3, 1); }
 #ph-date .lid path { fill: #4d4a48; }
 #ph-date.on .lid { transform: translateY(-21px); }
 @keyframes ph-burn { 0% { opacity: .85; } 100% { opacity: 0; } }
-@keyframes ph-burn-die { 0% { fill: #ffe2b0; } 100% { fill: #e08a4a; } }
+@keyframes ph-burn-lit { 0% { fill: #fff0c8; } 100% { fill: #ffa44a; } }
 
 /* 高度尺：手機疊在搖桿上方，電腦在快門那排右邊。刻度在左，圓點旁邊寫幾公尺 */
 #ph-alt {

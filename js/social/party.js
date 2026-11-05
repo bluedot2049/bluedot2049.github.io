@@ -466,8 +466,8 @@ export class Party {
     if (!this.state.met) {
       this.state.met = 1;   // 真的組成過：之後渡海換頁、一時沒人，照一般的時間等，不當成沒跟上
       store(this.state);
-      this.ui.hint('一起同行了，按「說話」可以打字', 4000);
-    } else if (p.n === 1 && this.roster().length <= MAX) this.ui.hint('有人加入了隊伍', 3000);
+      this.ui.hint('已同行。按「說話」打字', 4000);
+    } else if (p.n === 1 && this.roster().length <= MAX) this.ui.hint('有人加入隊伍', 3000);
     this.beatSoon();   // 新人進來，馬上報一次讓他知道
     this.refresh();
   }
@@ -596,7 +596,7 @@ export class Party {
   onBye(p) {
     if (!p || !isId(p.m) || !this.mates.has(p.m)) return;
     this.drop(p.m);
-    this.ui.hint('有人離開了隊伍', 3000);
+    this.ui.hint('有人離開隊伍', 3000);
   }
 
   drop(m) {
@@ -627,15 +627,15 @@ export class Party {
     // 別人的邀請還等著回：自己也想同行，就是答應
     if (this.pending) return this.answer(true);
     if (now - this.lastInvite < INVITE_GAP) return;
-    if (!this.mp.active) return this.ui.hint('還沒連上，等一下再邀請');
+    if (!this.mp.active) return this.ui.hint('還沒連線，稍後再邀請');
     if (this.state && this.roster().length >= MAX) return this.ui.hint('隊伍已經滿了');
-    if (!this.nearby().length) return this.ui.hint('旁邊沒有人，走近一點再邀請');
+    if (!this.nearby().length) return this.ui.hint('附近沒有人。走近再邀請');
     this.lastInvite = now;
     if (!this.state) this.open({ pid: rid(), me: rid(), j: Date.now() });
     this.aloneSince = now;
     // j：隊裡最晚進來的人的入隊時間。答應的人排在這之後，手機時鐘不準也不會插到老隊員前面
     this.mp.party({ t: 'invite', pid: this.state.pid, j: Math.max(...this.roster().map((r) => r.j)) });
-    this.ui.hint('邀請送出了，等對方答應', 4000);
+    this.ui.hint('已送出邀請，等對方回應', 4000);
   }
 
   onInvite(m) {
@@ -729,12 +729,12 @@ export class Party {
       // 渡海過來、隊友還沒回話
       html = `<p>找隊友中⋯</p><div class="studio-row"><button class="btn" data-act="leave">離隊</button></div>`;
     } else if (this.state?.guest) {
-      html = `<p>跟上隊伍中⋯</p><div class="studio-row"><button class="btn" data-act="leave">不跟了</button></div>`;
+      html = `<p>跟上隊伍中⋯</p><div class="studio-row"><button class="btn" data-act="leave">停止跟隨</button></div>`;
     } else if (this.state) {
-      html = `<p>等旁邊的人答應⋯</p><div class="studio-row"><button class="btn" data-act="invite">再邀一次</button><button class="btn" data-act="leave">不等了</button></div>`;
+      html = `<p>等對方回應⋯</p><div class="studio-row"><button class="btn" data-act="invite">再邀一次</button><button class="btn" data-act="leave">取消</button></div>`;
     } else {
       const n = this.nearby().length;
-      html = `<p>${n ? '邀請旁邊的人一起走？組了隊才能打字聊天' : '旁邊沒有人。走近別人再邀請，組了隊才能打字聊天'}</p>
+      html = `<p>${n ? '邀請附近的人同行？組隊後才能打字' : '附近沒有人。走近再邀請，組隊後才能打字'}</p>
         <div class="studio-row">${n ? '<button class="btn primary" data-act="invite">邀請</button>' : ''}<button class="btn" data-act="close">算了</button></div>`;
     }
     c.innerHTML = html;
@@ -822,7 +822,7 @@ export class Party {
   say(raw) {
     const text = cleanSay(raw), now = performance.now();
     if (!text || !this.together) return;
-    if (now - this.lastSay < SAY_GAP) return this.ui.hint('慢一點，話說太快了', 2000);
+    if (now - this.lastSay < SAY_GAP) return this.ui.hint('說太快了，稍等再送', 2000);
     this.lastSay = now;
     this.send('say', { t: text });
     this.mine = this.speak(this.mine, text, this.colorOf(this.state.me));
@@ -869,12 +869,13 @@ export class Party {
     if (!this.together) return;
     this.armed = true;
     document.body.classList.add('party-arming');
-    this.ui.hint('點一下要標記的地方', 4000);
+    this.ui.hint('點要標記的地方', { id: 'mark', hold: true });
   }
 
   disarm() {
     this.armed = false;
     document.body.classList.remove('party-arming');
+    this.ui.hideHint('mark');
   }
 
   tapMark(cx, cy) {
@@ -997,12 +998,12 @@ export class Party {
     if (now - this.lastBeat > (this.asking ? ASK : this.player.moving ? BEAT_MOVING : BEAT_IDLE)) this.beat();
     for (const [m, o] of this.mates) if (this.gone(o, now)) {
       this.drop(m);
-      this.ui.hint('有人離開了隊伍', 3000);
+      this.ui.hint('有人離開隊伍', 3000);
     }
     const missed = this.state.guest && !this.state.met;
     if (!this.mates.size && now - this.aloneSince > (missed ? FOLLOW : LONELY)) {
       this.leave(false);
-      if (missed) this.ui.hint('沒有跟上隊伍，對方可能已經離開了', 4000);
+      if (missed) this.ui.hint('沒跟上隊伍，對方可能已離開', 4000);
       return;
     }
     this.updateChase(now);

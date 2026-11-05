@@ -193,7 +193,7 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
   function soundHint() {
     if (soundTold || !ambience || ambience.muted || ambience.ctx?.state === 'running') return;
     soundTold = true;
-    ui.hint('按一下畫面或鍵盤就有聲音', 5000);
+    ui.hint('點畫面或按鍵開啟聲音', 5000);
   }
 
   // 面板換了：焦點放到新的那一層的主要那顆；都收了就把焦點還給畫面
@@ -213,7 +213,7 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
     glyph();
     if (!labels) {
       asking = true;
-      ui.hint('按一下手把上印著 A 的那顆（PlayStation 按 ✕）', 600000);
+      ui.hint('按手把上的 A（PlayStation 按 ✕）', { id: 'pad-ask', hold: true });
     }
   }
 
@@ -223,7 +223,8 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
     keep();
     asking = false;
     glyph();
-    ui.hint(`好，${faceName(i, labels)} 在${i === E ? '右邊' : '下面'}，之後都照這樣`, 2500);
+    ui.hideHint('pad-ask');
+    ui.hint(`好，${faceName(i, labels)} 在${i === E ? '右邊' : '下面'}，已記住`, 2500);
     setTimeout(firstTell, 2600);
   }
 
@@ -232,6 +233,8 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
     release();
     if (photo.active && photo.quick) photo.exit();
     cur = null;
+    asking = false;   // 接回來 take 會再問
+    ui.hideHint('pad-ask');
     if (active) ui.hint('手把斷線了', 3000);
     setActive(false);
     if (![...(navigator.getGamepads?.() ?? [])].some((p) => p?.connected)) player.padLink(false);
@@ -479,6 +482,7 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
       labels = opt.labels = pick.value;
       opt.forced = true;
       asking = false;
+      ui.hideHint('pad-ask');
       keep();
       glyph();
     });
@@ -497,7 +501,7 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
       b.dataset.i = i;
       b.classList.toggle('listen', i === listen);
       b.classList.toggle('moved', bind[i] !== i);
-      b.querySelector('kbd').textContent = i === listen ? '按一下要換成的那顆' : btnName(bind[i], labels);
+      b.querySelector('kbd').textContent = i === listen ? '按要換成的鍵' : btnName(bind[i], labels);
     });
   }
   function setBind(next) {
@@ -535,7 +539,7 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
   map?.querySelector('.pm-reset')?.addEventListener('click', () => {
     listen = -1;
     setBind(SAME);
-    ui.hint('手把按鍵換回原本的了', 2500);
+    ui.hint('手把按鍵已還原', 2500);
   });
   map?.querySelector('.pm-done')?.addEventListener('click', closeMap);
   // Esc（手把的 B 沒在等按鍵時也走這條）：收起來回到暫停選單。暫停選單那段（deskkeys.js）先看到 Esc、已經打開了的話就不再開

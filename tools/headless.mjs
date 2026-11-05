@@ -5,11 +5,41 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
+export const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
+
+// Edge 的暫存設定檔（一份幾十 MB）放 TEMP。以前 kill 完馬上刪，子程序還鎖著檔案、刪不掉又沒說，累積到把 C 槽塞滿。
+// 現在：開新的先清一小時前留下的；結束時整棵程序樹砍掉再刪（重試），掛在 process exit 上，出錯、Ctrl+C 也會清
+export function edgeProfile(prefix) {
+  const tmp = os.tmpdir(), old = Date.now() - 3600e3;
+  for (const n of fs.readdirSync(tmp)) {
+    if (!/^(headless|smoke)-/.test(n)) continue;
+    const p = path.join(tmp, n);
+    try { if (fs.statSync(p).mtimeMs < old) fs.rmSync(p, { recursive: true, force: true }); } catch {}
+  }
+  return fs.mkdtempSync(path.join(tmp, `${prefix}-`));
+}
+export function onEdgeExit(edge, prof, more = () => {}) {
+  let done = false;
+  const quit = () => {
+    if (done) return;
+    done = true;
+    try { more(); } catch {}
+    try { execFileSync('taskkill', ['/pid', String(edge.pid), '/T', '/F'], { stdio: 'ignore' }); } catch {}
+    // 砍完要再等幾百毫秒才放開檔案；rmSync 自己的 maxRetries 碰到 Windows 的 EPERM 不重試，自己來
+    for (let i = 0; ; i++) {
+      try { fs.rmSync(prof, { recursive: true, force: true }); break; }
+      catch (e) { if (i === 50) { console.log(`暫存設定檔沒刪掉：${prof}（${e.code}）`); break; } }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+    }
+  };
+  process.on('exit', quit);
+  process.once('SIGINT', () => process.exit(130));
+  return quit;
+}
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.avif': 'image/avif', '.json': 'application/json', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.m4a': 'audio/mp4', '.webmanifest': 'application/manifest+json' };
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -18,19 +48,31 @@ export async function openBrowser({ port, dbg, window = '1920,2160', onEvent = n
     const f = path.join(ROOT, decodeURIComponent(new URL(q.url, 'http://x').pathname).replace(/\/$/, '/index.html'));
     fs.readFile(f, (e, b) => {
       if (e) { r.writeHead(404); r.end(); return; }
-      r.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream' });
+      const type = TYPES[path.extname(f)] || 'application/octet-stream';
+      // 分段下載（跟 GitHub Pages 一樣）：背景音樂照伺服器時間從中間開始放（ambience.js 的 musicAt），沒有這個跳不過去
+      const m = /^bytes=(\d*)-(\d*)$/.exec(q.headers.range || '');
+      if (m && (m[1] || m[2])) {
+        const start = m[1] ? +m[1] : Math.max(0, b.length - +m[2]), end = m[1] && m[2] ? Math.min(+m[2], b.length - 1) : b.length - 1;
+        if (start >= b.length || start > end) { r.writeHead(416, { 'content-range': `bytes */${b.length}` }); r.end(); return; }
+        r.writeHead(206, { 'content-type': type, 'accept-ranges': 'bytes', 'content-range': `bytes ${start}-${end}/${b.length}`, 'content-length': end - start + 1 });
+        r.end(b.subarray(start, end + 1));
+        return;
+      }
+      r.writeHead(200, { 'content-type': type, 'accept-ranges': 'bytes' });
       r.end(b);
     });
   }).listen(port);
-  const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'headless-'));
+  const prof = edgeProfile('headless');
   // 多人頻道的 WebSocket 擋不掉（Network.setBlockedURLs 只管一般請求），直接讓 supabase.co 查不到網址，測試角色才不會出現在線上
   const edge = spawn(EDGE, ['--headless=new', `--remote-debugging-port=${dbg}`, `--user-data-dir=${prof}`, '--host-resolver-rules=MAP *.supabase.co ~NOTFOUND', `--window-size=${window}`, 'about:blank']);
+  let ws;
+  const quit = onEdgeExit(edge, prof, () => { ws?.close(); srv.close(); });
   let tgt;
   for (let i = 0; i < 90 && !tgt; i++) {
     try { tgt = (await (await fetch(`http://127.0.0.1:${dbg}/json`)).json()).find((t) => t.type === 'page'); } catch {}
     if (!tgt) await sleep(1000);
   }
-  const ws = new WebSocket(tgt.webSocketDebuggerUrl);
+  ws = new WebSocket(tgt.webSocketDebuggerUrl);
   await new Promise((r) => (ws.onopen = r));
   let id = 0;
   const wait = new Map();
@@ -82,11 +124,6 @@ export async function openBrowser({ port, dbg, window = '1920,2160', onEvent = n
       await ev(`document.documentElement.classList.remove('no-dev')`);
       return Buffer.from(r.result.data, 'base64');
     },
-    close() {
-      ws.close();
-      edge.kill();
-      srv.close();
-      try { fs.rmSync(prof, { recursive: true, force: true }); } catch {}
-    },
+    close: quit,
   };
 }

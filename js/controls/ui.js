@@ -20,6 +20,20 @@ sizePick = Math.min(SIZE_MAX, Math.max(SIZE_MIN, pref('uiSize') || 1));
 export const uiScale = () => scale;
 export const uiSize = () => sizePick;
 
+// 提示（#hint）停多久：照字數，一秒約六個字，再加轉過眼睛去看的一秒半；英文字母、數字、鍵名算小半個字
+const readMs = (text) => Math.min(12000, 1500 + 170 * [...String(text).replace(/\s/g, '')].reduce((n, c) => n + (c < '\u0080' ? 0.4 : 1), 0));
+// 教學提示同一台裝置出現幾次就夠了（做過那件事的立刻不再出現）
+const TIP_TIMES = 2;
+// 手機橫拿畫面矮：房名停這麼久再讓位給提示（ui.js 的 putHint、hud.css 的 yield）
+const TOAST_KEEP = 2500;
+const short = () => document.body.classList.contains('touch') && matchMedia('(orientation: landscape) and (max-height: 500px)').matches;
+let tips = null;
+const tipsSeen = () => {
+  if (tips) return tips;
+  const v = pref('tipsSeen');
+  return (tips = v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+};
+
 // 面板做成側欄時佔掉的畫面寬度（電腦、手機橫拿），底部抽屜回傳 0。寬度寫在 CSS 的 --panel-w，電腦上再放大成 --ui 倍
 export const panelW = () => (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panel-w')) || 0) * scale;
 
@@ -115,10 +129,12 @@ export class UI {
       more.title = text;
     };
     tidy(pref('tidy'));
+    this.tidy = tidy;
     more.addEventListener('click', () => {
       const on = !document.body.classList.contains('tidy');
       tidy(on);
       setPref('tidy', on);
+      this.dressTidied = false;   // 照鏡子時自己按開了，關鏡子就不用再放回去
     });
     $('#sheet-close').addEventListener('click', () => { this.hidePainting(); this.onClose?.(); });
     $('#dress-close').addEventListener('click', () => { this.hideDress(); this.onClose?.(); });
@@ -252,15 +268,21 @@ export class UI {
     this.onSheet?.(false);
   }
 
+  // 手機直拿照鏡子，鏡頭把整個人裝進抽屜上面那塊，上排按鈕會壓到帽子：先收成「⋯」，關鏡子再放回來（不改設定）
   showDress() {
     this.dress.classList.add('open');
     this.onSheet?.(true);
+    if (!document.body.classList.contains('desk') && !document.body.classList.contains('tidy') && matchMedia('(orientation: portrait)').matches) {
+      this.tidy(true);
+      this.dressTidied = true;
+    }
   }
 
   hideDress() {
     if (!this.dress.classList.contains('open')) return;
     this.dress.classList.remove('open');
     this.onSheet?.(false);
+    if (this.dressTidied) { this.dressTidied = false; this.tidy(false); }
   }
 
   // 全螢幕看大圖：雙指縮放、拖曳移動、點兩下切換放大
@@ -361,24 +383,101 @@ export class UI {
     // 地名的字都造過就用煉金體（tools/build_font.py），操作說明那類句子會缺字，照舊用一般字型
     el.classList.toggle('alchemy', alchemyCovers(title));
     el.style.setProperty('--n', [...title].length);
-    el.classList.remove('show');
+    el.classList.remove('show', 'yield');
     void el.offsetWidth;
     el.classList.add('show');
+    this.toastAt = performance.now();
     // 動畫播完把 show 拿掉：提示看 #toast.show 決定要不要讓位（hud.css）
     clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => el.classList.remove('show'), 8000);
   }
 
-  hint(text, ms = 5000) {
-    const el = $('#hint');
-    el.textContent = text;
-    el.classList.add('show');
-    clearTimeout(this.hintTimer);
-    this.hintTimer = setTimeout(() => el.classList.remove('show'), ms);
+  // 提示（#hint）：上緣一行，只給看、不用點。三種（介面原則「提示」）：
+  //   hint(text, ms)                  回饋、事件（已還原、有人加入）：至少停到讀得完（readMs），走動不收
+  //   hint(text, { id, hold: true })  狀態：一直在，到 hideHint(id) 才收（問手把的 A、沖洗中、點要標記的地方）
+  //   tip(id, text, ms)               教學：這台裝置出現過兩次、或做過那件事（learned(id)）就不再出現；做了當場收
+  // 同時來：狀態壓過回饋、回饋壓過教學。被壓下去、還沒停夠的教學和狀態排在後面，上面那個收了再出來。
+  // hideHint(id) 只收那一個，id 寫成 'photo:' 收這一組，不給 id 全收
+  hint(text, o = 5000) {
+    const opt = typeof o === 'number' ? { ms: o } : o;
+    this.showHint({ text, id: opt.id ?? null, pri: opt.hold ? 3 : 2, ms: opt.hold ? Infinity : Math.max(opt.ms ?? 0, readMs(text)) });
   }
 
-  hideHint() {
+  tip(id, text, ms = 0) {
+    if (!this.fresh(id)) return false;
+    this.showHint({ text, id, pri: 1, ms: Math.max(ms, readMs(text)) });
+    return true;
+  }
+
+  // 這則教學還要不要說：要的話記一次（攝影模式舉相機那行用房名說，也走這裡）
+  fresh(id) {
+    const seen = tipsSeen();
+    if (seen[id] === 'done' || (seen[id] ?? 0) >= TIP_TIMES) return false;
+    seen[id] = (seen[id] ?? 0) + 1;
+    setPref('tipsSeen', seen);
+    return true;
+  }
+
+  // 做過那件事了：教它的那行收掉，以後不再說
+  learned(id) {
+    const seen = tipsSeen();
+    if (seen[id] === 'done') return;
+    seen[id] = 'done';
+    setPref('tipsSeen', seen);
+    this.hideHint(id);
+  }
+
+  showHint(h) {
+    const now = performance.now(), cur = this.hintCur;
+    if (cur && h.pri < cur.pri) {
+      if (!this.hintNext || this.hintNext.pri <= h.pri) this.hintNext = h;
+      return;
+    }
+    // 被蓋掉的教學、狀態還沒停夠就排到後面；回饋被新的回饋蓋掉就算了，新的那句比較準
+    if (cur && cur.pri !== 2 && cur.id !== h.id && cur.end - now > 1500 && (!this.hintNext || this.hintNext.pri <= cur.pri)) {
+      cur.ms = cur.end - now;
+      this.hintNext = cur;
+    }
+    clearTimeout(this.hintTimer);
+    this.hintCur = h;
+    // 手機橫拿畫面矮，排在房名底下會壓到角色：房名先停一會兒，再讓位給提示
+    const wait = short() && this.toastEl.classList.contains('show') && !this.toastEl.classList.contains('yield')
+      ? TOAST_KEEP - (now - (this.toastAt ?? 0)) : 0;
+    if (wait > 0) {
+      $('#hint').classList.remove('show');
+      h.end = now + wait + h.ms;
+      this.hintTimer = setTimeout(() => this.putHint(h), wait);
+    } else this.putHint(h);
+  }
+
+  putHint(h) {
+    if (short() && this.toastEl.classList.contains('show')) this.toastEl.classList.add('yield');
+    const el = $('#hint');
+    el.textContent = h.text;
+    el.classList.add('show');
+    h.end = performance.now() + h.ms;
+    clearTimeout(this.hintTimer);
+    if (h.ms !== Infinity) this.hintTimer = setTimeout(() => this.endHint(), h.ms);
+  }
+
+  endHint() {
     $('#hint').classList.remove('show');
+    this.hintCur = null;
+    // 排著的等這句淡掉（.5 秒）再換字
+    if (this.hintNext) this.hintTimer = setTimeout(() => {
+      const n = this.hintNext;
+      this.hintNext = null;
+      if (n) this.showHint(n);
+    }, 500);
+  }
+
+  hideHint(id) {
+    const hit = (h) => h && (id == null || h.id === id || (id.endsWith(':') && h.id?.startsWith(id)));
+    if (hit(this.hintNext)) this.hintNext = null;
+    if (id == null || hit(this.hintCur)) {
+      clearTimeout(this.hintTimer);
+      this.endHint();
+    }
   }
 
   // 門邊問號立牌那張卡：能在哪裡玩、支援什麼（問胖頭「這裡能用什麼玩」也會打開）。

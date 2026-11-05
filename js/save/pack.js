@@ -9,8 +9,8 @@
 // 讀照片哪裡都能讀（鏡中的照片、海市的明信片）；存檔只有兩個地方：鏡子前請眼睛拍一張，或在海市照相館寄一張給自己。
 // 鈕右下的封蠟是魔法印泥：有照片交給師傅、還沒去拿，或拿回來還沒看過時亮著。
 // 存檔有沒有過期只寫在卡片裡，不亮、不催。上次存了什麼記在這台裝置上（packed），不放進存檔。
-import { decodeSave, decodeLook, tryOn, codeFrom, hasProgress, restoreSave } from './savecode.js';
-import { readPostcard } from './postcard.js';
+import { decodeSave, decodeLook, tryOn, codeFrom, hasProgress, restoreSave, attachFaces } from './savecode.js';
+import { readPostcard, joinFace } from './postcard.js';
 import { readMirrorCard } from './mirrorcard.js';
 import { encodeFace } from '../avatar/looks.js';
 import { getSave, savePrint } from './progress.js';
@@ -113,7 +113,7 @@ export class Pack {
   refresh() {
     const ready = this.ready, lab = album().some((it) => it.state === 'lab');
     this.btn.classList.toggle('lit', ready);
-    this.btn.setAttribute('aria-label', lab ? '行囊，照片洗好了' : ready ? '行囊，有新照片' : '行囊');
+    this.btn.setAttribute('aria-label', lab ? '行囊・照片洗好' : ready ? '行囊・新照片' : '行囊');
     if (!this.card.hidden) this.render();
     if (this.viewer && !this.viewer.hidden) this.paintView();
   }
@@ -251,7 +251,7 @@ export class Pack {
     const m = loadMark(), mirror = this.events.canSelfie(), page = this.page;
     const top = this.card.querySelector('.album-grid')?.scrollTop ?? 0;   // 重畫以後捲回原本看到的地方
     const state = page === 'album' ? this.albumState()
-      : !m ? '還沒存過' : this.stale ? `上次存檔 ${when(m.t)}，之後又有變動` : `存好了・${when(m.t)}`;
+      : !m ? '還沒存過' : this.stale ? `上次存檔 ${when(m.t)}・之後有變動` : `存好了・${when(m.t)}`;
     const tabs = `<nav class="pack-tabs">
         <button data-page="album" class="${page === 'album' ? 'on' : ''}">相簿</button>
         <button data-page="save" class="${page === 'save' ? 'on' : ''}">存讀檔</button>
@@ -282,8 +282,8 @@ export class Pack {
   }
 
   savePage(mirror) {
-    const how = mirror ? '請鏡子裡的眼睛拍一張，存檔就印在照片上。換手機或瀏覽器時，讀這張照片東西就回來了'
-      : '存檔要在前廳的鏡子前拍，或在海市照相館寄一張明信片給自己。讀照片在哪裡都可以';
+    const how = mirror ? '請鏡中的眼睛拍一張，存檔印在照片上。換裝置時讀這張就能還原'
+      : '存檔：在前廳鏡前拍，或在海市照相館寄明信片給自己。讀取不限地點';
     return `<p class="pack-how">${how}</p>
       <div class="pack-acts">
         <button data-act="selfie"${mirror ? '' : ' disabled'}>${icon('orb')}<span>請眼睛拍一張<small>${!mirror ? '在鏡子前才拍得到' : this.withCode ? '印上存檔' : '只拍照片'}</small></span></button>
@@ -314,7 +314,7 @@ export class Pack {
     for (const it of this.chosen) if (!list.includes(it) || it.state === 'lab') this.chosen.delete(it);
     // 全部丟光了也要留著底下那行，才按得到復原
     const note = '<p class="album-note" hidden></p>';
-    if (!list.length) return '<p class="pack-how">還沒有照片。拍的照片、錄影、明信片、鏡中的照片都先收在這裡</p>' + note;
+    if (!list.length) return '<p class="pack-how">還沒有照片。照片、錄影、明信片、鏡中照片都收在這裡</p>' + note;
     const cells = list.map((it, i) => {
       if (it.state === 'lab') return `<div class="ph-cell slip"><i class="ink lit"></i><span>取件單</span><small>${LABS[it.lab]?.name ?? ''}</small></div>`;
       const on = this.chosen.has(it) ? ' on' : '';
@@ -343,7 +343,7 @@ export class Pack {
     if (!n) return;
     const all = album().filter((it) => it.state !== 'lab'), c = [...this.chosen];
     const keep = c.filter(visible), send = c.filter(labOk), film = c.length - keep.length;
-    n.textContent = c.length ? `選了 ${c.length} 張` + (film ? `，其中 ${film} 張底片要先沖` : '') : all.length ? '點一下選，點兩下看大圖' : '';
+    n.textContent = c.length ? `選了 ${c.length} 張` + (film ? `，其中 ${film} 張底片要先沖` : '') : all.length ? '點選，點兩下看大圖' : '';
     const a = this.card.querySelector('[data-act="all"]');
     a.hidden = !all.length;
     a.textContent = all.length && all.every((it) => this.chosen.has(it)) ? '全不選' : '全選';
@@ -394,7 +394,7 @@ export class Pack {
     sfx('seal');
     this.rest = album().filter(visible);
     const n = this.rest.length;
-    this.note(where ? `存好了，${keep.length} 張在「${where}」` : `存好了 ${keep.length} 張`, n ? 'rest' : '', `剩下 ${n} 張也丟掉`);
+    this.note(where ? `已存 ${keep.length} 張到「${where}」` : `已存 ${keep.length} 張`, n ? 'rest' : '', `丟掉其餘 ${n} 張`);
   }
 
   // Android 的分享：分享出去的照樣留在相簿、照樣選著
@@ -403,7 +403,7 @@ export class Pack {
     if (!list.length || this.busy) return;
     if (!(await shareChosen(list))) return;
     sfx('confirm');
-    this.note(`分享出去了，${list.length} 張還在相簿`);
+    this.note(`已分享，${list.length} 張留在相簿`);
   }
 
   async send(lab) {
@@ -412,7 +412,7 @@ export class Pack {
     send.forEach((it) => this.chosen.delete(it));
     await toLab(send, lab);
     sfx('confirm');
-    this.note(`交給${LABS[lab].who}了，已經洗好。走到${LABS[lab].name}找他拿`);
+    this.note(`已交給${LABS[lab].who}洗好，到${LABS[lab].name}取件`);
   }
 
   // 丟掉：不先問，丟完底下那行可以復原。接連丟的算同一批，按一次復原全部放回來
@@ -426,7 +426,7 @@ export class Pack {
     undo.push({ out: await discard(list), was });
     this.dropping = false;
     this.undo = undo;
-    this.note(`丟掉了 ${undo.reduce((n, u) => n + u.out.length, 0)} 張`, 'undo', '復原');
+    this.note(`已丟掉 ${undo.reduce((n, u) => n + u.out.length, 0)} 張`, 'undo', '復原');
   }
 
   // 放回原本的位置，原本選著的照樣選著。後丟的先放回去，位置才對得上
@@ -638,7 +638,7 @@ export class Pack {
   }
 
   // 先當鏡中的照片讀（眼紋、鏡框符文），讀不到再當海市的明信片（郵票、底片邊）。
-  // 鏡中的照片和明信片的行囊：整份還原（先問），臉放回身上那套和衣櫃三套。朋友寄的明信片：試穿，沒拿到的部位換回預設。
+  // 鏡中的照片和明信片的行囊：整份還原（先問），臉接回戴著的那幾套（舊的每套一張，併成一張）。朋友寄的明信片：試穿，沒拿到的部位換回預設。
   // 回傳讀到什麼：'save'（要重新整理了）、'look'、null
   async read(file, b = null) {
     const small = b?.querySelector('small'), was = small?.textContent;
@@ -649,10 +649,8 @@ export class Pack {
       try { m = await readMirrorCard(file); } catch {}
       if (m) {
         const sv = m.save;
-        if (sv.look && m.faces[0]) sv.look.face = encodeFace(m.faces[0]);
-        sv.closet.forEach((c, i) => { if (c && m.faces[i + 1]) c.face = encodeFace(m.faces[i + 1]); });
-        const ask = !m.full ? '鏡框讀不清楚，只救得回身上這套和拿到的東西，衣櫃和畫的臉沒有回來。要用這張照片嗎？'
-          : hasProgress() ? '這台裝置上已經有東西了，要用這張照片蓋掉嗎？' : null;
+        const ask = !m.full ? '鏡框讀不清楚，只能還原身上這套和拿到的東西，衣櫃和畫的臉不會回來。要用這張嗎？'
+          : hasProgress() ? '這台裝置已有存檔。用這張照片覆蓋？' : null;
         if (ask && !confirm(ask)) return null;
         this.restore(sv, m.full);
         return 'save';
@@ -660,22 +658,23 @@ export class Pack {
       let r = null;
       try { r = await readPostcard(file); } catch {}
       const code = r?.text && codeFrom(r.text);
-      const face = (e) => (r.faces[e] ? encodeFace(r.faces[e]) : undefined);
+      const face = (e) => (r.faces[e] ? encodeFace(r.faces[e]) : '');
+      // 新的：幾條底片邊接起來是一張臉；舊的行囊：一條一張（下緣身上那套，上、左、右衣櫃三套）
+      const joined = async () => { const c = await joinFace(r.strips); return c ? encodeFace(c) : ''; };
       const sv = code && decodeSave(code), L = code && !sv && decodeLook(code);
       if (sv) {
-        if (sv.look) sv.look.face = face('bottom');
-        ['top', 'left', 'right'].forEach((e, i) => { if (sv.closet[i]) sv.closet[i].face = face(e); });
-        if (hasProgress() && !confirm('這台裝置上已經有東西了，要用這張明信片蓋掉嗎？')) return null;
+        attachFaces(sv, sv.wears ? [await joined()] : ['bottom', 'top', 'left', 'right'].map(face));
+        if (hasProgress() && !confirm('這台裝置已有存檔。用這張明信片覆蓋？')) return null;
         this.restore(sv, true);
         return 'save';
       }
       if (L) {
         this.close();
-        this.events.onTryOn(tryOn({ ...L, face: face('bottom') }));
+        this.events.onTryOn(tryOn({ ...L, face: await joined() }));
         return 'look';
       }
       sfx('fail');
-      alert('這張圖上讀不到存檔。可能被裁掉、縮得太小，或不是鏡中的照片和海市的明信片');
+      alert('讀不到存檔。圖可能被裁切、縮得太小，或不是鏡中照片、海市明信片');
       return null;
     } finally {
       if (b?.isConnected) {

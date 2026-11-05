@@ -5,13 +5,13 @@
 // 拱上那 7 道刻痕原來是整圈符文露出來的幾道；外面繞著前廳掛布（camtable.js）的兩道細金線，下襬收成掛布的尖角，日期寫在尖角裡。
 // 存檔印在兩個地方，都只給這個遊戲讀（不是 QR，手機相機掃不到）：
 //   眼紋：虹膜一圈圈切成亮暗的弧，放最要緊的「身上這套 + 拿到的東西」，格子大，最好讀
-//   鏡框符文：拱形鏡框邊上刻滿短痕，放完整存檔（含衣櫃、各攤日子）和畫的臉
+//   鏡框符文：拱形鏡框邊上刻滿短痕，放完整存檔（含衣櫃、各攤日子）和畫的臉（一個人一張；更早的照片每套各一張，照樣讀）
 // 鏡框讀壞了，眼紋還能救回身上這套和拿到的東西。錯誤更正和亂數打散用 filmcode.js 的 codeBits / codeData。
 // 讀的時候先照圖的大小反推版面（原圖、等比例縮小、上下或左右多了黑邊）；對不上就當截圖，在圖裡找虹膜、對鏡框的邊（locate）。
 // 卡片本身被裁掉一塊就讀不到
 import { codeBits, codeData, codeCapacity, packFace, unpackFace } from './filmcode.js';
-import { encodeSave, decodeSave } from './savecode.js';
-import { decodeFace } from '../avatar/looks.js';
+import { encodeSave, decodeSave, attachFaces } from './savecode.js';
+import { decodeFace, encodeFace } from '../avatar/looks.js';
 
 export const CARD_W = 1500, CARD_H = 2000;
 // 鏡面（照片）：左右兩邊、拱的圓心和半徑、下緣
@@ -68,7 +68,7 @@ export const capacity = { iris: codeCapacity(IRIS.length, ECC_IRIS), band: codeC
 
 // ---------- 要印的資料 ----------
 const enc = new TextEncoder(), dec = new TextDecoder();
-const FACES = 4;   // 身上那套、衣櫃三套
+const OLD_FACES = 4;   // 第 1 版的鏡框：身上那套、衣櫃三套各一張
 
 // 眼紋：身上這套和拿到的東西（不含各攤日子，日子可能很長；也不含手把按鍵這種只放鏡框的）
 const irisPayload = (save) => enc.encode(encodeSave({ ...save, visits: {} }, { closet: false, face: false, iris: true }));
@@ -78,25 +78,17 @@ const pipe = async (bytes, stream) => new Uint8Array(await new Response(new Blob
 const deflate = (bytes) => pipe(bytes, new CompressionStream('deflate-raw'));
 const inflate = (bytes) => pipe(bytes, new DecompressionStream('deflate-raw')).catch(() => null);
 
-// 鏡框：[1][存檔長度 2][壓過的完整存檔][4 張臉，各自長度 2 + 壓過的格子]。放不下的臉從衣櫃最後一套開始拿掉
+// 鏡框：[2][存檔長度 2][壓過的完整存檔][臉的長度 2][壓過的臉]。臉放不下就不印，lost 是 true。
+// 第 1 版是 [1][存檔][4 張臉各自長度 + 格子]，讀的時候還認得
 async function bandPayload(save) {
   const text = await deflate(enc.encode(encodeSave(save, { face: false })));
-  const looks = [save.look, ...[0, 1, 2].map((i) => save.closet[i])];
-  const faces = await Promise.all(looks.map((L) => {
-    const c = L && decodeFace(L.face);
-    return c ? packFace(c) : Promise.resolve(new Uint8Array(0));
-  }));
-  const lost = [];
-  const build = () => {
-    const out = [1, text.length >> 8, text.length & 255, ...text];
-    for (const f of faces) out.push(f.length >> 8, f.length & 255, ...f);
-    return Uint8Array.from(out);
-  };
-  let data = build();
-  for (let i = FACES - 1; data.length > capacity.band && i >= 0; i--) {
-    if (!faces[i].length) continue;
-    faces[i] = new Uint8Array(0);
-    lost.push(i);
+  const c = decodeFace(save.face);
+  let face = c ? await packFace(c) : new Uint8Array(0);
+  const build = () => Uint8Array.from([2, text.length >> 8, text.length & 255, ...text, face.length >> 8, face.length & 255, ...face]);
+  let data = build(), lost = false;
+  if (data.length > capacity.band && face.length) {
+    face = new Uint8Array(0);
+    lost = true;
     data = build();
   }
   return { data, lost };
@@ -530,7 +522,7 @@ async function dateLine(g, date, track) {
 }
 
 // photo：鏡子拍到的畫面（PHOTO_W × PHOTO_H，還沒翻）。save 給了就印存檔，不給就是一張普通照片。track 是日期的字距（em）。
-// 回傳 { canvas, lost }：lost 是放不下、沒印上去的臉（0 身上那套，1–3 衣櫃）
+// 回傳 { canvas, lost }：lost 是畫的臉太滿、鏡框放不下，沒印上去
 export async function makeMirrorCard(photo, { save = null, date = new Date(), track = DATE_TRACK } = {}) {
   const c = document.createElement('canvas');
   c.width = CARD_W;
@@ -544,7 +536,7 @@ export async function makeMirrorCard(photo, { save = null, date = new Date(), tr
   glass(g, photo);
   frame(g);
   marks(g);
-  let lost = [], irisBits = null;
+  let lost = false, irisBits = null;
   if (save) {
     const band = await bandPayload(save);
     lost = band.lost;
@@ -786,7 +778,7 @@ async function imageData(file) {
 }
 
 // 讀一張鏡中的照片。讀不到是 null；
-// 讀到是 { save, faces: [身上, 衣櫃1, 衣櫃2, 衣櫃3]（Uint8Array 或 null）, full }：full 是鏡框也讀到了（衣櫃、日子、臉都在）
+// 讀到是 { save, full }：save 的臉已經接好；full 是鏡框也讀到了（衣櫃、日子、臉都在）
 export async function readMirrorCard(file) {
   const img = await imageData(file);
   for (const f of (function* () { yield* fits(img.width, img.height); yield* locate(img); })()) {
@@ -798,13 +790,14 @@ export async function readMirrorCard(file) {
     if (!save) continue;
     const bb = sample(img, BANDC, f, CELL * 0.18);
     const band = bb && codeData(bb, ECC_BAND);
-    const full = band && band[0] === 1 && (await unpackBand(band));
-    if (!full) return { save, faces: [null, null, null, null], full: false };
-    return { save: full.save, faces: await Promise.all(full.faces.map((b) => (b.length ? unpackFace(b) : null))), full: true };
+    const full = band && (band[0] === 1 || band[0] === 2) && (await unpackBand(band));
+    if (!full) return { save, full: false };
+    return { save: full, full: true };
   }
   return null;
 }
 
+// 鏡框解開：存檔，後面第 2 版一張臉、第 1 版四張
 async function unpackBand(b) {
   let at = 1;
   const n = (b[at] << 8) | b[at + 1];
@@ -814,11 +807,13 @@ async function unpackBand(b) {
   if (!save) return null;
   at += n;
   const faces = [];
-  for (let i = 0; i < FACES; i++) {
+  for (let i = 0; i < (b[0] === 1 ? OLD_FACES : 1); i++) {
     const m = (b[at] << 8) | b[at + 1];
     at += 2;
-    faces.push(b.slice(at, at + m));
+    const cells = m ? await unpackFace(b.slice(at, at + m)) : null;
+    faces.push(cells ? encodeFace(cells) : '');
     at += m;
   }
-  return { save, faces };
+  attachFaces(save, faces);
+  return save;
 }

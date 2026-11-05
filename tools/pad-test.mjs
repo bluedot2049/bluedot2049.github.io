@@ -50,7 +50,7 @@ try {
   let s = await st();
   check(s.pad && s.padOn, '叫醒後換成手把的樣子（body.pad）');
   check(s.shoulder, '手把一律越肩');
-  check(/印著 A/.test(s.hint), '認不出牌子，問印著 A 的那顆', s.hint);
+  check(/手把上的 A/.test(s.hint), '認不出牌子，問印著 A 的那顆', s.hint);
   await press(1);
   s = await st();
   const saved = await ev(`localStorage.getItem('pad')`);
@@ -170,7 +170,7 @@ try {
   check(/^跳/.test(f), '十字鍵往下兩格：「跳」', f);
   await press(1);
   m = await map();
-  check(/按一下/.test(m.listen), 'A：等按鍵', m.listen);
+  check(/按要換成的鍵/.test(m.listen), 'A：等按鍵', m.listen);
   await press(0);
   m = await map();
   s = await st();

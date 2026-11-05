@@ -196,10 +196,9 @@ export class Selfie {
     addPhoto(blob, { name, cam: 'mirror', kind: this.withCode ? 'mirror-save' : 'mirror', k, quiet: true }).then((it) => { result.item = it; });
     this.img.src = this.result.url;
     this.openEye(canvas);
-    const which = ['身上這套', '衣櫃第一套', '衣櫃第二套', '衣櫃第三套'];
-    this.tip.textContent = !this.withCode ? '這張只是照片，沒有印存檔'
-      : lost.length ? `這張就是你的存檔。${lost.map((i) => which[i]).join('、')}畫的臉太滿，鏡框放不下，其他都印上了`
-      : '這張圖就是你的存檔。存下、截圖、傳給自己都可以，換手機時打開行囊讀這張，東西就回來了';
+    this.tip.textContent = !this.withCode ? '只有照片，沒有印存檔'
+      : lost ? '存檔已印上。臉太滿，沒有印上'
+      : '這張是存檔，存下或截圖都可以。換裝置時在行囊讀這張就能還原';
     this.el.classList.add('done');
   }
 

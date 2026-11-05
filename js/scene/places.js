@@ -11,7 +11,7 @@ export const PLACES = [
   { to: 'gallery', name: '畫廊', desc: '展區。', tags: ['照鏡子', '挑相機', '樹洞'] },
   { to: 'haishi', name: '海市', desc: '港區夜市。', tags: ['照相館', '報社', '沖洗底片'] },
   { to: 'jinghai', name: '月球企業觀光工廠', sign: '月球', desc: '海牛一廠。', tags: ['食堂', '商店街', '消費'] },
-  { to: 'shenlou', name: '沙島', desc: '影子之城。', tags: ['花園', '沙船'] },
+  { dev: 'shenlou', name: '沙島', desc: '影子之城。', tags: ['花園', '沙船'] },
   { to: 'ting', name: '汀', desc: '時間之外。', tags: ['捷運', '沼澤'] },
 ];
 

@@ -23,6 +23,8 @@ const ZENITH = 1.52;
 const SWIPE_MIN = 40;
 // 鏡頭追目標的時間：跟著角色、看畫照鏡子
 const FOLLOW_T = 0.2, VIEW_T = 0.32;
+// 離開照鏡子、看畫：鏡頭繞著頭轉回背後要多久（秒）
+const RETURN_T = 0.85;
 // 被山坡、石階擋住時鏡頭最多往上抬幾度（弧度），抬到這裡還擋著才往前推
 const CLIP_LIFT = 0.7;
 // 上面有天花板的區域（camDuck）鏡頭最低壓到哪：從頭看出去的仰角（弧度），比頭略低一點
@@ -52,7 +54,7 @@ const PAD_LOOK_T = 0.08;
 // 手機橫拿越肩：鏡頭追手指的時間（秒）。拖曳的方向、靈敏度跟一般視角一樣（拖著畫面走），見 orbit。
 // 搖桿那一側這麼寬的畫面不拿來轉視角：左手拇指沒剛好按在搖桿上時，跟右手湊成兩指會被當成捏合
 // 搖桿外圈多少像素內按下去不轉視角（拇指沒剛好按在搖桿上）
-const SH_TOUCH_T = 0.12, SH_JOY_PAD = 36;
+const SH_TOUCH_T = 0.12;
 // 越肩走路的起步和停下（秒）
 const SH_ACCEL_T = 0.14, SH_DECEL_T = 0.11;
 // 越肩和手持相機的高度另外慢慢跟（秒）：石階是一階一階踩上去的，跟緊了每一階都把畫面頂一下；一下差超過這麼多公尺（瞬移）直接跟過去
@@ -177,6 +179,7 @@ export class Player {
     this.camLook = new THREE.Vector3();
     this.posVel = {};               // 鏡頭位置和注視點的彈簧速度
     this.lookVel = {};
+    this.ret = null;                // 離開照鏡子、看畫時鏡頭繞回去的起點（exitFocus 記下，update 接著轉）
     this.headPos = new THREE.Vector3();
     this.liftPos = new THREE.Vector3();
     this.orbLook = new THREE.Vector3();   // 照鏡子拉近時移到臉上的視線（mirrorCamera）
@@ -221,15 +224,9 @@ export class Player {
     const el = this.dom;
     const pts = new Map();
     let pinch = null, multi = false;
-    // 手機越肩：按在搖桿外圈的手指不轉視角、不算捏合（點東西照樣算）；搖桿旁邊其他地方照樣能拖
-    const joySide = (x, y) => {
-      if (!this.coarse || !this.shoulder) return false;
-      const r = document.getElementById('joy')?.getBoundingClientRect();
-      return !!r?.width && Math.hypot(x - (r.left + r.width / 2), y - (r.top + r.height / 2)) < r.width / 2 + SH_JOY_PAD;
-    };
     // 手機越肩兩根手指分在畫面左右兩半：是兩根拇指（一手走一手轉），不是捏合
     const thumbs = (a, b) => this.coarse && this.shoulder && (a.sx < innerWidth / 2) !== (b.sx < innerWidth / 2);
-    const free = () => [...pts.values()].filter((q) => !q.side);
+    const free = () => [...pts.values()];
     // 第二顆鍵按下或放開時不會再觸發 pointerdown/up，只會來一次 pointermove，所以每個事件都看 buttons
     const chord = (e) => {
       if (e.pointerType !== 'mouse') return;
@@ -276,7 +273,7 @@ export class Player {
       }
       // 右鍵按下就直接當成拖曳轉鏡頭，不會觸發走路
       const mouse = e.pointerType === 'mouse';
-      pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, drag: e.button === 2, right: e.button === 2, mouse, side: !mouse && joySide(e.clientX, e.clientY) });
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, drag: e.button === 2, right: e.button === 2, mouse });
       el.setPointerCapture(e.pointerId);
       chord(e);
       const two = free();
@@ -301,7 +298,7 @@ export class Player {
       const dx = e.clientX - p.x, dy = e.clientY - p.y;
       p.x = e.clientX;
       p.y = e.clientY;
-      if (pinch && !p.side && free().length >= 2) {
+      if (pinch && free().length >= 2) {
         const [a, b] = free();
         const d = Math.hypot(a.x - b.x, a.y - b.y);
         this.zoomDist = pinch.base * (pinch.d / Math.max(d, 1));
@@ -313,7 +310,7 @@ export class Player {
         // 觸控看畫時，左右滑是切換作品，不轉鏡頭；挑相機時是換一台
         p.swipe = (this.focus?.kind === 'painting' || this.focus?.kind === 'cameras') && !p.mouse && Math.abs(e.clientX - p.sx) > Math.abs(e.clientY - p.sy);
       }
-      if (p.drag && !multi && !p.swipe && !p.side) this.orbit(dx, dy, p.mouse, p.right);
+      if (p.drag && !multi && !p.swipe) this.orbit(dx, dy, p.mouse, p.right);
       el.classList.toggle('dragging', p.drag && p.mouse);
     });
     const up = (e) => {
@@ -1176,7 +1173,10 @@ export class Player {
     const wasSitting = this.sitting, n = this.focus.n, hadView = !!this.focus.camPos;
     this.focus = null;
     // 鏡頭退到角色背後、面向剛才的畫或鏡子。看畫時鏡頭在角色和畫之間，照原方位拉遠會跑到牆後
-    if (hadView) this.camYaw = Math.atan2(n.x, n.z);
+    if (hadView) {
+      this.camYaw = Math.atan2(n.x, n.z);
+      this.ret = this.orbitFrom();
+    }
     if (wasSitting) {
       this.character.sitting = false;
       this.character.lying = false;
@@ -1197,6 +1197,7 @@ export class Player {
 
   teleport(x, z) {
     this.exitFocus();
+    this.ret = null;
     this.pos.set(x, 0, z);
     this.stop();
   }
@@ -1218,6 +1219,7 @@ export class Player {
     this.sh.reach = null;
     this.sh.y = this.pos.y;
     this.shVel = {};
+    this.ret = null;
     this.desiredCamera(this.camPos, this.camLook);
     this.posVel = {};
     this.lookVel = {};
@@ -1225,6 +1227,39 @@ export class Player {
 
   fadeTarget() {
     return this.focus?.fadeTarget || this.pos;
+  }
+
+  // 鏡頭離頭的方位、俯仰、遠近，和視線離頭多遠：離開照鏡子、看畫時記下起點，回去的路照這幾個數字換，不走直線
+  orbitAround(pos, look, head) {
+    const dx = pos.x - head.x, dy = pos.y - head.y, dz = pos.z - head.z, h = Math.hypot(dx, dz);
+    return { yaw: Math.atan2(dx, dz), pitch: Math.atan2(dy, h), dist: Math.max(0.3, Math.hypot(h, dy)), look: look.clone().sub(head) };
+  }
+
+  orbitFrom() {
+    const head = this.headPos.set(this.pos.x, this.pos.y + 1.2, this.pos.z);
+    return { t: 0, fov: this.fov, ...this.orbitAround(this.camPos, this.camLook, head) };
+  }
+
+  // 從起點繞著頭轉到這一幀該在的地方（dPos、dLook），先慢後快再慢。視角放寬時，取景的高度（遠近 × tan 半視角）
+  // 照比例換，角色在畫面上一路慢慢變小，不會一邊甩一邊突然縮。人走動了，起點跟著頭走
+  easeReturn(dt, dPos, dLook, fov) {
+    const r = this.ret;
+    r.t = Math.min(1, r.t + dt / RETURN_T);
+    const s = r.t * r.t * (3 - 2 * r.t), lerp = THREE.MathUtils.lerp;
+    const head = this.headPos.set(this.pos.x, this.pos.y + 1.2, this.pos.z), to = this.orbitAround(dPos, dLook, head);
+    const half = (f) => Math.tan(THREE.MathUtils.degToRad(f / 2));
+    this.fov = lerp(r.fov, fov, s);
+    const h0 = r.dist * half(r.fov), h1 = to.dist * half(fov);
+    const dist = (h0 * Math.pow(h1 / h0, s)) / half(this.fov);
+    const yaw = r.yaw + wrapAngle(to.yaw - r.yaw) * s, pitch = lerp(r.pitch, to.pitch, s);
+    this.camPos.set(head.x + dist * Math.cos(pitch) * Math.sin(yaw), head.y + dist * Math.sin(pitch), head.z + dist * Math.cos(pitch) * Math.cos(yaw));
+    this.camPos.y = Math.max(this.camPos.y, this.world.camFloor(this.camPos.x, this.camPos.z) + 0.3);
+    this.camLook.copy(r.look).lerp(to.look, s).add(head);
+    if (r.t >= 1) {
+      this.ret = null;
+      this.posVel = {};
+      this.lookVel = {};
+    }
   }
 
   // 照鏡子的鏡頭：把鏡子取景的位置繞著注視點轉、拉遠拉近。轉到鏡子那面牆後面時，牆和鏡子會自己淡掉（見 world.js）
@@ -1644,17 +1679,22 @@ export class Player {
       }
       // 切換越肩、走去看畫時，視角和鏡頭變形慢慢換過去
       const fov = this.baseFov(), k = this.wantK();
+      if (this.ret && this.focus) this.ret = null;   // 半路又去看畫、照鏡子
       if (this.fov !== fov || this.bendK !== k) {
         const a = Math.min(1, dt * 5);
-        this.fov = Math.abs(fov - this.fov) < 0.05 ? fov : this.fov + (fov - this.fov) * a;
+        if (!this.ret) this.fov = Math.abs(fov - this.fov) < 0.05 ? fov : this.fov + (fov - this.fov) * a;
         this.bendK = Math.abs(k - this.bendK) < 0.002 ? k : this.bendK + (k - this.bendK) * a;
         settling = true;
       }
+      if (this.ret) {
+        this.easeReturn(dt, dPos, dLook, fov);
+        settling = true;
+      } else
+        for (const k of 'xyz') {
+          damp(this.camPos, k, dPos[k], this.posVel, T, dt);
+          damp(this.camLook, k, dLook[k], this.lookVel, T, dt);
+        }
       this.applyLens();
-      for (const k of 'xyz') {
-        damp(this.camPos, k, dPos[k], this.posVel, T, dt);
-        damp(this.camLook, k, dLook[k], this.lookVel, T, dt);
-      }
       this.camera.position.copy(this.camPos);
       this.camera.lookAt(this.camLook);
       settling = settling || this.camPos.distanceToSquared(dPos) > 1e-4 || this.camLook.distanceToSquared(dLook) > 1e-4;
@@ -1662,6 +1702,7 @@ export class Player {
       // 攝影模式回來時鏡頭從停下的地方重新起步
       this.posVel = {};
       this.lookVel = {};
+      this.ret = null;
     }
 
     this.moving = this.speed > 0.05 || settling || ch.busy;

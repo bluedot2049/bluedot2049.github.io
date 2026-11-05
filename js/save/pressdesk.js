@@ -105,7 +105,7 @@ export async function submit() {
       <h2>投稿</h2>
       <p class="press-sub">${PRESS.name}　編輯部</p>
       <div class="press-picks">${ok.map((it, i) => `<button type="button" data-pick="${i}" aria-label="第 ${i + 1} 張">${img(it.blob)}</button>`).join('')}</div>
-      <label class="press-pen"><span>署名</span><input type="text" maxlength="12" autocomplete="off" placeholder="不寫就是「一位旅人」"></label>
+      <label class="press-pen"><span>署名</span><input type="text" maxlength="12" autocomplete="off" placeholder="空白署名為「一位旅人」"></label>
       <div class="press-acts"><button type="button" data-act="send">交稿</button><button type="button" data-act="close">算了</button></div>
     </div>`, 'desk');
     paintPick();
@@ -202,7 +202,7 @@ if (new URLSearchParams(location.search).has('debug')) {
     async fake(grade = 2, place = '') {
       await loadAlbum();
       const it = [...album()].reverse().find((x) => visible(x) && !x.kind && x.cam !== 'eye');
-      if (!it) return '相簿裡沒有帶相機拍的照片';
+      if (!it) return '相簿裡沒有相機拍的照片';
       await amend(it, { rare: { kind: 'beast', grade, zone: 'haishi', where: '海市', place }, pressed: null });
       return it.name;
     },

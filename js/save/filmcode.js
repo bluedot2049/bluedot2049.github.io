@@ -198,22 +198,34 @@ async function pipe(bytes, stream) {
   return new Uint8Array(await r.arrayBuffer());
 }
 // 格子後面可以多 8 個位元組：兩個眼睛框各 x、y、寬、高（looks.js 的 decodeEyes，只有一個框時後四個是 0）。
-// 沒框的臉還是 4096 個，舊的照樣讀；解開來的格子帶著 .eyes，encodeFace 會接回臉碼
+// 左右剛好對稱的臉（畫臉工具預設開著對稱）只存左半邊 32 欄，壓完小一半。解開時照長度分：4096／4104 整張、2048／2056 半邊。
+// 舊的照片都是整張，照樣讀；解開來的格子帶著 .eyes，encodeFace 會接回臉碼
+const FW = 64, HALF = 32;
+const mirrored = (c) => { for (let y = 0; y < FW; y++) for (let x = 0; x < HALF; x++) if (c[y * FW + x] !== c[y * FW + FW - 1 - x]) return false; return true; };
 export const packFace = (cells, eyes = cells.eyes) => {
-  if (!eyes?.length) return pipe(cells, new CompressionStream('deflate-raw'));
-  const all = new Uint8Array(4104);
-  all.set(cells.subarray(0, 4096));
-  eyes.slice(0, 2).forEach((e, i) => all.set([e.x, e.y, e.w, e.h], 4096 + i * 4));
+  let body = cells.subarray(0, FW * FW);
+  if (mirrored(body)) {
+    const h = new Uint8Array(FW * HALF);
+    for (let y = 0; y < FW; y++) h.set(body.subarray(y * FW, y * FW + HALF), y * HALF);
+    body = h;
+  }
+  if (!eyes?.length) return pipe(body, new CompressionStream('deflate-raw'));
+  const all = new Uint8Array(body.length + 8);
+  all.set(body);
+  eyes.slice(0, 2).forEach((e, i) => all.set([e.x, e.y, e.w, e.h], body.length + i * 4));
   return pipe(all, new CompressionStream('deflate-raw'));
 };
 export async function unpackFace(bytes) {
   try {
     const c = await pipe(bytes, new DecompressionStream('deflate-raw'));
-    if ((c.length !== 4096 && c.length !== 4104) || !c.subarray(0, 4096).every((v) => v <= 8)) return null;
-    const cells = c.slice(0, 4096);
-    if (c.length === 4104) {
+    const n = c.length === 4096 || c.length === 4104 ? 4096 : c.length === 2048 || c.length === 2056 ? 2048 : 0;
+    if (!n || !c.subarray(0, n).every((v) => v <= 8)) return null;
+    const cells = new Uint8Array(FW * FW);
+    if (n === 4096) cells.set(c.subarray(0, n));
+    else for (let y = 0; y < FW; y++) for (let x = 0; x < HALF; x++) cells[y * FW + x] = cells[y * FW + FW - 1 - x] = c[y * HALF + x];
+    if (c.length === n + 8) {
       const eyes = [];
-      for (let i = 4096; i < 4104; i += 4) if (c[i + 2] && c[i + 3] && c[i] + c[i + 2] <= 64 && c[i + 1] + c[i + 3] <= 64) eyes.push({ x: c[i], y: c[i + 1], w: c[i + 2], h: c[i + 3] });
+      for (let i = n; i < n + 8; i += 4) if (c[i + 2] && c[i + 3] && c[i] + c[i + 2] <= 64 && c[i + 1] + c[i + 3] <= 64) eyes.push({ x: c[i], y: c[i + 1], w: c[i + 2], h: c[i + 3] });
       if (eyes.length) cells.eyes = eyes;
     }
     return cells;

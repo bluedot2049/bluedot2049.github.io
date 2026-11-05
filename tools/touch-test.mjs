@@ -50,7 +50,7 @@ try {
   // 調色台（?debug）蓋在上排按鈕上，藏起來（同 headless.mjs 的 pagePNG）
   await ev(`document.documentElement.classList.add('no-dev'); 1`);
   await sleep(1500);
-  const st = () => ev(`(() => { const p = __g.player, r = getComputedStyle(document.getElementById('reticle')); return { x: p.pos.x, z: p.pos.z, yaw: p.camYaw, dist: p.shDist, heading: p.heading, shoulder: p.shoulder, ok: p.shoulderOk, coarse: p.coarse, btn: !document.getElementById('shoulder-btn').hidden, reticle: +r.opacity, photo: __g.photo.active, joyLeft: document.body.classList.contains('joy-left'), pref: localStorage.getItem('shoulder'), guide: [...document.querySelectorAll('#guide .keys')].filter((u) => getComputedStyle(u).display !== 'none').map((u) => u.className).join(' / ') }; })()`);
+  const st = () => ev(`(() => { const p = __g.player, r = getComputedStyle(document.getElementById('reticle')); return { x: p.pos.x, z: p.pos.z, yaw: p.camYaw, dist: p.shDist, heading: p.heading, shoulder: p.shoulder, ok: p.shoulderOk, coarse: p.coarse, btn: !document.getElementById('shoulder-btn').hidden, reticle: +r.opacity, photo: __g.photo.active, joyLeft: document.body.classList.contains('joy-left'), pref: localStorage.getItem('shoulder') }; })()`);
   const rect = (sel) => ev(`(() => { const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`);
 
   let s = await st();
@@ -65,7 +65,6 @@ try {
   s = await st();
   check(s.shoulder, '點越肩鈕：開了');
   check(s.reticle > 0.5, '準心出來', s.reticle);
-  check(/for-touch for-shoulder/.test(s.guide), '說明卡換成觸控越肩那張', s.guide);
 
   // 搖桿往右推：平移，鏡頭不轉
   const joy = await rect('#joy');
@@ -102,12 +101,12 @@ try {
   const body = Math.abs(Math.atan2(Math.sin(s.heading - Math.PI - s.yaw), Math.cos(s.heading - Math.PI - s.yaw)));
   check(body < 0.2, '身體轉向視線', body.toFixed(2));
 
-  // 搖桿外圈（拇指沒按準）拖：不轉
+  // 緊貼搖桿外面拖：跟自由視角一樣照樣轉
   s0 = s;
   await drag([joy[0], joy[1] - 80], [joy[0] + 100, joy[1] - 80]);
   await sleep(500);
   s = await st();
-  check(Math.abs(s.yaw - s0.yaw) < 0.01, '搖桿外圈拖：不轉視角', (s.yaw - s0.yaw).toFixed(3));
+  check(s.yaw - s0.yaw > 0.2, '緊貼搖桿外面拖：照樣轉視角', (s.yaw - s0.yaw).toFixed(2));
 
   // 搖桿那一側、外圈以外拖：照樣轉
   s0 = s;
@@ -140,7 +139,7 @@ try {
   s = await st();
   check(!s.shoulder && !s.btn, '轉直拿：退回一般視角、越肩鈕收起');
   check(s.pref === '1', '設定沒改', s.pref);
-  check(!s.joyLeft, '直拿搖桿回右邊');
+  check(s.joyLeft, '直拿搖桿留在左邊（跟著轉之前那一邊）');
   await screen(LAND);
   await sleep(800);
   s = await st();

@@ -145,7 +145,7 @@ const RATE = { focus: [12, 3], tab: [6, 3], tap: [8, 3] };
 // 外面只叫這一個。kind 是 UI 的代號；i 第幾個（分頁）；pan 左右
 export function uiSound(amb, kind, { i = 0, pan = 0 } = {}) {
   const ctx = amb.ctx, fn = UI[kind];
-  if (!ctx || amb.muted || amb.gone || !fn) return;
+  if (!ctx || amb.hush || !fn) return;
   if (RATE[kind] && !amb.allow(gates[kind] ??= {}, ...RATE[kind])) return;
   // 每次大小和高低都差一點，連按不像同一段錄音
   const vol = LEVEL[kind] * (BRIGHT.has(kind) && COARSE ? 0.7 : 1) * (0.85 + Math.random() * 0.15);
@@ -168,7 +168,7 @@ export function sfx(kind, o) { if (bound) uiSound(bound, kind, o); }
 const thingGates = {};
 export function thing(kind, vol = 0.3, p = 1) {
   const amb = bound, ctx = amb?.ctx, fn = MAT[kind];
-  if (!ctx || amb.muted || amb.gone || !fn) return;
+  if (!ctx || amb.hush || !fn) return;
   if (!amb.allow(thingGates[kind] ??= {}, 8, 3)) return;   // 滑桿拖著、翻得很快時不會變成一片
   amb.played(fn(ctx, amb.out(vol * (0.85 + Math.random() * 0.15), 0), ctx.currentTime + 0.02, p * (0.95 + Math.random() * 0.1), amb.noise));
 }

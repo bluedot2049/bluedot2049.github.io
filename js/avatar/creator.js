@@ -84,6 +84,8 @@ const BLOBS = ['52% 48% 55% 45% / 46% 56% 44% 54%', '45% 55% 48% 52% / 54% 44% 5
 
 const CLOSET = 3;
 const loadCloset = () => [...getSave().closet];
+// 畫臉板上的那張：一個人只有一張畫的臉（progress.js 的 face），這套沒戴也照樣攤出來改
+const myFace = (L) => decodeFace(L.face) || decodeFace(getSave().face) || new Uint8Array(FACE * FACE);
 const PAD = 256;           // 畫布像素，一格 4 像素
 const UNDO = 30;
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -112,6 +114,22 @@ export class Creator {
     this.undo = [];
     this.nav.innerHTML = MENU.map((t) => `<button class="med" data-tab="${t.id}"><span>${icon(t.id)}</span>${t.name}</button>`).join('')
       + `<i></i><button class="med-mini" data-act="dice" aria-label="骰子">${icon('dice')}</button><button class="med-mini" data-act="reset" aria-label="重來">${icon('reset')}</button>`;
+    // 骰子、重來按了先問一次：小卡長在那顆鈕旁邊，點別的地方就當取消
+    this.ask = document.createElement('div');
+    this.ask.id = 'dress-ask';
+    this.ask.hidden = true;
+    this.ask.innerHTML = '<p></p><div class="chips"><button class="on" data-ask="yes">確認</button><button id="dress-ask-no" data-ask="no">取消</button></div>';
+    this.ask.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ask]');
+      if (!b) return;
+      const act = this.asking;
+      this.closeAsk();
+      if (b.dataset.ask === 'yes') this.doAct(act);
+    });
+    this.nav.closest('#dress').append(this.ask);
+    document.addEventListener('pointerdown', (e) => {
+      if (!this.ask.hidden && !this.ask.contains(e.target) && !e.target.closest('[data-act="dice"], [data-act="reset"]')) this.closeAsk();
+    }, true);
     for (const el of [this.nav, this.subs, this.body, this.paint]) el.addEventListener('click', (e) => this.onClick(e));
     // 橫著排、捲軸藏起來的兩排：滑鼠滾輪改成左右捲，不然右邊的選不到
     for (const el of [this.subs, this.paint]) el.addEventListener('wheel', (e) => {
@@ -130,17 +148,57 @@ export class Creator {
     this.unlocked = unlockedSet();   // 可能剛從海市回來
     this.hint = null;
     this.look = { ...look };
-    this.cells = decodeFace(look.face) || new Uint8Array(FACE * FACE);
+    this.cells = myFace(look);
     this.frames = this.cells.eyes ? [...this.cells.eyes] : [];
     this.eyeMode = false;
     this.undo = [];
+    this.closeAsk();
     this.show(this.tab);
+  }
+
+  openAsk(act, btn) {
+    if (this.asking === act && !this.ask.hidden) return this.closeAsk();
+    this.asking = act;
+    this.ask.querySelector('p').textContent = act === 'dice' ? '整身重抽？' : '回到小學徒？';
+    this.ask.hidden = false;
+    // 放在鈕的下面，左右夾在鏡子面板裡；下面放不下就放上面。手機橫拿時圓章排成左欄，改放在鈕的右邊
+    const box = this.ask.offsetParent.getBoundingClientRect(), r = btn.getBoundingClientRect();
+    const w = this.ask.offsetWidth, h = this.ask.offsetHeight;
+    let x, y;
+    if (getComputedStyle(this.nav).flexDirection === 'column') {
+      x = r.right - box.left + 6;
+      y = Math.min(box.height - h - 8, r.top - box.top + r.height / 2 - h / 2);
+    } else {
+      x = Math.min(box.width - w - 8, Math.max(8, r.left - box.left + r.width / 2 - w / 2));
+      y = r.bottom - box.top + 6;
+      if (y + h > box.height - 8) y = r.top - box.top - h - 6;
+    }
+    this.ask.style.left = `${x}px`;
+    this.ask.style.top = `${Math.max(8, y)}px`;
+    this.ask.querySelector('[data-ask="yes"]').focus({ preventScroll: true });
+  }
+
+  closeAsk() {
+    this.asking = null;
+    this.ask.hidden = true;
+  }
+
+  // 骰子、重來：問過才做
+  doAct(act) {
+    const L = this.look;
+    if (act === 'dice') this.set(randomLook(L, this.unlocked), true);
+    // 重來：回到一般的小學徒，衣服顏色和畫好的臉留著
+    else if (act === 'reset') {
+      const P = presetLook(L.topC < 8 ? L.topC : 0);
+      P.face = L.face;
+      this.set(P, true);
+    }
   }
 
   set(L, rerender) {
     this.look = L;
     if (rerender) {
-      this.cells = decodeFace(L.face) || new Uint8Array(FACE * FACE);
+      this.cells = myFace(L);
       this.frames = this.cells.eyes ? [...this.cells.eyes] : [];
       this.render();
     }
@@ -226,18 +284,19 @@ export class Creator {
   pageHTML(id) {
     const L = this.look;
     const races = (odd) => RACES.filter((r) => !!r.odd === odd).map((r) => [r.id, r.name]);
-    const covered = L.one !== 'none' ? `<p class="dress-note">穿著${optionName('one', L.one)}，這一層先收起來了<button data-act="unone">脫掉</button></p>` : '';
+    const covered = L.one !== 'none' ? `<p class="dress-note">${optionName('one', L.one)}蓋住這一層<button data-act="unone">脫掉</button></p>` : '';
     switch (id) {
       case 'race': return this.tiles('race', '人和動物', races(false), false) + this.tiles('race', '其他', races(true));
       case 'shape': return this.slider('tall') + this.slider('fat') + this.slider('head');
-      case 'hair': return !raceOf(L).hair ? '<p class="dress-note">這個種族沒有頭髮，換成「人」才能選</p>'
-        : (HOODED.includes(L.one) && TUCKED[L.hair] ? `<p class="dress-note">穿著${optionName('one', L.one)}，頭髮收在裡面<button data-act="unone">脫掉</button></p>` : '') + this.tiles('hair');
-      case 'parts': return (L.face && !L.keep ? `<p class="dress-note">畫了臉，原本的五官先收起來了<button data-act="keep">叫回來</button></p>` : '')
-        + (L.glasses === 'groucho' ? '<p class="dress-note">戴著搞笑眼鏡，鼻子和八字鬍先收起來了<button data-act="unglasses">摘掉</button></p>' : '')
+      case 'hair': return !raceOf(L).hair ? '<p class="dress-note">只有「人」有頭髮</p>'
+        : (HOODED.includes(L.one) && TUCKED[L.hair] ? `<p class="dress-note">${optionName('one', L.one)}蓋住頭髮<button data-act="unone">脫掉</button></p>` : '') + this.tiles('hair');
+      case 'parts': return (L.face && !L.keep ? `<p class="dress-note">畫的臉蓋住五官<button data-act="keep">顯示五官</button></p>` : '')
+        + (!L.face && getSave().face ? `<p class="dress-note">這套沒戴畫的臉<button data-act="wear">戴上</button></p>` : '')
+        + (L.glasses === 'groucho' ? '<p class="dress-note">搞笑眼鏡蓋住鼻子和鬍子<button data-act="unglasses">摘掉</button></p>' : '')
         + this.tiles('eyes', '眼睛') + this.tiles('brows', '眉毛') + this.tiles('nose', '鼻子') + this.tiles('mouth', '嘴巴') + this.tiles('mark', '臉上');
       case 'pos': return this.slider('eyeSize') + this.slider('eyeGap') + this.slider('eyeOdd') + this.slider('faceY');
       case 'glasses': return this.tiles('glasses');
-      case 'draw': return `<div class="pad">
+      case 'draw': return this.faceNote() + `<div class="pad">
           <canvas id="pad" width="${PAD}" height="${PAD}" aria-label="畫臉"></canvas>
           <div class="pad-tools">
             <div class="inks">${FACE_INK.map((c, i) => i
@@ -248,13 +307,14 @@ export class Creator {
               <button data-act="sym">左右對稱</button>
               <button data-act="undo">復原</button>
               <button data-act="clear">清掉</button>
+              <button data-act="wearface">這套戴</button>
               <button data-act="keep">留著五官</button>
               <button data-act="eyes">眼睛</button>
             </div>
             <p class="pad-note"></p>
           </div>
         </div>`;
-      case 'hat': return (HOODED.includes(L.one) ? `<p class="dress-note">穿著${optionName('one', L.one)}，帽子先收起來了<button data-act="unone">脫掉</button></p>` : '') + this.tiles('hat');
+      case 'hat': return (HOODED.includes(L.one) ? `<p class="dress-note">${optionName('one', L.one)}蓋住帽子<button data-act="unone">脫掉</button></p>` : '') + this.tiles('hat');
       case 'top': return covered + this.tiles('top') + this.tiles('topPat', '花紋');
       case 'bottom': return covered + this.tiles('bottom') + this.tiles('botPat', '花紋');
       case 'outer': return covered + this.tiles('outer');
@@ -286,7 +346,7 @@ export class Creator {
     const frames = Array.from({ length: CLOSET }, (_, i) => {
       const s = slots[i] ? sanitizeLook(slots[i]) : null;
       const what = s ? `${raceOf(s).name}・${s.one !== 'none' ? optionName('one', s.one) : optionName('top', s.top) + '配' + optionName('bottom', s.bottom)}` : '空的';
-      const pic = s ? `<button class="frame" data-act="wear" data-i="${i}" aria-label="穿上第 ${i + 1} 套">${this.thumb('closet:' + i, s, 'full')}</button>`
+      const pic = s ? `<button class="frame" data-act="wear" data-i="${i}" aria-label="穿上第 ${i + 1} 套">${this.thumb('closet:' + i, s, 'full')}${s.face ? '<i class="face-tag">戴臉</i>' : ''}</button>`
         : `<button class="frame empty" data-act="store" data-i="${i}" aria-label="把現在的樣子存進第 ${i + 1} 格">空的</button>`;
       return `<div class="closet-slot">${pic}<small>${what}</small><button class="store" data-act="store" data-i="${i}">存進來</button></div>`;
     }).join('');
@@ -297,7 +357,7 @@ export class Creator {
         ? `<button class="stamp" data-stamp="${v}" aria-label="${g.who}送的">${this.thumb('stamp:' + v, { ...this.look, one: k === 'one' ? id : 'none', [k]: id }, FRAME[k])}</button>`
         : `<button class="stamp empty" data-stamp="${v}" aria-label="還沒拿到"></button>`;
     }).join('');
-    return label('掛在牆上的三套') + `<div class="closet">${frames}</div><p class="dress-note">點畫框換上那一套</p>`
+    return this.faceNote() + label('掛在牆上的三套') + `<div class="closet">${frames}</div><p class="dress-note">點畫框換上${getSave().face ? '。畫的臉三套共用，各自選戴不戴' : ''}</p>`
       + label(`海市拿到的　${got.length} / ${gifts.length}`) + `<div class="stamps">${stamps}</div>` + this.hintHTML('stamps');
   }
 
@@ -309,14 +369,14 @@ export class Creator {
     if (b.dataset.sub) { this.show(this.tab, b.dataset.sub); return; }
     if (b.dataset.lock) {
       const g = GIFTS[b.dataset.lock];
-      this.hint = { k: b.dataset.hk, text: `這個要去海市找${g.who}拿` };
+      this.hint = { k: b.dataset.hk, text: `在海市，向${g.who}拿` };
       this.render();
       return;
     }
     if (b.dataset.stamp) {
       const v = b.dataset.stamp, g = GIFTS[v];
       const got = !b.classList.contains('empty');
-      this.hint = { k: 'stamps', text: got ? `${g.who}送的：${g.items.map(([kk, id]) => optionName(kk, id)).join('、')}` : `去海市找${g.who}聊聊看` };
+      this.hint = { k: 'stamps', text: got ? `${g.who}送的：${g.items.map(([kk, id]) => optionName(kk, id)).join('、')}` : `在海市，找${g.who}` };
       this.render();
       return;
     }
@@ -331,16 +391,16 @@ export class Creator {
     if (b.dataset.ink) this.ink = +b.dataset.ink;
     else if (b.dataset.brush) this.brush = +b.dataset.brush;
     else switch (b.dataset.act) {
-      case 'dice': this.set(randomLook(L, this.unlocked), true); return;
-      // 重來：回到一般的小學徒，衣服顏色和畫好的臉留著
-      case 'reset': {
-        const P = presetLook(L.topC < 8 ? L.topC : 0);
-        P.face = L.face;
-        this.set(P, true);
-        return;
-      }
+      case 'dice': case 'reset': this.openAsk(b.dataset.act, b); return;
       case 'slot': this.slot = this.slot ? 0 : 1; this.renderPaint(this.page); return;
       case 'keep': this.set({ ...L, keep: L.keep ? 0 : 1 }, true); return;
+      // 戴上、拿下畫的那張臉：只動這一套，臉本身留著
+      case 'wear': case 'wearface': {
+        const f = getSave().face;
+        if (L.face || f) this.set({ ...L, face: L.face ? '' : f }, true);
+        return;
+      }
+      case 'facenote': putSave({ faceNote: 0 }); this.render(); return;
       case 'unone': this.set({ ...L, one: 'none' }, true); return;
       case 'unglasses': this.set({ ...L, glasses: 'none' }, true); return;
       case 'wear': {
@@ -418,10 +478,11 @@ export class Creator {
     q('[data-brush]').forEach((b) => b.classList.toggle('on', +b.dataset.brush === this.brush));
     q('[data-act="sym"]').forEach((b) => b.classList.toggle('on', this.sym));
     q('[data-act="keep"]').forEach((b) => b.classList.toggle('on', !!this.look.keep));
+    q('[data-act="wearface"]').forEach((b) => { b.classList.toggle('on', !!this.look.face); b.hidden = !this.look.face && !getSave().face; });
     q('[data-act="eyes"]').forEach((b) => b.classList.toggle('on', this.eyeMode));
     q('[data-act="undo"]').forEach((b) => b.classList.toggle('off', !this.undo.length));
     const note = this.body.querySelector('.pad-note');
-    if (note) note.textContent = this.eyeMode ? '框住你畫的眼睛，角色會照著眨眼、瞟一眼。按在框裡拖著走，按在框外重新框一個。' : '';
+    if (note) note.textContent = this.eyeMode ? '框住畫的眼睛，角色照框眨眼。框內拖曳移動，框外重框' : this.faceTip();
   }
 
   snapshot() {
@@ -452,9 +513,25 @@ export class Creator {
     this.markTools();
   }
 
+  // 畫一筆就是改這個人唯一的那張臉：這套戴上，衣櫃裡戴著的幾套跟著換（progress.js 的 putSave）；清掉就每一套都沒有了
   commit() {
-    this.look = { ...this.look, face: encodeFace(this.cells, this.frames) };
+    const face = encodeFace(this.cells, this.frames);
+    putSave({ face });
+    this.look = { ...this.look, face };
     this.events.onChange(this.look);
+  }
+
+  // 畫臉板下面那行小字：臉只有一張，告訴他改了會動到哪幾套
+  faceTip() {
+    const n = loadCloset().filter((L) => L?.face).length;
+    if (!this.look.face) return getSave().face ? '這套沒戴。動筆就戴上' : '一人一張臉，三套共用';
+    return n ? `衣櫃裡 ${n} 套戴著，會一起改` : '一人一張臉，三套共用';
+  }
+
+  // 舊存檔每套各畫一張臉，併成一張以後說一次
+  faceNote() {
+    const n = getSave().faceNote;
+    return n ? `<p class="dress-note">畫的臉改為一人一張，另外 ${n} 張已移除<button data-act="facenote">知道了</button></p>` : '';
   }
 
   // ---------- 眼睛框 ----------

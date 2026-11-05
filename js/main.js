@@ -36,6 +36,7 @@ import { installGrade, gradeAt, NEUTRAL } from './core/grade.js';
 import { Hollow } from './zones/gallery/hollow.js';
 import { PLACES } from './scene/places.js';
 import { bindDeskKeys } from './controls/deskkeys.js';
+import { bindVolume } from './controls/volume.js';
 import { bindGamepad, rumble, padBtn } from './controls/gamepad.js';
 import { is, key } from './controls/keymap.js';
 import { Beast } from './npc/beast.js';
@@ -89,13 +90,13 @@ document.addEventListener('dragstart', (e) => { if (e.target.tagName === 'IMG' &
 // 自己捏的樣子存在這台裝置上（looks.js 的存檔），下次來還是同一個。第一次來隨機配一套顏色
 // 網址帶 #save=存檔碼：整份存檔搬過來（蓋掉之前先問）。#look=造型碼：只是試穿，不存、不動解鎖，重新整理就回到自己的樣子
 function loadLook() {
-  const m = /^#(save|look)=([\w.,:~-]+)$/.exec(location.hash);
+  const m = /^#(save|look)=([\w.,:~=-]+)$/.exec(location.hash);
   if (m) {
     try { history.replaceState(null, '', location.pathname + location.search); } catch {}
     if (m[1] === 'save') {
       const sv = decodeSave(m[2]);
-      if (!sv) alert('這串存檔碼打不開，可能少了幾個字');
-      else if (!hasProgress() || confirm('這台裝置上已經有東西了，要用存檔碼蓋掉嗎？')) restoreSave(sv);
+      if (!sv) alert('存檔碼打不開，可能缺字');
+      else if (!hasProgress() || confirm('這台裝置已有存檔。用存檔碼覆蓋？')) restoreSave(sv);
     } else {
       const L = decodeLook(m[2]);
       if (L) return tryOn(L);
@@ -153,7 +154,9 @@ async function precompile(renderer, scene, camera, world, toTexture = false) {
 
 async function start() {
   const params = new URLSearchParams(location.search);
-  const zone = Object.hasOwn(ZONES, params.get('z')) ? params.get('z') : 'gallery';
+  // 還在蓋的區域（places.js 寫 dev）直接打網址也進不去，要加 ?debug
+  const devOnly = PLACES.some((d) => d.dev === params.get('z')) && !params.has('debug');
+  const zone = Object.hasOwn(ZONES, params.get('z')) && !devOnly ? params.get('z') : 'gallery';
   // 介面依區域換字色（hud.css 的 :root[data-zone]）
   document.documentElement.dataset.zone = zone;
   // 區域的程式和 gallery.json 同時下載
@@ -326,7 +329,7 @@ async function start() {
       if (atMirror()) creator.set(L, true);
       else {
         wear(L);
-        ui.hint('換上明信片上的這一身', 3000);
+        ui.hint('已換上明信片上的造型', 3000);
       }
     },
   });
@@ -344,7 +347,7 @@ async function start() {
         const span = soul.querySelector('span');
         span.textContent = '讀取中…';
         const got = await pack.read(f);
-        span.textContent = got === 'look' ? '換上了，進去看看' : '讀取靈魂相片';
+        span.textContent = got === 'look' ? '已換上' : '讀取靈魂相片';
       };
       input.click();
     });
@@ -359,7 +362,8 @@ async function start() {
       guide?.closeCard();
       // 照鏡子時拖曳、縮放是在轉著看自己，面板留著
       if (!(kind === 'drag' && player.focus?.kind === 'mirror')) ui.hideDress();
-      ui.hideHint();
+      else ui.learned('mirror-turn');
+      // 提示不跟著收：回饋、事件停到讀得完，教學等做了那件事才收（ui.js 的 hint、tip）
       ui.hideGuide();
       hollow.close();
       ask?.close();
@@ -377,7 +381,7 @@ async function start() {
       creator.open(look);
       if (!mirrorTurnHinted) {
         mirrorTurnHinted = true;
-        ui.hint('拖曳可以轉身', 3500);
+        ui.tip('mirror-turn', '拖曳轉身', 3500);
       }
     },
     onJump(k = 1) {
@@ -391,8 +395,9 @@ async function start() {
       mp?.sendNow();
       if (on && !sitHinted) {
         sitHinted = true;
-        ui.hint(coarse ? (player.shoulder ? '推搖桿就會站起來' : '推搖桿或點地面就會站起來') : '走動或點地面就會站起來', 4000);
+        ui.tip(`stand-${coarse ? 'touch' : 'desk'}`, coarse ? (player.shoulder ? '推搖桿起身' : '推搖桿或點地面起身') : '走動或點地面起身', 4000);
       }
+      if (!on) ui.learned(`stand-${coarse ? 'touch' : 'desk'}`);
     },
     onFood() {
       mp?.sendNow();
@@ -437,10 +442,11 @@ async function start() {
       showCams(i);
       if (coarse && !camSwipeHinted) {
         camSwipeHinted = true;
-        ui.hint('左右滑動換一台', 3500);
+        ui.tip('cam-swipe', '左右滑動換相機', 3500);
       }
     },
     onCamStep(dir) {
+      ui.learned('cam-swipe');
       const f = player.focus, i = f ? THREE.MathUtils.clamp(f.slot + dir, 0, TABLE.length - 1) : -1;
       if (i < 0 || i === f.slot) return;
       player.viewCamSlot(i);
@@ -450,7 +456,7 @@ async function start() {
       ui.showPainting(p, p.url);
       if (coarse && !swipeHinted) {
         swipeHinted = true;
-        ui.hint('左右滑動切換作品', 4000);
+        ui.tip('art-swipe', '左右滑動切換作品', 4000);
       }
     },
     onRoomChange(i) {
@@ -459,7 +465,7 @@ async function start() {
       const r = world.rooms[i].data;
       ui.toast(r.name, r.subtitle);
       place = null;
-      if (bgm && i >= world.rooms.findIndex((room) => room.id === bgm.from)) ambience.music(bgm.src, bgm.rest);
+      if (bgm && i >= world.rooms.findIndex((room) => room.id === bgm.from)) ambience.music(bgm.src, bgm.rest, bgm.len);
     },
   });
   scene.add(player.marker);
@@ -486,7 +492,7 @@ async function start() {
   }
   for (const src of Z.attention?.({ world, player }) ?? []) attention.add(src);
   // 白獸（beast.js）：很久才出現一次，同一區的人同時看到。拍到的照片快門當下評分，拿去海市星台的報社登報
-  const beast = new Beast({ scene, world, zone, where: PLACES.find((d) => d.to === zone)?.name ?? '', ambience, attention, spots: Z.beast?.spots, params });
+  const beast = new Beast({ scene, world, zone, where: PLACES.find((d) => (d.to || d.dev) === zone)?.name ?? '', ambience, attention, spots: Z.beast?.spots, params });
   // 動物叫了一聲：轉頭看牠
   if (animals) animals.onSay = (a, d) => d < 10 && attention.notice(`a${a.index}`, (o) => a.shown && !!a.rig.head.getWorldPosition(o), { kind: 'animal', dur: 1.2 + Math.random() * 1.2 });
   // 別人做了什麼（揮手、跳、閃光、說話）：在附近就轉頭看他一下
@@ -605,7 +611,7 @@ async function start() {
       ambience.voice('setdown', 0.35);
       setTimeout(() => ambience.voice('strap', 0.45), 380);
     } else ambience.voice(next ? 'strap' : 'setdown', 0.45);
-    ui.hint(next ? `帶著${CAMERAS[next].name}出門。按相機鈕拍照` : '放回桌上了。拍照時又是畫廊的眼睛，可以到處飛', 4000);
+    ui.hint(next ? `帶著${CAMERAS[next].name}。按相機鈕拍照` : '已放回桌上。拍照改用畫廊的眼睛', 4000);
     showCams(f.slot);
   });
   dropPref('director');   // 導演運鏡拿掉了，舊的開關設定清掉
@@ -613,17 +619,21 @@ async function start() {
 
   // 手機操作：搖桿走路，靠近畫作或鏡子時出現按鈕
   if (coarse) document.body.classList.add('touch');
-  // 搖桿放哪一邊：直拿在右，單手拇指推；橫拿在左，跟一般雙手拿的遊戲一樣。換邊鈕把兩個方向都反過來，記住選擇
+  // 搖桿放哪一邊：沒選過時照開頭的拿法，直拿在右（單手拇指推）、橫拿在左（跟一般雙手拿的遊戲一樣）。
+  // 轉直橫不換邊，搖桿和拇指弧留在原本那一側；換邊鈕（攝影模式也有）換了就記住
   if (coarse) {
-    const land = matchMedia('(orientation: landscape)');
-    let swap = pref('joySwap');
-    const placeJoy = () => document.body.classList.toggle('joy-left', land.matches !== swap);
-    placeJoy();
-    land.addEventListener('change', placeJoy);
+    let side = pref('joySide');
+    if (side !== 'L' && side !== 'R') {
+      const land = matchMedia('(orientation: landscape)').matches;
+      if (pref('joySwap')) { side = land ? 'R' : 'L'; setPref('joySide', side); }
+      else side = land ? 'L' : 'R';
+    }
+    dropPref('joySwap');
+    document.body.classList.toggle('joy-left', side === 'L');
     document.getElementById('swap-btn').addEventListener('click', () => {
-      swap = !swap;
-      setPref('joySwap', swap);
-      placeJoy();
+      side = side === 'L' ? 'R' : 'L';
+      setPref('joySide', side);
+      document.body.classList.toggle('joy-left', side === 'L');
     });
   }
   bindJoystick(document.getElementById('joy'), document.getElementById('joy-knob'), (x, y) => (photo.active ? photo.setJoystick(x, y) : player.setJoystick(x, y)));
@@ -684,27 +694,18 @@ async function start() {
   player.cursorWanted = () => {
     const b = document.body.classList;
     return b.contains('panel-open') || b.contains('chatting') || !document.getElementById('pack-card').hidden
-      || !!document.querySelector('#list.open, #guide.show, #ask.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show') || !!document.activeElement?.closest?.('input, textarea');
+      || !!document.querySelector('#list.open, #vol.open, #guide.show, #ask.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show') || !!document.activeElement?.closest?.('input, textarea');
   };
   // 第一次鎖住滑鼠時提一下怎麼點按鈕
   let lockTold = false;
   document.addEventListener('pointerlockchange', () => {
     if (!player.locked || lockTold) return;
     lockTold = true;
-    ui.toast(`按住 ${key('cursor')} 叫出游標`, `${key('pack')} 行囊　Esc 暫停選單`);
+    ui.toast(`按住 ${key('cursor')} 顯示游標`, `${key('pack')} 行囊　Esc 暫停選單`);
   });
 
-  // 聲音開關：戶外的風聲和動物叫聲共用，室內也有貓，所以一直都在
-  const soundBtn = document.getElementById('sound-btn');
-  const soundLabel = () => {
-    const text = ambience.muted ? '開啟聲音' : '靜音';
-    soundBtn.classList.toggle('muted', ambience.muted);
-    soundBtn.setAttribute('aria-label', text);
-    soundBtn.title = text;
-  };
-  soundLabel();
-  soundBtn.hidden = false;
-  soundBtn.addEventListener('click', () => { ambience.setMuted(!ambience.muted); soundLabel(); });
+  // 聲音鈕：點一下打開音量盤（volume.js），全部、音樂、音效三根推桿和靜音。室內也有貓，所以一直都在
+  bindVolume(ambience);
 
   // 越肩視角開關，player.js 記住上次的選擇；F 鍵切換時按鈕也跟著變
   const shoulderBtn = document.getElementById('shoulder-btn');
@@ -951,7 +952,7 @@ async function start() {
     guide.isMate = (id) => !!party && [...party.mates.values()].some((o) => o.s === id);
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, guide };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, guide, creator };
   const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass, dofPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
@@ -1033,7 +1034,8 @@ async function start() {
     if (byDoor) ui.toast(world.rooms[0].data.name, world.rooms[0].data.subtitle);
     if (params.has('photo')) photo.enter();
     // 鍵照換過的寫（keymap.js、gamepad.js）
-    else if (!homeDoor) setTimeout(() => (byDoor && lastInput > at) || ui.hint(pad.active ? `左搖桿走路　右搖桿轉視角　${padBtn(3)} 跳　${padBtn(2)} 坐${zone === 'gallery' ? `　${padBtn(-1)} 看畫` : ''}`
+    // 教學：每種操作（手把、觸控、鍵盤滑鼠）這台裝置說兩次就夠了
+    else if (!homeDoor) setTimeout(() => (byDoor && lastInput > at) || ui.tip(`move-${pad.active ? 'pad' : coarse ? 'touch' : 'desk'}`, pad.active ? `左搖桿走路　右搖桿轉視角　${padBtn(3)} 跳　${padBtn(2)} 坐${zone === 'gallery' ? `　${padBtn(-1)} 看畫` : ''}`
       : coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿${player.shoulder ? '走路　拖曳轉視角' : '或點地面走路　拖曳轉視角'}`
       : `點地面或 ${['fwd', 'left', 'back', 'right'].map((id) => key(id)).join('')} 走路　拖曳轉視角　${key('jump')} 跳　${key('sit')} 坐${zone === 'gallery' ? `　${key('interact')} 看畫` : ''}`, 6000), byDoor ? 2600 : 0);
   });

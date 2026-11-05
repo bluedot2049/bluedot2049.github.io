@@ -9,7 +9,7 @@
 // 欄位的意思變了、要搬位置，才把 SAVE_V 加一、MIGRATIONS 寫一條「舊版轉下一版」的函式；不要再清空舊存檔。
 // 音量、操作習慣這些屬於裝置，不放這裡（prefs.js）
 
-export const SAVE_V = 1;
+export const SAVE_V = 2;
 // 每個欄位：init 沒有時的值；read 把存檔裡的東西整理成合法的值（壞掉的當成沒有）；
 // print 算不算進封蠟的指紋（pack.js：改了這些才算「有東西沒存」，各攤的日子天天變，不算）；
 // code 怎麼寫進存檔碼：tag 是碼裡的短名（一個字母，不能跟別的重複），enc 回傳空字串就不寫，dec 讀不懂回傳 init 的值；
@@ -20,6 +20,10 @@ export const FIELDS = [
   { key: 'closet', init: () => [], read: (v) => (Array.isArray(v) ? v.slice(0, 3) : []), print: true },
   { key: 'unlocked', init: () => [], read: (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []), print: true },
   { key: 'visits', init: () => ({}), read: (v) => (v && typeof v === 'object' ? v : {}) },
+  // 自己畫的臉：一個人只有一張（looks.js 的臉碼，'' 是沒畫）。身上和衣櫃每一套只記戴不戴：戴的那套 face 就是這張，不戴是 ''（oneFace 管著）。
+  // 存檔碼裡是 f=臉碼；鏡中照片、明信片的碼寫 f=.，臉另外印在鏡框、底片邊（savecode.js 的 attachFaces）
+  { key: 'face', init: () => '', read: (v) => (typeof v === 'string' && v.length <= 12000 && /^[a-i0-9:-]*$/.test(v) ? v : ''), print: true,
+    code: { tag: 'f', iris: false, away: true, enc: (v) => v || '', dec: (s) => s } },
   // 帶在身上的相機（cameras.js 的 id）：換裝置也跟著走
   { key: 'camera', init: () => null, read: (v) => (typeof v === 'string' ? v : null), code: { tag: 'c', enc: (v) => v || '', dec: (s) => (/^[a-z0-9]{1,16}$/i.test(s) ? s : null) } },
   // 手把換過的按鍵（gamepad.js）：16 顆的對調表，沒換過是 null。使用者要它跟著存檔照片走，所以不放 prefs；改了不算「有東西沒存」
@@ -30,6 +34,8 @@ export const FIELDS = [
   // asked 是問過他哪幾題（ASK 的 id）。跟著這個人走，但不進存檔碼：換了裝置只是題目又亮起來
   { key: 'tour', init: () => [], read: words },
   { key: 'asked', init: () => [], read: words },
+  // 舊存檔每套各畫一張臉，併成一張時丟掉了幾張不一樣的。換裝面板說一次就歸零（creator.js）
+  { key: 'faceNote', init: () => 0, read: (v) => (Number.isInteger(v) && v > 0 && v < 4 ? v : 0) },
 ];
 // 0–15 每個剛好出現一次才算；跟沒換一樣的也當成沒換
 function padKeys(v) {
@@ -43,7 +49,28 @@ function deskKeys(v) {
   return typeof v === 'string' && v.length && v.length <= 600 && /^([0-9a-f]{6})+$/.test(v) ? v : null;
 }
 // 版本 n 轉成 n+1：{ 1: (s) => ({ ...s, v: 2, 新欄位: 從舊欄位算 }) }
-const MIGRATIONS = {};
+const MIGRATIONS = {
+  // 1 → 2：每套各自的臉併成一張
+  1: (s) => { const t = { ...s, closet: Array.isArray(s.closet) ? s.closet : [] }; t.faceNote = mergeFaces(t); return { ...t, v: 2 }; },
+};
+
+// 舊的（每套各帶一張臉）併成一張：留第一張畫了的（身上那套優先，再來衣櫃照順序），畫了別張的那幾套也改戴這張。
+// 直接改 s（s.face、各套的 face），回傳丟掉了幾張不一樣的
+export function mergeFaces(s) {
+  const looks = [s.look, ...s.closet], has = (L) => L && typeof L === 'object' && typeof L.face === 'string' && L.face;
+  const face = looks.find(has)?.face || '';
+  const dropped = new Set(looks.filter(has).map((L) => L.face).filter((f) => f !== face)).size;
+  s.face = face;
+  wearFace(s);
+  return dropped;
+}
+
+// 戴著臉的每一套都換成 s.face（s.face 是空的就是都不戴了）
+function wearFace(s) {
+  const fit = (L) => (L && typeof L === 'object' && L.face && L.face !== s.face ? { ...L, face: s.face } : L);
+  s.look = fit(s.look);
+  s.closet = s.closet.map(fit);
+}
 
 let cache = null;
 export function getSave() {
@@ -59,6 +86,7 @@ export function getSave() {
   for (let v = s.v | 0; v >= 1 && v < SAVE_V; v++) s = MIGRATIONS[v]?.(s) ?? { ...s, v: v + 1 };
   cache = { v: SAVE_V };
   for (const f of FIELDS) cache[f.key] = f.key in s ? f.read(s[f.key]) : f.init();
+  wearFace(cache);
   if (fresh) {
     putSave({});
     // 請瀏覽器別隨便清掉（不保證有用）
@@ -67,8 +95,11 @@ export function getSave() {
   return cache;
 }
 
+// 臉只有一張：patch 給了 face 就是它；身上換了一套戴著臉的（畫臉工具剛畫好）就是那張；其他照舊，戴著的幾套跟著換
 export function putSave(patch) {
   const s = Object.assign(getSave(), patch);
+  if (!('face' in patch) && patch.look?.face) s.face = patch.look.face;
+  wearFace(s);
   try { localStorage.setItem('save', JSON.stringify(s)); } catch {}
   // 行囊（pack.js）聽這個，看封蠟要不要亮
   if (typeof dispatchEvent === 'function') dispatchEvent(new Event('savechange'));

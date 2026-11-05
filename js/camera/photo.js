@@ -18,7 +18,7 @@
 // 看鏡（lookOn）：開著時自己的頭一直看著鏡頭，關著就隨意看（attention.js）。鏡頭的位置和方向由 lensInfo 給別人和自己的頭
 import * as THREE from 'three';
 import { lens, fitSource, unbend, COVER } from '../core/lens.js';
-import { makePostcard, loadQR } from '../save/postcard.js';
+import { makePostcard, loadQR, spreadFace, FILM_ORDER } from '../save/postcard.js';
 import { packFace } from '../save/filmcode.js';
 import { sanitizeLook, decodeFace } from '../avatar/looks.js';
 import { getSave } from '../save/progress.js';
@@ -27,7 +27,7 @@ import { savePrint } from '../save/pack.js';
 import { CAMERAS, carried, dateKnob, drawDate, eyeShutter, flashKnob, longTan, shutterKnob } from './cameras.js';
 import { MARKS, markURL } from './marks.js';
 import { dof, dofK } from '../core/dof.js';
-import { addPhoto, canShare, discard, saveChosen, saveTip, shareChosen } from './album.js';
+import { addPhoto, canShare, discard, onSnap, saveChosen, saveTip, shareChosen } from './album.js';
 import { pref, setPref, dropPref } from '../save/prefs.js';
 import { onFreshTouch } from '../controls/touch.js';
 import { rumble, padKey, padPair, padBtn } from '../controls/gamepad.js';
@@ -170,7 +170,7 @@ export class PhotoMode {
     this.grip = 1;                          // 拿法：GRIPS 的第幾個
     this.upright = 0;                       // 0 橫拿、1 直拿
     this.flashOn = 0;                       // 0 開、1 關
-    this.dateOn = 0;                        // 日期印記，0 年月日、1 不印、2 月日（0、1 跟以前的開、關一樣）
+    this.dateOn = 0;                        // 日期印記，0 印、1 不印（以前的 2 月日讀進來當成印）
     this.focusD = 3;                        // 對焦的距離（公尺）
     this.af = null;                         // 正在對焦 { from, to, t }
     this.afPoint = null;                    // 對焦點在畫面上的位置 { x, y }；null 是正中間（準心）
@@ -233,7 +233,7 @@ export class PhotoMode {
     this.grip = pick(s.grip, GRIPS.length, 1);
     this.upright = pick(s.upright, 2, 0);
     this.flashOn = pick(s.flash, 2, 0);
-    this.dateOn = pick(s.date, 3, 0);
+    this.dateOn = pick(s.date, 2, 0);
     this.aimPitch = this.pitch = THREE.MathUtils.clamp(this.pitch * 0.3, -0.3, 0.3);
     this.af = null;
     this.needAF = true;
@@ -314,9 +314,10 @@ export class PhotoMode {
     this.refresh();
     if (quick) this.quickHint();
     else if (studio) this.setStudio(studio);
-    else if (postcard) this.ui.hint('拍一張做成明信片，拍好就能寄出去', 6000);
-    else if (gear) this.ui.hint(this.padHint() ?? (this.coarse ? '搖桿走路　拖曳轉身　點一下對焦　按住快門慢慢曝光' : `${wasd()} 走路　拖曳轉身　點一下對焦　${key('shutter', 1)} 拍照，按住慢慢曝光` + (this.gear.flash ? `　${key('flash')} 閃光` : '') + `　${key('turn')} 直橫`), 6000);
-    else this.ui.hint(this.padHint() ?? (this.coarse ? '拖曳轉頭　雙指變焦　點兩下靠近　點一下收起按鈕' : `${wasd()} 移動　${key('up')} ${key('down')} 升降　拖曳轉頭　滾輪變焦　點兩下靠近　${key('shutter', 1)} 拍照　${key('bare')} 收起按鈕`), 6000);
+    else if (postcard) this.ui.hint('拍一張，做成明信片', { id: 'photo:card', ms: 6000 });
+    // 操作那行是教學：每種拿法、每種操作這台裝置說兩次就夠了（ui.js 的 tip）
+    else if (gear) this.ui.tip(`photo:gear-${this.inputKind()}`, this.padHint() ?? (this.coarse ? '搖桿走路　拖曳轉身　點一下對焦　按住快門慢慢曝光' : `${wasd()} 走路　拖曳轉身　點一下對焦　${key('shutter', 1)} 拍照，按住慢慢曝光` + (this.gear.flash ? `　${key('flash')} 閃光` : '') + `　${key('turn')} 直橫`), 6000);
+    else this.ui.tip(`photo:eye-${this.inputKind()}`, this.padHint() ?? (this.coarse ? '拖曳轉頭　雙指變焦　點兩下靠近　點一下收起按鈕' : `${wasd()} 移動　${key('up')} ${key('down')} 升降　拖曳轉頭　滾輪變焦　點兩下靠近　${key('shutter', 1)} 拍照　${key('bare')} 收起按鈕`), 6000);
   }
 
   exit() {
@@ -377,7 +378,7 @@ export class PhotoMode {
     // 拿著相機時人可能走遠了，跟拍鏡頭還停在拿起相機的地方：直接切回角色身後
     this.player.snapCamera();
     this.world.setCurrentRoom(this.player.room, true);   // 鏡頭一下子跳回角色身邊，房間也直接切
-    this.ui.hideHint();
+    this.ui.hideHint('photo:');
     left?.();
   }
 
@@ -397,7 +398,7 @@ export class PhotoMode {
     this.fov = this.cur = c.fov;
     this.self = true;
     this.refresh();
-    this.ui.hint(c.host ? '站好了。按快門，照相師會數三聲' : '站好了，等拍照的人按快門', 6000);
+    this.ui.hint(c.host ? '站定。按快門後倒數三聲' : '站定。等對方按快門', 6000);
   }
 
   // 照相館的快門：三、二、一，閃光一下才拍
@@ -462,14 +463,14 @@ export class PhotoMode {
     this.lookOn = !this.lookOn;
     this.save();
     this.refreshLook();
-    if (this.quick && !this.gear) this.ui.hint(this.lookOn ? '看著鏡頭' : '隨意看', 1500);
+    if (this.quick && !this.gear) this.ui.hint(this.lookOn ? '看著鏡頭' : '隨意看', { id: 'photo:look', ms: 1500 });
   }
 
   refreshLook() {
     const b = this.$('#ph-look');
     b.classList.toggle('on', this.lookOn);
     b.setAttribute('aria-pressed', this.lookOn);
-    b.title = (this.lookOn ? '一直看著鏡頭' : '隨意看，偶爾瞄一眼') + (this.coarse ? '' : `（${key('look')}）`);
+    b.title = (this.lookOn ? '看鏡頭' : '隨意') + (this.coarse ? '' : `（${key('look')}）`);
   }
 
   // 右鍵：按下舉起來、放開放下；按一下就放（短於 0.25 秒）是一直舉著，再按一次才放下
@@ -513,8 +514,9 @@ export class PhotoMode {
   quickHint() {
     const pad = document.body.classList.contains('pad'), lb = document.body.dataset.padLabels || null;
     const told = (pad ? 'pad-' : '') + (this.gear ? 'held' : 'drone');
+    // 每頁說一次，同一台裝置說兩次就不再說（ui.js 的 fresh）
     this.told ??= {};
-    if (this.told[told]) return;
+    if (this.told[told] || !this.ui.fresh(`quick-${told}`)) return;
     this.told[told] = true;
     const lock = this.gear?.focus === 'lock';
     // 鍵照換過的寫：手把 gamepad.js 的 padKey，鍵盤滑鼠 keymap.js 的 key
@@ -527,6 +529,11 @@ export class PhotoMode {
   }
 
   // 完整攝影模式剛打開時上緣那行，手把在用時寫手把的鍵；沒在用回傳 null
+  // 現在用什麼操作：教學提示照這個分開記（換到手機或手把的人還沒看過那一套）
+  inputKind() {
+    return document.body.classList.contains('pad') ? 'pad' : this.coarse ? 'touch' : 'desk';
+  }
+
   padHint() {
     if (!document.body.classList.contains('pad')) return null;
     const lb = document.body.dataset.padLabels || null;
@@ -554,10 +561,10 @@ export class PhotoMode {
     this.chips = [
       { k: 'eye', label: '用', swap: true, lock: true, opts: [], get: () => (this.eyeCam ? 1 : 0), set: (i) => this.swapEye(i === 1) },
       { k: 'aspect', label: '比例', gear: false, lock: true, opts: ASPECTS.map((a) => a.label), get: () => this.aspect, set: (i) => { this.aspect = i; } },
-      { k: 'move', label: '運鏡', gear: false, lock: true, studio: false, opts: MOVES, get: () => this.move, set: (i) => { this.move = i; }, note: '按下錄影才開始動' },
-      { k: 'grip', label: '拿法', gear: true, opts: GRIPS, get: () => this.grip, set: (i) => { this.grip = i; }, note: '自拍是把手伸長，從前面拍自己' },
+      { k: 'move', label: '運鏡', gear: false, lock: true, studio: false, opts: MOVES, get: () => this.move, set: (i) => { this.move = i; }, note: '按錄影開始' },
+      { k: 'grip', label: '拿法', gear: true, opts: GRIPS, get: () => this.grip, set: (i) => { this.grip = i; }, note: '自拍：伸手從正面拍' },
       { k: 'turn', label: '方向', gear: true, opts: ['橫拿', '直拿'], get: () => this.upright, set: (i) => { this.upright = i; } },
-      { k: 'pose', label: '相機', carry: true, opts: ['掛著', '舉起來'], get: () => this.pose, set: (i) => { this.pose = i; }, note: '舉起來是朝自己面對的方向拍' },
+      { k: 'pose', label: '相機', carry: true, opts: ['掛著', '舉起來'], get: () => this.pose, set: (i) => { this.pose = i; }, note: '舉起：拍面向的方向' },
     ];
     // 直橫（帶相機是「方向」、空拍機是「比例」）後面寫鍵：鍵盤照按鍵表，手把帶相機是十字鍵右、空拍機是 R
     const turnKey = (c) => (c.k === 'turn' || c.k === 'aspect' ? `<i class="on-kb" data-kb="turn">F</i><i class="on-pad" data-pad-btn="${c.k === 'turn' ? 15 : 5}"></i>` : '');
@@ -633,12 +640,11 @@ export class PhotoMode {
     knob.setAttribute('aria-pressed', on);
     knob.title = (on ? '閃光開著' : '閃光關著') + (g?.flash?.bulb ? '，閃一次要換一顆燈泡' : '') + (this.coarse ? '' : `（${key('flash')}）`);
     this.$('#ph-grip b').textContent = g ? GRIPS[this.grip] : '空拍機';
-    const die = this.dieFace(), dated = this.dated(), year = dated && this.dateOn === 0;
+    const die = this.dieFace(), dated = this.dated();
     die.hidden = !g?.date;
     die.classList.toggle('on', dated);
-    die.classList.toggle('full', year);
     die.setAttribute('aria-pressed', dated);
-    die.title = dated ? (year ? '年月日' : '月日') + '會燙在照片角落' : '不印日期';
+    die.title = dated ? '日期會印在照片角落' : '不印日期';
     this.latch();
     // 帶著相機時照片的樣子是相機自己的；手持看不到自己，自拍才看得到
     const look = g ? g.develop : PLAIN;
@@ -811,7 +817,7 @@ export class PhotoMode {
       const p = pts.get(e.pointerId);
       if (!p) return;
       pts.delete(e.pointerId);
-      if (this.active && e.type === 'pointerup' && !p.drag && !multi && !this.result) {
+      if (this.active && e.type === 'pointerup' && !p.drag && !multi && !this.result && !onSnap(e.clientX, e.clientY)) {
         if (this.gear) this.focusAt(e.clientX, e.clientY);
         else this.tap(e.clientX, e.clientY);
       }
@@ -918,7 +924,7 @@ export class PhotoMode {
     this.markLens();
     if (!was && this.pushing() && !this.pushHinted) {
       this.pushHinted = true;
-      this.ui.hint(this.coarse ? '廣角和魚眼：雙指改成前進後退' : '廣角和魚眼：滾輪改成前進後退', 3500);
+      this.ui.tip(`photo:push-${this.coarse ? 'touch' : 'desk'}`, this.coarse ? '廣角、魚眼：雙指前後移動' : '廣角、魚眼：滾輪前後移動', 3500);
     }
   }
 
@@ -935,9 +941,26 @@ export class PhotoMode {
   showZoom(text) {
     const el = this.$('#ph-zoom');
     el.textContent = text;
+    this.placeZoom(el);
     el.classList.add('show');
     clearTimeout(this.zoomTimer);
     this.zoomTimer = setTimeout(() => el.classList.remove('show'), 900);
+  }
+
+  // 距離、焦距那行字放哪：電腦、手機橫拿交給 css（#ph-zoom）。手機直拿像單眼觀景窗底下那條資訊列，
+  // 貼在取景框下緣外面；直拿相機時取景框長到拇指弧後面，下面放不下，改貼上緣外面（選項那排底下）
+  placeZoom(el) {
+    el.style.top = '';
+    if (!this.coarse || innerWidth > innerHeight || !this.frame) return;
+    const f = this.frame, h = el.offsetHeight || 34, gap = 10;
+    let low = innerHeight;
+    for (const b of document.querySelectorAll('#ph-shoot > *, .ph-keys > *,#photo-btn, #pack-btn, #swap-btn, #joy')) {
+      const r = b.getBoundingClientRect();
+      if (r.height) low = Math.min(low, r.top);
+    }
+    const bar = Math.max(...['#ph-bar', '#ph-rec'].map((s) => this.$(s).getBoundingClientRect().bottom || 0));
+    const below = f.y + f.h + gap, above = f.y - gap - h;
+    el.style.top = (below + h + gap <= low ? below : Math.max(above, bar + gap)) + h / 2 + 'px';
   }
 
   // ───────── 推鏡、靠近 ─────────
@@ -1362,7 +1385,7 @@ export class PhotoMode {
     this.showZoom(`${this.gear.focal}mm 定焦`);
     if (this.primeHinted) return;
     this.primeHinted = true;
-    this.ui.hint('定焦鏡頭：想拍大一點就走近，想拍多一點就退後', 3500);
+    this.ui.tip('photo:prime', '定焦：走近放大，後退拍進更多', 3500);
   }
 
   // 牆要不要降下來：自己入鏡時跟走路一樣顧著角色，不入鏡就只看鏡頭在哪；手持時鏡頭本來就在角色身上
@@ -1415,7 +1438,7 @@ export class PhotoMode {
     if (this.dated()) {
       const img = this.$('#ph-frame .sig'), s = this.sigSize * k;
       const sw = this.signed() && img.naturalWidth ? s * this.markH * img.naturalWidth / img.naturalHeight + s * 0.8 : 0;
-      drawDate(this.gear.id, ctx, W - s * 1.3 - sw, H - s * 1.15, s * 0.62, this.dateOn === 0);
+      drawDate(this.gear.id, ctx, W - s * 1.3 - sw, H - s * 1.15, s * 0.62);
     }
   }
 
@@ -1461,10 +1484,10 @@ export class PhotoMode {
     return !!(this.gear?.flash && this.flashOn === 0);
   }
 
-  // 快門旁的日期開關，點一下換一段：不印 → 月日 → 年月日 → 不印。跟閃光一樣每台相機各自記得
+  // 快門旁的日期開關：點一下印或不印，跟閃光一樣每台相機各自記得
   toggleDate() {
     if (!this.gear?.date) return;
-    this.dateOn = [1, 2, 0][this.dateOn];
+    this.dateOn ^= 1;
     this.save();
     this.refresh();
   }
@@ -1483,7 +1506,7 @@ export class PhotoMode {
     return die;
   }
 
-  // 拍下去那一下，開關的小窗燒紅再暗回去
+  // 拍下去那一下，開關小窗裡的火光燒亮再暗回去
   burned() {
     if (!this.dated()) return;
     const die = this.dieFace();
@@ -1781,7 +1804,7 @@ export class PhotoMode {
   // 拍好的畫布：從信差站來的做成明信片，不然存成 JPG 收進相簿，不跳視窗，左下角閃一下。rare：拍到白獸（rareShot）
   deliver(out, rare = null) {
     if (this.postcard) {
-      this.ui.hint('照相師沖洗中…', 30000);
+      this.ui.hint('照相師沖洗中…', { id: 'photo:develop', hold: true });
       this.shot = out;
       this.cardMode = 'friend';
       this.postcardResult();
@@ -1847,14 +1870,13 @@ export class PhotoMode {
     c.height = even(fr.h * k);
     const fps = this.coarse ? 30 : 60;
     const stream = c.captureStream(fps);
-    // 環境聲和動物叫聲一起錄進去；靜音時錄到的就是安靜的
+    // 聽到什麼錄什麼：接在音量盤的總出口（ambience.total），推桿和靜音都算進去。只接網頁自己的聲音，不開麥克風、不錄分頁以外的
     const a = this.ambience;
     let tap = null;
-    if (a.ctx && a.master) {
+    if (a.ctx && a.total) {
       try {
         tap = a.ctx.createMediaStreamDestination();
-        a.master.connect(tap);
-        a.sfx.connect(tap);
+        a.total.connect(tap);
         a.hold = true;
         a.ctx.resume().catch(() => {});
         for (const t of tap.stream.getAudioTracks()) stream.addTrack(t);
@@ -1865,7 +1887,7 @@ export class PhotoMode {
       mr = new MediaRecorder(stream, { mimeType: this.mime, videoBitsPerSecond: Math.min(16e6, c.width * c.height * fps * 0.1) });
     } catch (e) {
       console.warn('錄影失敗：', e);
-      this.ui.hint('這個瀏覽器沒辦法錄影', 3000);
+      this.ui.hint('這個瀏覽器不支援錄影', 3000);
       return;
     }
     const chunks = [];
@@ -1881,7 +1903,7 @@ export class PhotoMode {
       markRec(false);
       window.removeEventListener('pagehide', bye);
       if (tap) {
-        try { a.master.disconnect(tap); a.sfx.disconnect(tap); } catch {}
+        try { a.total.disconnect(tap); } catch {}
         a.hold = false;
         a.apply();
       }
@@ -1935,18 +1957,21 @@ export class PhotoMode {
 
   // ───────── 拍好之後 ─────────
 
-  // 明信片：郵票是存檔碼，照片四周的底片邊是自己畫的臉（郵票的 QR 放不下臉）。
-  // 寄給朋友：茜紅郵票只帶身上這套造型，下緣一條底片邊。寄給自己：藍染郵票帶整份進度（含衣櫃），四邊都有底片邊
+  // 明信片：郵票是存檔碼，照片四周的底片邊是自己畫的那張臉（郵票的 QR 放不下臉），一條放滿接下一條（postcard.js 的 spreadFace）。
+  // 寄給朋友：茜紅郵票只帶身上這套造型，有戴臉才印，先只用下緣，放不下四邊都用。寄給自己：藍染郵票帶整份進度（含衣櫃），四邊都有底片邊
   async postcardResult() {
     const mode = this.cardMode, save = getSave(), mine = mode === 'self';
     await loadQR();
-    const face = (L) => {
-      const c = L && decodeFace(L.face);
-      return c ? packFace(c) : Promise.resolve(new Uint8Array(0));
-    };
-    const look = sanitizeLook(save.look), films = {};
-    if (mine) [films.bottom, films.top, films.left, films.right] = await Promise.all([look, ...[0, 1, 2].map((i) => save.closet[i])].map(face));
-    else if (decodeFace(look.face)) films.bottom = await face(look);
+    const look = sanitizeLook(save.look), c = decodeFace(mine ? save.face : look.face);
+    const bytes = c ? await packFace(c) : new Uint8Array(0), sh = this.shot;
+    if (!sh) return;
+    let films = null, lost = false;
+    for (const edges of mine ? [FILM_ORDER] : bytes.length ? [['bottom'], FILM_ORDER] : [[]]) if (!films) films = spreadFace(sh.width, sh.height, edges, bytes);
+    if (!films) {
+      // 四邊都放不下：底片邊印空的
+      films = Object.fromEntries((mine ? FILM_ORDER : ['bottom']).map((e) => [e, new Uint8Array(0)]));
+      lost = true;
+    }
     const url = location.origin + location.pathname;
     const qr = mine
       ? { kind: 'save', text: url + '#save=' + encodeSave(save, { face: false }) }
@@ -1958,11 +1983,11 @@ export class PhotoMode {
     const name = `${mine ? '海市行囊' : '海市明信片'}-${stamp()}.jpg`;
     this.showCard(blob, name, mine ? savePrint() : undefined);
     this.ambience.voice('print', 0.35);
-    this.$('#ph-tip').textContent = card.lost.length ? '有一張臉畫得太滿，明信片放不下。要整份收好，到前廳的鏡子前請眼睛拍一張'
-      : mine ? '這張留給自己：存下、傳給自己都可以，換手機的時候打開行囊讀這張明信片，東西就回來了'
-      : canShare ? '按分享，選要寄給誰。朋友掃郵票就能試穿你這一身'
-      : saveTip ? '按存下，選單裡選要寄給誰。朋友掃郵票就能試穿你這一身'
-      : '存下以後寄給朋友，掃郵票就能試穿你這一身';
+    this.$('#ph-tip').textContent = lost || card.lost.length ? '臉太滿，沒有印上，其他都已印上。要連臉一起存，到前廳鏡前拍一張'
+      : mine ? '給自己的存檔。換裝置時，在行囊讀這張就能還原'
+      : canShare ? '按分享寄出。朋友掃郵票可試穿這一身'
+      : saveTip ? '按存下，在選單裡選收件人。朋友掃郵票可試穿這一身'
+      : '存下後寄給朋友。掃郵票可試穿這一身';
   }
 
   // 明信片一印好就收進相簿；換寄給朋友、寄給自己時，換下來的那張（還沒存下的）拿掉。k：寄給自己的存檔指紋
@@ -1984,7 +2009,7 @@ export class PhotoMode {
     save.disabled = false;
     save.querySelector('span').textContent = '存下';
     this.$('#ph-result').hidden = false;
-    this.ui.hideHint();
+    this.ui.hideHint('photo:');
     this.$('#ph-mode').hidden = false;
     for (const b of this.$('#ph-mode').querySelectorAll('button')) b.setAttribute('aria-pressed', b.dataset.mode === this.cardMode);
   }

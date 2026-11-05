@@ -357,7 +357,7 @@ export class Guide {
     this.chase = null;
     if (!load(KEY_TOLD, 0)) {
       save(KEY_TOLD, 1);
-      this.ui.hint(document.body.classList.contains('pad') ? `走近黑眼按 ${padBtn(-1)}，角色就自己跟著走` : this.coarse ? '走近黑眼按「跟著」，角色就自己走過去' : `走近黑眼按 ${key('interact')}，角色就自己跟著走`, 5000);
+      this.ui.hint(document.body.classList.contains('pad') ? `走近黑眼按 ${padBtn(-1)} 跟隨` : this.coarse ? '走近黑眼按「跟著」' : `走近黑眼按 ${key('interact')} 跟隨`, 5000);
     }
   }
 
@@ -471,7 +471,7 @@ export class Guide {
   }
 
   lost() {
-    this.ui.hint('黑眼找不到路過去', 3500);
+    this.ui.hint('找不到路', 3500);
     this.dest = null;
     this.follow = null;
     this.route = null;

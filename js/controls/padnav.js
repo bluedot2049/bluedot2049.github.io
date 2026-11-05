@@ -6,7 +6,7 @@
 // 會蓋在畫面上、要用手把點的那些。新的跳出介面加在這裡
 const LAYERS = [
   '#pause.show', '#padmap.show', '#keymap.show', '#ph-result:not([hidden])', '#album-view:not([hidden])', '#viewer.open', '#press.show', '#hollow.show', '#guide.show', '#ask.show',
-  '#eye-card.open', '#cams.open', '#ferry.open', '.studio-card:not([hidden])', '#pack-card:not([hidden])', '#chat:not([hidden])',
+  '#vol.open', '#eye-card.open', '#cams.open', '#ferry.open', '.studio-card:not([hidden])', '#pack-card:not([hidden])', '#chat:not([hidden])',
   '#dress.open', '#sheet.open', '#list.open',
 ].join(', ');
 const ITEMS = 'button, [role="button"], a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -93,6 +93,11 @@ export function adjust(el, d) {
     el.value = v;
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+  // 自己畫的推桿（音量盤 volume.js）：掛了 nudge 的照它調
+  if (el?.matches('[role=slider]') && el.nudge) {
+    el.nudge(d);
     return true;
   }
   if (el?.matches('select')) {

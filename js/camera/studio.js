@@ -53,7 +53,7 @@ export class Studio {
     row.querySelectorAll('[data-act="self"]').forEach((b) => b.remove());
     row.classList.toggle('two', !!id);
     row.insertAdjacentHTML('afterbegin', id
-      ? `<button class="btn" data-act="self" data-eye="0">${CAMERAS[id].name}<small>拿著自己拍</small></button><button class="btn" data-act="self" data-eye="1">畫廊的眼睛<small>鏡頭到處飛</small></button>`
+      ? `<button class="btn" data-act="self" data-eye="0">${CAMERAS[id].name}<small>手持自拍</small></button><button class="btn" data-act="self" data-eye="1">畫廊的眼睛<small>自由飛行</small></button>`
       : '<button class="btn" data-act="self">自己拍</button>');
     this.menu.hidden = false;
   }
@@ -131,7 +131,7 @@ export class Studio {
       if (s || this.photo.active || !o || !this.spots[m.spot]) return;
       if (Math.hypot(o.pos.x - this.player.pos.x, o.pos.z - this.player.pos.z) > NEAR) return;
       this.pending = { sid: m.sid, spot: m.spot, from: m.id };
-      this.inviteEl.querySelector('p').textContent = `旁邊有人要在${this.spots[m.spot].name}拍照，要一起入鏡嗎？`;
+      this.inviteEl.querySelector('p').textContent = `附近有人在${this.spots[m.spot].name}拍照。一起入鏡？`;
       this.inviteEl.hidden = false;
       clearTimeout(this.inviteTimer);
       this.inviteTimer = setTimeout(() => this.answer(false), INVITE_MS);

@@ -137,11 +137,11 @@ export function attention({ world, player }) {
   }];
 }
 
-// 從海市搭船回來：站在小划船往草原走幾步的地方，面向草原，鏡頭就在角色背後
-// ?go=房間.畫 是在海市點了清單裡的畫，到了直接站到那幅畫前面
+// 從別區搭船回來（from=區名）：站在小划船往草原走幾步的地方，面向草原，鏡頭就在角色背後；走歸門的（from=door）才回前廳
+// ?go=房間.畫 是在別區點了清單裡的畫，到了直接站到那幅畫前面
 export function arrive({ player, world, params, ui }) {
-  const ferry = world.exits[0];
-  if ((params.get('from') === 'haishi' || params.get('from') === 'shenlou') && ferry) {
+  const ferry = world.exits[0], from = params.get('from');
+  if (from && from !== 'door' && ferry) {
     player.place(ferry.x, ferry.z + 1.8, 0);
     world.frontDoor?.shut(0, true);
   } else if (world.frontDoor) {

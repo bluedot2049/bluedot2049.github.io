@@ -20,7 +20,7 @@ const android = /Android/i.test(UA);
 export const canPick = 'showDirectoryPicker' in window && !android && !iOS;
 const viaShare = iOS && 'canShare' in navigator;
 // 存下那顆鈕底下的一行小字：只有 iPhone 要講，選單裡的選項不點就沒存到照片
-export const saveTip = viaShare ? '存下時，選單裡點「儲存影像」' : '';
+export const saveTip = viaShare ? '存下時選「儲存影像」' : '';
 // 多一顆「分享」：存下本來就是分享選單的（iPhone）不用，電腦也不放
 export const canShare = android && 'canShare' in navigator;
 // 相簿裡照片以外的東西。kind 沒寫的是照片（舊版相簿裡的也是）
@@ -122,8 +122,49 @@ function flash(blob, text) {
   t.textContent = text;
   el.append(t);
   document.body.appendChild(el);
-  setTimeout(() => el.classList.add('out'), 3300);
-  setTimeout(() => el.remove(), 3900);
+  setTimeout(() => stow(el), 3300);
+}
+
+// 收進行囊：字先淡掉，照片稍微被拎起來，再沿一道往下掉的弧縮進行囊鈕，鈕接住時沉一下。
+// 只動 transform、opacity（合成器做，不重排）；行囊鈕看不到（電腦攝影時、畫面收乾淨時）或減少動態，就照原本往上淡掉
+function stow(el) {
+  const btn = document.getElementById('pack-btn'), img = el.querySelector('img');
+  const b = btn?.getBoundingClientRect(), q = img?.getBoundingClientRect();
+  const seen = b?.width && !btn.classList.contains('on') && +getComputedStyle(btn).opacity > 0.5;
+  if (!seen || !q?.width || !el.animate || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 600);
+    return;
+  }
+  // 電腦的縮圖跟著 --ui 放大（base.css 的 zoom），量到的是畫面上的 px，位移要換回元素自己的單位
+  const z = parseFloat(getComputedStyle(el).zoom) || 1, c = el.getBoundingClientRect();
+  const dx = (b.left + b.width / 2 - (q.left + q.width / 2)) / z, dy = (b.top + b.height / 2 - (q.top + q.height / 2)) / z;
+  const s = Math.min(1, (b.width * 0.5) / q.width);
+  el.style.transformOrigin = `${(q.left + q.width / 2 - c.left) / z}px ${(q.top + q.height / 2 - c.top) / z}px`;
+  el.classList.add('fly');
+  const run = el.animate([
+    { transform: 'none', opacity: 1, easing: 'cubic-bezier(.3, 0, .4, 1)' },
+    { transform: 'translate(0, -6px) scale(1.04)', opacity: 1, offset: 0.16, easing: 'cubic-bezier(.45, 0, .8, .4)' },
+    { transform: `translate(${dx * 0.42}px, ${dy * 0.28}px) scale(${0.5 + s * 0.5})`, opacity: 1, offset: 0.55, easing: 'cubic-bezier(.3, .3, .6, 1)' },
+    { transform: `translate(${dx}px, ${dy}px) scale(${s})`, opacity: 0.9, offset: 0.92 },
+    { transform: `translate(${dx}px, ${dy}px) scale(${s * 0.6})`, opacity: 0 },
+  ], { duration: 820, fill: 'forwards' });
+  run.onfinish = () => el.remove();
+  setTimeout(() => {
+    btn.classList.remove('took');
+    void btn.offsetWidth;
+    btn.classList.add('took');
+  }, 740);
+  setTimeout(() => btn.classList.remove('took'), 1400);
+}
+
+// 點在縮圖上的那一下不算數（photo.js 收著不對焦、不收按鈕）；縮圖本身點不到，拖曳照樣穿過去轉視角
+export function onSnap(x, y) {
+  for (const e of document.querySelectorAll('.snapsave')) {
+    const r = e.getBoundingClientRect();
+    if (x >= r.left - 6 && x <= r.right + 6 && y >= r.top - 6 && y <= r.bottom + 6) return true;
+  }
+  return false;
 }
 
 async function put(it) {

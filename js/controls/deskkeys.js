@@ -160,6 +160,7 @@ export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote 
     if (e.key !== 'Escape' || e.repeat || photo.active || pack.isOpen || e.target.closest?.('input:not([type=checkbox]):not([type=range]), textarea')) return;
     if (document.querySelector('#album-view:not([hidden]), #selfie:not([hidden]), #pause.show')) return;
     if ($('viewer').classList.contains('open')) return ui.closeViewer();
+    if (document.querySelector('#dress-ask:not([hidden])')) return click('dress-ask-no');   // 骰子、重來的確認卡先收
     const x = $('dress').classList.contains('open') ? 'dress-close' : ui.sheetOpen ? 'sheet-close' : null;
     if (x) click(x);
   }, true);

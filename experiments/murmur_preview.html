@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>人潮聲試聽</title>
+  <!-- 人潮聲新舊對照：舊的抄在這頁裡，新的是遊戲現在用的 renderMurmur（ambience-voices.js）。混音照 ambience.js 的 murmur()、talk() 抄，人數、近處的人拉桿調，切版本聽同一個場面 -->
+  <style>
+    html, body { margin: 0; background: #1c1814; color: #e9e0cc; font-family: "Noto Serif TC", serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 18px 16px 48px; }
+    h1 { margin: 0; font-size: 17px; font-weight: 600; color: #c9a86e; }
+    h2 { font-size: 14px; font-weight: 600; color: #c9a86e; margin: 24px 0 8px; }
+    .note { font-size: 13px; opacity: .65; margin-top: 4px; line-height: 1.6; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 10px; font-size: 13px; }
+    .row label { display: flex; gap: 6px; align-items: center; }
+    input[type=range] { width: 180px; }
+    button { padding: 9px 14px; border: 1px solid #5a4e3e; border-radius: 6px; background: #2a241e; color: inherit; font: inherit; font-size: 14px; cursor: pointer; }
+    button.on { background: #e8b86a; color: #1b1714; border-color: #e8b86a; }
+    #log { font: 12px/1.6 Consolas, monospace; opacity: .7; margin-top: 14px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>人潮聲試聽</h1>
+  <div class="note">第一下點畫面才開聲音。兩版同時在播，切版本只換聽哪一版，場面一樣。音量是遊戲裡的實際值（舊版用當時的音量），喇叭開到平常玩的大小。</div>
+  <div id="warn" class="note" style="opacity:1;color:#ffb38a;display:none"></div>
+  <div class="note" id="state">聲音：還沒開（點任何一顆）</div>
+  <script>
+    (function () {
+      var w = document.getElementById('warn');
+      if (location.protocol === 'file:') { w.innerHTML = '這一頁要用伺服器開才會動：先雙擊專案資料夾裡的「開啟畫廊.bat」，再到瀏覽器打開 <b>http://localhost:8000/experiments/murmur_preview.html</b>'; w.style.display = 'block'; }
+    })();
+  </script>
+
+  <div class="row">
+    <button id="old">舊版</button>
+    <button id="new">新版</button>
+    <button id="ab">自動輪流（每 8 秒）</button>
+    <button id="again">重算一次</button>
+  </div>
+  <div class="note" id="times">還沒算</div>
+
+  <h2>遠的那一片</h2>
+  <div class="row"><label>附近多少人 <input type="range" id="amount" min="0" max="15" step="0.1" value="4"><b id="amountV"></b></label></div>
+  <div class="row"><label>最近那個人多近 <input type="range" id="near" min="0" max="1" step="0.01" value="0.3"><b id="nearV"></b></label></div>
+
+  <h2>近處的兩個嗓子</h2>
+  <div class="row"><label>左邊那個人 聽得到 <input type="range" id="k0" min="0" max="1" step="0.01" value="0"><b id="k0V"></b></label></div>
+  <div class="row"><label>右邊那個人 聽得到 <input type="range" id="k1" min="0" max="1" step="0.01" value="0"><b id="k1V"></b></label></div>
+  <div class="row"><label>嗓子高低 <input type="range" id="rate" min="0.85" max="1.15" step="0.01" value="1"><b id="rateV"></b></label></div>
+
+  <h2>場面</h2>
+  <div class="row" id="scenes"></div>
+  <div id="log"></div>
+</main>
+<script type="module">
+  import { MURMUR_LAYERS, MURMUR_NOTES, MURMUR_RMS, MURMUR_SR, MURMUR_VOL, MURMUR_XF, VOICE_LEN, VOICE_RMS, VOICE_VOL, VOWELS, biquad, loopOf, osc, renderMurmur } from '../js/audio/ambience-voices.js';
+
+  // 舊版原樣抄在這裡，只為了對照（2026-11-05 遊戲裡已經換成新版）：一個音節開一組振盪器和濾波器、沒有字頭、各講各的。音量是當時的 0.22、0.3
+  // 算一段 len 秒、talkers 個人在講話的聲音（多算 MURMUR_XF 秒給頭尾交疊）。
+  // solo：每個人各佔一個聲道（第二個嗓子高一點），給近處的人用；不然每個人隨機放在左右，是遠遠的一片
+  function oldMurmur(len, talkers, solo = false) {
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) return Promise.resolve(null);
+    const total = len + MURMUR_XF, ctx = new OAC(2, Math.ceil(total * MURMUR_SR), MURMUR_SR);
+    const pick = (a) => a[Math.floor(Math.random() * a.length)];
+    const breath = ctx.createBuffer(1, MURMUR_SR * 2, MURMUR_SR), bd = breath.getChannelData(0);
+    for (let i = 0; i < bd.length; i++) bd[i] = Math.random() * 2 - 1;
+    const merge = solo ? ctx.createChannelMerger(2) : null;
+    merge?.connect(ctx.destination);
+    for (let v = 0; v < talkers; v++) {
+      // 大多是低的四個音，四個人裡有一個高一點、小聲一點
+      const high = solo ? v === 1 : Math.random() < 0.25, root = high ? 4 + Math.floor(Math.random() * 2) : Math.floor(Math.random() * 4);
+      const tune = 2 ** ((Math.random() - 0.5) / 24);   // 每個人的嗓子差一點點，前後 25 音分，還聽得出在調上，不會疊成整齊的和弦
+      let pan;
+      if (solo) {
+        pan = ctx.createGain();
+        pan.connect(merge, 0, v);
+      } else {
+        // 遠的人左右拉開，聽起來是四周都有人，沒有特定方向
+        pan = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain();
+        if (pan.pan) pan.pan.value = (Math.random() - 0.5) * 1.8;
+        pan.connect(ctx.destination);
+      }
+      // 一句三到七個音節，句子之間停久一點
+      for (let t = Math.random() * 4; t < total;) {
+        const n = 3 + Math.floor(Math.random() * 5), peak = (0.15 + Math.random() * 0.08) * (high && !solo ? 0.7 : 1);
+        let deg = root;
+        for (let i = 0; i < n && t < total; i++) {
+          const d = 0.14 + Math.random() * 0.16, last = i === n - 1;
+          if (last) deg = Math.max(0, root - 1);
+          else if (Math.random() < 0.3) deg = Math.max(0, Math.min(MURMUR_NOTES.length - 1, root + (Math.random() < 0.5 ? -1 : 1)));
+          else deg = root;
+          const f = MURMUR_NOTES[deg] * tune;
+          const o = osc(ctx, 'sawtooth', t, d + 0.05, [[0, f], [d, f * (last ? 0.95 : 0.985)]]);   // 每個字尾巴往下掉一點，像說話
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0, t);
+          g.gain.linearRampToValueAtTime(peak, t + 0.04);
+          g.gain.linearRampToValueAtTime(peak * 0.7, t + d * 0.7);
+          g.gain.linearRampToValueAtTime(0, t + d + 0.05);
+          // 鋸齒波先磨掉高頻再過母音，第二個共振峰小聲一點，比較悶、比較不刺
+          const [f1, f2] = pick(VOWELS), src = o.connect(biquad(ctx, 'lowpass', 1400, 0.5)), f2g = ctx.createGain();
+          f2g.gain.value = 0.6;
+          src.connect(biquad(ctx, 'bandpass', f1, 5)).connect(g);
+          src.connect(biquad(ctx, 'bandpass', f2, 7)).connect(f2g).connect(g);
+          // 同一個母音的氣音，蓋掉一點音高感
+          const air = ctx.createBufferSource(), ag = ctx.createGain();
+          air.buffer = breath;
+          ag.gain.value = 0.9;
+          air.connect(biquad(ctx, 'bandpass', f1, 3)).connect(ag).connect(g);
+          air.start(t, Math.random() * 1.5);
+          air.stop(t + d + 0.06);
+          g.connect(pan);
+          t += d + 0.03 + Math.random() * 0.05;
+        }
+        t += 1 + Math.random() * 3;
+      }
+    }
+    return new Promise((done) => {
+      ctx.oncomplete = (e) => done(e.renderedBuffer);
+      ctx.startRendering();
+    });
+  }
+
+  const $ = (id) => document.getElementById(id);
+  const log = (s) => { $('log').textContent = [s, ...$('log').textContent.split('\n')].slice(0, 10).join('\n'); };
+  const VERS = {
+    old: { render: oldMurmur, vol: 0.22, voice: 0.3 },
+    new: { render: renderMurmur, vol: MURMUR_VOL, voice: VOICE_VOL },
+  };
+  let ctx = null, cur = 'new', abTimer = 0;
+
+  // 一版全部算好，回傳每一段花了幾毫秒（只算 OfflineAudioContext 的部分，跟遊戲進區時一樣）
+  async function renderAll(v) {
+    const ms = [], raws = [];
+    for (const [len, n] of MURMUR_LAYERS) {
+      const t0 = performance.now();
+      raws.push(await VERS[v].render(len, n));
+      ms.push(performance.now() - t0);
+    }
+    const t0 = performance.now();
+    raws.push(await VERS[v].render(VOICE_LEN, 2, true));
+    ms.push(performance.now() - t0);
+    return { raws, ms };
+  }
+  // 沒開聲音也能量（無頭測試用）
+  window.__bench = async () => {
+    const out = {};
+    for (const v of Object.keys(VERS)) out[v] = (await renderAll(v)).ms.map((x) => Math.round(x));
+    return out;
+  };
+
+  // 照 ambience.js buildMurmur() 接：遠的三段 → 一個濾波 → 音量；近的兩個嗓子各自濾波、音量、左右
+  function chain(v, { raws }) {
+    const filter = biquad(ctx, 'lowpass', 450, 0.5), gain = ctx.createGain();
+    gain.gain.value = 0;
+    filter.connect(gain).connect(ctx.destination);
+    const loop = (buf) => { const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; s.start(0, Math.random() * buf.duration); return s; };
+    const layers = MURMUR_LAYERS.map(([len], i) => {
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      g.connect(filter);
+      loop(loopOf(ctx, raws[i], len, MURMUR_RMS)).connect(g);
+      return g;
+    });
+    const buf = loopOf(ctx, raws[3], VOICE_LEN, VOICE_RMS, true);
+    const voices = [0, 1].map((ch) => {
+      const src = loop(buf), split = ctx.createChannelSplitter(2), f = biquad(ctx, 'lowpass', 800, 0.5), g = ctx.createGain(), p = ctx.createStereoPanner();
+      g.gain.value = 0;
+      p.pan.value = ch ? 0.55 : -0.55;
+      src.connect(split);
+      split.connect(f, ch);
+      f.connect(g).connect(p).connect(ctx.destination);
+      return { src, f, g };
+    });
+    return { v, filter, gain, layers, voices };
+  }
+  let chains = [];
+
+  // 照 ambience.js 的 murmur()、talk()
+  function mix() {
+    if (!ctx) return;
+    const t = ctx.currentTime, amount = +$('amount').value, near = +$('near').value;
+    const level = 1 - Math.exp(-amount / 3), clamp = (x) => Math.max(0, Math.min(1, x));
+    const on = [Math.min(1, level * 3), clamp((level - 0.25) / 0.35), clamp((level - 0.55) / 0.35)];
+    for (const c of chains) {
+      const live = c.v === cur ? 1 : 0, V = VERS[c.v];
+      c.layers.forEach((g, i) => g.gain.setTargetAtTime(on[i], t, 0.3));
+      c.gain.gain.setTargetAtTime(live * V.vol * Math.sqrt(level), t, 0.15);
+      c.filter.frequency.setTargetAtTime(380 + 300 * level + 300 * near * near, t, 0.2);
+      c.voices.forEach((s, i) => {
+        const k = +$('k' + i).value;
+        s.g.gain.setTargetAtTime(live * V.voice * k, t, 0.15);
+        s.f.frequency.setTargetAtTime(500 + 1500 * k * k, t, 0.15);
+        s.src.playbackRate.setValueAtTime(+$('rate').value * (i ? 1.04 : 0.97), t);
+      });
+    }
+    for (const id of ['amount', 'near', 'k0', 'k1', 'rate']) $(id + 'V').textContent = (+$(id).value).toFixed(2);
+    $('old').classList.toggle('on', cur === 'old');
+    $('new').classList.toggle('on', cur === 'new');
+  }
+
+  let building = null;
+  async function build() {
+    if (building) return building;
+    return building = (async () => {
+      for (const c of chains) { c.layers.forEach((g) => g.disconnect()); c.gain.disconnect(); c.voices.forEach((s) => { s.src.stop(); s.g.disconnect(); }); }
+      chains = [];
+      $('times').textContent = '算中…';
+      const res = {};
+      for (const v of Object.keys(VERS)) res[v] = await renderAll(v);
+      const fmt = (ms) => `${Math.round(ms.reduce((a, b) => a + b))} ms（${ms.map((x) => Math.round(x)).join(' / ')}）`;
+      $('times').textContent = `算一次要多久　舊：${fmt(res.old.ms)}　新：${fmt(res.new.ms)}　（遠三段 / 近兩個嗓子；遊戲裡進區時算一次，之後只播）`;
+      chains = Object.keys(VERS).map((v) => chain(v, res[v]));
+      mix();
+      building = null;
+    })();
+  }
+
+  function start() {
+    if (ctx) return;
+    ctx = new AudioContext();
+    build();
+  }
+  document.addEventListener('pointerdown', start, { capture: true });
+  setInterval(() => {
+    const s = ctx?.state;
+    $('state').textContent = !s ? '聲音：還沒開（點任何一顆）' : s === 'running' ? `聲音：開著，現在聽的是${cur === 'new' ? '新版' : '舊版'}` : `聲音：${s}（再點一下）`;
+    if (s && s !== 'running') ctx.resume().catch(() => {});
+  }, 300);
+
+  const pickVer = (v) => { cur = v; mix(); log(v === 'new' ? '新版' : '舊版'); };
+  $('old').onclick = () => { clearInterval(abTimer); abTimer = 0; $('ab').classList.remove('on'); pickVer('old'); };
+  $('new').onclick = () => { clearInterval(abTimer); abTimer = 0; $('ab').classList.remove('on'); pickVer('new'); };
+  $('ab').onclick = () => {
+    if (abTimer) { clearInterval(abTimer); abTimer = 0; $('ab').classList.remove('on'); return; }
+    $('ab').classList.add('on');
+    abTimer = setInterval(() => pickVer(cur === 'new' ? 'old' : 'new'), 8000);
+  };
+  $('again').onclick = () => { if (ctx) build(); };
+  for (const id of ['amount', 'near', 'k0', 'k1', 'rate']) $(id).oninput = mix;
+
+  // 遊戲裡常見的幾個場面
+  const SCENES = {
+    '巷子裡幾個人': { amount: 1.2, near: 0.2, k0: 0, k1: 0 },
+    '市集裡': { amount: 6, near: 0.5, k0: 0, k1: 0 },
+    '港口最擠': { amount: 14, near: 0.7, k0: 0, k1: 0 },
+    '有人從身邊走過': { amount: 3, near: 0.8, k0: 0.85, k1: 0 },
+    '兩個人站在旁邊聊': { amount: 3, near: 0.9, k0: 0.7, k1: 0.6 },
+    '只聽近處嗓子': { amount: 0, near: 0, k0: 0.8, k1: 0.8 },
+  };
+  for (const [name, s] of Object.entries(SCENES)) {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.onclick = () => { for (const [k, v] of Object.entries(s)) $(k).value = v; mix(); log(name); };
+    $('scenes').appendChild(b);
+  }
+  mix();
+</script>
+</body>
+</html>

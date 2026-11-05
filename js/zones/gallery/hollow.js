@@ -62,7 +62,7 @@ export class Hollow {
       if (!pick) return;
       const url = await shrink(pick).catch(() => null);
       if (url) this.attach(url);
-      else this.note('這張圖讀不出來，換一張');
+      else this.note('圖片讀不出來，請換一張');
     });
     f.querySelector('.drop').addEventListener('click', () => this.attach(null));
     const vv = window.visualViewport;
@@ -105,7 +105,7 @@ export class Hollow {
     const box = this.letter.querySelector('.body');
     const body = box.value.trim();
     if (!body) { this.note('還沒寫字'); return; }
-    if (Date.now() - pref('hollowSent') < GAP) { this.note('樹洞還在收上一張，過一會兒再投'); return; }
+    if (Date.now() - pref('hollowSent') < GAP) { this.note('上一張還在傳送，稍後再投'); return; }
     this.sending = true;
     this.note('投進去……');
     let ok = false;
@@ -117,7 +117,7 @@ export class Hollow {
       ok = !!(await r.json()).ok;
     } catch {}
     this.sending = false;
-    if (!ok) { this.note('樹洞沒收到，等一下再投'); return; }
+    if (!ok) { this.note('沒有送達，稍後再投'); return; }
     setPref('hollowSent', Date.now());
     box.value = '';
     this.attach(null);

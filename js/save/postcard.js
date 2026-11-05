@@ -3,7 +3,7 @@
 // 明信片：在海市的信差站拍的照片，外面加一圈紙邊，右上角貼郵票、蓋郵戳，下面寫寄自哪裡和日期。
 // 輸入攝影模式拍好的畫布，回傳一張新的畫布
 import { drawText } from '../core/glyphs.js';
-import { filmGeometry, drawFilm, readFilm, unpackFace, tone } from './filmcode.js';
+import { filmGeometry, filmCapacity, drawFilm, readFilm, unpackFace, tone } from './filmcode.js';
 
 const PAPER = '#f2ead8', INK = 'rgba(52, 36, 28, 0.62)', BROWN = '#4a3022';
 
@@ -84,10 +84,12 @@ function postmark(g, x, y, r, date) {
 }
 
 // 明信片的版面：照片四周留紙邊 m，下面一條寫字的 foot。
-// edges 是要加底片邊的那幾邊（bottom／top／left／right）：寄給朋友只有下緣（身上那張臉），
-// 寄給自己四邊都有（下緣身上那套，上、左、右是衣櫃三套）。左右的帶子是直的
+// edges 是要加底片邊的那幾邊（bottom／top／left／right），印的是這個人畫的那張臉（一個人只有一張），照 FILM_ORDER 一條放滿接下一條：
+// 寄給朋友先只用下緣，放不下才四邊都用；寄給自己四邊都有。左右的帶子是直的。
+// 更早的「寄給自己」四邊各印一張（下緣身上那套，上、左、右是衣櫃三套），讀的時候還認得（pack.js 照郵票上的碼分）
 const FILM_GAP = 0.006;
 const EDGE_SETS = [['bottom'], ['bottom', 'top', 'left', 'right']];
+export const FILM_ORDER = ['bottom', 'top', 'left', 'right'];
 export function cardLayout(pw, ph, edges = []) {
   const long = Math.max(pw, ph), m = Math.round(long * 0.045), foot = Math.round(long * 0.1);
   const has = (e) => edges.includes(e);
@@ -339,6 +341,30 @@ export function qrStamp(g, x, y, s, text, { kind = 'look', tilt = 0.015, ecc = '
   return { n, version: (n - 17) / 4 };
 }
 
+// 一張臉（packFace 壓好的位元組）拆到 edges 那幾條底片邊上，回傳 { 邊: 位元組 }；放不下回傳 null
+export function spreadFace(pw, ph, edges, bytes) {
+  const Lay = cardLayout(pw, ph, edges), films = {};
+  let at = 0;
+  for (const e of FILM_ORDER) {
+    const st = Lay.strips[e];
+    if (!st) continue;
+    const cap = filmCapacity(filmGeometry(st.w, Lay.long).cols);
+    films[e] = bytes.slice(at, at + cap);
+    at += cap;
+  }
+  return at >= bytes.length ? films : null;
+}
+
+// 讀回來的底片邊（readPostcard 的 strips）接回一張臉：照 FILM_ORDER 接起來再解開。缺一條、解不開是 null
+export async function joinFace(strips) {
+  const parts = FILM_ORDER.filter((e) => e in strips).map((e) => strips[e]);
+  if (!parts.length || parts.some((p) => !p)) return null;
+  const all = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const p of parts) { all.set(p, at); at += p.length; }
+  return all.length ? unpackFace(all) : null;
+}
+
 // ---------- 載入 QR 函式庫、從明信片讀回來 ----------
 function loadScript(src) {
   return new Promise((resolve, reject) => {
@@ -351,7 +377,8 @@ function loadScript(src) {
 }
 export const loadQR = () => (window.qrcode ? Promise.resolve() : loadScript('vendor/qrcode.js'));
 
-// 讀一張明信片圖：郵票上的網址（沒找到是 null）和每一條底片邊上的臉（64×64 格；讀不出來或沒畫是 null）
+// 讀一張明信片圖：郵票上的網址（沒找到是 null）、每一條底片邊上的位元組 strips（讀不出來是 null），
+// 和每一條各自當一張臉解開的 faces（64×64 格；舊的「寄給自己」一條一張臉，新的要用 joinFace 接起來）
 export async function readPostcard(file) {
   if (!window.jsQR) await loadScript('vendor/jsQR.js');
   const url = URL.createObjectURL(file), im = new Image();
@@ -383,17 +410,18 @@ export async function readPostcard(file) {
     text = window.jsQR(sg.getImageData(0, 0, s.width, s.height).data, s.width, s.height)?.data ?? null;
   }
   // 不知道是哪一種版面，每一種都試，讀到最多條的就是了
-  let faces = {}, most = 0;
+  let strips = {}, most = 0;
   for (const guess of guessFilm(c.width, c.height)) {
     const got = {};
     let n = 0;
     for (const [e, est] of Object.entries(guess.strips)) {
-      const bytes = readFilm(img, est);
-      if (bytes) n++;
-      got[e] = bytes?.length ? await unpackFace(bytes) : null;
+      got[e] = readFilm(img, est);
+      if (got[e]) n++;
     }
-    if (n > most) { most = n; faces = got; }
+    if (n > most) { most = n; strips = got; }
     if (n === Object.keys(guess.strips).length) break;
   }
-  return { text, faces };
+  const faces = {};
+  for (const [e, b] of Object.entries(strips)) faces[e] = b?.length ? await unpackFace(b) : null;
+  return { text, strips, faces };
 }

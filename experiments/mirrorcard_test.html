@@ -57,7 +57,7 @@
 
     const t0 = performance.now();
     const { canvas, lost } = await makeMirrorCard(photo, { save, date: new Date(2026, 10, 1) });
-    log(`made in ${Math.round(performance.now() - t0)} ms, lost faces: ${JSON.stringify(lost)}`);
+    log(`made in ${Math.round(performance.now() - t0)} ms, face lost: ${lost}`);
     const blobOf = (cv, q) => new Promise((ok) => cv.toBlob(ok, 'image/jpeg', q));
     const scaled = (k) => { const s = document.createElement('canvas'); s.width = Math.round(canvas.width * k); s.height = Math.round(canvas.height * k); const g = s.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(canvas, 0, 0, s.width, s.height); return s; };
     const padded = () => { const s = document.createElement('canvas'); s.width = 1170; s.height = 2532; const g = s.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, s.width, s.height); const h = 1170 * 4 / 3; g.drawImage(canvas, 0, (2532 - h) / 2, 1170, h); return s; };
@@ -72,14 +72,14 @@
       const okLook = same({ ...m.save.look, face: '' }, { ...save.look, face: '' }) || same(m.save.look.race, save.look.race);
       const okUn = same([...m.save.unlocked].sort(), [...save.unlocked].sort());
       const okCloset = m.full && m.save.closet.length === 3 && m.save.closet.every((x, i) => x && x.race === save.closet[i].race);
-      const okFaces = m.faces.map((f, i) => (f ? encodeFace(f) === ([save.look, ...save.closet][i]?.face || '') : 'none'));
+      const okFaces = m.save.face === save.face && [m.save.look, ...m.save.closet].every((x, i) => (x?.face || '') === ([save.look, ...save.closet][i]?.face || ''));
       log(`${name} (${cv.width}×${cv.height}, ${Math.round(blob.size / 1024)} KB): look ${okLook} unlocks ${okUn} full ${m.full} closet ${okCloset} visits ${same(m.save.visits, save.visits)} faces ${JSON.stringify(okFaces)}`);
     }
     // 舊版照片（?old=網址）也要讀得回來
     const old = new URLSearchParams(location.search).get('old');
     if (old) {
       const m = await readMirrorCard(await (await fetch(old)).blob());
-      log(`舊版照片: ${m ? `讀到 full ${m.full} closet ${m.save.closet.length} visits ${same(m.save.visits, save.visits)} faces ${m.faces.map((f) => !!f)}` : '讀不到'}`);
+      log(`舊版照片: ${m ? `讀到 full ${m.full} closet ${m.save.closet.length} visits ${same(m.save.visits, save.visits)} face ${!!m.save.face}` : '讀不到'}`);
     }
 
     // 字距：拖了就重畫（不印存檔，快一點）

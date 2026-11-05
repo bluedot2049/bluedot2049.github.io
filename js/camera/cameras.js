@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { rod } from '../avatar/heads.js';
 import { getSave, putSave } from '../save/progress.js';
-import { drawGlyph, strokes } from '../core/glyphs.js';
+import { strokes } from '../core/glyphs.js';
 import { punch } from '../core/icode.js';
 
 // 等效全片幅的焦距換成視角：照片長邊對應底片的 36mm
@@ -22,7 +22,7 @@ export const longTan = (mm) => 18 / mm;
 // aspect：照片長寬比（橫拿），直拿就倒過來。
 // flash：閃光燈；bulb：閃一次要換一顆燈泡，換好之前不能拍；knob：快門旁那顆閃光開關長什麼樣（KNOBS）。hold：按住快門不放就一直曝光（B 快門），放開時才閃
 // develop：沖出來的樣子，跟 photo.js 的色調同一種寫法；halo：亮的地方暈開一點
-// date：照片角落的日期印記，開關點一下換一段：不印、月日、年月日；knob：快門旁那個開關長什麼樣（KNOBS），ink：印記怎麼上到照片（INKS）。同一家工坊的相機用同一種
+// date：照片角落的日期印記（年月日），開關點一下印或不印；knob：快門旁那個開關長什麼樣（KNOBS），ink：印記怎麼上到照片（INKS）。同一家工坊的相機用同一種
 // mark：照片角落蓋哪個記號（marks.js 的名字）；沒寫就不蓋，只留相機自己的印記
 // af：自動對焦的個性。time 轉到位要幾秒、hunt 快到時多轉過頭幾成再退回來（找焦）、
 //     priority 'release' 快門隨時按得下去（還在找焦就照當下的焦距拍），'focus' 對好才放快門（按了先記著，對好自己拍）
@@ -35,7 +35,7 @@ export const CAMERAS = {
     focal: 27, prime: true, fstop: 1.4, bokeh: 4, focus: 'lock', aspect: 3 / 2,
     af: { time: 0.22, hunt: 0.1, priority: 'release' },   // 數位式：對得快、幾乎不找焦，快門不等人
     flash: { color: 0xfff1dc, power: 2.6, bulb: 1.6, knob: 'fan' },
-    date: { knob: 'die', ink: 'burn' },
+    date: { knob: 'slot', ink: 'candle' },
     make: { mark: '火', model: 1, serial: [0, 4, 1, 7] }, shutter: 'gold',
     rattle: 'tink',   // 在桌上浮起來時發出的聲音（ambience-voices.js 的 VOICES）
     hold: true,
@@ -92,7 +92,7 @@ function bulbModel(k) {
   k.cyl(0.036, 0.04, 0.03, DARK, -0.012, 0.052, 0.058, { rx: Math.PI / 2 }, 12);
   k.cyl(0.03, 0.03, 0.004, OLD, -0.012, 0.052, 0.074, { rx: Math.PI / 2 }, 12);
   k.cyl(0.022, 0.022, 0.003, GLASS, -0.012, 0.052, 0.076, { rx: Math.PI / 2 }, 12);
-  // 機背的日期框：舊金框開一個暗窗，在快門底下、右手拇指旁邊
+  // 機背的日期框：舊金框開一個暗窗（裡面是燭火照的七段縫），在快門底下、右手拇指旁邊
   k.box(0.042, 0.02, 0.003, OLD, -0.035, 0.074, -0.046);
   k.box(0.034, 0.012, 0.002, WELL, -0.035, 0.074, -0.0478);
   // 左邊的支架和摺扇反光罩：十片銀、灰交錯的扇骨排成淺碗朝前，中間一顆燈泡
@@ -295,21 +295,19 @@ const KNOBS = {
       + '<circle class="puff" cx="3" cy="-6" r="5"/>'
       + '<circle class="ring" r="27.6" pathLength="100" transform="rotate(-90)"/></svg>';
   },
-  // 銅模：舊金的銅板（#ph-date 的底）開一個小窗，窗裡是一塊青銅字模，刻著今天的日期，跟燙上照片的一模一樣，一看就知道是日期。
-  // 字是刻進去的：刀痕底下錯開一道亮邊。開著時刀痕裡是燒熱的銅色，拍下去那一下小窗燒紅再暗回去。
-  // 點一下換一段：不印（開了細縫的鐵蓋滑下來，縫裡透出暗暗的字）→ 月日 → 年月日（#ph-date 的 .on、.full）
-  die() {
-    const now = new Date();
-    const row = (cls, year, size) => {
-      const t = (c, dy) => `<text class="${c}" y="${(size * 0.32 + dy).toFixed(2)}" font-size="${size}" font-family="${DATE_FONT}" text-anchor="middle">${dateText(now, year)}</text>`;
-      // 刀痕：上緣一道暗影、下緣一道亮邊，中間才是刀口
-      return `<g class="${cls}">${t('die sh', -0.45)}${t('die lo', 0.6)}${t('die', 0)}</g>`;
-    };
+  // 燭窗：舊金的銅板（#ph-date 的底）開一個小窗，窗裡一塊暗銅片鏤著今天日期的七段縫，跟印上照片的一模一樣，一看就知道是日期；
+  // 沒用到的段也刻著淡淡的槽，像電子錶。銅片後面點著一小朵燭火：開著時縫裡透出橘紅的火光，拍下去那一下燒亮再暗回去。
+  // 點一下印或不印：不印時開了細縫的鐵蓋滑下來，擋住火光，縫裡只看得到暗暗的字（#ph-date 的 .on）
+  slot() {
+    const h = 8, { on, off, w } = segText(dateText(new Date()), h);
+    const at = `translate(${(-w / 2).toFixed(2)} ${(h / 2).toFixed(2)})`;
     return '<svg viewBox="-32 -20 64 40" aria-hidden="true">'
       + '<defs><clipPath id="dt-win"><rect x="-24" y="-10" width="48" height="20" rx="1.5"/></clipPath></defs>'
       + '<g clip-path="url(#dt-win)"><rect class="well" x="-24" y="-10" width="48" height="20"/>'
       + '<g class="glow"><rect x="-24" y="-10" width="48" height="20"/></g>'
-      + row('md', false, 16) + row('ymd', true, 12)
+      // 鏤空的縫底下錯開一道亮邊，像刻進銅片裡；沒用到的段只是很淺的槽，不能搶走數字
+      + `<g transform="${at}"><path class="edge" transform="translate(0 .5)" d="${polyD(on)}"/>`
+      + `<path class="slot" d="${polyD(off)}"/><path class="lit" d="${polyD(on)}"/></g>`
       + '<g class="lid"><path fill-rule="evenodd" d="M-24-10H24V10H-24ZM-20-3.2H20V-1.4H-20ZM-20 1.4H20V3.2H-20Z"/></g></g>'
       + '<rect class="sill" x="-24.5" y="-10.5" width="49" height="21" rx="1.8"/><path class="sill lo" d="M-23 11.2H23"/>'
       + '<circle class="rivet" cx="-28" cy="-15" r="1.3"/><circle class="rivet" cx="28" cy="-15" r="1.3"/>'
@@ -532,61 +530,81 @@ const NUMS = [
   [[[0.5, 0.1], [0.5, 0.9]], [[0.32, 0.38], [0.68, 0.38]], [[0.22, 0.64], [0.78, 0.64]], [[0.14, 0.9], [0.86, 0.9]]],
   [[[0.18, 0.1], [0.78, 0.1], [0.3, 0.6]], [[0.46, 0.38], [0.84, 0.9]]],
 ];
-// 十二時辰，子時從晚上 11 點起。字用海市的毛筆記號寫（glyphs.js），讀不出是哪個字，但看得出是一個時辰
-const HOURS = '子丑寅卯辰巳午未申酉戌亥';
-
-// 日期的字：26·11·02，只印月日就是 11·02
-function dateText(d, year) {
-  const two = (n) => String(n % 100).padStart(2, '0');
-  return (year ? two(d.getFullYear()) + '·' : '') + two(d.getMonth() + 1) + '·' + two(d.getDate());
-}
-
-// 日期的字模用十七世紀英國鉛字 IM Fell DW Pica（index.html 從 Google Fonts 載入），數字高低錯落，像老書裡的頁碼。
-// 照片是畫在 canvas 上的，字型沒到之前畫不出來，所以一開始就先要；連不上就退回系統襯線字
-const DATE_FONT = "'IM Fell DW Pica', serif";
-document.fonts?.load(`20px ${DATE_FONT}`, '0123456789·').catch(() => {});
-
 function numPath(n, x, y, w, h) {
   return NUMS[n].map((s) => 'M' + s.map(([u, v]) => `${(x + u * w).toFixed(2)} ${(y + v * h).toFixed(2)}`).join('L')).join('');
 }
 
+// 日期的字：'26 11 05，跟大部分底片相機的機背一樣，年份前面一撇、中間空一格
+function dateText(d) {
+  const two = (n) => String(n % 100).padStart(2, '0');
+  return `'${two(d.getFullYear())} ${two(d.getMonth() + 1)} ${two(d.getDate())}`;
+}
+
+// 日期的字是七段數字，跟真的機背一樣：每個數字亮哪幾段（a 上、b 右上、c 右下、d 下、e 左下、f 左上、g 中），整串往右斜
+const SEG7 = ['abcdef', 'bc', 'abdeg', 'abcdg', 'bcfg', 'acdfg', 'acdefg', 'abc', 'abcdefg', 'abcdfg'];
+const SLANT = 0.16;
+
+// 一段是兩頭尖的六角形：(x0, y0) 到 (x1, y1) 是中線（直的由上往下、橫的由左往右），t 是粗細
+function bar(x0, y0, x1, y1, t) {
+  const s = t / 2;
+  return x0 === x1
+    ? [[x0, y0], [x0 + s, y0 + s], [x1 + s, y1 - s], [x1, y1], [x1 - s, y1 - s], [x0 - s, y0 + s]]
+    : [[x0, y0], [x0 + s, y0 - s], [x1 - s, y1 - s], [x1, y1], [x1 - s, y1 + s], [x0 + s, y0 + s]];
+}
+
+// 把一串日期排成七段：字高 h，左下角在 (0, 0)，y 往上是負的。
+// on 是亮的段、off 是沒亮的段（開關小窗裡看得到淡淡的縫），每段一串點；w 是整串多寬（斜出去的也算）
+function segText(text, h) {
+  const cw = h * 0.56, t = h * 0.15, g = h * 0.04, adv = h * 0.14;
+  const L = t / 2, R = cw - t / 2, T = -h + t / 2, M = -h / 2, B = -t / 2;
+  const SEGS = {
+    a: [L + g, T, R - g, T], b: [R, T + g, R, M - g], c: [R, M + g, R, B - g], d: [L + g, B, R - g, B],
+    e: [L, M + g, L, B - g], f: [L, T + g, L, M - g], g: [L + g, M, R - g, M],
+  };
+  const on = [], off = [];
+  const put = (list, x, p) => list.push(p.map(([u, v]) => [x + u - v * SLANT, v]));
+  let x = 0;
+  for (const ch of text) {
+    if (ch === ' ') x += h * 0.32;
+    else if (ch === "'") {
+      put(on, x, bar(L, T, L, -h * 0.66, t * 0.9));
+      x += t + adv;
+    } else {
+      for (const k in SEGS) put(SEG7[+ch].includes(k) ? on : off, x, bar(...SEGS[k], t));
+      x += cw + adv;
+    }
+  }
+  return { on, off, w: x - adv + h * SLANT };
+}
+
+const polyD = (list) => list.map((p) => 'M' + p.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join('L') + 'Z').join('');
+
 // 印記怎麼上到照片：ctx 上 (x, y) 是印記的右下角，h 是字高
 const INKS = {
-  // 燙印：燈泡的熱隔著銅模把日期烙在底片角落，焦糖到赭褐，邊上燒出一圈暈。
-  // 字是模子刻的，所以每張都一樣工整；只有銅模壓下去的角度和燒的深淺每張差一點
-  burn(ctx, x, y, h, date, year) {
-    const hr = h * 1.3, text = dateText(date, year), tx = -hr - h * 0.3, ty = -h * 0.12;
-    const hour = HOURS[Math.floor(((date.getHours() + 1) % 24) / 2)];
-    const ink = (edge) => {
-      ctx.fillText(text, tx, ty);
-      if (edge) ctx.strokeText(text, tx, ty);
-      drawGlyph(ctx, hour, -hr / 2, -h / 2, hr, ctx.strokeStyle, { brush: 0 });
-    };
+  // 燭窗：機背裡點著一小朵燭火，隔著七段的縫照在底片角落。字是光印上去的，所以是亮的：
+  // 橘紅的芯，外面暈開一圈紅；火每次燒得旺不旺不一樣，亮度每張差一點
+  candle(ctx, x, y, h, date) {
+    const { on, w } = segText(dateText(date), h), path = new Path2D(polyD(on));
+    const blur = 'filter' in ctx;
     ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate((Math.random() - 0.5) * 0.012);
-    ctx.lineJoin = 'round';
-    ctx.font = `${h * 1.5}px ${DATE_FONT}`;
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'alphabetic';
-    // 先燒一圈暈，再壓上字芯
+    ctx.translate(x - w, y);
     ctx.globalCompositeOperation = 'screen';
-    ctx.globalAlpha = 0.5;
-    if ('filter' in ctx) ctx.filter = `blur(${Math.max(1, h * 0.12)}px)`;
-    ctx.lineWidth = h * 0.1;
-    ctx.strokeStyle = ctx.fillStyle = '#ff8a3c';
-    ink(true);
-    ctx.filter = 'none';
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 0.72 + Math.random() * 0.2;
-    ctx.lineWidth = h * 0.1;
-    ctx.strokeStyle = ctx.fillStyle = '#b8582a';
-    ink(false);
+    ctx.lineJoin = 'round';
+    ctx.fillStyle = ctx.strokeStyle = '#ff4a14';
+    ctx.globalAlpha = blur ? 0.6 : 0.25;
+    if (blur) ctx.filter = `blur(${Math.max(1, h * 0.16)}px)`;
+    ctx.lineWidth = h * 0.14;
+    ctx.fill(path);
+    ctx.stroke(path);
+    if (blur) ctx.filter = `blur(${Math.max(0.3, h * 0.02)}px)`;
+    ctx.globalAlpha = 0.82 + Math.random() * 0.18;
+    ctx.fillStyle = '#ffa44a';
+    ctx.fill(path);
     ctx.restore();
   },
 };
 
-// 把這台相機的日期印記畫上照片；year：年月日都印，不然只印月日
-export function drawDate(id, ctx, x, y, h, year) {
-  INKS[CAMERAS[id]?.date?.ink]?.(ctx, x, y, h, new Date(), year);
+// 把這台相機的日期印記畫上照片
+export function drawDate(id, ctx, x, y, h) {
+  INKS[CAMERAS[id]?.date?.ink]?.(ctx, x, y, h, new Date());
 }

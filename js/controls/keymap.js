@@ -258,13 +258,13 @@ export function bindKeymap({ ui, back }) {
     wait = {
       id, slot: s, el: b,
       done(code) {
-        if (code === false) return ui.hint('這顆留給選單', 2000);
+        if (code === false) return ui.hint('選單專用，不能換', 2000);
         stop();
         if (code === undefined) return;
         const moved = assign(id, s, code);
         draw();
         const name = (o) => `「${BY[o][1]}」`;
-        ui.hint(code ? [`${name(id)}改成 ${label(code)}`, ...moved.map(([o, c]) => `${name(o)}${c ? `改成 ${label(c)}` : '空了'}`)].join('，') : `${name(id)}的這格清掉了`, 3000);
+        ui.hint(code ? [`${name(id)}改成 ${label(code)}`, ...moved.map(([o, c]) => `${name(o)}${c ? `改成 ${label(c)}` : '空了'}`)].join('，') : `已清空${name(id)}`, 3000);
       },
     };
     draw();
@@ -275,7 +275,7 @@ export function bindKeymap({ ui, back }) {
     if (wait?.el === b) return stop();
     listen(b);
   });
-  card.querySelector('.km-reset')?.addEventListener('click', () => { stop(); reset(); draw(); ui.hint('按鍵換回原本的了', 2500); });
+  card.querySelector('.km-reset')?.addEventListener('click', () => { stop(); reset(); draw(); ui.hint('按鍵已還原', 2500); });
   const close = (toMenu = true) => {
     if (!shown()) return;
     stop();

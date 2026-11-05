@@ -12,7 +12,7 @@ function homeScreenCard(btn) {
     const el = document.createElement('div');
     el.id = 'a2hs-tip';
     el.className = 'studio-card';
-    el.innerHTML = '<p>點下方分享　→　加入主畫面</p><p>從桌面圖示開，就是全螢幕</p><div class="studio-row"><button class="btn primary">好</button></div>';
+    el.innerHTML = '<p>點下方分享　→　加入主畫面</p><p>從主畫面圖示開啟就是全螢幕</p><div class="studio-row"><button class="btn primary">好</button></div>';
     el.querySelector('button').addEventListener('click', () => el.remove());
     document.body.appendChild(el);
   });

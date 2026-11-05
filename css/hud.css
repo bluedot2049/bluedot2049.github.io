@@ -17,6 +17,8 @@
   opacity: 0;
 }
 #toast.show { animation: toast 8s ease forwards; }
+#toast.show.yield { animation: toast-yield .4s ease forwards; }
+@keyframes toast-yield { from { opacity: 1; } to { opacity: 0; } }
 /* 名字長（--n 是字數，ui.js 寫）、螢幕窄時先收字距，再不夠才縮字；--tw 是扣掉兩側紋飾最短時剩下的寬 */
 #toast .t1 {
   display: flex; align-items: center; gap: 16px; max-width: calc(100vw / var(--ui, 1) - 16px); white-space: nowrap;
@@ -97,6 +99,8 @@ body.desk #toast .t2 { font-size: 22px; margin-top: 12px; }
   background: var(--gold); transform: rotate(45deg); opacity: .7;
 }
 #hint.show { opacity: 1; }
+/* 側欄開著（作品資訊、換裝；手機橫拿也是）：跟按鈕列一樣排到剩下那塊畫面的中間，不壓到面板。直拿 --panel-w 是 0，不動 */
+body.panel-open #hint { left: calc((100vw / var(--ui, 1) - var(--panel-w)) / 2); max-width: calc(100vw / var(--ui, 1) - var(--panel-w) - 32px); }
 
 /* 門邊立牌那張（能在哪裡玩）和問胖頭的題目卡：門口告示（.notice）同一張卡，這裡只管位置和裡面多出來的東西。
    手機橫拿靠左、垂直置中，不擋住畫面中間的角色；直式貼底，房間外那片空的地方剛好放得下；電腦在下面 */
@@ -360,6 +364,44 @@ body.photo #photo-btn .x { display: block; }
 }
 #sound-btn.muted .off { display: block; }
 #sound-btn.muted { color: var(--muted); }
+#sound-btn[aria-expanded="true"] { border-color: var(--gold); color: var(--gold-hi); }
+/* 音量盤（volume.js）：三根直的推桿，金線細軌、填滿的那段是金色，上面寫多少、底下寫是什麼。
+   電腦從聲音鈕往上長（volume.js 照鈕的位置寫 left、bottom），手機貼底中間。推桿整根擋掉觸控手勢，拖了不會轉到鏡頭 */
+#vol {
+  position: fixed; z-index: 21; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: 12px; padding: 16px 18px 14px;
+  transform: translateX(-50%);
+  background: rgba(16, 11, 9, .94); border: 1px solid rgba(232, 184, 106, .2); border-radius: 2px;
+  animation: vol-in .22s ease-out both;
+}
+@keyframes vol-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+.vol-row { display: flex; gap: 6px; }
+.vs { width: 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.vs b { font: 13px/1 var(--latin); font-weight: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
+.vs span { font-size: 13px; letter-spacing: .2em; margin-right: -.2em; color: var(--text); }
+/* 軌道本身窄，摸得到的範圍寬：手指按在軌道旁邊也算 */
+.vs-track { position: relative; width: 44px; height: 150px; touch-action: none; outline: none; cursor: var(--cur-pointer); }
+.vs-track::before { content: ''; position: absolute; left: 50%; top: 8px; bottom: 8px; width: 2px; margin-left: -1px; background: rgba(232, 184, 106, .22); }
+.vs-fill { position: absolute; left: 50%; bottom: 8px; width: 2px; margin-left: -1px; height: calc((100% - 16px) * var(--v, 1)); background: var(--gold); }
+.vs-knob {
+  position: absolute; left: 50%; bottom: calc(8px + (100% - 16px) * var(--v, 1)); width: 18px; height: 18px; margin: 0 0 -9px -9px;
+  border: 1.4px solid var(--gold); border-radius: 50%; background: #2a1c12; transition: transform .15s;
+}
+.vs-track:active .vs-knob, .vs-track.drag .vs-knob { transform: scale(1.15); }
+.vs-track:focus-visible .vs-knob, .vs-track.pad-focus .vs-knob { border-color: var(--gold-hi); box-shadow: 0 0 0 3px rgba(232, 184, 106, .25); }
+@media (hover: hover) { .vs-track:hover .vs-knob { border-color: var(--gold-hi); } }
+/* 靜音的時候推桿暗下來，數字還留著，打開聲音回到原本的位置 */
+#vol.muted .vs-fill, #vol.muted .vs-knob { opacity: .4; }
+.vol-mute { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; font-size: 13px; letter-spacing: .2em; }
+.vol-mute svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.vol-mute .off, .vol-mute[aria-pressed="true"] .on { display: none; }
+.vol-mute[aria-pressed="true"] .off { display: block; }
+body.desk #vol { bottom: auto; }
+/* 手機橫拿高度不夠：推桿短一點 */
+@media (orientation: landscape) and (max-height: 500px) {
+  body:not(.desk) .vs-track { height: 120px; }
+}
+@media (prefers-reduced-motion: reduce) { #vol { animation: none; } }
 #shoulder-btn.on { border-color: var(--gold); color: var(--gold-hi); }
 /* 黑眼鈕：叫出來時外圈變金（scene/guide.js） */
 #eye-btn.on { border-color: var(--gold); color: var(--gold-hi); }
@@ -408,6 +450,16 @@ body.photo #reticle { display: none; }
 .snapsave img { display: block; width: auto; height: auto; max-width: 112px; max-height: min(36vh, calc(100vh - 480px - env(safe-area-inset-top))); margin: 0 auto 5px; border: 1px solid rgba(246, 219, 166, .6); }
 .snapsave span { display: block; padding: 0 4px; }
 .snapsave.out { opacity: 0; transform: translateY(-6px); }
+/* 飛進行囊時只剩照片：底和字在被拎起來那一下淡掉（album.js 的 stow） */
+.snapsave.fly { background-color: transparent; border-color: transparent; transition: background-color .2s, border-color .2s; }
+.snapsave.fly span { opacity: 0; transition: opacity .15s; }
+/* 行囊接住照片：往下一沉再回來，金線亮一圈就散 */
+#pack-btn.took { animation: pack-took .6s cubic-bezier(.3, 1.5, .5, 1); }
+@keyframes pack-took {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(246, 219, 166, .55); }
+  30% { transform: scale(.9); box-shadow: 0 0 0 2px rgba(246, 219, 166, .5); }
+  100% { transform: scale(1); box-shadow: 0 0 0 9px rgba(246, 219, 166, 0); }
+}
 @media (orientation: landscape) and (max-height: 500px) {
   body:not(.desk) .snapsave { top: calc(14px + env(safe-area-inset-top)); }
   body:not(.desk) .snapsave img { max-height: calc(100vh - 240px - env(safe-area-inset-top)); }
@@ -431,7 +483,7 @@ body.desk .snapsave img { max-width: 120px; max-height: 160px; }
 #pause .set input[type=range] { width: 160px; accent-color: var(--gold); }
 #pause .set input[type=checkbox] { accent-color: var(--gold); }
 /* 介面大小：100% 是照視窗高度自動放大的大小 */
-#pause .size b, #pause .view b { margin-left: 8px; font-weight: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
+#pause .size b, #pause .view b, #pause .vol-set b { margin-left: 8px; font-weight: normal; color: var(--muted); font-variant-numeric: tabular-nums; }
 #pause .saves b { font-weight: normal; color: var(--muted); }
 #pause .saves .btn { min-height: 30px; padding: 0 12px; font-size: 12.5px; letter-spacing: .08em; }
 /* 手把按鍵（gamepad.js）：暫停選單點進去的那一張，同一種卡、同一個位置。換過的那顆字亮一點，等按鍵的那列呼吸 */
@@ -629,7 +681,7 @@ body.panel-open:not(.desk) #photo-btn, body.panel-open:not(.desk) #say-btn, body
 /* 坐著看風景時，其他按鈕退到背景，但還是按得到。相機不淡，坐著也常拍 */
 body.sitting #joy, body.sitting #jump-btn, body.sitting #emote, body.sitting #top-btns, body.sitting #swap-btn, body.sitting:not(.desk) #say-btn, body.sitting:not(.desk) #pack-btn { opacity: .3; }
 
-/* ───────── 搖桿換邊：小圓鈕貼在搖桿內側。直拿預設搖桿在右，橫拿預設在左，按一下就反過來 ───────── */
+/* ───────── 搖桿換邊：小圓鈕貼在搖桿內側。沒選過時直拿在右、橫拿在左，轉直橫留在原本那邊，按一下換到另一邊 ───────── */
 #swap-btn {
   position: fixed; z-index: 20;
   right: calc(var(--joy-x) + var(--joy) + 10px); bottom: var(--edge-b);
@@ -642,13 +694,18 @@ body.sitting #joy, body.sitting #jump-btn, body.sitting #emote, body.sitting #to
 #swap-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 #swap-btn:active { color: var(--gold-hi); border-color: var(--gold); }
 body.touch #swap-btn { display: flex; }
-/* 攝影模式不能換邊（換了快門會跑走），但照著平常的邊排 */
-body.photo #swap-btn { display: none; }
+/* 攝影模式搖桿內側是鏡頭那排、高度尺的字，換邊鈕移到搖桿正上方、貼外側（直拿時在高度尺 ▼ 的外邊），快門那組跟著換到另一邊 */
+body.photo:not(.desk) #swap-btn { right: var(--joy-x); bottom: calc(var(--edge-b) + var(--joy) + 10px); }
 body.joy-left #joy { right: auto; left: var(--joy-x); }
 body.joy-left #swap-btn { right: auto; left: calc(var(--joy-x) + var(--joy) + 10px); }
+body.joy-left.photo:not(.desk) #swap-btn { left: var(--joy-x); }
 body.touch #hint { bottom: auto; top: calc(70px + env(safe-area-inset-top)); }
 /* 提示讓位：房名（#toast）出來時排到房名底下；錄影中排到錄影指示底下（電腦版在下面） */
 body.touch #toast.show ~ #hint { top: calc(13vh + 118px + env(safe-area-inset-top)); }
+/* 橫拿畫面矮，排到房名底下就壓在角色頭上：房名停一會兒先讓位（ui.js 的 putHint 加 yield），提示照樣在上排底下 */
+@media (orientation: landscape) and (max-height: 500px) {
+  body.touch #toast.show ~ #hint { top: calc(70px + env(safe-area-inset-top)); }
+}
 body.touch:has(#ph-rec:not([hidden])) #hint { top: calc(106px + env(safe-area-inset-top)); }
 
 /* ───────── 拇指弧（手機）：「跳」放在不推搖桿那隻手的角落當圓心，坐、相機、表情排在拇指掃得到的弧上，
@@ -710,7 +767,12 @@ body:not(.desk):has(#dress.open) #pack-btn { --a: 90deg; --r: calc(var(--dress-h
     animation: pack-pop .35s cubic-bezier(.3, 1.4, .5, 1) backwards;
   }
   body:not(.desk):has(#dress.open) #pack-btn svg { width: calc(var(--seal) * .42); height: calc(var(--seal) * .42); }
+  /* 行囊開著時側欄蓋在鏡子上，這顆不收，同一個位置換成人物：按一下收起行囊、回到鏡子（跟攝影時相機鈕換成收起一樣） */
+  body:not(.desk):has(#dress.open) #pack-btn.on { opacity: 1; pointer-events: auto; animation: none; }
+  body:not(.desk):has(#dress.open) #pack-btn.on :is(.bag, .ink) { display: none; }
+  body:not(.desk):has(#dress.open) #pack-btn.on .back { display: block; }
 }
+#pack-btn .back { display: none; }
 @keyframes pack-pop { from { opacity: 0; transform: scale(.7); } }
 @media (prefers-reduced-motion: reduce) { body:not(.desk) #pack-btn { transition: opacity .3s; animation: none !important; } }
 /* 360 寬的手機：互動鍵跟搖桿擠過來，22.5° 只剩 3px，往「坐」那邊轉一點，每一顆都還隔 10px 以上 */

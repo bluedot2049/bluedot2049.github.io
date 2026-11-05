@@ -192,7 +192,7 @@ function poster(to) {
   return group;
 }
 
-// 照 places.js 的順序，畫廊自己除外
+// 照 places.js 的順序，畫廊自己除外；還在蓋的（dev）也掛，牆面不跟著開關變
 export function buildTravelPosters() {
-  return PLACES.filter((p) => p.to && p.to !== 'gallery').map((p) => ({ to: p.to, group: poster(p.to) }));
+  return PLACES.filter((p) => (p.to || p.dev) && (p.to || p.dev) !== 'gallery').map((p) => ({ to: p.to || p.dev, group: poster(p.to || p.dev) }));
 }

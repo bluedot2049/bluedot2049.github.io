@@ -13,8 +13,9 @@ import { buildRain } from './rain.js';
 import { RainSound } from './rain-sound.js';
 import { Footprints } from '../../core/footprints.js';
 
-// 一上岸就放。rest：播完停幾秒（最少、最多）再從頭放，中間只剩海、人潮和雨
-export const bgm = { src: 'assets/audio/haishi.m4a', from: 'haishi', rest: [40, 120] };
+// 一上岸就放。rest：播完停幾秒（最少、最多）再從頭放，中間只剩海、人潮和雨。
+// len：曲子幾秒（ffprobe 量的），有寫就照伺服器時間排，同一區的人聽到同一段（ambience.js 的 musicAt）
+export const bgm = { src: 'assets/audio/haishi.m4a', from: 'haishi', rest: [40, 120], len: 253.2 };
 
 // 海市的高度霧和調色（grade.js）：鎮子和山坡從近處就開始往夜色裡退。?debug 時右上角可以即時調，「複製」貼回這裡
 // 色調「海市藍夜01」（tones.js）裡的 far、farAir：一百公尺外再罩一層遠景空氣，遠山越遠越退進天邊的顏色，海和山腳也吃同一層
@@ -90,8 +91,8 @@ export function crowd({ scene, world, shadowTex, player, camera, ambience, coars
   const vendors = new Vendors({
     scene, shadowTex, spots: world.shops,
     onPostcard: postcard,
-    onGift: (g) => ui.toast('收到' + g.items.map(([k, id]) => optionName(k, id)).join('、'), '回畫廊照鏡子就能穿上'),
-    onLab: (n, L) => ui.toast(`拿到 ${n} 張照片・${L.style}`, '打開行囊的相簿看'),
+    onGift: (g) => ui.toast('收到' + g.items.map(([k, id]) => optionName(k, id)).join('、'), '到畫廊鏡前換上'),
+    onLab: (n, L) => ui.toast(`拿到 ${n} 張照片・${L.style}`, '在行囊的相簿'),
   });
   const passers = new Passersby({ scene, world, shadowTex, ambience, coarse, force: params.get('crowd') });
   vendors.setQuiet(() => passers.busy < 0.2);

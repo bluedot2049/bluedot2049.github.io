@@ -12,9 +12,9 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { EDGE, edgeProfile, onEdgeExit } from './headless.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'tools/out');
@@ -24,7 +24,6 @@ const ZONES = ['gallery', 'haishi', 'shenlou', 'ting', 'jinghai', 'jinggong'];
 // 有路人的區域開著路人跑（?crowd=1 人最多），另外記一份路人指紋：時間固定在同一刻，每一組人該在哪、長什麼樣。整理路人程式時拿來比
 const CROWD = { haishi: 1, ting: 1 };
 const PORT = 8173, DBG = 9373;
-const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.avif': 'image/avif', '.json': 'application/json', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.m4a': 'audio/mp4', '.webmanifest': 'application/manifest+json' };
 
 const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? walk(path.join(dir, d.name)) : [path.join(dir, d.name)]));
@@ -40,16 +39,18 @@ const srv = http.createServer((q, r) => {
     r.end(b);
   });
 }).listen(PORT);
-const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'smoke-'));
+const prof = edgeProfile('smoke');
 // 多人頻道的 WebSocket 擋不掉（Network.setBlockedURLs 只管一般請求），直接讓 supabase.co 查不到網址，測試角色才不會出現在線上
 const edge = spawn(EDGE, ['--headless=new', `--remote-debugging-port=${DBG}`, `--user-data-dir=${prof}`, '--host-resolver-rules=MAP *.supabase.co ~NOTFOUND', '--window-size=1280,800', '--autoplay-policy=no-user-gesture-required', 'about:blank']);
+let ws;
+onEdgeExit(edge, prof, () => { ws?.close(); srv.close(); });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let tgt;
 for (let i = 0; i < 90 && !tgt; i++) {
   try { tgt = (await (await fetch(`http://127.0.0.1:${DBG}/json`)).json()).find((t) => t.type === 'page'); } catch {}
   if (!tgt) await sleep(1000);
 }
-const ws = new WebSocket(tgt.webSocketDebuggerUrl);
+ws = new WebSocket(tgt.webSocketDebuggerUrl);
 await new Promise((r) => (ws.onopen = r));
 let id = 0, problems = [];
 const wait = new Map();
@@ -188,9 +189,5 @@ if (diffWith) {
     }
   }
 }
-ws.close();
-edge.kill();
-srv.close();
-try { fs.rmSync(prof, { recursive: true, force: true }); } catch {}
 console.log(bad ? `\n有 ${bad} 個問題` : '\n全部通過');
 process.exit(bad ? 1 : 0);

@@ -217,7 +217,7 @@ function shoes(amb, id, t) {
 // 捏角色面板改了外觀：比對前後，換了什麼就出那件東西的聲音
 export function dressSound(amb, prev, next) {
   const ctx = amb.ctx;
-  if (!ctx || amb.muted || amb.gone || !prev) return;
+  if (!ctx || amb.hush || !prev) return;
   const changed = Object.keys(next).filter((k) => k !== 'face' && k !== 'keep' && next[k] !== prev[k]);
   if (!changed.length) return;
   const t = ctx.currentTime + 0.02;
@@ -239,6 +239,6 @@ export function dressSound(amb, prev, next) {
 // 自己畫臉：筆在紙上走，一筆一筆短短的沙沙聲
 export function paintSound(amb) {
   const ctx = amb.ctx;
-  if (!ctx || amb.muted || amb.gone || !amb.allow(paintGate, 14, 2)) return;
+  if (!ctx || amb.hush || !amb.allow(paintGate, 14, 2)) return;
   play(amb, 'dab', VOL * 0.45, ctx.currentTime + 0.01);
 }
