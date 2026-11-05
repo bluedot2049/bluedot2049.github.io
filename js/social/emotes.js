@@ -25,15 +25,18 @@ const ICONS = {
 export const emoteName = (e) => ICONS[e]?.name ?? e;
 
 // 按鈕裡的圖示：顏色跟著按鈕的 color，大小交給 CSS
-export function emoteSVG(e) {
-  const ic = ICONS[e];
+export const emoteSVG = (e) => iconSVG(ICONS[e]);
+export function iconSVG(ic) {
   return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">`
     + `<path d="${ic.s}"/>${ic.f ? `<path d="${ic.f}" fill="currentColor" stroke="none"/>` : ''}</svg>`;
 }
 
 // 頭上那一個：24 格放大成 size 畫在 g 現在的原點。金線外面先描一圈淡淡的深色，夕陽底下也看得清楚，再發一點光
-export function drawEmote(g, e, size) {
-  const ic = ICONS[e], k = size / 24;
+export const drawEmote = (g, e, size) => drawIcon(g, ICONS[e], size);
+// 同一套筆法畫別的圖示（{ s 線, f 塗滿的點 }），拍照人的口令（cues.js）也用這個
+export { dia, ring };
+export function drawIcon(g, ic, size) {
+  const k = size / 24;
   const line = new Path2D(ic.s), dots = ic.f && new Path2D(ic.f);
   g.save();
   g.scale(k, k);

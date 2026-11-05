@@ -49,7 +49,7 @@ try {
   await sleep(200);
   let s = await st();
   const slots = await ev(`document.querySelectorAll('#keymap .km-slot').length`);
-  check(s.card && !s.pause && slots === 76, '換鍵卡打開，38 個功能各兩格', slots);
+  check(s.card && !s.pause && slots === 84, '換鍵卡打開，42 個功能各兩格', slots);
   await click('#keymap .km-slot[data-a="jump"][data-s="0"]');
   s = await st();
   check(/按一下/.test(s.listen), '點「跳」的第一格：等鍵', s.listen);

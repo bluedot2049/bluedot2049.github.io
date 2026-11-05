@@ -37,6 +37,8 @@ const SAY_GAP = 1200;        // 自己送話的最短間隔
 const HEAR_GAP = 700;        // 同一個隊友的話，間隔太短的不理
 const MARK_GAP = 1500;
 const MARK_TIME = 10;        // 標記亮幾秒
+const SPOT_TIME = 90;        // 拍照的站位記號亮幾秒（拍的人說「好了」就收）
+const SPOT_NEAR = 0.5;       // 走到站位這麼近、停下來，算站上去了
 const CALL_GAP = 3000;       // 自己吹哨的最短間隔
 const CALL_HEAR_GAP = 1500;  // 同一個隊友的哨音，間隔太短的不理
 const CALL_SHOW = 2400;      // 吹哨的人記號閃多久
@@ -135,6 +137,35 @@ function makeMark(color) {
   return { group, ring, mats, geos: [beamGeo, ringGeo] };
 }
 
+// 拍照的站位（cues.js 的「站這」）：地上一圈加一雙腳印，腳尖朝拍的人。不立光柱，跟一般標記分得開。
+// mats 的順序跟 makeMark 一樣（亮的那一層、圈），淡入淡出照同一套
+function makeSpot(color, face) {
+  const group = new THREE.Group(), mats = [];
+  const mat = () => {
+    const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, toneMapped: false });
+    mats.push(m);
+    return m;
+  };
+  const feet = new THREE.Group(), footMat = mat();
+  const sole = new THREE.CircleGeometry(1, 20).scale(0.055, 0.1, 1).rotateX(-Math.PI / 2);
+  const heel = new THREE.CircleGeometry(1, 16).scale(0.042, 0.045, 1).rotateX(-Math.PI / 2);
+  for (const sx of [-1, 1]) {
+    const s = new THREE.Mesh(sole, footMat), h = new THREE.Mesh(heel, footMat);
+    s.position.set(sx * 0.09, 0, 0.04);
+    h.position.set(sx * 0.09, 0, -0.1);
+    feet.add(s, h);
+  }
+  feet.position.y = 0.04;
+  feet.rotation.y = face;
+  group.add(feet);
+  const ringGeo = new THREE.RingGeometry(0.32, 0.38, 40).rotateX(-Math.PI / 2);
+  const ring = new THREE.Mesh(ringGeo, mat());
+  ring.position.y = 0.04;
+  group.add(ring);
+  group.renderOrder = 5;
+  return { group, ring, mats, geos: [sole, heel, ringGeo] };
+}
+
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
 
 export class Party {
@@ -166,6 +197,8 @@ export class Party {
     this.away = false;
     this.onHeard = null;            // (multiplayer 代號)：隊友說了一句話、吹了哨
     this.onFar = null;              // (區域)：點了別區隊友的名牌，main 帶人走到渡口、翻到那一區
+    this.pk = 0;                    // 自己最後一張給隊友看的照片編號（peek.js 設），報到時帶上；0 是沒有
+    this.peek = null;               // 湊過來看（peek.js），收到 peek、pix 轉給它
     // 切到背景時畫面停了，update 不會跑：另外每十秒報一次（瀏覽器會再放慢），別區的隊友才知道還在
     setInterval(() => { if (document.hidden && this.state) this.beat(); }, BEAT_IDLE * 2);
 
@@ -269,6 +302,8 @@ export class Party {
       .on('broadcast', { event: 'bye' }, on(this.onBye))
       .on('broadcast', { event: 'note' }, on(this.onNote))
       .on('broadcast', { event: 'call' }, on(this.onCall))
+      .on('broadcast', { event: 'peek' }, on((p) => this.peek?.onAsk(p)))
+      .on('broadcast', { event: 'pix' }, on((p) => this.peek?.onPix(p)))
       .subscribe((status) => {
         if (ch !== this.ch) return;
         this.live = status === 'SUBSCRIBED';
@@ -303,7 +338,7 @@ export class Party {
   }
 
   // 報自己在哪：這一區的代號（找得到畫面上的角色）、區域、座標。
-  // a：還在等隊友回話　n：剛答應邀請、第一次進來　go：正要換頁去哪一區
+  // a：還在等隊友回話　n：剛答應邀請、第一次進來　go：正要換頁去哪一區　pk：有照片給隊友湊過來看（peek.js）
   // 頻道還沒接上就不報，接上時馬上報一次
   beat() {
     if (!this.live) return;
@@ -311,7 +346,7 @@ export class Party {
     this.lastBeat = performance.now();
     this.send('hi', {
       s: this.mp.id, j: s.j, zn: this.zone, x: +p.x.toFixed(2), z: +p.z.toFixed(2), w: this.away ? 1 : 0,
-      a: this.asking ? 1 : 0, n: s.guest && !s.met ? 1 : 0, ...(this.going && { go: this.going }),
+      a: this.asking ? 1 : 0, n: s.guest && !s.met ? 1 : 0, ...(this.going && { go: this.going }), ...(this.pk && { pk: this.pk }),
     });
   }
 
@@ -453,7 +488,8 @@ export class Party {
     }
     const go = isZone(p.go) ? p.go : null;
     if (go && go !== o.go) o.goAt = performance.now();   // 什麼時候出發的：渡船卡翻到最近出發的那個人去的地方
-    Object.assign(o, { s: p.s, j: p.j, zn: p.zn, go, x: p.x, z: p.z, w: p.w === 1 ? 1 : 0, seen: performance.now() });
+    const pk = Number.isInteger(p.pk) && p.pk > 0 && p.pk < 2 ** 31 ? p.pk : 0;
+    Object.assign(o, { s: p.s, j: p.j, zn: p.zn, go, x: p.x, z: p.z, w: p.w === 1 ? 1 : 0, pk, seen: performance.now() });
     // 對方還沒聽到任何隊友：多半是剛答應、剛渡海，頻道還沒接好，漏掉了這邊上一次的回報。馬上再報一次，不讓他等五秒
     if (p.a === 1) this.beatSoon();
     if (!fresh) return;
@@ -490,7 +526,7 @@ export class Party {
   onMark(p) {
     if (!p || !isId(p.m) || !this.mates.has(p.m) || p.zn !== this.zone) return;
     if (!isNum(p.x, 500) || !isNum(p.y, 200) || !isNum(p.z, 500)) return;
-    this.showMark(p.m, p.x, p.y, p.z);
+    this.showMark(p.m, p.x, p.y, p.z, p.p === 1 && isNum(p.f, 7) ? p.f : null);
   }
 
   // 隊友自動說的話（去哪了、到哪了）：照代號自己組字，跟說話一樣冒在他頭上或名牌旁，字淡一點
@@ -891,24 +927,42 @@ export class Party {
     return true;
   }
 
-  markAt(cx, cy) {
+  // face：拍照的站位（cues.js），拍的人的鏡頭在哪，腳印朝那裡；回傳有沒有標上
+  markAt(cx, cy, face = null) {
     const now = performance.now();
-    if (!this.together || now - this.lastMark < MARK_GAP) return;
+    if (!this.together || now - this.lastMark < MARK_GAP) return false;
     const hit = this.player.pick(cx, cy);
-    if (!hit) return;
+    if (!hit) return false;
     this.lastMark = now;
     const { x, y, z } = hit.point;
-    this.showMark(this.state.me, x, y, z);
-    this.send('mark', { zn: this.zone, x: +x.toFixed(2), y: +y.toFixed(2), z: +z.toFixed(2) });
+    const f = face ? +Math.atan2(face.x - x, face.z - z).toFixed(2) : null;
+    this.showMark(this.state.me, x, y, z, f);
+    this.send('mark', { zn: this.zone, x: +x.toFixed(2), y: +y.toFixed(2), z: +z.toFixed(2), ...(face ? { p: 1, f } : {}) });
+    return true;
   }
 
-  // 一人一個標記，新的換掉舊的
-  showMark(m, x, y, z) {
+  // 一人一個標記，新的換掉舊的。face 不是 null 就是拍照的站位，腳印朝這個方向
+  showMark(m, x, y, z, face = null) {
     this.dropMark(m);
-    const mark = makeMark(new THREE.Color(this.colorOf(m)));
+    const spot = face !== null, color = new THREE.Color(this.colorOf(m));
+    const mark = spot ? makeSpot(color, face) : makeMark(color);
     mark.group.position.set(x, y, z);
     this.scene.add(mark.group);
-    this.marks.set(m, { mark, t: 0, el: null, x, y, z });
+    this.marks.set(m, { mark, t: 0, el: null, x, y, z, spot, face, life: spot ? SPOT_TIME : MARK_TIME, stood: false });
+  }
+
+  // 拍的人說「好了」：收掉他的站位（m 是隊伍代號；mpId 是他在 multiplayer 的代號，收到口令時用）
+  dropSpot(m) {
+    if (this.marks.get(m)?.spot) this.dropMark(m);
+  }
+
+  dropSpotOf(mpId) {
+    for (const o of this.mates.values()) if (o.s === mpId) this.dropSpot(o.m);
+  }
+
+  // 自己的站位記號收掉（說「好了」）
+  dropOwnSpot() {
+    if (this.state) this.dropSpot(this.state.me);
   }
 
   dropMark(m) {
@@ -1059,11 +1113,19 @@ export class Party {
     // 標記：光柱慢慢亮起、最後淡掉；人看不到時畫面邊上也指個方向
     for (const [m, k] of this.marks) {
       k.t += dt;
-      if (k.t >= MARK_TIME) {
+      if (k.t >= k.life) {
         this.dropMark(m);
         continue;
       }
-      const a = Math.min(1, k.t / 0.3) * Math.min(1, (MARK_TIME - k.t) / 1.5);
+      // 走到隊友給的站位、停下來：轉身對著拍的人（main.js 接到 cues.js），一個站位只轉一次
+      if (k.spot && !k.stood && m !== this.state?.me) {
+        const pl = this.player;
+        if (Math.hypot(pl.pos.x - k.x, pl.pos.z - k.z) < SPOT_NEAR && pl.speed < 0.05) {
+          k.stood = true;
+          this.onSpot?.(this.mates.get(m)?.s, k.face);
+        }
+      }
+      const a = Math.min(1, k.t / 0.3) * Math.min(1, (k.life - k.t) / 1.5);
       const [beam, ring] = k.mark.mats;
       beam.opacity = a * 0.85;
       ring.opacity = a * (0.55 + 0.45 * Math.sin(k.t * 4));

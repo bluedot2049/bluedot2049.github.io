@@ -271,6 +271,17 @@ export const VOICES = {
     }
     return 0.25;
   },
+  // 拍照人說「再一張」（cues.js）：拇指撥捲片桿，棘輪喀啦啦四小下，最後卡一聲到位。一下比一下高一點
+  wind(ctx, out, t, p, noise) {
+    for (let i = 0; i < 4; i++) {
+      const dt = i * 0.055;
+      hiss(ctx, out, noise, t + dt, 0.008, 'bandpass', (3800 + i * 250) * p, 0.32, 4);
+      osc(ctx, 'sine', t + dt, 0.02, [[0, (2400 + i * 120) * p]]).connect(envelope(ctx, t + dt, 0.001, 0.02, 0.05)).connect(out);
+    }
+    hiss(ctx, out, noise, t + 0.3, 0.015, 'bandpass', 1700 * p, 0.7, 2);
+    osc(ctx, 'sine', t + 0.3, 0.045, [[0, 400 * p], [0.045, 300 * p]]).connect(envelope(ctx, t + 0.3, 0.002, 0.045, 0.3)).connect(out);
+    return 0.36;
+  },
   // 定焦鏡想變焦：舊金的鏡頭圈擰一下就到頭，「頓」
   stop(ctx, out, t, p, noise) {
     rub(ctx, out, noise, t, 2600 * p, 1800 * p, 0.01, 0.05, 0.12, { low: 900 * p, shake: 0 });

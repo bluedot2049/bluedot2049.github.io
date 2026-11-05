@@ -104,12 +104,12 @@ body.panel-open #hint { left: calc((100vw / var(--ui, 1) - var(--panel-w)) / 2);
 
 /* 門邊立牌那張（能在哪裡玩）和問胖頭的題目卡：門口告示（.notice）同一張卡，這裡只管位置和裡面多出來的東西。
    手機橫拿靠左、垂直置中，不擋住畫面中間的角色；直式貼底，房間外那片空的地方剛好放得下；電腦在下面 */
-#guide, #ask {
+#guide, #ask, #peek {
   position: fixed; left: calc(24px + env(safe-area-inset-left)); top: 50%; z-index: 25;
   display: none; transform: translateY(-50%);
   background: rgba(16, 11, 9, .94); box-shadow: var(--shadow);
 }
-:is(#guide, #ask).show { display: flex; animation: guide-in .4s ease-out both; }
+:is(#guide, #ask, #peek).show { display: flex; animation: guide-in .4s ease-out both; }
 @keyframes guide-in { from { opacity: 0; transform: translateY(calc(-50% + 6px)); } }
 #guide .keys { list-style: none; margin: 0; padding: 0; }
 #guide .keys li {
@@ -122,17 +122,17 @@ body.panel-open #hint { left: calc((100vw / var(--ui, 1) - var(--panel-w)) / 2);
 #guide .keys li:nth-child(3) { animation-delay: .12s; }
 #guide .keys li:nth-child(4) { animation-delay: .18s; }
 #guide .keys li:nth-child(5) { animation-delay: .24s; }
-:is(#guide, #ask) kbd {
+:is(#guide, #ask, #peek) kbd {
   min-width: 20px; padding: 0 5px; text-align: center;
   font: 11.5px/1.6 var(--latin); letter-spacing: .04em; color: var(--text);
   border: 1px solid rgba(232, 184, 106, .35); border-radius: 2px;
 }
-:is(#guide, #ask) .btn kbd { color: inherit; }
+:is(#guide, #ask, #peek) .btn kbd { color: inherit; }
 body.touch #guide .for-desk, body:not(.touch) #guide .for-touch { display: none; }
 /* 中間那條小標（支援）：跟告示的副標同一種字 */
 #guide .part { margin-top: 2px; font-size: 12.5px; letter-spacing: .12em; color: var(--muted); }
 /* 矮的螢幕可以捲 */
-:is(#guide, #ask) { max-height: calc(100vh / var(--ui, 1) - 24px); overflow-y: auto; }
+:is(#guide, #ask, #peek) { max-height: calc(100vh / var(--ui, 1) - 24px); overflow-y: auto; }
 /* 題目：一列一題，前面一顆魔法印泥（沒問過的亮著，panels.css 的封蠟同一款），電腦後面寫 1–9 */
 #ask .asks { list-style: none; margin: 0; padding: 0; }
 #ask .asks button {
@@ -151,25 +151,38 @@ body.touch #guide .for-desk, body:not(.touch) #guide .for-touch { display: none;
 #ask .asks kbd { color: var(--muted); border-color: rgba(232, 184, 106, .2); }
 #ask .ink { position: relative; width: 9px; height: 9px; }
 @media (orientation: portrait) {
-  #guide, #ask {
+  #guide, #ask, #peek {
     left: 16px; right: 16px; top: auto; bottom: calc(16px + env(safe-area-inset-bottom));
     width: auto; max-width: 420px; margin: 0 auto; transform: none;
   }
-  :is(#guide, #ask).show { animation-name: guide-up; }
+  :is(#guide, #ask, #peek).show { animation-name: guide-up; }
   /* 題目卡在手機上蓋住拇指那排：互動鍵、搖桿都在卡片底下，開著時只聽卡片 */
   #ask { max-height: 62vh; }
 }
 @keyframes guide-up { from { opacity: 0; transform: translateY(6px); } }
+/* 湊過來看（peek.js）：照片一格，到之前是暗的、照 3:2 留位置（不寫傳送中），到了換成照片；底下「收進相簿」窄、「好了」撐滿 */
+#peek .pic { aspect-ratio: 3 / 2; background: rgba(0, 0, 0, .35); border: 1px solid rgba(232, 184, 106, .2); }
+#peek.ready .pic { aspect-ratio: auto; background: none; }
+#peek .pic img { display: none; width: 100%; max-height: calc(52vh / var(--ui, 1)); object-fit: contain; }
+#peek.ready .pic img { display: block; animation: peek-in .3s ease-out both; }
+@keyframes peek-in { from { opacity: 0; } }
+#peek .foot { display: flex; gap: 8px; }
+#peek .foot .keep { flex: none; min-height: 42px; padding: 0 16px; letter-spacing: .14em; }
+#peek .foot .keep:disabled { color: var(--muted); border-style: dashed; cursor: var(--cur-default); }
+#peek .foot .enter { flex: 1; width: auto; min-height: 42px; gap: 10px; padding: 0 14px; white-space: nowrap; }
+#peek .foot .keep { white-space: nowrap; }
+@media (orientation: portrait) { #peek .pic img { max-height: 40vh; } }
+@media (prefers-reduced-motion: reduce) { #peek.ready .pic img { animation: none; } }
 /* 電腦：立牌那張停下來看，放正中，跟暫停選單同一個位置；題目卡是小卡，長在胖頭旁邊（ask.js 每幀寫 --cx、--cy：卡片左上角） */
 body.desk #guide { left: 50%; transform: translate(-50%, -50%); }
 body.desk #guide.show { animation-name: guide-mid; }
 @keyframes guide-mid { from { opacity: 0; transform: translate(-50%, calc(-50% + 6px)); } }
-body.desk #ask { left: var(--cx, 50%); top: var(--cy, 30%); right: auto; bottom: auto; transform: none; width: 300px; }
-body.desk #ask.show { animation-name: guide-up; }
+body.desk :is(#ask, #peek) { left: var(--cx, 50%); top: var(--cy, 30%); right: auto; bottom: auto; transform: none; width: 300px; }
+body.desk :is(#ask, #peek).show { animation-name: guide-up; }
 @media (orientation: landscape) and (max-height: 560px) {
   #guide .keys li, #ask .asks button { padding: 6px 0; }
 }
-@media (prefers-reduced-motion: reduce) { :is(#guide, #ask).show, #guide .keys li, #ask .asks button { animation: none; } }
+@media (prefers-reduced-motion: reduce) { :is(#guide, #ask, #peek).show, #guide .keys li, #ask .asks button { animation: none; } }
 
 /* 胖頭指著畫面上的按鈕（ask.js 的 beckon）：外圈一道金光往外擴，跟互動鍵的光暈同一種，亮幾下就停 */
 .beckon { position: relative; border-color: var(--gold) !important; color: var(--gold-hi) !important; }
@@ -550,23 +563,34 @@ body.pad #top-btns [data-padkey]::after { content: attr(data-padkey); position: 
 }
 #emote-btn { pointer-events: auto; }
 #emote.open #emote-btn { border-color: var(--gold); color: var(--gold-hi); }
-#emote-bar {
+/* 拍照時換成拍照人的口令（#cue-bar，cues.js）：同一個鈕、同一種排法 */
+body.photo #emote-bar, body:not(.photo) #cue-bar { display: none; }
+#emote-bar, #cue-bar {
   display: flex; flex-direction: column-reverse; gap: 6px;
   padding: 6px 0;
   opacity: 0; transform: translateY(8px); pointer-events: none;
   transition: opacity .2s, transform .2s;
 }
-#emote.open #emote-bar { opacity: 1; transform: none; pointer-events: auto; }
+#emote.open :is(#emote-bar, #cue-bar) { opacity: 1; transform: none; pointer-events: auto; }
 /* 圖示在 emotes.js：金線，跟著按鈕的字色 */
-#emote-bar button {
+:is(#emote-bar, #cue-bar) button {
   width: 44px; height: 44px; padding: 0; display: grid; place-items: center;
   color: var(--gold-hi);
   background: var(--panel); border: 1px solid var(--line-soft); border-radius: 50%;
   box-shadow: var(--shadow);
   cursor: var(--cur-pointer);
 }
-#emote-bar button svg { width: 52%; height: 52%; }
-#emote-bar button:active { transform: scale(.9); }
+:is(#emote-bar, #cue-bar) button svg { width: 52%; height: 52%; }
+:is(#emote-bar, #cue-bar) button:active { transform: scale(.9); }
+#cue-bar button[hidden] { display: none; }
+/* 站這：按住拖出去，手指底下跟著一雙腳印 */
+#cue-bar [data-cue="spot"] { touch-action: none; }
+#cue-ghost {
+  position: fixed; z-index: 40; width: 44px; height: 44px; margin: -22px 0 0 -22px; pointer-events: none;
+  color: var(--gold-hi); filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .6));
+}
+#cue-ghost[hidden] { display: none; }
+#cue-ghost svg { width: 100%; height: 100%; }
 
 /* ───────── 手機按鈕的底線和邊線：搖桿、「跳」都貼著它。瀏海、home 條的安全區本身就是留白，不再另外加；
    沒有安全區的手機留 14、16px。--safe-* 分開寫，測試時可以直接蓋掉模擬 iPhone ───────── */
@@ -806,10 +830,10 @@ body:not(.desk) #action-btn.show.fresh::before { animation-iteration-count: 4; a
 
   body:not(.desk) #emote { flex-direction: row; align-items: center; gap: 6px; }
   body.joy-left:not(.desk) #emote { flex-direction: row-reverse; align-items: center; }
-  body:not(.desk) #emote-bar { flex-direction: row; padding: 0; transform: translateX(-8px); }
-  body.joy-left:not(.desk) #emote-bar { flex-direction: row-reverse; transform: translateX(8px); }
-  body:not(.desk) #emote.open #emote-bar { transform: none; }
-  body:not(.desk) #emote-bar button { width: 40px; height: 40px; }
+  body:not(.desk) :is(#emote-bar, #cue-bar) { flex-direction: row; padding: 0; transform: translateX(-8px); }
+  body.joy-left:not(.desk) :is(#emote-bar, #cue-bar) { flex-direction: row-reverse; transform: translateX(8px); }
+  body:not(.desk) #emote.open :is(#emote-bar, #cue-bar) { transform: none; }
+  body:not(.desk) :is(#emote-bar, #cue-bar) button { width: 40px; height: 40px; }
 }
 
 /* ───────── 電腦版：按鈕集中在畫面下方中間一列，動作按鈕浮在那一列正上方，提示移到頂端 ───────── */
@@ -819,7 +843,7 @@ body.desk #top-btns {
 }
 body.desk #online { order: 1; }
 body.desk #emote { position: relative; left: auto; bottom: auto; }
-body.desk #emote-bar { position: absolute; left: 0; bottom: calc(100% + 2px); }
+body.desk :is(#emote-bar, #cue-bar) { position: absolute; left: 0; bottom: calc(100% + 2px); }
 body.desk #action-btn {
   right: auto; left: 50%; bottom: calc(82px + env(safe-area-inset-bottom));
   transform: translateX(-50%) scale(.7); transform-origin: 50% 100%;

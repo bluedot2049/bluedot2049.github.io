@@ -136,9 +136,9 @@ function markRec(on) {
 export class PhotoMode {
   // render(dt)：照目前的設定畫一幀（有後製就走後製）；resizeFX(w, h)：後製跟著換尺寸；lensPass：拍魚眼照片時拿來彎大圖
   // dofPass：景深（dof.js）；flashLight：閃光燈，平常亮度是 0；flashFx：別人閃燈時借用同一盞燈（flashfx.js）
-  // onFlash：自己閃了燈，告訴別人
-  constructor({ renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass, dofPass, flashLight, flashFx, onFlash }) {
-    Object.assign(this, { renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass, dofPass, flashLight, flashFx, onFlash });
+  // onFlash：自己閃了燈，告訴別人；onShot(t)：沒閃光的快門 's'、長曝光葉片打開 'o'、闔上 'c'，告訴別人（照相館不送，那邊自己同步）
+  constructor({ renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass, dofPass, flashLight, flashFx, onFlash, onShot }) {
+    Object.assign(this, { renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass, dofPass, flashLight, flashFx, onFlash, onShot });
     this.active = false;
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
@@ -446,7 +446,7 @@ export class PhotoMode {
   }
 
   // 鏡頭在哪、朝哪、多廣：送給別人判斷有沒有被拍、畫出畫廊的眼睛（multiplayer.js），自己的頭也照這個看鏡頭（attention.js）。
-  // kind 0 是手上的相機，1 是畫廊的眼睛；studio 是照相館架好的鏡頭（不送給別人）
+  // kind 0 是手上的相機，1 是畫廊的眼睛；focus 手上的相機對焦幾公尺（眼睛是 0）；studio 是照相館架好的鏡頭（不送給別人）
   // fov 是取景框上下的視角：鏡頭的 fov 是整個螢幕的，框比螢幕矮（手機上常常是）要照框的高換算
   lensInfo() {
     if (!this.active) return null;
@@ -457,6 +457,7 @@ export class PhotoMode {
     L.fov = Math.min(THREE.MathUtils.radToDeg(2 * Math.atan(tv)), 120);
     L.aspect = f.w / Math.max(1, f.h);
     L.kind = this.gear ? 0 : 1;
+    L.focus = this.gear && dof.on ? this.focusD : 0;
     L.studio = !!this.studio;
     return L;
   }
@@ -1639,11 +1640,14 @@ export class PhotoMode {
     };
     document.body.classList.add('photo-expose');
     this.say('open', 0.5);   // 葉片停在開著，放開才闔（中間不出聲）
+    this.onShot?.('o');      // 旁邊的人聽得到葉片開著，知道要站著別動（或故意走過去拖出殘影）
   }
 
-  cancelExposure() {
+  // shut：告訴別人葉片闔上了；放開時閃了光就不用，別人聽到的是閃光那一聲
+  cancelExposure(shut = true) {
     const e = this.expo;
     if (!e) return;
+    if (shut) this.onShot?.('c');
     this.expo = null;
     e.acc.dispose();
     e.grab.dispose();
@@ -1723,7 +1727,7 @@ export class PhotoMode {
     r.readRenderTargetPixels(out, 0, 0, e.w, e.h, px);
     r.setRenderTarget(null);
     out.dispose();
-    this.cancelExposure();
+    this.cancelExposure(!fire);
     // 讀出來是從下往上排的，一列一列翻過來
     const img = new ImageData(e.w, e.h), row = e.w * 4;
     for (let y = 0; y < e.h; y++) img.data.set(px.subarray((e.h - 1 - y) * row, (e.h - y) * row), y * row);
@@ -1762,6 +1766,7 @@ export class PhotoMode {
       if (this.gear) this.say('shutter', 0.5);
       else this.ambience.voice(this.studio ? 'oldshutter' : 'blink', 0.5);
       rumble('shutter');
+      if (!this.studio) this.onShot?.('s');
     }
     const fr = this.frame, r = this.renderer, cam = this.camera;
     const W = window.innerWidth, H = window.innerHeight;

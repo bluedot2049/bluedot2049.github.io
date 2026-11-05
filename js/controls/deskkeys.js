@@ -51,20 +51,31 @@ export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote 
   });
 
   // ───────── 表情輪：按住 Q ─────────
+  // 平常是表情；手把舉著相機按住 L 時換成拍照人的口令（cues.js 的 wheel：{ list, svg, send }），各記各的上一次
   const wheel = $('wheel');
-  wheel.innerHTML = emotes.map((m, i) => {
-    const a = -Math.PI / 2 + (i * Math.PI * 2) / emotes.length;
-    return `<i style="left:calc(50% + ${(Math.cos(a) * WHEEL_R).toFixed(1)}px);top:calc(50% + ${(Math.sin(a) * WHEEL_R).toFixed(1)}px)">${emoteSVG(m)}</i>`;
-  }).join('');
-  const slots = [...wheel.children];
-  let open = false, vx = 0, vy = 0, pick = -1, last = null;
+  const EMOTES = { list: emotes, svg: emoteSVG, send: (e) => emote(e) };
+  let set = null, slots = [];
+  const fill = (s) => {
+    if (set === s) return;
+    set = s;
+    wheel.innerHTML = s.list.map((m, i) => {
+      const a = -Math.PI / 2 + (i * Math.PI * 2) / s.list.length;
+      return `<i style="left:calc(50% + ${(Math.cos(a) * WHEEL_R).toFixed(1)}px);top:calc(50% + ${(Math.sin(a) * WHEEL_R).toFixed(1)}px)">${s.svg(m)}</i>`;
+    }).join('');
+    slots = [...wheel.children];
+  };
+  fill(EMOTES);
+  let open = false, vx = 0, vy = 0, pick = -1;
+  const last = new Map();
   const choose = () => {
-    const d = Math.hypot(vx, vy);
-    pick = d < WHEEL_DEAD ? -1 : Math.round((Math.atan2(vy, vx) + Math.PI / 2) / ((Math.PI * 2) / emotes.length) + emotes.length) % emotes.length;
+    const d = Math.hypot(vx, vy), n = set.list.length;
+    pick = d < WHEEL_DEAD ? -1 : Math.round((Math.atan2(vy, vx) + Math.PI / 2) / ((Math.PI * 2) / n) + n) % n;
     slots.forEach((s, i) => s.classList.toggle('on', i === pick));
   };
-  const openWheel = () => {
-    if (open || photo.active || !emote) return false;
+  // alt：換一組（拍照人的口令）；沒給就是表情，攝影時不開
+  const openWheel = (alt = null) => {
+    if (open || (!alt && (photo.active || !emote))) return false;
+    fill(alt || EMOTES);
     open = true;
     vx = vy = 0;
     choose();
@@ -76,16 +87,16 @@ export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote 
     if (!open) return;
     open = false;
     wheel.classList.remove('show');
-    const e = pick >= 0 ? emotes[pick] : send === 'again' ? last : null;
+    const e = pick >= 0 ? set.list[pick] : send === 'again' ? last.get(set) : null;
     if (!send || !e) return;
-    last = e;
-    emote(e);
+    last.set(set, e);
+    set.send(e);
   };
   window.addEventListener('keydown', (e) => {
     if (!is(e, 'wheel') || e.repeat || typing(e)) return;
-    openWheel();
+    if (!photo.active) openWheel();
   });
-  window.addEventListener('keyup', (e) => { if (is(e, 'wheel')) close(true); });
+  window.addEventListener('keyup', (e) => { if (is(e, 'wheel') && set === EMOTES) close(true); });
   window.addEventListener('blur', () => close(false));
   // 鎖著滑鼠時撥的量從 player 來（不轉鏡頭）；沒鎖時看滑鼠離畫面中間多遠
   player.lookHook = (dx, dy) => {

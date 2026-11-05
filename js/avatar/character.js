@@ -1209,7 +1209,16 @@ export class Character {
   aimPose(dt) {
     this.aimP = clamp01(this.aimP + (this.aim ? dt : -dt) / AIM_TIME);
     const a = this.aimG, p = this.aimP, selfie = a.grip === 3;
-    const stow = smooth(clamp01(p / STOW)), r = smooth(clamp01((p - STOW) / (1 - STOW)));
+    const stow = smooth(clamp01(p / STOW));
+    let r = smooth(clamp01((p - STOW) / (1 - STOW))), up = 0;
+    // 拍照人的口令（cues.js 的 cue）：再一張把相機舉高一下，好了放到胸前一陣子再舉回去
+    const c = this.cueA;
+    if (c) {
+      c.t += dt;
+      if (c.t >= c.dur || !this.aim) this.cueA = null;
+      else if (c.k === 'again') up = Math.sin((Math.PI * c.t) / c.dur);
+      else r *= 1 - 0.6 * smooth(Math.min(1, c.t / 0.3, (c.dur - c.t) / 0.4));
+    }
     this.handG.scale.setScalar(selfie ? 1 : 1 - stow);
     if (this.foodMesh) this.foodMesh.scale.setScalar((1 - this.bites * 0.28) * (1 - stow));
     this.head.rotation.x = -(selfie ? 0.1 : a.grip === 4 ? 0 : a.pitch * 0.7) * r;
@@ -1237,6 +1246,11 @@ export class Character {
       arms(-2.85, 0.3, -0.05, -2.85, -0.3, 0.05);
       to.set(0, this.dims.crownY / this.S.H, front * 0.8);
     } else arms(-2.45, 0.6, -0.1, -2.45, -0.6, 0.1);
+    if (up && !selfie) {
+      L.x -= 0.3 * up;
+      R.x -= 0.3 * up;
+      to.y += 0.06 * up;
+    }
     // 蹲低：身體往下沉，腿往前收
     if (a.grip === 0) {
       this.group.position.y -= 0.2 * this.S.H * r;
@@ -1248,6 +1262,11 @@ export class Character {
     this.camG.position.lerpVectors(this.camHang, to, r);
     // 鏡頭跟著抬頭低頭；自拍時轉過來對著自己
     this.camG.rotation.set(selfie ? 0.15 * r : -a.pitch * r, selfie ? Math.PI * r : 0, 0);
+  }
+
+  // 拍照人的口令：'again' 再一張、'done' 好了。舉著相機才有動作（aimPose）
+  cue(k) {
+    if (this.aim) this.cueA = { k, t: 0, dur: k === 'again' ? 0.55 : 1.4 };
   }
 
   // 表情動作疊在走路動作上面。走路時只動手，站著時整個身體一起演

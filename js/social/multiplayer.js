@@ -27,6 +27,12 @@ const JUMP_GAP = 400;       // 自己送跳躍的最短間隔
 const PET_GAP = 1500;       // 自己送摸動物的最短間隔
 const ANIMAL_GAP = 400;     // 同一隻動物同一種反應的最短間隔
 const FLASH_GAP = 1000;     // 別人的閃光最短間隔（燈泡要換），亂送的也只會一秒閃一次
+const SHOT_GAP = 150;       // 別人的快門聲最短間隔，亂送的不會連成一片
+const BLINK = 0.22;         // 別人畫廊的眼睛拍下去眨一下要幾秒
+// 別人的快門：送來的動作對到相機的哪個聲音（cameras.js 的 voices）。s 按下去（沒閃光；閃光走 flash）、o 長曝光葉片打開、c 闔上
+const SHOT_VOICE = { s: 'shutter', o: 'open', c: 'close' };
+const CUES = ['count', 'again', 'done'];   // 拍照人的口令（cues.js）
+const CUE_GAP = 400;        // 同一個人的口令最短間隔
 const LOOK_DELAY = 1000;    // 捏角色停手這麼久才送出，連點選項、拖滑桿不會一直送
 // Supabase 每條連線 30 秒內最多登記 5 次在線名單，超過會直接關掉頻道，之後誰都看不到誰。
 // 換樣子再怎麼頻繁，兩次登記至少隔這麼久，連線剛建好那一次也算在內
@@ -172,7 +178,7 @@ export class Multiplayer {
     this.shadowTex = shadowTex;
     this.player = player;
     this.cfg = cfg;
-    this.events = events;           // { onCount(n), onReady(), onPet(other, i, m), onAnimal(other, m), onJump(other), onLand(character), onEmote(character, e), onFlash(character), onStudio(m), onParty(m), onGate(m) }
+    this.events = events;           // { onCount(n), onReady(), onPet(other, i, m), onAnimal(other, m), onJump(other), onLand(character), onEmote(character, e), onFlash(character), onShot(other, voice, at), onCue(other, k), onStudio(m), onParty(m), onGate(m) }
     this.id = Math.random().toString(36).slice(2, 10);
     this.others = new Map();        // id -> { ch, pos, target, heading, seen, speed }
     this.present = new Set();       // 目前在線上的訪客 id（來自 presence）
@@ -218,6 +224,8 @@ export class Multiplayer {
       .on('broadcast', { event: 'pet' }, ({ payload }) => this.onPet(payload))
       .on('broadcast', { event: 'animal' }, ({ payload }) => this.onAnimal(payload))
       .on('broadcast', { event: 'flash' }, ({ payload }) => this.onFlash(payload))
+      .on('broadcast', { event: 'shot' }, ({ payload }) => this.onShot(payload))
+      .on('broadcast', { event: 'cue' }, ({ payload }) => this.onCue(payload))
       .on('broadcast', { event: 'studio' }, ({ payload }) => this.onStudio(payload))
       .on('broadcast', { event: 'party' }, ({ payload }) => this.onParty(payload))
       .on('broadcast', { event: 'gate' }, ({ payload }) => this.onGate(payload))
@@ -306,6 +314,7 @@ export class Multiplayer {
     // g：頭在看誰的臉或鏡頭（代號，自己的鏡頭就是自己），別人照自己畫面上那個人的位置算角度，眼神才對得上；沒有就照 l、v
     // c：正在拍時鏡頭在哪、朝哪、多廣 [x, y, z, 左右, 上下, 視角（度）, 寬高比, 0 手上的相機／1 畫廊的眼睛]，
     //    別人照這個判斷自己有沒有被拍（attention.js），畫廊的眼睛也照這個畫出來。照相館不送
+    // d：手上的相機對焦在幾公尺，別人照這個分「在拍我」和「我擋在他要拍的東西前面」。另外送不塞進 c：舊版網頁 c 不是 8 格整個不收
     // e：叫出來的黑眼在哪 [x, y, z, 帶路中 1／跟在身邊 0, 要去的地方代號]，別人照這個畫出來，隊友走近可以跟著它（scene/guide.js）。收起來就不送
     const aim = p.camAim;
     const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room, s: p.sitCode, f: p.character.foodCode, a: aim ? aim.grip + 1 : 0, q: aim ? Math.round(aim.pitch * 20) / 20 : 0, w: this.away ? 1 : 0, l: Math.round((p.gaze || 0) * 20) / 20, v: Math.round((p.gazeP || 0) * 20) / 20 };
@@ -314,11 +323,12 @@ export class Multiplayer {
     if (p.world.drift) st.y = Math.round(p.pos.y * 10) / 10;
     const L = this.lens?.();
     if (L) st.c = [r50(L.pos.x), r50(L.pos.y), r50(L.pos.z), r50(wrapAngle(L.yaw)), r50(L.pitch), Math.round(L.fov), Math.round(L.aspect * 100) / 100, L.kind];
+    if (L?.focus) st.d = Math.round(L.focus * 10) / 10;
     const E = this.eye?.();
     if (E) st.e = E;
     const l = this.last;
     const changed = !l || Math.abs(st.x - l.x) > 0.02 || Math.abs(st.z - l.z) > 0.02 || Math.abs(wrapAngle(st.h - l.h)) > 0.05 || st.r !== l.r || st.s !== l.s || st.f !== l.f || st.a !== l.a || st.q !== l.q || st.w !== l.w || st.l !== l.l || st.v !== l.v
-      || st.g !== l.g || st.y !== l.y || String(st.c) !== String(l.c) || String(st.e) !== String(l.e);
+      || st.g !== l.g || st.y !== l.y || String(st.c) !== String(l.c) || st.d !== l.d || String(st.e) !== String(l.e);
     if (now - this.lastSent < (changed ? SEND_MOVING : SEND_IDLE)) return;
     this.channel.send({ type: 'broadcast', event: 'pos', payload: { id: this.id, ...st } });
     this.last = st;
@@ -343,6 +353,7 @@ export class Multiplayer {
     const c = m.c;
     m.c = Array.isArray(c) && c.length === 8 && isNum(c[0], COORD_LIMIT) && isNum(c[1], COORD_LIMIT) && isNum(c[2], COORD_LIMIT) && isNum(c[3], 4) && isNum(c[4], 2)
       && c[5] >= 5 && c[5] <= 150 && c[6] > 0.2 && c[6] < 5 && (c[7] === 0 || c[7] === 1) ? c : null;
+    m.d = isNum(m.d, 1000) && m.d > 0 ? m.d : 0;   // 舊版網頁不送，當成沒有對焦的資料（只要在框裡就算被拍）
     const e = m.e;
     m.e = Array.isArray(e) && e.length === 5 && isNum(e[0], COORD_LIMIT) && isNum(e[1], COORD_LIMIT) && isNum(e[2], COORD_LIMIT) && (e[3] === 0 || e[3] === 1)
       && typeof e[4] === 'string' && /^[a-z0-9]{0,16}$/.test(e[4]) ? e : null;
@@ -418,6 +429,45 @@ export class Multiplayer {
     if (!o || !o.ch.group.visible || !o.ch.camG || now - (o.lastFlash || 0) < FLASH_GAP) return;
     o.lastFlash = now;
     this.events.onFlash?.(o.ch);
+  }
+
+  // 快門、長曝光的葉片（閃光的那一下走 flash）：只送動作，聲音照那個人帶的相機、從他的相機那裡發出來
+  shot(t) {
+    if (!this.active || !SHOT_VOICE[t]) return;
+    this.channel.send({ type: 'broadcast', event: 'shot', payload: { id: this.id, t } });
+  }
+
+  onShot(m) {
+    const now = performance.now(), o = m && isId(m.id) ? this.others.get(m.id) : null;
+    if (!o || !o.ch.group.visible || !SHOT_VOICE[m.t]) return;
+    // 間隔分動作算：按住一下就放開的長曝光，開和闔可以靠得很近
+    const last = (o.lastShot ??= {});
+    if (now - (last[m.t] || 0) < SHOT_GAP) return;
+    last[m.t] = now;
+    const cam = CAMERAS[this.cams.get(o.id)], L = o.lens;
+    // 畫廊的眼睛：眨一下，聲音跟自己拍時一樣；長曝光只有手上的相機有
+    if (L?.kind === 1 || (!L && !cam)) {
+      if (m.t !== 's' || !L) return;
+      L.blink = 0;
+      return this.events.onShot?.(o, 'blink', L.pos);
+    }
+    const v = cam?.voices?.[SHOT_VOICE[m.t]];
+    if (!v || !o.ch.camG) return;
+    o.ch.camG.updateWorldMatrix(true, false);
+    this.events.onShot?.(o, v, o.ch.camG.getWorldPosition(this.tmp));
+  }
+
+  // 拍照人的口令（cues.js）：數拍、再一張、好了。只送哪一個，數拍收到就開始數
+  cue(k) {
+    if (!this.active || !CUES.includes(k)) return;
+    this.channel.send({ type: 'broadcast', event: 'cue', payload: { id: this.id, k } });
+  }
+
+  onCue(m) {
+    const now = performance.now(), o = m && isId(m.id) ? this.others.get(m.id) : null;
+    if (!o || !o.ch.group.visible || !CUES.includes(m.k) || now - (o.lastCue || 0) < CUE_GAP) return;
+    o.lastCue = now;
+    this.events.onCue?.(o, m.k);
   }
 
   // 動物的行程每台算出來都一樣，摸了哪一隻傳編號，加上牠在這邊的位置，別台先走過來再演
@@ -543,7 +593,7 @@ export class Multiplayer {
   updateLens(o, dt) {
     const c = o.target.c;
     if (!c) return this.dropLens(o);
-    const L = (o.lens ??= { id: o.id, pos: new THREE.Vector3(c[0], c[1], c[2]), yaw: c[3], pitch: c[4], fov: c[5], aspect: c[6], kind: c[7], onMe: false, eye: null, glint: null, pupil: 1 });
+    const L = (o.lens ??= { id: o.id, pos: new THREE.Vector3(c[0], c[1], c[2]), yaw: c[3], pitch: c[4], fov: c[5], aspect: c[6], kind: c[7], focus: 0, onMe: false, eye: null, glint: null, pupil: 1, blink: null });
     const k = 1 - Math.exp(-dt * 8);
     L.pos.x += (c[0] - L.pos.x) * k;
     L.pos.y += (c[1] - L.pos.y) * k;
@@ -553,6 +603,7 @@ export class Multiplayer {
     L.fov = c[5];
     L.aspect = c[6];
     L.kind = c[7];
+    L.focus = L.kind === 0 ? o.target.d : 0;
     if (L.kind === 1) {
       if (!L.eye) {
         L.eye = new Eye();
@@ -560,6 +611,12 @@ export class Multiplayer {
         L.eye.addTo(this.scene);
       }
       L.eye.group.visible = true;
+      // 拍下去眨一下：闔上再張開
+      if (L.blink !== null) {
+        L.blink += dt / BLINK;
+        L.eye.setOpen(L.blink < 1 ? Math.abs(1 - 2 * L.blink) : 1);
+        if (L.blink >= 1) L.blink = null;
+      }
       L.pupil += ((L.onMe ? 0.6 : 1) - L.pupil) * Math.min(1, dt * 6);
       L.eye.setPupil(L.pupil);
       L.eye.group.position.copy(L.pos);

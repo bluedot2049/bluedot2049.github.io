@@ -43,6 +43,7 @@ export const CAMERAS = {
       shutter: 'shutter', open: 'leafopen', close: 'leafclose', flash: 'flash', bulb: 'bulb', jam: 'jam', focus: 'focus',
       raise: 'raise', lower: 'lower', grip: 'hand', turn: 'swivel', prime: 'stop',
       flashOn: 'fanopen', flashOff: 'fanclose', dateOn: 'lidopen', dateOff: 'lidclose', burn: 'wick',
+      again: 'wind', done: 'lower',   // 拍照人的口令（cues.js）：再一張撥捲片桿、好了把相機放到胸前
     },
     hold: true,
     develop: { filter: 'sepia(.16) saturate(.92) contrast(1.08) brightness(1.02)', vig: 0.62, grain: 0.07, halo: 0.16 },

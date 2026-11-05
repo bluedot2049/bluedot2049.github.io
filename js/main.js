@@ -27,6 +27,8 @@ import { PhotoMode } from './camera/photo.js';
 import { Selfie } from './camera/selfie.js';
 import { Studio } from './camera/studio.js';
 import { Party } from './social/party.js';
+import { Cues } from './social/cues.js';
+import { Peek } from './social/peek.js';
 import { lens, LensPass, bend } from './core/lens.js';
 import { dof, DofPass } from './core/dof.js';
 import { fullscreenButton, keepFullscreen } from './controls/screen.js';
@@ -279,6 +281,8 @@ async function start() {
   let camSwipeHinted = false;
   let mp = null;
   let party = null;   // 組隊同行（party.js），有連線才有
+  let cues = null;    // 拍照人的口令（social/cues.js），有連線、攝影模式建好以後才有
+  let peek = null;    // 湊過來看隊友的照片（social/peek.js），有連線才有
   let guide = null;   // 黑眼帶路（scene/guide.js），攝影模式建好以後才建
   let ask = null;   // 前廳胖頭的教學（zones/gallery/ask.js），畫廊才有
   let checkAway = null;   // 看自己是不是掛機中，有連線才有
@@ -648,9 +652,10 @@ async function start() {
   // lens：有鏡頭對著自己（attention.js），按了就一直看著它，再按一次放掉
   // follow：走到帶路中的黑眼（自己的或隊友的）旁邊，按了跟著它走（scene/guide.js），底下小字是要去哪
   // ask：站在前廳胖頭旁邊，按了打開題目卡（zones/gallery/ask.js）
-  const LABELS = { ask: '問', painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來', lens: '看鏡頭', follow: '跟著' };
+  // peek：站在剛用燭火乙式拍完的隊友旁邊，按了看他最後一張（social/peek.js）
+  const LABELS = { ask: '問', painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來', lens: '看鏡頭', follow: '跟著', peek: '看照片' };
   // 手機的互動鍵是一顆小圓章，只放兩個字；沒列在這裡的取前兩個字
-  const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信', 看鏡頭: '看鏡', 不看了: '不看', 叫電梯: '叫梯', 上觀星台: '上樓', 回一樓: '下樓' };
+  const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信', 看鏡頭: '看鏡', 不看了: '不看', 叫電梯: '叫梯', 上觀星台: '上樓', 回一樓: '下樓', 看照片: '照片' };
   // 剛走出範圍的那一下（走過攤位、動物走開）互動鍵先留著：手指可能已經在按的路上，按到了照原本的做（player.action 的 fallback）。
   // 以前一出範圍就收，手指落在收起來的鈕上會穿到畫面，角色往鈕底下走過去
   const ACTION_LINGER = 400;
@@ -695,7 +700,7 @@ async function start() {
   player.cursorWanted = () => {
     const b = document.body.classList;
     return b.contains('panel-open') || b.contains('chatting') || !document.getElementById('pack-card').hidden
-      || !!document.querySelector('#list.open, #vol.open, #guide.show, #ask.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show') || !!document.activeElement?.closest?.('input, textarea');
+      || !!document.querySelector('#list.open, #vol.open, #guide.show, #ask.show, #peek.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show') || !!document.activeElement?.closest?.('input, textarea');
   };
   // 第一次鎖住滑鼠時提一下怎麼點按鈕
   let lockTold = false;
@@ -799,6 +804,8 @@ async function start() {
         flashFx.fire(ch);
         lookAtOther(otherOf(ch), 1.2);
       },
+      onShot: (_, voice, at) => flashFx.sound(at, voice),
+      onCue: (o, k) => cues?.receive(o, k),
     }, look);
     if (animals) {
       animals.selfId = mp.id;
@@ -814,6 +821,10 @@ async function start() {
       ambience,
     });
     party.onHeard = (id) => lookAtOther(id, 2 + Math.random());
+    party.onSpot = (id, face) => cues?.arrived(id, face);   // 走到隊友給的站位：轉身對著他的鏡頭
+    // 隊友剛用燭火乙式拍完，走到他旁邊互動鍵是「看照片」
+    peek = new Peek({ party, mp, player, camera, ui });
+    player.actionables.push((x, z) => peek.target(x, z));
     // 點了別區隊友的名牌：走到渡口，到了渡船卡直接翻到他那一區
     party.onFar = (to) => {
       const ex = world.exits?.find((e) => e.boat);
@@ -845,7 +856,7 @@ async function start() {
     // 電腦：數字鍵 1–5（表情一到五，keymap.js）送表情
     window.addEventListener('keydown', (e) => {
       const i = [1, 2, 3, 4, 5].findIndex((n) => is(e, 'emote' + n));
-      if (i >= 0) sendEmote(EMOTES[i]);
+      if (i >= 0 && !photo.active) sendEmote(EMOTES[i]);   // 拍照時數字鍵是口令（cues.js）
     });
   }
 
@@ -891,13 +902,16 @@ async function start() {
     render: draw,
     lensPass, dofPass, flashLight, flashFx,
     onFlash: () => mp?.flash(),
+    onShot: (t) => mp?.shot(t),
     resizeFX: (w, h) => fx?.setSize(w, h),
   });
   photo.beast = beast;
   // 電腦的快捷鍵、Q 表情輪、Esc 暫停選單（表情要連上線才送得出去）
   const desk = bindDeskKeys({ player, ui, photo, pack, ambience, emotes: EMOTES, emote: (e) => mp && sendEmote(e) });
   // 手把：每幀在主迴圈讀（tick），按鍵類的動作借電腦按鍵的規則；有動就送 padinput（閒置、掛機都聽它）
-  const pad = bindGamepad({ player, photo, ui, desk, party: () => party, ambience });
+  // 拍照人的口令：舉著相機時表情換成數拍、再一張、好了、站這
+  if (mp) cues = new Cues({ mp, party, photo, player, character, attention, ambience, flashFx, scene, ui });
+  const pad = bindGamepad({ player, photo, ui, desk, party: () => party, cues: () => cues, ambience });
   window.addEventListener('padinput', () => { lastInput = performance.now(); });
   const selfie = new Selfie({
     renderer, scene, camera, player, character, ambience, render: draw,
@@ -951,7 +965,7 @@ async function start() {
   if (ask) player.actionables.push((x, z) => ask.target(x, z));
   // 做過的事（progress.js 的 tour）：來過哪一區、拍過照。前廳胖頭照這個決定說什麼、題目長出哪幾題
   markTour(zone);
-  addEventListener('photoadd', (e) => { if (!e.detail?.kind?.endsWith('-save')) markTour('photo'); });
+  addEventListener('photoadd', (e) => { const k = e.detail?.kind; if (!k?.endsWith('-save') && k !== 'mate') markTour('photo'); });
   // 畫面上點得到的角色（player.tap）：自己（小跳、回頭看鏡頭）和在場的人（揮手）
   player.tappable = () => [{ id: 'self', group: character.group }, ...(mp ? [...mp.others.values()].map((o) => ({ id: o.id, group: o.ch.group })) : [])];
   if (mp) {
@@ -960,7 +974,7 @@ async function start() {
     guide.isMate = (id) => !!party && [...party.mates.values()].some((o) => o.s === id);
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, guide, creator };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, guide, creator, cues, peek };
   const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass, dofPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
@@ -1169,8 +1183,10 @@ async function start() {
     for (const w of walkers) w.update(dt, player);
     manatee?.update(dt, player.pos.x, player.pos.z, camera);
     ask?.update();
+    peek?.update();
     hollow.update(dt, clock.elapsedTime, player.pos, camera);
     flashFx.update(dt);
+    cues?.update(dt);
     if (world.camTable) {
       world.camTable.look(player.focus?.kind === 'cameras' ? player.focus.slot : -1);
       world.camTable.update(dt);

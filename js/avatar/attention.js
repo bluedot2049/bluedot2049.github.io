@@ -8,6 +8,8 @@ import { bend } from '../core/lens.js';
 
 // 發現得到別人鏡頭的距離（公尺）；身高佔畫面高度不到 MIN_SIZE 是背景裡的小人，不算被拍
 const NOTICE = 12, MIN_SIZE = 0.1;
+// 手上的相機送了對焦距離：自己離鏡頭的距離跟它差太多（照 1/距離 算，跟景深一樣近處嚴、遠處鬆）就是擋在他要拍的東西前面，不算被拍
+const FOCUS_SLACK = 0.15;
 // 鏡頭對到多久才算數、移開多久才收（秒），掃過去時按鍵不會一直跳；同一個鏡頭這麼久內不重複出聲
 const SEEN_IN = 0.4, SEEN_OUT = 1.5, SEEN_QUIET = 6;
 // 頭轉得到的範圍（弧度，跟 player.js 的 SH_GAZE、GAZE_UP、GAZE_DOWN 一樣，上下多留一點給 0.8 倍的抬頭）
@@ -43,7 +45,7 @@ export class Attention {
     this.world = world;
     this.character = character;
     this.sources = [];              // (push, ctx) => {}：換目標時問一輪。push(key, get(out) → 還在不在, kind, w, pid)
-    this.lenses = () => [];         // 別人的鏡頭 [{ id, pos, yaw, pitch, fov, aspect, kind, onMe }]（multiplayer.js 的 lenses）
+    this.lenses = () => [];         // 別人的鏡頭 [{ id, pos, yaw, pitch, fov, aspect, kind, focus, onMe }]（multiplayer.js 的 lenses；focus 0 是沒送）
     this.ownLens = () => null;      // 自己的鏡頭（photo.js 的 lensInfo）
     this.ownLock = () => false;     // 攝影模式的看鏡開著、照相館正在倒數
     this.onSeen = null;             // (lens, d)：有鏡頭剛對到自己，主程式出聲
@@ -246,6 +248,7 @@ export class Attention {
   framed(L, ctx, tall) {
     const v = this.q.subVectors(ctx.head, L.pos), d = v.length();
     if (d > NOTICE || d < 0.3) return false;
+    if (L.focus > 0 && Math.abs(1 / d - 1 / L.focus) > FOCUS_SLACK) return false;
     // 鏡頭的前、右、上（前方同 photo.js 的 forward，上 = 右 × 前）
     const cy = Math.cos(L.yaw), sy = Math.sin(L.yaw), cp = Math.cos(L.pitch), sp = Math.sin(L.pitch);
     const fx = -sy * cp, fy = sp, fz = -cy * cp, rx = cy, rz = -sy;

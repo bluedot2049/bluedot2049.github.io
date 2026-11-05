@@ -20,6 +20,9 @@ const WOOD = '#7a4e2e', DARK = '#4e3020', CLOTH = '#5e2a32', HEM = '#c9a24a', PA
 export const BAN_W = 1.8, BAN_SIDE = 1.55, BAN_V = 0.24, BAN_TOP = 3.03;
 const FRINGE = 0.07, PPM = 640;   // 下襬細流蘇的長度；貼圖每公尺幾個像素
 const WINE = '#5e2a32';
+// 眼睛的瞳孔：離地多高、半徑（banner() 把金紋畫在側邊一半高的地方，pattern() 的瞳孔金圈換算成公尺）。前廳的暖光從這裡出來（vestibule-light.js）
+const EYE_Y = BAN_TOP - BAN_SIDE / 2;
+const PUPIL = (62 / 455) * 0.29 * 0.488 * Math.min(BAN_W * PPM - 100, BAN_SIDE * PPM - 60) / PPM;
 // 桌前的長毯：寬、從哪裡鋪到哪裡（本地 z，桌子底下壓一截，直的部分鋪到 RUG_Z1，再收成一個尖到 RUG_TIP；旁邊並排的是鏡子前的毯子）；貼圖每公尺幾個像素
 const RUG_W = 2.9, RUG_Z0 = -0.15, RUG_Z1 = 2.1, RUG_TIP = 2.9, RUG_PPM = 256;
 // 地上的格子：方框邊長、方框上緣離桌子中心多遠；整張貼片連同框外那把光芒的寬和深
@@ -552,7 +555,9 @@ export function buildCamTable(x, z, rot) {
     group, x, z, rot,
     n: { x: Math.sin(rot), z: Math.cos(rot) },
     along: { x: Math.cos(rot), z: -Math.sin(rot) },
-    hw: TABLE_W / 2, hd: TABLE_D / 2,
+    hw: TABLE_W / 2, hd: TABLE_D / 2, top: H,
+    // 瞳孔在桌子的本地座標（x 是 0）：高、離桌子中心多遠（朝房間是正）、半徑
+    eye: { y: EYE_Y, z: -TABLE_D / 2 - 0.06 + fold(0), r: PUPIL },
     slots,
     // 帶走的那台不擺在桌上
     setCarried(id) {

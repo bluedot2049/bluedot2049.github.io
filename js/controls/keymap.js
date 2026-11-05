@@ -24,11 +24,13 @@ export const ACTIONS = [
   ['eye', '黑眼', 'walk', ['KeyM']], ['eyeOff', '收起黑眼', 'walk', ['Digit0']], ['list', '作品清單', 'walk', ['KeyL']],
   ['party', '同行', 'walk', ['KeyO']], ['talk', '說話', 'walk', ['KeyT']], ['mark', '標記', 'walk', ['KeyG', 'Mouse1']],
   ['whistle', '吹哨', 'walk', ['KeyX']], ['tidy', '收起按鈕', 'walk', ['KeyH']], ['cursor', '叫出游標', 'walk', ['Alt']],
+  // 拍照人的口令（social/cues.js）：舉著相機、攝影模式裡表情一到三換成這三個，G 標站位
+  ['count', '數拍', 'cam', ['Digit1']], ['again', '再一張', 'cam', ['Digit2']], ['done', '好了', 'cam', ['Digit3']], ['spot', '站這', 'cam', ['KeyG']],
 ];
 // 換鍵卡上的分組和順序
 const GROUPS = [
   ['走動', ['fwd', 'back', 'left', 'right', 'jump', 'sit', 'interact', 'view', 'wheel', 'emote1', 'emote2', 'emote3', 'emote4', 'emote5']],
-  ['相機', ['raise', 'shutter', 'refocus', 'selfie', 'flash', 'date', 'turn', 'look', 'bare', 'up', 'down', 'fast']],
+  ['相機', ['raise', 'shutter', 'refocus', 'selfie', 'flash', 'date', 'turn', 'look', 'bare', 'up', 'down', 'fast', 'count', 'again', 'done', 'spot']],
   ['介面', ['photo', 'pack', 'save', 'eye', 'eyeOff', 'list', 'party', 'talk', 'mark', 'whistle', 'tidy', 'cursor']],
 ];
 // 能指定的鍵：只能往後加（存檔記第幾個）。Esc、Enter、方向鍵、Backspace、Delete、F1–F12、Windows 鍵留給選單和瀏覽器

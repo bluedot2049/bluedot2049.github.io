@@ -291,7 +291,7 @@ export class Creator {
       case 'hair': return !raceOf(L).hair ? '<p class="dress-note">只有「人」有頭髮</p>'
         : (HOODED.includes(L.one) && TUCKED[L.hair] ? `<p class="dress-note">${optionName('one', L.one)}蓋住頭髮<button data-act="unone">脫掉</button></p>` : '') + this.tiles('hair');
       case 'parts': return (L.face && !L.keep ? `<p class="dress-note">畫的臉蓋住五官<button data-act="keep">顯示五官</button></p>` : '')
-        + (!L.face && getSave().face ? `<p class="dress-note">這套沒戴畫的臉<button data-act="wear">戴上</button></p>` : '')
+        + (!L.face && getSave().face ? `<p class="dress-note">這套沒戴畫的臉<button data-act="wearface">戴上</button></p>` : '')
         + (L.glasses === 'groucho' ? '<p class="dress-note">搞笑眼鏡蓋住鼻子和鬍子<button data-act="unglasses">摘掉</button></p>' : '')
         + this.tiles('eyes', '眼睛') + this.tiles('brows', '眉毛') + this.tiles('nose', '鼻子') + this.tiles('mouth', '嘴巴') + this.tiles('mark', '臉上');
       case 'pos': return this.slider('eyeSize') + this.slider('eyeGap') + this.slider('eyeOdd') + this.slider('faceY');
@@ -395,7 +395,7 @@ export class Creator {
       case 'slot': this.slot = this.slot ? 0 : 1; this.renderPaint(this.page); return;
       case 'keep': this.set({ ...L, keep: L.keep ? 0 : 1 }, true); return;
       // 戴上、拿下畫的那張臉：只動這一套，臉本身留著
-      case 'wear': case 'wearface': {
+      case 'wearface': {
         const f = getSave().face;
         if (L.face || f) this.set({ ...L, face: L.face ? '' : f }, true);
         return;

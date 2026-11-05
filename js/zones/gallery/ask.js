@@ -52,7 +52,7 @@ export class Ask {
     manatee.onShy = () => markTour('shy');
     // 叫你拍他，照片收進去了：補一句照片在哪
     addEventListener('photoadd', (e) => {
-      if (this.teaseUntil < this.m.time || e.detail?.kind?.endsWith('-save')) return;
+      if (this.teaseUntil < this.m.time || e.detail?.kind?.endsWith('-save') || e.detail?.kind === 'mate') return;
       this.teaseUntil = 0;
       setTimeout(() => this.reply({ a: AFTER_SHOT, to: '#pack-btn', key: ['pack', '行囊'] }), 1800);
     });

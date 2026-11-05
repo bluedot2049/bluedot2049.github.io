@@ -94,7 +94,7 @@ let rumbler = null;
 // 別的模組要震時呼叫：手把在用、頁面在最前面、設定沒關才震（頁面被蓋住時瀏覽器照樣回 complete，不能靠回覆判斷）
 export const rumble = (kind) => rumbler?.(kind);
 
-export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
+export function bindGamepad({ player, photo, ui, desk, party, cues, ambience }) {
   const saved = pref('pad') || {};
   const opt = { sens: Number.isFinite(saved.sens) ? saved.sens : 1, invert: saved.invert === true, labels: saved.labels ?? null, forced: saved.forced === true, told: saved.told === true, rumble: saved.rumble !== false };
   const keep = () => setPref('pad', opt);
@@ -328,13 +328,19 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
     if (pr(MINUS)) fire('pack');
   }
 
-  // 舉著相機、完整攝影模式
-  function camera(K, M, lx, ly, dt, now) {
+  // 舉著相機、完整攝影模式。按住 L 是拍照人的口令輪（cues.js），右搖桿選，開著時不轉鏡頭
+  function camera(K, M, lx, ly, rx, ry, dt, now) {
     const { on, pr, rl } = M;
-    const A = confirmPos(), B = backPos(), gear = photo.gear;
+    const A = confirmPos(), B = backPos(), gear = photo.gear, cw = cues?.();
     player.setPad(0, 0);
     photo.setJoystick(lx, ly);
-    photo.padLook(yawV * dt, pitchV * dt);
+    if (wheelAt) desk.wheel.aim(rx, ry);
+    else photo.padLook(yawV * dt, pitchV * dt);
+    if (pr(L) && cw?.available() && desk.wheel.open(cw.wheel)) wheelAt = now;
+    if (rl(L) && wheelAt) {
+      desk.wheel.close(now - wheelAt < TAP_MS ? 'again' : true);
+      wheelAt = 0;
+    }
     // 明信片那類拍好跳出來的卡（存下、重拍、好了）：跟面板一樣用十字鍵挑、A 按
     focusOn(photo.result ? nav.topLayer() : null);
     if (layer) return panel(layer, K, M, now);
@@ -357,7 +363,7 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
       if (pr(R3) || pr(R)) photo.refocus();
       if (pr(N)) photo.toggleSelfie();
       if (pr(W) && gear.flash) photo.toggleFlash();
-      if (pr(L) && gear.date) photo.toggleDate();
+      if (pr(LEFT) && gear.date) photo.toggleDate();
       if (pr(RIGHT)) photo.turn();
     } else {
       photo.padFly((on[UP] ? 1 : 0) - (on[DOWN] ? 1 : 0), !!on[L3]);
@@ -428,7 +434,7 @@ export function bindGamepad({ player, photo, ui, desk, party, ambience }) {
       if (got >= 0) { held.add(got); assign(got); }
       else if (asking && (pr(S) || pr(E))) answer(pr(E) ? E : S);
       else if (el) typing(el, pr, lx, ly);
-      else if (photo.active) camera(K, M, lx, ly, dt, now);
+      else if (photo.active) camera(K, M, lx, ly, rx, ry, dt, now);
       else walk(K, M, lx, ly, rx, ry, dt, now);
     }
     prev = on;

@@ -199,6 +199,7 @@ export class Player {
     this.marker = this.makeMarker();
     this.markerT = 1;
     this.lookBackT = 0;             // 點了自己：還要回頭看鏡頭幾秒
+    this.faceYaw = null;            // 停下來要轉向的方向（站位記號，cues.js），轉到了就清掉
     this.lastAct = null;            // 上一幀互動鍵挑到的目標（挑的時候讓它一點，不會跳來跳去）
     this.tappable = null;           // () => [{ id, group }]：畫面上點得到的角色（自己和別人，main.js 給）
     this.moving = true;
@@ -1603,7 +1604,11 @@ export class Player {
     // 鎖定時按住右鍵：身體保持原來的方向。走路照身體的方向，身體若再照走的方向轉，繞過家具時兩邊會互相帶著越轉越偏
     else if (this.shoulder && this.freeLook && this.locked) want = null;
     else if (this.speed > 0.05) want = Math.atan2(mx, mz);
-    else if (this.focus) want = Math.atan2(-this.focus.n.x, -this.focus.n.z) + (this.focus.orb?.spin ?? 0);   // 照鏡子轉了身就照轉的角度
+    else if (this.faceYaw != null && !this.focus) {
+      // 停下來要面向的方向（走到隊友的站位記號：轉身對著他的鏡頭，cues.js），轉到了就放掉
+      want = this.faceYaw;
+      if (Math.abs(wrapAngle(want - this.heading)) < 0.03) this.faceYaw = null;
+    } else if (this.focus) want = Math.atan2(-this.focus.n.x, -this.focus.n.z) + (this.focus.orb?.spin ?? 0);   // 照鏡子轉了身就照轉的角度
     if (want === null) this.bodyVel = {};
     else if (this.shoulder) {
       const b = { h: this.heading };

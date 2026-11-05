@@ -566,3 +566,32 @@ body.selfie > :not(#stage):not(#selfie) { visibility: hidden; }
 .selfie-lids[hidden] { display: none; }
 .selfie-tip { max-width: 34em; margin: 0; font-size: 12px; line-height: 1.7; letter-spacing: .1em; color: var(--muted); text-align: center; }
 .selfie-tip:empty { display: none; }
+
+/* 拍照人的口令（cues.js）：快門上方三顆點，數拍一拍熄一顆；第三拍快門外面亮一圈（印泥亮了：現在按），
+   再一張、好了的圖示從快門上方冒一下。位置由 JS 貼著快門放 */
+#ph-cue { position: fixed; z-index: 21; pointer-events: none; }
+#ph-cue[hidden] { display: none; }
+#ph-cue i {
+  position: absolute; top: -13px; width: 8px; height: 8px; margin-left: -4px;
+  border: 1px solid rgba(246, 219, 166, .5); transform: rotate(45deg); transition: background .12s, box-shadow .12s;
+}
+#ph-cue i:nth-child(1) { left: 26%; top: -9px; }
+#ph-cue i:nth-child(2) { left: 50%; top: -15px; }
+#ph-cue i:nth-child(3) { left: 74%; top: -9px; }
+#ph-cue i.lit { background: #f6dba6; border-color: #f6dba6; box-shadow: 0 0 6px rgba(255, 205, 130, .85); }
+#ph-cue::after {
+  content: ""; position: absolute; inset: -7px; border-radius: 50%;
+  border: 2px solid #f6dba6; box-shadow: 0 0 14px rgba(255, 205, 130, .8), inset 0 0 8px rgba(255, 205, 130, .5);
+  opacity: 0; transition: opacity .1s;
+}
+#ph-cue.now::after { opacity: 1; animation: cue-now 1.5s ease-out forwards; }
+@keyframes cue-now { 0% { opacity: 1; transform: scale(1.08); } 15% { transform: none; } 100% { opacity: 0; } }
+/* 圖示蓋在快門正中間（手機的快門上下左右都有鈕，冒到外面會撞到日期窗），墊一塊深色圓才看得清楚 */
+#ph-cue b {
+  position: absolute; inset: 18%; display: grid; place-items: center; border-radius: 50%;
+  color: var(--gold-hi); background: rgba(22, 15, 10, .82); box-shadow: 0 0 10px rgba(0, 0, 0, .45); opacity: 0;
+}
+#ph-cue b svg { width: 70%; height: 70%; }
+#ph-cue b.pop { animation: cue-pop 1.6s ease-out forwards; }
+@keyframes cue-pop { 0% { opacity: 0; transform: scale(.8); } 12% { opacity: 1; transform: none; } 70% { opacity: 1; } 100% { opacity: 0; } }
+body.photo-quick.desk #ph-grip .g-cue, body.photo-quick.pad #ph-grip .g-cue { display: block; }
