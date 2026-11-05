@@ -69,12 +69,14 @@ export class Fader {
   // gate：畫廊的家具用。網點平常不編進去，有一組在淡才打開（discard 的代價見 RoomFader 的說明）
   // lead：提早淡幾秒。角色和鏡頭照現在的速度再走這麼久，那時會擋住的也先淡，走到房子後面時房子已經淡下去了
   // sway：掛著的東西（零件帶 hang 掛點）在著色器裡輕輕晃，風和人走過都會（海市開）
-  constructor(gate = false, { lead = 0, sway = false } = {}) {
+  // faded：擋住時留幾成，0 是整組藏起來（靜海：鏡頭什麼都不躲，隔著好幾層時留網點會疊成一片）。add 可以每組另外給
+  constructor(gate = false, { lead = 0, sway = false, faded = FADED } = {}) {
     this.units = [null];   // 0 號是不會淡的東西
     this.gate = gate;
     this.mats = [];
     this.on = false;
     this.lead = lead;
+    this.faded = faded;
     this.track = null;
     this.sway = sway;
     this.swayU = sway ? { uSway: { value: new THREE.Vector4() }, uPass: { value: new THREE.Vector4(0, 0, -1e3, 0) }, uSwayT: uTime } : null;
@@ -92,14 +94,14 @@ export class Fader {
 
   // boxes：這一組佔的範圍，可以好幾塊；objs：跟著一起藏的獨立物件（牌樓的匾）。回傳的編號給 Kit 的 fid
   // 一塊範圍是 [x0, y0, z0, x1, y1, z1]，或斜放的 { x, z, a, hw, hd, y0, y1 }（中心、角度、半寬、半深，角度的轉法跟擋路方塊一樣）
-  add(boxes, objs = []) {
+  add(boxes, objs = [], { faded = this.faded } = {}) {
     boxes = boxes.map((b) => {
       if (Array.isArray(b)) return b;
       const r = [-b.hw, b.y0, -b.hd, b.hw, b.y1, b.hd];
       r.rot = { x: b.x, z: b.z, c: Math.cos(b.a), s: Math.sin(b.a) };
       return r;
     });
-    this.units.push({ boxes, objs, a: 1, want: 1, hold: 0 });
+    this.units.push({ boxes, objs, faded, a: 1, want: 1, hold: 0 });
     return this.units.length - 1;
   }
 
@@ -174,7 +176,7 @@ export class Fader {
       }
       let want = 1;
       if (u.boxes.some((b) => inside(cam, b, 0.6))) want = 0;
-      else if (eyes.some((e) => u.boxes.some((b) => cross(e, cam, b))) || (ahead && u.boxes.some((b) => cross(ahead.eye, ahead.cam, b)))) want = FADED;
+      else if (eyes.some((e) => u.boxes.some((b) => cross(e, cam, b))) || (ahead && u.boxes.some((b) => cross(ahead.eye, ahead.cam, b)))) want = u.faded;
       if (want < 1) { u.want = want; u.hold = HOLD; }
       else if ((u.hold -= dt) <= 0) u.want = 1;
       if (u.a === u.want) continue;

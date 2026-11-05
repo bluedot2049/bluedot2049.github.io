@@ -344,7 +344,7 @@ function menuList(g, w, h, title, items) {
   });
 }
 // 畫一張圖集：cols × rows 格，每格 cw × ch
-function atlas(draws, cols, rows, cw, ch) {
+export function atlas(draws, cols, rows, cw, ch) {
   const c = document.createElement('canvas');
   c.width = cols * cw;
   c.height = rows * ch;
@@ -363,7 +363,7 @@ function atlas(draws, cols, rows, cw, ch) {
 }
 
 // 換頁的材質：MeshBasic 加一段，照 aSet 和 uTime 挑格子、推進下一張、慢慢放大；偶爾一道斜的亮光掃過去
-function slideMaterial(map, cols, rows) {
+export function slideMaterial(map, cols, rows) {
   const m = new THREE.MeshBasicMaterial({ map, toneMapped: false });
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = uTime;
@@ -374,15 +374,17 @@ function slideMaterial(map, cols, rows) {
       .replace('#include <map_pars_fragment>', `#include <map_pars_fragment>\nuniform float uTime;\nvarying vec4 vSet;\nconst vec2 GRID = vec2(${cols}.0, ${rows}.0);
 vec4 jhCell(float i, vec2 uv) {
   uv = clamp(uv, 0.004, 0.996);
+  i = floor(i + 0.5);
   float c = mod(i, GRID.x), r = floor(i / GRID.x);
   return texture2D(map, vec2((c + uv.x) / GRID.x, (GRID.y - 1.0 - r + uv.y) / GRID.y));
 }`)
       .replace('#include <map_fragment>', `
+  // 第幾張起、幾張輪先四捨五入：大三角形遠遠斜著看，內插出來的 4.0 會變成 3.9999，取到隔壁那格（一片雜點或空白）
   float per = max(vSet.z, 0.001), tt = uTime + vSet.w, u = fract(tt / per), k = floor(tt / per);
-  float i0 = vSet.x + mod(k, vSet.y), i1 = vSet.x + mod(k + 1.0, vSet.y);
-  float tr = vSet.y > 1.5 ? smoothstep(1.0 - 0.7 / per, 1.0, u) : 0.0;
+  float s0 = floor(vSet.x + 0.5), n = floor(vSet.y + 0.5), i0 = s0 + mod(k, n), i1 = s0 + mod(k + 1.0, n);
+  float tr = n > 1.5 ? smoothstep(1.0 - 0.7 / per, 1.0, u) : 0.0;
   vec2 uv = vMapUv;
-  float zoom = vSet.y > 1.5 ? 1.0 - 0.04 * u : 1.0;
+  float zoom = n > 1.5 ? 1.0 - 0.04 * u : 1.0;
   vec4 col = uv.x < 1.0 - tr ? jhCell(i0, 0.5 + (uv + vec2(tr, 0.0) - 0.5) * zoom) : jhCell(i1, uv - vec2(1.0 - tr, 0.0));
   float sweep = fract((tt + uv.x * 1.5 - uv.y) / 9.0);
   col.rgb += 0.1 * smoothstep(0.0, 0.02, sweep) * smoothstep(0.06, 0.02, sweep);

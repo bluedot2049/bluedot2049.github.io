@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>燭火乙式音效試聽</title>
+  <!-- 燭火乙式拿在手上時每個動作的聲音（cameras.js 的 voices → ambience-voices.js 的 VOICES）一顆一顆聽；下面是遊戲裡真的會連著響的幾段，和改之前的對照。音量照 photo.js 的 say() -->
+  <style>
+    html, body { margin: 0; background: #1c1814; color: #e9e0cc; font-family: "Noto Serif TC", serif; }
+    main { max-width: 900px; margin: 0 auto; padding: 18px 16px 48px; }
+    h1 { margin: 0; font-size: 17px; font-weight: 600; color: #c9a86e; }
+    h2 { font-size: 14px; font-weight: 600; color: #c9a86e; margin: 26px 0 8px; }
+    .note { font-size: 13px; opacity: .65; margin-top: 4px; line-height: 1.6; }
+    .bar { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-top: 12px; font-size: 13px; }
+    .bar label { display: flex; gap: 6px; align-items: center; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+    button { padding: 9px 12px; border: 1px solid #5a4e3e; border-radius: 6px; background: #2a241e; color: inherit; font: inherit; font-size: 14px; cursor: pointer; text-align: left; }
+    button:active { background: #e8b86a; color: #1b1714; }
+    button small { display: block; font-size: 11px; opacity: .6; margin-top: 2px; }
+    .w { color: #e8b86a; font-size: 11px; }
+    input[type=range] { font: inherit; }
+    #log { font: 12px/1.6 Consolas, monospace; opacity: .7; margin-top: 14px; white-space: pre-wrap; }
+  </style>
+  <!-- cameras.js 帶著模型，要 three -->
+  <script type="importmap">
+    { "imports": { "three": "../vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+<main>
+  <h1>燭火乙式音效試聽</h1>
+  <div class="note">第一下點畫面才建聲音。每次都會差一點高低大小（跟遊戲一樣），連按幾次聽。音量是遊戲裡的實際值，喇叭開到平常玩的大小。</div>
+  <div id="warn" class="note" style="opacity:1;color:#ffb38a;display:none"></div>
+  <div class="note" id="state">聲音：還沒開（點任何一顆）</div>
+  <script>
+    // 直接雙擊開檔（file://）時瀏覽器不讓模組載入，整頁只剩字。提示改用本機伺服器
+    (function () {
+      var w = document.getElementById('warn');
+      function say(t) { w.innerHTML = t; w.style.display = 'block'; }
+      if (location.protocol === 'file:') say('這一頁要用伺服器開才會動：先雙擊專案資料夾裡的「開啟畫廊.bat」，再到瀏覽器打開 <b>http://localhost:8000/experiments/camera_sounds.html</b>');
+      else setTimeout(function () { if (!document.querySelector('#kinds button')) say('程式沒載進來（按 F12 看主控台的錯誤）。網站上還沒有這一頁的話，要先跑「更新網站.bat」。'); }, 3000);
+    })();
+  </script>
+  <div class="bar">
+    <label><input type="checkbox" id="coarse"> 手機喇叭（整體壓 0.7）</label>
+    <label>音量 ×<input type="range" id="gain" min="0.25" max="3" step="0.05" value="1"><b id="gainV">1.00</b></label>
+  </div>
+
+  <h2>新舊對照</h2>
+  <div class="grid" id="cmp"></div>
+
+  <h2>一顆一顆</h2>
+  <div class="grid" id="kinds"></div>
+
+  <h2>連續動作（遊戲裡真的會這樣響）</h2>
+  <div class="grid" id="seqs"></div>
+  <div id="log"></div>
+</main>
+<script type="module">
+  import { VOICES } from '../js/audio/ambience-voices.js';
+  import { CAMERAS } from '../js/camera/cameras.js';
+
+  const $ = (id) => document.getElementById(id);
+  const log = (s) => { $('log').textContent = [s, ...$('log').textContent.split('\n')].slice(0, 12).join('\n'); };
+  const V = CAMERAS.bulb.voices;
+
+  // 跟 ambience.js 一樣的出口，只差沒有場景
+  const amb = {
+    ctx: null, noise: null, sfx: null, gain: 1,
+    start() {
+      if (this.ctx) return;
+      const ctx = this.ctx = new AudioContext();
+      this.sfx = ctx.createGain();
+      this.sfx.connect(ctx.destination);
+      // 跟 ambience.js 同一種偏粉紅的雜訊
+      const n = ctx.sampleRate * 8, buf = ctx.createBuffer(2, n, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch);
+        let b0 = 0, b1 = 0, b2 = 0;
+        for (let i = 0; i < n; i++) {
+          const w = Math.random() * 2 - 1;
+          b0 = 0.997 * b0 + w * 0.029591;
+          b1 = 0.985 * b1 + w * 0.032534;
+          b2 = 0.95 * b2 + w * 0.048056;
+          d[i] = (b0 + b1 + b2 + w * 0.05) * 0.9;
+        }
+      }
+      this.noise = buf;
+    },
+    out(vol) {
+      const out = this.ctx.createGain();
+      out.gain.value = vol * this.gain;
+      out.connect(this.sfx);
+      return out;
+    },
+    // ambience.js 的 voice()：每次高低差一點、大小差一點
+    voice(kind, vol, pitch = 1) {
+      const ctx = this.ctx;
+      VOICES[kind](ctx, this.out(vol * (0.8 + Math.random() * 0.2)), ctx.currentTime + 0.03, pitch * (0.94 + Math.random() * 0.12), this.noise);
+    },
+  };
+  document.addEventListener('pointerdown', () => amb.start(), { capture: true });
+  setInterval(() => {
+    const s = amb.ctx?.state;
+    $('state').textContent = !s ? '聲音：還沒開（點任何一顆）' : s === 'running' ? '聲音：開著' : `聲音：${s}（再點一下）`;
+    if (s && s !== 'running') amb.ctx.resume().catch(() => {});
+  }, 300);
+
+  // photo.js 每個 say() 的音量（改那邊要一起改這裡）：[動作, 音量, 名稱, 什麼時候]
+  const ACTS = [
+    ['raise', 0.2, '舉起', '右鍵、相機鈕'], ['lower', 0.25, '放下', '放開右鍵、收起'],
+    ['shutter', 0.5, '快門', '不閃'], ['open', 0.5, '葉片開', 'B 快門按住'], ['close', 0.5, '葉片闔', 'B 快門放開、閃光後'],
+    ['flash', 0.7, '閃光', '燈泡啪'], ['bulb', 0.45, '換燈泡', '閃完 0.45 秒'], ['jam', 0.2, '硬按', '換燈泡時'],
+    ['focus', 0.35, '對焦鎖定', '沒改'], ['flashOn', 0.28, '閃光開', '摺扇刷開'], ['flashOff', 0.28, '閃光關', '摺扇收攏'],
+    ['dateOn', 0.2, '日期印', '鐵蓋滑開＋火苗'], ['dateOff', 0.2, '日期不印', '鐵蓋到底'], ['burn', 0.16, '燭火', '印日期的快門後面'],
+    ['grip', 0.2, '換拿法', '滾輪、自拍'], ['turn', 0.2, '直橫', 'F'], ['prime', 0.15, '想變焦', '鏡頭圈到頭'],
+  ];
+  const LEVEL = Object.fromEntries(ACTS.map(([k, v]) => [k, v]));
+  const say = (k, dt = 0, vol = LEVEL[k]) => setTimeout(() => amb.voice(V[k], vol), dt * 1000);
+  for (const [k, vol, name, when] of ACTS) {
+    const b = document.createElement('button');
+    b.innerHTML = `${name} <span class="w">${V[k]} · ${vol}</span><small>${when}</small>`;
+    b.onclick = () => { amb.start(); say(k); log(`${k} → ${V[k]}`); };
+    $('kinds').appendChild(b);
+  }
+
+  // 閃光拍一張：photo.js 的 fired()
+  const flashShot = (dt = 0) => { say('flash', dt); say('close', dt + 0.09); say('bulb', dt + 0.45); };
+  const SEQ = {
+    '舉起 → 對焦鎖定 → 拍 → 放下': () => { say('raise'); say('focus', 0.3); say('shutter', 1.1); say('lower', 2.0); },
+    '閃光開 → 拍 → 硬按 → 換好再拍': () => { say('flashOn'); flashShot(1.0); say('jam', 1.9); flashShot(2.9); },
+    '閃光關': () => say('flashOff'),
+    'B 快門 3 秒': () => { say('open', 0.28); say('close', 3.28); },
+    'B 快門 3 秒，放開時閃': () => { say('open', 0.28); flashShot(3.28); },
+    'B 快門手滑取消': () => { say('open', 0.28); say('close', 1.5, 0.3); },
+    '日期印 → 拍（有火苗）': () => { say('dateOn'); say('shutter', 1.0); say('burn', 1.12); },
+    '日期印著拍（沒有火苗，對照）': () => say('shutter'),
+    '日期不印': () => say('dateOff'),
+    '換拿法兩格 → 直拿 → 自拍 → 回來': () => { say('grip'); say('grip', 0.4); say('turn', 1.0); say('grip', 1.8); say('grip', 2.6); },
+    '想變焦（滾輪一滑只響一聲）': () => say('prime'),
+  };
+  for (const [name, fn] of Object.entries(SEQ)) {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.onclick = () => { amb.start(); fn(); log(name); };
+    $('seqs').appendChild(b);
+  }
+
+  // 改之前：閃光拍只有啪，B 快門按下、放開各一整聲喀嚓
+  const CMP = {
+    '閃光拍 舊': () => { amb.voice('flash', 0.7); setTimeout(() => amb.voice('bulb', 0.45), 450); },
+    '閃光拍 新': () => flashShot(),
+    'B 快門 2 秒 舊': () => { setTimeout(() => amb.voice('shutter', 0.3), 280); setTimeout(() => amb.voice('shutter', 0.5), 2280); },
+    'B 快門 2 秒 新': () => { say('open', 0.28); say('close', 2.28); },
+  };
+  for (const [name, fn] of Object.entries(CMP)) {
+    const b = document.createElement('button');
+    b.innerHTML = `${name}<small>${name.endsWith('舊') ? '原本的' : '現在遊戲裡的'}</small>`;
+    b.onclick = () => { amb.start(); fn(); log(name); };
+    $('cmp').appendChild(b);
+  }
+
+  // 量測用（tools 的離線渲染）：每個動作的聲音名字和音量
+  window.__cam = { VOICES, V, LEVEL };
+
+  const level = () => { amb.gain = +$('gain').value * ($('coarse').checked ? 0.7 : 1); $('gainV').textContent = (+$('gain').value).toFixed(2); };
+  $('coarse').onchange = level;
+  $('gain').oninput = level;
+</script>
+</body>
+</html>

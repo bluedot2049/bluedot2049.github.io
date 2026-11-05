@@ -291,6 +291,7 @@ export class PhotoMode {
     const gear = studio || eye ? null : carried();
     if (gear) {
       this.holdGear(gear);
+      this.say('raise', 0.2, 250);
       // 手持舉相機：按著的走路鍵接過來，邊走邊舉不用重按（空拍機的 WASD 是飛，不接）；鏡頭一下到了手上，先黑一下
       if (quick) {
         for (const k of walking) this.keys.add(k);
@@ -323,6 +324,8 @@ export class PhotoMode {
   exit() {
     if (!this.active) return;
     const quick = this.quick;
+    if (this.expo) this.say('close', 0.3);   // 長曝光到一半收起來，葉片闔上
+    this.say('lower', 0.25, 250);
     this.afPoint = null;
     this.pendingShot = false;
     this.aimTarget = null;
@@ -708,6 +711,7 @@ export class PhotoMode {
     if (c.note) this.ui.hint(c.note, 2500);
     this.save();
     this.refresh();
+    if (c.k === 'grip' || c.k === 'turn') this.say(c.k, 0.2);   // 拿法、方向是手上的相機在動
   }
 
   // 高度尺：拖軌道直接到想要的高度，點刻度跳到常用的高度，按住兩端慢慢升降（電腦也可以按 E / Q）
@@ -1318,6 +1322,7 @@ export class PhotoMode {
     this.grip = g;
     this.save();
     this.refresh();
+    this.say('grip', 0.2);
   }
 
   // 舉著相機時中鍵：切到自拍（手伸長從前面拍自己），再按回到原本的拿法；轉過去的那一下直接到位，再對一次焦
@@ -1334,6 +1339,7 @@ export class PhotoMode {
     this.snapHand = true;
     this.darken();
     this.refresh();
+    this.say('grip', 0.2);
     // 手先轉到位再對：lock 的相機自己重新對一次焦，follow 的下一次量的時候就對過去
     this.afCheck = AF_EVERY;
     clearTimeout(this.selfieAF);
@@ -1357,6 +1363,7 @@ export class PhotoMode {
     }
     this.save();
     this.refresh();
+    this.say('turn', 0.2);   // 空拍機沒有 gear，不出聲
   }
 
   // 對到焦：框停住（舉相機時一直留著，表示鎖住了；完整攝影模式過一下淡掉）。
@@ -1370,7 +1377,7 @@ export class PhotoMode {
     const now = performance.now(), lock = this.gear?.focus === 'lock';
     if ((big || lock) && now - (this.beepT || 0) > 300) {
       this.beepT = now;
-      this.ambience.voice('focus', 0.35);
+      this.say('focus', 0.35);
       this.showZoom(this.quick && lock ? `對焦鎖定 ${dist(this.focusD)}` : `對焦 ${dist(this.focusD)}`);
     }
     // 對好才放快門的相機：剛才按了快門，現在拍
@@ -1382,6 +1389,7 @@ export class PhotoMode {
 
   // 定焦鏡頭不能變焦：提醒一次走近或退後
   primeNote() {
+    this.say('prime', 0.15, 400);
     this.showZoom(`${this.gear.focal}mm 定焦`);
     if (this.primeHinted) return;
     this.primeHinted = true;
@@ -1471,12 +1479,22 @@ export class PhotoMode {
     return !!(this.active && this.gear?.hold && !this.studio);
   }
 
+  // 帶著的相機發出的聲音：cameras.js 的 voices 把動作對到 VOICES，那台沒寫的動作不出聲。
+  // gap：這麼多毫秒內只響一聲（右鍵連按舉起放下、滾輪一滑送很多次）
+  say(k, vol, gap = 0) {
+    const v = this.gear?.voices?.[k], now = performance.now();
+    if (!v || (gap && now - (this.saidAt || 0) < gap)) return;
+    if (gap) this.saidAt = now;
+    this.ambience.voice(v, vol);
+  }
+
   // 快門旁的閃光開關：點一下就切，每台相機各自記得
   toggleFlash() {
     if (!this.gear?.flash) return;
     this.flashOn ^= 1;
     this.save();
     this.refresh();
+    this.say(this.fires() ? 'flashOn' : 'flashOff', 0.28);
   }
 
   // 閃光開著、這台相機有閃光燈
@@ -1490,6 +1508,7 @@ export class PhotoMode {
     this.dateOn ^= 1;
     this.save();
     this.refresh();
+    this.say(this.dated() ? 'dateOn' : 'dateOff', 0.2);
   }
 
   dated() {
@@ -1506,9 +1525,10 @@ export class PhotoMode {
     return die;
   }
 
-  // 拍下去那一下，開關小窗裡的火光燒亮再暗回去
+  // 拍下去那一下，開關小窗裡的火光燒亮再暗回去，火苗呼一聲
   burned() {
     if (!this.dated()) return;
+    this.say('burn', 0.16);
     const die = this.dieFace();
     die.classList.remove('burn');
     void die.offsetWidth;
@@ -1529,6 +1549,7 @@ export class PhotoMode {
   jammed() {
     const sh = this.$('#ph-shutter');
     if (!sh.classList.contains('gear')) return this.ui.hint('燈泡還在換', 1500);
+    this.say('jam', 0.2);
     replay(sh, 'jam');
   }
 
@@ -1558,7 +1579,12 @@ export class PhotoMode {
     if (!p) return;
     clearTimeout(p.timer);
     this.pressing = null;
-    if (this.expo) return cancel ? this.cancelExposure() : this.finishExposure();
+    if (this.expo && !cancel) return this.finishExposure();
+    // 長曝光不要了，葉片還是要闔上
+    if (this.expo) {
+      this.say('close', 0.3);
+      return this.cancelExposure();
+    }
     if (!cancel) this.shoot();
   }
 
@@ -1572,9 +1598,10 @@ export class PhotoMode {
     else this.flashFx.restore();   // 別人那一閃還沒暗完，就還給它
   }
 
-  // 閃過了：啪一聲，鏡頭前飄過一陣煙，接著換燈泡
+  // 閃過了：啪一聲，葉片闔上，鏡頭前飄過一陣煙，接著換燈泡
   fired() {
-    this.ambience.voice('flash', 0.7);
+    this.say('flash', 0.7);
+    setTimeout(() => this.active && this.say('close', 0.5), 90);   // 葉片張開那一聲被啪蓋掉，闔上的等啪過去才聽得到
     rumble('flash');
     this.onFlash?.();
     const bulb = this.gear.flash.bulb;
@@ -1587,7 +1614,7 @@ export class PhotoMode {
     clearTimeout(this.swapT);
     this.latch();
     this.swapT = setTimeout(() => { knob.classList.remove('swap'); this.latch(); }, bulb * 1000 + 100);
-    setTimeout(() => this.active && this.ambience.voice('bulb', 0.45), 450);
+    setTimeout(() => this.active && this.say('bulb', 0.45), 450);
     const el = this.$('#ph-smoke');
     el.classList.remove('puff');
     void el.offsetWidth;
@@ -1611,7 +1638,7 @@ export class PhotoMode {
       sum: 0, t0: now, last: now,
     };
     document.body.classList.add('photo-expose');
-    this.ambience.voice('shutter', 0.3);
+    this.say('open', 0.5);   // 葉片停在開著，放開才闔（中間不出聲）
   }
 
   cancelExposure() {
@@ -1711,7 +1738,7 @@ export class PhotoMode {
     this.flash();
     this.burned();
     if (fire) this.fired();
-    else this.ambience.voice('shutter', 0.5);
+    else this.say('close', 0.5);
     this.deliver(shot, rare);
   }
 
@@ -1731,8 +1758,11 @@ export class PhotoMode {
     // 拍到白獸了沒：趁鏡頭和畫布還是平常的樣子先算（下面畫大圖時都會換掉）
     const rare = dry || this.postcard ? null : this.rareShot(fire);
     // 快門聲在畫大圖之前就發：手機畫一張要卡一下，放在後面會比按下去晚。閃光的聲音在 fired()
-    if (!dry && !fire) this.ambience.voice(this.studio ? 'oldshutter' : this.gear ? 'shutter' : 'blink', 0.5);
-    if (!dry && !fire) rumble('shutter');
+    if (!dry && !fire) {
+      if (this.gear) this.say('shutter', 0.5);
+      else this.ambience.voice(this.studio ? 'oldshutter' : 'blink', 0.5);
+      rumble('shutter');
+    }
     const fr = this.frame, r = this.renderer, cam = this.camera;
     const W = window.innerWidth, H = window.innerHeight;
     // 長邊：電腦 3840、手機 2560，不超過顯示卡能畫的大小

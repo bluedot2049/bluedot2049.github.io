@@ -38,6 +38,12 @@ export const CAMERAS = {
     date: { knob: 'slot', ink: 'candle' },
     make: { mark: '火', model: 1, serial: [0, 4, 1, 7] }, shutter: 'gold',
     rattle: 'tink',   // 在桌上浮起來時發出的聲音（ambience-voices.js 的 VOICES）
+    // 拿著時各個動作的聲音：photo.js 的 say(動作) → VOICES 的名字。沒寫的動作不出聲
+    voices: {
+      shutter: 'shutter', open: 'leafopen', close: 'leafclose', flash: 'flash', bulb: 'bulb', jam: 'jam', focus: 'focus',
+      raise: 'raise', lower: 'lower', grip: 'hand', turn: 'swivel', prime: 'stop',
+      flashOn: 'fanopen', flashOff: 'fanclose', dateOn: 'lidopen', dateOff: 'lidclose', burn: 'wick',
+    },
     hold: true,
     develop: { filter: 'sepia(.16) saturate(.92) contrast(1.08) brightness(1.02)', vig: 0.62, grain: 0.07, halo: 0.16 },
   },

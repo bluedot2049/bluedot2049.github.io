@@ -27,8 +27,6 @@ const FOLLOW_T = 0.2, VIEW_T = 0.32;
 const RETURN_T = 0.85;
 // 被山坡、石階擋住時鏡頭最多往上抬幾度（弧度），抬到這裡還擋著才往前推
 const CLIP_LIFT = 0.7;
-// 上面有天花板的區域（camDuck）鏡頭最低壓到哪：從頭看出去的仰角（弧度），比頭略低一點
-const DUCK_LOW = -0.05;
 // 照鏡子時繞著自己轉：俯角範圍、離注視點的遠近、角度追手指的快慢、放手後還滑多久
 // 照鏡子的遠近是一條：tZoom 是離全身取景的幾倍，1 是全身剛好裝滿（每一頁都停在這裡），focus.zf 是臉剛好裝滿（視線也一路從身體中間移到臉上）。
 // 臉再往前最多湊到 ORB_CLOSE 倍，全身再往後最多 ORB_ZOOM_FAR 倍
@@ -1314,8 +1312,8 @@ export class Player {
     );
     // 角色和鏡頭之間隔著山坡或石台時，鏡頭繞著角色的頭往上抬，抬到剛好看得到，遠近不變；抬到 CLIP_LIFT 還擋著，才沿原方向往前移。
     // 不直接往前推：順著陡石階往下走時鏡頭跟坡面差不多斜，擋住的那一點會在近處和遠處之間跳，鏡頭一下拉近一下放開；
-    // 要抬多少是跟著地形連續變的。房子不推鏡頭，是淡掉
-    if (this.world.camClip) {
+    // 要抬多少是跟著地形連續變的。房子不推鏡頭，是淡掉。區域寫了 camFree（靜海）就什麼都不躲，擋住的東西藏起來
+    if (this.world.camClip && !this.world.camFree) {
       const head = this.headPos.set(this.pos.x, this.pos.y + 1.2, this.pos.z);
       if (this.world.camClip(head, outPos) < 1) {
         const dx = outPos.x - head.x, dy = outPos.y - head.y, dz = outPos.z - head.z;
@@ -1334,35 +1332,14 @@ export class Player {
             else hi = m;
           }
           turn = hi;
-        } else if (this.world.camDuck) {
-          // 區域寫了 camDuck（靜海的室內）：抬到頂還擋著，表示上面是天花板、樓板、雨遮，改往下壓到剛好鑽得過去。
-          // 以前沿著抬到頂的方向往前移，鏡頭貼到頭頂上往下看，看不到前面
-          let a = 0, b = e0 - DUCK_LOW;
-          if (b > 0 && this.world.camClip(head, lifted(-b)) >= 1) {
-            for (let i = 0; i < 8; i++) {
-              const m = (a + b) / 2;
-              if (this.world.camClip(head, lifted(-m)) < 1) a = m;
-              else b = m;
-            }
-            turn = -b;
-          } else {
-            // 壓也壓不過（牆在背後、上面又有樓板）：從最低到抬到頂試九個角度，挑看得最遠的（差不多遠挑最接近原本的），
-            // 停在撞到的地方前面。不留最少 0.15 的距離：迴廊、商店街二樓牆就在背後，留了會把鏡頭推進牆裡
-            let far = -1;
-            for (let i = 0; i <= 8; i++) {
-              const t = -b + ((hi + b) * i) / 8, c = this.world.camClip(head, lifted(t));
-              if (c > far + 0.01 || (c > far - 0.01 && Math.abs(t) < Math.abs(turn))) { far = Math.max(far, c); turn = t; }
-            }
-            near = 0;
-          }
         }
         outPos.copy(lifted(turn));
         const clip = this.world.camClip(head, outPos);
         if (clip < 1) outPos.lerpVectors(head, outPos, Math.max(clip, near));
       }
     }
-    // 鏡頭不鑽進地面，也不退進樹林裡
-    outPos.y = Math.max(outPos.y, this.world.camFloor(outPos.x, outPos.z) + 0.3);
+    // 鏡頭不鑽進地面，也不退進樹林裡。第三個是腳下多高：樓上的區域（靜海）照自己那一層的樓板算
+    outPos.y = Math.max(outPos.y, this.world.camFloor(outPos.x, outPos.z, this.pos.y) + 0.3);
     // 再往下拉的部分換成抬頭：鏡頭位置不動，視線往上轉，最多接近正上方
     const extra = Math.max(0, PITCH_LOW - this.camPitch);
     if (extra) {
@@ -1465,10 +1442,10 @@ export class Player {
     const e = Math.max(p, SH_LOW), ce = Math.cos(e);
     outPos.set(piv.x - fx * ce * d, piv.y + Math.sin(e) * d, piv.z - fz * ce * d);
     // 背後是山坡或石台：越肩不往上抬，往肩膀收近。收近要快才不會穿進坡裡，退回去慢慢來，免得一抽一抽
-    const reach = Math.max(this.world.camClip ? this.world.camClip(piv, outPos) : 1, 0.25), r0 = this.sh.reach;
+    const reach = Math.max(this.world.camClip && !this.world.camFree ? this.world.camClip(piv, outPos) : 1, 0.25), r0 = this.sh.reach;
     this.sh.reach = r0 == null ? reach : r0 + (reach - r0) * Math.min(1, this.sh.dt * (reach < r0 ? SH_REACH_IN : SH_REACH_OUT));
     if (this.sh.reach < 1) outPos.lerpVectors(piv, outPos, this.sh.reach);
-    outPos.y = Math.max(outPos.y, this.world.camFloor(outPos.x, outPos.z) + 0.3);
+    outPos.y = Math.max(outPos.y, this.world.camFloor(outPos.x, outPos.z, this.pos.y) + 0.3);
     // 視線往上偏一點，肩膀落在畫面中線下方；往下拉過 SH_LOW 的部分換成抬頭
     const v = THREE.MathUtils.clamp(p - Math.atan(slope(port ? 0.36 : 0.1)), -ZENITH, ZENITH), cv = Math.cos(v);
     outLook.set(outPos.x + fx * cv * 8, outPos.y - Math.sin(v) * 8, outPos.z + fz * cv * 8);

@@ -415,7 +415,8 @@ async function start() {
       if (!ex.boat) return travel(ex.to);
       if (player.boarding) return;
       const mates = party?.ferryInfo();
-      const list = PLACES.map((d) => {
+      // 還在蓋的區域（dev）船卡上不列，只有 ?debug 看得到；樹洞照樣寫「開發中」
+      const list = PLACES.filter((d) => !d.dev || params.has('debug')).map((d) => {
         const at = mates?.at.get(d.to || d.dev);
         const m = at ? { ...d, mates: at } : d;
         if ((d.to || d.dev) === zone) return { ...m, to: null, here: true };

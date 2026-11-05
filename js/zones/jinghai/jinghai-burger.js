@@ -132,7 +132,7 @@ export function buildBurger({ coarse = false, fade = null } = {}) {
   }
   // 東邊的招牌帶：可可底、底下一條奶油色燈條，中間一顆咬月圓牌（跟高桿招牌同一張圖，見 jinghai.js）
   glowBox(F.x1 + 0.2, 4.8, F.z0 + 0.3, F.x1 + 0.24, 4.88, F.z1 - 0.3, '#fff3dc');
-  // 雨遮：也擋鏡頭，站在門口時鏡頭壓到雨遮底下，不從上面隔著雨遮往下看
+  // 雨遮：擋住鏡頭時整片藏起來（solids，見 jinghai.js 的 onSolid）
   SB(k, F.x1, 3.55, 30.4, F.x1 + 2.4, 3.8, 35.6, PANEL, 0.08);
   solid(F.x1, 3.55, 30.4, F.x1 + 2.4, 3.8, 35.6);
   glowBox(F.x1 + 0.3, 3.53, 30.7, F.x1 + 2.2, 3.55, 35.3, '#fff1d8');

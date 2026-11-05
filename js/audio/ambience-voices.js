@@ -116,12 +116,33 @@ export function ring(ctx, out, t, f, peak, dur) {
   osc(ctx, 'sine', t, dur, [[0, f]]).connect(g).connect(out);
 }
 
+// 火苗吸一口氣：雜訊先切掉很低的（不然是轟一聲），低通照 pts 掀上去再落回來，音量跟著火苗顫
+function flame(ctx, out, noise, t, pts, attack, dur, peak) {
+  const src = ctx.createBufferSource(), f = biquad(ctx, 'lowpass', pts[0][1], 0.6), v = ctx.createGain();
+  src.buffer = noise;
+  f.frequency.setValueAtTime(pts[0][1], t);
+  for (const [dt, fr] of pts.slice(1)) f.frequency.exponentialRampToValueAtTime(fr, t + dt);
+  v.gain.value = 1;
+  lfo(ctx, t, dur, 9 + Math.random() * 4, 0.3, v.gain);
+  src.connect(biquad(ctx, 'highpass', 160, 0.5)).connect(f).connect(envelope(ctx, t, attack, dur, peak)).connect(v).connect(out);
+  src.start(t, Math.random() * 7);
+  src.stop(t + dur + 0.02);
+}
+
 export const VOICES = {
-  // 相機（cameras.js）：葉片快門喀嚓兩下
+  // 相機（cameras.js）：葉片快門喀嚓兩下＝葉片張開一聲、闔上一聲。B 快門按住時兩聲分開，中間是開著的時間
   shutter(ctx, out, t, p, noise) {
-    hiss(ctx, out, noise, t, 0.018, 'bandpass', 3200 * p, 1.1, 2);
-    hiss(ctx, out, noise, t + 0.055, 0.025, 'bandpass', 2300 * p, 0.8, 2);
+    VOICES.leafopen(ctx, out, t, p, noise);
+    VOICES.leafclose(ctx, out, t + 0.055, p, noise);
     return 0.09;
+  },
+  leafopen(ctx, out, t, p, noise) {
+    hiss(ctx, out, noise, t, 0.018, 'bandpass', 3200 * p, 1.1, 2);
+    return 0.03;
+  },
+  leafclose(ctx, out, t, p, noise) {
+    hiss(ctx, out, noise, t, 0.025, 'bandpass', 2300 * p, 0.8, 2);
+    return 0.035;
   },
   // ---------- 畫廊的眼睛（photo.js、鏡子前的 selfie.js）：偏機械的細小手感，像換彈匣，不做成生物的聲音 ----------
   // 眨一下：眼皮滑下來「嚓」，到底一記扎實的「喀」，彈回來再輕輕一扣；尾巴留一絲玻璃光
@@ -193,6 +214,81 @@ export const VOICES = {
     for (const dt of [0.55, 0.78]) hiss(ctx, out, noise, t + dt, 0.12, 'bandpass', 5200 * p, 0.28, 6);
     hiss(ctx, out, noise, t + 1.25, 0.03, 'bandpass', 2600 * p, 0.9, 2);
     return 1.3;
+  },
+  // ---------- 燭火乙式的零件（cameras.js 的 voices 把 photo.js 的動作對到這裡），長度照 css/photo.css 的動畫 ----------
+  // 舉起來：背帶從胸前滑上來一抹，皮殼的方盒碰到臉（或手心）悶悶一下
+  raise(ctx, out, t, p, noise) {
+    rub(ctx, out, noise, t, 1900 * p, 900 * p, 0.04, 0.16, 0.3, { low: 350 * p });
+    osc(ctx, 'sine', t + 0.15, 0.07, [[0, 170 * p], [0.07, 115 * p]]).connect(envelope(ctx, t + 0.15, 0.003, 0.07, 0.4)).connect(out);
+    hiss(ctx, out, noise, t + 0.15, 0.035, 'lowpass', 700 * p, 0.35);
+    return 0.3;
+  },
+  // 放下：背帶落回胸前一抹，皮殼貼到衣服上，比舉起輕
+  lower(ctx, out, t, p, noise) {
+    rub(ctx, out, noise, t, 1600 * p, 750 * p, 0.03, 0.2, 0.24, { low: 320 * p });
+    osc(ctx, 'sine', t + 0.17, 0.08, [[0, 130 * p], [0.08, 90 * p]]).connect(envelope(ctx, t + 0.17, 0.004, 0.08, 0.25)).connect(out);
+    return 0.3;
+  },
+  // 閃光開：十片銀扇從收著的那一根一片接一片刷開（#ph-flash .45 秒、先快後慢：片聲先密後疏，一片比一片高），燈泡落進反光罩碰一下玻璃
+  fanopen(ctx, out, t, p, noise) {
+    air(ctx, out, noise, t, [[0, 2800 * p], [0.4, 4600 * p]], 0.03, 0.42, 0.07, 1.2, 'bandpass');
+    for (let i = 1; i <= 10; i++) hiss(ctx, out, noise, t + 0.42 * (1 - Math.sqrt(1 - i / 10)), 0.006, 'bandpass', (4200 + i * 160) * p, 0.32 - i * 0.015, 5);
+    for (const [f, g] of [[3500, 0.07], [5800, 0.025]]) osc(ctx, 'sine', t + 0.43, 0.16, [[0, f * p]]).connect(envelope(ctx, t + 0.43, 0.002, 0.16, g)).connect(out);
+    return 0.62;
+  },
+  // 閃光關：扇子反過來收攏，片聲一片比一片低，最後疊成一根「喀」
+  fanclose(ctx, out, t, p, noise) {
+    air(ctx, out, noise, t, [[0, 4400 * p], [0.38, 2600 * p]], 0.03, 0.4, 0.06, 1.2, 'bandpass');
+    for (let i = 1; i <= 10; i++) hiss(ctx, out, noise, t + 0.4 * (1 - Math.sqrt(1 - i / 10)), 0.006, 'bandpass', (5800 - i * 160) * p, 0.3 - i * 0.015, 5);
+    hiss(ctx, out, noise, t + 0.42, 0.012, 'bandpass', 2600 * p, 0.7, 2);
+    osc(ctx, 'sine', t + 0.42, 0.04, [[0, 900 * p], [0.04, 650 * p]]).connect(envelope(ctx, t + 0.42, 0.002, 0.04, 0.12)).connect(out);
+    return 0.5;
+  },
+  // 日期開：機背小窗的鐵蓋順著槽滑開（#ph-date .3 秒），到頂輕輕一停；蓋子一開，裡面的燭火吸到空氣「呼」一口
+  lidopen(ctx, out, t, p, noise) {
+    rub(ctx, out, noise, t, 3200 * p, 1800 * p, 0.03, 0.26, 0.2, { low: 700 * p, shake: 0.4 });
+    hiss(ctx, out, noise, t + 0.27, 0.008, 'bandpass', 3400 * p, 0.35, 3);
+    flame(ctx, out, noise, t + 0.16, [[0, 350 * p], [0.12, 1100 * p], [0.42, 450 * p]], 0.08, 0.45, 0.35);
+    return 0.65;
+  },
+  // 日期關：鐵蓋滑下來，到底「喀」。火沒熄，只是被蓋住，所以沒有吹熄的聲音
+  lidclose(ctx, out, t, p, noise) {
+    rub(ctx, out, noise, t, 2800 * p, 1500 * p, 0.03, 0.24, 0.2, { low: 650 * p, shake: 0.4 });
+    hiss(ctx, out, noise, t + 0.26, 0.012, 'bandpass', 2300 * p, 0.7, 2);
+    osc(ctx, 'sine', t + 0.26, 0.045, [[0, 560 * p], [0.045, 400 * p]]).connect(envelope(ctx, t + 0.26, 0.002, 0.045, 0.18)).connect(out);
+    return 0.35;
+  },
+  // 拍下時燭火照過七段縫：火苗一下竄高（小窗燒亮那 1.4 秒的開頭），印日期才有
+  wick(ctx, out, t, p, noise) {
+    flame(ctx, out, noise, t, [[0, 600 * p], [0.05, 1600 * p], [0.5, 500 * p]], 0.025, 0.55, 0.3);
+    return 0.6;
+  },
+  // 換燈泡時硬按：金鈕撞到卡進來的卡榫，左右晃到頭各一下（sh-jam .26 秒的 25%、75%）；實心黃銅撞鐵，悶、不響
+  jam(ctx, out, t, p, noise) {
+    for (const [dt, g] of [[0.065, 1], [0.195, 0.55]]) {
+      hiss(ctx, out, noise, t + dt, 0.012, 'bandpass', 1500 * p, 0.6 * g, 2);
+      osc(ctx, 'sine', t + dt, 0.035, [[0, 430 * p], [0.035, 310 * p]]).connect(envelope(ctx, t + dt, 0.002, 0.035, 0.28 * g)).connect(out);
+    }
+    return 0.25;
+  },
+  // 定焦鏡想變焦：舊金的鏡頭圈擰一下就到頭，「頓」
+  stop(ctx, out, t, p, noise) {
+    rub(ctx, out, noise, t, 2600 * p, 1800 * p, 0.01, 0.05, 0.12, { low: 900 * p, shake: 0 });
+    osc(ctx, 'sine', t + 0.045, 0.05, [[0, 330 * p], [0.05, 250 * p]]).connect(envelope(ctx, t + 0.045, 0.002, 0.05, 0.3)).connect(out);
+    hiss(ctx, out, noise, t + 0.045, 0.015, 'lowpass', 1400 * p, 0.3);
+    return 0.12;
+  },
+  // 換拿法、伸手自拍：手和背帶一抹
+  hand(ctx, out, t, p, noise) {
+    rub(ctx, out, noise, t, 2200 * p, 900 * p, 0.05, 0.2, 0.3, { low: 380 * p });
+    return 0.22;
+  },
+  // 直拿、橫拿互換：方盒在手裡轉九十度，皮殼嘎一下，背帶的扣環輕輕碰一下
+  swivel(ctx, out, t, p, noise) {
+    hiss(ctx, out, noise, t, 0.07, 'bandpass', 900 * p, 0.9, 6);
+    hiss(ctx, out, noise, t + 0.13, 0.01, 'bandpass', 3800 * p, 0.7, 5);
+    osc(ctx, 'sine', t + 0.13, 0.08, [[0, 3150 * p]]).connect(envelope(ctx, t + 0.13, 0.001, 0.08, 0.07)).connect(out);
+    return 0.25;
   },
   // ---------- 前廳的相機桌（camtable.js、main.js 的帶走鈕） ----------
   // 帶走：相機離開木座，木頭輕輕一聲，背帶的金屬扣「喀、喀」扣上，最後背帶落到胸前一抹布聲
