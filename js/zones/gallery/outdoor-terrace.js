@@ -171,8 +171,6 @@ export function buildTerrace(c) {
   strand(P[1], P[2], 0.6);
   strand(P[0], P[2], 0.45);
   strand(P[1], P[3], 0.45);
-  strand(new THREE.Vector3(-1.6, 2.6, z0 - 0.05), P[2].clone().lerp(P[3], 0.35), 0.4);
-  strand(new THREE.Vector3(1.6, 2.6, z0 - 0.05), P[3].clone().lerp(P[2], 0.35), 0.4);
   group.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(wire), new THREE.LineBasicMaterial({ color: 0x2a1a10 })));
   return { k, vk, host, tableX, tableRel, tableLen, depth, bx, bRel, arcane, zFront };
 }

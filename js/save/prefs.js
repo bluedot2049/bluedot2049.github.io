@@ -32,7 +32,7 @@ export const PREFS = {
   eyeStay: { kind: 'json' },                     // guide.js：黑眼留在身邊（1）：帶到了、很久沒操作都不自己收
   verbsSeen: { kind: 'json' },                   // main.js：互動鍵出現過哪些動詞（第一次出現光暈多擴幾圈）
   tipsSeen: { kind: 'json' },                    // ui.js：教學提示 { 代號: 出現過幾次，或 'done' 做過了 }
-  radio: { kind: 'json' },                       // radio-sound.js：前廳收音機 { on 開著, at 指針在刻度哪裡 0～1 }
+  radio: { kind: 'json' },                       // radio-sound.js：前廳收音機 { at 指針在刻度哪裡 0～1 }，開關不記，每次上線都是關著
   radioAt: { kind: 'json' },                     // radio-card.js：收音機面板拖到哪 { desk|land|port: { dx, dy } }，左上角離畫面中心多遠
 };
 

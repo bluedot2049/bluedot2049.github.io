@@ -1583,12 +1583,21 @@ export class PhotoMode {
 
   // 閃光燈放在鏡頭上方一點，照對焦的距離調亮：對到焦的人亮度剛好，比他近的過曝，遠的暗下去
   light(on) {
-    const L = this.flashLight, f = this.gear.flash;
+    const L = this.flashLight, c = this.studio;
+    if (!on) return this.flashFx.restore();   // 別人那一閃還沒暗完，就還給它
+    if (c?.light) {
+      // 照相館的燈（studio.js 的 LIGHT）：鏡頭後上方偏一邊，照到人身上是 power 那麼亮
+      const s = c.light, fx = -Math.sin(c.yaw), fz = -Math.cos(c.yaw);
+      L.position.set(c.pos.x - fx * s.back - fz * s.side, c.pos.y + s.up, c.pos.z - fz * s.back + fx * s.side);
+      L.color.setHex(s.color);
+      L.intensity = s.power * L.position.distanceToSquared(c.look);
+      return;
+    }
+    const f = this.gear.flash;
     L.position.copy(this.camera.position);
     L.position.y += 0.12;
     L.color.setHex(f.color);
-    if (on) L.intensity = f.power * this.focusD * this.focusD;
-    else this.flashFx.restore();   // 別人那一閃還沒暗完，就還給它
+    L.intensity = f.power * this.focusD * this.focusD;
   }
 
   // 閃過了：啪一聲，葉片闔上，鏡頭前飄過一陣煙，接著換燈泡
@@ -1753,12 +1762,14 @@ export class PhotoMode {
     if (!this.active || this.result) return;
     if (!dry && this.waitingBulb()) return this.jammed();
     const fire = !dry && this.fires(), wasLong = dof.long;
+    const lit = fire || (!dry && !!this.studio?.light);   // 照相館拍下去那一張有燈
     // 拍到白獸了沒：趁鏡頭和畫布還是平常的樣子先算（下面畫大圖時都會換掉）
     const rare = dry || this.postcard ? null : this.rareShot(fire);
     // 快門聲在畫大圖之前就發：手機畫一張要卡一下，放在後面會比按下去晚。閃光的聲音在 fired()
     if (!dry && !fire) {
       if (this.gear) this.say('shutter', 0.5);
       else this.ambience.voice(this.studio ? 'oldshutter' : 'blink', 0.5);
+      if (this.studio?.light) this.ambience.voice('flash', 0.35);
       rumble('shutter');
       if (!this.studio) this.onShot?.('s');
     }
@@ -1782,7 +1793,7 @@ export class PhotoMode {
       // 景深的模糊圈照照片的大小算，取樣也多一點
       dof.long = Math.max(outW, outH);
       this.dofPass.hq = true;
-      if (fire) this.light(true);
+      if (lit) this.light(true);
       if (lens.on) this.renderFish(outW, outH);
       else {
         r.setSize(outW, outH, false);
@@ -1794,7 +1805,7 @@ export class PhotoMode {
       this.compose(ctx, r.domElement, 0, 0, outW, outH, outW, outH, k, Math.random());
     } finally {
       cam.layers.enable(GUIDE_LAYER);
-      if (fire) this.light(false);
+      if (lit) this.light(false);
       this.dofPass.hq = false;
       dof.long = wasLong;
       cam.clearViewOffset();

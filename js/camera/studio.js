@@ -12,6 +12,9 @@ const NEAR = 6;            // 多遠以內的玩家會收到邀請
 const GAP = 0.9;           // 並排站的間隔
 const MAX = 4;             // 最多幾個人入鏡
 const INVITE_MS = 20000;   // 邀請放多久
+// 照相館的燈：只照拍下去的那一張（借 main.js 那盞閃光燈，photo.js 的 light），取景時看不到，照片跳出來才知道。
+// 暖色、從鏡頭後上方偏一邊打過來，離得遠一點光才軟、前後亮得平均。power 是打在人身上的亮度，閃光燈泡相機是 2.6
+const LIGHT = { color: 0xffbd96, power: 0.85, back: 1.4, up: 0.9, side: 0.6 };
 const sid = () => Math.random().toString(36).slice(2, 10);
 
 export class Studio {
@@ -79,7 +82,7 @@ export class Studio {
     const look = new THREE.Vector3(spot.x, g + 0.75 + (spot.up || 0), spot.z);
     const yaw = Math.atan2(-(look.x - pos.x), -(look.z - pos.z));
     const pitch = Math.atan2(look.y - pos.y, Math.hypot(look.x - pos.x, look.z - pos.z));
-    return { pos, yaw, pitch, fov: 42 };
+    return { pos, look, yaw, pitch, fov: 42 };
   }
 
   // 照目前的名單站好、架好鏡頭。first：第一次到景點，畫面先暗下來再亮
@@ -95,7 +98,7 @@ export class Studio {
     if (this.mp) this.mp.only = new Set(s.ids);
     for (const w of this.walkers) w.hidden = true;
     // mark：照片角落蓋的記號（marks.js 的名字），景點可以自己指定，沒寫就是海市的印
-    const cam = { ...this.camera(spot, n), host: s.host, mark: spot.mark };
+    const cam = { ...this.camera(spot, n), host: s.host, mark: spot.mark, light: LIGHT };
     if (this.photo.active) this.photo.setStudio(cam);
     else this.photo.enter({ postcard: true, studio: cam });
     if (first) this.fade(false);

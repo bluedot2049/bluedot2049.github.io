@@ -4,7 +4,7 @@
 // 開著就是這一區的背景音樂：整個畫廊（前廳、走廊、圓廳、戶外）都一樣聽得到，戶外照背景音樂的規矩小一半；收到台時星盤夜讀整個讓位，關著就跟沒有收音機一樣。
 // 只在畫廊：上船照背景音樂一起淡掉（ambience.musicOut），別區放別區的音樂，回來照記著的接著放。
 // ambience.beds 的一員：每幀 update(amb)，on 為真時音訊不睡，duck 是背景音樂壓低幾成。走 musicBus，音量盤的「音樂」管它。
-// 開著、指針在哪記在 prefs.js 的 radio（這台裝置），下次進來照舊；第一次來是關著的
+// 每次上線都是關著；指針停在哪一台記在 prefs.js 的 radio（這台裝置，不進存檔），下次進來指針還在那台
 import { STATIONS } from './radio.js';
 import { pref, setPref } from '../../save/prefs.js';
 
@@ -34,7 +34,7 @@ export class RadioSound {
     this.r = world.radio;
     this.amb = ambience;
     const p = pref('radio') || {};
-    this.power = !!p.on;
+    this.power = false;       // 每次上線都是關著，只記電台
     this.at = Number.isFinite(p.at) ? clamp(p.at, 0.02, 0.98) : STATIONS[0].at;
     // 台換過（表改了）：記著的位置不在任何一台上，就放到最近那台
     const n0 = nearest(this.at);
@@ -91,7 +91,7 @@ export class RadioSound {
     this.station(i < 0 || i >= STATIONS.length ? 0 : i);
   }
 
-  save() { setPref('radio', { on: this.power, at: +this.at.toFixed(4) }); }
+  save() { setPref('radio', { at: +this.at.toFixed(4) }); }
 
   // 旋鈕、開關卡一下：很短的一聲，走音效那條
   click(vol) {

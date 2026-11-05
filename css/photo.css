@@ -26,6 +26,9 @@ body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #swap-btn, body.p
 /* 閃光燈泡：偏暖、亮得久一點 */
 #ph-frame.bulb::after { background: #fff1d6; }
 #ph-frame.bulb.flash::after { animation: ph-flash .7s ease-out; }
+/* 照相館的燈：暖、退得慢，像老照相館的鎂光 */
+body.photo-studio #ph-frame::after { background: #ffdcb0; }
+body.photo-studio #ph-frame.flash::after { animation: ph-flash .8s ease-out; }
 
 /* 帶著相機（cameras.js）：取景框左上寫是哪一台；沒有變焦、高度尺和錄影 */
 #ph-frame .gear { display: none; position: absolute; left: 12px; top: 10px; font-size: 11px; letter-spacing: .25em; color: rgba(246, 219, 166, .7); }
