@@ -14,6 +14,7 @@ import { VestibuleSound } from './vestibule-sound.js';
 import { RadioCard } from './radio-card.js';
 import { CAMERAS, SOON } from '../../camera/cameras.js';
 import { Ask } from './ask.js';
+import { CellarVoice } from './cellar-voice.js';
 
 // 背景音樂「星盤夜讀」（study.js，現場合成）：走進「歡迎光臨煉金畫廊」那間才開始放，往後的房間和戶外一路放著。
 // 那間一進門就是落地擺鐘，滴答聲從那裡來
@@ -107,6 +108,11 @@ export function ask(ctx) {
 // 前廳的收音機（radio-card.js）：互動鍵「收音機」打開面板，聲音走 ambience.beds。main.js 建好角色、鏡頭以後叫這裡
 export function radio({ world, ambience, player, camera }) {
   return world.radio ? new RadioCard({ world, ambience, player, camera }) : null;
+}
+
+// 地下室會說話的那幅畫（cellar-voice.js）：站到畫前互動鍵「聊天」。main.js 建好角色、鏡頭以後叫這裡
+export function cellarVoice({ world, player, camera }) {
+  return world.cellar?.paintings.some((p) => p.data.talks) ? new CellarVoice({ world, player, camera }) : null;
 }
 
 // 動物和不定期搭船來看畫的冒險者

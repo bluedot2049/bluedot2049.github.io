@@ -7,12 +7,14 @@
 // 測試：?z=jinghai&view=x,z,面向(度),鏡頭距離,俯角(度)，?crowd=0 不放海牛人
 // 座標：x 往東、z 往南，大廳中心是原點
 import * as THREE from 'three';
+import { HQ } from '../../core/hq.js';
+import { soften } from '../../core/softshadow.js';
 import { Kit, rng, newBucket, mergeBucket } from '../../core/props.js';
 import { bucketObjects, uTime } from '../../core/scenery.js';
 import { footMask } from '../../core/footshadow.js';
 import { Fader } from '../../core/fade.js';
 import { makePathfinder } from '../../core/pathgrid.js';
-import { makeSkiff } from '../../scene/harbor.js';
+import { makeSkiff, skiffBerth } from '../../scene/harbor.js';
 import { setGravity } from '../../avatar/character.js';
 import { buildSky } from './jinghai-sky.js';
 import { crinkle, foilRing, foilMaterials } from './jinghai-foil.js';
@@ -363,8 +365,10 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
   boat.position.set(PAD.x + 2.2, PAD.y + 0.32, PAD.z + 0.6);
   boat.rotation.y = -0.45;
   group.add(boat);
-  obstacles.push({ x: PAD.x + 2.2, z: PAD.z + 0.6, hw: 0.8, hd: 2, a: -0.45 });
-  const exits = [{ x: PAD.x + 0.4, z: PAD.z - 1.2, r: 1.8, to: 'gallery', label: '搭船', title: '渡船', boat: ferry }];
+  const berth = skiffBerth(PAD.x + 2.2, PAD.z + 0.6, -0.45);
+  obstacles.push(...berth.block);
+  // x、z、r 是黑眼帶路、走去渡口的落點；上不上得了船看 hull
+  const exits = [{ x: PAD.x + 0.4, z: PAD.z - 1.2, r: 1.8, hull: berth.hull, to: 'gallery', label: '搭船', title: '渡船', boat: ferry }];
   scene.add(group);
 
   // ---------- 碰撞、高度、尋路、鏡頭 ----------
@@ -459,12 +463,15 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.shadowMap.autoUpdate = false;
     sun.castShadow = true;
-    sun.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 1024 : 2048);
+    // 電腦版加料（hq.js）：陰影圖大一倍、影子邊照真的太陽大小變軟（softshadow.js）。月球沒有空氣，太陽是一個小圓，影子本來就利，只軟一點點
+    const res = HQ.on ? 4096 : coarse ? 1024 : 2048;
+    sun.shadow.mapSize.set(res, res);
     const sc = sun.shadow.camera;
     sc.left = sc.bottom = -60; sc.right = sc.top = 60; sc.near = 1; sc.far = 420;
     sc.updateProjectionMatrix();
     sun.shadow.bias = -0.0005;
     sun.shadow.normalBias = 0.06;
+    soften(sun, 0.5);
     scene.add(sun.target);
   }
   // 人和海牛人腳下的影子扣地面的光，跟房子的影子一樣過調色（footshadow.js）：每一幀畫一張影子圖

@@ -16,7 +16,7 @@ const b = await openBrowser({ port: 8176, dbg: 9376, window: '1280,800', onEvent
 } });
 const { send, ev } = b;
 // 真的按鍵（CDP 送的是 isTrusted 的事件）
-const VK = { Space: 32, Escape: 27, KeyJ: 74, KeyC: 67, KeyI: 73, KeyP: 80, KeyW: 87 };
+const VK = { Space: 32, Escape: 27, KeyJ: 74, KeyC: 67, KeyI: 73, KeyP: 80, KeyZ: 90, KeyW: 87 };
 const keyOf = (code) => (code === 'Space' ? ' ' : code === 'Escape' ? 'Escape' : code.slice(3).toLowerCase());
 const down = (code) => send('Input.dispatchKeyEvent', { type: 'keyDown', code, key: keyOf(code), windowsVirtualKeyCode: VK[code] });
 const up = (code) => send('Input.dispatchKeyEvent', { type: 'keyUp', code, key: keyOf(code), windowsVirtualKeyCode: VK[code] });
@@ -69,7 +69,7 @@ try {
   await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 640, y: 200, button: 'forward', buttons: 0, clickCount: 1 });
   await sleep(200);
   const eye = await ev(`[...document.querySelectorAll('#keymap .km-slot[data-a="eye"] kbd')].map((k) => k.textContent).join(' ')`);
-  check(eye === 'M 側鍵前', '黑眼的第二格：側鍵前', eye);
+  check(eye === 'B 側鍵前', '黑眼的第二格：側鍵前', eye);
   // Esc 不換、再一次收起回到暫停選單
   await click('#keymap .km-slot[data-a="talk"][data-s="0"]');
   await tap('Escape');
@@ -111,11 +111,11 @@ try {
   check(/~k=[0-9a-f]+/.test(codes.all) && codes.back === codes.now, '存檔碼帶著按鍵、讀得回來', codes.now);
   check(!/~k=/.test(codes.eye), '眼紋不帶按鍵');
 
-  // 攝影模式：P 進、空白鍵拍、Esc 出
+  // 攝影模式：Z 進、空白鍵拍、Esc 出
   await ev(`window.__shots = 0; { const ph = __g.photo, f = ph.shoot.bind(ph); ph.shoot = (...a) => { window.__shots++; return f(...a); }; } 1`);
-  await tap('KeyP');
+  await tap('KeyZ');
   await sleep(500);
-  check((await st()).photo, 'P：攝影模式');
+  check((await st()).photo, 'Z：攝影模式');
   const tags = await ev(`[...document.querySelectorAll('.ph-tag')].filter((t) => getComputedStyle(t).display !== 'none').map((t) => [...t.children].filter((c) => getComputedStyle(c).display !== 'none').map((c) => c.textContent).join('')).join(' ')`);
   check(/空白鍵/.test(tags) && /Esc/.test(tags), '快門那排底下標鍵', tags);
   await tap('Space');

@@ -14,6 +14,8 @@ import { WET, wetRipple } from '../../core/wet.js';
 import { Weather, BREEZE } from '../../core/weather.js';
 import { uDock } from './distant.js';
 import { SEA } from './haishi-map.js';
+import { SSR } from '../../core/ssr.js';
+import { HQ } from '../../core/hq.js';
 
 // 兩張圖蓋住的範圍：整座鎮、兩側和後山的人家、星廟
 const MAP = { x0: -80, z0: -130, w: 144, d: 172 };
@@ -21,6 +23,8 @@ const TOPS = [512, 612], LAMPS = [384, 456];   // 遮雨圖、燈光圖幾格（
 const TOP_Y = [-4, 96];                         // 遮雨圖拍的時候，高度壓成十六位元：最低、範圍
 const LAMP_Y = [-2, 64];                        // 燈光圖裡燈的高度：最低、範圍
 const COUNT = { low: 1000, mid: 2600, high: 6000 };  // 下大雨時最多幾條雨絲，毛毛雨少一些
+// 港邊常年潮濕：碼頭、棧橋、漁港的小棧橋、渡船口，浪花和夜露，不下雨也泛一層倒影（wet.js 的 damp，配 ssr.js）。只有電腦版帶，手機不下雨時碼頭是乾的
+const DAMP = { amount: 0.2, box: [-30, 4.6, 16, 31], y: 0.5 };
 const BOX = new THREE.Vector3(18, 12, 18);           // 雨絲的盒子：跟著鏡頭，往看的方向推出去三成，背後不浪費
 const WIND = new THREE.Vector2(0.4, -1).normalize(); // 海風從海上往山後吹
 const SHUTTER = 0.04;                                // 雨絲多長：一滴在這麼多秒裡掉了多遠
@@ -262,6 +266,9 @@ export function buildRain({ scene, world, renderer, quality, coarse, params }) {
   WET.occ = topTex;
   WET.light = lampTex;
   WET.lightY.set(LAMP_Y[0], LAMP_Y[1]);
+  WET.dampBox.set(...DAMP.box);
+  WET.dampY = DAMP.y;
+  SSR.above = SEA + 0.1;   // 電腦版的濕地反射（ssr.js）不畫在海上：海有自己的倒影
   const level = () => qualityOf(quality, coarse);
   const mesh = streakMesh(COUNT.high, topTex, lampTex), u = mesh.material.uniforms;
   scene.add(mesh);
@@ -320,6 +327,7 @@ export function buildRain({ scene, world, renderer, quality, coarse, params }) {
       WEATHER.wet = w.wet;
       WET.amount = w.wet;
       WET.q = level() === 'low' ? 0 : 1;
+      WET.damp = HQ.on ? DAMP.amount : 0;
       WET.now = uTime.value;
       const n = w.rain > 0.003 ? Math.round((COUNT[level()] ?? COUNT.mid) * Math.min(1, 0.3 + w.rain)) : 0;
       mesh.visible = n > 0;

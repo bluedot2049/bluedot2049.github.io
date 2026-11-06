@@ -40,6 +40,14 @@ export class Studio {
       const b = e.target.closest('button');
       if (b) this.answer(b.dataset.act === 'yes');
     });
+    // Esc：選景的卡同「算了」，收到的合照邀請同「不了」
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || e.repeat) return;
+      if (!this.inviteEl.hidden) this.answer(false);
+      else if (!this.menu.hidden) this.close();
+      else return;
+      e.stopImmediatePropagation();
+    });
     this.fadeEl = this.$('#studio-fade');
     photo.studioHooks = { shutter: () => this.shutter(), exit: () => this.end() };
   }

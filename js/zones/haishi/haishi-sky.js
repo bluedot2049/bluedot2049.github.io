@@ -336,7 +336,7 @@ export function buildSky(c) {
   const { group, bucket, coarse, shimmerMore, inArea } = c;
   // 推車、蒸籠、煙囪冒的煙；燈照在地上的光
   group.add(smoke(bucket.puffs, coarse));
-  group.add(pools(bucket.pools, 1.8));   // 燈下的地面要明顯暖起來，跟藍灰的夜色對比
+  group.add(pools(bucket.pools, 1.8, true));   // 燈下的地面要明顯暖起來，跟藍灰的夜色對比；跟著燈籠的燭火亮暗
 
   // ---------- 霧：夾在層與層之間，鎮子兩側的山谷裡也有；街道上方也飄幾團，在屋頂之間 ----------
   const MR = rng('haishi-mist'), mists = [];
@@ -357,6 +357,10 @@ export function buildSky(c) {
   const shimmer = [{ x: 0, z: 12.2, w: 16, l: 20, color: '#ff8a48', a: 0.16 }];
   for (let x = -7.5; x <= 7.5; x += 1.5) if (Math.abs(x) > 1.5) shimmer.push({ x: x + (MR() - 0.5) * 0.4, z: 12.2, w: 0.35, l: 4 + MR() * 3, color: '#ff7a40', a: 0.5 });
   for (const z of [16, 22, 29.6]) for (const sx of [-1, 1]) shimmer.push({ x: sx * 1.5, z: z + 0.1, w: 0.3, l: 3 + MR() * 1.5, color: '#ff7a40', a: 0.55 });
+  // 碼頭前那兩間店（haishi-houses.js 臨海的 shop）：整片拉開的店面映在碼頭邊的水上，站上棧橋或從船上回頭才看得到。
+  // 顏色照畫面上看到的店面配：偏白的淡黃（色相 47、飽和 0.3 上下），燈籠倒影是飽和的橘（色相 19），兩種分得開；
+  // 店面亮的那片離水 0.65 到 2.55 公尺（h 中間、tall 半高），倒影是一整塊直的，碎得少
+  for (const x of [-4.9, 4.9]) shimmer.push({ x, z: 5.0, w: 1.1, l: 4, h: 1.6, tall: 0.95, broken: 0.35, color: '#ffe8aa', a: 0.5 });
   group.add(ripples(shimmer.concat(shimmerMore), SEA));
   // 天燈：從幾條街的正中間升起，屋頂擋不到
   const LR = rng('haishi-sky-lanterns'), streets = ORIGINAL.filter((a) => a.street && a.y != null), launch = [];
@@ -389,7 +393,7 @@ export function buildSky(c) {
   // 空氣本身海上只罩一部分（uSeaAir）：全罩的話遠海會跟天邊一樣亮，高處看不到海平線那條線
   const seaFog = {
     uSeaFogAmt: { value: 0.8 }, uSeaFogColor: { value: new THREE.Color('#2c4262') },
-    uSeaBand: { value: 1 }, uSeaBandHigh: { value: 0.45 }, uSeaBandNow: { value: 1 }, uSeaBandFrom: { value: 330 }, uSeaDeep: { value: 0.85 }, uSeaAir: { value: 0.4 }, uSeaMatch: { value: 0.6 }, uSeaMatchNow: { value: 0 },
+    uSeaBand: { value: 1 }, uSeaBandHigh: { value: 0.45 }, uSeaBandNow: { value: 1 }, uSeaBandFrom: { value: 330 }, uSeaDeep: { value: 0.85 }, uSeaAir: { value: 0.4 }, uSeaMatch: { value: 0.6 }, uSeaMatchNow: { value: 0 }, uSeaSky: { value: 0.5 },
   };
   TUNE.push(
     { label: '海霧量', key: 'seaFog', uniform: seaFog.uSeaFogAmt, kind: [0, 2, 0.01] },
@@ -400,15 +404,27 @@ export function buildSky(c) {
     { label: '遠海壓暗', key: 'seaDeep', uniform: seaFog.uSeaDeep, kind: [0.4, 1, 0.01] },
     { label: '海上空氣', key: 'seaAir', uniform: seaFog.uSeaAir, kind: [0, 1, 0.01] },
     { label: '高處海霧同岸', key: 'seaMatch', uniform: seaFog.uSeaMatch, kind: [0, 1, 0.01] },
+    { label: '海映天光', key: 'seaSky', uniform: seaFog.uSeaSky, kind: [0, 1, 0.01] },
   );
   // 海面和白塔底下的小島共用這一段，小島才跟周圍的海是同一個顏色、同樣退進霧裡
   const seaShade = (sh) => {
     Object.assign(sh.uniforms, seaFog);
-    sh.fragmentShader = 'uniform float uSeaFogAmt; uniform vec3 uSeaFogColor; uniform float uSeaBandNow; uniform float uSeaBandFrom; uniform float uSeaDeep; uniform float uSeaAir; uniform float uSeaMatchNow;' + SKY_EDGE_GLSL +
+    sh.fragmentShader = 'uniform float uSeaFogAmt; uniform vec3 uSeaFogColor; uniform float uSeaBandNow; uniform float uSeaBandFrom; uniform float uSeaDeep; uniform float uSeaAir; uniform float uSeaMatchNow; uniform float uSeaSky;' + SKY_EDGE_GLSL +
       sh.fragmentShader.replace('#include <fog_fragment>', `#ifdef USE_FOG
       if ( uGrade.on > 0.5 ) {
         vec2 seaDir = vFogWorld.xz - cameraPosition.xz;
         float seaD = length( seaDir );
+        // 映天光：視線在水面彈上去看到的那一塊天（天邊的霧色、西邊的日出光），照斜的程度映上來：腳下幾乎沒有，越斜越多。
+        // 遠處交給下面的霧帶，這裡先收掉，高處看海平線照樣是海比天暗的一條線（小島和塔在兩百多公尺外，到那裡已經是 0）
+        vec3 seaV = normalize( vFogWorld - cameraPosition );
+        float seaFr = pow( 1.0 - max( - seaV.y, 0.0 ), 5.0 ) * uSeaSky * ( 1.0 - smoothstep( 60.0, 240.0, vFogDepth ) );
+        if ( seaFr > 0.0 ) {
+          bool seaOut = gradeSrgbOut();
+          vec3 seaC = seaOut ? sRGBTransferEOTF( gl_FragColor ).rgb : gl_FragColor.rgb;
+          vec3 seaSky = sunLit( skyLow( uGrade.fogLin ) * mix( 1.0, 0.6, smoothstep( 0.0, 0.35, - seaV.y ) ), sunUp( seaDir, 0.0 ) );
+          seaC = mix( seaC, seaSky, seaFr );
+          gl_FragColor.rgb = seaOut ? sRGBTransferOETF( vec4( seaC, 1.0 ) ).rgb : seaC;
+        }
         // 左手邊起霧的那一段：從近處就起霧，一百多公尺外已經差不多是天邊的顏色，海和天在那裡融成一片，也不再壓暗。這一段不跟著高度變
         float mist = mistAt( seaDir );
         float air = gradeAir( vFogWorld ), same = max( uGrade.farAir > 0.0 ? air / uGrade.farAir : 0.0, uSeaMatchNow ) * ( 1.0 - smoothstep( uSeaBandFrom - 150.0, uSeaBandFrom, vFogDepth ) );
@@ -509,8 +525,8 @@ export function buildSky(c) {
 
   // 海上的船：海平線上幾條航道有大船慢慢開過，中間的海面撒滿漁火。從碼頭看得到一些，爬上遠眺台和星廟就整片出來
   // 航道在白塔那座小島（z 260 前後）的前面：再遠，從星廟看已經超過相機看得到的海面。
-  // 地形只做到 z 32，再出去都是海；航道兩頭在看得到的範圍外面，船開進來、開出去都是慢慢從霧裡淡出
-  const VR = rng('haishi-ships'), seaAt = (x, z) => z > 34 || terrain(x, z) < SEA - 0.3;
+  // 地形只做到 z 48，再出去都是海；航道兩頭在看得到的範圍外面，船開進來、開出去都是慢慢從霧裡淡出
+  const VR = rng('haishi-ships'), seaAt = (x, z) => z > 48 || terrain(x, z) < SEA - 0.3;
   const lanes = [];
   for (let i = 0; i < (coarse ? 10 : 16); i++) {
     const odd = i === 0, z = odd ? 226 : 172 + VR() * 60, xa = -220, xb = 220;

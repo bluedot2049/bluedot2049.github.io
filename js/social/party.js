@@ -252,6 +252,14 @@ export class Party {
       const b = e.target.closest('button');
       if (b) this.answer(b.dataset.act === 'yes');
     });
+    // Esc：收到的邀請當成「不了」，隊伍卡只收起來（不離隊）。暫停選單看到 .studio-card 開著就不跳（deskkeys.js 的 busy）
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || e.repeat) return;
+      if (!this.inviteEl.hidden) this.answer(false);
+      else if (!this.card.hidden) this.closeCard();
+      else return;
+      e.stopImmediatePropagation();
+    });
     this.bindChat();
     player.onTap = (cx, cy) => this.tapMark(cx, cy);
     window.addEventListener('pointermove', (e) => { this.mouse = { x: e.clientX, y: e.clientY }; }, { passive: true });
@@ -438,6 +446,8 @@ export class Party {
   placeOf(x, z) {
     const w = this.world;
     if (w.placeAt) return w.placeAt(x, z)?.name || null;
+    const cellar = w.cellarAt?.(x, z);   // 畫廊的地下室在前廳入口牆外面，roomIndexAt 照樣算前廳
+    if (cellar) return cellar.name;
     const rooms = w.rooms || [], r = w.roomIndexAt?.(z) ?? -1, room = rooms[r];   // 畫廊的房間沿 z 排，只看 z
     if (!room) return null;
     if (w.outdoor && r === rooms.length - 1) return (w.outdoor.inMeadow(z) && w.outdoor.placeAt(x, z)?.name) || room.data.name;

@@ -1,0 +1,16 @@
+{
+  "name": "地下室",
+  "subtitle": "Prima Materia",
+  "note": "老作品。image 填 paintings/ 底下的原圖，跑 python tools/cellar-thumbs.py 產生縮圖圖集（thumbs.webp、thumbs.json）。只有一幅時掛在正對樓梯的後牆；talks 的那幅會說話（cellar-voice.js，台詞在 cellar-lines.js）",
+  "paintings": [
+    {
+      "title": "無題",
+      "year": "",
+      "medium": "",
+      "width": 80,
+      "height": 100,
+      "image": "",
+      "talks": true
+    }
+  ]
+}

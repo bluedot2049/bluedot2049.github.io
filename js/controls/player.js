@@ -138,7 +138,7 @@ export class Player {
     this.relock = false;            // 程式放開的：面板關掉後一走路就鎖回去
     this.peek = false;              // 按住 Alt 叫出游標中
     this.userUnlock = false;        // 剛才是玩家自己按 Esc 放開的（deskkeys.js 跳暫停選單）
-    this.lookHook = null;           // 表情輪打開時，鎖定的滑鼠移動拿去選表情，不轉鏡頭
+    this.lookHook = null;           // 口令輪打開時，鎖定的滑鼠移動拿去選，不轉鏡頭
     this.onPausedLook = null;       // 舉著相機時移動滑鼠：轉相機
     this.holdLock = false;          // 舉相機時攝影模式接手，滑鼠照樣鎖著
     this.mouseSens = 1;             // 滑鼠靈敏度倍數、上下反轉（暫停選單裡調）
@@ -364,10 +364,23 @@ export class Player {
         return;
       }
       const move = MOVES.find((id) => is(e, id));
+      // 挑相機時左右（A、D、方向鍵）是換一台，不走開；往前往後照樣離開
+      if (this.focus?.kind === 'cameras' && (move === 'left' || move === 'right')) {
+        e.preventDefault();
+        if (!e.repeat) this.events.onCamStep?.(move === 'left' ? -1 : 1);
+        return;
+      }
       if (move || is(e, 'jump')) this.tryRelock(true);
       // Enter、E（互動）：看畫、照鏡子、摸動物、樹洞⋯
+      // 卡片開著時（main.js 給 cardOpen）是確認：按卡片裡有焦點的那顆，不去按卡片後面的東西、也不收卡（介面原則第五節）
       if (e.key === 'Enter' || (is(e, 'interact') && !e.repeat)) {
         e.preventDefault();
+        const card = this.cardOpen?.();
+        if (card) {
+          const a = document.activeElement;
+          if (a && card.contains(a) && a.matches('button, [role=button]')) a.click();
+          return;
+        }
         this.action();
         return;
       }
@@ -460,6 +473,8 @@ export class Player {
     dy = THREE.MathUtils.clamp(dy, -250, 250);
     if (!dx && !dy) return;
     if (this.lookHook?.(dx, dy)) return;
+    // 看畫、挑相機時鏡頭被接管，鎖定還沒放開的那一下滑鼠動了也不算（不然剛打開的卡片會被收掉）
+    if (this.focus?.camPos) return;
     const k = SH_MOUSE * this.mouseSens;
     this.camYaw -= dx * k;
     let dp = dy * k * (this.invertY ? -1 : 1);
@@ -602,7 +617,10 @@ export class Player {
     const rect = this.dom.getBoundingClientRect();
     const ndc = new THREE.Vector2(((cx - rect.left) / rect.width) * 2 - 1, -((cy - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(unbend(ndc), this.camera);
-    return this.raycaster.intersectObjects(this.world.raycastTargets, false).find((h) => isShown(h.object) && !h.object.userData.ghost);
+    const hit = this.raycaster.intersectObjects(this.world.raycastTargets, false).find((h) => isShown(h.object) && !h.object.userData.ghost);
+    // 地下室一面牆的畫布合成一塊網格：照打到第幾個三角形換成那一幅
+    const at = hit?.object.userData.paintingAt;
+    return at ? { ...hit, object: { userData: { painting: at(hit.faceIndex) } } } : hit;
   }
 
   // 畫面上 (cx, cy) 附近有沒有對著自己的鏡頭（看畫、坐船時不算）
@@ -784,7 +802,7 @@ export class Player {
   switchPainting(dir) {
     if (this.focus?.kind === 'cameras') return this.events.onCamStep?.(dir);
     if (this.focus?.kind !== 'painting') return;
-    const list = this.world.paintings, i = list.indexOf(this.focus.p) + dir;
+    const list = this.focus.p.cellar ? this.world.cellar.paintings : this.world.paintings, i = list.indexOf(this.focus.p) + dir;   // 地下室的只在地下室裡換
     if (i >= 0 && i < list.length) this.showPainting(list[i]);
   }
 
@@ -896,8 +914,9 @@ export class Player {
   nearbyPainting() {
     if (!WORKS_OPEN || this.focus || this.pending) return null;
     let best = null, bd = 3.4;
-    for (const p of this.world.paintings) {
-      if (Math.abs(p.room.index - this.room) > 1) continue;
+    for (const p of [...this.world.paintings, ...(this.world.cellar?.paintings || [])]) {
+      if (!p.cellar && Math.abs(p.room.index - this.room) > 1) continue;
+      if (p.data.talks) continue;   // 會說話的那幅，互動鍵是「聊天」（cellar-voice.js）
       const dx = this.pos.x - p.wall.x, dz = this.pos.z - p.wall.z;
       const front = dx * p.n.x + dz * p.n.z;
       const d = Math.hypot(dx, dz);
@@ -1073,6 +1092,15 @@ export class Player {
     const vi = this.visitors?.nearest(x, z);
     if (vi) list.push({ kind: 'talk', p: vi.v, d: vi.d, ax: vi.v.pos.x, az: vi.v.pos.z });
     for (const ex of this.world.exits || []) {
+      const h = ex.hull;
+      if (h) {
+        // 有船身範圍的（harbor.js 的 skiffBerth）量到船身最近的一點，看的也是那一點
+        const c = Math.cos(h.a), s = Math.sin(h.a), dx = x - h.x, dz = z - h.z;
+        const lx = Math.max(-h.hw, Math.min(h.hw, dx * c - dz * s)), lz = Math.max(-h.hd, Math.min(h.hd, dx * s + dz * c));
+        const ax = h.x + lx * c + lz * s, az = h.z - lx * s + lz * c, d = Math.hypot(x - ax, z - az);
+        if (d < h.reach) list.push({ kind: 'exit', p: ex, d, ax, az });
+        continue;
+      }
       const d = Math.hypot(x - ex.x, z - ex.z);
       if (d < ex.r) list.push({ kind: 'exit', p: ex, d, ax: ex.x, az: ex.z });
     }

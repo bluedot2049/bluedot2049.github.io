@@ -58,7 +58,8 @@ export async function buildZone(name) {
   let gallery = null;
   if (name === 'gallery') {
     const g = JSON.parse(fs.readFileSync(path.join(ROOT, 'gallery.json'), 'utf8'));
-    gallery = { ...g, rooms: g.order.map((id) => ({ id, ...JSON.parse(fs.readFileSync(path.join(ROOT, `rooms/${id}/room.json`), 'utf8')) })) };
+    const room = (id) => ({ id, ...JSON.parse(fs.readFileSync(path.join(ROOT, `rooms/${id}/room.json`), 'utf8')) });
+    gallery = { ...g, rooms: g.order.map(room), cellar: g.cellar ? room(g.cellar) : null };
   }
   const w = Z.build(scene, { gallery, coarse: false, params: new URLSearchParams(''), renderer: null, quality: null });
   return { THREE, Z, scene, w };

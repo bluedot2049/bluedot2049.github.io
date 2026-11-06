@@ -7,7 +7,7 @@
 const LAYERS = [
   '#pause.show', '#padmap.show', '#keymap.show', '#ph-result:not([hidden])', '#album-view:not([hidden])', '#viewer.open', '#press.show', '#hollow.show', '#guide.show', '#ask.show', '#peek.show', '#radio.show',
   '#vol.open', '#eye-card.open', '#cams.open', '#ferry.open', '.studio-card:not([hidden])', '#pack-card:not([hidden])', '#chat:not([hidden])',
-  '#dress.open', '#sheet.open', '#list.open',
+  '#dress.open', '#sheet.open', '#list.open', '#kaopanel.open',
 ].join(', ');
 const ITEMS = 'button, [role="button"], a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 

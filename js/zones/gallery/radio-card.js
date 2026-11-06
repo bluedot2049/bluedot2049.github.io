@@ -168,16 +168,16 @@ export class RadioCard {
 
   get isOpen() { return this.el.classList.contains('show'); }
 
-  // 互動鍵（player.actionables）：站在收音機前面那一側，量到櫃子邊
+  // 互動鍵（player.actionables）：站在收音機前面那一側，量到櫃子邊。面板開著時不算（卡片裡互動鍵是確認，不拿來關，見介面原則第五節）
   target(x, z) {
     const r = this.r, dx = x - r.x, dz = z - r.z, lx = dx * r.along.x + dz * r.along.z, lz = dx * r.n.x + dz * r.n.z;
     const d = Math.hypot(Math.max(0, Math.abs(lx) - r.hw), Math.max(0, lz - r.hd));
-    if (lz <= 0 || d > NEAR) return null;
+    if (lz <= 0 || d > NEAR || this.isOpen) return null;
     return { kind: 'radio', p: { act: () => this.act() }, d, ax: r.x, az: r.z };
   }
 
   act() {
-    if (this.isOpen) return this.close();
+    if (this.isOpen) return;
     if (!this.sound.power) this.sound.setPower(true);
     this.open();
   }

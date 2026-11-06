@@ -5,7 +5,7 @@
 // 淡掉是在著色器裡丟掉一部分像素（網點），不用半透明：合併成一大塊的網格不用拆，前後也不會排錯。
 // 鏡頭本身不再被房子推來推去，距離和斜度都照玩家拖的。lead 是提早淡：照角色和鏡頭的速度往前推一點時間，那時會擋住的先淡（海市、蜃樓都開）
 import * as THREE from 'three';
-import { uTime } from './scenery.js';
+import { uTime, LAMP_FLICKER } from './scenery.js';
 
 const FADED = 0.22;   // 擋住時留下幾成像素，看得出輪廓
 const SPEED = 4;      // 淡出、淡回的速度（每秒）
@@ -131,7 +131,7 @@ export class Fader {
 
   // 材質各複製一份，加上照編號丟像素的那幾行
   patch(mat) {
-    const m = mat.clone();
+    const m = mat.clone(), lamp = this.sway && m.isMeshBasicMaterial;
     m.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.uniforms);
       sh.vertexShader = sh.vertexShader
@@ -140,11 +140,20 @@ export class Fader {
       if (this.sway) sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\n' + SWAY_PARS)
         .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + SWAY_VERT);
+      // 發光的零件帶掛點的就是燈籠：紙跟著裡面的燭火亮暗（scenery.js 的 LAMP_FLICKER），暗下去也留六成，不會像熄掉
+      if (lamp) {
+        sh.vertexShader = sh.vertexShader
+          .replace('#include <common>', '#include <common>\n' + LAMP_FLICKER + '\nvarying float vLamp;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLamp = aHangK > 0.0 ? mix(1.0, lampFlicker(aHang.xz, uSwayT), 0.6) : 1.0;');
+        sh.fragmentShader = sh.fragmentShader
+          .replace('#include <common>', '#include <common>\nvarying float vLamp;')
+          .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= vLamp;');
+      }
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', '#include <common>\nvarying float vFade;')
         .replace('void main() {', `void main() {\n${this.gate ? '#ifdef PROP_FADE\n' : ''}if (vFade < 0.996 && vFade <= ${DITHER}) discard;${this.gate ? '\n#endif' : ''}`);
     };
-    m.customProgramCacheKey = () => (this.gate ? 'prop-fade' : 'haishi-fade') + (this.sway ? '-sway' : '');
+    m.customProgramCacheKey = () => (this.gate ? 'prop-fade' : 'haishi-fade') + (this.sway ? '-sway' : '') + (lamp ? '-lamp' : '');
     if (this.gate) this.mats.push(m);
     return m;
   }

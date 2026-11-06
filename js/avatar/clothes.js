@@ -659,18 +659,37 @@ export function tailGeo(L, skin) {
 }
 
 // ---------- 右手 ----------
-// hang：手垂著拿；hold：手往前抬，東西拿在胸前；up：手舉高，東西在頭上。
+// 右手拿的東西一樣一行，新的東西照抄一行、在 handGeo 加造型就好：
+// pose：hang 手垂著拿、hold 手往前抬拿在胸前、up 手舉高東西在頭上
+// kind：性子，表情的手勢只跟性子打交道（kaomoji-parts.js）。long 長的跟著手轉、cup 杯子保持水平、lamp 燈保持直立、
+//       flat 書和框正面朝前、top 留在頭頂、float 飄著拖在後面
+// swing：垂著時跟著手盪多少（負的是拖在後面），swingW 擺的快慢（每秒弧度，沒寫是 6）
+// sit：坐下時先放到身邊地上；float 的躺下也不放，其他躺下全部放下（handclear.js）
+// stand：放在地上時立著，其他的橫躺
 // 拿的東西由 character.js 抵銷手臂的轉動，一直保持直立
-
-export const HAND_POSE = {
-  staff: 'hang', umbrella: 'up', balloon: 'hold', book: 'hold', flower: 'hold', boba: 'hold', chicken: 'hold', selfie: 'up', spatula: 'hold',
-  lantern: 'hold', candle: 'hold', fish: 'hang', brush: 'hold', flask: 'hold', frame: 'hold', scope: 'hold', baguette: 'hang', teacup: 'hold', squid: 'hold',
+export const ITEMS = {
+  staff: { pose: 'hang', kind: 'long', swing: 0.35, sit: true },
+  umbrella: { pose: 'up', kind: 'top' },
+  balloon: { pose: 'hold', kind: 'float', swing: -0.6, swingW: 2.2 },
+  book: { pose: 'hold', kind: 'flat' },
+  flower: { pose: 'hold', kind: 'long', swing: 0.5 },
+  boba: { pose: 'hold', kind: 'cup', swing: 0.25, stand: true },
+  chicken: { pose: 'hold', kind: 'cup' },
+  selfie: { pose: 'up', kind: 'top' },
+  spatula: { pose: 'hold', kind: 'long' },
+  lantern: { pose: 'hold', kind: 'lamp', swing: 1, stand: true },
+  candle: { pose: 'hold', kind: 'lamp', swing: 0.2, stand: true },
+  fish: { pose: 'hang', kind: 'long', swing: 0.9 },
+  brush: { pose: 'hold', kind: 'long', swing: 0.2 },
+  flask: { pose: 'hold', kind: 'cup', swing: 0.3, stand: true },
+  frame: { pose: 'hold', kind: 'flat' },
+  scope: { pose: 'hold', kind: 'long' },
+  baguette: { pose: 'hang', kind: 'long', swing: 0.3, sit: true },
+  teacup: { pose: 'hold', kind: 'cup', swing: 0.12, stand: true },
+  squid: { pose: 'hold', kind: 'long' },
 };
-
-// 坐下時先放到身邊地上的長東西；躺下時除了氣球全部放下（見 handclear.js）
-export const SIT_DOWN = ['staff', 'baguette'];
-// 放在地上時立著的，其他的橫躺
-export const STAND_DOWN = ['boba', 'candle', 'flask', 'teacup', 'lantern'];
+const NO_ITEM = {};
+export const itemOf = (id) => ITEMS[id] || NO_ITEM;
 
 // 原點在手心，+y 朝上，+z 朝前。reach：雨傘、自拍棒拉長多少，舉高時才高過帽子（handclear.js 算）
 export function handGeo(L, reach = 0) {

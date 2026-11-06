@@ -6,6 +6,8 @@ import { Player } from './controls/player.js';
 import { Character } from './avatar/character.js';
 import { addMirrorLight, setMirrorLight, setStageLight } from './avatar/mirrorlight.js';
 import { Attention } from './avatar/attention.js';
+import { kaoLike, kaoFacing } from './avatar/kaomoji-parts.js';
+import { KaoPanel } from './controls/kaopanel.js';
 import { sanitizeLook, randomPreset } from './avatar/looks.js';
 import { getSave, putSave, markTour } from './save/progress.js';
 import { decodeLook, decodeSave, tryOn, hasProgress, restoreSave } from './save/savecode.js';
@@ -13,7 +15,7 @@ import { Creator } from './avatar/creator.js';
 import { Pack } from './save/pack.js';
 import { pack as packCarry, unpack as unpackCarry } from './save/carry.js';
 import { layoutBubbles } from './core/bubbles.js';
-import { UI, panelW, uiScale } from './controls/ui.js';
+import { UI, panelW, uiScale, WORKS_OPEN } from './controls/ui.js';
 import { bindJoystick } from './controls/joystick.js';
 import { bindTouch } from './controls/touch.js';
 import { Multiplayer, EMOTES } from './social/multiplayer.js';
@@ -21,9 +23,11 @@ import * as TX from './core/textures.js';
 import { Ambience } from './audio/ambience.js';
 import { dressSound, paintSound } from './audio/wear-voices.js';
 import { bindUI } from './audio/ui-voices.js';
-import { ANIMAL_LAYER, REFLECT_LAYER, GUIDE_LAYER } from './core/scenery.js';
+import { ANIMAL_LAYER, REFLECT_LAYER, GUIDE_LAYER, TAG_LAYER } from './core/scenery.js';
 import { Quality } from './core/quality.js';
 import { createPostFX } from './core/postfx.js';
+import { setHQ } from './core/hq.js';
+import { installSoftShadows } from './core/softshadow.js';
 import { PhotoMode } from './camera/photo.js';
 import { Selfie } from './camera/selfie.js';
 import { Studio } from './camera/studio.js';
@@ -65,11 +69,12 @@ async function loadJSON(url) {
   return res.json();
 }
 
-// gallery.json 決定房間順序，每間房的內容在 rooms/<id>/room.json
+// gallery.json 決定房間順序，每間房的內容在 rooms/<id>/room.json；cellar 是前廳底下的地下室（不在順序裡）
 async function loadGallery() {
   const g = await loadJSON('gallery.json');
-  const rooms = await Promise.all(g.order.map(async (id) => ({ id, ...(await loadJSON(`rooms/${id}/room.json`)) })));
-  return { ...g, rooms };
+  const room = async (id) => ({ id, ...(await loadJSON(`rooms/${id}/room.json`)) });
+  const [rooms, cellar] = await Promise.all([Promise.all(g.order.map(room)), g.cellar ? room(g.cellar) : null]);
+  return { ...g, rooms, cellar };
 }
 
 function hasWebGL() {
@@ -124,9 +129,20 @@ async function precompile(renderer, scene, camera, world, toTexture = false) {
   scene.traverse((o) => { if (!o.visible) { hidden.push(o); o.visible = true; } });
   const rt = toTexture ? new THREE.WebGLRenderTarget(1, 1) : null;
   const jobs = [];
+  // 海面倒影的鏡頭只看 REFLECT_LAYER，燈也只算這一層的（天光、太陽），前廳那幾盞真的燈不算，燈數跟主畫面不同又是另一組著色器。
+  // 載入時那一次順便編：照那個鏡頭、畫進貼圖，只編倒影裡有的東西。沒編的話鏡頭第一次轉向海會卡一下
+  const mirrorCam = toTexture ? null : new THREE.PerspectiveCamera();
+  mirrorCam?.layers.set(REFLECT_LAYER);
+  const mirrorRT = mirrorCam && new THREE.WebGLRenderTarget(1, 1);
+  const reflected = [];
+  if (mirrorCam) scene.traverse((o) => { if (o.material && o.layers.test(mirrorCam.layers)) reflected.push(o); });
   const compile = () => {
     renderer.setRenderTarget(rt);
     jobs.push(renderer.compileAsync(scene, camera));
+    if (reflected.length) {
+      renderer.setRenderTarget(mirrorRT);
+      for (const o of reflected) jobs.push(renderer.compileAsync(o, mirrorCam, scene));
+    }
     renderer.setRenderTarget(null);
   };
   try {
@@ -153,6 +169,7 @@ async function precompile(renderer, scene, camera, world, toTexture = false) {
   }
   await Promise.all(jobs).catch(() => {});
   rt?.dispose();
+  mirrorRT?.dispose();
 }
 
 async function start() {
@@ -188,6 +205,9 @@ async function start() {
   const bgm = Z.bgm;
   const coarse = matchMedia('(pointer: coarse)').matches;
   const quality = new Quality(coarse, params);
+  // 電腦版加料（hq.js）：high 畫質才開，建場景之前定好，各區照這個多畫倒影、光束、軟影子；跑不動降級時關掉
+  setHQ(quality.post);
+  if (quality.post) installSoftShadows();
   // 有後製時由 SMAA 處理鋸齒，瀏覽器的多重取樣用不到。手機實際只畫 1 到 2 倍解析度，邊緣一樣會鋸齒，也要開
   const renderer = new THREE.WebGLRenderer({ antialias: !quality.post, powerPreference: 'high-performance' });
   renderer.setPixelRatio(quality.dpr);
@@ -253,6 +273,7 @@ async function start() {
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 400);
   camera.layers.enable(ANIMAL_LAYER);   // 動物只在圖層 1；海面反射的鏡頭只看 REFLECT_LAYER
   camera.layers.enable(GUIDE_LAYER);    // 標記、站位：畫面上看得到，拍照時關掉
+  camera.layers.enable(TAG_LAYER);      // 頭上的表情、顏文字：一樣拍照時關掉
 
   // 只有一組光線的區域一開始就套上；兩組的每一幀照位置算（見 tick）
   if (envs.length === 1) applyEnv(0);
@@ -289,6 +310,7 @@ async function start() {
   let guide = null;   // 黑眼帶路（scene/guide.js），攝影模式建好以後才建
   let ask = null;   // 前廳胖頭的教學（zones/gallery/ask.js），畫廊才有
   let radio = null;   // 前廳的收音機（zones/gallery/radio-card.js），畫廊才有
+  let voice = null;   // 地下室會說話的畫（zones/gallery/cellar-voice.js），畫廊有地下室才有
   let checkAway = null;   // 看自己是不是掛機中，有連線才有
   let studio = null;   // 海市信差站的照相館（studio.js），畫廊沒有
   let place = null;   // 戶外現在在哪裡：null 是陽台，否則是草原或棧橋盡頭的地名
@@ -366,6 +388,8 @@ async function start() {
       lastInput = performance.now();
       ui.hidePainting();
       ui.hideCams();
+      // 相機桌的卡收掉了，鏡頭也一起退回來（跟按關閉一樣），不會停在桌上卻沒有卡
+      if (player.focus?.kind === 'cameras') player.exitFocus();
       ui.hideFerry();
       guide?.closeCard();
       // 照鏡子時拖曳、縮放是在轉著看自己，面板留著
@@ -661,7 +685,7 @@ async function start() {
   // radio：站在前廳收音機前面，關著按就開機，再打開面板（zones/gallery/radio-card.js）
   const LABELS = { ask: '問', painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來', lens: '看鏡頭', follow: '跟著', peek: '看照片', radio: '收音機' };
   // 手機的互動鍵是一顆小圓章，只放兩個字；沒列在這裡的取前兩個字
-  const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信', 看鏡頭: '看鏡', 不看了: '不看', 叫電梯: '叫梯', 上觀星台: '上樓', 回一樓: '下樓', 看照片: '照片', 收音機: '收音' };
+  const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信', 看鏡頭: '看鏡', 不看了: '不看', 叫電梯: '叫梯', 上觀星台: '上樓', 回一樓: '下樓', 看照片: '照片', 收音機: '收音', 拿海草: '海草', 要冰淇淋: '甜筒', 要汽水: '汽水', 要熱茶: '熱茶', 取照片: '照片' };
   // 剛走出範圍的那一下（走過攤位、動物走開）互動鍵先留著：手指可能已經在按的路上，按到了照原本的做（player.action 的 fallback）。
   // 以前一出範圍就收，手指落在收起來的鈕上會穿到畫面，角色往鈕底下走過去
   const ACTION_LINGER = 400;
@@ -706,8 +730,10 @@ async function start() {
   player.cursorWanted = () => {
     const b = document.body.classList;
     return b.contains('panel-open') || b.contains('chatting') || !document.getElementById('pack-card').hidden
-      || !!document.querySelector('#list.open, #vol.open, #guide.show, #ask.show, #peek.show, #radio.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show') || !!document.activeElement?.closest?.('input, textarea');
+      || !!document.querySelector('#list.open, #kaopanel.open, #vol.open, #guide.show, #ask.show, #peek.show, #radio.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show') || !!document.activeElement?.closest?.('input, textarea');
   };
+  // 互動鍵打開的卡片：開著時互動鍵是確認，不按卡片後面的東西（player.js 的 keydown）
+  player.cardOpen = () => document.querySelector('#guide.show, #ask.show, #peek.show, #radio.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show, .studio-card:not([hidden])');
   // 第一次鎖住滑鼠時提一下怎麼點按鈕
   let lockTold = false;
   document.addEventListener('pointerlockchange', () => {
@@ -739,8 +765,19 @@ async function start() {
 
   // 作品或換裝面板打開時挪動畫面中心，畫和角色才不會被擋住：側欄往左，底部抽屜往上。
   // 電腦版挑相機：相機往上挪一點，底下留給銘牌
+  // 表情盤開著：試擺要看得到角色。手機橫拿往面板另一邊挪半個面板；直拿和電腦（面板在下面）腳踩到面板才往上挪，挪到腳在面板上緣
+  const kaoFeet = new THREE.Vector3();
   function applyViewOffset() {
     const w = window.innerWidth, h = window.innerHeight, panel = ui.docked, pw = panelW();
+    const kp = document.querySelector('#kaopanel.open');
+    if (!panel && kp) {
+      const r = kp.getBoundingClientRect();
+      if (kp.classList.contains('side')) return camera.setViewOffset(w, h, r.left > w / 2 ? r.width / 2 : -r.width / 2, 0, w, h);
+      camera.clearViewOffset();
+      const feet = (1 - kaoFeet.copy(character.group.position).project(camera).y) / 2 * h, dy = feet - (r.top - 24);
+      if (dy > 0) camera.setViewOffset(w, h, 0, Math.round(dy), w, h);
+      return;
+    }
     if (!panel && ui.panel === ui.cams) camera.setViewOffset(w, h, 0, Math.round(h * 0.1), w, h);
     else if (!panel) camera.clearViewOffset();
     else if (pw) camera.setViewOffset(w, h, pw / 2, 0, w, h);
@@ -770,6 +807,9 @@ async function start() {
   // 對胖頭用驚訝表情，附近的胖頭會回話
   function sendEmote(e) {
     mp.emote(e);
+    startle(e);
+  }
+  function startle(e) {
     if (e !== '😮') return;
     manatee?.startled(player.pos.x, player.pos.z);
     if (host?.group.visible) host.startled(player.pos.x, player.pos.z);
@@ -778,14 +818,8 @@ async function start() {
   // 多人同遊：gallery.json 有填 realtime 才連線，連不上就當單人。每個區域各用一個頻道，只看得到同一區的人；畫廊沿用原本的頻道名稱
   const rt = gallery.realtime;
   if (rt?.url && rt?.key) {
-    let ready = false;
     mp = new Multiplayer(scene, shadowTex, player, zone === 'gallery' ? rt : { ...rt, channel: `${rt.channel || 'gallery'}-${zone}` }, {
       onCount: (n) => ui.online(n),
-      onReady() {
-        if (ready) return;
-        ready = true;
-        ui.bindEmotes(EMOTES, sendEmote);
-      },
       // 別人摸了動物：那位訪客的學徒也做出摸的動作
       onPet(o, i, m) {
         const a = animals?.remote(i, o, { k: 'pet', x: m.x, z: m.z });
@@ -802,6 +836,13 @@ async function start() {
       onEmote: (ch, e) => {
         ambience.cheer(ch, e);
         lookAtOther(otherOf(ch), 1.8 + Math.random());
+      },
+      // 別人擺了顏文字：像哪個舊表情就照它出聲，頭轉過去看一下
+      onKao: (ch, code) => {
+        if (!code) return;
+        const e = kaoLike(code);
+        if (e) ambience.cheer(ch, e);
+        lookAtOther(otherOf(ch), 1.5 + Math.random());
       },
       onStudio: (m) => studio?.onMessage(m),
       onParty: (m) => party?.onInvite(m),
@@ -859,11 +900,6 @@ async function start() {
     };
     document.addEventListener('visibilitychange', () => { awake(); checkAway(); });
     if (visitors) visitors.mp = mp;
-    // 電腦：數字鍵 1–5（表情一到五，keymap.js）送表情
-    window.addEventListener('keydown', (e) => {
-      const i = [1, 2, 3, 4, 5].findIndex((n) => is(e, 'emote' + n));
-      if (i >= 0 && !photo.active) sendEmote(EMOTES[i]);   // 拍照時數字鍵是口令（cues.js）
-    });
   }
 
   // 歸門（homedoor.js）：點火、開門的消息送給同一區的人；推開門走進光裡，就回到前廳
@@ -912,8 +948,36 @@ async function start() {
     resizeFX: (w, h) => fx?.setSize(w, h),
   });
   photo.beast = beast;
-  // 電腦的快捷鍵、Q 表情輪、Esc 暫停選單（表情要連上線才送得出去）
-  const desk = bindDeskKeys({ player, ui, photo, pack, ambience, emotes: EMOTES, emote: (e) => mp && sendEmote(e) });
+  // 表情盤（kaopanel.js）：點表情鈕、電腦 Q、手把 L 開關，常用、表情、動作、姿勢四排，開著照樣能走。擺好時頭上冒字、照像的舊表情出聲（胖頭照驚訝回話）；
+  // 擺著的組合和撐不撐由 multiplayer 的位置一起送（k、b），沒連線也照樣擺
+  const kao = new KaoPanel({
+    player,
+    // 舉相機、暫停、全畫面、照鏡子、看畫、操作說明、手機的行囊開著時不開
+    blocked: () => photo.active || !!document.querySelector('#pause.show, #dress.open, #guide.show, #hollow.show, #list.open, #press:not([hidden]), #loading:not(.done), #ph-result:not([hidden]), #album-view:not([hidden]), #viewer.open, .studio-card:not([hidden]), #selfie:not([hidden]), #keymap.show')
+      || document.body.classList.contains('panel-open') || (pack.isOpen && !document.body.classList.contains('desk')),
+    onView: () => applyViewOffset(),
+    onSet(code) {
+      mp?.popKao(character, code);
+      // 回眸、側身：身體自己轉，讓回頭剛好對著鏡頭。有人在拍就對他的鏡頭，沒有就對自己的畫面
+      const at = attention.frontLens()?.pos ?? camera.position;
+      const face = kaoFacing(code, Math.atan2(at.x - player.pos.x, at.z - player.pos.z));
+      if (face != null) player.faceYaw = face;
+      const e = kaoLike(code);
+      if (!e) return;
+      ambience.cheer(character, e);
+      startle(e);
+    },
+  });
+  kao.bindButton(document.getElementById('emote-btn'), () => photo.active);
+  // 電腦：數字鍵 1–5（常用一到五，keymap.js）擺常用的那一組，再按一次放下。拍照時數字鍵是口令（cues.js），打字時不算
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat || e.target.closest?.('input, textarea, #dress')) return;
+    const i = [1, 2, 3, 4, 5].findIndex((n) => is(e, 'emote' + n));
+    if (i >= 0 && !photo.active) kao.fav(i);
+  });
+  ui.bindEmotes();
+  // 電腦的快捷鍵、Q 表情盤、Esc 暫停選單（數字鍵的舊表情要連上線才送得出去）
+  const desk = bindDeskKeys({ player, ui, photo, pack, ambience, emotes: EMOTES, emote: (e) => mp && sendEmote(e), kao });
   // 手把：每幀在主迴圈讀（tick），按鍵類的動作借電腦按鍵的規則；有動就送 padinput（閒置、掛機都聽它）
   // 拍照人的口令：舉著相機時表情換成數拍、再一張、好了、站這
   if (mp) cues = new Cues({ mp, party, photo, player, character, attention, ambience, flashFx, scene, ui });
@@ -953,7 +1017,7 @@ async function start() {
     if (params.has('studio')) setTimeout(() => studio.begin(+params.get('studio') || 0), 1500);
   }
 
-  // 黑眼（scene/guide.js）：上排的黑眼鈕或 M 叫出來，帶路到這一區去過的地方，最遠到渡船。清單在各區 zone-*.js 的 guide。
+  // 黑眼（scene/guide.js）：上排的黑眼鈕或 B 叫出來，帶路到這一區去過的地方，最遠到渡船。清單在各區 zone-*.js 的 guide。
   // 要建在電腦按鍵（bindDeskKeys）後面：Esc 先讓暫停選單那段看到卡片開著，這裡才收卡片
   guide = new Guide({ scene, world, zone, player, camera, ui, ambience, coarse, list: Z.guide?.(world) ?? [] });
   // 攝影、自拍（照相館也是攝影模式）、上船時收起來；看畫、照鏡子、挑相機、聽樹洞時鏡頭被接管，也先收
@@ -971,6 +1035,8 @@ async function start() {
   if (ask) player.actionables.push((x, z) => ask.target(x, z));
   radio = Z.radio?.({ world, ambience, player, camera }) ?? null;
   if (radio) player.actionables.push((x, z) => radio.target(x, z));
+  voice = Z.cellarVoice?.({ world, player, camera }) ?? null;
+  if (voice) player.actionables.push((x, z) => voice.target(x, z));
   // 做過的事（progress.js 的 tour）：來過哪一區、拍過照。前廳胖頭照這個決定說什麼、題目長出哪幾題
   markTour(zone);
   addEventListener('photoadd', (e) => { const k = e.detail?.kind; if (!k?.endsWith('-save') && k !== 'mate') markTour('photo'); });
@@ -982,10 +1048,11 @@ async function start() {
     guide.isMate = (id) => !!party && [...party.mates.values()].some((o) => o.s === id);
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, guide, creator, cues, peek, radio };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, guide, creator, cues, peek, radio, kao };
   const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass, dofPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
+    if (!q.post) setHQ(false);
     if (!q.post && fx) { fx.dispose(); fx = null; }
     renderer.setPixelRatio(q.dpr * boost);
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -1001,17 +1068,19 @@ async function start() {
     fx = await fxJob;
     fx?.render(0);   // 後製的著色器也趁載入畫面先編好
   }
-  // 景深的兩組取樣也先編：有後製時畫進浮點的圖，沒有時直接上螢幕
+  // 景深的兩組取樣也先編：有後製時畫進浮點的圖，沒有時直接上螢幕。
+  // 真的畫一次（見 screenfx.js 的 compile），螢幕那一份畫在讀取畫面底下看不到
   {
     const rt = fx ? new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }) : null;
     renderer.setRenderTarget(rt);
     for (const m of [dofPass.fast, dofPass.fine]) {
       dofPass.quad.material = m;
-      renderer.compile(dofPass.scene, dofPass.cam);
+      renderer.render(dofPass.scene, dofPass.cam);
     }
     renderer.setRenderTarget(null);
     rt?.dispose();
   }
+  await photo.warmUI();   // 攝影介面也趁讀取畫面蓋著先畫一次（見 photo.js）
   window.loadbar?.mark('compiled');
   const stats =params.has('debug') ? debugStats(renderer, quality) : null;
   // 改地圖、調色用的小工具：?ref= 疊參考圖，?debug 開右邊的調色台（調色、分區、光線、參考圖，見 devtools.js）
@@ -1063,11 +1132,11 @@ async function start() {
     if (byDoor) world.frontDoor.shut(0.15);
     if (byDoor) ui.toast(world.rooms[0].data.name, world.rooms[0].data.subtitle);
     if (params.has('photo')) photo.enter();
-    // 鍵照換過的寫（keymap.js、gamepad.js）
+    // 鍵照換過的寫（keymap.js、gamepad.js）；作品上架前（ui.js 的 WORKS_OPEN）不提看畫
     // 教學：每種操作（手把、觸控、鍵盤滑鼠）這台裝置說兩次就夠了
-    else if (!homeDoor) setTimeout(() => (byDoor && lastInput > at) || ui.tip(`move-${pad.active ? 'pad' : coarse ? 'touch' : 'desk'}`, pad.active ? `左搖桿走路　右搖桿轉視角　${padBtn(3)} 跳　${padBtn(2)} 坐${zone === 'gallery' ? `　${padBtn(-1)} 看畫` : ''}`
+    else if (!homeDoor) setTimeout(() => (byDoor && lastInput > at) || ui.tip(`move-${pad.active ? 'pad' : coarse ? 'touch' : 'desk'}`, pad.active ? `左搖桿走路　右搖桿轉視角　${padBtn(3)} 跳　${padBtn(2)} 坐${zone === 'gallery' && WORKS_OPEN ? `　${padBtn(-1)} 看畫` : ''}`
       : coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿${player.shoulder ? '走路　拖曳轉視角' : '或點地面走路　拖曳轉視角'}`
-      : `點地面或 ${['fwd', 'left', 'back', 'right'].map((id) => key(id)).join('')} 走路　拖曳轉視角　${key('jump')} 跳　${key('sit')} 坐${zone === 'gallery' ? `　${key('interact')} 看畫` : ''}`, 6000), byDoor ? 2600 : 0);
+      : `點地面或 ${['fwd', 'left', 'back', 'right'].map((id) => key(id)).join('')} 走路　拖曳轉視角　${key('jump')} 跳　${key('sit')} 坐${zone === 'gallery' && WORKS_OPEN ? `　${key('interact')} 看畫` : ''}`, 6000), byDoor ? 2600 : 0);
   });
 
   // 挑相機時鏡頭差不多就在自己頭的高度，帽子、頭上的東西會擋在桌上那台前面：鏡頭飛過去時自己淡掉，離開再淡回來。
@@ -1193,9 +1262,11 @@ async function start() {
     ask?.update();
     peek?.update();
     radio?.update();
+    voice?.update();
     hollow.update(dt, clock.elapsedTime, player.pos, camera);
     flashFx.update(dt);
     cues?.update(dt);
+    kao.tick();
     if (world.camTable) {
       world.camTable.look(player.focus?.kind === 'cameras' ? player.focus.slot : -1);
       world.camTable.update(dt);
@@ -1237,7 +1308,8 @@ async function start() {
       applyEnv(t, world.envDim?.(view.x, view.z) ?? 0, mirrorK);
       ambience.setLevel(t);
       const meadow = player.room === world.rooms.length - 1 && world.outdoor.inMeadow(player.pos.z);
-      const spot = meadow ? world.outdoor.placeAt(player.pos.x, player.pos.z) : null;
+      // 地下室算前廳的一部分，走進方廳時報地下室，走回樓上報前廳
+      const spot = meadow ? world.outdoor.placeAt(player.pos.x, player.pos.z) : world.cellarAt?.(player.pos.x, player.pos.z) || null;
       if (spot !== place && !photo.active) {
         // 從棧橋盡頭走回草原時不再報一次「原野」
         const back = place && spot === world.outdoor.meadow;

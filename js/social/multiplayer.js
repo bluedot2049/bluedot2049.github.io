@@ -10,6 +10,9 @@ import { CAMERAS } from '../camera/cameras.js';
 import { Eye } from '../camera/eye.js';
 import { sanitizeLook, lookKey, presetLook, lookFromOutfit, toOutfit, ROBES } from '../avatar/looks.js';
 import { drawEmote } from './emotes.js';
+import { isKao, kaoParts, kaoText } from '../avatar/kaomoji-parts.js';
+import { TAG_LAYER } from '../core/scenery.js';
+import { pref } from '../save/prefs.js';
 
 const SEND_MOVING = 200;    // 走動時每 0.2 秒送一次位置
 const SEND_IDLE = 8000;     // 站著不動時偶爾報一次，確認還在
@@ -172,13 +175,42 @@ function emoteTexture(e) {
   return emoteTextures.get(e);
 }
 
+// 頭上冒的顏文字：一般字型寫，描深色邊、金色字、同一種光暈。a 是寬高比。組合上千種，存太多就整批丟掉重畫
+const kaoTextures = new Map();
+function kaoTexture(text) {
+  if (!kaoTextures.has(text)) {
+    if (kaoTextures.size > 48) { kaoTextures.forEach((k) => k.t.dispose()); kaoTextures.clear(); }
+    const c = document.createElement('canvas'), g = c.getContext('2d'), H = 80;
+    const font = `600 52px ${getComputedStyle(document.body).fontFamily}`;
+    g.font = font;
+    const W = Math.ceil(g.measureText(text).width) + 28;
+    c.width = W;
+    c.height = H;
+    g.font = font;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.lineJoin = 'round';
+    g.lineWidth = 9;
+    g.strokeStyle = 'rgba(40, 24, 12, .5)';
+    g.strokeText(text, W / 2, H / 2 + 2);
+    g.shadowColor = 'rgba(255, 205, 130, .85)';
+    g.shadowBlur = 10;
+    g.fillStyle = '#f6dba6';
+    g.fillText(text, W / 2, H / 2 + 2);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    kaoTextures.set(text, { t, a: W / H });
+  }
+  return kaoTextures.get(text);
+}
+
 export class Multiplayer {
   constructor(scene, shadowTex, player, cfg, events, look) {
     this.scene = scene;
     this.shadowTex = shadowTex;
     this.player = player;
     this.cfg = cfg;
-    this.events = events;           // { onCount(n), onReady(), onPet(other, i, m), onAnimal(other, m), onJump(other), onLand(character), onEmote(character, e), onFlash(character), onShot(other, voice, at), onCue(other, k), onStudio(m), onParty(m), onGate(m) }
+    this.events = events;           // { onCount(n), onReady(), onPet(other, i, m), onAnimal(other, m), onJump(other), onLand(character), onEmote(character, e), onFlash(character), onShot(other, voice, at), onCue(other, k), onKao(character, code), onStudio(m), onParty(m), onGate(m) }
     this.id = Math.random().toString(36).slice(2, 10);
     this.others = new Map();        // id -> { ch, pos, target, heading, seen, speed }
     this.present = new Set();       // 目前在線上的訪客 id（來自 presence）
@@ -271,7 +303,7 @@ export class Multiplayer {
           this.last = null;
           if (performance.now() - this.lastTrack >= TRACK_GAP) this.track();
           else this.setLook(this.look);
-          this.events.onReady();
+          this.events.onReady?.();
         } else {
           this.active = false;
           if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') this.rejoin();
@@ -319,6 +351,13 @@ export class Multiplayer {
     const aim = p.camAim;
     const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room, s: p.sitCode, f: p.character.foodCode, a: aim ? aim.grip + 1 : 0, q: aim ? Math.round(aim.pitch * 20) / 20 : 0, w: this.away ? 1 : 0, l: Math.round((p.gaze || 0) * 20) / 20, v: Math.round((p.gazeP || 0) * 20) / 20 };
     if (p.gazeId) st.g = p.gazeId === 'self' ? this.id : p.gazeId;
+    // k：擺著的顏文字（kaomoji-parts.js 的代號），b：撐著，n：頭上不冒字（表情盤關了「給別人看」）。沒擺不送
+    const ch = p.character;
+    if (ch.kao) {
+      st.k = ch.kao;
+      if (ch.braced) st.b = 1;
+      if (!pref('kaoTagMine')) st.n = 1;
+    }
     // y：有樓上的區域（靜海）才送，別人照這個知道站在哪一層
     if (p.world.drift) st.y = Math.round(p.pos.y * 10) / 10;
     const L = this.lens?.();
@@ -328,7 +367,7 @@ export class Multiplayer {
     if (E) st.e = E;
     const l = this.last;
     const changed = !l || Math.abs(st.x - l.x) > 0.02 || Math.abs(st.z - l.z) > 0.02 || Math.abs(wrapAngle(st.h - l.h)) > 0.05 || st.r !== l.r || st.s !== l.s || st.f !== l.f || st.a !== l.a || st.q !== l.q || st.w !== l.w || st.l !== l.l || st.v !== l.v
-      || st.g !== l.g || st.y !== l.y || String(st.c) !== String(l.c) || st.d !== l.d || String(st.e) !== String(l.e);
+      || st.g !== l.g || st.k !== l.k || st.b !== l.b || st.n !== l.n || st.y !== l.y || String(st.c) !== String(l.c) || st.d !== l.d || String(st.e) !== String(l.e);
     if (now - this.lastSent < (changed ? SEND_MOVING : SEND_IDLE)) return;
     this.channel.send({ type: 'broadcast', event: 'pos', payload: { id: this.id, ...st } });
     this.last = st;
@@ -350,6 +389,9 @@ export class Multiplayer {
     m.l = isNum(m.l, 1.3) ? m.l : 0;
     m.v = isNum(m.v, 0.6) ? m.v : 0;
     m.g = isId(m.g) ? m.g : null;
+    m.k = isKao(m.k) ? m.k : 0;
+    m.b = m.b === 1 ? 1 : 0;
+    m.n = m.n === 1 ? 1 : 0;
     const c = m.c;
     m.c = Array.isArray(c) && c.length === 8 && isNum(c[0], COORD_LIMIT) && isNum(c[1], COORD_LIMIT) && isNum(c[2], COORD_LIMIT) && isNum(c[3], 4) && isNum(c[4], 2)
       && c[5] >= 5 && c[5] <= 150 && c[6] > 0.2 && c[6] < 5 && (c[7] === 0 || c[7] === 1) ? c : null;
@@ -517,15 +559,29 @@ export class Multiplayer {
     this.setLook(this.look);
   }
 
-  // 頭上冒出表情，往上飄再淡出。高度跟著角色的身高和頭的大小
+  // 頭上冒出表情，往上飄再淡出。高度跟著角色的身高和頭的大小。拍不進照片（TAG_LAYER）
   pop(ch, e) {
     const group = ch.group;
     if (this.fx.filter((f) => f.group === group).length >= 3) return;
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: emoteTexture(e), transparent: true, depthWrite: false }));
-    const y = ch.dims.topY + 0.22;
+    this.addFx(group, ch.dims.topY + 0.22, emoteTexture(e), 1, 0.45);
+  }
+
+  // 頭上冒出顏文字（kaomoji-parts.js 的代號）：同一個人換了組合，舊的那串直接收掉
+  popKao(ch, code) {
+    if (!code) return;
+    const group = ch.group, k = kaoTexture(kaoText(...kaoParts(code)));
+    for (const f of this.fx) if (f.group === group && f.kao) f.t = Math.max(f.t, EMOTE_TIME - 0.15);
+    this.addFx(group, ch.dims.topY + 0.18, k.t, k.a, 0.2).kao = true;
+  }
+
+  addFx(group, y, map, a, size) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true, depthWrite: false }));
+    s.layers.set(TAG_LAYER);
     s.position.y = y;
     group.add(s);
-    this.fx.push({ s, group, y, t: 0 });
+    const f = { s, group, y, t: 0, a, size };
+    this.fx.push(f);
+    return f;
   }
 
   // 照相館（studio.js）：邀請、加入、名單、快門、收場
@@ -696,6 +752,14 @@ export class Multiplayer {
       if (t.s) o.ch.lift = seat ? seat.lift : t.s === -3 ? 0.3 : 0.02;   // -3 坐在邊上垂腳（player.sitCode）
       o.ch.lying = t.s === -2;
       if (t.f !== o.ch.foodCode) o.ch.setFoodCode(t.f);
+      // 顏文字：照收到的變了才換（角色走起來會自己放下，不能每幀拿舊的蓋回去）
+      if (t.k !== o.kaoIn) {
+        o.kaoIn = t.k;
+        o.ch.setKao?.(t.k);
+        if (!t.n && pref('kaoTagOthers')) this.popKao(o.ch, t.k);
+        this.events.onKao?.(o.ch, t.k);
+      }
+      o.ch.brace?.(!!t.b);
       o.ch.setAim?.(t.a ? { grip: t.a - 1, pitch: t.q } : null);
       this.updateLens(o, dt);
       // 頭看哪：送了 g 就照自己畫面上那個人（或他的鏡頭）的位置算，眼神才對得上；
@@ -728,8 +792,8 @@ export class Multiplayer {
       f.t += dt;
       const t = f.t;
       f.s.position.y = f.y + t * 0.3;
-      const sc = 0.45 * Math.min(1, t * 6);
-      f.s.scale.set(sc, sc, sc);
+      const sc = f.size * Math.min(1, t * 6);
+      f.s.scale.set(sc * f.a, sc, sc);
       f.s.material.opacity = t < EMOTE_TIME - 0.5 ? 1 : Math.max(0, (EMOTE_TIME - t) / 0.5);
       if (t >= EMOTE_TIME) {
         f.group.remove(f.s);

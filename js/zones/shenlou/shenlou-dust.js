@@ -12,6 +12,8 @@ import { uTime } from '../../core/scenery.js';
 import { quadStreaks, driftStep, fitScreen, qualityOf } from '../../core/weatherfx.js';
 import { GRADE, GRADE_VERT, GRADE_GLSL, TUNE, WEATHER, gradeUniforms } from '../../core/grade.js';
 import { Dust, BREEZE } from '../../core/weather.js';
+import { HQ } from '../../core/hq.js';
+import { SHAFTS } from '../../core/shafts.js';
 
 const COUNT = { low: 300, mid: 800, high: 1800 };   // 起風沙時最多幾粒；平常大約六成、沙停兩成多
 const BOX = new THREE.Vector3(24, 8, 24);           // 沙粒的盒子：跟著鏡頭，往看的方向推出去三成，背後不浪費
@@ -223,6 +225,7 @@ export function buildDust({ scene, world, renderer, quality, coarse, params }) {
   // 回傳給 shenlou.js 的光線：跟 sky() 一樣的幾樣，顏色換成這一刻塵裡的
   const out = { bg: new THREE.Color(), sky: new THREE.Color(), ground: new THREE.Color(), light: new THREE.Color(), hi: 1, si: 1, near: 0, far: 0 };
 
+  const sun = scene.children.find((o) => o.isDirectionalLight && o.castShadow) ?? null;
   const dust = {
     weather,
     haze: 0,    // 塵比沙停濃多少：0 是沙停、1 是平常以上（天空球、太陽圓盤用）
@@ -257,6 +260,14 @@ export function buildDust({ scene, world, renderer, quality, coarse, params }) {
       out.far = s.far;
       // 朝太陽發亮的霧：方向跟著太陽，長度是太陽多亮（夜裡月亮只亮一點）
       GRADE.sunDir.copy(s.dir).normalize().multiplyScalar(clamp01(s.si / 2.2) * (s.day ? 1 : 0.4));
+      // 電腦版加料：塵裡的光柱（shafts.js 沿視線查太陽的陰影圖）。巷子、拱廊、塔影裡的空氣暗，照得到的亮。
+      // 平常的塵最明顯；沙停空氣清，只剩一點；風沙太濃，光柱糊成一片也淡下來。只有白天
+      SHAFTS.k = HQ.on && sun && s.day ? (0.25 + 0.75 * haze) * (1 - 0.55 * st) * clamp01(out.si / 1.2) : 0;
+      if (SHAFTS.k) {
+        Object.assign(SHAFTS, { light: sun, far: 70, base: floor, falloff: 0.05, ext: 0.01 + 0.02 * st, g: 0.5, shade: 0.8 + 0.4 * haze, avg: 0.9 });
+        SHAFTS.dir.copy(s.dir).normalize();
+        SHAFTS.color.copy(out.light);
+      }
       // 風：沙停時微風，風沙時一陣比一陣大
       const speed = (SPEED[0] + (SPEED[1] - SPEED[0]) * smooth(0.15, 1, w.wind)) * (0.65 + 0.7 * w.gust);
       GRADE.driftOff.addScaledVector(WIND, -speed * dt);

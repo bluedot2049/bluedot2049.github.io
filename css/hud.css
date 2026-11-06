@@ -704,6 +704,70 @@ body.desk .snapsave img { max-width: 120px; max-height: 160px; }
 #wheel i { position: absolute; width: 50px; height: 50px; margin: -25px 0 0 -25px; display: grid; place-items: center; font-style: normal; color: var(--gold-hi); border-radius: 50%; border: 1px solid transparent; transition: transform .15s, border-color .15s, background .15s; }
 #wheel i svg { width: 30px; height: 30px; }
 #wheel i.on { transform: scale(1.25); border-color: var(--gold); background: rgba(232, 184, 106, .12); }
+/* 表情盤（kaopanel.js）：常用、表情、動作、姿勢四排，一排一層，橫著捲。開著照樣能走：手機不蓋搖桿和拇指那排，
+   位置、寬高由 place 照裝置算（直拿貼在拇指那排上面、橫拿在搖桿另一邊的上半、電腦在下方那排上面）。開著時提示、地名讓位。
+   三層各一個顏色，取門口讀取條的色票再提亮一點（暗底上讀得清楚）：表情珊瑚、動作薰衣草、姿勢草綠；常用是金。
+   排名、格子的框、亮的那格都照那排的色（--k），字照層分色（.kf 臉、.kh 手、.kb 身體），動作那排的臉淡一點，讓手那段跳出來 */
+#kaopanel {
+  --k-face: #f0a080; --k-hand: #c3a0e8; --k-body: #9cc27e;
+  position: fixed; z-index: 26; display: none; flex-direction: column; gap: 6px; padding: 10px 10px 8px;
+  background: rgba(38, 26, 18, .94); border: 1px solid var(--line-soft); border-radius: 16px; box-shadow: var(--shadow);
+  overflow: hidden; animation: kp-in .22s cubic-bezier(.2, .8, .2, 1);
+}
+#kaopanel.open { display: flex; }
+@keyframes kp-in { from { opacity: 0; transform: translateY(8px); } }
+body.desk #kaopanel { transform: translateX(-50%); animation-name: kp-in-desk; }
+@keyframes kp-in-desk { from { opacity: 0; transform: translate(-50%, 8px); } }
+body.kao-open :is(#hint, #toast) { opacity: 0 !important; transition: opacity .15s; }
+body.kao-open #emote-btn { border-color: var(--gold); color: var(--gold-hi); }
+/* 橫拿：面板蓋到上排的小鈕，先藏起來 */
+body.kao-open:not(.desk):has(#kaopanel.side) #top-btns { opacity: 0; pointer-events: none; }
+.kp-row, .kp-foot { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 6px; align-items: center; min-height: 0; }
+.kp-fav { --k: var(--gold); } .kp-face { --k: var(--k-face); } .kp-hand { --k: var(--k-hand); } .kp-body { --k: var(--k-body); }
+.kp-name { font-size: 11.5px; letter-spacing: .1em; color: var(--k, var(--gold)); white-space: nowrap; }
+.kp-chips { display: flex; gap: 6px; overflow-x: auto; overscroll-behavior: contain; scrollbar-width: none; touch-action: pan-x; padding: 1px 22px 1px 1px;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent); }
+.kp-chips::-webkit-scrollbar { display: none; }
+.kp-chips button {
+  flex: 0 0 auto; height: 38px; padding: 0 11px; display: flex; align-items: center; gap: 6px;
+  font: 15px/1 var(--font); letter-spacing: 0; white-space: nowrap; color: var(--gold-hi);
+  background: rgba(16, 11, 9, .35); border: 1px solid color-mix(in srgb, var(--k) 24%, transparent); border-radius: 19px; cursor: var(--cur-pointer);
+  transition: background .12s, border-color .12s;
+}
+.kp-chips button[hidden] { display: none; }
+.kp-chips button.on { background: color-mix(in srgb, var(--k) 26%, rgba(16, 11, 9, .5)); border-color: var(--k); font-weight: 600; }
+.kp-chips i { font-style: normal; }
+.kp-chips .kf { color: var(--k-face); } .kp-chips .kh { color: var(--k-hand); } .kp-chips .kb { color: var(--k-body); } .kp-chips .k0 { color: var(--muted); }
+.kp-hand .kf { opacity: .5; }
+.kp-hand button.on .kf { opacity: .8; }
+.kp-body .kp-chips button { padding: 0 7px; color: var(--k-body); }
+.kp-body .kp-chips button svg { width: 30px; height: 30px; }
+.kp-chips button kbd { font: 11px/1.4 var(--latin); padding: 0 4px; color: var(--muted); border: 1px solid rgba(232, 184, 106, .3); border-radius: 2px; }
+.kp-chips button.on kbd { color: var(--gold-hi); border-color: rgba(232, 184, 106, .6); }
+/* ＋存：常用最前面，虛線框像一個等著放東西的空位；沒擺東西時暗著，擺的已經在常用裡變「－移出」（實線、淡字）。存進去的那格閃一下 */
+.kp-chips .kp-keep { font-size: 13.5px; letter-spacing: .06em; color: var(--gold-hi); border: 1px dashed rgba(232, 184, 106, .6); background: none; }
+.kp-chips .kp-keep.saved { color: var(--muted); border-style: solid; border-color: var(--line-soft); }
+.kp-chips .kp-keep.off { opacity: .35; }
+/* 常用還是空的：＋存旁邊一行小字 */
+.kp-empty { align-self: center; white-space: nowrap; font-size: 11.5px; letter-spacing: .06em; color: var(--muted); }
+.kp-empty[hidden] { display: none; }
+.kp-chips button.flash { animation: kp-flash .7s ease-out; }
+@keyframes kp-flash { 0% { background: rgba(255, 215, 150, .55); } }
+.kp-foot { grid-template-columns: auto auto auto minmax(0, 1fr); padding-top: 2px; }
+.kp-foot button { height: 28px; padding: 0 10px; font: 12px/1 var(--font); letter-spacing: .06em; color: var(--muted); background: none; border: 1px solid var(--line-soft); border-radius: 14px; cursor: var(--cur-pointer); }
+.kp-foot button.on { color: var(--gold-hi); border-color: rgba(232, 184, 106, .55); }
+.kp-foot .kp-x { justify-self: end; color: var(--text); }
+/* 電腦：不捲，換行攤開，一眼看完 */
+body.desk .kp-row { align-items: start; }
+body.desk .kp-name { padding-top: 9px; }
+body.desk .kp-chips { flex-wrap: wrap; overflow: visible; padding: 1px; -webkit-mask-image: none; mask-image: none; }
+body.desk .kp-chips button { height: 34px; }
+/* 橫拿高度不夠：格子矮一點 */
+#kaopanel.side { padding: 8px 8px 6px; gap: 5px; }
+#kaopanel.side .kp-chips button { height: 33px; font-size: 14px; padding: 0 9px; }
+#kaopanel.side .kp-body .kp-chips button { padding: 0 6px; }
+#kaopanel.side .kp-body .kp-chips button svg { width: 27px; height: 27px; }
+#kaopanel.side .kp-foot button { height: 26px; }
 /* 暫停選單：跟操作說明同一種卡，放在畫面中間 */
 #pause { position: fixed; left: 50%; top: 50%; z-index: 27; display: none; width: 380px; max-height: calc(100vh / var(--ui, 1) - 24px); overflow-y: auto; transform: translate(-50%, -50%); background: rgba(16, 11, 9, .94); box-shadow: var(--shadow); }
 #pause.show { display: flex; animation: pause-in .25s ease-out both; }
@@ -780,25 +844,25 @@ body.pad #top-btns [data-padkey]::after { content: attr(data-padkey); position: 
 }
 #emote-btn { pointer-events: auto; }
 #emote.open #emote-btn { border-color: var(--gold); color: var(--gold-hi); }
-/* 拍照時換成拍照人的口令（#cue-bar，cues.js）：同一個鈕、同一種排法 */
-body.photo #emote-bar, body:not(.photo) #cue-bar { display: none; }
-#emote-bar, #cue-bar {
+/* 拍照時點開拍照人的口令（#cue-bar，cues.js）；平常這顆鈕開關表情盤（kaopanel.js） */
+body:not(.photo) #cue-bar { display: none; }
+#cue-bar {
   display: flex; flex-direction: column-reverse; gap: 6px;
   padding: 6px 0;
   opacity: 0; transform: translateY(8px); pointer-events: none;
   transition: opacity .2s, transform .2s;
 }
-#emote.open :is(#emote-bar, #cue-bar) { opacity: 1; transform: none; pointer-events: auto; }
-/* 圖示在 emotes.js：金線，跟著按鈕的字色 */
-:is(#emote-bar, #cue-bar) button {
+#emote.open #cue-bar { opacity: 1; transform: none; pointer-events: auto; }
+/* 圖示在 cues.js：金線，跟著按鈕的字色 */
+#cue-bar button {
   width: 44px; height: 44px; padding: 0; display: grid; place-items: center;
   color: var(--gold-hi);
   background: var(--panel); border: 1px solid var(--line-soft); border-radius: 50%;
   box-shadow: var(--shadow);
   cursor: var(--cur-pointer);
 }
-:is(#emote-bar, #cue-bar) button svg { width: 52%; height: 52%; }
-:is(#emote-bar, #cue-bar) button:active { transform: scale(.9); }
+#cue-bar button svg { width: 52%; height: 52%; }
+#cue-bar button:active { transform: scale(.9); }
 #cue-bar button[hidden] { display: none; }
 /* 站這：按住拖出去，手指底下跟著一雙腳印 */
 #cue-bar [data-cue="spot"] { touch-action: none; }
@@ -1047,10 +1111,10 @@ body:not(.desk) #action-btn.show.fresh::before { animation-iteration-count: 4; a
 
   body:not(.desk) #emote { flex-direction: row; align-items: center; gap: 6px; }
   body.joy-left:not(.desk) #emote { flex-direction: row-reverse; align-items: center; }
-  body:not(.desk) :is(#emote-bar, #cue-bar) { flex-direction: row; padding: 0; transform: translateX(-8px); }
-  body.joy-left:not(.desk) :is(#emote-bar, #cue-bar) { flex-direction: row-reverse; transform: translateX(8px); }
-  body:not(.desk) #emote.open :is(#emote-bar, #cue-bar) { transform: none; }
-  body:not(.desk) :is(#emote-bar, #cue-bar) button { width: 40px; height: 40px; }
+  body:not(.desk) #cue-bar { flex-direction: row; padding: 0; transform: translateX(-8px); }
+  body.joy-left:not(.desk) #cue-bar { flex-direction: row-reverse; transform: translateX(8px); }
+  body:not(.desk) #emote.open #cue-bar { transform: none; }
+  body:not(.desk) #cue-bar button { width: 40px; height: 40px; }
 }
 
 /* ───────── 電腦版：按鈕集中在畫面下方中間一列，動作按鈕浮在那一列正上方，提示移到頂端 ───────── */
@@ -1060,7 +1124,7 @@ body.desk #top-btns {
 }
 body.desk #online { order: 1; }
 body.desk #emote { position: relative; left: auto; bottom: auto; }
-body.desk :is(#emote-bar, #cue-bar) { position: absolute; left: 0; bottom: calc(100% + 2px); }
+body.desk #cue-bar { position: absolute; left: 0; bottom: calc(100% + 2px); }
 body.desk #action-btn {
   right: auto; left: 50%; bottom: calc(82px + env(safe-area-inset-bottom));
   transform: translateX(-50%) scale(.7); transform-origin: 50% 100%;

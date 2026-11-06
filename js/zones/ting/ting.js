@@ -8,12 +8,15 @@
 import * as THREE from 'three';
 import { bucketObjects, uTime } from '../../core/scenery.js';
 import { makePathfinder } from '../../core/pathgrid.js';
-import { makeSkiff } from '../../scene/harbor.js';
+import { makeSkiff, skiffBerth } from '../../scene/harbor.js';
 import { buildMarsh, moundY, pollen, TREE, wade, wind } from './ting-marsh.js';
 import { buildBugs } from './ting-bugs.js';
 import { buildTree } from './ting-tree.js';
 import { buildStation, stationD, stationY } from './ting-station.js';
 import { buildLines } from './ting-lines.js';
+import { mirrorUniforms, waterMirror } from './ting-mirror.js';
+import { HQ } from '../../core/hq.js';
+import { CAUSTICS } from '../../core/caustics.js';
 
 const WATER_Y = 0.15;       // 水底是 0，水面在腳踝
 const WALK_R = 70;          // 走得到多遠
@@ -160,9 +163,13 @@ function skyMaterial(frag, opts, extra = {}) {
 }
 
 // 水：照反射方向取別區的天，有一點細波紋；上面流著一層慢慢捲動的虹彩，顏色跟著看的角度變。
-// 往正下方看透出一點珍珠色的水底，夜空那幾個方向偶爾一點星。汀自己的東西不倒映。
+// 往正下方看透出一點珍珠色的水底，夜空那幾個方向偶爾一點星。手機上汀自己的東西不倒映；
+// 電腦版（ting-mirror.js）孤櫻、汀站、船和人淡淡地倒映在別區的天上，提亮成粉彩，跟著波紋晃。
 // 漣漪的浪峰亮一點、浪谷暗一點，也把虹彩推動一點
 const WATER_FRAG = RIPPLE_GLSL + /* glsl */`
+uniform sampler2D uRefl;
+uniform mat4 uReflMat;
+uniform float uReflOn;
 vec3 surface() {
   vec3 V = normalize(vWp - cameraPosition);
   vec2 p = vWp.xz;
@@ -190,6 +197,12 @@ vec3 surface() {
   // 孤櫻的樹冠底下，水面透一圈櫻花粉的光
   float gl = 1.0 - smoothstep(0.0, uGlow.z, length(p - uGlow.xy));
   c = mix(c, vec3(0.98, 0.85, 0.9), gl * gl * 0.45);
+  if (uReflOn > 0.5) {
+    vec4 rc = uReflMat * vec4(vWp, 1.0);
+    vec4 r = texture2D(uRefl, rc.xy / rc.w + n * 0.6 + rp.xy * 0.4);
+    float fres = 0.55 + 0.4 * pow(1.0 - clamp(-V.y, 0.0, 1.0), 3.0);
+    c = mix(c, mix(r.rgb, uPearl, 0.28) * mix(vec3(1.0), irid, 0.35), clamp(r.a, 0.0, 1.0) * fres * 0.82);
+  }
   return mix(c, horizonCol(V.xz), smoothstep(0.12, 0.0, -V.y));
 }
 `;
@@ -218,7 +231,8 @@ export function buildTing(scene, { renderer = null, coarse = false } = {}) {
     rip.value[ripNext].set(x, z, t0, k);
     ripNext = (ripNext + 1) % RIPS;
   };
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), skyMaterial(WATER_FRAG, {}, { uRip: rip, ...wind }));
+  const refl = mirrorUniforms();
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), skyMaterial(WATER_FRAG, {}, { uRip: rip, ...wind, ...refl }));
   water.rotation.x = -Math.PI / 2;
   water.position.y = WATER_Y;
   water.renderOrder = -1;
@@ -244,8 +258,10 @@ export function buildTing(scene, { renderer = null, coarse = false } = {}) {
   boat.rotation.y = 0.5;
   boat.rotation.z = 0.05;
   group.add(boat);
-  obstacles.push({ x: 2.4, z: 3, hw: 0.8, hd: 2, a: 0.5 });
-  const exits = [{ x: 0.9, z: 3.6, r: 1.6, to: 'gallery', label: '搭船', title: '渡船', boat: ferry }];
+  const berth = skiffBerth(2.4, 3, 0.5);
+  obstacles.push(...berth.block);
+  // x、z、r 是黑眼帶路、走去渡口的落點；上不上得了船看 hull
+  const exits = [{ x: 0.9, z: 3.6, r: 1.6, hull: berth.hull, to: 'gallery', label: '搭船', title: '渡船', boat: ferry }];
 
   // ---------- 汀站和兩條線 ----------
   const station = buildStation(group);
@@ -255,6 +271,7 @@ export function buildTing(scene, { renderer = null, coarse = false } = {}) {
   obstacles.push(...lines.obstacles(WALK_R));
 
   // ---------- 浮塵 ----------
+  let dustPts = null;
   const dust = (() => {
     const n = DUST.count, pos = new Float32Array(n * 3), seed = new Float32Array(n * 4), tint = new Float32Array(n * 3), c = new THREE.Color();
     let s = 1;
@@ -276,9 +293,13 @@ export function buildTing(scene, { renderer = null, coarse = false } = {}) {
     const pts = new THREE.Points(geo, mat);
     pts.frustumCulled = false;   // 位置在著色器裡繞著鏡頭算，包圍盒不準
     group.add(pts);
+    dustPts = pts;
     return mat.uniforms;
   })();
   scene.add(group);
+  // 電腦版加料：水面倒影（ting-mirror.js）、水把光反到船身、樹幹、柱子和人的小腿上（caustics.js）
+  const waterRefl = renderer && HQ.on ? waterMirror({ water, skip: [water, dome, dustPts], y: WATER_Y, uniforms: refl }) : null;
+  CAUSTICS.pools = HQ.on ? [{ y: WATER_Y, h: 1.1, k: 0.7, size: 0.65 }] : [];
 
   // ---------- 碰撞、高度、尋路 ----------
   const hits = (x, z, pad) => obstacles.some((o) => {
@@ -357,6 +378,7 @@ export function buildTing(scene, { renderer = null, coarse = false } = {}) {
       const dt = lastT == null ? 0 : Math.max(0, Math.min(0.1, t - lastT));
       lastT = t;
       uTime.value = t;
+      waterRefl?.tick();
       if (feet && !photoMode) walk(t, feet);
       bugs.update(t, ripple);
       lines.update(Date.now() / 1000, t, cam, feet, ripple);

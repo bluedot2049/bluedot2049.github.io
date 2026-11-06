@@ -197,37 +197,39 @@ async function pipe(bytes, stream) {
   const r = new Response(new Blob([bytes]).stream().pipeThrough(stream));
   return new Uint8Array(await r.arrayBuffer());
 }
-// 格子後面可以多 8 個位元組：兩個眼睛框各 x、y、寬、高（looks.js 的 decodeEyes，只有一個框時後四個是 0）。
+// 格子後面可以多 8 個位元組：兩個眼睛框各 x、y、寬、高（looks.js 的 decodeFrames，只有一個框時後四個是 0）；有嘴巴框再多 4 個。
 // 左右剛好對稱的臉（畫臉工具預設開著對稱）只存左半邊 32 欄，壓完小一半。解開時照長度分：4096／4104 整張、2048／2056 半邊。
-// 舊的照片都是整張，照樣讀；解開來的格子帶著 .eyes，encodeFace 會接回臉碼
+// 舊的照片都是整張，照樣讀；解開來的格子帶著 .eyes、.mouth，encodeFace 會接回臉碼
 const FW = 64, HALF = 32;
 const mirrored = (c) => { for (let y = 0; y < FW; y++) for (let x = 0; x < HALF; x++) if (c[y * FW + x] !== c[y * FW + FW - 1 - x]) return false; return true; };
-export const packFace = (cells, eyes = cells.eyes) => {
+export const packFace = (cells, eyes = cells.eyes, mouth = cells.mouth) => {
   let body = cells.subarray(0, FW * FW);
   if (mirrored(body)) {
     const h = new Uint8Array(FW * HALF);
     for (let y = 0; y < FW; y++) h.set(body.subarray(y * FW, y * FW + HALF), y * HALF);
     body = h;
   }
-  if (!eyes?.length) return pipe(body, new CompressionStream('deflate-raw'));
-  const all = new Uint8Array(body.length + 8);
+  if (!eyes?.length && !mouth) return pipe(body, new CompressionStream('deflate-raw'));
+  const all = new Uint8Array(body.length + (mouth ? 12 : 8));
   all.set(body);
-  eyes.slice(0, 2).forEach((e, i) => all.set([e.x, e.y, e.w, e.h], body.length + i * 4));
+  (eyes || []).slice(0, 2).forEach((e, i) => all.set([e.x, e.y, e.w, e.h], body.length + i * 4));
+  if (mouth) all.set([mouth.x, mouth.y, mouth.w, mouth.h], body.length + 8);
   return pipe(all, new CompressionStream('deflate-raw'));
 };
 export async function unpackFace(bytes) {
   try {
     const c = await pipe(bytes, new DecompressionStream('deflate-raw'));
-    const n = c.length === 4096 || c.length === 4104 ? 4096 : c.length === 2048 || c.length === 2056 ? 2048 : 0;
+    const n = [4096, 4104, 4108].includes(c.length) ? 4096 : [2048, 2056, 2060].includes(c.length) ? 2048 : 0;
     if (!n || !c.subarray(0, n).every((v) => v <= 8)) return null;
     const cells = new Uint8Array(FW * FW);
     if (n === 4096) cells.set(c.subarray(0, n));
     else for (let y = 0; y < FW; y++) for (let x = 0; x < HALF; x++) cells[y * FW + x] = cells[y * FW + FW - 1 - x] = c[y * HALF + x];
-    if (c.length === n + 8) {
-      const eyes = [];
-      for (let i = n; i < n + 8; i += 4) if (c[i + 2] && c[i + 3] && c[i] + c[i + 2] <= 64 && c[i + 1] + c[i + 3] <= 64) eyes.push({ x: c[i], y: c[i + 1], w: c[i + 2], h: c[i + 3] });
+    const box = (i) => (c[i + 2] && c[i + 3] && c[i] + c[i + 2] <= 64 && c[i + 1] + c[i + 3] <= 64 ? { x: c[i], y: c[i + 1], w: c[i + 2], h: c[i + 3] } : null);
+    if (c.length >= n + 8) {
+      const eyes = [box(n), box(n + 4)].filter(Boolean);
       if (eyes.length) cells.eyes = eyes;
     }
+    if (c.length === n + 12 && box(n + 8)) cells.mouth = box(n + 8);
     return cells;
   } catch {
     return null;

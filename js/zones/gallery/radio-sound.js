@@ -5,7 +5,9 @@
 // 只在畫廊：上船照背景音樂一起淡掉（ambience.musicOut），別區放別區的音樂，回來照記著的接著放。
 // ambience.beds 的一員：每幀 update(amb)，on 為真時音訊不睡，duck 是背景音樂壓低幾成。走 musicBus，音量盤的「音樂」管它。
 // 每次上線都是關著；指針停在哪一台記在 prefs.js 的 radio（這台裝置，不進存檔），下次進來指針還在那台
+// 頂上那幅玻璃畫要聽音樂：串流在喇叭濾波之前分一路給 radio-ear.js，畫看得到、收得到台才每幀聽，聽到的交給 radio.glass.hear
 import { STATIONS } from './radio.js';
+import { RadioEar } from './radio-ear.js';
 import { pref, setPref } from '../../save/prefs.js';
 
 const VOL = 0.25;                 // 室內多大聲（星盤夜讀在室內是 0.16，串流的音樂本來就比較滿）
@@ -144,7 +146,9 @@ export class RadioSound {
     const n = (this.nodes = {});
     // 收音機的喇叭：切掉低頻和高頻，中頻凸一點
     n.clear = gain();
-    ctx.createMediaElementSource(a).connect(bq('highpass', 170, 0.8)).connect(bq('peaking', 1400, 1, 4)).connect(bq('lowpass', 4800, 0.9)).connect(n.clear);
+    const src = ctx.createMediaElementSource(a);
+    this.ear = new RadioEar(ctx, src);
+    src.connect(bq('highpass', 170, 0.8)).connect(bq('peaking', 1400, 1, 4)).connect(bq('lowpass', 4800, 0.9)).connect(n.clear);
     n.noise = ctx.createBufferSource();
     n.noise.buffer = amb.noise;
     n.noise.loop = true;
@@ -182,6 +186,10 @@ export class RadioSound {
 
   update(amb, force = false) {
     const ctx = amb.ctx, now = performance.now();
+    // 玻璃畫每幀聽（鼓點要短窗一幀一幀看），其他的照 EVERY 調
+    const dt = Math.min(0.1, (now - (this.earAt ?? now)) / 1000);
+    this.earAt = now;
+    this.r.glass.hear(this.ear && this.clarity > 0 && this.r.glass.seen() ? this.ear.listen(dt, this.clarity) : null);
     if (!ctx || (!force && now - this.t < EVERY)) return;
     this.t = now;
     // 開著就整區都要；上船（leaving）不斷線，照背景音樂的速度淡掉，換頁才斷

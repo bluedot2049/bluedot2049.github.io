@@ -108,8 +108,10 @@ export class Creator {
     this.ink = 1;
     this.brush = 1;
     this.sym = true;
-    this.frames = [];       // 畫的臉上眼睛的框（looks.js 的 decodeEyes），最多兩個
+    this.frames = [];       // 畫的臉上眼睛的框（looks.js 的 decodeFrames），最多兩個
+    this.mouthBox = null;   // 嘴巴的框，最多一個：擺顏文字時照框張嘴、抿嘴
     this.eyeMode = false;   // 畫臉工具正在框眼睛
+    this.mouthMode = false; // 正在框嘴巴
     this.eyeDrag = null;
     this.undo = [];
     this.nav.innerHTML = MENU.map((t) => `<button class="med" data-tab="${t.id}"><span>${icon(t.id)}</span>${t.name}</button>`).join('')
@@ -150,7 +152,8 @@ export class Creator {
     this.look = { ...look };
     this.cells = myFace(look);
     this.frames = this.cells.eyes ? [...this.cells.eyes] : [];
-    this.eyeMode = false;
+    this.mouthBox = this.cells.mouth ? { ...this.cells.mouth } : null;
+    this.eyeMode = this.mouthMode = false;
     this.undo = [];
     this.closeAsk();
     this.show(this.tab);
@@ -200,6 +203,7 @@ export class Creator {
     if (rerender) {
       this.cells = myFace(L);
       this.frames = this.cells.eyes ? [...this.cells.eyes] : [];
+      this.mouthBox = this.cells.mouth ? { ...this.cells.mouth } : null;
       this.render();
     }
     this.events.onChange(L);
@@ -310,6 +314,7 @@ export class Creator {
               <button data-act="wearface">這套戴</button>
               <button data-act="keep">留著五官</button>
               <button data-act="eyes">眼睛</button>
+              <button data-act="mouthbox">嘴巴</button>
             </div>
             <p class="pad-note"></p>
           </div>
@@ -417,6 +422,7 @@ export class Creator {
       }
       case 'sym': this.sym = !this.sym; break;
       case 'eyes': this.toggleEyes(); break;
+      case 'mouthbox': this.toggleMouth(); break;
       case 'undo':
         if (this.undo.length) {
           this.cells = this.undo.pop();
@@ -428,6 +434,7 @@ export class Creator {
         this.snapshot();
         this.cells = new Uint8Array(FACE * FACE);
         this.frames = [];
+        this.mouthBox = null;
         this.refresh();
         this.commit();
         break;
@@ -447,20 +454,20 @@ export class Creator {
     };
     cv.addEventListener('pointerdown', (e) => {
       cv.setPointerCapture(e.pointerId);
-      if (this.eyeMode) return this.eyeDown(cell(e));
+      if (this.eyeMode || this.mouthMode) return this.eyeDown(cell(e));
       this.snapshot();
       last = cell(e);
       this.stroke(last, last);
     });
     cv.addEventListener('pointermove', (e) => {
-      if (this.eyeMode) return this.eyeMove(cell(e));
+      if (this.eyeMode || this.mouthMode) return this.eyeMove(cell(e));
       if (!last) return;
       const p = cell(e);
       this.stroke(last, p);
       last = p;
     });
     const end = () => {
-      if (this.eyeMode) return this.eyeUp();
+      if (this.eyeMode || this.mouthMode) return this.eyeUp();
       if (!last) return;
       last = null;
       this.commit();
@@ -480,9 +487,11 @@ export class Creator {
     q('[data-act="keep"]').forEach((b) => b.classList.toggle('on', !!this.look.keep));
     q('[data-act="wearface"]').forEach((b) => { b.classList.toggle('on', !!this.look.face); b.hidden = !this.look.face && !getSave().face; });
     q('[data-act="eyes"]').forEach((b) => b.classList.toggle('on', this.eyeMode));
+    q('[data-act="mouthbox"]').forEach((b) => b.classList.toggle('on', this.mouthMode));
     q('[data-act="undo"]').forEach((b) => b.classList.toggle('off', !this.undo.length));
     const note = this.body.querySelector('.pad-note');
-    if (note) note.textContent = this.eyeMode ? '框住畫的眼睛，角色照框眨眼。框內拖曳移動，框外重框' : this.faceTip();
+    if (note) note.textContent = this.eyeMode ? '框住畫的眼睛，角色照框眨眼。框內拖曳移動，框外重框'
+      : this.mouthMode ? '框住畫的嘴巴，擺表情時照框張嘴、抿嘴。框內拖曳移動，框外重框' : this.faceTip();
   }
 
   snapshot() {
@@ -515,7 +524,7 @@ export class Creator {
 
   // 畫一筆就是改這個人唯一的那張臉：這套戴上，衣櫃裡戴著的幾套跟著換（progress.js 的 putSave）；清掉就每一套都沒有了
   commit() {
-    const face = encodeFace(this.cells, this.frames);
+    const face = encodeFace(this.cells, this.frames, this.mouthBox);
     putSave({ face });
     this.look = { ...this.look, face };
     this.events.onChange(this.look);
@@ -540,6 +549,7 @@ export class Creator {
 
   toggleEyes() {
     this.eyeMode = !this.eyeMode;
+    this.mouthMode = false;
     if (this.eyeMode && !this.frames.length) {
       const u = PAD / FACE, w = 10, h = 8;
       this.frames = this.guide.eyes.map(([x, y]) => ({ x: clampCell(Math.round(x / u - w / 2), FACE - w), y: clampCell(Math.round(y / u - h / 2), FACE - h), w, h }));
@@ -548,14 +558,32 @@ export class Creator {
     this.drawPad();
   }
 
+  // ---------- 嘴巴框 ----------
+  // 跟眼睛框同一套拖法，只有一個框；先放在原本嘴巴的位置。開著左右對稱時框擺在正中間
+  toggleMouth() {
+    this.mouthMode = !this.mouthMode;
+    this.eyeMode = false;
+    if (this.mouthMode && !this.mouthBox) {
+      const u = PAD / FACE, w = 14, h = 7, [x, y] = this.guide.mouth;
+      this.mouthBox = { x: clampCell(Math.round(x / u - w / 2), FACE - w), y: clampCell(Math.round(y / u - h / 2), FACE - h), w, h };
+      this.commit();
+    }
+    this.drawPad();
+  }
+
+  // 拖的時候操作的那一組框：框眼睛時是眼睛的，框嘴巴時是嘴巴那一個
+  get boxes() {
+    return this.mouthMode ? (this.mouthBox ? [this.mouthBox] : []) : this.frames;
+  }
+
   frameAt(c) {
-    return this.frames.findIndex((f) => c[0] >= f.x && c[0] < f.x + f.w && c[1] >= f.y && c[1] < f.y + f.h);
+    return this.boxes.findIndex((f) => c[0] >= f.x && c[0] < f.x + f.w && c[1] >= f.y && c[1] < f.y + f.h);
   }
 
   eyeDown(c) {
     c = [clampCell(c[0], FACE - 1), clampCell(c[1], FACE - 1)];
     const i = this.frameAt(c);
-    this.eyeDrag = { c, i, from: i >= 0 ? { ...this.frames[i] } : null, rect: null };
+    this.eyeDrag = { c, i, from: i >= 0 ? { ...this.boxes[i] } : null, rect: null };
   }
 
   eyeMove(c) {
@@ -563,8 +591,9 @@ export class Creator {
     if (!d) return;
     c = [clampCell(c[0], FACE - 1), clampCell(c[1], FACE - 1)];
     if (d.i >= 0) {
-      const f = d.from;
-      this.frames[d.i] = { x: clampCell(f.x + c[0] - d.c[0], FACE - f.w), y: clampCell(f.y + c[1] - d.c[1], FACE - f.h), w: f.w, h: f.h };
+      const f = d.from, moved = { x: clampCell(f.x + c[0] - d.c[0], FACE - f.w), y: clampCell(f.y + c[1] - d.c[1], FACE - f.h), w: f.w, h: f.h };
+      if (this.mouthMode) this.mouthBox = moved;
+      else this.frames[d.i] = moved;
     } else {
       const x0 = Math.min(d.c[0], c[0]), y0 = Math.min(d.c[1], c[1]);
       d.rect = { x: x0, y: y0, w: Math.max(d.c[0], c[0]) - x0 + 1, h: Math.max(d.c[1], c[1]) - y0 + 1 };
@@ -576,6 +605,15 @@ export class Creator {
     const d = this.eyeDrag;
     this.eyeDrag = null;
     if (!d) return;
+    if (this.mouthMode) {
+      if (d.i < 0) {
+        if (!d.rect || d.rect.w < 2 || d.rect.h < 2) return this.drawPad();
+        this.mouthBox = d.rect;
+      }
+      if (this.sym) this.mouthBox = { ...this.mouthBox, x: clampCell(Math.round((FACE - this.mouthBox.w) / 2), FACE - this.mouthBox.w) };
+      this.drawPad();
+      return this.commit();
+    }
     let i = d.i;
     if (i < 0) {
       const r = d.rect;
@@ -611,7 +649,7 @@ export class Creator {
     }
     g.putImageData(img, 0, 0);
     const toPad = (x, y) => [((x + m.R) / (2 * m.R)) * PAD, ((m.cy + m.R - y) / (2 * m.R)) * PAD];
-    return { img: c, eyes: [-1, 1].map((s) => toPad(s * race.ex, race.ey)) };
+    return { img: c, eyes: [-1, 1].map((s) => toPad(s * race.ex, race.ey)), mouth: toPad(0, race.ey - 0.11 * (race.fs ?? 1)) };
   }
 
   drawPad() {
@@ -631,14 +669,16 @@ export class Creator {
       g.fillStyle = FACE_INK[v];
       for (let i = 0; i < this.cells.length; i++) if (this.cells[i] === v) g.fillRect((i % FACE) * u, Math.floor(i / FACE) * u, u, u);
     }
-    // 眼睛框：金色虛線，框選模式亮一點；正在拉的那個也畫
-    const boxes = this.eyeDrag?.rect ? [...this.frames, this.eyeDrag.rect] : this.frames;
-    if (boxes.length) {
-      g.setLineDash([4, 3]);
-      g.lineWidth = 1.5;
-      g.strokeStyle = this.eyeMode ? 'rgba(212, 165, 74, .95)' : 'rgba(212, 165, 74, .45)';
-      for (const f of boxes) g.strokeRect(f.x * u + 0.75, f.y * u + 0.75, f.w * u - 1.5, f.h * u - 1.5);
-      g.setLineDash([]);
+    // 眼睛框、嘴巴框：金色虛線，正在框的那一組亮一點；正在拉的那個也畫
+    const rect = this.eyeDrag?.rect;
+    const sets = [[this.frames, this.eyeMode], [this.mouthBox ? [this.mouthBox] : [], this.mouthMode]];
+    g.setLineDash([4, 3]);
+    g.lineWidth = 1.5;
+    for (const [list, on] of sets) {
+      const all = on && rect ? [...list, rect] : list;
+      g.strokeStyle = on ? 'rgba(212, 165, 74, .95)' : 'rgba(212, 165, 74, .45)';
+      for (const f of all) g.strokeRect(f.x * u + 0.75, f.y * u + 0.75, f.w * u - 1.5, f.h * u - 1.5);
     }
+    g.setLineDash([]);
   }
 }

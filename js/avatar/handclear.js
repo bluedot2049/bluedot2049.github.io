@@ -4,7 +4,7 @@
 // 帽子、頭、身體換外觀時各量一張「高度 × 方位 → 最遠半徑」的表，手上的東西量成幾十個點，每幀拿點去查表。
 // 東西讓帽子，帽子不讓東西：帽子戴死在頭上，手比較能動
 import * as THREE from 'three';
-import { handGeo, HAND_POSE, SIT_DOWN, STAND_DOWN } from './clothes.js';
+import { handGeo, itemOf } from './clothes.js';
 
 const STEP = 0.03;       // 量網格時三角形上每隔多遠取一點
 const BIN = 0.03;        // 表的高度一格多高（形狀自己的座標）
@@ -18,7 +18,7 @@ const ARM_X = 0.6, ARM_OUT = 0.8, ARM_IN = 0.2;   // 手臂最多往前後、往
 const RELAX = 2.5;       // 不用讓的時候每秒回正多少（越大回得越快）
 const ITER = 5;
 const PALM = 0.33;       // 手心離肩膀多遠（character.js 的 handG）
-const UP_POSE = new THREE.Euler(-2.6, 0, -0.1, 'YXZ');   // 舉過頭（HAND_POSE 的 up）的手臂
+const UP_POSE = new THREE.Euler(-2.6, 0, -0.1, 'YXZ');   // 舉過頭（ITEMS 的 pose: up）的手臂
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const clamp01 = (v) => clamp(v, 0, 1);
 const smooth = (t) => t * t * (3 - 2 * t);
@@ -48,9 +48,9 @@ function eachPoint(geo, fn, step = STEP) {
   }
 }
 
-// 量一個形狀：parts = [{ geo, y: 往上移多少, spin: 會繞 y 轉（竹蜻蜓），每個方位都算 }]。
+// 量一個形狀（tools/check-poses.mjs 也用）：parts = [{ geo, y: 往上移多少, spin: 會繞 y 轉（竹蜻蜓），每個方位都算 }]。
 // 取的點都在三角形上，高度範圍直接看頂點就知道，邊取邊填表
-function shapeOf(parts, step = STEP * 1.5) {
+export function shapeOf(parts, step = STEP * 1.5) {
   parts = parts.filter((p) => p.geo);
   if (!parts.length) return null;
   let y0 = Infinity, y1 = -Infinity;
@@ -75,7 +75,7 @@ function shapeOf(parts, step = STEP * 1.5) {
 }
 
 // 形狀座標裡的一點陷進去多深（≤ 0 是沒碰到），往外推的方向是水平離開中軸。上下各多看一格，薄的帽緣才不會被點跳過
-function depth(sh, x, y, z, m) {
+export function depth(sh, x, y, z, m) {
   const i = Math.floor((y - sh.y0) / BIN);
   if (i < -1 || i > sh.nb) return 0;
   const rho = Math.hypot(x, z);
@@ -105,7 +105,8 @@ function itemPoints(geo) {
 const _v = new THREE.Vector3(), _q = new THREE.Vector3(), _d = new THREE.Vector3(), _w = new THREE.Vector3(), _r = new THREE.Vector3();
 const _palm = new THREE.Vector3(), _sh = new THREE.Vector3(), _e = new THREE.Euler();
 const _rot = new THREE.Matrix4(), _bodyInv = new THREE.Matrix4(), _m = new THREE.Matrix4();
-const _hand = new THREE.Matrix4(), _rest = new THREE.Matrix4();
+const _hand = new THREE.Matrix4(), _rest = new THREE.Matrix4(), _tilt = new THREE.Matrix4();
+const X_AXIS = new THREE.Vector3(1, 0, 0), _up = new THREE.Vector3();
 const _p1 = new THREE.Vector3(), _p2 = new THREE.Vector3(), _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _s1 = new THREE.Vector3(), _s2 = new THREE.Vector3();
 
 export class HandClear {
@@ -113,6 +114,8 @@ export class HandClear {
     this.ch = ch;
     this.tX = this.tZ = 0;       // 東西額外傾多少（手心為支點，跟擺盪疊在一起）
     this.aX = this.aZ = 0;       // 手臂額外移多少（往前後、往外）
+    this.bX = this.bZ = 0;       // 左手（armR）額外移多少：只有擺顏文字時才讓
+    this.shaped = false;         // 身體、頭、帽子量過了沒（空手的路人不量，擺顏文字才量）
     this.down = 0;               // 放到地上的進度：0 在手上、1 放好
     this.pts = null;
     // 三個要讓開的形狀，各自在哪個關節的座標裡；每幀算一次到身體座標的矩陣
@@ -133,24 +136,22 @@ export class HandClear {
   setLook(L) {
     const ch = this.ch;
     const [torso, head, hat] = this.shapes;
-    this.tX = this.tZ = this.aX = this.aZ = 0;
-    // 空手的（路人大多是）不用量
+    this.tX = this.tZ = this.aX = this.aZ = this.bX = this.bZ = 0;
+    this.shaped = false;
+    // 空手的（路人大多是）不用量，擺顏文字時才量（measure）
     if (L.hand === 'none') {
       this.pts = null;
       for (const o of this.shapes) o.sh = null;
       return null;
     }
-    torso.sh = shapeOf([{ geo: ch.torso.visible ? ch.torso.geometry : null }]);
-    const glass = ch.glass.visible ? new THREE.SphereGeometry(1, 8, 6).scale(ch.glass.scale.x, ch.glass.scale.y, ch.glass.scale.z).translate(ch.glass.position.x, ch.glass.position.y, ch.glass.position.z) : null;
-    head.sh = shapeOf([{ geo: ch.headMesh.visible ? ch.headMesh.geometry : null }, { geo: glass }]);
-    glass?.dispose();
-    hat.sh = shapeOf([{ geo: ch.hatMesh.visible ? ch.hatMesh.geometry : null }, { geo: ch.prop.visible ? ch.prop.geometry : null, y: ch.prop.position.y, spin: true }]);
-    this.floaty = L.hand === 'balloon';
-    this.sitDown = SIT_DOWN.includes(L.hand);
-    this.lieDown = L.hand !== 'balloon';
-    this.stand = STAND_DOWN.includes(L.hand);
+    this.measure();
+    const item = itemOf(L.hand);
+    this.floaty = item.kind === 'float';
+    this.sitDown = !!item.sit;
+    this.lieDown = !this.floaty;
+    this.stand = !!item.stand;
     let geo = handGeo(L);
-    if (geo && HAND_POSE[L.hand] === 'up') {
+    if (geo && item.pose === 'up') {
       const reach = this.reach(geo);
       if (reach > 0) { geo.dispose(); geo = handGeo(L, reach); }
     }
@@ -163,7 +164,18 @@ export class HandClear {
     return geo;
   }
 
-  // 舉過頭的東西要拉多長才高過帽子（或頭頂）：站直、手照 HAND_POSE 的 up 舉好時算一次
+  // 量身體、頭、帽子
+  measure() {
+    const ch = this.ch, [torso, head, hat] = this.shapes;
+    this.shaped = true;
+    torso.sh = shapeOf([{ geo: ch.torso.visible ? ch.torso.geometry : null }]);
+    const glass = ch.glass.visible ? new THREE.SphereGeometry(1, 8, 6).scale(ch.glass.scale.x, ch.glass.scale.y, ch.glass.scale.z).translate(ch.glass.position.x, ch.glass.position.y, ch.glass.position.z) : null;
+    head.sh = shapeOf([{ geo: ch.headMesh.visible ? ch.headMesh.geometry : null }, { geo: glass }]);
+    glass?.dispose();
+    hat.sh = shapeOf([{ geo: ch.hatMesh.visible ? ch.hatMesh.geometry : null }, { geo: ch.prop.visible ? ch.prop.geometry : null, y: ch.prop.position.y, spin: true }]);
+  }
+
+  // 舉過頭的東西要拉多長才高過帽子（或頭頂）：站直、手照 pose: up 舉好時算一次
   reach(geo) {
     const ch = this.ch, [, head, hat] = this.shapes, item = shapeOf([{ geo }]);
     const top = hat.sh || head.sh;
@@ -184,21 +196,35 @@ export class HandClear {
   // 每幀：character.js 擺完所有姿勢、算完擺盪之後。動手臂（armL）、設 handG、handSwing 的轉角、地上那一份的位置
   update(dt) {
     const ch = this.ch, A = ch.armL.rotation;
-    // 坐下時長東西先放下，躺下時全部放下；放下的進度跟著坐、躺的進度走
-    const sit = this.sitDown ? smooth(clamp01(ch.sitP * 1.6)) : 0, lie = this.lieDown ? smooth(ch.lieP) : 0;
+    // 坐下時長東西先放下，躺下時全部放下；放下的進度跟著坐、躺的進度走。顏文字蹲、跪（kaoLow）跟坐一樣先放長的
+    const sit = this.sitDown ? smooth(clamp01(Math.max(ch.sitP * 1.6, ch.kaoLow))) : 0, lie = this.lieDown ? smooth(ch.lieP) : 0;
     this.down = this.pts ? Math.max(sit, lie) : 0;
 
     const relax = Math.exp(-dt * RELAX);
-    this.tX *= relax; this.tZ *= relax; this.aX *= relax; this.aZ *= relax;
+    this.tX *= relax; this.tZ *= relax; this.aX *= relax; this.aZ *= relax; this.bX *= relax; this.bZ *= relax;
     const bx = A.x, bz = A.z;
+    const kao = ch.kaoK > 0.001;
+    if (kao && !this.shaped) this.measure();
     if (this.pts && ch.handMesh.visible && this.down < 1 && ch.handG.scale.x > 0.3) this.solve(bx, bz);
+    else if (kao) this.solveArm(ch.armL, bx, bz, 'a');
     A.x = bx + this.aX;
     A.z = bz + this.aZ;
+    // 擺顏文字時左手也讓開頭和帽子（推帽沿、揮手碰到寬帽緣）
+    if (kao) {
+      const R = ch.armR.rotation, rx = R.x, rz = R.z;
+      this.solveArm(ch.armR, rx, rz, 'b');
+      R.x = rx + this.bX;
+      R.z = rz + this.bZ;
+    }
 
     // 手上的東西抵銷手臂的轉動，不管手怎麼擺都直立；氣球連身體的傾斜也抵銷，躺下也往上飄
+    // 顏文字的手勢要長的東西往前倒（法杖變魔杖）：直立之後再在身體座標裡轉 itemTilt
     if (this.floaty) {
       _q1.setFromEuler(A);
       ch.handG.quaternion.copy(ch.body.quaternion).multiply(_q1).invert();
+    } else if (ch.itemTilt > 1e-3) {
+      _q1.setFromEuler(A).invert();
+      ch.handG.quaternion.copy(_q1).multiply(_q2.setFromAxisAngle(X_AXIS, ch.itemTilt));
     } else ch.handG.rotation.set(-A.x, -A.y, -A.z);
     ch.handSwing.rotation.set(ch.swX + this.tX, 0, ch.swZ + this.tZ);
 
@@ -222,6 +248,10 @@ export class HandClear {
     }
     if (this.floaty) _bodyInv.makeRotationFromQuaternion(ch.body.quaternion).transpose();
     _sh.copy(ch.armL.position);
+    // 地板（蹲、跪時垂著的東西）：身體座標換到角色座標比高度，地面跟影子同高；往上推的方向換回身體座標
+    ch.body.updateMatrix();
+    const floor = ch.shadow.position.y - 0.012 + ITEM_M, H = ch.body.scale.x;
+    _up.set(0, 1, 0).applyQuaternion(_q2.copy(ch.body.quaternion).invert());
 
     for (let it = 0; it < ITER; it++) {
       A.x = bx + this.aX;
@@ -231,6 +261,7 @@ export class HandClear {
       const sx = (swing ? ch.swX : 0) + this.tX, sz = (swing ? ch.swZ : 0) + this.tZ;
       _rot.makeRotationFromEuler(_e.set(sx, 0, sz));
       if (this.floaty) _rot.premultiply(_bodyInv);
+      else if (ch.itemTilt > 1e-3) _rot.premultiply(_tilt.makeRotationX(ch.itemTilt));
 
       // 找陷最深的點：手上的東西對三個形狀，手臂只對頭和帽子
       let worst = 0, arm = false;
@@ -243,6 +274,8 @@ export class HandClear {
           const d = depth(o.sh, _v.x, _v.y, _v.z, ITEM_M / o.k) * o.k;
           if (d > worst) { worst = d; arm = false; _w.copy(_q); _d.set(_v.x || 1e-6, 0, _v.z).transformDirection(o.to).multiplyScalar(d); }
         }
+        const f = (floor - _v.copy(_q).applyMatrix4(ch.body.matrix).y) / H;
+        if (f > worst) { worst = f; arm = false; _w.copy(_q); _d.copy(_up).multiplyScalar(f); }
       }
       for (let t = 0.4; t <= 1.001; t += 0.2) {
         _q.set(0, -PALM * t, 0).applyMatrix4(ch.armL.matrix);
@@ -281,6 +314,44 @@ export class HandClear {
       const cy = Math.cos(A.y), sy = Math.sin(A.y), cx = Math.cos(A.x), sxa = Math.sin(A.x);
       this.aX = clamp(this.aX + _v.x * cy - _v.z * sy, -ARM_X, ARM_X);
       this.aZ = clamp(this.aZ + _v.x * sy * cx - _v.y * sxa + _v.z * cy * cx, -ARM_OUT, ARM_IN);
+    }
+  }
+
+  // 只有手臂（擺顏文字、手上沒東西或另一隻手）：手臂那幾點對頭和帽子，推開手臂。k 是存在 this 的哪一組（'a' 右手、'b' 左手）
+  solveArm(arm, bx, bz, k) {
+    const ch = this.ch, A = arm.rotation, [, head, hat] = this.shapes, X = k + 'X', Z = k + 'Z';
+    if (!head.sh && !hat.sh) return;
+    ch.head.updateMatrix();
+    ch.hat.updateMatrix();
+    head.to.copy(ch.head.matrix);
+    hat.to.multiplyMatrices(ch.head.matrix, ch.hat.matrix);
+    for (const o of [head, hat]) {
+      o.from.copy(o.to).invert();
+      o.k = _v.setFromMatrixColumn(o.to, 0).length();
+    }
+    _sh.copy(arm.position);
+    // 往外的方向：右手（armL）是 -z，左手是 +z
+    const lo = arm === ch.armL ? -ARM_OUT : -ARM_IN, hi = arm === ch.armL ? ARM_IN : ARM_OUT;
+    for (let it = 0; it < ITER; it++) {
+      A.x = bx + this[X];
+      A.z = bz + this[Z];
+      arm.updateMatrix();
+      let worst = 0;
+      for (let t = 0.4; t <= 1.001; t += 0.2) {
+        _q.set(0, -PALM * t, 0).applyMatrix4(arm.matrix);
+        for (const o of [head, hat]) {
+          if (!o.sh) continue;
+          _v.copy(_q).applyMatrix4(o.from);
+          const d = depth(o.sh, _v.x, _v.y, _v.z, ARM_M / o.k) * o.k;
+          if (d > worst) { worst = d; _w.copy(_q); _d.set(_v.x || 1e-6, 0, _v.z).transformDirection(o.to).multiplyScalar(d); }
+        }
+      }
+      if (worst <= 1e-4) break;
+      _r.subVectors(_w, _sh);
+      _v.crossVectors(_r, _d).divideScalar(Math.max(1e-4, _r.lengthSq()));
+      const cy = Math.cos(A.y), sy = Math.sin(A.y), cx = Math.cos(A.x), sxa = Math.sin(A.x);
+      this[X] = clamp(this[X] + _v.x * cy - _v.z * sy, -ARM_X, ARM_X);
+      this[Z] = clamp(this[Z] + _v.x * sy * cx - _v.y * sxa + _v.z * cy * cx, lo, hi);
     }
   }
 

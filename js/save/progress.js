@@ -30,6 +30,9 @@ export const FIELDS = [
   { key: 'padKeys', init: () => null, read: padKeys, code: { tag: 'p', iris: false, enc: (v) => (v ? v.map((n) => n.toString(16)).join('') : ''), dec: (s) => (/^[0-9a-f]{16}$/.test(s) ? padKeys([...s].map((c) => parseInt(c, 16))) : null) } },
   // 電腦換過的按鍵（controls/keymap.js）：每個換過的功能 6 個十六進位字，沒換過是 null。跟手把的一樣跟著存檔照片走、不進眼紋
   { key: 'deskKeys', init: () => null, read: deskKeys, code: { tag: 'k', iris: false, enc: (v) => v || '', dec: (s) => deskKeys(s) } },
+  // 表情盤「常用」五組（controls/kaopanel.js）：顏文字的代號（avatar/kaomoji-parts.js），數字鍵 1–5，0 是空格；一開始全空（null），玩家自己組。
+  // 跟著人走、不進眼紋；改了不算「有東西沒存」。碼裡每組 3 個十六進位字，後面的空格不寫（存兩組只佔 6 個字）
+  { key: 'kaoFav', init: () => null, read: kaoFav, code: { tag: 'e', iris: false, enc: (v) => (v ? v.map((c) => c.toString(16).padStart(3, '0')).join('').replace(/(000)+$/, '') : ''), dec: (s) => (/^([0-9a-f]{3}){1,5}$/.test(s) ? kaoFav([...s.match(/.{3}/g).map((h) => parseInt(h, 16)), 0, 0, 0, 0].slice(0, 5)) : null) } },
   // 前廳胖頭的教學（zones/gallery/ask.js）：tour 是做過的事（mirror 照過鏡子、photo 拍過照、out 走出後門、各區的 zone 名字、shy 被他拒拍過），
   // asked 是問過他哪幾題（ASK 的 id）。跟著這個人走，但不進存檔碼：換了裝置只是題目又亮起來
   { key: 'tour', init: () => [], read: words },
@@ -41,6 +44,9 @@ export const FIELDS = [
 function padKeys(v) {
   if (!Array.isArray(v) || v.length !== 16 || new Set(v).size !== 16 || !v.every((n) => Number.isInteger(n) && n >= 0 && n < 16)) return null;
   return v.some((n, i) => n !== i) ? v : null;
+}
+function kaoFav(v) {
+  return Array.isArray(v) && v.length === 5 && v.every((c) => Number.isInteger(c) && c >= 0 && c < 4096) ? v : null;
 }
 function words(v) {
   return Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.length <= 16).slice(0, 64) : [];

@@ -8,6 +8,9 @@
 // 測試：?z=shenlou&hour=8.5 固定從幾點開始，&timescale=120 讓時間跑快（120 倍＝半分鐘一小時）
 // 座標：x 往東、z 往南（沙海在南邊），井的中心是原點。擋住鏡頭的房子、塔、城牆照海市的做法淡掉（core/fade.js）
 import * as THREE from 'three';
+import { HQ } from '../../core/hq.js';
+import { soften } from '../../core/softshadow.js';
+import { CAUSTICS } from '../../core/caustics.js';
 import { Kit, rng, newBucket } from '../../core/props.js';
 import { bucketObjects, uTime, sunShadow } from '../../core/scenery.js';
 import { footMask } from '../../core/footshadow.js';
@@ -709,13 +712,24 @@ export function buildShenlou(scene, { coarse = false, renderer = null, params = 
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.shadowMap.autoUpdate = false;
     sun.castShadow = true;
-    sun.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 1024 : 2048);
+    // 電腦版加料（hq.js）：陰影圖大一倍，影子邊離東西越遠越軟（softshadow.js）；塵裡的光柱也查這張圖（shenlou-dust.js → shafts.js）
+    const res = HQ.on ? 4096 : coarse ? 1024 : 2048;
+    sun.shadow.mapSize.set(res, res);
     const sc = sun.shadow.camera;
     sc.left = sc.bottom = -55 * K; sc.right = sc.top = 55 * K; sc.near = 1; sc.far = 400 * K;
     sc.updateProjectionMatrix();
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.05;
+    soften(sun, 2.5);
     scene.add(sun.target);
+  }
+  // 電腦版加料：井底水池、水窖的方池把光反到池邊的石頭、晷針、睡蓮和人身上（caustics.js）
+  if (HQ.on) {
+    const wy = WATER_Y * K, cy = -9.15 * K;
+    CAUSTICS.pools = [
+      { y: wy, h: 1.6, k: 0.28, size: 0.7, box: [-COURT_IN * K, -COURT_IN * K, COURT_IN * K, COURT_IN * K] },
+      { y: cy, h: 1.4, k: 0.22, size: 0.5, box: [-7.65 * K, 5.35 * K, -6.35 * K, 6.65 * K] },
+    ];
   }
   // 人腳下的影子扣地面的光，跟房子的影子一樣過調色（footshadow.js）：每一幀畫一張影子圖
   const foot = renderer && sun ? footMask(renderer, scene, { coarse }) : null;

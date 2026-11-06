@@ -31,7 +31,21 @@ export function tz(z) {
 // 鎮子在一道山谷裡，兩側的山往外升高；鎮子範圍裡的起伏只往下，不會高過路面
 export const TOWN_X0 = -31, TOWN_X1 = 16;
 export function terrain(x, z) {
-  return carve(x, z, hill(x, z));
+  return coast(x, z, carve(x, z, hill(x, z)));
+}
+// 鎮子兩側的山原本一路延伸到網格的邊，邊上還在海面上好幾公尺，從海上斜看是一片翹起來的薄皮。
+// 現在兩邊的山在網格的邊以前就插進海裡：岸線彎彎曲曲，越高的地方越早開始往下，最後落到跟港外海底一樣深。
+// z 24 以內、網格原本的東西兩緣以內一點都不動，樹和聚落照舊；兩緣以外的山爬得緩一點，岸線往北退，像是岬角後面還有一道灣
+const DEEP = SEA - 2.6;
+export function coast(x, z, h) {
+  const out = Math.max(0, x - TOWN_X1) + Math.max(0, TOWN_X0 - x);
+  if (!out) return h;
+  const far = Math.max(0, x - 92) + Math.max(0, -102 - x);
+  h -= far * 0.24;
+  if (h <= DEEP) return h;
+  const edge = 42 + Math.sin(x * 0.083) * 2.5 + Math.sin(x * 0.21 + 1) * 1.2 - far * 0.35;
+  const from = Math.max(edge - Math.max(10, (h - DEEP) * 1.1), 24 - far * 3);
+  return h - (h - DEEP) * smooth(from, edge, z) * smooth(0, 6, out);
 }
 // 削之前的山坡：山上人家照這個蓋、照這個決定朝向，才跟有星廟之前一模一樣
 export function hill(x, z) {
@@ -86,22 +100,34 @@ export const paveOf = (a) => a.id === 'summit' || a.temple ? 'summit'
   : { lower: 'cobble', lantern: 'strip', upper: 'patch', specula: 'great' }[a.street] ?? (a.y === 0 ? 'granite' : 'pebble');
 
 // 畫出來的山坡是 2 公尺一格的網格，在削過的山、石台之間的陡坎跟 terrain() 會差到一兩公尺。
-// 放在山坡上的東西照網格的三角形內插，才會踩在看得到的地面上。每個頂點只算一次，生網格也用同一份
-export const TG = { x0: -100, x1: 90, z0: 32, z1: -140, s: 2 };
-TG.cols = (TG.x1 - TG.x0) / TG.s + 1;
+// 放在山坡上的東西照網格的三角形內插，才會踩在看得到的地面上。每個頂點只算一次，生網格也用同一份。
+// x −100～90 是原本 2 公尺的格子；兩緣以外越往外越寬，一路鋪進霧裡，山的邊看不到切口。每一列的頂點東西貫通，寬窄交界不會裂縫
+export const TG = { x0: -100, x1: 90, z0: 48, z1: -140, s: 2 };
+TG.xs = [-196, -166, -142, -126, -114, -106];
+for (let x = TG.x0; x <= TG.x1; x += TG.s) TG.xs.push(x);
+TG.xs.push(96, 104, 116, 132, 156, 186);
+TG.cols = TG.xs.length;
 TG.rows = (TG.z0 - TG.z1) / TG.s + 1;
+const WEST = TG.xs.indexOf(TG.x0);
 export let tgy = null;
 export function gridY(i, j) {
   if (!tgy) {
     tgy = new Float32Array(TG.cols * TG.rows);
-    for (let r = 0; r < TG.rows; r++) for (let c = 0; c < TG.cols; c++) tgy[r * TG.cols + c] = terrain(TG.x0 + c * TG.s, TG.z0 - r * TG.s);
+    for (let r = 0; r < TG.rows; r++) for (let c = 0; c < TG.cols; c++) tgy[r * TG.cols + c] = terrain(TG.xs[c], TG.z0 - r * TG.s);
   }
   return tgy[j * TG.cols + i];
 }
+// x 落在第幾欄：原本那段直接算，兩邊寬的往外找
+function colAt(x) {
+  if (x >= TG.x0 && x < TG.x1) return WEST + Math.floor((x - TG.x0) / TG.s);
+  let i = 0;
+  while (i < TG.cols - 1 && TG.xs[i + 1] <= x) i++;
+  return x < TG.xs[0] ? -1 : i;
+}
 export function meshY(x, z) {
-  const fx = (x - TG.x0) / TG.s, fz = (TG.z0 - z) / TG.s, i = Math.floor(fx), j = Math.floor(fz);
+  const i = colAt(x), fz = (TG.z0 - z) / TG.s, j = Math.floor(fz);
   if (i < 0 || j < 0 || i >= TG.cols - 1 || j >= TG.rows - 1) return terrain(x, z);
-  const u = fx - i, v = fz - j, h0 = gridY(i, j), h1 = gridY(i + 1, j), h2 = gridY(i + 1, j + 1), h3 = gridY(i, j + 1);
+  const u = (x - TG.xs[i]) / (TG.xs[i + 1] - TG.xs[i]), v = fz - j, h0 = gridY(i, j), h1 = gridY(i + 1, j), h2 = gridY(i + 1, j + 1), h3 = gridY(i, j + 1);
   // 每格沿著 (x, z)–(x + S, z - S) 那條對角線切成兩個三角形，跟 terrainGeometry 一樣
   return u >= v ? h0 + (h1 - h0) * u + (h2 - h1) * v : h0 + (h2 - h3) * u + (h3 - h0) * v;
 }
@@ -110,8 +136,8 @@ export function terrainGeometry() {
   const pos = [], S = TG.s;
   for (let i = 0; i < TG.cols - 1; i++) {
     for (let j = 0; j < TG.rows - 1; j++) {
-      const x = TG.x0 + i * S, z = TG.z0 - j * S;
-      const v = [[x, z, i, j], [x + S, z, i + 1, j], [x + S, z - S, i + 1, j + 1], [x, z - S, i, j + 1]].map(([px, pz, pi, pj]) => [px, gridY(pi, pj), pz]);
+      const x = TG.xs[i], x2 = TG.xs[i + 1], z = TG.z0 - j * S;
+      const v = [[x, z, i, j], [x2, z, i + 1, j], [x2, z - S, i + 1, j + 1], [x, z - S, i, j + 1]].map(([px, pz, pi, pj]) => [px, gridY(pi, pj), pz]);
       // 逆時針從上面看才是正面；反過來的話只有從坡底往上看得到，站上遠眺台往下看整片山坡會不見
       pos.push(...v[0], ...v[1], ...v[2], ...v[0], ...v[2], ...v[3]);
     }

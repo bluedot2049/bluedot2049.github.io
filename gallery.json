@@ -10,5 +10,6 @@
     "02-nigredo",
     "03-rubedo"
   ],
+  "cellar": "00-cellar",
   "outdoor": true
 }

@@ -3,7 +3,6 @@
 // 畫面上的 HTML 介面：作品資訊、捏角色的抽屜、房間名稱、平面清單。捏角色面板的內容在 creator.js。
 
 import { alchemyCovers } from '../core/alchemy-glyphs.js';
-import { emoteSVG, emoteName } from '../social/emotes.js';
 import { pref, setPref } from '../save/prefs.js';
 import { sfx, thing } from '../audio/ui-voices.js';
 
@@ -358,17 +357,13 @@ export class UI {
     el.title = `${n} 人在線`;
   }
 
-  // 表情按鈕：點一下展開，選了就收起來
-  bindEmotes(list, onPick) {
-    const box = $('#emote'), bar = $('#emote-bar');
-    // 電腦按數字鍵也送得出去，滑過去看得到是第幾個
+  // 表情按鈕：平常開關表情盤（kaopanel.js 的 bindButton 自己接）；拍照時點一下展開拍照人的口令那一排（cues.js），選了就收起來
+  bindEmotes() {
+    const box = $('#emote');
     const key = document.body.classList.contains('desk');
-    bar.innerHTML = list.map((e, i) => `<button aria-label="${emoteName(e)}" title="${emoteName(e)}${key ? `（${i + 1}）` : ''}">${emoteSVG(e)}</button>`).join('');
-    bar.querySelectorAll('button').forEach((b, i) => b.addEventListener('click', () => {
-      box.classList.remove('open');
-      onPick(list[i]);
-    }));
-    $('#emote-btn').addEventListener('click', () => box.classList.toggle('open'));
+    $('#emote-btn').addEventListener('click', () => {
+      if (document.body.classList.contains('photo')) box.classList.toggle('open');
+    });
     // 手機：開著時按別的地方就收起來，點畫面、按弧上退到後面的鈕都算，那一下照樣算數（hud.css 那幾顆只淡掉、不擋）。
     // 搖桿不算：雙手拿的時候一邊走一邊挑表情。電腦照舊，按表情鈕才收
     if (!key) document.addEventListener('pointerdown', (e) => {

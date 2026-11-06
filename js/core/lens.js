@@ -58,6 +58,8 @@ void main() {
 // 原圖是半浮點：物件邊緣偶爾有一個取樣點算出 NaN，直接畫上螢幕會被吞掉，畫進半浮點卻整個像素壞掉，
 // 線性取樣再把旁邊一起帶黑（海面上一小條一小條）。所以自己取四點，壞的那點不算，照剩下的混
 const FRAG = /* glsl */ `
+#include <common>
+#include <dithering_pars_fragment>
 uniform sampler2D tDiffuse;
 uniform float uK, uFo, uFs, uAspect, uCover;
 varying vec2 vUv;
@@ -82,6 +84,7 @@ void main() {
   float keep = 1.0 - smoothstep(uCover - 0.012, uCover, th);
   gl_FragColor = vec4(source(clamp(uv, 0.0, 1.0)) * keep, 1.0);
   #include <colorspace_fragment>
+  #include <dithering_fragment>
 }`;
 
 export class LensPass {

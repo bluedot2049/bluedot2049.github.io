@@ -4,10 +4,12 @@
 // 平常顏色是乾掉的赭色（魔法印泥睡著的樣子）；站在畫前不動一陣子，顏色從其中一塊開始亮起、往外滲，深處的光像炭火在呼吸。
 // 走開以後慢慢暗回去，看過的會留一點。表面那層釉照看的角度換色。
 // 效能：四層在 CPU 用 2D canvas 畫一次，烤成一張 512² 的圖（一層一格），之後每個像素只取四次圖、幾個混色，不用半透明、不丟像素。
+// 電腦版加料（hq.js）：深的兩層照深度糊開（焦點在畫布表面，像隔著一層釉往裡看），上面的色塊在下面的層投一點軟影子，光從畫框左上方來。手機一樣是四次取樣
 // 材質是 MeshBasicMaterial 改片段，霧、調色、房間淡出（fade.js）都照舊接得上；所有畫共用同一個著色器
 import * as THREE from 'three';
 import { rng } from '../../core/props.js';
 import { uTime } from '../../core/scenery.js';
+import { HQ } from '../../core/hq.js';
 
 const A = 512, T = 256, PAD = 8, INNER = T - PAD * 2;
 // 四層的深度（公尺，畫布後面多深）和往外多畫幾成：越深的層斜著看會看到越外面
@@ -214,7 +216,7 @@ function paint(seed, pal, aspect) {
 const PARS = `
 uniform sampler2D uAtlas; uniform vec2 uSize; uniform vec3 uEye; uniform float uWake; uniform vec2 uSeed;
 uniform float uPhase; uniform float uReady; uniform float uDepthK; uniform float uTime;
-uniform vec3 uGlow; uniform vec3 uGlazeA; uniform vec3 uGlazeB; uniform vec3 uDry; uniform vec3 uBox;
+uniform vec3 uGlow; uniform vec3 uGlazeA; uniform vec3 uGlazeB; uniform vec3 uDry; uniform vec3 uBox; uniform float uHQ;
 varying vec2 vPaint;
 highp float mpHash( highp vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
 float mpNoise( vec2 p ) {
@@ -227,6 +229,17 @@ vec4 mpTile( vec2 o, float m, vec2 luv ) {
 	vec2 t = clamp( ( luv + m ) / ( 1.0 + 2.0 * m ), 0.0, 1.0 );
 	vec2 px = o + ${PAD.toFixed(1)} + vec2( t.x, 1.0 - t.y ) * ${INNER.toFixed(1)};
 	return texture2D( uAtlas, vec2( px.x, ${A.toFixed(1)} - px.y ) / ${A.toFixed(1)} );
+}
+// 同一格糊開：小圖第 lod 層，再往四邊各取一點（r 公尺）。格子之間留了 ${PAD} 個像素，糊到第二層還不會吃到隔壁
+vec4 mpLod( vec2 o, float m, vec2 luv, float lod ) {
+	vec2 t = clamp( ( luv + m ) / ( 1.0 + 2.0 * m ), 0.0, 1.0 );
+	vec2 px = o + ${PAD.toFixed(1)} + vec2( t.x, 1.0 - t.y ) * ${INNER.toFixed(1)};
+	return textureLod( uAtlas, vec2( px.x, ${A.toFixed(1)} - px.y ) / ${A.toFixed(1)}, lod );
+}
+vec4 mpSoft( vec2 o, float m, vec2 luv, float r, float lod ) {
+	vec2 d = r / uSize;
+	return ( mpLod( o, m, luv, lod ) * 2.0 + mpLod( o, m, luv + vec2( d.x, 0.0 ), lod ) + mpLod( o, m, luv - vec2( d.x, 0.0 ), lod )
+		+ mpLod( o, m, luv + vec2( 0.0, d.y ), lod ) + mpLod( o, m, luv - vec2( 0.0, d.y ), lod ) ) / 6.0;
 }
 `;
 
@@ -242,8 +255,22 @@ if ( uReady > 0.5 ) {
 	// 斜得太厲害、超出最深層畫的範圍：看到的是盒子的內壁
 	vec2 out0 = max( - ${MARGIN[0].toFixed(2)} - luv0, luv0 - ${(1 + MARGIN[0]).toFixed(2)} );
 	l0.rgb = mix( l0.rgb, uBox, smoothstep( - 0.12, 0.0, max( out0.x, out0.y ) ) );
-	vec4 l1 = mpTile( vec2( ${T}.0, 0.0 ), ${MARGIN[1].toFixed(2)}, uv + shift * ${DEPTH[1].toFixed(2)} );
+	vec2 luv1 = uv + shift * ${DEPTH[1].toFixed(2)};
+	vec4 l1 = mpTile( vec2( ${T}.0, 0.0 ), ${MARGIN[1].toFixed(2)}, luv1 );
 	vec4 l2 = mpTile( vec2( 0.0, ${T}.0 ), ${MARGIN[2].toFixed(2)}, uv + shift * ${DEPTH[2].toFixed(2)} );
+	if ( uHQ > 0.5 ) {
+		// 深的糊、淺的清楚；上面兩層往光那邊找，找到色塊就在下面那層落一片影子
+		vec4 s0 = mpSoft( vec2( 0.0, 0.0 ), ${MARGIN[0].toFixed(2)}, luv0, 0.018, 1.6 );
+		s0.rgb = mix( s0.rgb, uBox, smoothstep( - 0.12, 0.0, max( out0.x, out0.y ) ) );
+		l0.rgb = mix( l0.rgb, s0.rgb, 0.85 );
+		l1 = mix( l1, mpSoft( vec2( ${T}.0, 0.0 ), ${MARGIN[1].toFixed(2)}, luv1, 0.008, 0.8 ), 0.6 );
+		vec2 toL = vec2( -0.35, 0.7 ) / uSize * uDepthK;
+		float sh0 = max( mpLod( vec2( ${T}.0, 0.0 ), ${MARGIN[1].toFixed(2)}, luv0 + toL * ${(DEPTH[0] - DEPTH[1]).toFixed(2)}, 2.2 ).a,
+			mpLod( vec2( 0.0, ${T}.0 ), ${MARGIN[2].toFixed(2)}, luv0 + toL * ${(DEPTH[0] - DEPTH[2]).toFixed(2)}, 2.2 ).a );
+		float sh1 = mpLod( vec2( 0.0, ${T}.0 ), ${MARGIN[2].toFixed(2)}, luv1 + toL * ${(DEPTH[1] - DEPTH[2]).toFixed(2)}, 1.8 ).a;
+		l0.rgb *= 1.0 - 0.42 * sh0;
+		l1.rgb *= 1.0 - 0.3 * sh1;
+	}
 	float l3 = mpTile( vec2( ${T}.0, ${T}.0 ), 0.0, uv ).a;
 	vec3 c = l0.rgb * ( 1.0 - l1.a ) + l1.rgb;
 	// 盒子內側的陰影：離畫框越近越暗，只壓後面兩層
@@ -281,7 +308,7 @@ export function createMagicPaint({ seed, palette, w, h }) {
   const u = {
     uAtlas: { value: null }, uSize: { value: new THREE.Vector2(w, h) }, uEye: { value: new THREE.Vector3(0, 0, 3) },
     uWake: { value: 0 }, uSeed: { value: new THREE.Vector2(0.5, 0.5) }, uPhase: { value: 0 }, uReady: { value: 0 },
-    uDepthK: DEPTH_K, uTime,
+    uDepthK: DEPTH_K, uTime, uHQ: HQ.u,
     uGlow: { value: new THREE.Color() }, uGlazeA: { value: new THREE.Color() }, uGlazeB: { value: new THREE.Color() }, uDry: { value: new THREE.Color(palette.dry) }, uBox: { value: new THREE.Color() },
   };
   const material = new THREE.MeshBasicMaterial({ color: 0xffffff });

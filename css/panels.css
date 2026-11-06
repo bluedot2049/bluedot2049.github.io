@@ -170,7 +170,7 @@
 .pack-bar { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
 .pack-bar .close { position: static; width: 34px; min-width: 34px; height: 34px; background: transparent; border-color: var(--line-soft); }
 .pack-bar .close svg { width: 16px; height: 16px; stroke: var(--muted); }
-body.desk #pack-card { width: 460px; padding: 18px 20px 20px; gap: 14px; }
+body.desk #pack-card { width: 460px; max-height: calc((100vh - 16px) / var(--ui, 1)); padding: 18px 20px 20px; gap: 14px; }
 body.desk .pack-bar { cursor: grab; user-select: none; }
 body.desk #pack-card.dragging .pack-bar { cursor: grabbing; }
 /* 電腦：右下角三道斜線是拉角，拉過以後卡片固定大小，相簿的格子撐滿剩下的高度 */
@@ -273,6 +273,8 @@ body:not(.desk) #pack-card .album-grid { flex: 0 1 auto; min-height: 0; }
   background: none; border: 0; border-bottom: 1.5px solid transparent; cursor: var(--cur-pointer);
 }
 .pack-tabs button.on { color: var(--gold-hi); border-bottom-color: var(--gold); }
+/* 相簿格子會捲：細的金線捲軸，電腦上不要瀏覽器的白條 */
+.album-grid { scrollbar-width: thin; scrollbar-color: rgba(232, 184, 106, .35) transparent; }
 /* 相簿：一格一張，點一下選（金框加勾）；底片只寫時辰，交給師傅的變成取件單。上面一行說選了幾張、全選 */
 .album-sel { display: flex; align-items: center; gap: 8px; min-height: 18px; }
 .album-sel .album-n { flex: 1; min-width: 0; font-size: 11px; letter-spacing: .04em; color: var(--muted); }

@@ -25,7 +25,8 @@ import { encodeLook } from '../save/savecode.js';
 import { CAMERAS, carried, dateKnob, drawDate, eyeShutter, flashKnob, longTan, shutterKnob } from './cameras.js';
 import { MARKS, markURL } from './marks.js';
 import { dof, dofK } from '../core/dof.js';
-import { GUIDE_LAYER } from '../core/scenery.js';
+import { LENSFX } from '../core/halation.js';
+import { GUIDE_LAYER, TAG_LAYER } from '../core/scenery.js';
 import { addPhoto, canShare, discard, onSnap, saveChosen, saveTip, shareChosen } from './album.js';
 import { pref, setPref, dropPref } from '../save/prefs.js';
 import { onFreshTouch } from '../controls/touch.js';
@@ -146,6 +147,7 @@ export class PhotoMode {
     this.fov = 50;                          // 要變到的視角；cur 是目前的，平滑追著 fov
     this.cur = 50;
     this.keys = new Set();
+    this.walkHeld = new Set();              // 打開時就按著、還沒放開的走路鍵：收起時交回角色（見 exit）
     this.joy = { x: 0, y: 0 };
     this.lift = 0;                          // 按住高度尺兩端的升、降
     this.height = 1.6;                      // 要離地多高
@@ -270,6 +272,7 @@ export class PhotoMode {
     p.stop();
     p.setJoystick(0, 0);
     const walking = [...p.keys].filter((k) => WALK_KEYS.has(k));
+    this.walkHeld = new Set(walking);
     p.keys.clear();
     p.paused = true;
     cam.clearViewOffset();
@@ -323,6 +326,7 @@ export class PhotoMode {
   exit() {
     if (!this.active) return;
     const quick = this.quick;
+    LENSFX.on = false;
     if (this.expo) this.say('close', 0.3);   // 長曝光到一半收起來，葉片闔上
     this.say('lower', 0.25, 250);
     this.afPoint = null;
@@ -331,16 +335,19 @@ export class PhotoMode {
     clearTimeout(this.afTimer);
     this.$('#ph-af').className = '';
     this.$('#ph-dark').className = '';   // 留著的話，下次打開攝影模式動畫會重播一次
-    // 手持舉相機放下時，越肩接著相機最後瞄的方向和高低（像射擊遊戲放下瞄準）；走路鍵交回去，人不停。手機橫拿越肩收起相機也是
+    // 手持舉相機放下時，越肩接著相機最後瞄的方向和高低（像射擊遊戲放下瞄準）。手機橫拿越肩收起相機也是
+    const p = this.player;
     if (this.handoff && this.gear) {
-      const p = this.player;
       if (this.grip === 3) p.camYaw = p.heading + Math.PI;
       else {
         p.camYaw = this.yaw;
         p.shPitch = THREE.MathUtils.clamp(-this.pitch, -1.3, 1.2);
       }
-      for (const k of this.keys) if (WALK_KEYS.has(k)) p.keys.add(k);
     }
+    // 還按著的走路鍵交回去，人接著走。畫廊的眼睛、空拍機也是：按著 W 飛、W 不放就按 Esc 收起，
+    // 按鍵重複換成了 Esc，W 不會再送 keydown，不交回去的話要放開重按才走得動
+    for (const k of [...this.keys, ...this.walkHeld]) if (WALK_KEYS.has(k)) p.keys.add(k);
+    this.walkHeld.clear();
     this.quick = false;
     this.player.holdLock = false;
     document.body.classList.remove('photo-quick');
@@ -354,6 +361,7 @@ export class PhotoMode {
     this.active = false;
     this.gear = null;
     this.eyeCam = null;
+    this.syncTags();
     dof.on = false;
     this.flashFx.restore();
     this.player.setJoystick(0, 0);
@@ -384,11 +392,50 @@ export class PhotoMode {
     left?.();
   }
 
+  // 載入畫面還蓋著時，把舉相機的介面（取景框、快門、旋鈕）和畫廊的眼睛的快門各擺出來幾幀再收掉。
+  // 瀏覽器第一次畫這些要先編它自己畫網頁用的著色器（Windows 上十幾支、兩百毫秒），不先畫過的話第一次舉相機會凍一下。
+  // 相機套在畫布上的色調（develop 的 filter）是合成時才畫的，被讀取畫面蓋住就不會畫：另外在讀取畫面上放一個跟底色一樣的小點套同一串 filter。
+  // 只動介面，鏡頭、角色、景深、暈光都照原樣；main.js 在讀取條滿之前呼叫
+  async warmUI() {
+    const frame = () => new Promise((r) => requestAnimationFrame(r));
+    const body = document.body, ph = this.$('#photo'), sh = this.$('#ph-shutter'), id = Object.keys(CAMERAS)[0];
+    const keep = { pitch: this.pitch, aimPitch: this.aimPitch, filter: this.renderer.domElement.style.filter };
+    const bg = getComputedStyle(document.getElementById('loading') || body).backgroundColor;
+    const dots = [...new Set(Object.values(CAMERAS).map((c) => c.develop?.filter).filter(Boolean))].map((f) => {
+      const d = document.createElement('div');
+      d.style.cssText = `position:fixed;left:0;top:0;width:2px;height:2px;z-index:2147483647;pointer-events:none;will-change:transform;background:${bg};filter:${f}`;
+      return body.appendChild(d);
+    });
+    for (const gear of [id, null]) {
+      if (gear) this.holdGear(gear);
+      else sh.innerHTML = eyeShutter();
+      sh.classList.toggle('eye', !gear);
+      body.classList.add('photo', 'photo-quick');
+      body.classList.toggle('photo-gear', !!gear);
+      ph.hidden = false;
+      this.useMark();
+      this.refresh();
+      for (let i = 0; i < 3; i++) await frame();
+    }
+    this.gear = null;
+    dof.on = LENSFX.on = false;
+    Object.assign(this, { pitch: keep.pitch, aimPitch: keep.aimPitch });
+    this.renderer.domElement.style.filter = keep.filter;
+    this.character.group.visible = true;
+    this.player.marker.visible = true;
+    body.classList.remove('photo', 'photo-quick', 'photo-gear', 'photo-hush');
+    sh.innerHTML = '';
+    sh.classList.remove('gear', 'locked', 'eye');
+    ph.hidden = true;
+    for (const d of dots) d.remove();
+  }
+
   // 照相館的鏡頭：固定在 c 的位置和方向；null 就回到自己拍
   setStudio(c) {
     this.studio = c;
     document.body.classList.toggle('photo-studio', !!c);
     document.body.classList.toggle('photo-guest', !!c && !c.host);
+    this.syncTags();
     if (!c) return;
     this.useMark();
     this.layoutFrame();
@@ -568,6 +615,8 @@ export class PhotoMode {
       { k: 'grip', label: '拿法', gear: true, opts: GRIPS, get: () => this.grip, set: (i) => { this.grip = i; }, note: '自拍：伸手從正面拍' },
       { k: 'turn', label: '方向', gear: true, opts: ['橫拿', '直拿'], get: () => this.upright, set: (i) => { this.upright = i; } },
       { k: 'pose', label: '相機', carry: true, opts: ['掛著', '舉起來'], get: () => this.pose, set: (i) => { this.pose = i; }, note: '舉起：拍面向的方向' },
+      // 頭上冒的顏文字是遊戲的字，只有畫廊的眼睛（遊戲自己的鏡頭）拍得到；記在這台裝置
+      { k: 'tag', label: '頭上字', gear: false, studio: false, opts: ['不拍', '拍進去'], get: () => (pref('kaoTagPhoto') ? 1 : 0), set: (i) => setPref('kaoTagPhoto', !!i) },
     ];
     // 直橫（帶相機是「方向」、空拍機是「比例」）後面寫鍵：鍵盤照按鍵表，手把帶相機是十字鍵右、空拍機是 R
     const turnKey = (c) => (c.k === 'turn' || c.k === 'aspect' ? `<i class="on-kb" data-kb="turn">F</i><i class="on-pad" data-pad-btn="${c.k === 'turn' ? 15 : 5}"></i>` : '');
@@ -621,8 +670,18 @@ export class PhotoMode {
     window.addEventListener('resize', () => this.active && this.refresh());
   }
 
+  // 頭上的顏文字拍不拍得進去（畫廊的眼睛才能選）。攝影模式裡畫面照這個藏，看到的就是拍到的，錄影也一樣
+  tags() {
+    return !this.gear && !this.studio && pref('kaoTagPhoto');
+  }
+
+  syncTags() {
+    this.camera.layers[!this.active || this.tags() ? 'enable' : 'disable'](TAG_LAYER);
+  }
+
   refresh() {
     const g = this.gear;
+    this.syncTags();
     for (const c of this.chips) {
       if (c.swap) c.opts = [CAMERAS[this.gear?.id || this.eyeCam]?.name, '畫廊的眼睛'];
       c.el.hidden = (c.studio === false && !!this.studio) || (c.swap ? !g && !this.eyeCam : c.carry ? !this.eyeCam : c.gear === false ? !!g : c.gear ? !g : false);
@@ -644,6 +703,12 @@ export class PhotoMode {
     this.latch();
     // 帶著相機時照片的樣子是相機自己的；手持看不到自己，自拍才看得到
     const look = g ? g.develop : PLAIN;
+    // 電腦版加料：鏡頭自己的暈光和色邊（halation.js，相機的 glow），取景時就看得到
+    LENSFX.on = !!g?.glow;
+    if (g?.glow) {
+      Object.assign(LENSFX, { halation: g.glow.halation, radius: g.glow.radius, fringe: g.glow.fringe });
+      LENSFX.tint.set(g.glow.tint);
+    }
     this.renderer.domElement.style.filter = look.filter;
     const seen = g ? this.grip === 3 : this.self;
     this.character.group.visible = seen;
@@ -878,9 +943,9 @@ export class PhotoMode {
     window.addEventListener('keyup', (e) => {
       if (is(e, 'raise')) this.aimButton(false);
       if (is(e, 'shutter')) this.quick ? this.quickShutter(false) : this.holdable() && this.shutterUp();
-      for (const id of HELD) if (is(e, id)) this.keys.delete(id);
+      for (const id of HELD) if (is(e, id)) { this.keys.delete(id); this.walkHeld.delete(id); }
     });
-    window.addEventListener('blur', () => { this.keys.clear(); this.lift = 0; this.shutterUp(true); });
+    window.addEventListener('blur', () => { this.keys.clear(); this.walkHeld.clear(); this.lift = 0; this.shutterUp(true); });
   }
 
   setJoystick(x, y) {
@@ -1404,8 +1469,9 @@ export class PhotoMode {
     ctx.filter = look.filter || 'none';
     ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
     ctx.restore();
-    // 亮的地方暈開一點：再疊一張糊過的上去（不支援 ctx.filter 的瀏覽器就不疊，免得整張變亮）
-    if (look.halo && 'filter' in ctx) {
+    // 亮的地方暈開一點：再疊一張糊過的上去（不支援 ctx.filter 的瀏覽器就不疊，免得整張變亮）。
+    // 電腦版的後製已經畫了暈光（halation.js 真的照亮處算），這裡就不疊
+    if (look.halo && 'filter' in ctx && !(LENSFX.on && LENSFX.drawn)) {
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
       ctx.globalAlpha = look.halo;
@@ -1640,6 +1706,7 @@ export class PhotoMode {
       sum: 0, t0: now, last: now,
     };
     document.body.classList.add('photo-expose');
+    this.camera.layers.disable(TAG_LAYER);
     this.camera.layers.disable(GUIDE_LAYER);   // 長曝光疊的是螢幕上的畫面，標記、站位在葉片開著時先收起來
     this.say('open', 0.5);   // 葉片停在開著，放開才闔（中間不出聲）
     this.onShot?.('o');      // 旁邊的人聽得到葉片開著，知道要站著別動（或故意走過去拖出殘影）
@@ -1655,6 +1722,7 @@ export class PhotoMode {
     e.grab.dispose();
     document.body.classList.remove('photo-expose');
     this.camera.layers.enable(GUIDE_LAYER);
+    this.syncTags();
     this.tickTo(0);
   }
 
@@ -1788,7 +1856,7 @@ export class PhotoMode {
     const ctx = out.getContext('2d');
     const dpr = r.getPixelRatio();
     try {
-      cam.layers.disable(GUIDE_LAYER);   // 標記、站位拍不進照片
+      cam.layers.disable(GUIDE_LAYER);   // 標記、站位拍不進照片；頭上的顏文字照「頭上字」（syncTags 已經套好）
       r.setPixelRatio(1);
       // 景深的模糊圈照照片的大小算，取樣也多一點
       dof.long = Math.max(outW, outH);

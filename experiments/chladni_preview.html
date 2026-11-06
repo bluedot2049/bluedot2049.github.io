@@ -1,0 +1,352 @@
+<!doctype html>
+<!-- © 2026 bluedot2049《煉金畫廊》。克拉尼紋試看：一張平面、一支著色器畫克拉尼板的節線（cos(nπu)cos(mπv) ± cos(mπu)cos(nπv) = 0），聽聲音換圖形。
+     挑圖形的規矩從 WAVERAWA 的 ChladniAcoustics 來：十二個音照五度圈各配一組 (n, m)，同一個音永遠是同一張圖；主音穩住一下才換，換在下一個鼓點上；低音讓板子響、鼓點敲一下。沙子不搬，只畫線。
+     聲音：收音機那九台（radio.js 的 STATIONS）、本機音檔、示範（不出聲，自己輪音）。用 http://localhost:8000/experiments/chladni_preview.html 打開；一打開就是示範 -->
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>克拉尼紋試看</title>
+<script type="importmap">{ "imports": { "three": "../vendor/three.module.min.js" } }</script>
+<style>
+  :root { --bg: #17120e; --panel: #201913; --line: rgba(232, 184, 106, .22); --gold: #e8b86a; --gold-hi: #f6dba6; --text: #efe3cf; --muted: #a8977c; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font: 13px/1.5 "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif; }
+  button, input, select { font: inherit; color: inherit; }
+  button { background: #2a211a; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+  button:hover { border-color: var(--gold); }
+  button.on { background: #4a3618; border-color: var(--gold); color: var(--gold-hi); }
+  main { display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; max-width: 1200px; margin: 0 auto; }
+  #stage { flex: 1 1 520px; min-width: 0; display: grid; place-items: center; background: #0f0c09; border-radius: 10px; min-height: 360px; padding: 12px; }
+  #gl { display: block; max-width: 100%; height: auto; aspect-ratio: 1; }
+  aside { flex: 0 1 340px; display: flex; flex-direction: column; gap: 14px; }
+  h1 { margin: 0; font-size: 16px; color: var(--gold-hi); font-weight: 600; }
+  .note { color: var(--muted); font-size: 12px; margin: 0; }
+  .group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  label.row { display: grid; grid-template-columns: 4.5em 1fr 3.2em; align-items: center; gap: 8px; }
+  label.row output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--gold); }
+  #read { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-variant-numeric: tabular-nums; }
+  #read dt { color: var(--muted); }
+  #read dd { margin: 0; }
+  #chroma { display: flex; gap: 2px; align-items: flex-end; height: 40px; }
+  #chroma div { flex: 1; background: rgba(232, 184, 106, .35); min-height: 1px; position: relative; }
+  #chroma div.top { background: var(--gold); }
+  #chroma div span { position: absolute; bottom: -16px; left: 0; right: 0; text-align: center; font-size: 10px; color: var(--muted); }
+  #hit { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #3a2e22; vertical-align: middle; }
+  #status { color: var(--muted); min-height: 1.5em; }
+</style>
+</head>
+<body>
+<main>
+  <div id="stage"><canvas id="gl"></canvas></div>
+  <aside>
+    <div>
+      <h1>克拉尼紋試看</h1>
+      <p class="note">一支著色器畫節線，沒有粒子。音高挑圖形，鼓點換圖、敲一下，低音讓線發亮。</p>
+    </div>
+    <div>
+      <div class="label">聲音</div>
+      <div class="group" id="sources">
+        <button id="demo">示範（不出聲）</button>
+        <button id="file">本機音檔…</button>
+        <input type="file" id="pick" accept="audio/*" hidden>
+      </div>
+      <div class="group" id="stations" style="margin-top:6px"></div>
+      <div id="status"></div>
+    </div>
+    <div>
+      <div class="label">樣子</div>
+      <label class="row">大小<input type="range" id="size" min="64" max="800" step="8" value="520"><output id="sizeV"></output></label>
+      <label class="row">線寬<input type="range" id="width" min="0.6" max="4" step="0.1" value="1.4"><output id="widthV"></output></label>
+      <label class="row">沙暈<input type="range" id="halo" min="0" max="1" step="0.05" value="0.5"><output id="haloV"></output></label>
+      <label class="row">音量<input type="range" id="vol" min="0" max="1" step="0.05" value="0.6"><output id="volV"></output></label>
+    </div>
+    <div>
+      <div class="label">聽到的</div>
+      <div id="chroma"></div>
+      <dl id="read" style="margin-top:22px">
+        <dt>主音</dt><dd id="rPc">—</dd>
+        <dt>圖形</dt><dd id="rMode">—</dd>
+        <dt>鼓點</dt><dd><span id="hit"></span> <span id="rHits">0</span></dd>
+        <dt>板子響</dt><dd id="rRing">0</dd>
+        <dt>分析耗時</dt><dd id="rCost">—</dd>
+        <dt>畫面</dt><dd id="rFps">—</dd>
+      </dl>
+    </div>
+  </aside>
+</main>
+<script type="module">
+import * as THREE from 'three';
+import { STATIONS } from '../js/zones/gallery/radio.js';
+
+const $ = (id) => document.getElementById(id);
+const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+// 一個音一組 (n, m)，照五度圈排：音近的圖也近，同一個音永遠同一張圖（WAVERAWA ChladniAcoustics 的 PITCH_MODES）
+const PITCH_MODES = [
+  [2, 5], [3, 7], [1, 4], [4, 7], [2, 3], [3, 8],
+  [1, 6], [4, 9], [2, 7], [3, 5], [1, 5], [5, 8],
+];
+const MORPH = 0.7;          // 換圖幾秒（換完才收下一次）
+const HOLD = 0.28;          // 主音要穩住多久才算
+const WAIT = 0.6;           // 排好的圖等鼓點最多等多久
+const STUCK = 6;            // 同一個音太久，鼓點推一格五度
+
+// ───────── 畫 ─────────
+
+const canvas = $('gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+const scene = new THREE.Scene();
+const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const U = {
+  uA: { value: new THREE.Vector2(2, 5) }, uB: { value: new THREE.Vector2(2, 5) },
+  uSA: { value: -1 }, uSB: { value: -1 }, uMix: { value: 1 },
+  uRing: { value: 0 }, uStrike: { value: 0 }, uTime: { value: 0 },
+  uWidth: { value: 1.4 }, uHalo: { value: 0.5 },
+};
+const mat = new THREE.ShaderMaterial({
+  uniforms: U,
+  vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+  fragmentShader: `
+    #define PI 3.14159265
+    uniform vec2 uA, uB; uniform float uSA, uSB, uMix, uRing, uStrike, uTime, uWidth, uHalo;
+    varying vec2 vUv;
+    float wave(vec2 p, vec2 nm, float s) {
+      vec2 a = p * PI;
+      return cos(nm.x * a.x) * cos(nm.y * a.y) + s * cos(nm.y * a.x) * cos(nm.x * a.y);
+    }
+    // 粗細照螢幕像素：線離 w=0 多少個像素
+    float hair(float f, float px) { float d = abs(f) / max(fwidth(f), 1e-5); return 1.0 - smoothstep(px * 0.5, px * 0.5 + 1.0, d); }
+    void main() {
+      const vec3 INK = vec3(0.090, 0.070, 0.055), PLATE = vec3(0.125, 0.098, 0.074);
+      const vec3 GOLD = vec3(0.910, 0.722, 0.416), HI = vec3(0.965, 0.859, 0.651);
+      float pad = 0.07;
+      vec2 p = (vUv - pad) / (1.0 - 2.0 * pad);              // 板子 0～1
+      vec2 q = abs(p - 0.5);
+      float edge = max(q.x, q.y);
+      vec3 col = INK;
+      if (edge < 0.5) {
+        float f = mix(wave(p, uA, uSA), wave(p, uB, uSB), smoothstep(0.0, 1.0, uMix));
+        // 鼓點敲下去：板子抖一下，線跟著晃
+        f += uStrike * 0.14 * sin(uTime * 46.0) * wave(p, uB.yx + vec2(1.0, 2.0), 1.0);
+        float line = hair(f, uWidth * (1.0 + uStrike * 0.4));
+        // 沙暈：沙堆在節線兩旁，板子越響越收緊
+        float halo = exp(-abs(f) * mix(9.0, 16.0, uRing)) * uHalo * (0.22 + uRing * 0.3);
+        // 腹點：響的時候一點點浮起來
+        float belly = smoothstep(0.6, 1.6, abs(f)) * uRing * 0.06;
+        col = PLATE;
+        col = mix(col, GOLD, halo + belly);
+        col = mix(col, mix(GOLD, HI, uRing * 0.6 + uStrike * 0.5), line * (0.75 + uRing * 0.25));
+      }
+      // 外框兩道細線＋四角十字
+      float px = fwidth(edge);
+      float frame = 1.0 - smoothstep(0.0, px * 1.2, abs(edge - 0.5 - 0.012));
+      frame = max(frame, 0.5 * (1.0 - smoothstep(0.0, px, abs(edge - 0.5))));
+      vec2 r = abs(q - 0.5 - 0.012);
+      float cross = (1.0 - smoothstep(0.0, px, min(r.x, r.y))) * step(max(r.x, r.y), 0.03);
+      col = mix(col, GOLD, max(frame * (0.55 + uStrike * 0.3), cross * 0.6));
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+});
+scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat));
+
+function resize() {
+  const s = +$('size').value;
+  renderer.setSize(s, s, false);
+  canvas.style.width = `${s}px`;
+  $('sizeV').value = s;
+}
+
+// ───────── 聽 ─────────
+
+let ctx = null, analyser = null, fast = null, out = null, srcNode = null, audio = null;
+let spec = null, fspec = null, prevDb = null, binPc = null, binW = null, binMidi = null, k0 = 0, k1 = 0, kBass0 = 0, kBass1 = 0, kFlux = 0;
+const chroma = new Float32Array(12), raw = new Float32Array(12), pcMax = new Float32Array(12);
+const pkK = new Int16Array(512), pkM = new Float32Array(512);
+const A = { ring: 0, strike: 0, bassPeak: 1e-4, fluxMean: 0, lastHit: -1, hits: 0, hitFlash: 0 };
+let mode = 'idle';
+
+function ensureAudio() {
+  if (ctx) return;
+  ctx = new AudioContext();
+  analyser = new AnalyserNode(ctx, { fftSize: 8192, smoothingTimeConstant: 0 });   // 8192 才分得出低音區相鄰的半音
+  fast = new AnalyserNode(ctx, { fftSize: 1024, smoothingTimeConstant: 0 });       // 鼓點另用短窗：8192 有 186 毫秒，起音會被抹平
+  out = new GainNode(ctx, { gain: +$('vol').value });
+  out.connect(ctx.destination);
+  audio = new Audio();
+  audio.crossOrigin = 'anonymous';
+  audio.addEventListener('playing', () => status(''));
+  audio.addEventListener('waiting', () => status('緩衝中…'));
+  audio.addEventListener('error', () => status('連不上（這台可能沒開 CORS，或網路斷了）'));
+  srcNode = ctx.createMediaElementSource(audio);
+  srcNode.connect(analyser);
+  srcNode.connect(fast);
+  srcNode.connect(out);
+  // 每個頻率格先算好：屬於哪個音、離半音中心多近給多少權重
+  const N = analyser.frequencyBinCount, hz = ctx.sampleRate / analyser.fftSize;
+  spec = new Float32Array(N);
+  binPc = new Int8Array(N).fill(-1); binW = new Float32Array(N); binMidi = new Float32Array(N);
+  k0 = Math.ceil(110 / hz); k1 = Math.floor(2100 / hz);           // A2～C7
+  for (let k = k0; k <= k1; k++) {
+    const midi = 69 + 12 * Math.log2((k * hz) / 440), near = Math.round(midi), d = midi - near;
+    binPc[k] = ((near % 12) + 12) % 12;
+    binW[k] = Math.exp(-((d / 0.22) ** 2));
+    binMidi[k] = midi;
+  }
+  kBass0 = Math.ceil(40 / hz); kBass1 = Math.floor(250 / hz);
+  fspec = new Float32Array(fast.frequencyBinCount); prevDb = new Float32Array(fast.frequencyBinCount).fill(-100);
+  kFlux = Math.min(fspec.length - 1, Math.floor(8000 / (ctx.sampleRate / fast.fftSize)));
+}
+
+function play(url, label) {
+  ensureAudio();
+  ctx.resume();
+  mode = 'audio';
+  audio.src = url;
+  audio.play().catch(() => status('按一下畫面再試（瀏覽器要手勢才放聲音）'));
+  status(`連 ${label}…`);
+  mark();
+}
+
+let costSum = 0, costN = 0;
+function listen(dt) {
+  const t0 = performance.now();
+  analyser.getFloatFrequencyData(spec);
+  // 音：只收局部高點（壓掉雜訊鋪的底），照半音折成十二格
+  raw.fill(0); pcMax.fill(0);
+  let np = 0;
+  for (let k = k0; k <= k1 && np < pkK.length; k++) {
+    const db = spec[k];
+    if (db < -90 || db < spec[k - 1] || db < spec[k + 1]) continue;
+    const m = 10 ** (db / 20) * binW[k], pc = binPc[k];
+    raw[pc] += m;
+    if (m > pcMax[pc]) pcMax[pc] = m;
+    pkK[np] = k; pkM[np++] = m;
+  }
+  let sum = 0;
+  for (let c = 0; c < 12; c++) { chroma[c] += (raw[c] - chroma[c]) * Math.min(1, dt / 0.15); sum += chroma[c]; }
+  let best = -1, bv = 0;
+  for (let c = 0; c < 12; c++) if (chroma[c] > bv) { bv = chroma[c]; best = c; }
+  const strength = sum > 1e-5 ? (bv - sum / 12) / bv : 0;          // 主音比平均高出多少（0～1）
+  // 主音的基音：這個音最低、夠響（最響那根的三成）的那根；泛音只會在它上面
+  let low = 60;
+  for (let i = 0; i < np; i++) if (binPc[pkK[i]] === best && pkM[i] > pcMax[best] * 0.3) { low = binMidi[pkK[i]]; break; }
+  // 低音：40～250Hz，照最近最大聲的比
+  let bass = 0;
+  for (let k = kBass0; k <= kBass1; k++) bass += 10 ** (spec[k] / 10);
+  A.bassPeak = Math.max(bass, A.bassPeak * Math.exp(-dt / 8));
+  // 鼓點：短窗頻譜往上跳的總量，比最近的平均高出一截
+  fast.getFloatFrequencyData(fspec);
+  let flux = 0;
+  for (let k = 2; k <= kFlux; k++) {
+    const db = Math.max(-100, fspec[k]), up = db - prevDb[k];   // 還沒聲音時是 -Infinity，不夾住平均會變成無限大
+    if (up > 0 && db > -85) flux += up;
+    prevDb[k] = db;
+  }
+  flux /= kFlux;
+  const hit = flux > A.fluxMean * 1.7 + 0.6 && uTime - A.lastHit > 0.12;
+  A.fluxMean += (flux - A.fluxMean) * Math.min(1, dt / 0.8);
+  if (hit) A.lastHit = uTime;
+  costSum += performance.now() - t0; costN++;
+  return { pc: strength > 0.35 ? best : -1, strength, sign: low >= 60 ? 1 : -1, flux, bass: Math.sqrt(bass / A.bassPeak), hit };
+}
+
+// 示範：不出聲，照一段假的旋律輪音、假的鼓
+const DEMO_TUNE = [0, 7, 9, 5, 0, 4, 7, 2, 11, 9, 5, 7];
+function fake() {
+  const beat = uTime * 2.1, i = Math.floor(beat), frac = beat - i;
+  const hit = i !== fake.i; fake.i = i;
+  const note = DEMO_TUNE[Math.floor(i / 3) % DEMO_TUNE.length];
+  return { pc: note, strength: 0.8, sign: Math.floor(i / 6) % 2 ? 1 : -1, bass: 0.35 + 0.4 * Math.exp(-frac * 3) * (i % 2 ? 0.5 : 1), hit };
+}
+
+// ───────── 挑圖 ─────────
+
+let uTime = 0, since = 9, curPc = -1, cand = -1, candT = 0, pending = null, pendingT = 0;
+function pick(h, dt) {
+  since += dt;
+  if (h.pc >= 0 && h.pc !== curPc) {
+    if (h.pc === cand) candT += dt; else { cand = h.pc; candT = 0; }
+    if (candT > HOLD) pending = { pc: h.pc, sign: h.sign };
+  } else if (h.pc === curPc) candT = 0;
+  if (since > STUCK && h.hit && curPc >= 0 && !pending) pending = { pc: (curPc + 7) % 12, sign: -U.uSB.value };
+  if (pending) {
+    pendingT += dt;
+    if ((h.hit || pendingT > WAIT || curPc < 0) && since > MORPH) {
+      setMode(pending.pc, pending.sign);
+      pending = null; pendingT = 0;
+    }
+  } else pendingT = 0;
+}
+function setMode(pc, sign) {
+  const [n, m] = PITCH_MODES[pc];
+  U.uA.value.copy(U.uB.value); U.uSA.value = U.uSB.value;
+  if (Math.random() < 0.5) U.uB.value.set(n, m); else U.uB.value.set(m, n);   // 一個音兩種擺法，重複的時候不完全一樣
+  U.uSB.value = sign;
+  U.uMix.value = 0;
+  curPc = pc; since = 0;
+  $('rPc').textContent = NAMES[pc];
+  $('rMode').textContent = `${U.uB.value.x}:${U.uB.value.y}　${sign > 0 ? '對稱（高）' : '反對稱（低）'}`;
+}
+
+// ───────── 主迴圈 ─────────
+
+const bars = [];
+for (let c = 0; c < 12; c++) { const d = document.createElement('div'); d.innerHTML = `<span>${NAMES[c]}</span>`; $('chroma').append(d); bars.push(d); }
+let last = performance.now(), fpsT = 0, fpsN = 0;
+renderer.setAnimationLoop((now) => {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  uTime += dt;
+  const h = mode === 'audio' ? listen(dt) : mode === 'demo' ? fake() : null;
+  if (h) {
+    pick(h, dt);
+    A.ring += (Math.min(1, h.bass) - A.ring) * Math.min(1, dt * (h.bass > A.ring ? 10 : 2.5));
+    if (h.hit) { A.strike = Math.min(1.2, A.strike + 0.7); A.hits++; A.hitFlash = 1; }
+  } else A.ring *= Math.exp(-dt * 2);
+  A.strike = Math.max(0, A.strike - dt * 6);
+  A.hitFlash = Math.max(0, A.hitFlash - dt * 5);
+  U.uMix.value = Math.min(1, U.uMix.value + dt / MORPH);
+  U.uRing.value = A.ring; U.uStrike.value = A.strike; U.uTime.value = uTime;
+  renderer.render(scene, cam);
+  // 讀數
+  const mx = Math.max(1e-6, ...chroma);
+  for (let c = 0; c < 12; c++) { bars[c].style.height = `${mode === 'audio' ? (chroma[c] / mx) * 100 : c === curPc ? 100 : 4}%`; bars[c].classList.toggle('top', c === curPc); }
+  $('hit').style.background = A.hitFlash > 0.05 ? `rgba(246,219,166,${0.3 + A.hitFlash * 0.7})` : '#3a2e22';
+  $('rHits').textContent = A.hits;
+  $('rRing').textContent = A.ring.toFixed(2);
+  fpsT += dt; fpsN++;
+  if (fpsT > 0.5) {
+    $('rFps').textContent = `${Math.round(fpsN / fpsT)} fps`;
+    $('rCost').textContent = costN ? `${(costSum / costN).toFixed(3)} 毫秒／幀` : '—';
+    fpsT = fpsN = costSum = costN = 0;
+  }
+});
+
+// ───────── 介面 ─────────
+
+function status(s) { $('status').textContent = s; }
+function mark(btn) { for (const b of document.querySelectorAll('#sources button, #stations button')) b.classList.toggle('on', b === btn); }
+for (const s of STATIONS) {
+  const b = document.createElement('button');
+  b.textContent = s.name;
+  b.title = s.by;
+  b.onclick = () => { play(s.urls[0], s.name); mark(b); };
+  $('stations').append(b);
+}
+$('demo').onclick = () => { if (audio) audio.pause(); mode = 'demo'; status(''); mark($('demo')); };
+$('file').onclick = () => $('pick').click();
+$('pick').onchange = (e) => { const f = e.target.files[0]; if (f) { play(URL.createObjectURL(f), f.name); mark($('file')); } };
+const bind = (id, fn, fmt = (v) => v) => { const el = $(id), upd = () => { $(id + 'V').value = fmt(+el.value); fn(+el.value); }; el.oninput = upd; upd(); };
+bind('size', resize);
+bind('width', (v) => (U.uWidth.value = v));
+bind('halo', (v) => (U.uHalo.value = v));
+bind('vol', (v) => out && (out.gain.value = v));
+
+// 第一幀就有圖：先擺 C 的那張，示範從頭開始輪
+setMode(0, -1); U.uMix.value = 1;
+mode = 'demo'; mark($('demo'));
+</script>
+</body>
+</html>

@@ -164,16 +164,16 @@ export function sizes(L) {
 // ---------- 自己畫的臉 ----------
 // 64 × 64 格，每格是 FACE_INK 的色號，0 是透明。傳送時壓成「色號字母 + 連續幾格」，例如 a300b2a12
 // 後面可以接眼睛的框（最多兩個）：「:x-y-w-h:x-y-w-h」，格子的左上角和寬高。角色照框眨眼、瞟一眼（character.js），
-// 畫臉工具裡框住自己畫的眼睛（creator.js）。只用數字、冒號、減號：存檔碼夾在網址裡（savecode.js 的 codeFrom）才不會斷，
+// 畫臉工具裡框住自己畫的眼睛（creator.js）。嘴巴的框前面多一個減號「:-x-y-w-h」（最多一個），擺顏文字時照框張嘴、抿嘴。只用數字、冒號、減號：存檔碼夾在網址裡（savecode.js 的 codeFrom）才不會斷，
 // 也不會撞到存檔碼的分隔符號。舊的臉碼沒有這段，照樣讀，只是不眨。
-// decodeFace 回傳的格子帶著 .eyes（有框才有），encodeFace 預設把它接回去；鏡中照片把臉另外壓成位元組（filmcode.js 的 packFace）也靠這個帶著框走
+// decodeFace 回傳的格子帶著 .eyes、.mouth（有框才有），encodeFace 預設把它們接回去；鏡中照片把臉另外壓成位元組（filmcode.js 的 packFace）也靠這個帶著框走
 
 export const FACE = 64;
 export const FACE_INK = ['', '#1a1412', '#ffffff', '#c8382a', '#f29a8a', '#e8c030', '#4a9a4a', '#3a6ac8', '#7a4a2a'];
 const INK_CHARS = 'abcdefghi';
 const FACE_MAX_LEN = 12000;
 
-export function encodeFace(cells, eyes = cells.eyes) {
+export function encodeFace(cells, eyes = cells.eyes, mouth = cells.mouth) {
   if (!cells.some((v) => v)) return '';
   let s = '';
   for (let i = 0; i < cells.length;) {
@@ -182,30 +182,34 @@ export function encodeFace(cells, eyes = cells.eyes) {
     s += INK_CHARS[cells[i]] + (j - i > 1 ? j - i : '');
     i = j;
   }
-  return s + encodeEyes(eyes);
+  return s + encodeEyes(eyes) + (mouth ? `:-${mouth.x}-${mouth.y}-${mouth.w}-${mouth.h}` : '');
 }
 
 export const encodeEyes = (eyes) => (eyes?.length ? eyes.slice(0, 2).map((e) => `:${e.x}-${e.y}-${e.w}-${e.h}`).join('') : '');
 
-// 臉碼裡眼睛那段（從第一個冒號起）→ [] 到兩個框 { x, y, w, h }；寫壞了回 null
-export function decodeEyes(s) {
-  if (!s) return [];
-  const out = [];
+// 臉碼裡框的那段（從第一個冒號起）→ { eyes: [] 到兩個框 { x, y, w, h }, mouth: 框或 null }；寫壞了回 null
+export function decodeFrames(s) {
+  const out = { eyes: [], mouth: null };
+  if (!s) return out;
   for (const part of s.split(':').slice(1)) {
-    const m = /^(\d{1,2})-(\d{1,2})-(\d{1,2})-(\d{1,2})$/.exec(part);
+    const m = /^(-?)(\d{1,2})-(\d{1,2})-(\d{1,2})-(\d{1,2})$/.exec(part);
     if (!m) return null;
-    const e = { x: +m[1], y: +m[2], w: +m[3], h: +m[4] };
+    const e = { x: +m[2], y: +m[3], w: +m[4], h: +m[5] };
     if (e.w < 1 || e.h < 1 || e.x + e.w > FACE || e.y + e.h > FACE) return null;
-    out.push(e);
+    if (!m[1]) out.eyes.push(e);
+    else if (out.mouth) return null;
+    else out.mouth = e;
   }
-  return out.length <= 2 ? out : null;
+  return out.eyes.length <= 2 ? out : null;
 }
+export const decodeEyes = (s) => decodeFrames(s)?.eyes ?? null;
 
 // 格式不對、格數對不上都當作沒畫
 export function decodeFace(s) {
   if (typeof s !== 'string' || !s || s.length > FACE_MAX_LEN) return null;
-  const bar = s.indexOf(':'), eyes = bar < 0 ? [] : decodeEyes(s.slice(bar));
-  if (!eyes) return null;
+  const bar = s.indexOf(':'), fr = bar < 0 ? { eyes: [], mouth: null } : decodeFrames(s.slice(bar));
+  if (!fr) return null;
+  const { eyes, mouth } = fr;
   if (bar >= 0) s = s.slice(0, bar);
   const cells = new Uint8Array(FACE * FACE);
   let n = 0;
@@ -220,6 +224,7 @@ export function decodeFace(s) {
   }
   if (n !== cells.length) return null;
   if (eyes.length) cells.eyes = eyes;
+  if (mouth) cells.mouth = mouth;
   return cells;
 }
 

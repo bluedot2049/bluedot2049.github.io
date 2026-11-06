@@ -17,6 +17,8 @@ const SOURCES = [
       DONE: '在前廳做完一步', ASK: '按「問」的題目：q 玩家問的、a 他回的；need 做過那件事才出現、carry 帶著相機時換的回答', AFTER_SHOT: '叫你拍他、照片收進去以後' } },
   { title: '畫廊・大樹的樹洞', file: 'js/zones/gallery/hollow-lines.js', note: '人走近就從洞口叫一聲，每次換一種語氣；投了紙條應一聲（zones/gallery/hollow.js）',
     keys: { CALLS: '叫人過來：先照 w 抽一類（多國話、動物叫法、沒有字的聲音、古裝腔），再從那一類抽一句，不跟上一句一樣', GOT: '收到紙條' } },
+  { title: '畫廊・地下室會說話的畫', file: 'js/zones/gallery/cellar-lines.js', note: '正對樓梯那幅（zones/gallery/cellar-voice.js）。「我：」開頭的是玩家回的，冒在玩家頭上',
+    keys: { CALLS: '走進地下室的方廳時叫一聲', TALKS: '按「聊天」照順序一段一段講', AFTER: '講完以後每按一次抽一句，不跟上一句一樣' } },
   { title: '畫廊・搭船來的訪客', file: 'js/npc/visitor-lines.js',
     note: '觸發位置對照 npc/visitors.js。抽取順序：熟客 → 職業 → 種族自己的先出，共用的混在後面；同一趟不重複，同一船的人不會說同一句。船上的話快靠岸時、全員上船要開走時輪流講，一句隔 4.5 秒，一個人來的就自言自語',
     keys: {

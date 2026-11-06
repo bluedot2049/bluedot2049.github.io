@@ -211,6 +211,41 @@ try {
   await sleep(350);
   check(!(await st()).pause && !(await map()).show, 'B 兩下：都收起來');
 
+  // L 點一下：表情盤（kaopanel.js）。開著左搖桿照樣走；十字鍵右挑第 1 張臉、A 擺，十字鍵下到動作那排、A 擺；B 收
+  const kaoNow = () => ev('[__g.player.character.kao, __g.kao.open, document.activeElement?.closest?.("#kaopanel") ? document.activeElement.dataset.act + document.activeElement.dataset.i : null]');
+  await press(4, 80);
+  let kk = await kaoNow();
+  check(kk[1] && kk[2] === 'face0', 'L 點一下：打開表情盤，焦點在現在的臉', kk);
+  const before = await st();
+  await ev('__fakePad.axes([0, -1, 0, 0])');
+  await sleep(500);
+  await ev('__fakePad.axes([0, 0, 0, 0])');
+  await sleep(150);
+  const after = await st();
+  check(Math.hypot(after.x - before.x, after.z - before.z) > 0.3 && (await kaoNow())[1], '表情盤開著：左搖桿照樣走、盤還開著');
+  await press(15);
+  await press(1);   // 任天堂字：A 在右邊
+  kk = await kaoNow();
+  check(kk[0] === 1 && kk[1], '十字鍵右、A：擺上第 1 張臉，盤還開著', kk);
+  await press(13);
+  await press(1);
+  kk = await kaoNow();
+  check((kk[0] & 15) === 1 && (kk[0] >> 4 & 15) > 0, '十字鍵下、A：疊上一個動作，臉不變', kk);
+  await press(0);
+  check(!(await kaoNow())[1], 'B：收起表情盤');
+  // 擺著時按住 L 是撐，放開不開盤；L 點一下開、在盤裡再按 L 收
+  await ev('__fakePad.set(4, 1)');
+  await sleep(350);
+  check(await ev('__g.player.character.braced && !__g.kao.open'), '擺著按住 L：撐著、盤不開');
+  await ev('__fakePad.set(4, 0)');
+  await sleep(250);
+  check(!(await ev('__g.player.character.braced || __g.kao.open')), '放開 L：不撐了、盤沒開');
+  await press(4, 80);
+  check((await kaoNow())[1], 'L 點一下：開');
+  await press(4, 80);
+  check(!(await kaoNow())[1], '盤裡按 L：收');
+  await ev('__g.kao.set(0)');
+
   // ZL 按住：舉相機（沒帶相機是空拍機）；ZR：拍；放開 ZL：放下
   await ev(`window.__shots = 0; { const ph = __g.photo, f = ph.shoot.bind(ph); ph.shoot = (...a) => { window.__shots++; return f(...a); }; } 1`);
   await ev('__fakePad.set(6, 1)');

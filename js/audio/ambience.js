@@ -96,7 +96,11 @@ export class Ambience {
   start() {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC || this.ctx) return;
-    const ctx = (this.ctx = new AC());
+    // 緩衝放大（playback）：預設的 interactive 只留十毫秒左右，畫面一重（高畫質加料、編著色器）音訊執行緒就趕不上，聲音一段一段斷。
+    // 代價是出聲晚幾十毫秒，腳步、介面聲聽不出來
+    let ctx;
+    try { ctx = new AC({ latencyHint: 'playback' }); } catch { ctx = new AC(); }
+    this.ctx = ctx;
     // 音量盤的三個推桿：音效 fxBus、音樂 musicBus 都匯到 total，再出喇叭。錄影接在 total，聽到什麼錄到什麼
     this.total = ctx.createGain();
     this.total.connect(ctx.destination);

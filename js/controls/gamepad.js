@@ -47,7 +47,7 @@ export function padPair(a, b, labels) {
 // 換鍵卡上的每一列：原本那顆（-1、-2 是確認、返回，照牌子換位置）、走動時做什麼、舉著相機時做什麼（一樣的不寫）
 const ROWS = [
   [-1, '互動', '快門'], [-2, '返回、起來', '放下'], [N, '跳', '自拍'], [W, '坐', '閃光'],
-  [ZL, '舉相機', ''], [ZR, '快門', ''], [L, '表情輪', '日期'], [R, '黑眼帶路', '重新對焦'],
+  [ZL, '舉相機', ''], [ZR, '快門', ''], [L, '表情', '日期'], [R, '黑眼帶路', '重新對焦'],
   [R3, '標記', '重新對焦'], [L3, '', '空拍機加速'], [UP, '拉近', '舉高、上升'], [DOWN, '拉遠', '蹲低、下降'],
   [LEFT, '同行', '空拍機變焦'], [RIGHT, '說話', '直橫'], [PLUS, '暫停選單', ''], [MINUS, '行囊', ''],
 ];
@@ -109,7 +109,7 @@ export function bindGamepad({ player, photo, ui, desk, party, cues, ambience }) 
   let yawV = 0, pitchV = 0, fullT = 0;
   const rb = [{ s: 0, at: 0 }, { s: 0, at: 0 }];   // 右搖桿兩軸的回彈
   let zrRaise = false;             // 沒舉相機時按 ZR：先舉起來，放開時照右鍵的短按、長按算
-  let wheelAt = 0;                 // 按住 L 叫出表情輪的時間；0 是沒開
+  let wheelAt = 0;                 // 按下 L 的時間（表情盤點一下開關、擺著按住撐；舉著相機是口令輪）；0 是沒按
   let mouse = 0;                   // 換回滑鼠前累積的移動量
   let rebase = false;              // 切走回來：下一幀重新取基準
   let layer = null;                // 現在用十字鍵在點的面板（padnav.js）
@@ -147,7 +147,7 @@ export function bindGamepad({ player, photo, ui, desk, party, cues, ambience }) 
     paintMap();
   }
 
-  // 放掉所有按著的：停下、按住舉著的相機放下（短按一直舉著的不動）、表情輪不送、長曝光取消
+  // 放掉所有按著的：停下、按住舉著的相機放下（短按一直舉著的不動）、表情不撐、長曝光取消
   function release() {
     player.setPad(0, 0);
     if (photo.active) {
@@ -265,6 +265,13 @@ export function bindGamepad({ player, photo, ui, desk, party, cues, ambience }) 
   // 開關暫停選單、行囊照換過的鍵（M）。搖桿照常走路、轉鏡頭
   function panel(l, K, M, now) {
     const { on, pr } = K;
+    // 表情盤：開著照樣走（搖桿在 walk 給過了）、照樣跳；L 收起來，X 是常用的「＋存／－移出」
+    const kp = l.id === 'kaopanel' ? desk.kaoPanel : null;
+    if (kp) {
+      if (M.pr(N)) fire('jump');
+      if (M.pr(W)) kp.keep();
+      if (M.pr(L)) return void kp.close();
+    }
     for (const [i, dx, dy] of [[UP, 0, -1], [DOWN, 0, 1], [LEFT, -1, 0], [RIGHT, 1, 0]]) {
       const first = pr(i);
       if (!first && !(on[i] && rep?.i === i && now >= rep.at)) continue;
@@ -274,7 +281,7 @@ export function bindGamepad({ player, photo, ui, desk, party, cues, ambience }) 
     if (rep && !on[rep.i]) rep = null;
     if (pr(confirmPos())) nav.press(l);
     if (pr(backPos())) l.id === 'chat' ? party()?.closeChat() : tap('Escape', 'Escape');
-    if (pr(L)) nav.tab(l, -1);
+    if (pr(L) && !kp) nav.tab(l, -1);
     if (pr(R)) nav.tab(l, 1);
     if (l === map && (M.pr(PLUS) || M.pr(MINUS))) return closeMap();
     if (M.pr(PLUS)) desk.togglePause();

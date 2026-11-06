@@ -22,6 +22,7 @@ export const longTan = (mm) => 18 / mm;
 // aspect：照片長寬比（橫拿），直拿就倒過來。
 // flash：閃光燈；bulb：閃一次要換一顆燈泡，換好之前不能拍；knob：快門旁那顆閃光開關長什麼樣（KNOBS）。hold：按住快門不放就一直曝光（B 快門），放開時才閃
 // develop：沖出來的樣子，跟 photo.js 的色調同一種寫法；halo：亮的地方暈開一點
+// glow：電腦版（high 畫質）才有的鏡頭味（core/halation.js），取景和照片都看得到：halation 亮處滲出的暈光多亮、tint 什麼顏色、radius 糊多開，fringe 畫面邊上紅藍錯開多少。有它時拍下來不再疊 develop 的 halo
 // date：照片角落的日期印記（年月日），開關點一下印或不印；knob：快門旁那個開關長什麼樣（KNOBS），ink：印記怎麼上到照片（INKS）。同一家工坊的相機用同一種
 // mark：照片角落蓋哪個記號（marks.js 的名字）；沒寫就不蓋，只留相機自己的印記
 // af：自動對焦的個性。time 轉到位要幾秒、hunt 快到時多轉過頭幾成再退回來（找焦）、
@@ -47,6 +48,7 @@ export const CAMERAS = {
     },
     hold: true,
     develop: { filter: 'sepia(.16) saturate(.92) contrast(1.08) brightness(1.02)', vig: 0.62, grain: 0.07, halo: 0.16 },
+    glow: { halation: 0.85, tint: '#ff7d4e', radius: 1.6, fringe: 0.004 },   // 燭火：燈籠、閃光外面滲一圈偏橘紅的暈，老鏡頭邊上一點色邊
   },
 };
 

@@ -3,7 +3,7 @@
 // 濕的地面：下過雨的石板、屋瓦變深，斜著看泛一層天光，燈籠倒映在上面，拉成一條一條的燈影。接在 grade.js 換掉的霧那一段（混霧、調色之前）。
 // 只有吃光的內建材質（MeshLambertMaterial）會濕，而且只有朝上、頂上沒有別的東西的面：屋簷下、殿裡照舊是乾的，路人和自己也不會濕。
 // 燈影不用反射相機：視線碰到地面往上彈，在燈籠的高度查一張從上往下畫的燈光圖（海市的 rain.js 畫的），越斜著看拉得越長，對得上真的燈籠。
-// 剛下的時候一塊一塊先濕，雨停以後照同一個樣子一塊一塊乾。amount 是 0 的時候整段跳過；不下雨的區域連這一段都不帶（zone 匯出 wet 才接，見 grade.js installGrade）
+// 剛下的時候一塊一塊先濕，雨停以後照同一個樣子一塊一塊乾。海邊可以另外圈一塊常年潮濕（damp），不下雨也泛一層燈影。amount、damp 都是 0 的時候整段跳過；不下雨的區域連這一段都不帶（zone 匯出 wet 才接，見 grade.js installGrade）
 import * as THREE from 'three';
 
 export const WET = {
@@ -20,6 +20,9 @@ export const WET = {
   lamp: 2.4,                         // 燈大約掛在地面上多高：先照這個高度找，找到燈再照它真的高度對一次
   now: 0,                            // 現在幾秒（rain.js 每幀寫），漣漪算年紀用
   rip: Array.from({ length: 6 }, () => new THREE.Vector4(0, 0, -1e3, 0)),   // 踩水的漣漪：x、z、起的時刻、多大
+  damp: 0,                           // 常年潮濕：不下雨也有這麼濕（海邊的碼頭），0 不帶
+  dampBox: new THREE.Vector4(0, 0, 0, 0),   // 潮濕的範圍：x0、z0、x1、z1，邊上一公尺漸變
+  dampY: 0.5,                        // 只有這個高度以下的面潮濕（碼頭的地，不是屋頂）
 };
 
 let ripAt = 0;
@@ -29,8 +32,9 @@ export function wetRipple(x, z, k = 1) {
   ripAt = (ripAt + 1) % WET.rip.length;
 }
 
-export const WET_GLSL = `
-struct Wet { float amount; float q; vec4 box; sampler2D occ; sampler2D light; vec2 lightY; float darken; float sheen; float shine; float blur; float lamp; float now; vec4 rip[6]; };
+// 結構、雜訊和「這一點多濕」：濕地反射（ssr.js）也拿這一段，濕的地方跟材質裡算的一樣
+export const WET_BASE_GLSL = `
+struct Wet { float amount; float q; vec4 box; sampler2D occ; sampler2D light; vec2 lightY; float darken; float sheen; float shine; float blur; float lamp; float now; vec4 rip[6]; float damp; vec4 dampBox; float dampY; };
 uniform Wet uWet;
 float wetHash( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
 float wetNoise( vec2 p ) {
@@ -40,20 +44,34 @@ float wetNoise( vec2 p ) {
 }
 // 燈光圖上 q 那一點、糊到第 lod 層的燈
 vec4 wetLamp( vec2 q, float lod ) { return textureLod( uWet.light, ( q - uWet.box.xy ) * uWet.box.zw, lod ); }
-// col 是輸出空間的顏色，P 是世界座標。面朝哪用位置的導數算（平面著色，算出來剛好是那一面）
-vec3 wetSurface( vec3 col, vec3 P ) {
-	vec3 N = normalize( cross( dFdx( P ), dFdy( P ) ) );
+// P 那一點（面朝 N，從 E 看）有多濕，0 是乾的
+float wetMask( vec3 P, vec3 N, vec3 E ) {
 	float up = smoothstep( 0.55, 0.85, N.y );
-	if ( up <= 0.0 ) return col;
+	if ( up <= 0.0 ) return 0.0;
+	// 常年潮濕的那一塊（damp）：框裡、夠低的面，不分塊，均勻的一層
+	vec4 db = uWet.dampBox;
+	vec2 din = smoothstep( db.xy, db.xy + 1.0, P.xz ) * ( 1.0 - smoothstep( db.zw - 1.0, db.zw, P.xz ) );
+	float damp = uWet.damp * din.x * din.y * ( 1.0 - smoothstep( uWet.dampY - 0.3, uWet.dampY, P.y ) );
+	if ( uWet.amount <= 0.0 && damp <= 0.0 ) return 0.0;
 	vec2 uv = ( P.xz - uWet.box.xy ) * uWet.box.zw;
 	bool inside = all( greaterThan( uv, vec2( 0.0 ) ) ) && all( lessThan( uv, vec2( 1.0 ) ) );
 	// 這一面就是最上面那一面才淋得到雨
 	float top = inside ? 1.0 - smoothstep( 0.3, 0.55, abs( P.y - textureLod( uWet.occ, uv, 0.0 ).r ) ) : 1.0;
 	// 一塊一塊濕：遠的不分塊（細的雜訊遠看會閃）
-	float dist = distance( P, cameraPosition );
+	float dist = distance( P, E );
 	float n = mix( 0.65 * wetNoise( P.xz * 1.3 ) + 0.35 * wetNoise( P.xz * 3.4 + 7.0 ), 0.5, smoothstep( 12.0, 40.0, dist ) );
-	float m = up * top * smoothstep( n - 0.12, n + 0.12, uWet.amount * 1.25 - 0.1 );
+	return up * top * max( smoothstep( n - 0.12, n + 0.12, uWet.amount * 1.25 - 0.1 ), damp );
+}
+`;
+
+export const WET_GLSL = WET_BASE_GLSL + `
+// col 是輸出空間的顏色，P 是世界座標。面朝哪用位置的導數算（平面著色，算出來剛好是那一面）
+vec3 wetSurface( vec3 col, vec3 P ) {
+	vec3 N = normalize( cross( dFdx( P ), dFdy( P ) ) );
+	float m = wetMask( P, N, cameraPosition );
 	if ( m <= 0.0 ) return col;
+	vec2 uv = ( P.xz - uWet.box.xy ) * uWet.box.zw;
+	bool inside = all( greaterThan( uv, vec2( 0.0 ) ) ) && all( lessThan( uv, vec2( 1.0 ) ) );
 	bool srgb = gradeSrgbOut();
 	vec3 c = srgb ? sRGBTransferEOTF( vec4( col, 1.0 ) ).rgb : col;
 	c *= mix( 1.0, uWet.darken, m );

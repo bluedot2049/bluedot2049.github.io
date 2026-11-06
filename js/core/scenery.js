@@ -11,6 +11,8 @@ export const ANIMAL_LAYER = 1;
 export const REFLECT_LAYER = 2;
 // 只給人看、拍不進照片的東西（隊友的標記、拍照的站位、點地走路的落點）：主鏡頭平常看這層，按快門畫那一張時關掉（photo.js、selfie.js）
 export const GUIDE_LAYER = 3;
+// 頭上冒的表情、顏文字：一樣只給人看、拍不進照片，跟標記分開一層，之後拍照的人可以自己開關要不要拍進去
+export const TAG_LAYER = 4;
 
 export const uTime = { value: 0 };
 
@@ -45,6 +47,16 @@ export function bucketObjects(b, ghost = false, floor = null, far = false) {
   return out;
 }
 
+// 海市燈籠裡的燭火：相位照燈的 x、z 算，燈籠紙（fade.js）、光暈（glowPoints 的 far）、地上的光圈（haze.js 的 pools）
+// 三樣在同一個位置，一起亮一起暗。平常幾道快的抖動疊著，偶爾一陣風壓下去暗一截再回來，每盞什麼時候被壓都不一樣
+export const LAMP_FLICKER = /* glsl */ `
+float lampFlicker(vec2 xz, float t) {
+  float ph = fract(sin(dot(xz, vec2(12.9898, 78.233))) * 43758.5453) * 6.2832;
+  float f = 0.86 + 0.08 * sin(t * 9.1 + ph) * sin(t * 5.3 + ph * 2.0) + 0.06 * sin(t * 13.7 + ph * 3.0);
+  float gust = pow(0.5 + 0.5 * sin(t * (0.5 + 0.5 * fract(ph * 1.37)) + ph * 3.0), 14.0);
+  return f * (1.0 - 0.45 * gust * (0.6 + 0.4 * sin(t * 21.0 + ph)));
+}`;
+
 // far：離鏡頭越遠，越從燭火的抖動換成星光的閃法——大多時候穩穩的，偶爾亮一下、脹大一點。
 // 再疊一道很慢的亮度波從海邊往山上推，遠看像風一層一層吹過整座鎮：風頭經過的那一帶燭火抖一下、暗一點。
 // 遠處的樣子跟海上的漁火一樣像星星：芯很小很亮、偏白，光暈攤開淡一點，亮一下的那瞬間有一點點十字光芒。
@@ -71,7 +83,7 @@ export function glowPoints(list, { far = false, sky = false, gain = 1, dot = 2.5
   geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
   const mat = new THREE.ShaderMaterial({
     uniforms: { uTime, uScale: { value: 150 * pr }, uPr: { value: pr }, uFar: { value: far ? 1 : 0 }, uAir: { value: sky ? 0 : 1 }, uGain: { value: gain }, uDot: { value: dot }, uVeil: AIR.veil, uHalo: AIR.halo, ...gradeUniforms() },
-    vertexShader: GRADE_VERT + `
+    vertexShader: GRADE_VERT + LAMP_FLICKER + `
       uniform float uTime; uniform float uScale; uniform float uPr; uniform float uFar; uniform float uAir; uniform float uGain; uniform float uDot; uniform float uVeil; uniform float uHalo;
       attribute vec3 aColor; attribute float aSize; attribute float aPhase;
       varying vec3 vC; varying float vA; varying float vF; varying float vSp;
@@ -79,7 +91,8 @@ export function glowPoints(list, { far = false, sky = false, gain = 1, dot = 2.5
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         float halo = mix(1.0, uHalo, uAir);
         float d = -mv.z, px = aSize * uScale * halo / d;
-        float flick = 0.5 + 0.08 * sin(uTime * 7.0 + aPhase) + 0.05 * sin(uTime * 13.0 + aPhase * 2.0);
+        // 近處：海市（far）跟燈籠紙同一個燭火，別的地方照舊輕輕抖
+        float flick = uFar > 0.5 ? 0.58 * lampFlicker(position.xz, uTime) : 0.5 + 0.08 * sin(uTime * 7.0 + aPhase) + 0.05 * sin(uTime * 13.0 + aPhase * 2.0);
         float f = smoothstep(20.0, 60.0, d) * uFar;
         // 兩道頻率對不上的慢波同時到頂才亮，什麼時候閃每盞都不一樣
         float s1 = 0.5 + 0.5 * sin(uTime * (0.35 + 0.5 * fract(aPhase * 7.31)) + aPhase * 3.0);

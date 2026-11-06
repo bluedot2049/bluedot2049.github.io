@@ -5,31 +5,34 @@
 // 牆分成一段一段（entry），擋住鏡頭和角色之間的那段會自動降成矮牆。
 import * as THREE from 'three';
 import * as TX from '../../core/textures.js';
-import { SETS, rng } from '../../core/props.js';
+import { Kit, PROPS, SETS, newBucket, rng } from '../../core/props.js';
 import { buildMirror, buildMirrorRug } from './mirror.js';
 import { TABLE_D, TABLE_W, buildCamTable } from './camtable.js';
 import { buildFrontDoor } from '../../scene/frontdoor.js';
 import { buildGuideSign } from './guidesign.js';
-import { buildNoticeBoard } from './noticeboard.js';
+import { buildCellar } from './cellar.js';
 import { buildSunMoon } from './sunmoon.js';
 import { buildTravelPosters } from './travelposters.js';
 import { buildRadio } from './radio.js';
 import { buildVestibuleLight } from './vestibule-light.js';
 import { CLOCK_D, CLOCK_W, buildClock } from './clock.js';
 import { OUTDOOR_ROOM, buildOutdoor } from './outdoor.js';
+import { SUN_DIR } from './outdoor-map.js';
+import { SHAFTS } from '../../core/shafts.js';
+import { HQ } from '../../core/hq.js';
 import { catRoomOf } from '../../npc/animals.js';
 import { makePathfinder } from '../../core/pathgrid.js';
 import { bucketObjects, glowPoints, tag, uTime } from '../../core/scenery.js';
 import { Fader, RoomFader, ease } from '../../core/fade.js';
 import { bakeOne, updateMagic } from './magicpaint.js';
-import { DEFAULTS, DOOR_NEAR, DOOR_W, MARGIN, ROOM_NEAR, ROOM_TYPES, SEA_SPAN, SHELL_SPAN, WALL_DOWN, WALL_H, WALL_HOLD, WALL_UP, boxSpan, buildBoundary, buildBoxShell, buildPainting, buildRotundaShell, dust, furnish, hitObstacle, propFader, setPropFader, shared, slotsFor } from './world-rooms.js';
+import { DEFAULTS, DOOR_NEAR, DOOR_W, MARGIN, ROOM_NEAR, ROOM_TYPES, SEA_SPAN, SHELL_SPAN, WALL_DOWN, WALL_H, WALL_HOLD, WALL_UP, boxSpan, buildBoundary, buildBoxShell, buildPainting, buildRotundaShell, dust, furnish, hitObstacle, propBox, propFader, setPropFader, shared, slotsFor } from './world-rooms.js';
 
 // ---------- 主程式 ----------
 
 // opts.lights：前廳放不放真的燈（電腦）；opts.motes：光柱裡的浮塵（vestibule-light.js）
 export function buildWorld(scene, gallery, opts = {}) {
   const rooms = [], paintings = [], entries = [], raycastTargets = [];
-  let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null, noticeBoard = null, clock = null, mirrorTick = null, sunMoon = null, stage = null, radio = null;
+  let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null, clock = null, mirrorTick = null, sunMoon = null, stage = null, radio = null, cellar = null;
   // 照鏡子幾成（main.js 每一幀給，0 到 1）；鏡子那面牆的牆段，照鏡子時整段藏起來
   let mirrorK = 0, mirrorWall = null;
   let z = 0;
@@ -78,6 +81,9 @@ export function buildWorld(scene, gallery, opts = {}) {
     rooms.push(room);
   });
 
+  // gallery.json 的 cellar：前廳入口牆（進門左手邊）開一道門往下到地下室（cellar.js），門在原本佈告欄那個位置
+  const CELLAR_X = 1.5;
+  if (gallery.cellar && rooms[0].type === 'hall') rooms[0].cellarDoor = CELLAR_X;
   const helpers = { bucketObjects, glowPoints, tag, uTime, shadowMat: shared().shadowMat };
   for (const room of rooms) {
     room.spans = room.spans || [];
@@ -88,6 +94,11 @@ export function buildWorld(scene, gallery, opts = {}) {
   }
   for (let i = 1; i < rooms.length; i++) buildBoundary(rooms[i - 1], rooms[i], entries);
   const catRoom = catRoomOf(rooms);
+  // 入口牆那側的門框跟著入口牆（下面照牆段的主人放進前廳）；最上面兩階放進前廳，在前廳就看得到門裡往下的樓梯
+  if (rooms[0].cellarDoor != null) {
+    cellar = buildCellar(gallery.cellar, CELLAR_X, rooms[0].frontEntry);
+    rooms[0].group.add(cellar.porch);
+  }
 
   for (const e of entries) {
     let owner = rooms[Math.max(...e.rooms)];
@@ -95,6 +106,15 @@ export function buildWorld(scene, gallery, opts = {}) {
     e.owner = owner.index;
     for (const m of [...e.full, ...e.stub]) owner.group.add(m);
     for (const m of e.stub) m.visible = false;
+  }
+  // 地下室的牆段：算前廳的牆（outerRoom 0），淡進淡出跟著地下室那一組（排在所有房間後面）
+  if (cellar) {
+    for (const e of cellar.entries) {
+      e.owner = rooms.length;
+      for (const m of e.stub) m.visible = false;
+      entries.push(e);
+    }
+    scene.add(cellar.group);
   }
 
   for (const room of rooms) {
@@ -227,19 +247,23 @@ export function buildWorld(scene, gallery, opts = {}) {
         p.group.traverse((m) => { if (m.isMesh) back.entry.tall.push(m); });
       });
 
-      // 入口那面牆（進門的左手邊）：靠鏡子那頭開窗，夕陽照在鏡子前；靠前門那頭空著，之後貼活動和消息的海報。
-      // 空著的這段家具照樣做一次再丟掉，海報掛上去時別處的擺設不會跟著換位置。窗前不放東西（low: false），那個牆角讓給月的花。
+      // 入口那面牆（進門的左手邊）：靠鏡子那頭開窗，夕陽照在鏡子前；靠前門那頭是往地下室的門（cellar.js，原本是佈告欄）。
+      // 門那段的家具照樣做一次再丟掉，別處的擺設不會跟著換位置。窗前不放東西（low: false），那個牆角讓給月的花。
       // 這扇窗要安靜：玻璃是淡淡的粉橘黃昏、窗簾跟鏡子同一路的灰紫、光束淡一點，眼睛才會先落到鏡子和掛布（那個橘給了掛布上的太陽）
       const front = boxSpan(room, 'front');
       room.window = { sp: front, s: 2.4, low: false, style: { glass: '#f3dfcc', glass2: '#e2ad98', curtain: '#5a4f6a' }, beam: 0.3 };
       front.clear = [[4.0, front.length]];
-      // 空位上掛佈告欄（noticeboard.js），窗邊長過來的藤纏在靠窗那個上角
-      const bs = 5.5, bp = front.at(bs);
-      noticeBoard = buildNoticeBoard(bs - room.window.s);
-      noticeBoard.group.position.set(bp.x + bp.nx * 0.01, 0, bp.z + bp.nz * 0.01);
-      noticeBoard.group.rotation.y = Math.atan2(bp.nx, bp.nz);
-      room.group.add(noticeBoard.group);
-      noticeBoard.group.traverse((m) => { if (m.isMesh) front.entry.tall.push(m); });
+
+      // 胖頭人身後、出口牆前面是一座畫架，上面一幅沒畫完的畫（props.js 的 easel），斜斜朝著前門那邊
+      const def = PROPS.easel, ex = 2.85, ez = -6.95, erot = 0.5;
+      const ek = new Kit(rng('前廳畫架')), eb = newBucket(), easel = new THREE.Group();
+      def.build(ek);
+      ek.emit(eb, ex, ez, erot);
+      easel.add(...bucketObjects(eb));
+      room.group.add(easel);
+      fadeByBoxes(easel, [propBox(ex, ez, erot, def)]);
+      room.obstacles.push({ x: ex, z: ez, hw: def.w / 2, hd: def.d / 2, rot: erot });
+      room.shadowSpots.push({ x: ex, z: ez, w: def.w, d: def.d, rot: erot });
     }
 
     const slots = slotsFor(room);
@@ -282,6 +306,8 @@ export function buildWorld(scene, gallery, opts = {}) {
   for (const room of rooms) {
     room.group.traverse((o) => { if (o.userData.kind || o.userData.painting) raycastTargets.push(o); });
   }
+  // 地下室一面牆的畫布合成一塊網格，點到時照第幾個三角形找是哪一幅（player.js 的 pick）
+  cellar?.group.traverse((o) => { if (o.userData.kind || o.userData.paintingAt) raycastTargets.push(o); });
 
   const doorZs = rooms.slice(1).map((r) => r.zStart);
 
@@ -291,6 +317,7 @@ export function buildWorld(scene, gallery, opts = {}) {
   }
 
   function walkable(x, zz) {
+    if (cellar?.claims(x, zz)) return cellar.walkable(x, zz);
     const i = roomIndexAt(zz);
     let ok = rooms[i].inside(x, zz, MARGIN);
     if (!ok) for (const dz of doorZs) if (Math.abs(x) < DOOR_W / 2 - 0.3 && Math.abs(zz - dz) < 0.6) ok = true;
@@ -305,7 +332,14 @@ export function buildWorld(scene, gallery, opts = {}) {
   function findWalkable(x, zz, fromX, fromZ) {
     const i = roomIndexAt(zz), r = rooms[i];
     const snap = r.inside(x, zz, MARGIN + 0.05) ? null : r.snap?.(x, zz);
-    if (snap) {
+    if (cellar?.claims(x, zz)) {
+      // 地下室：方廳裡夾回牆內，樓梯上夾回門寬
+      const m = MARGIN + 0.05, half = DOOR_W / 2 - m;
+      if (zz > cellar.z0) {
+        x = Math.min(cellar.x1 - m, Math.max(cellar.x0 + m, x));
+        zz = Math.min(cellar.z1 - m, zz);
+      } else x = Math.min(cellar.door.x + half, Math.max(cellar.door.x - half, x));
+    } else if (snap) {
       x = snap.x;
       zz = snap.z;
     } else if (!r.inside(x, zz, MARGIN + 0.05)) {
@@ -329,8 +363,9 @@ export function buildWorld(scene, gallery, opts = {}) {
 
   // ---------- 尋路：見 pathgrid.js ----------
   // 戶外的格子鋪到山坡和涼亭（reachW），室內那幾列只有房間範圍是空的
+  // 地下室在入口牆外面，格子往 +z 和兩邊多鋪到它的範圍
   const maxHalf = Math.max(...rooms.map((r) => r.reachW ?? r.halfW)) + 0.5;
-  const { findPath } = makePathfinder(walkable, -maxHalf, rooms[rooms.length - 1].zEnd - 0.5, maxHalf, 0.5);
+  const { findPath } = makePathfinder(walkable, Math.min(-maxHalf, cellar ? cellar.x0 - 0.5 : 0), rooms[rooms.length - 1].zEnd - 0.5, Math.max(maxHalf, cellar ? cellar.x1 + 0.5 : 0), cellar ? cellar.z1 + 0.5 : 0.5);
 
   // 色塊畫：前後一間以內的要烤好（一幀烤一幅，見 update），站的這間馬上烤；離開兩間以上的丟掉
   const magic = paintings.map((p) => p.magic);
@@ -360,7 +395,7 @@ export function buildWorld(scene, gallery, opts = {}) {
   }
 
   // 遠處的房間整間出現、藏起來時淡進淡出（見 fade.js）。第一次和 snap 時直接切
-  const roomFader = new RoomFader(rooms.map((r) => r.group), scene.fog?.color || new THREE.Color(0));
+  const roomFader = new RoomFader([...rooms.map((r) => r.group), ...(cellar ? [cellar.group] : [])], scene.fog?.color || new THREE.Color(0));
   let snapNext = true, lastT = null;
   // 每段牆的牆面、牆頂、門框，和掛在上面的畫，降下時一起淡掉。畫掛在哪間就算哪間的
   for (const e of entries) {
@@ -414,13 +449,15 @@ export function buildWorld(scene, gallery, opts = {}) {
   const ramp = (d, span) => Math.min(1, Math.max(0, d / span));
   const chase = (a, want, dt) => (want > a ? Math.min(want, a + dt * WALL_UP) : Math.max(want, a - dt * WALL_DOWN));
 
-  // 腳下地面的高度。只有戶外的石階和草原不是 0
+  // 腳下地面的高度。戶外的石階和草原、地下室的樓梯和地板不是 0
   function groundY(x, zz) {
+    if (cellar?.covers(x, zz)) return cellar.ground(zz);
     return outdoor && zz < outdoor.door ? outdoor.groundY(x, zz) : 0;
   }
 
   // 鏡頭不能低於這個高度：地面，戶外再加上樹冠殼
   function camFloor(x, zz) {
+    if (cellar?.covers(x, zz)) return cellar.ground(zz);
     return outdoor && zz < outdoor.door ? outdoor.camFloor(x, zz) : 0;
   }
 
@@ -510,11 +547,19 @@ export function buildWorld(scene, gallery, opts = {}) {
     bakeOne(magic);
     // 算距離用站在目前這間的那個點：平常是角色，拍照時鏡頭自己飛
     const here = roomIndexAt(target.z) === currentRoom ? target : cam;
-    roomFader.show(roomWant(currentRoom, here.z), snapNext);
+    const want = roomWant(currentRoom, here.z);
+    if (cellar) {
+      // 地下室：踏進門口才淡進來；下樓梯走到一半，樓上每一間都跟著藏
+      const down = cellar.down(here.z);
+      if (down > 0) for (let k = 0; k < want.length; k++) want[k] *= 1 - down;
+      const c = currentRoom === 0 ? cellar.want(here.x, here.z) : 0;
+      want.push(c);
+      cellar.update(c > 0, currentRoom === 0);
+    }
+    roomFader.show(want, snapNext);
     snapNext = false;
     roomFader.update(dt);
     frontDoor?.update(dt);
-    noticeBoard?.update(dt);
     radio?.update(dt);
     clock?.update();
     mirrorTick?.(dt, target);
@@ -535,7 +580,11 @@ export function buildWorld(scene, gallery, opts = {}) {
         outdoor.shell.visible = shellA > 0;
       }
       outdoor.sky.position.copy(cam);
-      if (rooms[rooms.length - 1].group.visible) outdoor.update(t, target, cam);
+      const outOn = rooms[rooms.length - 1].group.visible;
+      if (outOn) outdoor.update(t, target, cam);
+      // 電腦版加料（shafts.js）：夕陽穿過大樹、涼亭、屋簷的縫拉出光束。戶外那一間看得到才有，從後門往外看也有
+      SHAFTS.k = outOn && HQ.on ? 0.6 : 0;
+      if (SHAFTS.k) Object.assign(SHAFTS, { pow: 30, bright: 0.8, decay: 0.97, reach: 0.95 }).dir.copy(SUN_DIR);
       // 海面也跟著鏡頭走出後門多遠淡進來。反射要多畫一次場景，鏡頭看不到海時不畫
       const seaWant = out ? ramp(outdoor.door - cam.z, SEA_SPAN) : 0;
       if (seaA !== seaWant) {
@@ -564,5 +613,8 @@ export function buildWorld(scene, gallery, opts = {}) {
   // 搭船去別的區域：棧橋邊繫著的小划船
   const exits = outdoor?.ferry ? [{ ...outdoor.ferry, to: 'haishi', label: '搭船', title: '渡船' }] : [];
 
-  return { rooms, paintings, mirror, camTable, radio, stage, frontDoor, guideSign, noticeBoard, sunMoon, clock, outdoor, exits, raycastTargets, roomIndexAt, envDim: (x, z) => stage?.dim(x, z) ?? 0, mirrorView: (k) => { mirrorK = k; }, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, updatePaintings, fadeVariants: (on) => roomFader.all(on), propVariants: (on) => propFader.turn(on) };
+  // 站在地下室的方廳裡：回傳地名（main.js 進去時報一次，party.js 說隊友在哪）
+  const cellarAt = (x, zz) => (cellar?.inside(x, zz) ? cellar.place : null);
+
+  return { rooms, paintings, mirror, camTable, radio, stage, frontDoor, guideSign, sunMoon, clock, outdoor, cellar, cellarAt, exits, raycastTargets, roomIndexAt, envDim: (x, z) => stage?.dim(x, z) ?? 0, mirrorView: (k) => { mirrorK = k; }, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, updatePaintings, fadeVariants: (on) => roomFader.all(on), propVariants: (on) => propFader.turn(on) };
 }

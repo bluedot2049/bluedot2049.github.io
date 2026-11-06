@@ -267,7 +267,7 @@ const PARS_FRAGMENT = (wet) => `#ifdef USE_FOG
 const FRAGMENT = (wet) => `#ifdef USE_FOG
 	if ( uGrade.on > 0.5 ) {
 		${wet ? `#ifdef LAMBERT
-			if ( uWet.amount > 0.0 ) gl_FragColor.rgb = wetSurface( gl_FragColor.rgb, vFogWorld );
+			if ( uWet.amount > 0.0 || uWet.damp > 0.0 ) gl_FragColor.rgb = wetSurface( gl_FragColor.rgb, vFogWorld );
 		#endif` : ''}
 		float gradeF = gradeHeightFog( vFogWorld ), gradeA = gradeAir( vFogWorld );
 		#ifndef FOG_EXP2

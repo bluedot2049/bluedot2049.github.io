@@ -86,11 +86,17 @@ export function wallPlane(mat, width, y0, y1, cx, cz, rotY) {
   return tag(m, 'wall');
 }
 
-// 平面牆（可開門）。rotY 決定牆面朝向：法線 = (sin rotY, cos rotY)
+// 平面牆（可開門）。rotY 決定牆面朝向：法線 = (sin rotY, cos rotY)。door 是數字時門不在中間，偏離中間這麼多（沿牆 tx 的方向）
 export function flatWall(out, mat, cx, cz, rotY, width, door) {
   const tx = Math.cos(rotY), tz = -Math.sin(rotY);
   const put = (w, y0, y1, o) => out.push(wallPlane(mat, w, y0, y1, cx + tx * o, cz + tz * o, rotY));
   if (!door) return put(width, 0, WALL_H, 0);
+  if (door !== true) {
+    const a = width / 2 + door - DOOR_W / 2, b = width / 2 - door - DOOR_W / 2;
+    put(a, 0, WALL_H, -width / 2 + a / 2);
+    put(b, 0, WALL_H, width / 2 - b / 2);
+    return put(DOOR_W, DOOR_H, WALL_H, door);
+  }
   const side = (width - DOOR_W) / 2, off = DOOR_W / 2 + side / 2;
   put(side, 0, WALL_H, -off);
   put(side, 0, WALL_H, off);
@@ -107,7 +113,10 @@ export function wallBox(mat, w, h, d, cx, y, cz, rotY) {
 // 矮牆和牆頂飾條
 export function stubAndCap(e, cx, cz, rotY, width, door) {
   const s = shared(), tx = Math.cos(rotY), tz = -Math.sin(rotY);
-  if (door) {
+  if (door && door !== true) {
+    const a = width / 2 + door - DOOR_W / 2, b = width / 2 - door - DOOR_W / 2;
+    for (const [w, o] of [[a, -width / 2 + a / 2], [b, width / 2 - b / 2]]) e.stub.push(wallBox(s.stub, w, STUB_H, WALL_T, cx + tx * o, STUB_H / 2, cz + tz * o, rotY));
+  } else if (door) {
     const side = (width - DOOR_W) / 2, off = DOOR_W / 2 + side / 2;
     for (const o of [-off, off]) e.stub.push(wallBox(s.stub, side, STUB_H, WALL_T, cx + tx * o, STUB_H / 2, cz + tz * o, rotY));
   } else {
@@ -184,9 +193,10 @@ export function buildBoxShell(room, mat, entries) {
     lineSpan(Rt, w / 2, zStart, 0, -1, -1, 0, d),
   ];
   if (!room.hasEntry) {
-    const F = makeEntry([room.index], 0, zStart, 0, -1, w / 2, room.index);
-    flatWall(F.full, mat, 0, zStart, Math.PI, w, false);
-    stubAndCap(F, 0, zStart, Math.PI, w, false);
+    // 前廳的入口牆可以開一道往地下室的門（room.cellarDoor 是門中間的 x，見 cellar.js）。這面牆朝 -z，沿牆的方向是 -x
+    const F = makeEntry([room.index], 0, zStart, 0, -1, w / 2, room.index), door = room.cellarDoor != null ? -room.cellarDoor : false;
+    flatWall(F.full, mat, 0, zStart, Math.PI, w, door);
+    stubAndCap(F, 0, zStart, Math.PI, w, door);
     entries.push(F);
     room.frontEntry = F;
     room.spans.push(lineSpan(F, -w / 2, zStart, 1, 0, 0, -1, w));

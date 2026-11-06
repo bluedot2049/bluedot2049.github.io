@@ -136,6 +136,15 @@ function skiffCrew(k) {
   k.cyl(0.065, 0.065, 0.16, '#e4ecff', LAMP_AT.x, LAMP_AT.y, LAMP_AT.z, { glow: true }, 6);
   k.light(LAMP_AT.x, LAMP_AT.y, LAMP_AT.z, '#cfdcff', 1.1);
 }
+// 船擱在走得到的地方、四周都能靠近時（汀、靜海）：x、z 船中心，a 跟 boat.rotation.y 一樣。
+// block 是擋人的兩塊（中段整個船寬、船頭船尾收窄，角才不會比船突出去），hull 給出口用：離船身 reach 公尺內哪一邊都上得去（player.js 的 actionTarget）
+export function skiffBerth(x, z, a) {
+  const { len: L, beam: B } = SKIFF;
+  return {
+    block: [{ x, z, hw: B / 2, hd: L * 0.3, a }, { x, z, hw: B * 0.28, hd: L / 2, a }],
+    hull: { x, z, hw: B / 2, hd: L / 2, a, reach: 1.3 },
+  };
+}
 // 做一艘渡船。objects 把桶子換成網格（每個區域用自己的 bucketObjects）。
 // seat() 是坐的地方（艙底中間偏後，世界座標）和船頭朝的方向；board() 讓船夫現身、燈亮起來
 export function makeSkiff(objects) {

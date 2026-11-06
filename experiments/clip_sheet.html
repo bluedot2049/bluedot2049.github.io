@@ -10,12 +10,15 @@
 <script type="module">
   // 穿模總表：兩樣東西排成格子，每格從斜前方和側面（或背面）各拍一張，一眼看出哪些組合會穿。
   // ?set=hathair 人的髮型 × 帽子｜face 五官 × 眼鏡｜beard 鬍子 × 脖子｜racehat 種族 × 帽子｜hood 連身頭套 × 髮型和種族｜outerback 外套 × 背上｜outerneck 外套 × 脖子｜cam 相機 × 下身和外套｜handhat 右手的東西 × 帽子
+  //   kaohand 右手的東西 × 顏文字的手（?body= 身體第幾個，撐著）｜kaobody 顏文字的身體 × 手（?look={"hand":…} 換手上的東西）｜kaoface 顏文字的臉 × 嘴巴
+  //   數字的檢查先跑 node tools/check-poses.mjs，列出來的最糟組合再來這裡看
   // ?rows= &cols= 只拍其中幾列、幾欄（逗號隔開）｜?views= ?look= 見下
   // ?pose=stand 站（預設）｜walk 走到手擺最前｜clap 拍手｜sit 坐地上｜bench 坐椅子｜lie 躺下｜selfie 自拍
   // 拍完把整張圖放在 window.sheet（dataURL），#out 出現
   import * as THREE from 'three';
   import { Character } from '../js/avatar/character.js';
   import { presetLook, OPTIONS, RACES } from '../js/avatar/looks.js';
+  import { FACES, HANDS, BODIES, kaoCode } from '../js/avatar/kaomoji-parts.js';
 
   const q = new URLSearchParams(location.search), set = q.get('set') || 'hathair';
   const ids = (k) => OPTIONS[k].map(([id]) => id);
@@ -33,6 +36,10 @@
     cam: { rows: [...ids('bottom').map((b) => 'bottom:' + b), ...ids('outer').map((o) => 'outer:' + o), ...ids('one').map((o) => 'one:' + o)], cols: ['cam'],
       look: (r) => { const [k, v] = r.split(':'); return { ...base(), [k]: v }; }, frame: 'body', views: ['front', 'side'], camera: true },
     handhat: { rows: ids('hand').filter((h) => h !== 'none'), cols: ids('hat'), look: (r, c) => ({ ...base(), hand: r, hat: c }), frame: 'full', views: ['front', 'side'] },
+    // 顏文字：欄、列的名字是零件的寫法，kao 給每格擺哪一組（臉固定笑）
+    kaohand: { rows: ids('hand'), cols: HANDS.map((h) => h.w), look: (r) => ({ ...base(), hand: r }), kao: (r, c) => kaoCode(1, HANDS.findIndex((h) => h.w === c), +(q.get('body') || 0)), frame: 'full', views: ['front', 'side'] },
+    kaoface: { rows: FACES.map((f) => f.t), cols: ids('mouth'), look: (r, c) => ({ ...base(), mouth: c }), kao: (r) => kaoCode(FACES.findIndex((f) => f.t === r), 0, 0), frame: 'head', views: ['front'] },
+    kaobody: { rows: BODIES.map((b) => b.w), cols: HANDS.map((h) => h.w), look: () => base(), kao: (r, c) => kaoCode(1, HANDS.findIndex((h) => h.w === c), BODIES.findIndex((b) => b.w === r)), frame: 'full', views: ['front', 'side'] },
   };
   // 姿勢：每格換好外觀後從站著開始，一次走到定格
   // 最後一秒用小步走完（手上的東西會盪，一大步跳過去會甩飛）：[開始做什麼, 速度]
@@ -89,11 +96,13 @@
       model.lift = 0;
       model.act = null;
       model.setAim(null);
+      model.setKao(0);
       model.swX = model.swZ = model.swVX = model.swVZ = 0;
       model.hpOk = model.hvOk = false;
       for (let i = 0; i < 3; i++) model.update(1, 0);
       model.group.position.set(0, 0, 0);
       pose[0](model);
+      if (S.kao) { model.setKao(S.kao(S.rows[ri], S.cols[ci])); model.brace(true); }
       for (let i = 0; i < 60; i++) {
         model.group.position.set(0, 0, 0);
         model.update(1 / 60, pose[1]);
