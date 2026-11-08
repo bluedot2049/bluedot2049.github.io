@@ -2,6 +2,9 @@
 //   node tools/key-test.mjs
 // 跳換成 J、跟坐撞到對調、側鍵當成鍵、換過的鍵手把照樣叫得到（fire）、存檔碼帶著、眼紋不帶、提示跟著換、換回原本的
 import { openBrowser, sleep } from './headless.mjs';
+import fs from 'node:fs';
+// 按鍵表有幾個功能：數 keymap.js 的 ACTIONS 那幾行（['id', '名字', '在哪', [鍵]]），加了功能不用改這裡
+const ACTIONS = { length: (fs.readFileSync(new URL('../js/controls/keymap.js', import.meta.url), 'utf8').split('export const ACTIONS')[1].split('];')[0].match(/\['\w+', '[^']+', '\w+', \[/g) || []).length };
 
 let failed = 0;
 const check = (ok, what, got = '') => {
@@ -24,7 +27,7 @@ const tap = async (code, ms = 80) => { await down(code); await sleep(ms); await 
 const click = (sel) => ev(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); el?.click(); return !!el; })()`);
 try {
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
-  const Q = 'z=gallery&q=mid&debug&crowd=0&beast=0&rain=0&dust=0.5&from=haishi';
+  const Q = 'z=gallery&q=mid&debug&crowd=0&beast=0&happen=0&rain=0&dust=0.5&from=haishi';
   await b.load(Q);
   await ev(`localStorage.clear(); localStorage.setItem('entered', '1'); sessionStorage.clear(); 1`);
   check(await b.load(Q), '畫廊載入');
@@ -49,7 +52,7 @@ try {
   await sleep(200);
   let s = await st();
   const slots = await ev(`document.querySelectorAll('#keymap .km-slot').length`);
-  check(s.card && !s.pause && slots === 84, '換鍵卡打開，42 個功能各兩格', slots);
+  check(s.card && !s.pause && slots === ACTIONS.length * 2, `換鍵卡打開，${ACTIONS.length} 個功能各兩格`, slots);
   await click('#keymap .km-slot[data-a="jump"][data-s="0"]');
   s = await st();
   check(/按一下/.test(s.listen), '點「跳」的第一格：等鍵', s.listen);

@@ -34,6 +34,10 @@ const SIT_TIME = 0.8;      // 坐下或站起來花幾秒
 const LIE_TIME = 0.9;      // 從坐著躺下去（或坐起來）花幾秒
 const SEAT_BUTT = 0.3;     // 屁股（褲子）底部離身體原點多高，clothes.js 的 hip() 從這裡開始
 const PRE_JUMP = 0.09;     // 起跳前蹲多久
+// 走動時的傾身（弧度）：每 1 m/s² 前後傾多少、往前最多、往後最多；轉彎時每（弧度／秒 × m/s）往內斜多少、最多
+const LEAN_ACC = 0.004, LEAN_FWD = 0.09, LEAN_BACK = 0.06, LEAN_TURN = 0.016, LEAN_SIDE = 0.1;
+// 走路的步伐：每 m/s 步頻快多少（弧度／秒，起點 4）；腿擺幅（弧度）的下限、上限，原地轉身踏小步的擺幅
+const STEP_CADENCE = 4.2, STRIDE = [0.22, 0.58], STRIDE_IDLE = 0.45;
 const LAND_TIME = 0.22;    // 落地沉一下多久
 const BLINK_DOWN = 0.07, BLINK_UP = 0.12;   // 眨眼：閉上、睜開各多久
 // 右手垂著的東西盪的擺長（公尺）；盪多少、多快寫在 clothes.js 的 ITEMS
@@ -1102,7 +1106,11 @@ export class Character {
     const turning = !walking && !this.sitP && !this.airborne && Math.abs(dYaw) < 1.4 ? Math.min(0.4, Math.abs(dYaw) / Math.max(dt, 1e-3) / 5) : 0;
     this.turnW = (this.turnW ?? 0) + (turning - (this.turnW ?? 0)) * Math.min(1, dt * 10);
     const was = this.phase;
-    this.phase += dt * ((4 + speed * 3.5) * this.walk + 6 * this.turnW * (1 - this.walk));
+    const cadence = 4 + speed * STEP_CADENCE;
+    this.phase += dt * (cadence * this.walk + 6 * this.turnW * (1 - this.walk));
+    // 擺幅照速度算：一步兩腳掃過的距離（2 × 腿長 × sin 擺幅）剛好是這一步走的距離，腳才黏在地上不溜。原地轉身的小步照原本的
+    const reach = walking ? Math.asin(Math.min(1, (speed * Math.PI) / (2 * HIP * this.S.H * cadence))) : STRIDE_IDLE;
+    this.stride = (this.stride ?? STRIDE_IDLE) + (THREE.MathUtils.clamp(reach, STRIDE[0], STRIDE[1]) - (this.stride ?? STRIDE_IDLE)) * Math.min(1, dt * 8);
     // 兩腳張到最開的那一刻算踩到地，交給 onStep 出聲（海市路人的木屐）
     if (this.onStep && this.walk > 0.5 && !this.airborne && !this.sitP) {
       const n = Math.floor(this.phase / Math.PI - 0.5);
@@ -1111,12 +1119,20 @@ export class Character {
 
     const s = Math.sin(this.phase), w = this.walk, wf = Math.max(w, this.turnW);
     this.body.position.y = Math.abs(s) * 0.06 * wf;
-    this.body.rotation.x = 0.08 * w;
-    this.body.rotation.z = s * 0.04 * w;
+    // 起步往前傾、煞車往後仰一點、轉彎往內側斜：只跟著速度的變化，站著不動時是 0（不是站著的小動作）
+    const acc = this.lastSpeed == null ? 0 : (speed - this.lastSpeed) / Math.max(dt, 1e-3);
+    this.lastSpeed = speed;
+    const free = !this.sitP && !this.airborne;
+    const leanF = free ? THREE.MathUtils.clamp(acc * LEAN_ACC, -LEAN_BACK, LEAN_FWD) : 0;
+    const leanS = free && walking && Math.abs(dYaw) < 1.4 ? THREE.MathUtils.clamp((-dYaw / Math.max(dt, 1e-3)) * speed * LEAN_TURN, -LEAN_SIDE, LEAN_SIDE) : 0;
+    this.leanF = (this.leanF ?? 0) + (leanF - (this.leanF ?? 0)) * Math.min(1, dt * 7);
+    this.leanS = (this.leanS ?? 0) + (leanS - (this.leanS ?? 0)) * Math.min(1, dt * 6);
+    this.body.rotation.x = 0.08 * w + this.leanF;
+    this.body.rotation.z = s * 0.04 * w + this.leanS;
     this.armL.rotation.x = s * 0.7 * w;
     this.armR.rotation.x = -s * 0.7 * w;
-    this.footL.rotation.x = -s * 0.45 * wf;
-    this.footR.rotation.x = s * 0.45 * wf;
+    this.footL.rotation.x = -s * this.stride * wf;
+    this.footR.rotation.x = s * this.stride * wf;
     this.footL.position.z = this.footR.position.z = 0;
 
     // 站著時輕輕呼吸，帽子跟著晃

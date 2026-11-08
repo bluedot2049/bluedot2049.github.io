@@ -28,6 +28,7 @@ export const KINDS = { video: '錄影', mirror: '鏡中', 'mirror-save': '存檔
 const LATEST = new Set(['mirror-save', 'postcard-save']);
 export const labOk = (it) => it.state === 'shot' && !it.kind;
 // 奇物：拍到白獸這類東西，快門當下算好的結果記在照片上（rare：{ kind, grade, zone, where, place }，見 beast.js 的 judge）。
+// 拍到這一區正在發生的事（core/happen.js）記在 seen：[{ kind 事件 id, grade 0–3, score, peak 是不是高點, place, zone, self }]，之後的照片委託只讀這一格。
 // 報社（pressdesk.js）只收這種，同一張只登一次（pressed 是登出來那份報紙的 id）；畫廊的眼睛拍的沒有相機的落款，不收
 export const rareShot = (it) => !!it.rare && it.pressed == null && visible(it) && !it.kind;
 export const pressOk = (it) => rareShot(it) && it.cam !== 'eye';

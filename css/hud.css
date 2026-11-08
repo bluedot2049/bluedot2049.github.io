@@ -16,6 +16,9 @@
   pointer-events: none; z-index: 10;
   opacity: 0;
 }
+/* 觸控的側欄開著（橫拿、平板）：房名排到剩下那塊的中間，不被側欄切掉。直拿 --panel-w 是 0，不動；電腦有停靠線，另外算 */
+body.panel-open:not(.desk) #toast { right: var(--panel-w); }
+body.panel-open:not(.desk) #toast .t1 { max-width: calc(100vw - var(--panel-w) - 16px); --tw: calc(100vw - var(--panel-w) - 120px); }
 #toast.show { animation: toast 8s ease forwards; }
 #toast.show.yield { animation: toast-yield .4s ease forwards; }
 @keyframes toast-yield { from { opacity: 1; } to { opacity: 0; } }
@@ -101,6 +104,14 @@ body.desk #toast .t2 { font-size: 22px; margin-top: 12px; }
 #hint.show { opacity: 1; }
 /* 側欄開著（作品資訊、換裝；手機橫拿也是）：跟按鈕列一樣排到剩下那塊畫面的中間，不壓到面板。直拿 --panel-w 是 0，不動 */
 body.panel-open #hint { left: calc((100vw / var(--ui, 1) - var(--panel-w)) / 2); max-width: calc(100vw / var(--ui, 1) - var(--panel-w) - 32px); }
+/* 手機的行囊做成側欄時（橫拿、平板）也一樣，房名和提示排到剩下那塊的中間。行囊平常在左邊，搖桿換到左邊或鏡子開著時在右邊（panels.css） */
+@media (min-width: 900px), (min-width: 700px) and (min-height: 501px) and (pointer: coarse), (orientation: landscape) and (max-height: 500px) {
+  body:not(.desk):has(#pack-card:not([hidden])) #toast { right: var(--panel-w); }
+  body:not(.desk):has(#pack-card:not([hidden])) #toast .t1 { max-width: calc(100vw - var(--panel-w) - 16px); --tw: calc(100vw - var(--panel-w) - 120px); }
+  body:not(.desk):has(#pack-card:not([hidden])) #hint { left: calc((100vw - var(--panel-w)) / 2); max-width: calc(100vw - var(--panel-w) - 32px); }
+  body:not(.desk):not(.joy-left):not(:has(#dress.open)):has(#pack-card:not([hidden])) #toast { left: var(--panel-w); right: 0; }
+  body:not(.desk):not(.joy-left):not(:has(#dress.open)):has(#pack-card:not([hidden])) #hint { left: calc(var(--panel-w) + (100vw - var(--panel-w)) / 2); }
+}
 
 /* 門邊立牌那張（能在哪裡玩）和問胖頭的題目卡：門口告示（.notice）同一張卡，這裡只管位置和裡面多出來的東西。
    手機橫拿靠左、垂直置中，不擋住畫面中間的角色；直式貼底，房間外那片空的地方剛好放得下；電腦在下面 */
@@ -412,7 +423,7 @@ body #radio.moved { left: var(--mx, 16px); top: var(--my, 16px); right: auto; bo
   display: block; margin-top: 3px; font-size: 11.5px; font-weight: 600; letter-spacing: .1em; color: #7a5a30;
 }
 
-/* 樹洞：作者銘牌、作者的話、航路（搭船能去的地方）。跟挑相機一樣是一個停下來看的模式：角色站在洞口，卡片在畫面正中；地方多了只捲航路那一段 */
+/* 樹洞：作者銘牌、作者的話、一張畫（在這裡做什麼）。跟挑相機一樣是一個停下來看的模式：角色站在洞口，卡片在畫面正中 */
 #hollow {
   /* 底下那排按鈕的高度讓出來，置中在按鈕上面那一塊 */
   position: fixed; left: 50%; top: calc(50% - 36px); z-index: 25;
@@ -421,7 +432,7 @@ body #radio.moved { left: var(--mx, 16px); top: var(--my, 16px); right: auto; bo
 }
 #hollow.show { display: flex; animation: hollow-in .4s ease-out both; }
 @keyframes hollow-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 6px)); } }
-/* 銘牌和作者的話包在 .who：直拿、電腦不算一層，照樣跟航路一條往下排；橫拿才收成左邊一欄（下面的 media） */
+/* 銘牌和作者的話包在 .who：直拿、電腦不算一層，照樣跟畫一條往下排；橫拿才收成左邊一欄（下面的 media） */
 #hollow .who { display: contents; }
 /* 銘牌：細金框兩層、四角菱形，上面「開發者」，中間簽名（assets/signature.svg），下面「十三」（assets/shisan.svg），都是象牙墨、不發光 */
 #hollow .plate { position: relative; flex: none; padding: 12px 14px 14px; border: 1px solid rgba(232, 184, 106, .3); }
@@ -440,20 +451,29 @@ body #radio.moved { left: var(--mx, 16px); top: var(--my, 16px); right: auto; bo
 /* 作者的話：銘牌底下一行，標籤小、話本身置中 */
 #hollow .words { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 15px; letter-spacing: .2em; color: var(--text); }
 #hollow .words span { font-size: 11px; letter-spacing: .4em; color: var(--muted); }
-#hollow .lead { margin: 0; font-size: 12.5px; line-height: 1.75; letter-spacing: .06em; color: var(--text); }
-#hollow .routes { list-style: none; margin: 0; padding: 0; overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
-#hollow .routes > li { padding: 8px 0; border-top: 1px solid rgba(232, 184, 106, .1); font-size: 12.5px; line-height: 1.7; letter-spacing: .04em; animation: row-in .45s ease-out both; }
-#hollow .routes > li.off { opacity: .5; }
-#hollow .routes .head { display: flex; align-items: baseline; gap: 10px; color: var(--text); }
-#hollow .routes .head b { flex: none; font-size: 15px; font-weight: 600; letter-spacing: .2em; color: var(--gold); }
-#hollow .routes .v { flex: none; margin-left: auto; font-size: 11px; letter-spacing: .3em; color: var(--muted); }
-#hollow .routes .tags { list-style: none; margin: 3px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 6px; }
-#hollow .routes .tags li { font-size: 11px; letter-spacing: .12em; color: var(--muted); border: 1px solid var(--line-soft); border-radius: 999px; padding: 1px 8px; }
+/* 在這裡做什麼，畫成一張（index.html 的 svg）：人和相機是象牙墨，畫框、地面、船是暗金，取景的角和閃光亮金；畫裡的人塗卡片底色，擋住後面的畫框 */
+#hollow .scene { flex: none; margin: 0; padding-top: 10px; border-top: 1px solid rgba(232, 184, 106, .1); }
+#hollow .scene svg { display: block; width: 100%; height: auto; stroke-width: 1.5; }
+#hollow .scene .fig { stroke: var(--text); fill: #100b09; }
+#hollow .scene .fig .face { fill: var(--text); stroke-width: 1.1; }
+#hollow .scene .frame, #hollow .scene .ground, #hollow .scene .sea, #hollow .scene .boat { stroke: var(--gold-lo); }
+#hollow .scene .thin { stroke-width: 1; opacity: .7; }
+#hollow .scene .sea { stroke-width: 1.1; }
+#hollow .scene .trail, #hollow .scene .star { fill: var(--gold-lo); stroke: none; }
+#hollow .scene .sight { stroke: var(--gold); stroke-width: 1; stroke-dasharray: 2 4; opacity: .45; }
+#hollow .scene .finder { stroke: var(--gold-hi); }
+#hollow .scene .flash { fill: var(--gold-hi); stroke: none; transform-box: fill-box; transform-origin: center; animation: hollow-flash 2.8s ease-in-out infinite; }
+#hollow .scene .boat { transform-box: fill-box; animation: hollow-bob 3.6s ease-in-out infinite; }
+#hollow .scene .flag { transform-box: fill-box; transform-origin: right center; animation: hollow-flag 1.9s ease-in-out infinite; }
+/* 一打開就在場：閃光在最亮和半亮之間、船在浮著，沒有從零長出來的一拍 */
+@keyframes hollow-flash { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .55; transform: scale(.8); } }
+@keyframes hollow-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.6px); } }
+@keyframes hollow-flag { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(.82); } }
 /* 底下按鈕：「留話」窄、確認撐滿；寫字的時候換成「返回」「投進樹洞」 */
 #hollow .foot { flex: none; display: flex; gap: 8px; }
 #hollow .foot .write { flex: none; min-height: 42px; margin-top: 4px; padding: 0 16px; letter-spacing: .3em; }
 #hollow .foot .enter { flex: 1; width: auto; }
-#hollow.writing .lead, #hollow.writing .routes { display: none; }
+#hollow.writing .scene { display: none; }
 #hollow.writing .foot .enter kbd { display: none; }
 /* 留話：署名一行、內文框、附圖；字用 16px，iPhone 點進去才不會整頁放大 */
 #hollow .letter { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
@@ -473,14 +493,14 @@ body #radio.moved { left: var(--mx, 16px); top: var(--my, 16px); right: auto; bo
 /* 手機鍵盤打開（hollow.js 量 visualViewport 給 --kb）：卡片置中在鍵盤上面那一塊，銘牌和作者的話先收起來 */
 #hollow.kb { top: calc((100% - var(--kb)) / 2); max-height: calc(100% - var(--kb) - 16px); }
 #hollow.kb .plate, #hollow.kb .words { display: none; }
-/* 手機橫拿：矮，排成兩欄。左邊銘牌和作者的話，右邊航路撐滿高度、多了自己捲，按鈕在右下（拇指弧那一邊）。
-   留話時寫字的框佔右欄上面那兩格；叫出鍵盤時左欄收起，只剩右欄。
+/* 手機橫拿：矮，排成兩欄。左邊銘牌和作者的話，右邊那張畫，按鈕在右下（拇指弧那一邊）。
+   留話時寫字的框換掉那張畫；叫出鍵盤時左欄收起，只剩右欄。
    卡片寬，一定疊到搖桿、拇指弧和上排，開著時那些先退掉（跟側欄開著一樣），不從卡片邊上露半顆；點畫面照樣收卡片 */
 @media (orientation: landscape) and (max-height: 560px) {
   #hollow {
     top: 50%; width: min(640px, calc(100% - 2 * max(16px, env(safe-area-inset-left), env(safe-area-inset-right))));
     max-height: calc(100% - 32px); padding: 14px 18px 12px;
-    grid-template: "who lead" auto "who routes" minmax(0, 1fr) "who foot" auto / 196px minmax(0, 1fr);
+    grid-template: "who scene" minmax(0, 1fr) "who foot" auto / 196px minmax(0, 1fr);
     gap: 8px 20px;
   }
   #hollow.show { display: grid; }
@@ -495,15 +515,14 @@ body #radio.moved { left: var(--mx, 16px); top: var(--my, 16px); right: auto; bo
   #hollow .plate .sig { margin: 6px 0 2px; }
   #hollow .plate .name { width: 60px; }
   #hollow .words { font-size: 13.5px; letter-spacing: .14em; text-align: center; }
-  #hollow .lead { grid-area: lead; }
-  #hollow .routes { grid-area: routes; }
-  #hollow .letter { grid-column: 2; grid-row: 1 / 3; }
+  #hollow .scene { grid-area: scene; align-self: center; padding-top: 0; border-top: 0; }
+  #hollow .letter { grid-area: scene; }
   #hollow .foot { grid-area: foot; }
-  #hollow.kb { grid-template: "routes" minmax(0, 1fr) "foot" auto / minmax(0, 1fr); }
+  #hollow.kb { grid-template: "scene" minmax(0, 1fr) "foot" auto / minmax(0, 1fr); }
   #hollow.kb .who { display: none; }
-  #hollow.kb .letter { grid-area: routes; }
+  #hollow.kb .letter { grid-area: scene; }
 }
-@media (prefers-reduced-motion: reduce) { #hollow.show, #hollow .routes > li { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #hollow.show, #hollow .scene * { animation: none; } }
 
 /* ───────── 一般按鈕 ───────── */
 .icon-btn {
@@ -742,8 +761,8 @@ body.kao-open:not(.desk):has(#kaopanel.side) #top-btns { opacity: 0; pointer-eve
 .kp-hand button.on .kf { opacity: .8; }
 .kp-body .kp-chips button { padding: 0 7px; color: var(--k-body); }
 .kp-body .kp-chips button svg { width: 30px; height: 30px; }
-.kp-chips button kbd { font: 11px/1.4 var(--latin); padding: 0 4px; color: var(--muted); border: 1px solid rgba(232, 184, 106, .3); border-radius: 2px; }
-.kp-chips button.on kbd { color: var(--gold-hi); border-color: rgba(232, 184, 106, .6); }
+.kp-chips button kbd, .kp-foot button kbd { font: 11px/1.4 var(--latin); padding: 0 4px; color: var(--muted); border: 1px solid rgba(232, 184, 106, .3); border-radius: 2px; }
+.kp-chips button.on kbd, .kp-foot button.on kbd { color: var(--gold-hi); border-color: rgba(232, 184, 106, .6); }
 /* ＋存：常用最前面，虛線框像一個等著放東西的空位；沒擺東西時暗著，擺的已經在常用裡變「－移出」（實線、淡字）。存進去的那格閃一下 */
 .kp-chips .kp-keep { font-size: 13.5px; letter-spacing: .06em; color: var(--gold-hi); border: 1px dashed rgba(232, 184, 106, .6); background: none; }
 .kp-chips .kp-keep.saved { color: var(--muted); border-style: solid; border-color: var(--line-soft); }
@@ -753,7 +772,8 @@ body.kao-open:not(.desk):has(#kaopanel.side) #top-btns { opacity: 0; pointer-eve
 .kp-empty[hidden] { display: none; }
 .kp-chips button.flash { animation: kp-flash .7s ease-out; }
 @keyframes kp-flash { 0% { background: rgba(255, 215, 150, .55); } }
-.kp-foot { grid-template-columns: auto auto auto minmax(0, 1fr); padding-top: 2px; }
+.kp-foot { grid-template-columns: auto auto auto auto minmax(0, 1fr); padding-top: 2px; }
+.kp-foot [data-act="look"] { margin-right: 8px; display: inline-flex; align-items: center; gap: 5px; }
 .kp-foot button { height: 28px; padding: 0 10px; font: 12px/1 var(--font); letter-spacing: .06em; color: var(--muted); background: none; border: 1px solid var(--line-soft); border-radius: 14px; cursor: var(--cur-pointer); }
 .kp-foot button.on { color: var(--gold-hi); border-color: rgba(232, 184, 106, .55); }
 .kp-foot .kp-x { justify-self: end; color: var(--text); }
@@ -1063,7 +1083,7 @@ body:not(.desk) #pack-btn {
 }
 body:not(.desk) #pack-btn.on { opacity: 0; pointer-events: none; }
 body:not(.desk):has(#dress.open) #pack-btn { --a: 90deg; --r: calc(var(--dress-h) + 12px - var(--jy) + var(--w) / 2); }
-@media (min-width: 900px), (orientation: landscape) and (max-height: 500px) {
+@media (min-width: 900px), (min-width: 700px) and (min-height: 501px) and (pointer: coarse), (orientation: landscape) and (max-height: 500px) {
   body:not(.desk):has(#dress.open) #pack-btn {
     --w: var(--seal);
     left: max(16px, var(--safe-l)); right: auto; bottom: var(--edge-b);

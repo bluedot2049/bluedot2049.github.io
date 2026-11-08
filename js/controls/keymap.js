@@ -26,10 +26,12 @@ export const ACTIONS = [
   ['whistle', '吹哨', 'walk', ['KeyX']], ['tidy', '收起按鈕', 'walk', ['KeyR']], ['cursor', '叫出游標', 'walk', ['Alt']],
   // 拍照人的口令（social/cues.js）：舉著相機、攝影模式裡表情一到三換成這三個，G 標站位
   ['count', '數拍', 'cam', ['Digit1']], ['again', '再一張', 'cam', ['Digit2']], ['done', '好了', 'cam', ['Digit3']], ['spot', '站這', 'cam', ['KeyG']],
+  // 擺表情時頭看不看鏡頭（kaopanel.js 的看鏡）；相機裡的看鏡是 look（C），走動時 C 是坐
+  ['kaoLook', '表情看鏡', 'walk', ['KeyL']],
 ];
 // 換鍵卡上的分組和順序
 const GROUPS = [
-  ['走動', ['fwd', 'back', 'left', 'right', 'jump', 'sit', 'interact', 'view', 'wheel', 'emote1', 'emote2', 'emote3', 'emote4', 'emote5']],
+  ['走動', ['fwd', 'back', 'left', 'right', 'jump', 'sit', 'interact', 'view', 'wheel', 'emote1', 'emote2', 'emote3', 'emote4', 'emote5', 'kaoLook']],
   ['相機', ['raise', 'shutter', 'refocus', 'selfie', 'flash', 'date', 'turn', 'look', 'bare', 'up', 'down', 'fast', 'count', 'again', 'done', 'spot']],
   ['介面', ['photo', 'pack', 'save', 'eye', 'eyeOff', 'list', 'party', 'talk', 'mark', 'whistle', 'tidy', 'cursor']],
 ];

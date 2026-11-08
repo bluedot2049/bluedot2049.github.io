@@ -205,7 +205,7 @@ body:not(.desk) #pack-card .album-grid { flex: 0 1 auto; min-height: 0; }
 @keyframes pack-up { from { transform: translateY(100%); } }
 @keyframes pack-in-r { from { transform: translateX(100%); } }
 @keyframes pack-in-l { from { transform: translateX(-100%); } }
-@media (min-width: 900px), (orientation: landscape) and (max-height: 500px) {
+@media (min-width: 900px), (min-width: 700px) and (min-height: 501px) and (pointer: coarse), (orientation: landscape) and (max-height: 500px) {
   body:not(.desk) #pack-card {
     top: 0; left: auto; width: var(--panel-w); max-height: none;
     padding: calc(14px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) 18px;
@@ -424,7 +424,7 @@ body.desk #album-view .av-close { top: max(14px, calc(var(--mt, 0px) / var(--ui,
   #pad { width: min(240px, 54vw, calc(60vh - 200px)); }
 }
 /* 電腦：右側面板，標題留著，部位小格排成兩列 */
-@media (min-width: 900px) {
+@media (min-width: 900px), (min-width: 700px) and (min-height: 501px) and (pointer: coarse) {
   #dress { height: auto; padding: 24px 0 0; }
   #dress .dress-head { display: flex; margin: 0 28px 12px; padding-right: 40px; }
   #dress-tabs { padding: 4px 28px 0; }
@@ -459,7 +459,7 @@ body.desk #album-view .av-close { top: max(14px, calc(var(--mt, 0px) / var(--ui,
   #dress-paint { grid-column: 2; grid-row: 3; align-items: center; padding: 8px calc(12px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) 10px; }
   .dabs { flex-wrap: nowrap; overflow-x: auto; }
 }
-@media (min-width: 900px), (orientation: landscape) and (max-height: 500px) {
+@media (min-width: 900px), (min-width: 700px) and (min-height: 501px) and (pointer: coarse), (orientation: landscape) and (max-height: 500px) {
   .pad { flex-direction: column; }
   #pad { width: 100%; }
   .inks { grid-template-columns: repeat(auto-fill, 30px); }
@@ -633,7 +633,7 @@ body.desk #eye-here { margin: 2px 40px 12px 2px; }
   .btn.primary:hover { filter: brightness(1.06); }
 }
 
-@media (min-width: 900px), (orientation: landscape) and (max-height: 500px) {
+@media (min-width: 900px), (min-width: 700px) and (min-height: 501px) and (pointer: coarse), (orientation: landscape) and (max-height: 500px) {
   .panel {
     left: auto; top: 0; width: var(--panel-w); max-height: none;
     border-radius: 0;

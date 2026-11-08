@@ -40,8 +40,12 @@ const ORB_TILT = 0.06, ORB_TILT_K = 0.3, ORB_TILT_HOLD = 400;   // 照鏡子滑�
 const defaultDist = () => (window.innerWidth < window.innerHeight ? 12 : 9.5);
 
 // 越肩：肩膀高度、遠近範圍、俯仰（往下拉過 SH_LOW 鏡頭不再降，改成抬頭）、倒退走的速度
-const SH_UP = 1.15, SH_DIST = [1.4, 6], SH_PITCH = [-1.3, 1.2], SH_PITCH_DEFAULT = 0.12, SH_LOW = -0.2;
+// 遠近最遠跟自由視角一樣（this.distMax），這裡只管最近
+const SH_UP = 1.15, SH_DIST_MIN = 1.4, SH_PITCH = [-1.3, 1.2], SH_PITCH_DEFAULT = 0.12, SH_LOW = -0.2;
 const SH_BACK = 0.55;
+const HELD_SIDE = 0.8;   // 舉著相機橫移是往前的幾成（倒退照 SH_BACK）
+// 舉著相機起步、停下比平常慢，像端穩了推軌，畫面不會一頓一頓（越肩 0.14／0.11、一般 0.06／0.05）
+const HELD_ACCEL_T = 0.3, HELD_DECEL_T = 0.24;
 // 越肩的阻尼（秒）：鏡頭左右和上下追視線、遠近、身體轉向、被山坡擋住時退回去的快慢
 const SH_YAW_T = 0.24, SH_PITCH_T = 0.28, SH_DIST_T = 0.3, SH_BODY_T = 0.2, SH_POS_T = 0.06, SH_REACH_IN = 15, SH_REACH_OUT = 2.5;
 // 拖曳放手後照最後的速度再滑多久（秒）、最多滑多少（弧度）；剛切換越肩時鏡頭滑過去要多久
@@ -54,8 +58,16 @@ const PAD_LOOK_T = 0.08;
 // 搖桿那一側這麼寬的畫面不拿來轉視角：左手拇指沒剛好按在搖桿上時，跟右手湊成兩指會被當成捏合
 // 搖桿外圈多少像素內按下去不轉視角（拇指沒剛好按在搖桿上）
 const SH_TOUCH_T = 0.12;
+// 手機越肩：兩指左右相距超過畫面寬的這麼多成，算兩根拇指不算捏合（單手捏合橫拿時很少超過三成）
+const THUMB_GAP = 0.42;
 // 越肩走路的起步和停下（秒）
 const SH_ACCEL_T = 0.14, SH_DECEL_T = 0.11;
+// 一般視角和點地走路的起步、停下（秒）；身體還背對著要去的方向時只走這麼多成，轉過去才全速
+const ACCEL_T = 0.06, DECEL_T = 0.05, TURN_SLOW = 0.2;
+// 點地走路：離終點這麼遠開始慢下來，最慢剩幾成、多近就當作到了；路點多近就換下一個（轉角切進去一點）
+const ARRIVE_D = 0.6, ARRIVE_MIN = 0.35, ARRIVE_SNAP = 0.06, CORNER_R = 0.25;
+// 上下石階時看得到的身體：往前看多遠的地面（公尺）、追上的時間（秒）、一階最多算多高、差超過多少直接跟上（公尺）
+const STEP_LOOK = 0.22, STEP_T = 0.07, STEP_MAX = 0.4, STEP_SNAP = 0.6;
 // 越肩和手持相機的高度另外慢慢跟（秒）：石階是一階一階踩上去的，跟緊了每一階都把畫面頂一下；一下差超過這麼多公尺（瞬移）直接跟過去
 const SH_STEP_T = 0.15, SH_STEP_SNAP = 1.5;
 // 面板關掉後按這些鍵就把滑鼠鎖回去
@@ -157,7 +169,7 @@ export class Player {
       if (this.coarse && !v) Object.assign(this.view, { fov: 85, fish: 0 });
     }
     this.cursorWanted = null;       // 主程式：面板、打字框打開時要游標，放開鎖定
-    this.mv = { x: 0, z: 0 };       // 越肩走路的速度（公尺／秒），帶起步和停下
+    this.mv = { x: 0, z: 0 };       // 走路的速度（公尺／秒），帶起步和停下：越肩、一般視角、點地都是它
     this.bodyRel = 0;               // 越肩平移、倒退時身體要轉離視線多少
     this.easeT = 0;                 // 剛切換越肩，鏡頭慢慢滑過去
     this.onShoulder = null;         // 主程式更新按鈕
@@ -165,7 +177,7 @@ export class Player {
     try {
       const v = JSON.parse(sessionStorage.getItem('camDist') || 'null');
       if (Number.isFinite(v?.free)) this.camDist = THREE.MathUtils.clamp(v.free, DIST_MIN, this.distMax);
-      if (Number.isFinite(v?.sh)) this.shDist = THREE.MathUtils.clamp(v.sh, ...SH_DIST);
+      if (Number.isFinite(v?.sh)) this.shDist = THREE.MathUtils.clamp(v.sh, SH_DIST_MIN, this.distMax);
     } catch {}
     addEventListener('pagehide', () => {
       try { sessionStorage.setItem('camDist', JSON.stringify({ free: this.camDist, sh: this.shDist })); } catch {}
@@ -225,8 +237,9 @@ export class Player {
     const el = this.dom;
     const pts = new Map();
     let pinch = null, multi = false;
-    // 手機越肩兩根手指分在畫面左右兩半：是兩根拇指（一手走一手轉），不是捏合
-    const thumbs = (a, b) => this.coarse && this.shoulder && (a.sx < innerWidth / 2) !== (b.sx < innerWidth / 2);
+    // 手機越肩兩根手指左右離很遠：是兩根拇指（一手走一手轉），不是捏合。
+    // 只看分在中線兩邊的話，跨過中線的捏合會被當成拇指，畫面中間一帶捏不動
+    const thumbs = (a, b) => this.coarse && this.shoulder && Math.abs(a.sx - b.sx) > innerWidth * THUMB_GAP;
     const free = () => [...pts.values()];
     // 第二顆鍵按下或放開時不會再觸發 pointerdown/up，只會來一次 pointermove，所以每個事件都看 buttons
     const chord = (e) => {
@@ -609,7 +622,7 @@ export class Player {
     if (this.focus?.orb) {
       this.focus.orb.tZoom = THREE.MathUtils.clamp(d, (this.focus.zf ?? 1) * ORB_CLOSE, ORB_ZOOM_FAR);
       this.focus.orb.touched = true;
-    } else if (this.shoulder) this.shDist = THREE.MathUtils.clamp(d, ...SH_DIST);
+    } else if (this.shoulder) this.shDist = THREE.MathUtils.clamp(d, SH_DIST_MIN, this.distMax);
     else this.camDist = THREE.MathUtils.clamp(d, DIST_MIN, this.distMax);
   }
 
@@ -1228,7 +1241,49 @@ export class Player {
     this.exitFocus();
     this.ret = null;
     this.pos.set(x, 0, z);
+    this.mv.x = this.mv.z = 0;
     this.stop();
+  }
+
+  // 看得到的身體高度：石階的地面高度是一階一階跳的（一階兩三十公分、三四幀就頂上去），身體照前面半步的地面先抬、再帶著緩衝跟上，
+  // 像踩上去、不是被頂上去。只動畫出來的高度，碰撞、鏡頭、送給別人的位置照 pos.y。坐、上船、跳一大段（瞬移、電梯）直接跟上
+  bodyY(dt) {
+    const y = this.pos.y, v = this.vis ??= { y, vel: {} };
+    if (this.focus || this.boarding || Math.abs(y - v.y) > STEP_SNAP) {
+      v.y = y;
+      v.vel = {};
+      return y;
+    }
+    let goal = y;
+    const sp = Math.hypot(this.mv.x, this.mv.z);
+    if (sp > 0.3) {
+      const k = STEP_LOOK / sp, ahead = this.world.groundY(this.pos.x + this.mv.x * k, this.pos.z + this.mv.z * k, y);
+      if (Number.isFinite(ahead) && ahead > y && ahead - y < STEP_MAX) goal = ahead;
+    }
+    damp(v, 'y', goal, v.vel, STEP_T, dt);
+    // 不陷進台階裡、也不浮太高
+    v.y = THREE.MathUtils.clamp(v.y, y - 0.02, y + STEP_MAX);
+    return v.y;
+  }
+
+  // 照路線走：再下一個路點已經直直走得到（一路上沒有擋住、地面沒有斷層），就不用先繞到這一個。
+  // 尋路的拉直只在格子轉彎的地方試，走到一半常常已經看得到下一個。一秒看十次就夠
+  cutCorner() {
+    const now = performance.now();
+    if (this.path.length < 2 || now - (this.cutT || 0) < 100) return;
+    this.cutT = now;
+    const b = this.path[1], w = this.world, x0 = this.pos.x, z0 = this.pos.z;
+    const dx = b.x - x0, dz = b.y - z0, n = Math.ceil(Math.hypot(dx, dz) / 0.15);
+    if (n > 50) return;
+    let y = this.pos.y;
+    for (let i = 1; i <= n; i++) {
+      const x = x0 + (dx * i) / n, z = z0 + (dz * i) / n;
+      if (!w.walkable(x, z, y)) return;
+      const gy = w.groundY(x, z, y);
+      if (!Number.isFinite(gy) || Math.abs(gy - y) > 0.35) return;
+      y = gy;
+    }
+    this.path.shift();
   }
 
   // 換區域抵達時站到指定位置、面向 heading，鏡頭直接到位，不從別處滑過來
@@ -1547,46 +1602,64 @@ export class Player {
       const c = Math.cos(wrapAngle(this.camYaw - Math.PI + this.bodyRel - this.heading));
       mag *= 0.4 + 0.6 * Math.max(0, c) ** 2;
     }
-    if (sh && !this.boarding) {
-      // 越肩走路有起步和停下：速度帶著緩衝追要的速度，放開鍵還會滑一小步才停
-      let tx = 0, tz = 0;
-      if (manual && !rising) {
+    // 走路都有起步和停下（越肩、一般視角、點地照路線走）：速度帶著緩衝追要的速度，放開鍵還會滑一小步才停。
+    // 走到一半再點別的地方、換方向，速度接著用，不會重新起步
+    const mv = this.mv;
+    let tx = 0, tz = 0, aim = null, follow = false;
+    const held = this.paused && this.camAim && this.camAim.grip !== 4;   // 舉著相機走（photo.js updateHeld 推搖桿）
+    if (!this.boarding && !rising && !this.focus) {
+      if (manual) {
         const sy = Math.sin(basis), cy = Math.cos(basis);
         tx = -sy * mf + cy * ms;
         tz = -cy * mf - sy * ms;
         const len = Math.hypot(tx, tz) || 1, sp = SPEED * mag * back;
-        tx = (tx / len) * sp;
-        tz = (tz / len) * sp;
+        tx /= len;
+        tz /= len;
+        if (!sh) aim = Math.atan2(tx, tz);
+        tx *= sp;
+        tz *= sp;
+      } else if (this.path.length) {
+        follow = true;
+        this.cutCorner();
+        const t = this.path[0], dx = t.x - this.pos.x, dz = t.y - this.pos.z, d = Math.hypot(dx, dz) || 1e-4;
+        // 最後一段慢下來再停，不是全速撞到終點
+        const sp = SPEED * (this.path.length === 1 ? THREE.MathUtils.clamp(d / ARRIVE_D, ARRIVE_MIN, 1) : 1);
+        aim = Math.atan2(dx, dz);
+        tx = (dx / d) * sp;
+        tz = (dz / d) * sp;
       }
-      const mv = this.mv;
-      if (this.path.length && !manual) mv.x = mv.z = 0;
-      const a = 1 - Math.exp(-dt / (Math.hypot(tx, tz) > Math.hypot(mv.x, mv.z) ? SH_ACCEL_T : SH_DECEL_T));
-      mv.x += (tx - mv.x) * a;
-      mv.z += (tz - mv.z) * a;
-      if (!manual && Math.hypot(mv.x, mv.z) < 0.05) mv.x = mv.z = 0;
-    } else this.mv.x = this.mv.z = 0;
-    const coast = !!(this.mv.x || this.mv.z);
-    if (coast) {
-      vx = this.mv.x * dt;
-      vz = this.mv.z * dt;
-    } else if (manual && !rising) {
-      const sy = Math.sin(this.camYaw), cy = Math.cos(this.camYaw);
-      vx = -sy * mf + cy * ms;
-      vz = -cy * mf - sy * ms;
-      const len = Math.hypot(vx, vz) || 1;
-      vx = (vx / len) * SPEED * mag * back * dt;
-      vz = (vz / len) * SPEED * mag * back * dt;
-    } else if (this.path.length && !rising) {
-      const t = this.path[0];
-      const dx = t.x - this.pos.x, dz = t.y - this.pos.z;
-      const dist = Math.hypot(dx, dz), step = SPEED * dt;
-      if (dist <= step) {
-        vx = dx; vz = dz;
+      // 一般視角、照路線走：身體還沒轉到要去的方向時先慢下來，轉過去了才全速（回身不會倒退著滑）
+      // 舉著相機：身體由 photo.js 釘在相機朝向、轉不過去，不能照「轉正才全速」（橫移、倒退會一直卡在兩成）；
+      // 改成往前全速、橫移 HELD_SIDE、倒退 SH_BACK，中間斜走平順接起來
+      if (aim != null) {
+        const c = Math.cos(wrapAngle(aim - this.heading));
+        const f = held ? HELD_SIDE + ((c >= 0 ? 1 : SH_BACK) - HELD_SIDE) * c * c : TURN_SLOW + (1 - TURN_SLOW) * Math.max(0, c) ** 2;
+        tx *= f;
+        tz *= f;
+      }
+    }
+    // 身體先轉向要去的方向：起步、回身、照路線走。順著走的時候照實際走的方向（貼著牆滑時面向滑的方向）
+    const cur = Math.hypot(mv.x, mv.z);
+    this.turnTo = aim != null && !sh && (follow || cur < 0.3 || Math.cos(aim - Math.atan2(mv.x, mv.z)) < 0.3) ? aim : null;
+    const up = Math.hypot(tx, tz) > cur;
+    const a = 1 - Math.exp(-dt / (held ? (up ? HELD_ACCEL_T : HELD_DECEL_T) : up ? (sh ? SH_ACCEL_T : ACCEL_T) : sh ? SH_DECEL_T : DECEL_T));
+    mv.x += (tx - mv.x) * a;
+    mv.z += (tz - mv.z) * a;
+    if ((!manual && !follow && Math.hypot(mv.x, mv.z) < 0.05) || this.boarding || this.focus) mv.x = mv.z = 0;
+    const coast = !!(mv.x || mv.z);
+    vx = mv.x * dt;
+    vz = mv.z * dt;
+    // 照路線走：靠近這個路點就換下一個（轉角稍微切進去），最後一個走到了才算到
+    if (follow) {
+      const t = this.path[0], dx = t.x - this.pos.x, dz = t.y - this.pos.z, d = Math.hypot(dx, dz), last = this.path.length === 1;
+      if (d <= Math.max(Math.hypot(vx, vz), last ? ARRIVE_SNAP : CORNER_R)) {
+        if (last) {
+          vx = dx;
+          vz = dz;
+          mv.x = mv.z = 0;
+        }
         this.path.shift();
         if (!this.path.length) this.arrive();
-      } else {
-        vx = (dx / dist) * step;
-        vz = (dz / dist) * step;
       }
     }
 
@@ -1633,6 +1706,7 @@ export class Player {
     if (sh && !this.freeLook && !this.focus && !this.boarding && !this.path.length) want = this.camYaw - Math.PI + this.bodyRel;
     // 鎖定時按住右鍵：身體保持原來的方向。走路照身體的方向，身體若再照走的方向轉，繞過家具時兩邊會互相帶著越轉越偏
     else if (this.shoulder && this.freeLook && this.locked) want = null;
+    else if (this.turnTo != null) want = this.turnTo;
     else if (this.speed > 0.05) want = Math.atan2(mx, mz);
     else if (this.faceYaw != null && !this.focus) {
       // 停下來要面向的方向（走到隊友的站位記號：轉身對著他的鏡頭，cues.js），轉到了就放掉
@@ -1651,6 +1725,7 @@ export class Player {
     const ch = this.character;
     if (this.focus?.kind === 'pet' && !ch.act) this.exitFocus();   // 摸完了
     ch.group.position.copy(this.pos);
+    ch.group.position.y = this.bodyY(dt);
     ch.group.rotation.y = this.heading;
     // 看畫看了一會兒，頭微微歪一下，過一陣子再正回來；每張畫歪的方向隨機
     const fp = this.focus?.kind === 'painting' ? this.focus : null;
@@ -1675,7 +1750,8 @@ export class Player {
         const lookT = this.locked ? SH_MOUSE_T : this.padOn ? PAD_LOOK_T : this.coarse ? SH_TOUCH_T : 0;
         damp(sh, 'yaw', sh.yaw + wrapAngle(this.camYaw - sh.yaw), this.shVel, lookT || SH_YAW_T, dt);
         damp(sh, 'pitch', this.shPitch, this.shVel, lookT || SH_PITCH_T, dt);
-        damp(sh, 'dist', this.shDist, this.shVel, SH_DIST_T, dt);
+        // 手機捏合跟手一點，不然手指停了畫面還在滑；滾輪一格一格的，留原本的緩衝
+        damp(sh, 'dist', this.shDist, this.shVel, this.coarse ? SH_TOUCH_T : SH_DIST_T, dt);
         if (Math.abs(wrapAngle(this.camYaw - sh.yaw)) + Math.abs(this.shPitch - sh.pitch) + Math.abs(this.shDist - sh.dist) > 1e-4) settling = true;
       }
       const dPos = new THREE.Vector3(), dLook = new THREE.Vector3();

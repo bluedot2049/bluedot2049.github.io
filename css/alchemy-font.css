@@ -2,7 +2,7 @@
 /* 煉金體（Alchemy Gallery Font）：系統化幾何造字，房間名稱用。由 tools/build_font.py 產生，不要手改 */
 @font-face {
     font-family: 'AlchemyGallery';
-    src: url('../assets/AlchemyGallery.woff2?v=33afbb7e') format('woff2'),
+    src: url('../assets/AlchemyGallery.woff2?v=580fe1f6') format('woff2'),
          url('../assets/AlchemyGallery.ttf') format('truetype');
     font-weight: normal;
     font-style: normal;
@@ -12,7 +12,7 @@
 /* 小字用：筆畫較細、橫更細，24px 以下比較不會糊 */
 @font-face {
     font-family: 'AlchemyGalleryText';
-    src: url('../assets/AlchemyGalleryText.woff2?v=a1515b0b') format('woff2'),
+    src: url('../assets/AlchemyGalleryText.woff2?v=42a1bb0e') format('woff2'),
          url('../assets/AlchemyGalleryText.ttf') format('truetype');
     font-weight: normal;
     font-style: normal;

@@ -4,7 +4,7 @@
 //   node tools/shoot.mjs haishi --wide                       電腦寬螢幕 1280×800、滑鼠
 //   node tools/shoot.mjs haishi --view=12,-30,180,6,20       站位，跟網址的 ?view= 一樣（x,z,面向,距離,俯角）
 //   node tools/shoot.mjs haishi --cam=-10,62,-96,0,0,10,48   固定鏡頭（鏡頭 xyz、看的點 xyz、直的視角），自己和路人藏起來，跟 aerial 一樣
-//   node tools/shoot.mjs haishi --q="rain=1&crowd=1"         另外的網址參數，同名的蓋掉預設（預設 crowd=0 beast=0 rain=0 dust=0.5）
+//   node tools/shoot.mjs haishi --q="rain=1&crowd=1"         另外的網址參數，同名的蓋掉預設（預設 crowd=0 beast=0 happen=0 rain=0 dust=0.5）
 //   node tools/shoot.mjs haishi --eval="__g.ui.openPack()"   載完、拍之前在頁面裡跑一段
 //   node tools/shoot.mjs gallery --from=none                 不當成搭船來（畫廊會停在前門）；預設跟 aerial 一樣，畫廊從碼頭上岸、別區從畫廊來
 //   --wait=3000 載完等幾毫秒再拍（海、霧、燈要穩）　--name=xxx 檔名　--size=寬,高 自訂畫面
@@ -22,7 +22,7 @@ const cam = opt('cam') ? opt('cam').split(',').map(Number) : null;
 const OUT = path.join(ROOT, 'tools/out/shoot');
 fs.mkdirSync(OUT, { recursive: true });
 
-const q = new URLSearchParams({ z: zone, q: 'mid', debug: '', crowd: '0', beast: '0', rain: '0', dust: '0.5' });
+const q = new URLSearchParams({ z: zone, q: 'mid', debug: '', crowd: '0', beast: '0', happen: '0', rain: '0', dust: '0.5' });
 const from = opt('from') ?? (zone === 'gallery' ? 'haishi' : 'gallery');
 if (from !== 'none') q.set('from', from);
 if (opt('view')) q.set('view', opt('view'));

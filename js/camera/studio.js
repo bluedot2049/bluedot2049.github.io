@@ -23,7 +23,7 @@ export class Studio {
     Object.assign(this, { world, player, photo, walkers });
     this.mp = null;                 // 主程式連上線後填進來
     this.spots = world.studios;
-    this.session = null;            // { sid, spot, host, ids }：這一場、哪個景、自己是不是開場的人、入鏡名單（照站位順序）
+    this.session = null;            // { sid, spot, host, ids, heading }：這一場、哪個景、自己是不是開場的人、入鏡名單（照站位順序）、自己站位的方向
     this.pending = null;            // 收到、還沒回覆的邀請
     this.$ = (q) => document.querySelector(q);
     this.menu = this.$('#studio-menu');
@@ -101,6 +101,7 @@ export class Studio {
     if (first) await this.fade(true);
     if (this.session !== s) return;
     const at = this.slot(spot, i, n);
+    s.heading = at.heading;   // 放下側身時轉回來（main.js 的表情盤）
     this.player.place(at.x, at.z, at.heading);
     this.mp?.sendNow();
     if (this.mp) this.mp.only = new Set(s.ids);
@@ -129,6 +130,7 @@ export class Studio {
     const s = this.session;
     if (!s?.host) return;
     this.mp?.studio({ t: 'shoot', sid: s.sid });
+    this.mp?.sendNow();   // 擺的表情跟著位置送，按下快門先送一次，隊友那張才對
     this.photo.countdown();
   }
 
@@ -166,7 +168,10 @@ export class Studio {
       if (!m.ids.includes(this.me)) return this.finish(true);
       s.ids = m.ids;
       this.place(false);
-    } else if (m.t === 'shoot') this.photo.countdown();
+    } else if (m.t === 'shoot') {
+      this.mp?.sendNow();
+      this.photo.countdown();
+    }
     else if (m.t === 'end') this.finish(true);
   }
 

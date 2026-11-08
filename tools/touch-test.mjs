@@ -43,7 +43,7 @@ try {
   await screen(LAND);
   await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   // 來過的人（不跳門口的告示）、說明卡關著；設定清空
-  const Q = 'z=gallery&q=mid&debug&crowd=0&beast=0&rain=0&dust=0.5&from=haishi';
+  const Q = 'z=gallery&q=mid&debug&crowd=0&beast=0&happen=0&rain=0&dust=0.5&from=haishi';
   await b.load(Q);
   await ev(`localStorage.clear(); localStorage.setItem('entered', '1'); localStorage.setItem('guideOff', '1'); sessionStorage.clear(); 1`);
   check(await b.load(Q), '畫廊載入（橫拿、觸控）');
@@ -132,6 +132,19 @@ try {
   await sleep(500);
   s = await st();
   check(s.dist > s0.dist + 0.2, '右邊兩指捏：拉遠', `${s0.dist.toFixed(2)} → ${s.dist.toFixed(2)}`);
+
+  // 跨過畫面中線的捏合也算（以前分在中線兩邊就被當成兩根拇指）
+  s0 = s;
+  {
+    const mid = await ev('innerWidth / 2');
+    await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: mid - 60, y: 200, id: 0 }, { x: mid + 60, y: 200, id: 1 }] });
+    for (let i = 1; i <= 8; i++) { await sleep(16); await send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: mid - 60 - i * 10, y: 200, id: 0 }, { x: mid + 60 + i * 10, y: 200, id: 1 }] }); }
+    await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  }
+  down = 0;
+  await sleep(500);
+  s = await st();
+  check(s.dist < s0.dist - 0.2, '跨中線兩指張開：拉近', `${s0.dist.toFixed(2)} → ${s.dist.toFixed(2)}`);
 
   // 轉直拿：退回一般視角、按鈕收起，設定留著；轉回來再開
   await screen(PORT);

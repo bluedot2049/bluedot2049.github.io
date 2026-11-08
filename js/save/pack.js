@@ -138,6 +138,7 @@ export class Pack {
     this.btn.classList.add('on');
     this.render();
     this.place();
+    this.events.onView?.();   // 手機的側欄蓋住半邊，鏡頭往另一邊讓（main.js applyViewOffset）
     // 開著的時候人會走動，走到鏡子前、離開鏡子，拍照那顆鈕要跟著變
     this.atMirror = this.events.canSelfie();
     clearInterval(this.watch);   // 開著時按 B 換頁也會走到這裡
@@ -152,6 +153,7 @@ export class Pack {
     this.card.hidden = true;
     this.btn.classList.remove('on');
     clearInterval(this.watch);
+    this.events.onView?.();
     this.note('');
     this.closeView();
     for (const u of this.urls.values()) URL.revokeObjectURL(u);

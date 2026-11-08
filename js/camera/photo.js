@@ -166,6 +166,7 @@ export class PhotoMode {
     this.frame = { x: 0, y: 0, w: 1, h: 1 };
     this.result = null;                     // 剛拍好的 { blob, url, name, video }
     this.beast = null;                      // 白獸（beast.js）：main.js 接上，快門時評分
+    this.happen = null;                     // 這一區的事件（core/happen.js）：main.js 接上，快門時評分
     this.gear = null;                       // 帶著的相機（cameras.js）；null 是畫廊的眼睛，鏡頭自由飛
     this.eyeCam = null;                     // 帶著相機卻選了畫廊的眼睛：身上那台的 id，照得到自己帶著它
     this.grip = 1;                          // 拿法：GRIPS 的第幾個
@@ -451,6 +452,12 @@ export class PhotoMode {
   }
 
   // 照相館的快門：三、二、一，閃光一下才拍
+  // 表情盤（kaopanel.js）收著不給用：攝影模式裡只有照相館站好位、還沒按快門時能擺。按下快門就不換，
+  // 合照時每個人各自倒數各自拍，最後一拍才換的話隊友那張拍到的是舊的
+  get kaoOff() {
+    return this.active && !(this.studio && !this.counting && !this.result);
+  }
+
   countdown() {
     if (this.counting || this.result || !this.active) return;
     this.counting = true;
@@ -1895,24 +1902,28 @@ export class PhotoMode {
     this.deliver(out, rare);
   }
 
-  // 白獸（beast.js 的 judge）：鏡頭先套上取景框那一塊，照那一塊算拍得好不好，算完放回去。沒拍到是 null
+  // 白獸（beast.js 的 judge）、這一區正在發生的事（core/happen.js 的 judge）：鏡頭先套上取景框那一塊，照那一塊算拍得好不好，算完放回去。
+  // 回傳 { rare, seen }（rare 白獸或 null；seen 拍到的事件清單或 null），兩樣都沒有是 null
   rareShot(fire) {
-    const b = this.beast;
-    if (!b?.ev) return null;
+    const b = this.beast?.ev ? this.beast : null, h = this.happen?.busy ? this.happen : null;
+    if (!b && !h) return null;
     const fr = this.frame, cam = this.camera;
+    const shot = { fire, focus: this.gear && dof.on ? { d: this.focusD, k: dof.k, max: dof.max } : null, character: this.character };
     cam.setViewOffset(window.innerWidth, window.innerHeight, fr.x, fr.y, fr.w, fr.h);
+    const tryJudge = (o, what) => {
+      try { return o?.judge(this.renderer, cam, fr.w / fr.h, shot) ?? null; } catch (e) { console.warn(what + '評分失敗：', e); return null; }
+    };
     try {
-      return b.judge(this.renderer, cam, fr.w / fr.h, { fire, focus: this.gear && dof.on ? { d: this.focusD, k: dof.k, max: dof.max } : null, character: this.character });
-    } catch (e) {
-      console.warn('白獸評分失敗：', e);
-      return null;
+      const rare = tryJudge(b, '白獸'), seen = tryJudge(h, '事件');
+      return rare || seen ? { rare, seen } : null;
     } finally {
       cam.clearViewOffset();
     }
   }
 
-  // 拍好的畫布：從信差站來的做成明信片，不然存成 JPG 收進相簿，不跳視窗，左下角閃一下。rare：拍到白獸（rareShot）
-  deliver(out, rare = null) {
+  // 拍好的畫布：從信差站來的做成明信片，不然存成 JPG 收進相簿，不跳視窗，左下角閃一下。judged：rareShot 算的（白獸 rare、事件 seen）
+  deliver(out, judged = null) {
+    const rare = judged?.rare ?? null, seen = judged?.seen ?? null;
     if (this.postcard) {
       this.ui.hint('照相師沖洗中…', { id: 'photo:develop', hold: true });
       this.shot = out;
@@ -1920,7 +1931,7 @@ export class PhotoMode {
       return;
     }
     const cam = this.gear?.id || 'eye';
-    out.toBlob((blob) => { if (blob) addPhoto(blob, { name: `煉金畫廊-${stamp()}.jpg`, cam, ...(rare && { rare }) }); }, 'image/jpeg', 0.92);
+    out.toBlob((blob) => { if (blob) addPhoto(blob, { name: `煉金畫廊-${stamp()}.jpg`, cam, ...(rare && { rare }), ...(seen && { seen }) }); }, 'image/jpeg', 0.92);
   }
 
   // 魚眼照片：彎的時候中間會放大 fo / fs 倍，原圖先畫成那麼大中間才不會糊。

@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { buildBeast, BODY_Y, HORN_TIPS, PRINTS } from './beast-models.js';
 import { judgeShot } from './beast-judge.js';
 import { hash, seedOf, serverNow, syncTime } from '../core/servertime.js';
+import { happenSight } from '../core/happen.js';
 import { rumble } from '../controls/gamepad.js';
 
 const SLOT = 60e3;              // 一格一分鐘
@@ -105,11 +106,11 @@ function facing(world, spot, u) {
   return u * Math.PI * 2;
 }
 
-// 其他人的頭（攤販、路人、動物）：前兆和現身時看牠那裡。回傳 false 是沒有、或太遠
+// 其他人的頭（攤販、路人、動物）：前兆和現身時看牠那裡；沒有白獸時看附近正在發生的事（core/happen.js）。回傳 false 是沒有、或太遠
 let live = null;
 export function beastSight(out, x, z) {
   const b = live, p = b?.sight;
-  if (!p || (p.x - x) ** 2 + (p.z - z) ** 2 > LOOK_R * LOOK_R) return false;
+  if (!p || (p.x - x) ** 2 + (p.z - z) ** 2 > LOOK_R * LOOK_R) return happenSight(out, x, z);
   out.copy(p);
   return true;
 }

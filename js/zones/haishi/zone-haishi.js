@@ -12,6 +12,7 @@ import { bindPress, latest } from '../../save/pressdesk.js';
 import { buildRain } from './rain.js';
 import { RainSound } from './rain-sound.js';
 import { Footprints } from '../../core/footprints.js';
+import { buildHappenings, catGather } from './haishi-happen.js';
 
 // 一上岸就放。rest：播完停幾秒（最少、最多）再從頭放，中間只剩海、人潮和雨。
 // len：曲子幾秒（ffprobe 量的），有寫就照伺服器時間排，同一區的人聽到同一段（ambience.js 的 musicAt）
@@ -47,6 +48,11 @@ export const beast = {
     { x: -21.5, z: -3, place: '小祠' },
   ],
 };
+
+// 事件（core/happen.js 排時間、評分）：漁港起網、燈巷整點點燈、貓到淨房門口排隊。拍到的記在相簿那一格。main.js 在 crowd 之後呼叫
+export function happen({ world, animals }) {
+  return buildHappenings({ world, animals });
+}
 
 // 黑眼（scene/guide.js）帶得到的地方，去過才列，渡船 guide.js 自己加在第一個。id 只用小寫英文和數字（會送給別人）。
 // 街和平台站的位置跟上面白獸那份一樣，place 是 world.placeAt 的地名，走進那條街就算去過；店站在櫃台前面，眼睛到了看櫃台
@@ -99,7 +105,8 @@ export function crowd({ scene, world, shadowTex, player, camera, ambience, coars
   vendors.people = (push) => passers.lookables(push);   // 攤販大部分時間看街上的路人，偶爾才看玩家
   // 山路上的貓（haishi-map.js 的 STRAYS）：地盤上的點貼到最近走得到的地方
   const cats = STRAYS.map((c) => ({ ...c, spots: c.spots?.map(([x, z]) => world.findWalkable(x, z, x, z)).filter(Boolean) }));
-  const animals = new Animals({ world, shadowTex, player, camera, ambience, cats });
+  // 每隔一陣子，貓會走到淨房門口排隊坐好（haishi-happen.js 的 catMeet，照伺服器時間）
+  const animals = new Animals({ world, shadowTex, player, camera, ambience, cats, gather: catGather(world) });
   // 雨聲：照站的地方變（簷下悶、殿裡幾乎沒有），撐傘多一層，濕地上的腳步帶水聲。自己撐傘時傘底下不落雨
   const rain = world.rain;
   if (rain) {

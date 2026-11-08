@@ -357,12 +357,13 @@ export class UI {
     el.title = `${n} 人在線`;
   }
 
-  // 表情按鈕：平常開關表情盤（kaopanel.js 的 bindButton 自己接）；拍照時點一下展開拍照人的口令那一排（cues.js），選了就收起來
+  // 表情按鈕：平常開關表情盤（kaopanel.js 的 bindButton 自己接）；拍照時點一下展開拍照人的口令那一排（cues.js），選了就收起來。照相館沒有口令，照平常
   bindEmotes() {
     const box = $('#emote');
     const key = document.body.classList.contains('desk');
     $('#emote-btn').addEventListener('click', () => {
-      if (document.body.classList.contains('photo')) box.classList.toggle('open');
+      const c = document.body.classList;
+      if (c.contains('photo') && !c.contains('photo-studio')) box.classList.toggle('open');
     });
     // 手機：開著時按別的地方就收起來，點畫面、按弧上退到後面的鈕都算，那一下照樣算數（hud.css 那幾顆只淡掉、不擋）。
     // 搖桿不算：雙手拿的時候一邊走一邊挑表情。電腦照舊，按表情鈕才收

@@ -4,7 +4,7 @@
 // Tab 行囊（按一下開、再按一下或 Esc 收；開著時滑鼠放出來用點的，收起時鎖回去；舉著相機時先放下再開相簿）、M 行囊的存讀檔、B 黑眼（guide.js）、F 作品清單、O 同行、R 收起按鈕；
 // Q 開關表情盤（kaopanel.js，開著時滑鼠放出來用點的，照樣能走），擺著時按住 Q 是撐；Esc 放開滑鼠時跳出暫停選單（沒鎖滑鼠、什麼都沒開著時按 Esc 也會跳）：
 // 繼續、滑鼠靈敏度和上下反轉、越肩的視野廣度和魚眼、介面大小、切走時繼續播聲音、按鍵一覽。Esc 也收換裝鏡子、作品資訊、看畫的大圖。
-// （V 越肩、E 互動、中鍵標記在 player.js；Z 攝影、Q 閃光、~ 日期、F 直橫、C 看鏡、X 收起介面在 photo.js；T 說話、G 標記、X 吹哨在 party.js；1–5 表情在 main.js）
+// （V 越肩、E 互動、中鍵標記在 player.js；Z 攝影、Q 閃光、~ 日期、F 直橫、C 看鏡、X 收起介面在 photo.js；T 說話、G 標記、X 吹哨在 party.js；1–5 表情在 main.js；L 表情看鏡在這裡，交給 kaopanel.js）
 import { setUiSize, uiSize } from './ui.js';
 import { sfx, thing } from '../audio/ui-voices.js';
 import { emoteSVG } from '../social/emotes.js';
@@ -95,7 +95,7 @@ export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote,
   };
   // 表情盤：Q 按下放開交給它（點一下開關、擺著按住撐）
   window.addEventListener('keydown', (e) => {
-    if (!is(e, 'wheel') || e.repeat || typing(e) || photo.active) return;
+    if (!is(e, 'wheel') || e.repeat || typing(e) || photo.kaoOff) return;
     if (kao) kao.down('key');
     else openWheel();
   });
@@ -105,6 +105,10 @@ export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote,
     else if (set === EMOTES) close(true);
   });
   window.addEventListener('blur', () => { close(false); kao?.release(); });
+  // 表情看鏡（L）：盤開不開都能按
+  window.addEventListener('keydown', (e) => {
+    if (kao && is(e, 'kaoLook') && !e.repeat && !typing(e) && !photo.kaoOff) kao.toggleLook();
+  });
   // 鎖著滑鼠時撥的量從 player 來（不轉鏡頭）；沒鎖時看滑鼠離畫面中間多遠
   player.lookHook = (dx, dy) => {
     if (!open) return false;
@@ -238,7 +242,7 @@ export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote,
     wheel: {
       open(alt) {
         if (alt || !kao) return openWheel(alt);
-        if (photo.active) return false;
+        if (photo.kaoOff) return false;
         return kao.down('pad');
       },
       aim(x, y) {

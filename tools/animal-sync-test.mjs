@@ -7,7 +7,7 @@
 import { openBrowser, sleep } from './headless.mjs';
 
 const mute = process.argv.includes('--mute');
-const Q = 'z=gallery&q=mid&debug&crowd=0&beast=0&rain=0&dust=0.5';
+const Q = 'z=gallery&q=mid&debug&crowd=0&beast=0&happen=0&rain=0&dust=0.5';
 const [A, B] = await Promise.all([
   openBrowser({ port: 8191, dbg: 9391, window: '800,600' }),
   openBrowser({ port: 8192, dbg: 9392, window: '800,600' }),

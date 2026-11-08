@@ -4,8 +4,11 @@
 // 每格寫的就是擺出來的樣子：動作那排套上現在的臉，姿勢那排畫火柴人（kaofigures.js）。點亮著的那格是拿掉那一層；常用點一下擺整組，正擺著就放下。
 // 三層各一個顏色（門口讀取條的色票）：表情珊瑚、動作薰衣草、姿勢草綠，常用和動作那排的字照層分色，一眼看出哪段是哪層。
 // 擺多久照性子：表情一直留著；動作寫了 once 的（揮手、拍手、敬禮…）做完一輪自己收，其他留著；姿勢一走就放下（character.js 的 kaoPose）。
+// 以上是在盤上擺的。電腦數字鍵 1–5 是做一下（quick）：擺 4 秒回到原本的、按住撐到放開；在盤上動過就變回擺著。
 // 擺著時按住表情鍵不放是撐（character.js 的 brace）。常用五組跟著人走（progress.js 的 kaoFav，數字鍵 1–5，0 是空格），一開始全空、玩家自己組：
 // 常用最前面一顆「＋存」把現在擺的接在最後面（五格滿了是「已滿」，要先移出一組），擺的已經在常用裡就變「－移出」；手把 X 同一顆。
+// 看鏡（kaoLook）：擺著表情時頭看著跟拍鏡頭不東張西望，關了照注意力隨意看（attention.js 的 posing）；被別人拍時互動鍵的看鏡照樣優先。
+// 電腦 L（keymap 的 kaoLook，盤收著也能按，提示一行）、手把盤開著時 R。
 // 位置照裝置（介面原則「表情盤」）：手機直拿貼在拇指那排上面、橫拿在搖桿另一邊的上半、電腦在下方那排上面；鏡頭讓開（main.js 的 applyViewOffset）
 import { FACES, HANDS, BODIES, kaoCode, kaoParts, kaoText } from '../avatar/kaomoji-parts.js';
 import { figureSVG } from './kaofigures.js';
@@ -17,6 +20,7 @@ import { uiScale } from './ui.js';
 import { padBtn } from './gamepad.js';
 
 const TAP = 230;            // 表情鍵按下放開在這麼短之內算點一下（開關），再長是撐（毫秒）
+const BRIEF = 4;            // 快捷鍵按一下擺幾秒（秒）
 const GAP = 10;             // 面板跟按鈕、畫面邊留這麼多
 // 手機要讓開的那些（拇指弧、搖桿、上排）
 const THUMBS = ['joy', 'swap-btn', 'emote-btn', 'photo-btn', 'pack-btn', 'say-btn', 'jump-btn', 'sit-btn', 'action-btn'];
@@ -40,7 +44,10 @@ function kaoHTML(f, h, b) {
 
 export class KaoPanel {
   // onSet(code)：擺好、換了、放下時呼叫，主程式拿去冒字、出聲、送給別人。blocked()：這時候不開（開著就收）。onView()：開關、換位置，鏡頭要讓
-  constructor({ player, onSet, blocked = () => false, onView = null }) {
+  // keepOnce()：這時候做一輪就收的動作不收（照相館，一直做到拍下去）
+  constructor({ player, onSet, blocked = () => false, onView = null, hint = null, keepOnce = () => false }) {
+    this.hint = hint;
+    this.keepOnce = keepOnce;
     this.player = player;
     this.onSet = onSet;
     this.blocked = blocked;
@@ -49,6 +56,7 @@ export class KaoPanel {
     this.held = false;          // 表情鍵還按著
     this.painted = -1;          // 畫的時候角色擺著什麼
     this.onceT = 0;             // 動作做完一輪就收的計時
+    this.brief = null;          // 快捷鍵做一下：{ i 第幾組, back 做完回到哪組, until 到什麼時候, held 鍵還按著 }
     this.el = document.createElement('div');
     this.el.id = 'kaopanel';
     this.el.setAttribute('role', 'dialog');
@@ -104,7 +112,7 @@ export class KaoPanel {
       + row('kp-face', '表情', chips('face', ids(FACES, 0)))
       + row('kp-hand', '動作', chips('hand', ids(HANDS, 1)))
       + row('kp-body', '姿勢', chips('body', ids(BODIES, 1)))
-      + `<div class="kp-foot"><span class="kp-name">頭上字</span>
+      + `<div class="kp-foot"><button type="button" data-act="look">看鏡</button><span class="kp-name">頭上字</span>
           <button type="button" data-act="tag-mine">給別人看</button><button type="button" data-act="tag-others">看別人的</button>
           <button type="button" class="kp-x" data-act="close" aria-label="收起來">收起</button></div>`;
   }
@@ -139,7 +147,11 @@ export class KaoPanel {
     keep.classList.toggle('saved', saved);
     keep.setAttribute('aria-label', saved ? '從常用移出' : full ? '常用五格滿了，先移出一組' : '存進常用');
     this.el.querySelector('.kp-empty').hidden = favs.some(Boolean);
-    for (const [act, id] of [['tag-mine', 'kaoTagMine'], ['tag-others', 'kaoTagOthers']]) {
+    // 看鏡的鍵：電腦 L、手把 R（盤開著時）
+    const look = this.el.querySelector('[data-act="look"]');
+    const lh = (cls.contains('pad') ? `<kbd>${padBtn(5)}</kbd>` : cls.contains('desk') ? `<kbd>${key('kaoLook')}</kbd>` : '') + '看鏡';
+    if (look.dataset.html !== lh) { look.dataset.html = lh; look.innerHTML = lh; }
+    for (const [act, id] of [['look', 'kaoLook'], ['tag-mine', 'kaoTagMine'], ['tag-others', 'kaoTagOthers']]) {
       const el = this.el.querySelector(`[data-act="${act}"]`), on = pref(id);
       el.classList.toggle('on', on);
       el.setAttribute('aria-pressed', on);
@@ -194,30 +206,37 @@ export class KaoPanel {
     this.open = false;
     this.el.classList.remove('open');
     document.body.classList.remove('kao-open');
+    // 開著時做一輪就收的手不收；關了從現在起再做完一輪才放下，不在關的瞬間切掉
+    const h = kaoParts(this.ch.kao)[1];
+    if (h && HANDS[h].once) this.onceT = Math.max(this.onceT, performance.now() + HANDS[h].once * 1000);
     sfx('close');
     this.onView?.();
   }
 
-  // 主迴圈每幀：別的東西跳出來（全畫面、暫停、舉相機…）就收；角色擺的變了（走路放下姿勢）就重寫；動作做完一輪收手
+  // 主迴圈每幀：別的東西跳出來（全畫面、暫停、舉相機…）就收；角色擺的變了（走路放下姿勢）就重寫；動作做完一輪收手（面板開著不收）
   tick() {
     if (this.open && this.blocked()) this.close();
     if (this.open && this.ch.kao !== this.painted) this.render();
-    if (this.onceT && performance.now() >= this.onceT && !this.ch.braced) {
+    if (this.onceT && performance.now() >= this.onceT && !this.open && !this.ch.braced && !this.brief?.held && !this.keepOnce()) {
       this.onceT = 0;
       const [f, h, b] = kaoParts(this.ch.kao);
       if (h && HANDS[h].once) this.set(kaoCode(f, 0, b));
     }
+    const q = this.brief;
+    if (q && !q.held && performance.now() >= q.until && !this.ch.braced && !this.keepOnce()) this.endQuick();
   }
 
   // 點了面板上的一顆
   press(b) {
     const i = +b.dataset.i, [f, h, bd] = kaoParts(this.ch.kao);
+    if (/^(fav|face|hand|body)$/.test(b.dataset.act)) this.brief = null;   // 在盤上動過就是擺著，不再自己收
     switch (b.dataset.act) {
       case 'fav': return this.fav(i);
       case 'keep': return this.keep();
       case 'face': return this.set(kaoCode(i === f ? 0 : i, h, bd));
       case 'hand': return this.set(kaoCode(f, i === h ? 0 : i, bd));
       case 'body': return this.set(kaoCode(f, h, i === bd ? 0 : i));
+      case 'look': return this.toggleLook();
       case 'tag-mine':
       case 'tag-others': {
         const k = b.dataset.act === 'tag-mine' ? 'kaoTagMine' : 'kaoTagOthers';
@@ -229,11 +248,50 @@ export class KaoPanel {
     }
   }
 
+  // 看鏡開關（盤上那顆、電腦 L、手把 R）。盤收著時按的提示一行
+  toggleLook() {
+    const on = !pref('kaoLook');
+    setPref('kaoLook', on);
+    sfx('tap');
+    if (this.open) this.render();
+    else this.hint?.(on ? '擺表情時看鏡頭' : '擺表情時隨意看');
+  }
+
+  // 擺著東西、看鏡開著：頭看著跟拍鏡頭（attention.js 的 posing）
+  get posing() {
+    return this.ch.kao !== 0 && pref('kaoLook');
+  }
+
   // 常用第 i 組（數字鍵、面板）：正擺著同一組就放下；空格不做事
   fav(i) {
     const c = favorites()[i];
     if (!c) return;
     this.set(this.ch.kao === c ? 0 : c);
+  }
+
+  // 快捷鍵（電腦數字鍵）做一下：按一下擺 BRIEF 秒（做一輪就收的動作等它做完），時間到回到按之前擺的；按住撐著、放開才收。
+  // 做一下時再按同一個收掉、按別組換過去重算；本來就擺著這組（盤上擺的）按了是放下
+  quick(i) {
+    const c = favorites()[i], q = this.brief;
+    if (!c) return;
+    if (q && q.i === i) return void this.endQuick();
+    if (!q && this.ch.kao === c) return void this.set(0);
+    const back = q ? q.back : this.ch.kao, h = kaoParts(c)[1];
+    this.set(c);
+    this.brief = { i, back, held: true, until: performance.now() + Math.max(BRIEF, (h && HANDS[h].once) || 0) * 1000 };
+  }
+
+  // 快捷鍵放開（換視窗也算放開）：按超過 BRIEF 秒的現在收，沒到的照時間收
+  quickUp(i = this.brief?.i) {
+    const q = this.brief;
+    if (!q || q.i !== i) return;
+    q.held = false;
+  }
+
+  endQuick() {
+    const q = this.brief;
+    this.brief = null;
+    if (q) this.set(q.back);
   }
 
   // ＋存（手把 X）：現在擺的接在常用最後面，五格滿了就不能存（要先移出一組）；已經在常用裡就移出，後面的往前補

@@ -47,6 +47,7 @@ import { bindVolume } from './controls/volume.js';
 import { bindGamepad, rumble, padBtn } from './controls/gamepad.js';
 import { is, key } from './controls/keymap.js';
 import { Beast } from './npc/beast.js';
+import { Happenings } from './core/happen.js';
 import { Guide } from './scene/guide.js';
 import { pref, setPref, dropPref } from './save/prefs.js';
 
@@ -60,6 +61,7 @@ const ZONES = {
   shenlou: { load: () => import('./zones/shenlou/zone-shenlou.js') },
   ting: { load: () => import('./zones/ting/zone-ting.js') },
   jinggong: { load: () => import('./zones/jinggong/zone-jinggong.js') },   // 海市星廟裡的鏡宮，不搭船，從星門進出
+  heilin: { load: () => import('./zones/heilin/zone-heilin.js') },   // 黑森林，還在蓋（places.js 的 dev）
 };
 // 渡船能去的地方在 scene/places.js，每個渡口都照那個順序一張一張卡
 
@@ -290,8 +292,8 @@ async function start() {
   scene.add(character.group);
   character.onLand = (c) => { ambience.footstep(c, 0, true); world.onLand?.(c); rumble('land'); };
   character.onEmote = (c, e) => ambience.cheer(c, e);
-  // 每踩一步：有腳印的區域印一個（core/footprints.js，world.prints），區域自己要做的事（海市濕地的漣漪）在 world.onStep
-  character.onStep = (c, foot) => { world.prints?.stamp(c, foot); world.onStep?.(c, foot); };
+  // 每踩一步：鞋子聲（照穿的鞋，ambience.js）、有腳印的區域印一個（core/footprints.js，world.prints），區域自己要做的事（海市濕地的漣漪）在 world.onStep
+  character.onStep = (c, foot) => { ambience.footstep(c, foot); world.prints?.stamp(c, foot); world.onStep?.(c, foot); };
   // 角色出來之前先站好的（畫廊的胖頭頭人）
   const { manatee = null, host = null } = Z.residents?.({ scene, world, shadowTex }) ?? {};
   // 大樹的樹洞：作者和網站消息。沒有大樹的區域什麼都不做
@@ -355,6 +357,7 @@ async function start() {
       frameMirror();
       if (!selfie.start(withCode)) ui.showDress();
     },
+    onView: () => applyViewOffset(),
     onTryOn(L) {
       if (atMirror()) creator.set(L, true);
       else {
@@ -526,6 +529,8 @@ async function start() {
   for (const src of Z.attention?.({ world, player }) ?? []) attention.add(src);
   // 白獸（beast.js）：很久才出現一次，同一區的人同時看到。拍到的照片快門當下評分，拿去海市星台的報社登報
   const beast = new Beast({ scene, world, zone, where: PLACES.find((d) => (d.to || d.dev) === zone)?.name ?? '', ambience, attention, spots: Z.beast?.spots, params });
+  // 這一區的事件（core/happen.js，zone 匯出 happen）：過一陣子就發生一次、值得拍的事，同一區的人同時看到。拍到的記在相簿那一格
+  const happen = new Happenings({ scene, zone, ambience, attention, params, list: Z.happen?.({ world, animals, scene }) ?? [] });
   // 動物叫了一聲：轉頭看牠
   if (animals) animals.onSay = (a, d) => d < 10 && attention.notice(`a${a.index}`, (o) => a.shown && !!a.rig.head.getWorldPosition(o), { kind: 'animal', dur: 1.2 + Math.random() * 1.2 });
   // 別人做了什麼（揮手、跳、閃光、說話）：在附近就轉頭看他一下
@@ -769,6 +774,11 @@ async function start() {
   const kaoFeet = new THREE.Vector3();
   function applyViewOffset() {
     const w = window.innerWidth, h = window.innerHeight, panel = ui.docked, pw = panelW();
+    // 手機的行囊做成側欄（橫拿、平板）：往面板另一邊挪半個面板，角色不被蓋住。量 offset 不量 getBoundingClientRect，滑進來的動畫還在半路
+    const pc = pack.card;
+    if (!panel && pack.isOpen && !pack.floating && pc.offsetHeight > h * 0.9) {
+      return camera.setViewOffset(w, h, pc.offsetLeft > w / 2 ? pc.offsetWidth / 2 : -pc.offsetWidth / 2, 0, w, h);
+    }
     const kp = document.querySelector('#kaopanel.open');
     if (!panel && kp) {
       const r = kp.getBoundingClientRect();
@@ -832,7 +842,7 @@ async function start() {
         lookAtOther(o.id, 1 + Math.random() * 0.6);
       },
       onLand: (ch) => { ambience.footstep(ch, 0, true); world.onLand?.(ch); },
-      onStep: (ch, foot) => { world.prints?.stamp(ch, foot); world.onStep?.(ch, foot); },
+      onStep: (ch, foot) => { ambience.footstep(ch, foot); world.prints?.stamp(ch, foot); world.onStep?.(ch, foot); },
       onEmote: (ch, e) => {
         ambience.cheer(ch, e);
         lookAtOther(otherOf(ch), 1.8 + Math.random());
@@ -948,33 +958,42 @@ async function start() {
     resizeFX: (w, h) => fx?.setSize(w, h),
   });
   photo.beast = beast;
+  photo.happen = happen;
   // 表情盤（kaopanel.js）：點表情鈕、電腦 Q、手把 L 開關，常用、表情、動作、姿勢四排，開著照樣能走。擺好時頭上冒字、照像的舊表情出聲（胖頭照驚訝回話）；
   // 擺著的組合和撐不撐由 multiplayer 的位置一起送（k、b），沒連線也照樣擺
   const kao = new KaoPanel({
     player,
-    // 舉相機、暫停、全畫面、照鏡子、看畫、操作說明、手機的行囊開著時不開
-    blocked: () => photo.active || !!document.querySelector('#pause.show, #dress.open, #guide.show, #hollow.show, #list.open, #press:not([hidden]), #loading:not(.done), #ph-result:not([hidden]), #album-view:not([hidden]), #viewer.open, .studio-card:not([hidden]), #selfie:not([hidden]), #keymap.show')
+    // 舉相機、暫停、全畫面、照鏡子、看畫、操作說明、手機的行囊開著時不開。照相館站好位可以擺，按下快門就收（photo.js 的 kaoOff）
+    blocked: () => photo.kaoOff || !!document.querySelector('#pause.show, #dress.open, #guide.show, #hollow.show, #list.open, #press:not([hidden]), #loading:not(.done), #ph-result:not([hidden]), #album-view:not([hidden]), #viewer.open, .studio-card:not([hidden]), #selfie:not([hidden]), #keymap.show')
       || document.body.classList.contains('panel-open') || (pack.isOpen && !document.body.classList.contains('desk')),
     onView: () => applyViewOffset(),
+    // 照相館裡揮手、拍手不做完一輪就收，一直做到拍下去
+    keepOnce: () => !!photo.studio,
+    hint: (t) => ui.hint(t, { id: 'kao:look', ms: 1500 }),
     onSet(code) {
       mp?.popKao(character, code);
       // 回眸、側身：身體自己轉，讓回頭剛好對著鏡頭。有人在拍就對他的鏡頭，沒有就對自己的畫面
       const at = attention.frontLens()?.pos ?? camera.position;
       const face = kaoFacing(code, Math.atan2(at.x - player.pos.x, at.z - player.pos.z));
       if (face != null) player.faceYaw = face;
+      else if (photo.studio && studio?.session?.heading != null) player.faceYaw = studio.session.heading;   // 照相館放下側身：轉回站位的方向
       const e = kaoLike(code);
       if (!e) return;
       ambience.cheer(character, e);
       startle(e);
     },
   });
-  kao.bindButton(document.getElementById('emote-btn'), () => photo.active);
-  // 電腦：數字鍵 1–5（常用一到五，keymap.js）擺常用的那一組，再按一次放下。拍照時數字鍵是口令（cues.js），打字時不算
+  kao.bindButton(document.getElementById('emote-btn'), () => photo.kaoOff);
+  attention.posing = () => kao.posing;
+  // 電腦：數字鍵 1–5（常用一到五，keymap.js）做一下常用的那一組：按一下擺幾秒回到原本的，按住撐到放開（kaopanel.js 的 quick）。拍照時數字鍵是口令（cues.js），打字時不算
+  const favKey = (e) => [1, 2, 3, 4, 5].findIndex((n) => is(e, 'emote' + n));
   window.addEventListener('keydown', (e) => {
     if (e.repeat || e.target.closest?.('input, textarea, #dress')) return;
-    const i = [1, 2, 3, 4, 5].findIndex((n) => is(e, 'emote' + n));
-    if (i >= 0 && !photo.active) kao.fav(i);
+    const i = favKey(e);
+    if (i >= 0 && !photo.kaoOff) kao.quick(i);
   });
+  window.addEventListener('keyup', (e) => { const i = favKey(e); if (i >= 0) kao.quickUp(i); });
+  window.addEventListener('blur', () => kao.quickUp());
   ui.bindEmotes();
   // 電腦的快捷鍵、Q 表情盤、Esc 暫停選單（數字鍵的舊表情要連上線才送得出去）
   const desk = bindDeskKeys({ player, ui, photo, pack, ambience, emotes: EMOTES, emote: (e) => mp && sendEmote(e), kao });
@@ -1048,7 +1067,7 @@ async function start() {
     guide.isMate = (id) => !!party && [...party.mates.values()].some((o) => o.s === id);
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, guide, creator, cues, peek, radio, kao };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, happen, guide, creator, cues, peek, radio, kao };
   const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass, dofPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
@@ -1254,6 +1273,7 @@ async function start() {
     // 不然要等畫的時候才更新，所有頭上的東西都慢一幀，鏡頭一動就抖
     camera.updateMatrixWorld();
     beast.update(dt, camera, player.pos);
+    happen.update(dt);
     animals?.update(dt);
     visitors?.update(dt);
     vendors?.update(dt, player, camera);
@@ -1334,7 +1354,7 @@ async function start() {
     // 牆上的色塊畫：視差跟著鏡頭，站在畫前不動才醒；拍照時醒的程度停著
     world.updatePaintings?.(camera.position, photo.active ? null : player.pos, player.focus?.kind === 'painting' ? player.focus.p : null);
     frame++;
-    const idle = !photo.active && !player.moving && !othersMoving && !fading && !talking && !world.home?.busy && !beast.busy && !guide.flying && performance.now() - lastInput > 2000;
+    const idle = !photo.active && !player.moving && !othersMoving && !fading && !talking && !world.home?.busy && !beast.busy && !happen.busy && !guide.flying && performance.now() - lastInput > 2000;
     if (idle && frame % 2) return;
     if (!idle) quality.sample(dt);
     if (stats) renderer.info.reset();

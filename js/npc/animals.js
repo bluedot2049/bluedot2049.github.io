@@ -34,6 +34,7 @@ class Animal {
     this.pitch = o.pitch || 1;
     this.scale = o.scale || 1;
     this.label = o.name || null;
+    this.cat = o.cat ?? null;   // 海市的貓：STRAYS 的第幾隻
     this.phase0 = hash(o.seed, 0, 99);
     this.rig = buildRig(o.model, set.shadowMat, this.scale);
     if (!this.spec.noPet) for (const m of this.rig.hits) {
@@ -89,6 +90,9 @@ class Animal {
 
   // 第 k 段結束時要走到的點
   spot(k) {
+    // 這一區排了事件（海市的貓到淨房門口排隊，haishi-happen.js）：那幾段的終點換成排隊的位子
+    const g = this.set.gather?.(this, k);
+    if (g) return g;
     const h = this.home;
     if (h.spots) return h.spots[Math.floor(hash(this.seed, k, 1) * h.spots.length)];
     for (let j = 0; j < 16; j++) {
@@ -120,6 +124,8 @@ class Animal {
     const n = pts.length, last = pts[n - 1], prev = pts[n - 2];
     const h = D > 0.01 ? Math.atan2(last.x - prev.x, last.z - prev.z) : hash(this.seed, k, 6) * Math.PI * 2;
     P = { pts, cum, D, v, T: D / v, h, act: pickAct(sp.acts, hash(this.seed, k, 9)), zoom: null };
+    // 排隊的位子：坐好、面向前面那一隻
+    if (b.seat) Object.assign(P, { act: 'sit', h: b.h });
     // 狗暴衝：繞著停下來的點跑兩圈，跑的範圍都要走得到，不然就改成坐著
     if (P.act === 'zoom') {
       const r = 1.3 + hash(this.seed, k, 5) * 0.6, a0 = hash(this.seed, k, 4) * Math.PI * 2;
@@ -585,9 +591,11 @@ export function along(P, s) {
 }
 
 export class Animals {
-  // cats：海市山路上的貓，[{ coat, name, spots: [{x, z}], lead, scale }]；給了就不放黑化的黑貓
-  constructor({ world, shadowTex, player, camera, ambience, cats = null }) {
+  // cats：海市山路上的貓，[{ coat, name, spots: [{x, z}], lead, scale }]；給了就不放黑化的黑貓。
+  // gather：(動物, 第幾段) → 那一段開始時該在的位子 { x, z, h, seat: true } 或 null，區域的事件要動物去哪裡集合時給（照伺服器時間，各台一樣）
+  constructor({ world, shadowTex, player, camera, ambience, cats = null, gather = null }) {
     this.world = world;
+    this.gather = gather;
     this.player = player;
     this.camera = camera;
     this.ambience = ambience;
@@ -656,7 +664,7 @@ export class Animals {
       cats.forEach((c, i) => {
         const coat = c.coat || 'black', leader = c.lead != null ? this.list[first + c.lead] : null;
         add({ room, area: () => true, species: 'cat', model: model('cat-' + coat, () => catModel(CATS[coat])), name: c.name,
-          home: leader ? leader.home : { spots: c.spots }, leader, back: leader ? 0.55 : 0, scale: c.scale, pitch: c.scale ? 1.35 : 0.9 + (i % 3) * 0.08 });
+          home: leader ? leader.home : { spots: c.spots }, leader, back: leader ? 0.55 : 0, scale: c.scale, pitch: c.scale ? 1.35 : 0.9 + (i % 3) * 0.08, cat: i });
       });
       return;
     }

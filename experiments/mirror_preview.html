@@ -45,7 +45,7 @@
 <button id="jump">跳</button>
 <script type="module">
   // 鏡宮預覽：遊戲裡的 ?z=jinggong 同一套（js/zones/jinggong/），這頁只有鏡宮和自己，好量效能。反射怎麼算見 jinggong-mirror.js，空間在 jinggong-map.js。
-  // ?ceil=0 天花板不是鏡子　?depth=反射幾次　?dpr=解析度　?view=x,z,鏡頭方位,俯角,距離 直接站到那裡（無頭測試用）
+  // ?ceil=0／1 天花板是不是鏡子（預設照 jinggong-map.js）　?depth=反射幾次　?dpr=解析度　?view=x,z,鏡頭方位,俯角,距離 直接站到那裡（無頭測試用）
   // 角色用這台瀏覽器在遊戲裡捏好的樣子（只讀存檔，不寫）
   import * as THREE from 'three';
   import { Character } from '../js/avatar/character.js';
@@ -75,7 +75,7 @@
   const hemi = new THREE.HemisphereLight(0x69617f, 0x544f69, Math.PI * 0.9), sun = new THREE.DirectionalLight(0x806f60, Math.PI);
   scene.add(hemi, sun);
 
-  const hall = new MirrorHall(MAP, MAP.buildLights(), { ceiling: q.get('ceil') !== '0', ...(q.get('depth') ? { depth: +q.get('depth') } : {}) });
+  const hall = new MirrorHall(MAP, MAP.buildLights(), { ...(q.has('ceil') ? { ceiling: q.get('ceil') !== '0' } : {}), ...(q.get('depth') ? { depth: +q.get('depth') } : {}) }, MAP.buildLines?.() ?? []);
   scene.add(hall.group);
   // 腳踩進黑水盪一圈漣漪，落地那一下大一點
   ch.onStep = (c, foot) => hall.ripple(me.x + Math.cos(me.yaw) * (foot ? -0.09 : 0.09), me.z - Math.sin(me.yaw) * (foot ? -0.09 : 0.09), time, 0.7);
