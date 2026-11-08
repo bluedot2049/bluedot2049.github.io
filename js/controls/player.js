@@ -13,6 +13,7 @@ import { is } from './keymap.js';
 import { lens, fitSource, unbend } from '../core/lens.js';
 import { pref, setPref } from '../save/prefs.js';
 import { GUIDE_LAYER } from '../core/scenery.js';
+import { kaoFacing } from '../avatar/kaomoji-parts.js';
 
 const SPEED = 2.6;
 const EDGE_LIFT = 0.3;   // 坐在邊上垂腳：屁股就在地面的高度（跟 character.js 的 SEAT_BUTT 一樣），腿垂到邊外
@@ -76,6 +77,9 @@ const MOVES = ['fwd', 'back', 'left', 'right'];
 // 視線（所有模式）：頭左右最多轉幾度、抬頭和低頭最多幾度；鏡頭繞到前面超過 GAZE_BACK 就改成看著鏡頭，回到 GAZE_FRONT 以內再看前方（中間重疊，交界不會來回甩）
 // 鏡頭在背後時，這麼多秒沒轉鏡頭、沒走路，頭就交給注意力東張西望（attention.js）
 const SH_GAZE = 1.2, GAZE_UP = 0.55, GAZE_DOWN = 0.4, GAZE_BACK = 2.05, GAZE_FRONT = 1.75, GAZE_IDLE = 4;
+// 擺表情站著時頭一直看鏡頭：鏡頭繞到偏離身體超過 POSE_REACH（弧度），身體慢慢轉過來，轉到只差 POSE_EASE（頭看得舒服、還看得到側臉）。
+// 回眸、側身那幾種（BODIES 的 turn）照它要的角度對著鏡頭，差超過 POSE_SLACK 才轉。POSE_TURN 是每秒轉多快的係數
+const POSE_REACH = 1.05, POSE_EASE = 0.55, POSE_SLACK = 0.35, POSE_TURN = 4;
 const shDefaultDist = () => (window.innerWidth < window.innerHeight ? 2.9 : 2.4);
 // 越肩的視野（暫停選單裡調，記在 localStorage view；手機、平板沒調過時另外收小，見 constructor）：
 // fov 是 16:9 的畫面左右看得到幾度，別的比例上下照同一個角度；fish 是魚眼，0 是一般廣角（直線不彎），1 是等距魚眼（k 見 lens.js）
@@ -213,6 +217,8 @@ export class Player {
     this.markerT = 1;
     this.lookBackT = 0;             // 點了自己：還要回頭看鏡頭幾秒
     this.faceYaw = null;            // 停下來要轉向的方向（站位記號，cues.js），轉到了就清掉
+    this.poseYaw = null;            // 擺表情站著：身體要轉到哪才看得到鏡頭（updateGaze 算），null 不轉
+    this.poseSide = 0;              // 正在轉過來時鏡頭在哪一邊（1／-1），鏡頭繞到正後方也不會左右換來換去；0 是沒在轉
     this.lastAct = null;            // 上一幀互動鍵挑到的目標（挑的時候讓它一點，不會跳來跳去）
     this.tappable = null;           // () => [{ id, group }]：畫面上點得到的角色（自己和別人，main.js 給）
     this.moving = true;
@@ -1484,6 +1490,9 @@ export class Player {
         pid = at.pid;
       }
     }
+    this.poseTurn(free && !eye && !back);
+    // 身體正轉過來、鏡頭在頭轉不到的地方：頭先轉到底等身體，照轉的那一邊（鏡頭在正後方時不左右甩）
+    if (this.poseSide && at && Math.abs(yaw) > SH_GAZE) yaw = this.poseSide * SH_GAZE;
     // 照鏡子轉了身：頭轉回去看鏡子裡的自己（鏡面上跟眼睛一樣高的那一點，就是正對鏡子），轉到快背對了只能越過肩膀看；
     // 整個背對就放棄、看前面。自拍時眼睛接手（上面的 own）
     if (!at && this.focus?.kind === 'mirror' && !this.paused) {
@@ -1513,6 +1522,35 @@ export class Player {
     this.gazeId = pid;
     this.character.gaze = this.gaze;
     this.character.gazeP = this.gazeP;
+  }
+
+  // 擺表情站著：鏡頭繞到頭轉不到的地方，身體慢慢轉過來，轉到頭看得舒服就停；回眸、側身照它要的角度。
+  // 對著自己的畫面；按了互動鍵「看鏡」看別人的鏡頭時對著那個。走路、越肩、看畫照鏡子時不轉
+  poseTurn(free) {
+    const a = this.attn;
+    if (!free || this.shoulder || this.speed > 0.05 || this.path.length || this.focus || !a?.posing()) {
+      this.poseYaw = null;
+      this.poseSide = 0;
+      return;
+    }
+    const cam = (a.lock && a.frontLens()?.pos) || this.camera.position, dir = Math.atan2(cam.x - this.pos.x, cam.z - this.pos.z);
+    const f = kaoFacing(this.character.kao, dir);
+    if (f != null) {
+      // 這幾種頭不另外轉（character 的 kaoTurnK），poseSide 不用；poseYaw 還留著就是正在轉
+      const off = Math.abs(wrapAngle(f - this.heading));
+      this.poseSide = 0;
+      this.poseYaw = off < (this.poseYaw != null ? 0.03 : POSE_SLACK) ? null : f;
+      return;
+    }
+    const rel = wrapAngle(dir - this.heading);
+    if (!this.poseSide) {
+      if (Math.abs(rel) <= POSE_REACH) { this.poseYaw = null; return; }
+      this.poseSide = Math.sign(rel);
+    }
+    // 照開始轉時那一邊算：鏡頭在正後方時不會一下往左一下往右
+    const r = rel * this.poseSide < 0 ? rel + this.poseSide * Math.PI * 2 : rel;
+    if (Math.abs(r) <= POSE_EASE + 0.03) { this.poseYaw = null; this.poseSide = 0; return; }
+    this.poseYaw = wrapAngle(dir - this.poseSide * POSE_EASE);
   }
 
   // 越肩：鏡頭在右肩後面，視線跟角色前方平行。角色在畫面中線偏左、略低；
@@ -1712,6 +1750,9 @@ export class Player {
       // 停下來要面向的方向（走到隊友的站位記號：轉身對著他的鏡頭，cues.js），轉到了就放掉
       want = this.faceYaw;
       if (Math.abs(wrapAngle(want - this.heading)) < 0.03) this.faceYaw = null;
+    } else if (this.poseYaw != null && !this.focus) {
+      // 擺表情：轉過來看鏡頭，比平常轉身慢
+      this.heading = wrapAngle(this.heading + wrapAngle(this.poseYaw - this.heading) * Math.min(1, dt * POSE_TURN));
     } else if (this.focus) want = Math.atan2(-this.focus.n.x, -this.focus.n.z) + (this.focus.orb?.spin ?? 0);   // 照鏡子轉了身就照轉的角度
     if (want === null) this.bodyVel = {};
     else if (this.shoulder) {

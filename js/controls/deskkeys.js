@@ -105,10 +105,6 @@ export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote,
     else if (set === EMOTES) close(true);
   });
   window.addEventListener('blur', () => { close(false); kao?.release(); });
-  // 表情看鏡（L）：盤開不開都能按
-  window.addEventListener('keydown', (e) => {
-    if (kao && is(e, 'kaoLook') && !e.repeat && !typing(e) && !photo.kaoOff) kao.toggleLook();
-  });
   // 鎖著滑鼠時撥的量從 player 來（不轉鏡頭）；沒鎖時看滑鼠離畫面中間多遠
   player.lookHook = (dx, dy) => {
     if (!open) return false;

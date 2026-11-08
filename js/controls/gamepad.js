@@ -265,12 +265,11 @@ export function bindGamepad({ player, photo, ui, desk, party, cues, ambience }) 
   // 開關暫停選單、行囊照換過的鍵（M）。搖桿照常走路、轉鏡頭
   function panel(l, K, M, now) {
     const { on, pr } = K;
-    // 表情盤：開著照樣走（搖桿在 walk 給過了）、照樣跳；L 收起來，X 是常用的「＋存／－移出」，R 是看鏡（盤沒有分頁）
+    // 表情盤：開著照樣走（搖桿在 walk 給過了）、照樣跳；L 收起來，X 是常用的「＋存／－移出」，R 空著（盤沒有分頁）
     const kp = l.id === 'kaopanel' ? desk.kaoPanel : null;
     if (kp) {
       if (M.pr(N)) fire('jump');
       if (M.pr(W)) kp.keep();
-      if (M.pr(R)) kp.toggleLook();
       if (M.pr(L)) return void kp.close();
     }
     for (const [i, dx, dy] of [[UP, 0, -1], [DOWN, 0, 1], [LEFT, -1, 0], [RIGHT, 1, 0]]) {

@@ -7,8 +7,7 @@
 // 以上是在盤上擺的。電腦數字鍵 1–5 是做一下（quick）：擺 4 秒回到原本的、按住撐到放開；在盤上動過就變回擺著。
 // 擺著時按住表情鍵不放是撐（character.js 的 brace）。常用五組跟著人走（progress.js 的 kaoFav，數字鍵 1–5，0 是空格），一開始全空、玩家自己組：
 // 常用最前面一顆「＋存」把現在擺的接在最後面（五格滿了是「已滿」，要先移出一組），擺的已經在常用裡就變「－移出」；手把 X 同一顆。
-// 看鏡（kaoLook）：擺著表情時頭看著跟拍鏡頭不東張西望，關了照注意力隨意看（attention.js 的 posing）；被別人拍時互動鍵的看鏡照樣優先。
-// 電腦 L（keymap 的 kaoLook，盤收著也能按，提示一行）、手把盤開著時 R。
+// 擺著表情時頭一直看著跟拍鏡頭、轉不到身體轉過來（attention.js 的 posing、player.js 的 poseTurn），沒有開關；被別人拍時互動鍵的看鏡照樣優先。
 // 位置照裝置（介面原則「表情盤」）：手機直拿貼在拇指那排上面、橫拿在搖桿另一邊的上半、電腦在下方那排上面；鏡頭讓開（main.js 的 applyViewOffset）
 import { FACES, HANDS, BODIES, kaoCode, kaoParts, kaoText } from '../avatar/kaomoji-parts.js';
 import { figureSVG } from './kaofigures.js';
@@ -22,6 +21,7 @@ import { padBtn } from './gamepad.js';
 const TAP = 230;            // 表情鍵按下放開在這麼短之內算點一下（開關），再長是撐（毫秒）
 const BRIEF = 4;            // 快捷鍵按一下擺幾秒（秒）
 const GAP = 10;             // 面板跟按鈕、畫面邊留這麼多
+const WAVE = 1;             // HANDS 的揮手（點別人的角色時做一輪）
 // 手機要讓開的那些（拇指弧、搖桿、上排）
 const THUMBS = ['joy', 'swap-btn', 'emote-btn', 'photo-btn', 'pack-btn', 'say-btn', 'jump-btn', 'sit-btn', 'action-btn'];
 
@@ -43,10 +43,9 @@ function kaoHTML(f, h, b) {
 }
 
 export class KaoPanel {
-  // onSet(code)：擺好、換了、放下時呼叫，主程式拿去冒字、出聲、送給別人。blocked()：這時候不開（開著就收）。onView()：開關、換位置，鏡頭要讓
+  // onSet(code, was)：擺好、換了、放下時呼叫（was 是換之前的），主程式拿去冒字、出聲、送給別人。blocked()：這時候不開（開著就收）。onView()：開關、換位置，鏡頭要讓
   // keepOnce()：這時候做一輪就收的動作不收（照相館，一直做到拍下去）
-  constructor({ player, onSet, blocked = () => false, onView = null, hint = null, keepOnce = () => false }) {
-    this.hint = hint;
+  constructor({ player, onSet, blocked = () => false, onView = null, keepOnce = () => false }) {
     this.keepOnce = keepOnce;
     this.player = player;
     this.onSet = onSet;
@@ -112,8 +111,8 @@ export class KaoPanel {
       + row('kp-face', '表情', chips('face', ids(FACES, 0)))
       + row('kp-hand', '動作', chips('hand', ids(HANDS, 1)))
       + row('kp-body', '姿勢', chips('body', ids(BODIES, 1)))
-      + `<div class="kp-foot"><button type="button" data-act="look">看鏡</button><span class="kp-name">頭上字</span>
-          <button type="button" data-act="tag-mine">給別人看</button><button type="button" data-act="tag-others">看別人的</button>
+      + `<div class="kp-foot"><span class="kp-name">頭上字</span>
+          <button type="button" data-act="tag-mine" title="自己頭上的字，別人看得到">自己</button><button type="button" data-act="tag-others" title="別人頭上的字，自己看得到">別人</button>
           <button type="button" class="kp-x" data-act="close" aria-label="收起來">收起</button></div>`;
   }
 
@@ -147,11 +146,7 @@ export class KaoPanel {
     keep.classList.toggle('saved', saved);
     keep.setAttribute('aria-label', saved ? '從常用移出' : full ? '常用五格滿了，先移出一組' : '存進常用');
     this.el.querySelector('.kp-empty').hidden = favs.some(Boolean);
-    // 看鏡的鍵：電腦 L、手把 R（盤開著時）
-    const look = this.el.querySelector('[data-act="look"]');
-    const lh = (cls.contains('pad') ? `<kbd>${padBtn(5)}</kbd>` : cls.contains('desk') ? `<kbd>${key('kaoLook')}</kbd>` : '') + '看鏡';
-    if (look.dataset.html !== lh) { look.dataset.html = lh; look.innerHTML = lh; }
-    for (const [act, id] of [['look', 'kaoLook'], ['tag-mine', 'kaoTagMine'], ['tag-others', 'kaoTagOthers']]) {
+    for (const [act, id] of [['tag-mine', 'kaoTagMine'], ['tag-others', 'kaoTagOthers']]) {
       const el = this.el.querySelector(`[data-act="${act}"]`), on = pref(id);
       el.classList.toggle('on', on);
       el.setAttribute('aria-pressed', on);
@@ -236,7 +231,6 @@ export class KaoPanel {
       case 'face': return this.set(kaoCode(i === f ? 0 : i, h, bd));
       case 'hand': return this.set(kaoCode(f, i === h ? 0 : i, bd));
       case 'body': return this.set(kaoCode(f, h, i === bd ? 0 : i));
-      case 'look': return this.toggleLook();
       case 'tag-mine':
       case 'tag-others': {
         const k = b.dataset.act === 'tag-mine' ? 'kaoTagMine' : 'kaoTagOthers';
@@ -248,18 +242,9 @@ export class KaoPanel {
     }
   }
 
-  // 看鏡開關（盤上那顆、電腦 L、手把 R）。盤收著時按的提示一行
-  toggleLook() {
-    const on = !pref('kaoLook');
-    setPref('kaoLook', on);
-    sfx('tap');
-    if (this.open) this.render();
-    else this.hint?.(on ? '擺表情時看鏡頭' : '擺表情時隨意看');
-  }
-
-  // 擺著東西、看鏡開著：頭看著跟拍鏡頭（attention.js 的 posing）
+  // 擺著東西：頭看著跟拍鏡頭（attention.js 的 posing）。點別人揮手的那一下看著他，不算
   get posing() {
-    return this.ch.kao !== 0 && pref('kaoLook');
+    return this.ch.kao !== 0 && this.brief?.i !== -1;
   }
 
   // 常用第 i 組（數字鍵、面板）：正擺著同一組就放下；空格不做事
@@ -288,6 +273,15 @@ export class KaoPanel {
     q.held = false;
   }
 
+  // 點了別人的角色：手換成揮手做一輪，做完回到原本擺的（臉、身體不動）。已經在揮就不再算一次
+  wave() {
+    const [f, h, b] = kaoParts(this.ch.kao), q = this.brief;
+    if (h === WAVE) return;
+    const back = q ? q.back : this.ch.kao;
+    this.set(kaoCode(f, WAVE, b));
+    this.brief = { i: -1, back, held: false, until: performance.now() + HANDS[WAVE].once * 1000 };
+  }
+
   endQuick() {
     const q = this.brief;
     this.brief = null;
@@ -312,10 +306,10 @@ export class KaoPanel {
 
   // 擺上（0 是全部放下）。換了動作、而且是做一輪就收的，開始計時
   set(code) {
-    const [, h] = kaoParts(code), was = kaoParts(this.ch.kao)[1];
+    const [, h] = kaoParts(code), before = this.ch.kao, was = kaoParts(before)[1];
     this.ch.setKao(code);
     if (h !== was) this.onceT = h && HANDS[h].once ? performance.now() + HANDS[h].once * 1000 : 0;
-    this.onSet?.(code);
+    this.onSet?.(code, before);
     if (this.open) this.render();
   }
 

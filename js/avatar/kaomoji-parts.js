@@ -70,6 +70,8 @@ export function kaoText(f, h, b) {
 // 網路上送的代號：臉、手、身體各 4 位元，0 是什麼都沒擺
 export const kaoCode = (f, h, b) => (f & 15) | ((h & 15) << 4) | ((b & 15) << 8);
 export const kaoParts = (c) => [c & 15, (c >> 4) & 15, (c >> 8) & 15];
+// 從 was 換到 now 有沒有多擺或換了一層；只是收掉幾層（做完一輪收手、走開放下姿勢、時間到）不算，頭上不再冒字、不再出聲
+export const kaoGrew = (was, now) => { const a = kaoParts(was), b = kaoParts(now); return b.some((v, i) => v && v !== a[i]); };
 // 擺出來時照哪個舊表情出聲：手優先，再看臉
 export const kaoLike = (c) => { const [f, h] = kaoParts(c); return HANDS[h]?.like || FACES[f]?.like || null; };
 // 要轉向的身體：鏡頭在 yaw 這個方向（從角色看出去，跟 heading 同一套）時，身體該朝哪

@@ -43,7 +43,8 @@ export function onEdgeExit(edge, prof, more = () => {}) {
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.avif': 'image/avif', '.json': 'application/json', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.m4a': 'audio/mp4', '.webmanifest': 'application/manifest+json' };
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function openBrowser({ port, dbg, window = '1920,2160', onEvent = null }) {
+// timeout：一個 CDP 指令最多等幾毫秒（0＝一直等）。頁面卡死時不會整支停住，丟出 e.timeout
+export async function openBrowser({ port, dbg, window = '1920,2160', onEvent = null, timeout = 0 }) {
   const srv = http.createServer((q, r) => {
     const f = path.join(ROOT, decodeURIComponent(new URL(q.url, 'http://x').pathname).replace(/\/$/, '/index.html'));
     fs.readFile(f, (e, b) => {
@@ -82,7 +83,12 @@ export async function openBrowser({ port, dbg, window = '1920,2160', onEvent = n
     if (d.method === 'Runtime.exceptionThrown') console.log('頁面錯誤', JSON.stringify(d.params.exceptionDetails).slice(0, 400));
     onEvent?.(d);
   };
-  const send = (method, params = {}) => new Promise((r) => { const i = ++id; wait.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
+  const send = (method, params = {}) => new Promise((r, no) => {
+    const i = ++id;
+    const t = timeout && setTimeout(() => { wait.delete(i); no(Object.assign(new Error(`${method} 等了 ${timeout / 1000} 秒沒回應`), { timeout: true })); }, timeout);
+    wait.set(i, (d) => { clearTimeout(t); r(d); });
+    ws.send(JSON.stringify({ id: i, method, params }));
+  });
   const ev = async (expr) => {
     const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true });
     if (r.result?.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails).slice(0, 600));

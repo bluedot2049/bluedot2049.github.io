@@ -9,7 +9,7 @@
 import { getSave, putSave } from '../save/progress.js';
 
 // 功能：[id, 名字, 在哪裡用, 預設的鍵]。在哪裡用：walk 走動、gear 舉著相機、drone 空拍機、cam 兩種相機、all 都算；同一個地方用到同一顆才算撞到。
-// 只能往後加（存檔記的是第幾個）
+// 只能往後加（存檔記的是第幾個）。不用的功能不能刪：名字留空、在哪寫 off、沒有鍵，佔著位子（換鍵卡不列、存檔裡換過的也不讀）
 export const ACTIONS = [
   ['fwd', '往前', 'all', ['KeyW']], ['back', '往後', 'all', ['KeyS']], ['left', '往左', 'all', ['KeyA']], ['right', '往右', 'all', ['KeyD']],
   ['jump', '跳', 'walk', ['Space']], ['sit', '坐', 'walk', ['KeyC']], ['interact', '互動', 'walk', ['KeyE']], ['view', '越肩', 'walk', ['KeyV']],
@@ -26,12 +26,12 @@ export const ACTIONS = [
   ['whistle', '吹哨', 'walk', ['KeyX']], ['tidy', '收起按鈕', 'walk', ['KeyR']], ['cursor', '叫出游標', 'walk', ['Alt']],
   // 拍照人的口令（social/cues.js）：舉著相機、攝影模式裡表情一到三換成這三個，G 標站位
   ['count', '數拍', 'cam', ['Digit1']], ['again', '再一張', 'cam', ['Digit2']], ['done', '好了', 'cam', ['Digit3']], ['spot', '站這', 'cam', ['KeyG']],
-  // 擺表情時頭看不看鏡頭（kaopanel.js 的看鏡）；相機裡的看鏡是 look（C），走動時 C 是坐
-  ['kaoLook', '表情看鏡', 'walk', ['KeyL']],
+  // 2026-11-08 拿掉：表情盤的看鏡開關（擺表情一定看鏡頭了）。佔位
+  ['kaoLook', '', 'off', []],
 ];
 // 換鍵卡上的分組和順序
 const GROUPS = [
-  ['走動', ['fwd', 'back', 'left', 'right', 'jump', 'sit', 'interact', 'view', 'wheel', 'emote1', 'emote2', 'emote3', 'emote4', 'emote5', 'kaoLook']],
+  ['走動', ['fwd', 'back', 'left', 'right', 'jump', 'sit', 'interact', 'view', 'wheel', 'emote1', 'emote2', 'emote3', 'emote4', 'emote5']],
   ['相機', ['raise', 'shutter', 'refocus', 'selfie', 'flash', 'date', 'turn', 'look', 'bare', 'up', 'down', 'fast', 'count', 'again', 'done', 'spot']],
   ['介面', ['photo', 'pack', 'save', 'eye', 'eyeOff', 'list', 'party', 'talk', 'mark', 'whistle', 'tidy', 'cursor']],
 ];
@@ -67,7 +67,7 @@ function load() {
   if (typeof s !== 'string') return;
   for (let i = 0; i + 6 <= s.length; i += 6) {
     const a = ACTIONS[parseInt(s.slice(i, i + 2), 16)], k = [s.slice(i + 2, i + 4), s.slice(i + 4, i + 6)].map((h) => CODES[parseInt(h, 16) - 1] ?? null);
-    if (a) binds[a[0]] = k;
+    if (a && a[2] !== 'off') binds[a[0]] = k;
   }
 }
 function store() {

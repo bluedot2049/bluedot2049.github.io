@@ -451,24 +451,25 @@ body #radio.moved { left: var(--mx, 16px); top: var(--my, 16px); right: auto; bo
 /* 作者的話：銘牌底下一行，標籤小、話本身置中 */
 #hollow .words { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 15px; letter-spacing: .2em; color: var(--text); }
 #hollow .words span { font-size: 11px; letter-spacing: .4em; color: var(--muted); }
-/* 在這裡做什麼，畫成一張（index.html 的 svg）：人和相機是象牙墨，畫框、地面、船是暗金，取景的角和閃光亮金；畫裡的人塗卡片底色，擋住後面的畫框 */
-#hollow .scene { flex: none; margin: 0; padding-top: 10px; border-top: 1px solid rgba(232, 184, 106, .1); }
-#hollow .scene svg { display: block; width: 100%; height: auto; stroke-width: 1.5; }
-#hollow .scene .fig { stroke: var(--text); fill: #100b09; }
-#hollow .scene .fig .face { fill: var(--text); stroke-width: 1.1; }
-#hollow .scene .frame, #hollow .scene .ground, #hollow .scene .sea, #hollow .scene .boat { stroke: var(--gold-lo); }
-#hollow .scene .thin { stroke-width: 1; opacity: .7; }
-#hollow .scene .sea { stroke-width: 1.1; }
-#hollow .scene .trail, #hollow .scene .star { fill: var(--gold-lo); stroke: none; }
-#hollow .scene .sight { stroke: var(--gold); stroke-width: 1; stroke-dasharray: 2 4; opacity: .45; }
-#hollow .scene .finder { stroke: var(--gold-hi); }
-#hollow .scene .flash { fill: var(--gold-hi); stroke: none; transform-box: fill-box; transform-origin: center; animation: hollow-flash 2.8s ease-in-out infinite; }
-#hollow .scene .boat { transform-box: fill-box; animation: hollow-bob 3.6s ease-in-out infinite; }
-#hollow .scene .flag { transform-box: fill-box; transform-origin: right center; animation: hollow-flag 1.9s ease-in-out infinite; }
-/* 一打開就在場：閃光在最亮和半亮之間、船在浮著，沒有從零長出來的一拍 */
-@keyframes hollow-flash { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .55; transform: scale(.8); } }
-@keyframes hollow-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.6px); } }
-@keyframes hollow-flag { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(.82); } }
+/* 在這裡做什麼，畫成一格寬銀幕的電影畫面（index.html 的 svg）：大片天空、碼頭一點透視、太陽在右邊三分之一、背光長影、四角壓暗；人小、幾何、只有剪影 */
+#hollow .scene { flex: none; margin: 0; padding-top: 12px; border-top: 1px solid rgba(232, 184, 106, .1); }
+#hollow .scene svg { display: block; width: 100%; height: auto; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+#hollow .scene .ink { fill: #100a0a; }
+#hollow .scene .shadow { fill: #0d0809; opacity: .7; }
+#hollow .scene .plank { stroke: rgba(232, 184, 106, .14); stroke-width: .6; }
+#hollow .scene .post { stroke: #100a0a; stroke-width: 1.1; }
+#hollow .scene .bulb { fill: var(--gold-hi); filter: drop-shadow(0 0 2px rgba(246, 219, 166, .9)); }
+#hollow .scene .glint { stroke: #f6dba6; stroke-width: 1.1; opacity: .6; }
+#hollow .scene .star { fill: var(--gold-hi); }
+#hollow .scene .bar { stroke: var(--gold); stroke-width: 1; opacity: .7; }
+#hollow .scene .dot { fill: var(--gold); }
+#hollow .scene .flash { fill: #fff3d6; filter: drop-shadow(0 0 2px rgba(246, 219, 166, 1)); transform-box: fill-box; transform-origin: center; animation: hollow-flash 2.8s ease-in-out infinite; }
+#hollow .scene .boat { animation: hollow-bob 3.6s ease-in-out infinite; }
+#hollow .scene .glint { animation: hollow-glint 2.2s ease-in-out infinite; }
+/* 一打開就在場：閃光在最亮和半亮之間、船浮著、海面的光閃，沒有從零長出來的一拍 */
+@keyframes hollow-flash { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .55; transform: scale(.7); } }
+@keyframes hollow-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-.8px); } }
+@keyframes hollow-glint { 0%, 100% { opacity: .6; } 50% { opacity: .3; } }
 /* 底下按鈕：「留話」窄、確認撐滿；寫字的時候換成「返回」「投進樹洞」 */
 #hollow .foot { flex: none; display: flex; gap: 8px; }
 #hollow .foot .write { flex: none; min-height: 42px; margin-top: 4px; padding: 0 16px; letter-spacing: .3em; }
@@ -772,8 +773,7 @@ body.kao-open:not(.desk):has(#kaopanel.side) #top-btns { opacity: 0; pointer-eve
 .kp-empty[hidden] { display: none; }
 .kp-chips button.flash { animation: kp-flash .7s ease-out; }
 @keyframes kp-flash { 0% { background: rgba(255, 215, 150, .55); } }
-.kp-foot { grid-template-columns: auto auto auto auto minmax(0, 1fr); padding-top: 2px; }
-.kp-foot [data-act="look"] { margin-right: 8px; display: inline-flex; align-items: center; gap: 5px; }
+.kp-foot { grid-template-columns: auto auto auto minmax(0, 1fr); padding-top: 2px; }
 .kp-foot button { height: 28px; padding: 0 10px; font: 12px/1 var(--font); letter-spacing: .06em; color: var(--muted); background: none; border: 1px solid var(--line-soft); border-radius: 14px; cursor: var(--cur-pointer); }
 .kp-foot button.on { color: var(--gold-hi); border-color: rgba(232, 184, 106, .55); }
 .kp-foot .kp-x { justify-self: end; color: var(--text); }

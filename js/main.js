@@ -6,7 +6,7 @@ import { Player } from './controls/player.js';
 import { Character } from './avatar/character.js';
 import { addMirrorLight, setMirrorLight, setStageLight } from './avatar/mirrorlight.js';
 import { Attention } from './avatar/attention.js';
-import { kaoLike, kaoFacing } from './avatar/kaomoji-parts.js';
+import { kaoLike, kaoFacing, kaoGrew } from './avatar/kaomoji-parts.js';
 import { KaoPanel } from './controls/kaopanel.js';
 import { sanitizeLook, randomPreset } from './avatar/looks.js';
 import { getSave, putSave, markTour } from './save/progress.js';
@@ -422,9 +422,11 @@ async function start() {
     onJump(k = 1) {
       mp?.jump(k);
     },
-    // 點了別人的角色：揮手
-    onTapOther() {
-      if (mp) sendEmote('👋');
+    // 點了別人的角色：揮手（顏文字的手那一層做一輪，kaopanel.js 的 wave），頭轉過去看他
+    onTapOther(id) {
+      if (photo.kaoOff) return;
+      kao.wave();
+      lookAtOther(id, 2);
     },
     onSit(on) {
       mp?.sendNow();
@@ -878,6 +880,11 @@ async function start() {
       ambience,
     });
     party.onHeard = (id) => lookAtOther(id, 2 + Math.random());
+    // 剛跟身邊的人同行：轉頭看他、揮手（跟點了別人的角色一樣，kaopanel.js 的 wave）。兩邊各自揮，照顏文字同步給對方看
+    party.onMet = (id) => {
+      if (!photo.kaoOff) kao.wave();
+      lookAtOther(id, 2.5);
+    };
     party.onSpot = (id, face) => cues?.arrived(id, face);   // 走到隊友給的站位：轉身對著他的鏡頭
     // 隊友剛用燭火乙式拍完，走到他旁邊互動鍵是「看照片」
     peek = new Peek({ party, mp, player, camera, ui });
@@ -969,15 +976,16 @@ async function start() {
     onView: () => applyViewOffset(),
     // 照相館裡揮手、拍手不做完一輪就收，一直做到拍下去
     keepOnce: () => !!photo.studio,
-    hint: (t) => ui.hint(t, { id: 'kao:look', ms: 1500 }),
-    onSet(code) {
-      mp?.popKao(character, code);
-      // 回眸、側身：身體自己轉，讓回頭剛好對著鏡頭。有人在拍就對他的鏡頭，沒有就對自己的畫面
-      const at = attention.frontLens()?.pos ?? camera.position;
-      const face = kaoFacing(code, Math.atan2(at.x - player.pos.x, at.z - player.pos.z));
+    onSet(code, was) {
+      // 只是收掉幾層（做完一輪收手、時間到回原本的少了幾層）不再冒字、出聲
+      const grew = kaoGrew(was, code);
+      if (grew) mp?.popKao(character, code);
+      // 回眸、側身：身體自己轉，讓回頭剛好對著鏡頭。走動時 player.poseTurn 一直照著轉（鏡頭繞過去也跟）；照相館對著照相館的鏡頭轉一次
+      const at = photo.studio ? camera.position : null;
+      const face = at ? kaoFacing(code, Math.atan2(at.x - player.pos.x, at.z - player.pos.z)) : null;
       if (face != null) player.faceYaw = face;
       else if (photo.studio && studio?.session?.heading != null) player.faceYaw = studio.session.heading;   // 照相館放下側身：轉回站位的方向
-      const e = kaoLike(code);
+      const e = grew && kaoLike(code);
       if (!e) return;
       ambience.cheer(character, e);
       startle(e);

@@ -129,6 +129,14 @@ function flame(ctx, out, noise, t, pts, attack, dur, peak) {
   src.stop(t + dur + 0.02);
 }
 
+// 用嘴吹的一聲哨（隊友的哨子）：正弦照 pts 滑音、vib 顫音深淺，帶一點氣音
+function blow(ctx, out, noise, t, d, pts, vib, peak = 0.9) {
+  const o = osc(ctx, 'sine', t, d, pts);
+  if (vib) lfo(ctx, t, d, 5.5, vib, o.frequency);
+  o.connect(envelope(ctx, t, 0.025, d, peak)).connect(out);
+  air(ctx, out, noise, t, [[0, pts[0][1] * 1.4]], 0.02, d, 0.05 * peak / 0.9, 2.5, 'bandpass');
+}
+
 export const VOICES = {
   // 相機（cameras.js）：葉片快門喀嚓兩下＝葉片張開一聲、闔上一聲。B 快門按住時兩聲分開，中間是開著的時間
   shutter(ctx, out, t, p, noise) {
@@ -654,15 +662,15 @@ export const VOICES = {
   // 隊友吹哨叫人（party.js）：用嘴吹的兩聲，先短短往上挑、再拉長往下帶一點顫，像在喊「喂——」。
   // p 照隊伍顏色分高低，聽得出是誰。帶一點氣音，不是電子的嗶
   hail(ctx, out, t, p, noise) {
-    const blow = (tt, d, pts, vib) => {
-      const o = osc(ctx, 'sine', tt, d, pts);
-      if (vib) lfo(ctx, tt, d, 5.5, vib, o.frequency);
-      o.connect(envelope(ctx, tt, 0.025, d, 0.9)).connect(out);
-      air(ctx, out, noise, tt, [[0, pts[0][1] * 1.4]], 0.02, d, 0.05, 2.5, 'bandpass');
-    };
-    blow(t, 0.15, [[0, 1350 * p], [0.12, 1900 * p]], 0);
-    blow(t + 0.23, 0.42, [[0, 1950 * p], [0.1, 1880 * p], [0.42, 1420 * p]], 18 * p);
+    blow(ctx, out, noise, t, 0.15, [[0, 1350 * p], [0.12, 1900 * p]], 0);
+    blow(ctx, out, noise, t + 0.23, 0.42, [[0, 1950 * p], [0.1, 1880 * p], [0.42, 1420 * p]], 18 * p);
     return 0.7;
+  },
+  // 剛同行（party.js 的 greet）：兩個人各吹一聲，一前一後像打招呼「嘿！」。跟叫人的哨子同一種氣音，短、往上挑、輕一點
+  met(ctx, out, t, p, noise) {
+    blow(ctx, out, noise, t, 0.1, [[0, 1500 * p], [0.08, 1760 * p]], 0, 0.55);
+    blow(ctx, out, noise, t + 0.14, 0.2, [[0, 1820 * p], [0.07, 2160 * p], [0.2, 2060 * p]], 0, 0.7);
+    return 0.4;
   },
   // 別區的隊友吹哨：隔著海傳過來，悶悶的、帶一點空曠的殘響
   hailFar(ctx, out, t, p, noise) {

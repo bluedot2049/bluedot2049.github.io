@@ -10,7 +10,7 @@ import { CAMERAS } from '../camera/cameras.js';
 import { Eye } from '../camera/eye.js';
 import { sanitizeLook, lookKey, presetLook, lookFromOutfit, toOutfit, ROBES } from '../avatar/looks.js';
 import { drawEmote } from './emotes.js';
-import { isKao, kaoParts, kaoText } from '../avatar/kaomoji-parts.js';
+import { isKao, kaoParts, kaoText, kaoGrew } from '../avatar/kaomoji-parts.js';
 import { TAG_LAYER } from '../core/scenery.js';
 import { pref } from '../save/prefs.js';
 
@@ -351,7 +351,7 @@ export class Multiplayer {
     const aim = p.camAim;
     const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room, s: p.sitCode, f: p.character.foodCode, a: aim ? aim.grip + 1 : 0, q: aim ? Math.round(aim.pitch * 20) / 20 : 0, w: this.away ? 1 : 0, l: Math.round((p.gaze || 0) * 20) / 20, v: Math.round((p.gazeP || 0) * 20) / 20 };
     if (p.gazeId) st.g = p.gazeId === 'self' ? this.id : p.gazeId;
-    // k：擺著的顏文字（kaomoji-parts.js 的代號），b：撐著，n：頭上不冒字（表情盤關了「給別人看」）。沒擺不送
+    // k：擺著的顏文字（kaomoji-parts.js 的代號），b：撐著，n：頭上不冒字（表情盤「頭上字」關了「自己」）。沒擺不送
     const ch = p.character;
     if (ch.kao) {
       st.k = ch.kao;
@@ -752,12 +752,13 @@ export class Multiplayer {
       if (t.s) o.ch.lift = seat ? seat.lift : t.s === -3 ? 0.3 : 0.02;   // -3 坐在邊上垂腳（player.sitCode）
       o.ch.lying = t.s === -2;
       if (t.f !== o.ch.foodCode) o.ch.setFoodCode(t.f);
-      // 顏文字：照收到的變了才換（角色走起來會自己放下，不能每幀拿舊的蓋回去）
+      // 顏文字：照收到的變了才換（角色走起來會自己放下，不能每幀拿舊的蓋回去）。只是收掉幾層不冒字、不出聲
       if (t.k !== o.kaoIn) {
+        const grew = kaoGrew(o.kaoIn ?? 0, t.k);
         o.kaoIn = t.k;
         o.ch.setKao?.(t.k);
-        if (!t.n && pref('kaoTagOthers')) this.popKao(o.ch, t.k);
-        this.events.onKao?.(o.ch, t.k);
+        if (grew && !t.n && pref('kaoTagOthers')) this.popKao(o.ch, t.k);
+        if (grew) this.events.onKao?.(o.ch, t.k);
       }
       o.ch.brace?.(!!t.b);
       o.ch.setAim?.(t.a ? { grip: t.a - 1, pitch: t.q } : null);

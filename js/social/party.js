@@ -18,6 +18,8 @@ const MAX = 4;               // 一隊最多幾個人
 const NEAR = 6;              // 多遠以內的人收得到邀請
 const INVITE_MS = 20000;     // 邀請放多久
 const INVITE_GAP = 5000;     // 自己送邀請的最短間隔
+const WAIT_JOIN = 4000;      // 對方最後一刻才答應，接上隊伍頻道再報到要的時間：送邀請的人等到 INVITE_MS 加這麼久才說沒有回應
+const MET_REPLY = 320;       // 剛同行時對方那聲哨子晚自己幾毫秒接上
 const SNUB_MS = 60000;       // 回絕過的人，這麼久內再邀請就不跳出來
 const BEAT_MOVING = 1500;    // 走動時多久報一次自己在哪
 const BEAT_IDLE = 5000;
@@ -197,6 +199,7 @@ export class Party {
     this.pending = null;            // 收到、還沒回覆的邀請 { pid, from, j }
     this.snubbed = new Map();       // 回絕過的人 -> 時間
     this.lastInvite = -Infinity;
+    this.waitUntil = 0;             // 送出邀請後等到什麼時候（0 是沒在等）
     this.lastBeat = -Infinity;
     this.lastSay = 0;
     this.lastMark = 0;
@@ -210,6 +213,7 @@ export class Party {
     this.view = { bottom: window.innerHeight, floor: Infinity };   // 看得到的範圍，每幀在 update 更新
     this.away = false;
     this.onHeard = null;            // (multiplayer 代號)：隊友說了一句話、吹了哨
+    this.onMet = null;              // (multiplayer 代號)：剛跟身邊這個人同行（greet），main 轉頭看他、揮手
     this.onFar = null;              // (區域)：點了別區隊友的名牌，main 帶人走到渡口、翻到那一區
     this.pk = 0;                    // 自己最後一張給隊友看的照片編號（peek.js 設），報到時帶上；0 是沒有
     this.peek = null;               // 湊過來看（peek.js），收到 peek、pix 轉給它
@@ -519,6 +523,7 @@ export class Party {
     if (!fresh) return;
     // 隊伍滿了，自己是最後進來的那個就退出
     if (this.roster().findIndex((r) => r.m === this.state.me) >= MAX) {
+      this.endWait();
       this.ui.hint('隊伍已經滿了');
       this.leave(true);
       return;
@@ -527,8 +532,14 @@ export class Party {
     if (!this.state.met) {
       this.state.met = 1;   // 真的組成過：之後渡海換頁、一時沒人，照一般的時間等，不當成沒跟上
       store(this.state);
+      this.endWait();
+      this.greet(o);
       this.ui.hint('已同行。按「說話」打字', 4000);
-    } else if (p.n === 1 && this.roster().length <= MAX) this.ui.hint('有人加入隊伍', 3000);
+    } else if (p.n === 1 && this.roster().length <= MAX) {
+      this.endWait();
+      this.greet(o);
+      this.ui.hint('有人加入隊伍', 3000);
+    }
     this.beatSoon();   // 新人進來，馬上報一次讓他知道
     this.refresh();
   }
@@ -600,15 +611,34 @@ export class Party {
     this.hail(null, this.colorOf(this.state.me), false);
   }
 
-  // 放哨音。at：吹的人在這一區的位置（null 是自己吹的，在耳邊）；far：隔著海。高低照隊伍顏色，聽得出是誰
-  hail(at, color, far) {
+  // 放哨音。at：吹的人在這一區的位置（null 是自己吹的，在耳邊）；far：隔著海。高低照隊伍顏色，聽得出是誰。
+  // kind：ambience-voices.js 的哪一聲（叫人 hail、剛同行 met）
+  hail(at, color, far, kind = 'hail') {
     const a = this.ambience;
     if (!a) return;
     const pitch = HAIL_PITCH[COLORS.indexOf(color)] ?? 1;
     if (far) return a.voice('hailFar', CALL_AWAY_VOL, 0, pitch);
-    if (!at) return a.voice('hail', CALL_VOL * 0.7, 0, pitch);
+    if (!at) return a.voice(kind, CALL_VOL * 0.7, 0, pitch);
     const ear = a.ear || this.player.pos, dx = at.x - ear.x, dz = at.z - ear.z, d = Math.hypot(dx, dz);
-    a.voice('hail', Math.max(CALL_MIN, CALL_VOL * (1 - d / HAIL_FAR)), a.panOf(dx, dz, d), pitch);
+    a.voice(kind, Math.max(CALL_MIN, CALL_VOL * (1 - d / HAIL_FAR)), a.panOf(dx, dz, d), pitch);
+  }
+
+  // 剛同行（第一次接上，或有新的人答應進來）：回饋放在兩個人身上，不只靠上面那行字。
+  // 他在身邊才做：自己的哨子先吹一聲短的、他那邊接一聲（各照隊伍顏色的高低），自己的角色轉頭看他、揮手（main 的 onMet）。
+  // 兩邊各自做，揮手照顏文字同步過去，所以兩邊看到的都是兩個人互相揮手。遠處的隊友有人進來只出字
+  greet(o) {
+    const other = o.s && this.mp.others.get(o.s);
+    if (o.zn !== this.zone || !other?.ch.group.visible) return;
+    if (Math.hypot(other.pos.x - this.player.pos.x, other.pos.z - this.player.pos.z) > NEAR * 2) return;
+    this.hail(null, this.colorOf(this.state.me), false, 'met');
+    setTimeout(() => this.hail(other.pos, this.colorOf(o.m), false, 'met'), MET_REPLY);
+    this.onMet?.(o.s);
+  }
+
+  // 等邀請的結果（送出去等人答應、答應了等接上隊伍）那行狀態收起來
+  endWait() {
+    this.waitUntil = 0;
+    this.ui.hideHint('party-wait');
   }
 
   // 點了隊友的記號：同一區就走過去（他還在走的話一路跟著找），別區的交給 main 帶到渡口；標記的記號走到標記那裡
@@ -696,7 +726,9 @@ export class Party {
     this.aloneSince = now;
     // j：隊裡最晚進來的人的入隊時間。答應的人排在這之後，手機時鐘不準也不會插到老隊員前面
     this.mp.party({ t: 'invite', pid: this.state.pid, j: Math.max(...this.roster().map((r) => r.j)) });
-    this.ui.hint('已送出邀請，等對方回應', 4000);
+    // 狀態：一直在，有人進來、或對方的邀請卡收掉再加接上頻道的時間都過了才收（update）
+    this.ui.hint('已送出邀請，等對方回應', { id: 'party-wait', hold: true });
+    this.waitUntil = now + INVITE_MS + WAIT_JOIN;
   }
 
   onInvite(m) {
@@ -734,11 +766,14 @@ export class Party {
     }
     if (this.state) this.leave(false);   // 自己發出去、還沒人答應的邀請就不等了
     this.open({ pid: p.pid, me: rid(), j: Math.max(Date.now(), p.j + 1), guest: 1 });
+    // 接上隊伍要一兩秒：這段時間說正在做什麼，接上了換成「已同行」，等不到（FOLLOW）換成沒跟上
+    this.ui.hint('正在加入隊伍', { id: 'party-wait', hold: true });
   }
 
   // 離隊。tell：跟隊友說一聲（只剩自己時散掉就不用）
   leave(tell) {
     if (!this.state) return;
+    this.endWait();
     if (tell) this.send('bye', {});
     const ch = this.ch;
     this.ch = null;
@@ -1075,6 +1110,11 @@ export class Party {
     if (this.pending) this.updateAsk();
     if (!this.state) return;
     if (now - this.lastBeat > (this.asking ? ASK : this.player.moving ? BEAT_MOVING : BEAT_IDLE)) this.beat();
+    // 送出的邀請沒有人答應：等的那行換成結果
+    if (this.waitUntil && now > this.waitUntil) {
+      this.endWait();
+      this.ui.hint('邀請沒有回應', 3000);
+    }
     for (const [m, o] of this.mates) if (this.gone(o, now)) {
       this.drop(m);
       this.ui.hint('有人離開隊伍', 3000);

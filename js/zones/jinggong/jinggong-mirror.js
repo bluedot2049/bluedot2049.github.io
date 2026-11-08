@@ -194,6 +194,12 @@ const PIECE_GLSL = /* glsl */ `
   }
 `;
 
+// 燈、金線、實牆、光線、底色寫的是畫面上的顏色（sRGB）。先轉回線性，再照 three.js 的規矩輸出：
+// 直接畫到螢幕時轉回原樣；相機取景、拍照先畫進中間的圖（線性）時，最後一道才轉，顏色才跟平常一樣
+const SCREEN_GLSL = /* glsl */ `
+  vec4 screenColor(vec3 c) { return sRGBTransferEOTF(vec4(max(c, vec3(0.0)), 1.0)); }
+`;
+
 const POINTS_VERT = PIECE_GLSL + /* glsl */ `
   uniform highp sampler2D uLights;
   uniform float uDelay; uniform float uScale; uniform float uDot; uniform float uFar;
@@ -232,13 +238,14 @@ const POINTS_VERT = PIECE_GLSL + /* glsl */ `
     gl_Position = projectionMatrix * mv;
   }`;
 
-const POINTS_FRAG = /* glsl */ `
+const POINTS_FRAG = SCREEN_GLSL + /* glsl */ `
   varying vec3 vC;
   void main() {
     float r = length(gl_PointCoord - 0.5) * 2.0;
     if (r > 1.0) discard;
     float halo = pow(1.0 - r, 2.4), core = smoothstep(0.24, 0.02, r);
-    gl_FragColor = vec4(vC * (halo * 0.5 + core * 1.05), 1.0);
+    gl_FragColor = screenColor(vC * (halo * 0.5 + core * 1.05));
+    #include <colorspace_fragment>
   }`;
 
 const COPY_VERT = PIECE_GLSL + /* glsl */ `
@@ -338,9 +345,12 @@ const TRIM_VERT = /* glsl */ `
     vC = uGold * pow(uWall * 0.7, vec3(aInfo.x)) * uVc[lv] * (1.0 - smoothstep(uFar * 0.2, uFar * 0.55, hd));
   }`;
 
-const TRIM_FRAG = /* glsl */ `
+const TRIM_FRAG = SCREEN_GLSL + /* glsl */ `
   varying vec3 vC; varying float vSide;
-  void main() { gl_FragColor = vec4(vC * (1.0 - vSide * vSide), 1.0); }`;
+  void main() {
+    gl_FragColor = screenColor(vC * (1.0 - vSide * vSide));
+    #include <colorspace_fragment>
+  }`;
 
 // 實牆：追光束碰到的那一段，照 piece 翻到倒影裡的位置畫一片直立的牆（每一層各一片）。
 // 明暗照牆在真實世界的位置算，倒影裡的洗牆燈才對得上本人那面：天花板上每隔 uSpan 一盞燈，往下打出一個扇形的光
@@ -363,7 +373,7 @@ const WALL_VERT = PIECE_GLSL + /* glsl */ `
     gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
   }`;
 
-const WALL_FRAG = /* glsl */ `
+const WALL_FRAG = SCREEN_GLSL + /* glsl */ `
   uniform float uH; uniform float uSpan; uniform float uFar; uniform vec3 uStone; uniform vec3 uWash; uniform vec3 uGold; uniform vec3 uFog;
   varying vec2 vReal; varying float vY; varying vec3 vWorld; varying vec3 vTint; varying float vS;
   float fresnelW(vec3 p) { return 0.45 + 0.55 * pow(1.0 - abs(normalize(p - cameraPosition).y), 4.0); }
@@ -381,7 +391,8 @@ const WALL_FRAG = /* glsl */ `
     if (vWorld.y < 0.0) col *= fresnelW(vWorld);
     // 遠處淡進底色（不是淡成黑的，不然倒影深處一片黑影）
     col = mix(col, uFog, smoothstep(uFar * 0.5, uFar, length(vWorld.xz - cameraPosition.xz)));
-    gl_FragColor = vec4(col, 1.0);
+    gl_FragColor = screenColor(col);
+    #include <colorspace_fragment>
   }`;
 
 // 光線：一段一段發光的細線（星盤的環、星座的連線、垂下來的光絲），跟燈一樣照 piece 翻進倒影。
@@ -425,17 +436,25 @@ const LINE_VERT = PIECE_GLSL + /* glsl */ `
     vC = col;
   }`;
 
-const LINE_FRAG = /* glsl */ `
+const LINE_FRAG = SCREEN_GLSL + /* glsl */ `
   varying vec3 vC; varying float vSide;
-  void main() { float e = 1.0 - vSide * vSide; gl_FragColor = vec4(vC * e * e, 1.0); }`;
+  void main() {
+    float e = 1.0 - vSide * vSide;
+    gl_FragColor = screenColor(vC * e * e);
+    #include <colorspace_fragment>
+  }`;
 
 const SKY_VERT = /* glsl */ `
   varying vec3 vDir;
   void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position.z = gl_Position.w * 0.99999; }`;
-const SKY_FRAG = /* glsl */ `
+const SKY_FRAG = SCREEN_GLSL + /* glsl */ `
   uniform vec3 uBase; uniform vec3 uGlow;
   varying vec3 vDir;
-  void main() { float h = exp(-abs(normalize(vDir).y) * 6.0); gl_FragColor = vec4(uBase + uGlow * h, 1.0); }`;
+  void main() {
+    float h = exp(-abs(normalize(vDir).y) * 6.0);
+    gl_FragColor = screenColor(uBase + uGlow * h);
+    #include <colorspace_fragment>
+  }`;
 
 // 位置都在著色器裡算，three.js 排序時不必量大小（量了反而是錯的）
 const EVERYWHERE = new THREE.Sphere(new THREE.Vector3(), Infinity);
@@ -815,9 +834,10 @@ export class MirrorHall {
     return { root: null, body, face, meshes, inst, n: 0 };
   }
 
-  // 場景裡看得到的角色（character.js 在根上標了 userData.character），近的先排，每人一格
+  // 場景裡看得到的角色（character.js 在根上標了 userData.character），近的先排，每人一格。
+  // mirrorOnly：本人藏起來、只在鏡子裡出現（攝影模式手持相機時，photo.js 標的）
   people(scene, ex, ez) {
-    const list = scene.children.filter((o) => o.userData.character && o.visible);
+    const list = scene.children.filter((o) => o.userData.character && (o.visible || o.userData.mirrorOnly));
     list.sort((a, b) => Math.hypot(a.position.x - ex, a.position.z - ez) - Math.hypot(b.position.x - ex, b.position.z - ez));
     list.length = Math.min(list.length, this.opt.people);
     while (this.copies.length < list.length) this.copies.push(this.slot());

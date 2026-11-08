@@ -381,6 +381,7 @@ export class PhotoMode {
     this.$('#photo').hidden = true;
     this.renderer.domElement.style.filter = '';
     this.character.group.visible = true;
+    this.character.group.userData.mirrorOnly = false;
     this.player.marker.visible = true;
     this.player.applyLens();
     this.camera.near = 0.1;
@@ -423,6 +424,7 @@ export class PhotoMode {
     Object.assign(this, { pitch: keep.pitch, aimPitch: keep.aimPitch });
     this.renderer.domElement.style.filter = keep.filter;
     this.character.group.visible = true;
+    this.character.group.userData.mirrorOnly = false;
     this.player.marker.visible = true;
     body.classList.remove('photo', 'photo-quick', 'photo-gear', 'photo-hush');
     sh.innerHTML = '';
@@ -719,6 +721,8 @@ export class PhotoMode {
     this.renderer.domElement.style.filter = look.filter;
     const seen = g ? this.grip === 3 : this.self;
     this.character.group.visible = seen;
+    // 手持看不到自己，但鏡子裡照樣有（鏡宮的倒影看這個旗子）
+    this.character.group.userData.mirrorOnly = !seen;
     this.player.marker.visible = seen && !g;
     document.body.classList.add('photo-hush');   // 對話框拍不進照片，取景時也藏起來
     const fr = this.$('#ph-frame');

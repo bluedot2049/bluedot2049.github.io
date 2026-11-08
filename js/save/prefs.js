@@ -35,7 +35,6 @@ export const PREFS = {
   radio: { kind: 'json' },                       // radio-sound.js：前廳收音機 { at 指針在刻度哪裡 0～1 }，開關不記，每次上線都是關著
   kaoTagMine: { kind: 'flag', init: true },      // kaopanel.js、multiplayer.js：自己頭上的顏文字給別人看
   kaoTagOthers: { kind: 'flag', init: true },    // 同上：看別人頭上的顏文字
-  kaoLook: { kind: 'flag', init: true },         // kaopanel.js、attention.js：擺著表情時頭看著鏡頭（表情盤的「看鏡」）
   kaoTagPhoto: { kind: 'flag', init: false },    // photo.js：畫廊的眼睛拍得進頭上的顏文字（攝影模式的「頭上字」）
   radioAt: { kind: 'json' },                     // radio-card.js：收音機面板拖到哪 { desk|land|port: { dx, dy } }，左上角離畫面中心多遠
 };
