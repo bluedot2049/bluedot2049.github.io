@@ -9,7 +9,9 @@
 // 以上是在盤上擺的。電腦數字鍵 1–5 是做一下（quick）：擺 4 秒回到原本的、按住撐到放開；在盤上動過就變回擺著。
 // 擺著時按住表情鍵不放是撐（character.js 的 brace）。常用五組跟著人走（progress.js 的 kaoFav，數字鍵 1–5，0 是空格），一開始全空、玩家自己組：
 // 常用最前面一顆「＋存」把現在擺的接在最後面（五格滿了是「已滿」，要先移出一組），擺的已經在常用裡就變「－移出」；手把 X 同一顆。
-// 擺著表情時頭一直看著跟拍鏡頭、轉不到身體轉過來（attention.js 的 posing、player.js 的 poseTurn），沒有開關；被別人拍時互動鍵的看鏡照樣優先。
+// 看哪（擺著表情時頭看哪，prefs 的 kaoGaze）：自動＝身邊有人就對著那個人做（隊友、正在看的優先），沒人看鏡頭；鏡頭＝一直看跟拍鏡頭；
+// 隨意＝表情不管頭。自動、鏡頭站著轉不到時身體轉過來（attention.js 的 emote、aimFor，player.js 的 poseTurn）。數字鍵做一下、盤上擺著都照它；
+// 點別人的角色揮手那一下不算（頭看他）；被別人拍時互動鍵的看鏡、自己在拍照樣優先。電腦 L（keymap 的 kaoLook，盤收著也能按，提示一行）、手把盤開著時 R
 // 位置照裝置（介面原則「表情盤」）：手機直拿貼在拇指那排上面、橫拿在搖桿另一邊的上半、電腦在下方那排上面；鏡頭讓開（main.js 的 applyViewOffset）
 import { FACES, HANDS, BODIES, PANEL, kaoCode, kaoParts } from '../avatar/kaomoji-parts.js';
 import { cached, request } from '../avatar/thumbs.js';
@@ -26,6 +28,8 @@ const TAP = 230;            // 表情鍵按下放開在這麼短之內算點一�
 const BRIEF = 4;            // 快捷鍵按一下擺幾秒（秒）
 const GAP = 10;             // 面板跟按鈕、畫面邊留這麼多
 const WAVE = 1;             // HANDS 的揮手（點別人的角色時做一輪）
+// 看哪的三種：值、按鈕上的字、選了以後下面那行寫什麼（也是收著時按 L 的提示）
+const GAZE = [['auto', '自動', '有人看人，沒人看鏡頭'], ['cam', '鏡頭', '一直看鏡頭'], ['free', '隨意', '表情不管頭']];
 // 手機要讓開的那些（拇指弧、搖桿、上排）
 const THUMBS = ['joy', 'swap-btn', 'emote-btn', 'photo-btn', 'pack-btn', 'say-btn', 'jump-btn', 'sit-btn', 'action-btn'];
 
@@ -50,8 +54,10 @@ const kaoName = (f, h, b) => [f && FACES[f]?.n, h && HANDS[h]?.n, b && BODIES[b]
 export class KaoPanel {
   // onSet(code, was)：擺好、換了、放下時呼叫（was 是換之前的），主程式拿去冒字、出聲、送給別人。blocked()：這時候不開（開著就收）。onView()：開關、換位置，鏡頭要讓
   // keepOnce()：這時候做一輪就收的動作不收（照相館，一直做到拍下去）
-  constructor({ player, onSet, blocked = () => false, onView = null, keepOnce = () => false }) {
+  // hint(字)：盤收著時換了看哪，提示一行
+  constructor({ player, onSet, blocked = () => false, onView = null, keepOnce = () => false, hint = null }) {
     this.keepOnce = keepOnce;
+    this.hint = hint;
     this.player = player;
     this.onSet = onSet;
     this.blocked = blocked;
@@ -116,6 +122,9 @@ export class KaoPanel {
       + row('kp-face', '表情', chips('face', PANEL.face))
       + row('kp-hand', '動作', chips('hand', PANEL.hand))
       + row('kp-body', '姿勢', poses)
+      + `<div class="kp-foot kp-gaze" role="radiogroup" aria-label="擺表情時頭看哪"><span class="kp-name">看哪</span>`
+      + GAZE.map(([v, t, say]) => `<button type="button" role="radio" data-act="gaze" data-v="${v}" title="${say}">${t}</button>`).join('')
+      + '<small class="kp-say"></small></div>'
       + `<div class="kp-foot"><span class="kp-name">頭上表情</span>
           <button type="button" data-act="tag-mine" title="自己頭上的表情，別人看得到">自己</button><button type="button" data-act="tag-others" title="別人頭上的表情，自己看得到">別人</button>
           <button type="button" class="kp-x" data-act="close" aria-label="收起來">收起</button></div>`;
@@ -177,6 +186,16 @@ export class KaoPanel {
       el.classList.toggle('on', on);
       el.setAttribute('aria-pressed', on);
     }
+    // 看哪：亮選的那顆，後面寫選了會怎樣；換的鍵寫在最前面（電腦 L、手把 R）
+    const g = this.gazeMode;
+    for (const el of this.el.querySelectorAll('[data-act="gaze"]')) {
+      const on = el.dataset.v === g;
+      el.classList.toggle('on', on);
+      el.setAttribute('aria-checked', on);
+    }
+    const say = this.el.querySelector('.kp-say');
+    const sh = (cls.contains('pad') ? `<kbd>${padBtn(5)}</kbd>` : cls.contains('desk') ? `<kbd>${key('kaoLook')}</kbd>` : '') + GAZE.find((x) => x[0] === g)[2];
+    if (say.dataset.html !== sh) { say.dataset.html = sh; say.innerHTML = sh; }
   }
 
   // 按下表情鍵。kind：'touch'（表情鈕）、'key'（Q）、'pad'（L）。擺著的時候按著就先撐，放開時看按了多久
@@ -264,13 +283,36 @@ export class KaoPanel {
         setPref(k, !pref(k));
         return this.render();
       }
+      case 'gaze': return this.setGaze(b.dataset.v);
       case 'close': return this.close();
     }
   }
 
-  // 擺著東西：頭看著跟拍鏡頭（attention.js 的 posing）。點別人揮手的那一下看著他，不算
-  get posing() {
-    return this.ch.kao !== 0 && this.brief?.i !== -1;
+  // 看哪現在選哪種（壞掉的值當自動）
+  get gazeMode() {
+    const v = pref('kaoGaze');
+    return GAZE.some((x) => x[0] === v) ? v : 'auto';
+  }
+
+  setGaze(v) {
+    if (v === this.gazeMode) return;
+    sfx('tap');
+    setPref('kaoGaze', v);
+    if (this.open) this.render();
+    else { const [, t, say] = GAZE.find((x) => x[0] === v); this.hint?.(`表情看哪：${t}　${say}`); }
+  }
+
+  // 自動 → 鏡頭 → 隨意 → 自動（電腦 L、手把盤開著時 R）
+  cycleGaze() {
+    const i = GAZE.findIndex((x) => x[0] === this.gazeMode);
+    this.setGaze(GAZE[(i + 1) % GAZE.length][0]);
+  }
+
+  // 擺著東西時頭看哪（attention.js 的 emote）：'auto'／'cam'；沒擺、選了隨意是 null。點別人揮手的那一下頭看他，不算
+  get gaze() {
+    if (this.ch.kao === 0 || this.brief?.i === -1) return null;
+    const g = this.gazeMode;
+    return g === 'free' ? null : g;
   }
 
   // 常用第 i 組（數字鍵、面板）：正擺著同一組就放下；空格不做事

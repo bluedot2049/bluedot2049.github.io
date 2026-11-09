@@ -5,7 +5,10 @@
 //   1. 自己在拍（空拍機、自拍、照相館）：攝影模式的看鏡開著、照相館正在倒數 → 看自己的鏡頭（ownLock）
 //   2. 別人的鏡頭按了看鏡（互動鍵、點那顆鏡頭、走到隊友的站位）→ 一直看著它。只有自己按不看、他放下相機、說好了、
 //      鏡頭離開自己 LOCK_LOST 秒才放；他重新構圖、對焦到別處、自己轉一下身都不放
-//   3. 擺著表情 → 看跟拍鏡頭（自己畫面的鏡頭），轉不到時身體轉過來（player.poseTurn）
+//   3. 擺著表情，照表情盤的「看哪」（kaopanel.js 的 gaze）：
+//      自動：擺上那一刻挑一個人對著他（正在看的人、隊友優先，aimFor），做完、換一組才重挑；身邊沒人 → 看跟拍鏡頭
+//      鏡頭：看跟拍鏡頭（自己畫面的鏡頭）。兩種都是站著轉不到時身體轉過來（player.poseTurn，轉向 turnTo）
+//      隨意：表情不管頭，照第 4 條
 //   4. 其他時候隨意看：對著自己的鏡頭只是候選之一，偶爾瞄一眼；按了不看的那個鏡頭，他放下相機之前不再瞄
 // 隊友的鏡頭不管對焦距離（他對焦在背後也算在拍你）
 // 這裡只回答看哪一點、那一點是誰（pid，同步給別人用）；什麼時候輪到注意力管、轉成頭的角度在 player.updateGaze
@@ -26,6 +29,9 @@ const EXPECT = 20, EXPECT_LEAVE = 1;
 const HEAD = 1.2, HEAD_UP = 0.7, HEAD_DOWN = 0.5;
 // 跟拍鏡頭偏離這麼多（弧度）頭才跟過去，鏡頭稍微動一下不會跟著轉一點
 const CAM_SLACK = 0.15;
+// 表情「自動」挑對象：隊友這麼遠（公尺）、哪個方向都算；別人（玩家、NPC）要在身體前方 AIM_WIDE 弧度內、AIM_FAR 公尺內。
+// 挑好了走到 AIM_KEEP 外才換
+const AIM_MATE = 10, AIM_FAR = 5, AIM_WIDE = HEAD + 0.6, AIM_KEEP = 12;
 // 插隊的事件最短間隔（秒），一群人同時揮手不會被扯來扯去
 const EVENT_GAP = 1.2;
 // 每種東西看多久（秒，範圍內抽）；走路時縮短
@@ -61,7 +67,7 @@ export class Attention {
     this.ownLens = () => null;      // 自己的鏡頭（photo.js 的 lensInfo）
     this.ownLock = () => false;     // 攝影模式的看鏡開著、照相館正在倒數
     this.mate = () => false;        // (鏡頭 id) 是不是隊友（party.js）：隊友的鏡頭不管對焦距離
-    this.posing = () => false;      // 擺著表情（kaopanel.js）
+    this.emote = () => null;        // 擺著表情時頭看哪：'auto'／'cam'，沒擺、表情盤選了隨意是 null（kaopanel.js 的 gaze）
     this.onSeen = null;             // (lens, d)：有鏡頭剛對到自己，主程式出聲
     this.cur = null;                // 正在看的 { key, get, kind, pid, until }
     this.last = [];                 // 最近看過的兩個，不會一直看同一個
@@ -70,6 +76,9 @@ export class Attention {
     this.lock = null;               // 按了看鏡的那個鏡頭
     this.want = null;               // 走到站位：等這個鏡頭對到自己就看鏡 { id, until, x, z }
     this.pose = null;               // 擺表情時看著跟拍鏡頭的那一個（cur 是它就是在擺）
+    this.aim = null;                // 表情「自動」對著的人 { key, get, pid, code 擺的哪一組 }；{ code, none } 是挑過了沒人
+    this.aimed = false;             // 這一幀對著人（turnTo 用 aimAt）
+    this.aimAt = new THREE.Vector3();
     this.mode = null;
     this.ctx = null;
     this.eventAt = -1e9;
@@ -95,6 +104,7 @@ export class Attention {
     this.ctx = ctx;
     const was = this.mode;
     this.mode = ctx.mode;
+    this.aimed = false;
     this.scan(dt, ctx);
     // 自己的空拍機飛得多快：飛著的時候比停著吸引人
     const L = ctx.mode === 'own' ? this.ownLens() : null;
@@ -105,15 +115,25 @@ export class Attention {
     this.waitLock(ctx);
     const lk = this.locked();
     if (lk && LOCKABLE.has(ctx.mode)) return this.result(lk.pos, lk.id);
-    // 擺表情：頭一直看著跟拍鏡頭，正在轉鏡頭也跟著（不留 CAM_SLACK，頭的彈簧自己會順）。
+    // 擺表情、自動：對著挑好的人（越肩也算，自己看不到臉，對方看得到你在看他）。站著轉不到身體轉過來，走路時轉不到看前面
+    const em = this.emote();
+    if (em !== 'auto') this.aim = null;
+    const a = em === 'auto' && LOCKABLE.has(ctx.mode) ? this.aimFor(ctx) : null;
+    if (a) {
+      this.cur = a;
+      this.aimed = true;
+      this.aimAt.copy(this.q);
+      return !ctx.moving || Math.abs(this.rel(this.q).yaw) <= HEAD + 0.3 ? this.result(this.q, a.pid) : this.result((this.ahead(this.p, 0, -0.05), this.p), null);
+    }
+    // 擺表情、鏡頭（自動但身邊沒人也是）：頭一直看著跟拍鏡頭，正在轉鏡頭也跟著（不留 CAM_SLACK，頭的彈簧自己會順）。
     // 站著時鏡頭繞到背後，頭先轉到底、身體跟著轉過來（player.poseTurn）；走路時轉不到就看前面
-    if (POSE_MODES.has(ctx.mode) && this.posing()) {
-      if (this.cur !== this.pose) this.cur = this.pose ??= { key: 'pose', kind: 'pose', get: (o) => !!o.copy(this.ctx.cam), pid: null, until: Infinity };
+    if (em && POSE_MODES.has(ctx.mode)) {
+      if (this.cur !== this.pose) this.cur = this.pose ??= { key: 'pose', kind: 'pose', get: (o) => !!o.copy(this.ctx.cam), pid: null, until: Infinity, emote: true };
       // 鏡頭多半比頭高很多：只看左右轉不轉得到，抬頭抬不到的部分 player.updateGaze 自己夾住
       this.q.copy(ctx.cam);
       return this.result(!ctx.moving || Math.abs(this.rel(this.q).yaw) <= HEAD + 0.3 ? this.q : (this.ahead(this.p, 0, -0.05), this.p), null);
     }
-    if (this.cur === this.pose) this.cur = null;
+    if (this.cur?.emote) this.cur = null;
     if (!ROAM.has(ctx.mode)) {
       this.cur = null;
       this.hasHeld = false;
@@ -129,6 +149,42 @@ export class Attention {
     if (!this.cur || ctx.now > this.cur.until || !this.usable(this.cur)) this.choose();
     if (!this.cur || !this.cur.get(this.p)) return null;
     return this.result(this.p, this.cur.pid);
+  }
+
+  // 表情「自動」對著誰：同一組擺著就一直是他（點留在 this.q）；換了一組、他走遠不見了重挑，沒人回 null（看鏡頭）。
+  // 挑過沒人，這一組擺著就不再找（不會擺到一半突然轉去看剛走過來的人）
+  aimFor(ctx) {
+    const code = this.character.kao, a = this.aim, same = a && a.code === code;
+    if (same && a.none) return null;
+    if (same && a.get(this.q) && this.rel(this.q).d <= AIM_KEEP) return a;
+    const pick = this.pickAim(ctx, same ? a.key : null);
+    this.aim = pick ? { key: pick.key, get: pick.get, pid: pick.pid, kind: 'person', until: Infinity, emote: true, code } : { code, none: true };
+    return pick && this.aim.get(this.q) ? this.aim : null;
+  }
+
+  // 挑一個人：隊友（哪個方向都算）、正在看的那個優先，再來身體正前方、近的；隔著牆的不算。skip 是剛走掉的那個
+  pickAim(ctx, skip) {
+    const list = [];
+    const push = (key, get, kind = 'person', w = 1, pid = null) => { if (kind === 'person' && key !== skip) list.push({ key, get, pid }); };
+    for (const src of this.sources) src(push, ctx);
+    let best = null, bs = -Infinity;
+    for (const x of list) {
+      if (!x.get(this.p)) continue;
+      const r = this.rel(this.p), mate = x.pid != null && this.mate(x.pid);
+      if (r.d > (mate ? AIM_MATE : AIM_FAR) || (!mate && Math.abs(r.yaw) > AIM_WIDE)) continue;
+      if (this.world.camClip && this.world.camClip(ctx.head, this.p) < 1) continue;
+      const s = -Math.abs(r.yaw) - r.d / 3 + (mate ? 2 : 0) + (this.cur?.key === x.key ? 1.5 : 0);
+      if (s > bs) { bs = s; best = x; }
+    }
+    return best;
+  }
+
+  // 擺表情站著時身體要轉向哪一點（player.poseTurn）：按了看鏡的那個鏡頭、自動對著的人、跟拍鏡頭；沒擺、選了隨意回 null
+  turnTo() {
+    if (!this.ctx || !this.emote()) return null;
+    const lk = this.locked();
+    if (lk) return lk.pos;
+    return this.aimed ? this.aimAt : this.ctx.cam;
   }
 
   result(p, pid) {
@@ -148,7 +204,7 @@ export class Attention {
   // 有事發生，插隊轉過去看 dur 秒：別人揮手、跳、閃光，隊友說話，動物叫，鏡頭剛對到自己
   notice(key, get, { kind = 'person', dur = 1.5, pid = null } = {}) {
     const ctx = this.ctx;
-    if (!ctx || !ROAM.has(ctx.mode) || this.lock || (ctx.mode === 'own' && this.ownLock()) || this.posing()) return;
+    if (!ctx || !ROAM.has(ctx.mode) || this.lock || (ctx.mode === 'own' && this.ownLock()) || this.emote()) return;
     if (ctx.now - this.eventAt < EVENT_GAP) return;
     const c = { key, get, kind, pid };
     if (!this.usable(c)) return;

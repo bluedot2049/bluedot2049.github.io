@@ -1524,16 +1524,16 @@ export class Player {
     this.character.gazeP = this.gazeP;
   }
 
-  // 擺表情站著：鏡頭繞到頭轉不到的地方，身體慢慢轉過來，轉到頭看得舒服就停；回眸、側身照它要的角度。
-  // 對著自己的畫面；按了互動鍵「看鏡」看別人的鏡頭時對著那個。走路、越肩、看畫照鏡子時不轉
+  // 擺表情站著：要看的那一點繞到頭轉不到的地方，身體慢慢轉過來，轉到頭看得舒服就停；回眸、側身照它要的角度。
+  // 看哪一點是 attention.turnTo：按了互動鍵「看鏡」的別人鏡頭、表情「自動」對著的人、自己的畫面；表情選了隨意不轉。走路、越肩、看畫照鏡子時不轉
   poseTurn(free) {
-    const a = this.attn;
-    if (!free || this.shoulder || this.speed > 0.05 || this.path.length || this.focus || !a?.posing()) {
+    const cam = free && !this.shoulder && this.speed <= 0.05 && !this.path.length && !this.focus ? this.attn?.turnTo() : null;
+    if (!cam) {
       this.poseYaw = null;
       this.poseSide = 0;
       return;
     }
-    const cam = (a.lock && a.frontLens()?.pos) || this.camera.position, dir = Math.atan2(cam.x - this.pos.x, cam.z - this.pos.z);
+    const dir = Math.atan2(cam.x - this.pos.x, cam.z - this.pos.z);
     const f = kaoFacing(this.character.kao, dir);
     if (f != null) {
       // 這幾種頭不另外轉（character 的 kaoTurnK），poseSide 不用；poseYaw 還留著就是正在轉

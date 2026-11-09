@@ -337,7 +337,9 @@ export function buildOutdoor(room, h) {
   const hillBucket = newBucket();
   vk.emit(hillBucket, 0, 0, 0);
   for (const o of h.bucketObjects(hillBucket)) { o.layers.enable(REFLECT_LAYER); o.renderOrder = ORDER.hills; group.add(o); }
-  meadowGroup.add(grass(terrain, z0, coarse ? 10000 : 20000, h.uTime, (x, z) => nearTrail(x, z, 0.6) || onJetty(x, z0 - z, -0.15)));
+  // 野餐墊底下不種草：草葉會隨風擺，從薄薄的墊子穿出來一閃一閃
+  const onMat = (x, z) => Math.abs(x - pic.x) < 1.05 && Math.abs(z - pic.z) < 0.8;
+  meadowGroup.add(grass(terrain, z0, coarse ? 10000 : 20000, h.uTime, (x, z) => nearTrail(x, z, 0.6) || onJetty(x, z0 - z, -0.15) || onMat(x, z)));
   meadowGroup.add(seeds(mz, h.uTime));
   meadowGroup.add(h.glowPoints(Array.from({ length: 28 }, () => {
     const a = R() * Math.PI * 2, e = Math.sqrt(R()) * 1.1;

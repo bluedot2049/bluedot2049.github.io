@@ -1015,6 +1015,7 @@ async function start() {
     onView: () => applyViewOffset(),
     // 照相館裡揮手、拍手不做完一輪就收，一直做到拍下去
     keepOnce: () => !!photo.studio,
+    hint: (t) => ui.hint(t, { id: 'kao:gaze', ms: 1800 }),
     onSet(code, was) {
       // 只是收掉幾層（做完一輪收手、時間到回原本的少了幾層）不再冒字、出聲
       const grew = kaoGrew(was, code);
@@ -1031,7 +1032,7 @@ async function start() {
     },
   });
   kao.bindButton(document.getElementById('emote-btn'), () => photo.kaoOff);
-  attention.posing = () => kao.posing;
+  attention.emote = () => kao.gaze;
   // 電腦：數字鍵 1–5（常用一到五，keymap.js）做一下常用的那一組：按一下擺幾秒回到原本的，按住撐到放開（kaopanel.js 的 quick）。拍照時數字鍵是口令（cues.js），打字時不算
   const favKey = (e) => [1, 2, 3, 4, 5].findIndex((n) => is(e, 'emote' + n));
   window.addEventListener('keydown', (e) => {

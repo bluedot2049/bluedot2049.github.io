@@ -886,9 +886,14 @@ body.kao-open:not(.desk):has(#kaopanel.side) #top-btns { opacity: 0; pointer-eve
 .kp-foot button { height: 28px; padding: 0 10px; font: 12px/1 var(--font); letter-spacing: .06em; color: var(--muted); background: none; border: 1px solid var(--line-soft); border-radius: 14px; cursor: var(--cur-pointer); }
 .kp-foot button.on { color: var(--gold-hi); border-color: rgba(232, 184, 106, .55); }
 .kp-foot .kp-x { justify-self: end; color: var(--text); }
+/* 看哪：三顆選一，後面一行寫選了會怎樣（換的鍵在最前面） */
+.kp-gaze { grid-template-columns: auto auto auto auto minmax(0, 1fr); }
+.kp-say { font-size: 11.5px; letter-spacing: .04em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kp-say kbd { font: 11px/1.4 var(--latin); padding: 0 4px; margin-right: 5px; color: var(--muted); border: 1px solid rgba(232, 184, 106, .3); border-radius: 2px; }
 /* 電腦：不捲，換行攤開，一眼看完 */
 body.desk .kp-row { align-items: start; }
 body.desk .kp-name { padding-top: 9px; }
+body.desk .kp-foot .kp-name { padding-top: 0; }
 body.desk .kp-chips { flex-wrap: wrap; overflow: visible; padding: 1px; -webkit-mask-image: none; mask-image: none; }
 body.desk .kp-chips button { height: 34px; }
 body.desk .kp-chips .kp-pose { height: 52px; }
