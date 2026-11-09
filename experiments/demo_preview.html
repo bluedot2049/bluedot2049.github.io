@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>動態示範</title>
+  <!-- 教學的動態示範圖：一個動作一張，手機、電腦、手把各畫一份，金線 SVG＋CSS 動畫（只動 transform、opacity）。
+       上半是三種平台並排（放大看、泡泡大小、提示那行），下半是擺在畫面上的位置（位置從模擬的搖桿、按鈕量出來）。
+       鍵盤的字照 js/controls/keymap.js 的 key()，手把的圖照 js/controls/padglyphs.js。第一幀就在動作中間（負的 animation-delay） -->
+  <link rel="stylesheet" href="../css/alchemy-font.css">
+  <style>
+    :root {
+      --bg: #1c130d; --ink: #120c08; --panel: rgba(30, 20, 14, 0.94);
+      --line: rgba(232, 184, 106, 0.32); --line-soft: rgba(232, 184, 106, 0.14);
+      --gold: #e8b86a; --gold-hi: #f6dba6; --gold-lo: #a9763a; --gold-fill: #e2ad5f;
+      --text: #f5e9d4; --muted: #b5a084;
+      --font: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+      --T: 2.6s;
+    }
+    html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+    main { max-width: 1120px; margin: 0 auto; padding: 18px 16px 56px; }
+    h1 { margin: 0; font-size: 17px; font-weight: 600; color: var(--gold); }
+    h2 { margin: 30px 0 4px; font-size: 15px; font-weight: 600; color: var(--gold); }
+    .note { font-size: 13px; color: var(--muted); margin-top: 4px; line-height: 1.6; }
+    .bar { display: flex; gap: 8px 14px; flex-wrap: wrap; align-items: center; margin-top: 12px; font-size: 13px; color: var(--muted); }
+    .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+    .seg button { padding: 5px 12px; border: 0; background: none; color: var(--muted); font: inherit; cursor: pointer; }
+    .seg button.on { background: var(--gold-fill); color: #2a1a0c; }
+    label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+    input[type=range] { accent-color: var(--gold); width: 110px; }
+    input[type=checkbox] { accent-color: var(--gold); }
+
+    /* ---------- 並排表 ---------- */
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th { font-size: 13px; font-weight: 600; color: var(--gold); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line-soft); }
+    th.verb { width: 64px; }
+    td { padding: 10px 8px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+    .cell { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .big { width: 96px; height: 96px; background: rgba(18, 12, 8, .5); border-radius: 10px; }
+    .mid { width: 44px; height: 44px; }
+    .sizes { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+    .verbname { font-size: 15px; color: var(--text); }
+
+    /* 提示那一行（照 hud.css 的 #hint）：圖放在字前面 */
+    .hint {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 7px 16px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: 999px;
+      font-size: 13px; letter-spacing: .08em; color: var(--muted); white-space: nowrap;
+    }
+    .hint::before, .hint::after { content: ""; flex: 0 0 auto; width: 5px; height: 5px; background: var(--gold); transform: rotate(45deg); opacity: .7; }
+    .hint .demo { width: 22px; height: 22px; margin: -4px 0; }
+
+    /* ---------- 示範圖本身 ---------- */
+    .demo { display: inline-block; flex: 0 0 auto; }
+    .demo svg { display: block; width: 100%; height: 100%; overflow: visible; }
+    .demo * { animation-duration: var(--T); animation-iteration-count: infinite; animation-timing-function: ease-in-out;
+              animation-delay: calc(var(--T) * (var(--ph, 0) + var(--o, 0)) * -1); }
+    .demo .sc { transform-box: fill-box; transform-origin: center; }
+    .still .demo *, .demo.still * { animation-play-state: paused !important; }
+    .bare .chrome { display: none; }
+    .ln { fill: none; stroke: var(--gold); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    .dim { opacity: .5; }
+    .fing { fill: rgba(18, 12, 8, .72); stroke: var(--gold-hi); stroke-width: 2; stroke-linejoin: round; }
+    .touchring { fill: none; stroke: var(--gold-hi); stroke-width: 1.6; }
+    .cap { fill: rgba(18, 12, 8, .6); stroke: var(--gold); stroke-width: 1.8; }
+    .capt { fill: var(--gold-hi); font: 700 7px Georgia, "Noto Serif TC", serif; text-anchor: middle; dominant-baseline: central; }
+    .lit rect { fill: var(--gold-fill); stroke: var(--gold-hi); }
+    .lit text { fill: #2a1a0c; }
+
+    /* 搖桿往前推、停一下、回來；箭頭只在推著時在 */
+    @keyframes push-ur { 0%, 12% { transform: translate(0, 0); } 38%, 68% { transform: translate(6px, -8px); } 90%, 100% { transform: translate(0, 0); } }
+    @keyframes push-up { 0%, 12% { transform: translate(0, 0); } 38%, 68% { transform: translate(0, -6px); } 90%, 100% { transform: translate(0, 0); } }
+    @keyframes while-pushed { 0%, 30% { opacity: 0; } 40%, 66% { opacity: 1; } 76%, 100% { opacity: 0; } }
+    /* 左右拖、左右推 */
+    @keyframes sway9 { 0%, 100% { transform: translateX(-9px); } 50% { transform: translateX(9px); } }
+    @keyframes sway6 { 0%, 100% { transform: translateX(-6px); } 50% { transform: translateX(6px); } }
+    /* 兩指撐開 */
+    @keyframes spread-a { 0%, 15% { transform: translate(0, 0); } 50%, 70% { transform: translate(-6px, 6px); } 95%, 100% { transform: translate(0, 0); } }
+    @keyframes spread-b { 0%, 15% { transform: translate(0, 0); } 50%, 70% { transform: translate(6px, -6px); } 95%, 100% { transform: translate(0, 0); } }
+    /* 點一下：手指下來、按鈕陷下去、外圈擴一圈 */
+    @keyframes tap-finger { 0%, 10% { transform: translate(5px, 8px); } 30%, 42% { transform: translate(0, 0); } 62%, 100% { transform: translate(5px, 8px); } }
+    @keyframes tap-btn { 0%, 30% { transform: scale(1); } 34%, 44% { transform: scale(.9); } 50%, 100% { transform: scale(1); } }
+    @keyframes ring-out { 0%, 33% { transform: scale(1); opacity: 0; } 35% { transform: scale(1); opacity: .95; } 82%, 100% { transform: scale(1.6); opacity: 0; } }
+    /* 鍵按下：亮的那層蓋上去、往下一點 */
+    @keyframes key-once { 0%, 28% { opacity: 0; transform: translateY(0); } 31%, 52% { opacity: 1; transform: translateY(.8px); } 55%, 100% { opacity: 0; transform: translateY(0); } }
+    @keyframes key-quarter { 0%, 21% { opacity: 1; transform: translateY(.8px); } 24%, 97% { opacity: 0; transform: translateY(0); } 100% { opacity: 1; transform: translateY(.8px); } }
+    @keyframes key-half { 0%, 42% { opacity: 1; } 47%, 95% { opacity: 0; } 100% { opacity: 1; } }
+    /* 滾輪的紋一直往上捲 */
+    @keyframes roll { from { transform: translateY(0); } to { transform: translateY(-3px); } }
+
+    /* ---------- 擺在畫面上 ---------- */
+    .frames { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; margin-top: 12px; }
+    .fwrap { position: relative; overflow: hidden; border-radius: 12px; border: 1px solid var(--line-soft); }
+    .fcap { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .scr { position: absolute; left: 0; top: 0; transform-origin: 0 0;
+           background: radial-gradient(ellipse at 50% 40%, #3a2a1e, #1d140e 70%); overflow: hidden; }
+    .scr .el { position: absolute; }
+    .m-joy { border-radius: 50%; background: rgba(30, 20, 14, .4); border: 1px solid var(--line);
+             box-shadow: inset 0 0 0 5px rgba(18, 12, 8, .35), inset 0 0 0 6px var(--line-soft); }
+    .m-joy::after { content: ""; position: absolute; left: 50%; top: 50%; width: 42%; height: 42%; transform: translate(-50%, -50%);
+                    border-radius: 50%; background: var(--gold-fill); }
+    .m-seal { border-radius: 50%; background: rgba(40, 27, 18, .9); border: 1px solid var(--line);
+              box-shadow: inset 0 0 0 4px rgba(18, 12, 8, .55), inset 0 0 0 5px var(--line-soft);
+              color: var(--gold-hi); font-family: 'AlchemyGalleryText', var(--font); display: grid; place-items: center; }
+    .m-act { border-radius: 50%; background: var(--gold-fill); border: 1px solid var(--gold-hi); }
+    .m-top { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: rgba(30, 20, 14, .5); }
+    .m-bar { height: 44px; border-radius: 999px; border: 1px solid var(--line-soft); background: rgba(30, 20, 14, .7); }
+    .m-who { border-radius: 40% 40% 30% 30%; background: linear-gradient(#6b4e35, #3b2a1d); }
+    .m-who::before { content: ""; position: absolute; left: 50%; top: -46%; width: 70%; aspect-ratio: 1; transform: translateX(-50%);
+                     border-radius: 50%; background: #7a5a3e; }
+    .m-hint { left: 50%; transform: translateX(-50%); }
+    .m-key { min-width: 26px; height: 26px; padding: 0 6px; box-sizing: border-box; border-radius: 6px; border: 1px solid var(--line);
+             color: var(--gold-hi); font: 700 13px Georgia, serif; display: grid; place-items: center; background: rgba(18, 12, 8, .6); }
+    .ov { position: absolute; pointer-events: none; }
+    .ov .demo { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>動態示範</h1>
+  <div class="note">
+    一個動作畫一張。遊戲裡看玩家最後用的操作給哪一份，換了操作就換。
+    鍵照按鍵表寫（這台電腦換過鍵就畫換過的），手把的圖跟互動鍵旁邊那顆同一套（padglyphs.js）。
+  </div>
+  <div class="bar">
+    <span>手把</span>
+    <span class="seg" id="brand"><button data-v="xbox" class="on">Xbox</button><button data-v="ps">PlayStation</button><button data-v="nintendo">任天堂</button></span>
+    <label>速度 <input id="speed" type="range" min="0.5" max="1.6" step="0.1" value="1"><span id="speedv">1.0×</span></label>
+    <label><input id="still" type="checkbox"> 減少動態（停在那一格）</label>
+    <label><input id="remap" type="checkbox"> 假裝換過鍵</label>
+  </div>
+
+  <h2>三種平台並排</h2>
+  <div class="note">每格：放大看、泡泡大小（胖頭的話底下那行）、提示那行。</div>
+  <table>
+    <thead><tr><th class="verb"></th><th>手機（觸控）</th><th>電腦（鍵盤滑鼠）</th><th>手把</th></tr></thead>
+    <tbody id="grid"></tbody>
+  </table>
+
+  <h2>擺在畫面上</h2>
+  <div class="note">
+    手機：除了提示那行，示範也疊在真的搖桿、按鈕上，位置從畫面上量出來（換左手搖桿、橫拿都跟著）。
+    電腦、手把：示範只放在提示那行和互動鍵旁邊的鍵帽，不在畫面中間畫東西。
+  </div>
+  <div class="bar">
+    <span>示範</span>
+    <span class="seg" id="pick"></span>
+    <label><input id="joyleft" type="checkbox"> 搖桿在左邊</label>
+  </div>
+  <div class="frames" id="frames"></div>
+</main>
+
+<script type="module">
+import { key } from '../js/controls/keymap.js';
+import { btnSVG, faceName } from '../js/controls/padglyphs.js';
+
+// ---------- 設定 ----------
+const S = { brand: 'xbox', remap: false };
+// 「假裝換過鍵」：只在這頁換字，不動存檔
+const FAKE = { fwd: 'I', left: 'J', back: 'K', right: 'L', jump: 'F', interact: 'R' };
+const kb = (id) => (S.remap ? FAKE[id] : key(id)) || '?';
+// 手把：跳是上面那顆（N=3），互動是確認（Xbox、PlayStation 在下面，任天堂在右邊）
+const PAD = { jump: 3, confirm: () => (S.brand === 'nintendo' ? 1 : 0) };
+// 右手四顆的圓心（跟 padglyphs.js 的 AT 一樣，24 格）
+const AT = [[12, 18.4], [18.4, 12], [5.6, 12], [12, 5.6]];
+let uid = 0;
+
+// ---------- 零件（48 格） ----------
+// 手：借遊戲的「可點」游標那隻指示小手（base.css 的 --cur-pointer，32 格、指尖在 12,2），指尖對在 x,y，繞指尖轉 rot
+const HAND =
+  `<path d="M11.5 23h14v4.6h-14z" fill="#8f5e28" stroke="#1c130d" stroke-width="1.3" stroke-linejoin="round"/>` +
+  `<path d="M11.2 28.2q1.5 2.2 3 0q1.5 2.2 3 0q1.5 2.2 3 0q1.5 2.2 3 0q1.3 1.9 2.7 0" fill="none" stroke="#fbe7bb" stroke-width="1" stroke-linecap="round"/>` +
+  `<path d="M9.8 12.4h12.6c2 0 3.4 1.3 3.4 3.4v4.4c0 2-1.3 3.2-3.3 3.2H12.3c-1.8 0-2.6-1-2.6-2.6z" fill="#c99448" stroke="#1c130d" stroke-width="1.3" stroke-linejoin="round"/>` +
+  `<path d="M11 22.2h11.6c1.4 0 2.2-.8 2.3-2" fill="none" stroke="#8f5e28" stroke-width="1.1"/>` +
+  `<path d="M17.5 12.6v4M21.4 12.6v4" stroke="#1c130d" stroke-width="1" stroke-linecap="round"/>` +
+  `<path d="M9.8 14.6V3.6c0-1.3 1-2.1 2.2-2.1s2.3.8 2.3 2.1v11z" fill="#efcd8c" stroke="#1c130d" stroke-width="1.3" stroke-linejoin="round"/>` +
+  `<path d="M12.1 2v12.6" stroke="#c99448" stroke-width="2.2" opacity=".55"/><path d="M11.1 4v9.6" stroke="#fbe7bb" stroke-width=".8" opacity=".9"/>` +
+  `<path d="M10.4 15.3L6.8 13.4c-1.6-.8-3.1.1-2.9 1.6.2 1.8 2.6 3.9 6.3 4.3" fill="#efcd8c" stroke="#1c130d" stroke-width="1.3" stroke-linejoin="round"/>`;
+const finger = (x, y, rot = 0) =>
+  `<g transform="translate(${x} ${y}) rotate(${rot})"><circle class="touchring" r="4.2"/>` +
+  `<g transform="scale(.82) translate(-12 -2)">${HAND}</g></g>`;
+const chevron = (x, y, rot) => `<path class="ln" transform="translate(${x} ${y}) rotate(${rot})" d="M-3.4 1.8L0 -1.8L3.4 1.8"/>`;
+// 兩頭箭頭的弧：轉視角
+const arc = (y = 9) => `<path class="ln dim" d="M11 ${y + 5}Q24 ${y - 3} 37 ${y + 5}"/>` + chevron(11.6, y + 4.2, -118) + chevron(36.4, y + 4.2, 118);
+// 鍵帽：底（金線金字）＋亮的那層（金底墨字），亮的那層會動
+function keycap(x, y, label, anim = 'key-once', o = 0) {
+  const w = Math.max(12, label.length * 6.4 + 6), h = 12;
+  const box = (cls) => `<rect class="cap" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="2.6"/><text class="capt" x="${x}" y="${y + .3}">${label}</text>`;
+  return `<g>${box()}</g><g class="lit" style="animation-name:${anim};--o:${o}">${box()}</g>`;
+}
+const svg = (inner) => `<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">${inner}</svg>`;
+const g = (anim, inner, extra = '') => `<g style="animation-name:${anim}${extra}">${inner}</g>`;
+
+// ---------- 每個動作 × 三種平台 ----------
+// draw 回傳 SVG；ph 是「停在那一格」時停在哪（也是第一幀從哪開始），say 是提示那行的字（鍵寫前面）
+const DEMOS = [
+  { id: 'walk', name: '走',
+    touch: { ph: .55, say: () => '推搖桿　走', draw: () => svg(
+      `<g class="chrome"><circle class="ln dim" cx="24" cy="26" r="15"/>` +
+      [0, 90, 180, 270].map((a) => `<path class="ln dim" transform="rotate(${a} 24 26)" d="M24 8.6V11.4"/>`).join('') + `</g>` +
+      g('while-pushed', chevron(34, 13.5, 37)) +
+      g('push-ur', `<circle cx="24" cy="26" r="6.5" fill="var(--gold-fill)" opacity=".9"/>` + finger(24, 26, 10))) },
+    desk: { ph: .1, say: () => `${['fwd', 'left', 'back', 'right'].map(kb).join(' ')}　走`, draw: () => svg(
+      keycap(24, 15.5, kb('fwd'), 'key-quarter', 0) + keycap(10.5, 30, kb('left'), 'key-quarter', .75) +
+      keycap(24, 30, kb('back'), 'key-quarter', .5) + keycap(37.5, 30, kb('right'), 'key-quarter', .25)) },
+    pad: { ph: .55, say: () => '左搖桿　走', draw: () => svg(stick('L', 'push-up', chevron(24, 6.5, 0))) },
+  },
+  { id: 'look', name: '轉視角',
+    touch: { ph: .3, say: () => '拖曳　轉視角', draw: () => svg(arc(8) + g('sway9', finger(24, 28))) },
+    desk: { ph: .3, say: () => '左鍵拖曳　轉視角', draw: () => svg(arc(4) + g('sway6', mouse('left'))) },
+    pad: { ph: .3, say: () => '右搖桿　轉視角', draw: () => svg(arc(2) + stick('R', 'sway6', '')) },
+  },
+  { id: 'zoom', name: '遠近',
+    touch: { ph: .6, say: () => '兩指　遠近', draw: () => svg(
+      `<path class="ln dim" d="M16 32L32 16"/>` + chevron(14.4, 33.6, -135) + chevron(33.6, 14.4, 45) +
+      g('spread-a', finger(21, 27, -45)) + g('spread-b', finger(27, 21, 135))) },
+    desk: { ph: .3, say: () => '滾輪　遠近', draw: () => svg(mouse('wheel') +
+      `<path class="ln dim" d="M39 15V29"/>` + chevron(39, 15.6, 0) + chevron(39, 28.4, 180)) },
+    pad: { ph: .2, say: () => '十字↑↓　遠近', draw: () => svg(dpad()) },
+  },
+  { id: 'jump', name: '跳',
+    touch: { ph: .4, say: () => '點「跳」', draw: () => svg(tapOn(
+      `<circle cx="24" cy="22" r="13" fill="rgba(40,27,18,.95)" stroke="var(--line)" stroke-width="1"/>` +
+      `<circle cx="24" cy="22" r="11" fill="none" stroke="var(--line-soft)" stroke-width="1"/>` +
+      `<text x="24" y="22.6" text-anchor="middle" dominant-baseline="central" fill="var(--gold-hi)" font-size="11" font-family="AlchemyGalleryText, serif">跳</text>`, 24, 22, 13)) },
+    desk: { ph: .42, say: () => `${kb('jump')}　跳`, draw: () => svg(keycap(24, 24, kb('jump'))) },
+    pad: { ph: .4, say: () => `${faceName(PAD.jump, S.brand)}　跳`, draw: () => svg(padBtn(PAD.jump)) },
+  },
+  { id: 'act', name: '互動',
+    touch: { ph: .4, say: () => '點金色那顆　互動', draw: () => svg(tapOn(
+      `<circle cx="24" cy="22" r="10" fill="var(--gold-fill)" stroke="var(--gold-hi)" stroke-width="1"/>` +
+      `<path d="M18.5 22Q24 16.5 29.5 22Q24 27.5 18.5 22Z" fill="none" stroke="#2a1a0c" stroke-width="1.4"/><circle cx="24" cy="22" r="1.9" fill="#2a1a0c"/>`, 24, 22, 10)) },
+    desk: { ph: .42, say: () => `${kb('interact')}　互動`, draw: () => svg(keycap(24, 24, kb('interact'))) },
+    pad: { ph: .4, say: () => `${faceName(PAD.confirm(), S.brand)}　互動`, draw: () => svg(padBtn(PAD.confirm())) },
+  },
+];
+
+// 點一下某顆按鈕：外圈擴一圈、按鈕陷下去、手指點上去。chrome 是按鈕本身（疊在真的按鈕上時不畫）
+function tapOn(button, cx, cy, r) {
+  return `<g class="chrome">${g('tap-btn', button, '" class="sc')}</g>` +
+    `<circle class="sc" cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--gold-hi)" stroke-width="1.6" style="animation-name:ring-out"/>` +
+    g('tap-finger', finger(cx + r * .45, cy + r * .5, -20));
+}
+// 搖桿：底座一圈刻度，帽子會動，帽子上寫 L／R
+function stick(side, anim, arrow) {
+  const ticks = [0, 90, 180, 270].map((a) => `<path class="ln dim" transform="rotate(${a} 24 26)" d="M24 11V13.4"/>`).join('');
+  return `<circle class="ln dim" cx="24" cy="26" r="14"/>${ticks}` + (arrow ? g('while-pushed', arrow) : '') +
+    g(anim, `<circle cx="24" cy="26" r="8.4" fill="var(--ink)" stroke="var(--gold)" stroke-width="2"/><circle cx="24" cy="26" r="5.4" class="ln" stroke-width="1.2" opacity=".6"/>` +
+      `<text x="24" y="26.4" text-anchor="middle" dominant-baseline="central" fill="var(--gold-hi)" font-family="Georgia,serif" font-weight="700" font-size="6.4">${side}</text>`);
+}
+// 滑鼠：left 左鍵亮著；wheel 滾輪紋往上捲
+function mouse(part) {
+  const id = 'mw' + uid++;
+  let s = `<rect x="16.5" y="13" width="15" height="24" rx="7.5" fill="rgba(18,12,8,.6)" stroke="var(--gold)" stroke-width="2"/>` +
+    `<path class="ln" stroke-width="1.4" d="M24 13V21.5M16.8 21.5H31.2" opacity=".7"/>`;
+  if (part === 'left') s += `<path d="M24 14V21H17.6V20.5Q17.6 14 24 14Z" fill="var(--gold-fill)"/>`;
+  if (part === 'wheel') s += `<clipPath id="${id}"><rect x="22.4" y="15" width="3.2" height="6" rx="1.6"/></clipPath>` +
+    `<rect x="22.4" y="15" width="3.2" height="6" rx="1.6" fill="var(--gold-fill)"/>` +
+    `<g clip-path="url(#${id})"><g style="animation-name:roll;animation-timing-function:linear;animation-duration:calc(var(--T) / 4)">` +
+    [14, 17, 20, 23].map((y) => `<path d="M22.4 ${y}H25.6" stroke="#2a1a0c" stroke-width="1"/>`).join('') + `</g></g>`;
+  return s;
+}
+// 十字鍵：上、下輪流亮（btnSVG 的十字放大兩倍）
+function dpad() {
+  const arm = (y, o) => `<rect x="19.6" y="${y}" width="8.8" height="10.8" rx="1.6" fill="var(--gold-fill)" style="animation-name:key-half;--o:${o}"/>`;
+  return `<path d="M18 7H30V19H42V31H30V43H18V31H6V19H18Z" class="ln dim" stroke-width="2"/>` + arm(8.4, 0) + arm(30.8, .5);
+}
+// 手把右手四顆：照 padglyphs 的圖，整顆按下去，亮的那顆外圈擴一圈
+function padBtn(pos) {
+  const [x, y] = AT[pos].map((v) => v * 2);
+  const glyph = btnSVG(pos, S.brand).replace('<svg ', '<svg width="48" height="48" ');
+  return g('tap-btn', glyph, '" class="sc') +
+    `<circle class="sc" cx="${x}" cy="${y}" r="8.8" fill="none" stroke="var(--gold-hi)" stroke-width="1.6" style="animation-name:ring-out"/>`;
+}
+
+// ---------- 放進頁面 ----------
+const PLATS = ['touch', 'desk', 'pad'];
+// 一張示範圖：還在動時每張錯開一點相位，看不出大家一起起跑；停住時停在 ph 那格
+function demo(verb, plat, cls = '') {
+  const d = DEMOS.find((x) => x.id === verb)[plat];
+  const el = document.createElement('span');
+  el.className = 'demo ' + cls;
+  el.innerHTML = d.draw();
+  el.style.setProperty('--ph', still.checked ? d.ph : d.ph + Math.random() * 0.12);
+  return el;
+}
+function hintRow(verb, plat) {
+  const h = document.createElement('span');
+  h.className = 'hint';
+  h.append(demo(verb, plat), DEMOS.find((x) => x.id === verb)[plat].say());
+  return h;
+}
+
+const grid = document.getElementById('grid'), still = document.getElementById('still');
+function drawGrid() {
+  grid.textContent = '';
+  for (const v of DEMOS) {
+    const tr = grid.insertRow();
+    tr.insertCell().innerHTML = `<span class="verbname">${v.name}</span>`;
+    for (const p of PLATS) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const sizes = document.createElement('div');
+      sizes.className = 'sizes';
+      sizes.append(demo(v.id, p, 'mid'), hintRow(v.id, p));
+      cell.append(demo(v.id, p, 'big'), sizes);
+      tr.insertCell().append(cell);
+    }
+  }
+}
+
+// ---------- 模擬畫面：真的尺寸排，再縮小放進框裡 ----------
+let pick = 'walk';
+const FRAMES = [
+  { name: '手機直拿', w: 390, h: 844, s: .5, plat: 'touch' },
+  { name: '手機橫拿', w: 844, h: 390, s: .5, plat: 'touch' },
+  { name: '電腦', w: 1280, h: 720, s: .4, plat: 'desk' },
+  { name: '電腦＋手把', w: 1280, h: 720, s: .4, plat: 'pad' },
+];
+const JOY = 124, SEAL = 64, BTN = 52, EDGE = 14, SIDE = 16;
+const R1 = (BTN + 10) * 1.307, R2 = R1 + BTN + 10;
+
+function el(cls, x, y, w, h, html = '') {
+  const e = document.createElement('div');
+  e.className = 'el ' + cls;
+  Object.assign(e.style, { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' });
+  e.innerHTML = html;
+  return e;
+}
+// 疊在某個東西上：示範圖的那顆按鈕（48 格裡半徑 r）對齊畫面上那顆（半徑 R）
+function overlayOn(scr, target, verb, plat, r) {
+  const R = target.offsetWidth / 2, size = 48 * R / r;
+  const cx = target.offsetLeft + R, cy = target.offsetTop + target.offsetHeight / 2;
+  const o = document.createElement('div');
+  o.className = 'ov bare';
+  // 搖桿那張的圓心在 (24, 26)，按鈕那張在 (24, 22)
+  const ay = verb === 'walk' ? 26 : 22;
+  Object.assign(o.style, { width: size + 'px', height: size + 'px', left: cx - size / 2 + 'px', top: cy - size * ay / 48 + 'px' });
+  o.append(demo(verb, plat));
+  scr.append(o);
+}
+
+function drawFrames() {
+  const box = document.getElementById('frames');
+  box.textContent = '';
+  const left = document.getElementById('joyleft').checked;
+  for (const F of FRAMES) {
+    const wrap = document.createElement('div');
+    const fw = document.createElement('div');
+    fw.className = 'fwrap';
+    Object.assign(fw.style, { width: F.w * F.s + 'px', height: F.h * F.s + 'px' });
+    const scr = document.createElement('div');
+    scr.className = 'scr';
+    Object.assign(scr.style, { width: F.w + 'px', height: F.h + 'px', transform: `scale(${F.s})` });
+    fw.append(scr);
+    wrap.append(fw);
+    const cap = document.createElement('div');
+    cap.className = 'fcap';
+    cap.textContent = F.name;
+    wrap.append(cap);
+    box.append(wrap);
+
+    // 角色
+    const ch = F.plat === 'touch' ? 70 : 120;
+    scr.append(el('m-who', F.w / 2 - ch * .22, F.h * .52, ch * .44, ch));
+    // 鏡像：搖桿在左時整組從右邊量
+    const X = (x, w) => (left ? F.w - x - w : x);
+
+    if (F.plat === 'touch') {
+      for (let i = 0; i < 3; i++) scr.append(el('m-top', F.w - SIDE - 36 - i * 46, 14, 36, 36));
+      const joy = el('m-joy', X(F.w - SIDE - JOY, JOY), F.h - EDGE - JOY, JOY, JOY);
+      const jx = SIDE + SEAL / 2, jy = F.h - EDGE - SEAL / 2;
+      const jump = el('m-seal', X(SIDE, SEAL), F.h - EDGE - SEAL, SEAL, SEAL, '<span style="font-size:22px">跳</span>');
+      const arcBtns = [[R1, 0, '坐'], [R1, 45, '相'], [R1, 90, '表'], [R2, 67.5, '說'], [R2, 22.5, '囊']].map(([r, a, t]) => {
+        const x = jx + r * Math.cos(a * Math.PI / 180) - BTN / 2, y = jy - r * Math.sin(a * Math.PI / 180) - BTN / 2;
+        return el('m-seal', X(x, BTN), y, BTN, BTN, `<span style="font-size:17px">${t}</span>`);
+      });
+      // 互動鍵：搖桿內側斜上方
+      const act = el('m-act', X(F.w - SIDE - JOY - 30, 46), F.h - EDGE - JOY - 40, 46, 46);
+      scr.append(joy, jump, ...arcBtns, act);
+      // 提示：上排按鈕底下
+      const h = hintRow(pick, 'touch');
+      h.classList.add('el', 'm-hint');
+      h.style.top = '70px';
+      scr.append(h);
+      // 疊在真的東西上
+      if (pick === 'walk') overlayOn(scr, joy, 'walk', 'touch', 15);
+      if (pick === 'jump') overlayOn(scr, jump, 'jump', 'touch', 13);
+      if (pick === 'act') overlayOn(scr, act, 'act', 'touch', 10);
+      if (pick === 'look' || pick === 'zoom') {
+        // 拖曳的地方：搖桿那側以外、上排底下到拇指弧上面那塊的中間
+        const joyEdge = left ? joy.offsetLeft + JOY + 10 : joy.offsetLeft - 10;
+        const x0 = left ? joyEdge : 0, x1 = left ? F.w : joyEdge;
+        const top = 110, bottom = Math.min(...arcBtns.map((b) => b.offsetTop)) - 10;
+        const size = Math.min(170, (bottom - top) * .8);
+        const o = document.createElement('div');
+        o.className = 'ov';
+        Object.assign(o.style, { width: size + 'px', height: size + 'px', left: (x0 + x1) / 2 - size / 2 + 'px', top: (top + bottom) / 2 - size / 2 + 'px' });
+        o.append(demo(pick, 'touch'));
+        scr.append(o);
+      }
+    } else {
+      // 電腦：下方那排、互動鍵在那排正上方（左邊是鍵帽），提示在那排上面
+      scr.append(el('m-bar', F.w / 2 - 210, F.h - 18 - 44, 420, 44));
+      const act = el('m-act', F.w / 2 - 23, F.h - 18 - 44 - 22 - 46, 46, 46);
+      scr.append(act);
+      if (pick === 'act') {
+        const o = document.createElement('div');
+        o.className = 'ov';
+        Object.assign(o.style, { width: '44px', height: '44px', left: act.offsetLeft - 52 + 'px', top: act.offsetTop + 1 + 'px' });
+        o.append(demo('act', F.plat));
+        scr.append(o);
+      } else {
+        const k = el('m-key', act.offsetLeft - 38, act.offsetTop + 10, 0, 26, F.plat === 'pad' ? '' : kb('interact'));
+        k.style.width = 'auto';
+        if (F.plat === 'pad') { k.style.border = '0'; k.style.background = 'none'; k.innerHTML = btnSVG(PAD.confirm(), S.brand).replace('<svg ', '<svg width="26" height="26" '); }
+        scr.append(k);
+      }
+      const h = hintRow(pick, F.plat);
+      h.classList.add('el', 'm-hint');
+      h.style.top = F.h - 18 - 44 - 22 - 46 - 24 - 40 + 'px';
+      h.style.fontSize = '15px';
+      Object.assign(h.querySelector('.demo').style, { width: '28px', height: '28px' });
+      scr.append(h);
+    }
+  }
+}
+
+// ---------- 控制 ----------
+const pickBar = document.getElementById('pick');
+pickBar.innerHTML = DEMOS.map((d) => `<button data-v="${d.id}"${d.id === pick ? ' class="on"' : ''}>${d.name}</button>`).join('');
+function seg(bar, set) {
+  bar.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    bar.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    set(b.dataset.v);
+    redraw();
+  });
+}
+seg(pickBar, (v) => { pick = v; });
+seg(document.getElementById('brand'), (v) => { S.brand = v; });
+document.getElementById('remap').onchange = (e) => { S.remap = e.target.checked; redraw(); };
+document.getElementById('joyleft').onchange = () => drawFrames();
+still.checked = matchMedia('(prefers-reduced-motion: reduce)').matches;
+still.onchange = () => { document.body.classList.toggle('still', still.checked); redraw(); };
+document.body.classList.toggle('still', still.checked);
+const speed = document.getElementById('speed');
+speed.oninput = () => {
+  document.documentElement.style.setProperty('--T', (2.6 / speed.value).toFixed(2) + 's');
+  document.getElementById('speedv').textContent = (+speed.value).toFixed(1) + '×';
+};
+function redraw() { drawGrid(); drawFrames(); }
+redraw();
+</script>
+</body>
+</html>

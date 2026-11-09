@@ -17,14 +17,14 @@ export const MOMENTS = {
 // chords 四個和弦一小節一個：root 低音、up 上方三音（MIDI）；hook 是主旋律 [第幾個八分音符, 長幾個八分音符, 音]，四小節一輪。
 // play 的聲部：piano 鋼琴、harm 乾淨吉他泛音、clean 乾淨吉他琶音（五個一輪）、bowl 頌缽、rev 倒放頌缽、choir 合唱（母音照段落開）、chop 合唱照 riff 切開、
 // voice 獨唱（唱主旋律）、riff 八弦吉他咒文（十六分音符）、down 同一段咒文放慢一倍（breakdown）、stops 齊奏重擊和空白、bass 低音吉他、
-// kick 大鼓（跟著 riff）、snare 小鼓、ride 叮叮鈸、china 碎鈸、swell 鑼滾奏漸強、gong 往下潛的大鑼、fb 吉他回授。palette：0 餘燼紅、1 晨光金、2 暖白、3 黎明藍
+// kick 大鼓（跟著 riff）、snare 小鼓、ride 叮叮鈸、china 碎鈸、swell 鑼滾奏漸強、gong 往下潛的大鑼、fb 吉他回授。palette：0 血紅、1 猩紅、2 燙紅、3 黑紅（全場只有紅，深淺冷熱不同）
 // riff 是一段咒文：x 悶切、R 響著的強力和弦、. 空；十三格一輪跟四拍錯開，四小節繞完（13×4＋12）歸位一次
 export const BANDS = [
   {
     id: 'morning', name: 'WASD BAND', note: 'Djent 的儀式：八弦吉他的悶切是一段十三格的咒文，跟四拍錯開繞，四小節唸完一輪才跟小節線對上；乾淨吉他和頌缽開場、riff 隔著門進來、齊奏重擊和空白、日出是放慢一倍的 breakdown、合唱被 riff 切開、往下潛的大鑼。整場是一個早晨：一束光、地平線、光環升起、靜默一拍、日出、光幕',
     bpm: 116,
     riff: 'x.xx.R..xx.R.',
-    // 台上的人（concert-band.js 照這張表擺）。at 是舞台上的位置（x 往右、z 往觀眾，公尺），y 站的台子多高；
+    // 台上的人（concert-band.js 照這張表擺）。at 是舞台上的位置（x 往右、z 往觀眾，公尺），y 站的台子多高（前排三個會走動、站台面，後面四個高低差拉大：鼓 0.9、法器 1.7、合成器 2.6、大太鼓 3.4 站在光圈前變剪影）；
     // tracks 是 MIDI 裡哪幾軌歸這個人（軌名裡有這幾個字就算），姿勢照那幾軌的音動；look 蓋在預設外觀上；hand: 'left' 左撇子（琴整把鏡像）。
     // 燈的 face.piano（一束光打的那個人）＝主旋律，desk（日出舉雙手）＝大太鼓
     members: [
@@ -34,16 +34,16 @@ export const BANDS = [
         look: { race: 'bull', top: 'tank', bottom: 'pants', outer: 'vest', hat: 'none', neck: 'necklace', back: 'none', topC: 2, botC: 12, outC: 12 } },
       { id: 'bass', name: '低音', role: 'bass', at: [4.3, 0.9], y: 0, hand: 'left', tracks: ['bass'],
         look: { race: 'lizard', top: 'hoodie', bottom: 'track', outer: 'none', hat: 'none', glasses: 'shades', neck: 'none', back: 'none', topC: 12, botC: 12 } },
-      { id: 'synth', name: '合成器', role: 'synth', at: [-5.8, -2.8], y: 0.5, tracks: ['pad', 'arp'],
+      { id: 'synth', name: '合成器', role: 'synth', at: [-5.8, -2.8], y: 2.6, tracks: ['pad', 'arp'],
         look: { race: 'tv', top: 'shirt', bottom: 'pants', outer: 'blazer', hat: 'none', neck: 'tie', back: 'none', outC: 12, botC: 12 } },
-      { id: 'ritual', name: '法器', role: 'ritual', at: [6.0, -2.6], y: 0.5, tracks: ['bowl', 'gong', 'bell', 'drone'],
+      { id: 'ritual', name: '法器', role: 'ritual', at: [6.0, -2.6], y: 1.7, tracks: ['bowl', 'gong', 'bell', 'drone'],
         look: { race: 'frog', top: 'robe', bottom: 'robe', outer: 'mino', hat: 'straw', neck: 'bell', back: 'none', topC: 6, botC: 6 } },
-      { id: 'drums', name: '鼓', role: 'drums', at: [2.4, -3.6], y: 0.7, tracks: ['kick', 'snare', 'hat', 'ride', 'china', 'tom', 'shime', 'kane', 'glitch'],
+      { id: 'drums', name: '鼓', role: 'drums', at: [2.4, -3.6], y: 0.9, tracks: ['kick', 'snare', 'hat', 'ride', 'china', 'tom', 'shime', 'kane', 'glitch'],
         look: { race: 'robot', top: 'tee', bottom: 'shorts', outer: 'none', hat: 'none', neck: 'towel', back: 'none', topC: 12, botC: 12 } },
-      { id: 'taiko', name: '大太鼓', role: 'taiko', at: [0, -6.6], y: 1.6, tracks: ['odaiko'],
+      { id: 'taiko', name: '大太鼓', role: 'taiko', at: [0, -6.6], y: 3.4, tracks: ['odaiko'],
         look: { race: 'bear', top: 'tank', bottom: 'hakama', outer: 'haori', hat: 'none', neck: 'towel', back: 'none', topC: 0, botC: 12, outC: 1 } },
     ],
-    palette: ['#d8452e', '#f0b860', '#f6ecdc', '#33468f'],
+    palette: ['#a80c14', '#e01e14', '#ff3418', '#240406'],   // 2026-11-10 全場血紅：0 血紅、1 猩紅（原本的金）、2 燙紅（原本的暖白）、3 黑紅（原本的黎明藍）
     sections: [
       { id: 'night', name: '一束光', bars: 4, play: ['piano', 'harm', 'bowl'] },
       { id: 'horizon', name: '地平線', bars: 8, play: ['piano', 'clean', 'choir', 'ride', 'bowl'] },
@@ -158,7 +158,7 @@ export function cueAt(b, t) {
       c.face = { piano: 0.4, desk: 0.3 };
       c.piano.strike = strike;
       c.crowd.hands = 0.3 + 0.3 * sp; c.crowd.jump = 0.3 * Math.abs(Math.sin(Math.PI * beat));
-      c.iris = { a: 0.27 + 0.48 * smooth(sp), spin: 0, sun: 0.85 * smooth(sp), sky: 0.7 + 0.3 * sp, warp: 0.1 + 0.25 * sp, pin: 0 };   // 光圈打開、太陽從底下升上來
+      c.iris = { a: 0.27 + 0.48 * smooth(sp), spin: 0, sun: 0.85 * smooth(sp), sky: 0.7 + 0.3 * sp, warp: 0.05 + 0.1 * sp, pin: 0 };   // 光圈打開、太陽從底下升上來
       c.arch = 0.2 + 0.45 * smooth(sp);   // 黎明線掃過去，建築第一次被看清楚
       break;
     }
@@ -186,14 +186,14 @@ export function cueAt(b, t) {
       const p = pulse(bf, 5);
       if (bar % 4 === 0 && bi === 0) c.strobe = 0.9 * pulse(bf, 3);
       c.ring = { a: 1, draw: 1, y: 0.6, fill: bar === 0 ? smooth(beat / 0.5) : 1, col: 1 };
-      c.rays = { a: 0.45 + 0.3 * p, n: 12, rot: t * 0.05, col: 1 };
+      c.rays = { a: 0.2 + 0.15 * p, n: 12, rot: t * 0.05, col: 1 };   // 放射收一半：太像神光
       c.sheet = { a: 0.75, y: 0.15 + 0.05 * Math.sin(t * 0.8), tilt: Math.sin(t * 0.4) * 0.05, col: bar % 2 ? 0 : 1 };
       c.haze = { a: 0.45, col: 1 };
       c.face = { piano: 0.6, desk: 0.85 };
       if (bar % 4 === 0 && beat < 2.4) { c.lift = Math.sin(Math.PI * Math.min(1, beat / 1.2) / 2); c.desk = 'arms'; moment('arms', Math.pow(c.lift, 2) * c.ring.fill * (beat < 1.8 ? 1 : 1 - (beat - 1.8) / 0.6)); }
       c.crowd.hands = 1; c.crowd.jump = Math.abs(Math.sin(Math.PI * beat));
       // 光圈一口氣全開、開得比光環還大；開口在拍子上呼吸，外面的天變成往外流的色帶
-      c.iris = { a: bar === 0 ? 0.55 + 0.5 * smooth(beat / 0.3) : 1.05 + 0.05 * p, spin: t * 0.05, sun: 1, sky: 0.45, warp: 0.55 + (bar >= sec.bars / 2 ? 0.2 : 0), pin: 0 };
+      c.iris = { a: bar === 0 ? 0.55 + 0.5 * smooth(beat / 0.3) : 1.05 + 0.05 * p, spin: t * 0.05, sun: 1, sky: 0.45, warp: 0.2 + (bar >= sec.bars / 2 ? 0.1 : 0), pin: 0 };   // 色帶一圈圈的收淡（2026-11-10：圓只留光圈一個）
       c.arch = 1;
       c.relight = (bar * 4 + beat) * (60 / b.bpm);
       break;
@@ -201,7 +201,7 @@ export function cueAt(b, t) {
     case 'veil': {    // 太陽退成光環，光幕從頭頂慢慢壓下來掃過舉起的手再升回去，兩小節一趟
       const p = pulse(bf, 5);
       c.ring = { a: 0.9, draw: 1, y: 0.6, fill: 0.35, col: 2 };
-      c.rays = { a: 0.25 + 0.2 * p, n: 6, rot: t * 0.15, col: 2 };
+      c.rays = { a: 0.12 + 0.1 * p, n: 6, rot: t * 0.15, col: 2 };
       const swing = 0.5 - 0.5 * Math.cos(Math.PI * ((bar % 2) + beat / 4));   // 0 → 1 → 0 兩小節
       c.sheet = { a: 0.85, y: 0.1 + 0.6 * swing, tilt: Math.sin(t * 0.3) * 0.04, col: bar < sec.bars / 2 ? 0 : 1 };
       c.haze = { a: 0.35, col: c.sheet.col };
@@ -210,7 +210,7 @@ export function cueAt(b, t) {
       c.piano.strike = strike;
       c.crowd.hands = 0.9; c.crowd.jump = 0.6 * Math.abs(Math.sin(Math.PI * beat));
       // 光幕壓下來時光圈收窄、葉片整組轉起來
-      c.iris = { a: 1.0 - 0.4 * swing, spin: t * 0.35, sun: 1, sky: 0.45, warp: 0.85, pin: 0 };
+      c.iris = { a: 1.0 - 0.4 * swing, spin: t * 0.35, sun: 1, sky: 0.45, warp: 0.35, pin: 0 };
       c.arch = 0.85;
       moment('sheet', clamp01(1 - Math.abs(c.sheet.y - 0.55) / 0.07));
       break;

@@ -67,7 +67,7 @@ function bladeMat() {
   return new THREE.ShaderMaterial({
     uniforms: {
       uOpen: { value: 0 }, uRot: { value: 0 }, uRimA: { value: 0 },
-      uMetal: { value: new THREE.Color() }, uRim: { value: new THREE.Color() }, uGold: { value: new THREE.Color('#6b5536') },
+      uMetal: { value: new THREE.Color() }, uRim: { value: new THREE.Color() }, uGold: { value: new THREE.Color('#5a1814') },
       ...gradeUniforms(),
     },
     vertexShader: GRADE_VERT + `

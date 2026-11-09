@@ -8,6 +8,8 @@ import { lastAt, nextAfter, hitK } from './concert-band.js';
 import { where } from './concert-show.js';
 import { pref } from '../../save/prefs.js';
 import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
+const RED_FLOOR = 0.5;   // 全場紅最少幾成（主光、天光、霧、雷射、光圈裡的天都照 rig.red 推）
+
 
 const smooth = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
 const hash = (a, b = 0, c = 0) => { let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ Math.imul(c | 0, 2246822519); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
@@ -51,9 +53,9 @@ export class LightRig {
     // 十二格顏色：這一團的四色照五度圈排一圈，中間漸變（音近色也近）
     const P = band.palette.map((h) => new THREE.Color(h));
     // 十二格照五度圈排，挑過的：金、琥珀、朱紅、深紅、血紅、燭光、暖白，藍只有黎明藍一格；不在兩色之間漸變（紅漸到藍中間會變粉紫）
-    this.fifths = ['#f0b860', '#e8902a', '#d8452e', '#b0201c', '#f6ecdc', '#ffcf8a', '#c8341a', '#8a1418', '#f0b860', '#33468f', '#e8902a', '#ffd9a0'].map((h) => new THREE.Color(h));
+    this.fifths = ['#e01e14', '#ff3418', '#b0101a', '#8a0a12', '#ff2a10', '#c81410', '#a00818', '#6a060c', '#e01e14', '#5a0410', '#ff3418', '#d0180e'].map((h) => new THREE.Color(h));
     this.crimson = new THREE.Color('#a8141c');
-    this.gold = new THREE.Color('#ffd590');
+    this.gold = new THREE.Color('#ff2a14');   // 日出放射的搖頭燈（原本是金）
     // 追光：前桁架上每人一盞，打在那個人身上（他走開了光也跟著），地上一圈。七道一組、七圈一組
     this.spotBeams = cones(7, 1, 0.04, 0.55, tex);
     this.spotPools = new THREE.InstancedMesh(new THREE.CircleGeometry(0.75, 24).rotateX(-Math.PI / 2), add(new THREE.MeshBasicMaterial({ color: 0xffffff })), 7);
@@ -107,8 +109,9 @@ export class LightRig {
       let red = 0;
       if (w.sec.id === 'still') red = smooth((w.bar * 4 + w.beat) / 1);
       else if (w.sec.id === 'veil' && hash(this.seed, phrase, 30) < 0.4) red = smooth(inP / 1) * smooth((16 - inP) / 1);
-      this.red = red;
-      if (red > 0) hue.lerp(this.crimson, red);
+      // 2026-11-10 全場血紅：平常也推一半進紅，靜止段、紅句推滿
+      this.red = red = Math.max(red, RED_FLOOR);
+      hue.lerp(this.crimson, red);
     }
     const kicks = R.drums?.notes ?? [], ik = lastAt(kicks, t, ['kick']), kickK = ik >= 0 ? hitK(t - kicks[ik].t, 0.12) * kicks[ik].vel : 0;
     this.kickK = kickK;

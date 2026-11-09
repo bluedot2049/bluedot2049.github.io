@@ -128,7 +128,7 @@ export class Stage {
     g.add(floor);
     const add = (geo, m, x, y, z, ry = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.y = ry; g.add(o); return o; };
     const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
-    const DECK = lam(0x2a2226), BLACK = lam(0x16121a), CAB = lam(0x1c1a1d), GRILL = lam(0x29272b), METAL = lam(0x2b2d33), GOLD = lam(0x6b5536);
+    const DECK = lam(0x2a2226), BLACK = lam(0x16121a), CAB = lam(0x1c1a1d), GRILL = lam(0x29272b), METAL = lam(0x2b2d33), GOLD = lam(0x3a1614);
     const D = STAGE.front - STAGE.back;
     add(B(STAGE.w, STAGE.y, D), DECK, 0, STAGE.y / 2, (STAGE.front + STAGE.back) / 2);
     // 舞台正面一層一層：最上面金色的台口、下面一條會跟著燈亮的光帶、凹進去的黑裙板，裙板裡嵌一排低音喇叭，最下面一條踢腳
@@ -154,12 +154,20 @@ export class Stage {
     add(new THREE.PlaneGeometry(40, 18), lam(0x120e12), 0, 9, STAGE.back - 0.5);
     // 兩側黑幕
     for (const s of [-1, 1]) add(B(0.1, 14, D + 1), BLACK, s * (STAGE.w / 2 + 0.6), 7, (STAGE.front + STAGE.back) / 2 - 0.5);
-    // 站高一點的人（members 的 y）腳下各一個台，跟著節目表的位置長；台的正面一條金線
+    // 站高一點的人（members 的 y）腳下各一個台，跟著節目表的位置長；台的正面一條暗紅線
+    // 低的台是實心的；高的台（1.2 公尺以上）是鐵架塔：台板、四根腳、正面背面打叉，底下透光（不像祭壇）
     for (const m of band.members) {
       if (!m.y) continue;
-      const big = m.y > 1, w = big ? 3.8 : 2.8, d = big ? 2.6 : 2.3;
-      add(B(w, m.y, d), lam(0x231d21), m.at[0], STAGE.y + m.y / 2, m.at[1] - 0.2);
-      add(B(w, 0.04, 0.05), GOLD, m.at[0], STAGE.y + m.y - 0.02, m.at[1] - 0.2 + d / 2);
+      const big = m.y > 1, w = big ? 3.8 : 2.8, d = big ? 2.6 : 2.3, x = m.at[0], z = m.at[1] - 0.2, top = STAGE.y + m.y;
+      if (m.y < 1.2) add(B(w, m.y, d), lam(0x231d21), x, STAGE.y + m.y / 2, z);
+      else {
+        add(B(w, 0.22, d), lam(0x1c1618), x, top - 0.11, z);
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(B(0.12, m.y - 0.22, 0.12), METAL, x + sx * (w / 2 - 0.1), STAGE.y + (m.y - 0.22) / 2, z + sz * (d / 2 - 0.1));
+        const span = Math.hypot(w - 0.2, m.y - 0.3), ang = Math.atan2(m.y - 0.3, w - 0.2);
+        for (const sz of [-1, 1]) for (const k of [-1, 1]) add(B(span, 0.06, 0.06), METAL, x, STAGE.y + (m.y - 0.22) / 2, z + sz * (d / 2 - 0.1)).rotation.z = k * ang;
+        for (const sx of [-1, 1]) add(B(0.06, 0.06, d - 0.2), METAL, x + sx * (w / 2 - 0.1), STAGE.y + 0.3, z);
+      }
+      add(B(w, 0.04, 0.05), GOLD, x, top - 0.02, z + d / 2);
     }
     // 吉他、低音背後的音箱牆
     for (const x of [-7.2, 7.2]) for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
@@ -197,7 +205,7 @@ export class Stage {
     }
     // 攝影溝前的石欄：齊腰的深色石頭、頂上一條金線、每兩公尺一根矮石柱頂一盞小燭火（像祭壇前的欄）；正對中央走道留 2 公尺的開口
     const RAIL_Z = STAGE.front + RAIL, H = 0.9, GAP = 1;
-    const fence = new THREE.Group(), RM = lam(0x2a2327), RG = lam(0x7a6238);
+    const fence = new THREE.Group(), RM = lam(0x2a2327), RG = lam(0x4a1a18);
     g.add(fence);
     this.fence = fence;
     this.fenceMats = [RM, RG];
@@ -215,7 +223,7 @@ export class Stage {
       }
     }
     // 柱頂的小燭火：一顆小方塊自己亮（instanced，不加燈）
-    const fl = new THREE.InstancedMesh(B(0.05, 0.1, 0.05), new THREE.MeshBasicMaterial({ color: 0xffb060 }), this.railFlames.length);
+    const fl = new THREE.InstancedMesh(B(0.05, 0.1, 0.05), new THREE.MeshBasicMaterial({ color: 0xff4a28 }), this.railFlames.length);
     this.railFlames.forEach(([x, y, z], i) => fl.setMatrixAt(i, new THREE.Matrix4().makeTranslation(x, y, z)));
     fl.userData.keep = true;
     fence.add(fl);

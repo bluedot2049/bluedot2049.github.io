@@ -32,7 +32,7 @@ function figure(head) {
     k.box(0.07, 0.07, 0.07, SKIN_K, s * SH[0], SH[1] - 0.33, 0);
   });
   part(4, (k) => k.box(0.035, 0.14, 0.035, '#efe6d0', SH[0], SH[1] - 0.3, 0.06));
-  part(5, (k) => k.box(0.03, 0.05, 0.03, '#ffd080', SH[0], SH[1] - 0.2, 0.06));
+  part(5, (k) => k.box(0.03, 0.05, 0.03, '#ff6a40', SH[0], SH[1] - 0.2, 0.06));
   // 合成一個，加上 aPart
   let n = 0;
   for (const [g] of parts) n += g.attributes.position.count;
@@ -106,7 +106,7 @@ const VERT_HEAD = /* glsl */ `
     else { arms = vec4(0.0, 0.12, -1.55 - 0.15 * on, 0.05); body = vec4(0.2 * on, 0.0, 0.1, 0.0); }                                // 指舞台
   }
   // 這一句這個人是安靜的還是熱的、是哪一種
-  // 區塊個性：狂熱區比較早熱、熱起來只跳和雙手高舉；虔誠區很難熱、安靜時多數在禱告；燭光區安靜時多數舉蠟燭；特別的人固定一種
+  // 區塊個性：狂熱區比較早熱、熱起來只跳和雙手高舉；虔誠區很難熱、安靜時有些在禱告；燭光區安靜時有些舉蠟燭；其他人安靜時晃或點頭；特別的人固定一種
   int styleAt(float seed, float phrase) {
     float zone = aMe2.x;
     if (aMe2.y >= 0.0) return int(aMe2.y + 0.5);
@@ -114,9 +114,11 @@ const VERT_HEAD = /* glsl */ `
     float bias = wild ? 0.25 : devout ? -0.3 : candles ? -0.15 : 0.0;
     bool hot = h1(seed, phrase + 10.0) < uHeat * 1.15 - 0.08 + bias;
     if (hot) { if (wild) return h1(seed, 2.0) < 0.5 ? 4 : 5; return 3 + int(floor(h1(seed, 2.0) * 5.0)); }
-    if (devout) return h1(seed, 1.0) < 0.75 ? 0 : 1;
-    if (candles) return h1(seed, 1.0) < 0.7 ? 2 : 1;
-    return int(floor(h1(seed, 1.0) * 3.0));
+    // 安靜的時候多半只是晃、點頭（2026-11-10：禱告和蠟燭太多像法會，收成少數）
+    float q = h1(seed, 1.0);
+    if (devout) return q < 0.4 ? 0 : q < 0.8 ? 1 : 3;
+    if (candles) return q < 0.35 ? 2 : q < 0.8 ? 1 : 3;
+    return q < 0.55 ? 1 : q < 0.85 ? 3 : q < 0.93 ? 2 : 0;
   }
 `;
 const VERT_BODY = /* glsl */ `

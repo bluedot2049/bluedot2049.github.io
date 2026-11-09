@@ -9,7 +9,7 @@ import { STAGE } from './concert-stage.js';
 export const bgm = { from: 'concert', src: ConcertBgm };
 
 // 調色：用使用者在調色台調好的「演唱會01」
-export const grade = { tone: '演唱會01' };   // 使用者調的色調（core/tones.js）
+export const grade = { tone: '演唱會02' };   // 使用者調的色調（core/tones.js）
 
 // 一場一個房間：多人頻道名字後面接這一場的種子，同一場（組隊帶著同一個 ?show= 進來）才看得到彼此，不跟陌生人共用（main.js 的 mp）
 export const room = () => `-${SHOW.seed >>> 0}`;

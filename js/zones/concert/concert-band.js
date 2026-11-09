@@ -12,7 +12,7 @@ const ARM_OUT = 0.28;
 const ink = (c) => new THREE.MeshLambertMaterial({ color: c, flatShading: true });
 const MAT = {
   wood: ink(0x5a3a2a), dark: ink(0x231c1f), blue: ink(0x2e3f6e), metal: ink(0x8d8a86), brass: ink(0xb08a4a), red: ink(0x8e2f2a),
-  skin: ink(0xd8c9a8), white: ink(0xe8e0d0), glow: new THREE.MeshBasicMaterial({ color: 0xbfe6ff }),
+  skin: ink(0xd8c9a8), white: ink(0xe8e0d0), glow: new THREE.MeshBasicMaterial({ color: 0xff4a30 }),
 };
 const box = (w, h, d, m, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); return o; };
 const cyl = (r0, r1, h, m, seg = 10) => new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, h, seg), m);

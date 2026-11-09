@@ -12,7 +12,7 @@ import { StageFX } from './concert-fx.js';
 import { LightRig } from './concert-rig.js';
 import { Hall, HALL, INNER, SEATS, groundAt } from './concert-hall.js';
 import { Crowd } from './concert-crowd.js';
-import { floorPlan, buildFences, placeCrowd, nearFence } from './concert-floor.js';
+import { floorPlan, placeCrowd } from './concert-floor.js';
 import { LongShadows } from './concert-shadows.js';
 import { Lasers } from './concert-lasers.js';
 import { StageSymbols } from './concert-symbols.js';
@@ -140,24 +140,23 @@ const P0 = new THREE.Color();
 export function buildConcert(scene, { coarse }) {
   const hall = new Hall(scene, { coarse });
   const stage = new Stage(scene, SHOW.band, { crowd: 0 });
-  // 台下分區：中央、橫向、兩側走道給攝影師走，四個區塊各有個性，沿走道圍矮欄留缺口；特別的人（找人任務的目標）記在 SHOW.notables
+  // 台下：一整片往台前擠，沒有走道和圍繩，兩側靠牆留路；四塊個性邊界歪的；特別的人（找人任務的目標）記在 SHOW.notables
   const plan = floorPlan(INNER, SEATS.z0);
-  const fenceG = buildFences(scene, plan.fences, coarse), posts = fenceG.userData.flames;
   {
-    // 燭火光暈：石欄、燭台柱頂每一盞小燭火一圈淡光，全部一次畫完
+    // 燭火光暈：攝影溝石欄每一盞小燭火一圈淡光，全部一次畫完
     const c = document.createElement('canvas'), S = 64, g2 = c.getContext('2d'), gr = g2.createRadialGradient(32, 32, 0, 32, 32, 32);
     c.width = c.height = S;
     gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
     g2.fillStyle = gr; g2.fillRect(0, 0, S, S);
-    const all = [...posts, ...stage.railFlames.map(([x, y, z]) => [x, y, z])], arr = new Float32Array(all.length * 3);
+    const all = stage.railFlames.map(([x, y, z]) => [x, y, z]), arr = new Float32Array(all.length * 3);
     all.forEach(([x, y, z], i) => { arr[i * 3] = x; arr[i * 3 + 1] = y + 0.02; arr[i * 3 + 2] = z; });
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
-    const halo = new THREE.Points(geo, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(c), size: 0.55, color: 0xff9440, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    const halo = new THREE.Points(geo, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(c), size: 0.55, color: 0xff3a1e, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
     halo.frustumCulled = false;
     scene.add(halo);
-    // 靜默那一拍全熄、日出從台前往後點回來：燭台柱、石欄、看台座位的燭火和這圈光暈
-    for (const m of [fenceG.userData.flameMesh.material, stage.railFlameMesh.material, hall.cand.material]) candleGate(m);
+    // 靜默那一拍全熄、日出從台前往後點回來：石欄、看台座位的燭火和這圈光暈
+    for (const m of [stage.railFlameMesh.material, hall.cand.material]) candleGate(m);
     candleGate(halo.material, true);
   }
   // 暗箱：台後的光圈、光圈外的天、沿中軸的光、後牆的倒影、柱子的刻度燈、黎明線
@@ -165,10 +164,9 @@ export function buildConcert(scene, { coarse }) {
   if (window.__show) window.__show.obscura = obscura;
   const { spots, notables } = placeCrowd(plan, { seed: SHOW.seed, scale: coarse ? 0.55 : 1 });
   SHOW.notables = notables;
-  // 長影子：觀眾、燭台柱、攝影溝石欄（柱子和中間的石板），朝離開舞台的方向拉長，離台越遠越長
+  // 長影子：觀眾、攝影溝石欄（柱子和中間的石板），朝離開舞台的方向拉長，離台越遠越長
   const shadowItems = [
     ...spots.map((s) => [s.x, s.z, 0.45, 1.25]),
-    ...posts.map(([x, , z]) => [x, z, 0.09, 0.95]),
     ...stage.railFlames.map(([x, , z]) => [x, z, 0.4, 1.1]),
   ];
   for (let i = 0; i + 1 < stage.railFlames.length; i++) {
@@ -182,7 +180,7 @@ export function buildConcert(scene, { coarse }) {
   const rig = new LightRig(scene, stage, SHOW.band, SHOW.seed);
   const lasers = new Lasers(scene, { x: INNER - 0.1, y: HALL.wall + 6, z0: HALL.back + 0.1, z1: HALL.rear - 0.1 });
   const symbols = new StageSymbols(scene, stage);
-  const LASER = Object.assign([P0.clone().set('#f0b860'), P0.clone().set('#d8452e'), P0.clone().set('#fff0d8')], { red: P0.clone().set('#c8141c') });
+  const LASER = Object.assign([P0.clone().set('#ff2410'), P0.clone().set('#b00c14'), P0.clone().set('#ff4a30')], { red: P0.clone().set('#c8141c') });   // 雷射只有紅
   if (window.__show) { window.__show.rig = rig; window.__show.hall = hall; }   // ?debug：量閃爍、切減少閃爍、重來一次點火（hall.born）
   // ---------- 走得到哪：大廳裡台下的地（攝影溝＋人群），不上台；圍欄擋著，兩邊留走道；柱子、地上的超低音、台口拱門的柱腳繞開 ----------
   // 離牆留 2.6 公尺：背對牆的時候鏡頭在背後還有地方，不會被牆推到頭上。後面是階梯座位，只有中間的走道通到大門
@@ -196,7 +194,7 @@ export function buildConcert(scene, { coarse }) {
     if (ax > ARCH - 1.1 && ax < ARCH + 1.1 && z < STAGE.front + 0.9) return true;                     // 台口拱門的柱腳
     return false;
   };
-  const walkable = (x, z) => x > X0 && x < X1 && z > Z0 && z < Z1 && !solid(x, z) && (Math.abs(x) > RAIL_W + 0.3 || Math.abs(x) < 0.7 || z < RZ - 0.25 || z > RZ + 0.95) && !nearFence(plan.fences, x, z, 0.3);
+  const walkable = (x, z) => x > X0 && x < X1 && z > Z0 && z < Z1 && !solid(x, z) && (Math.abs(x) > RAIL_W + 0.3 || Math.abs(x) < 0.7 || z < RZ - 0.25 || z > RZ + 0.95);
   function findWalkable(x, z) {
     x = Math.max(X0 + 0.05, Math.min(X1 - 0.05, x)); z = Math.max(Z0 + 0.05, Math.min(Z1 - 0.05, z));
     if (!walkable(x, z)) z = z < RZ + 0.35 ? RZ - 0.3 : RZ + 1;   // 點在圍欄上：落到靠近的那一邊
@@ -218,16 +216,16 @@ export function buildConcert(scene, { coarse }) {
     if (o.isDirectionalLight) sun ??= o;
   });
   const env = {
-    bg: 0x0d0a0e, near: 30, far: 115,   // 霧拉長：遠的地方淡進空氣裡，大廳才看得出有多大
-    sky: 0x3a3340, ground: 0x1a1518, hi: Math.PI * 0.55, sun: 0x806f60, si: Math.PI * 0.8, dir: new THREE.Vector3(0, 8, -6),
+    bg: 0x0c0405, near: 30, far: 115,   // 霧拉長：遠的地方淡進空氣裡，大廳才看得出有多大
+    sky: 0x3a1a1c, ground: 0x1a0c0c, hi: Math.PI * 0.55, sun: 0x804038, si: Math.PI * 0.8, dir: new THREE.Vector3(0, 8, -6),
   };
-  const COOL = new THREE.Color(0.025, 0.035, 0.055);   // 冷：偏藍的中性冷（不偏紫，跟紅混在一起會變粉）
+  const COOL = new THREE.Color(0.022, 0.006, 0.008);   // 遠處：黑紅（2026-11-10 全場血紅，不再留冷藍）
   const BLOOD = new THREE.Color(0.5, 0.03, 0.03);
   const key = new THREE.Color(), tmp = new THREE.Color(), P = SHOW.band.palette.map((h) => new THREE.Color(h));
   function light(c) {
     if (!hemi || !sun) return;
     // 主光：台上的燈加起來是什麼顏色、多亮（太陽、光幕、一束光、閃白），從台子往觀眾打過來，人的正面才吃得到
-    key.setRGB(0.08, 0.07, 0.08);
+    key.setRGB(0.06, 0.018, 0.018);
     const add = (col, k) => key.add(tmp.copy(col).multiplyScalar(k));
     add(P[c.ring.col ?? 1], c.ring.fill * 0.9 + c.ring.a * 0.15);
     add(P[c.sheet.col ?? 0], c.sheet.a * 0.35);
@@ -239,19 +237,18 @@ export function buildConcert(scene, { coarse }) {
     sun.position.set(0, 9, 14);   // 從觀眾頭頂往台上打：樂手正面吃得到燈，台下的人背對著是剪影
     hemi.color.copy(P[c.haze.col ?? 0]).multiplyScalar(0.12 + c.haze.a * 0.25 + c.strobe * 0.6);
     // 地上反上來的是火把的暖光：火點得越多越亮
-    hemi.groundColor.setRGB(0.07 + 0.12 * hall.lit, 0.035 + 0.06 * hall.lit, 0.02 + 0.02 * hall.lit);
-    hemi.color.add(tmp.setRGB(0.05, 0.025, 0.012).multiplyScalar(hall.lit));
-    hemi.color.add(tmp.setRGB(0.008, 0.016, 0.032));   // 天光帶一點冷藍：暗部冷、火和燈暖，整個畫面才有冷暖
+    hemi.groundColor.setRGB(0.07 + 0.12 * hall.lit, 0.018 + 0.025 * hall.lit, 0.014 + 0.01 * hall.lit);
+    hemi.color.add(tmp.setRGB(0.05, 0.012, 0.008).multiplyScalar(hall.lit));
     // 全場宗教紅：主光、天光、霧一起往血紅推
     const red = rig.red ?? 0;
-    if (red > 0) { key.lerp(tmp.copy(BLOOD).multiplyScalar(1.4), red * 0.85); sun.color.copy(key); hemi.color.lerp(tmp.setRGB(0.14, 0.01, 0.01), red * 0.8); }
+    { key.lerp(tmp.copy(BLOOD).multiplyScalar(1.4), red * 0.85); sun.color.copy(key); hemi.color.lerp(tmp.setRGB(0.14, 0.01, 0.01), red * 0.8); }
     hemi.intensity = Math.PI;
     // 建築本身多亮（節目表的 arch）：全暗、靜默那一拍整座殿沉下去，只剩火和燭光的點；閃白時照樣看得到
     const ak = Math.max(0.08 + 0.92 * (c.arch ?? 1), Math.min(1, c.strobe * 1.5));
     hemi.color.multiplyScalar(ak);
     hemi.groundColor.multiplyScalar(0.3 + 0.7 * ak);
     if (c.snuff) { key.multiplyScalar(0.12); sun.color.copy(key); }   // 靜默那一拍：台上的燈也收掉，只剩光環的線
-    // 遠冷近暖：霧往冷紫偏，遠的地方淡進冷色，近處的火和燈保持暖
+    // 霧：遠的地方淡進黑紅
     if (scene.fog) scene.fog.color.copy(P[c.haze.col ?? 0]).multiplyScalar(0.05 + c.haze.a * 0.12).lerp(COOL, 0.55).lerp(tmp.setRGB(0.07, 0.004, 0.004), red * 0.8);
     if (scene.background?.isColor) scene.background.copy(P[c.haze.col ?? 0]).multiplyScalar(0.03 + c.haze.a * 0.06 + c.strobe * 0.3);
   }
