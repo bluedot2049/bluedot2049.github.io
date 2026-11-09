@@ -27,7 +27,7 @@ const tap = async (code, ms = 80) => { await down(code); await sleep(ms); await 
 const click = (sel) => ev(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); el?.click(); return !!el; })()`);
 try {
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
-  const Q = 'z=gallery&q=mid&debug&crowd=0&beast=0&happen=0&rain=0&dust=0.5&from=haishi';
+  const Q = 'z=gallery&q=mid&debug&crowd=0&beast=0&happen=0&act=0&rain=0&dust=0.5&from=haishi';
   await b.load(Q);
   await ev(`localStorage.clear(); localStorage.setItem('entered', '1'); sessionStorage.clear(); 1`);
   check(await b.load(Q), '畫廊載入');

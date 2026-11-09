@@ -3,7 +3,9 @@
 // 濕的地面：下過雨的石板、屋瓦變深，斜著看泛一層天光，燈籠倒映在上面，拉成一條一條的燈影。接在 grade.js 換掉的霧那一段（混霧、調色之前）。
 // 只有吃光的內建材質（MeshLambertMaterial）會濕，而且只有朝上、頂上沒有別的東西的面：屋簷下、殿裡照舊是乾的，路人和自己也不會濕。
 // 燈影不用反射相機：視線碰到地面往上彈，在燈籠的高度查一張從上往下畫的燈光圖（海市的 rain.js 畫的），越斜著看拉得越長，對得上真的燈籠。
-// 剛下的時候一塊一塊先濕，雨停以後照同一個樣子一塊一塊乾。海邊可以另外圈一塊常年潮濕（damp），不下雨也泛一層燈影。amount、damp 都是 0 的時候整段跳過；不下雨的區域連這一段都不帶（zone 匯出 wet 才接，見 grade.js installGrade）
+// 剛下的時候一塊一塊先濕，雨停以後照同一個樣子一塊一塊乾。
+// 海市的石板（pave.js）每個頂點多記它在石頭裡的哪裡（材質開 WET_STONE，見 wetStoneMaterial）：石縫和石頭的邊吸飽水最深、最後乾，
+// 石頭中間先乾，每塊石頭吃水不一樣，一塊深一塊淺。全靠顏色，沒有貼圖。海邊可以另外圈一塊常年潮濕（damp），不下雨也泛一層燈影。amount、damp 都是 0 的時候整段跳過；不下雨的區域連這一段都不帶（zone 匯出 wet 才接，見 grade.js installGrade）
 import * as THREE from 'three';
 
 export const WET = {
@@ -25,6 +27,28 @@ export const WET = {
   dampY: 0.5,                        // 只有這個高度以下的面潮濕（碼頭的地，不是屋頂）
 };
 
+// 石板的材質：跟鎮上的吃光材質一樣，多開 WET_STONE，頂點帶 aStone（石頭裡的座標、半寬、半深）、aSeed（這塊的脾氣）
+export function wetStoneMaterial() {
+  const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  m.defines = { WET_STONE: '' };
+  return m;
+}
+
+// 頂點著色器那兩段（grade.js 接在霧的頂點段後面）：只有開 WET_STONE 的材質才有
+export const WET_VERT_PARS = `#ifdef WET_STONE
+	attribute vec4 aStone;
+	attribute float aSeed;
+	varying vec4 vStone;
+	varying float vSeed;
+#endif`;
+export const WET_VERT = `#ifdef WET_STONE
+	vStone = aStone;
+	vSeed = aSeed;
+#endif`;
+
+// 石板的網格（海市的 haishi-ground.js 建好後放這裡）：濕地反射另外畫一張它的小圖
+export const WET_MESH = { stones: null };
+
 let ripAt = 0;
 // 踩在濕的地上：在 (x, z) 起一圈漣漪（rain.js 的 splash 呼叫）。環形緩衝，滿了蓋掉最舊的
 export function wetRipple(x, z, k = 1) {
@@ -44,8 +68,9 @@ float wetNoise( vec2 p ) {
 }
 // 燈光圖上 q 那一點、糊到第 lod 層的燈
 vec4 wetLamp( vec2 q, float lod ) { return textureLod( uWet.light, ( q - uWet.box.xy ) * uWet.box.zw, lod ); }
-// P 那一點（面朝 N，從 E 看）有多濕，0 是乾的
-float wetMask( vec3 P, vec3 N, vec3 E ) {
+// P 那一點（面朝 N，從 E 看）有多濕，0 是乾的。bias：這一點比旁邊難濕、早乾多少（石縫是負的）；
+// calm：一大片一大片的雜訊留幾成（石板讓每塊石頭自己的形狀蓋過雜訊）
+float wetMask( vec3 P, vec3 N, vec3 E, float bias, float calm ) {
 	float up = smoothstep( 0.55, 0.85, N.y );
 	if ( up <= 0.0 ) return 0.0;
 	// 常年潮濕的那一塊（damp）：框裡、夠低的面，不分塊，均勻的一層
@@ -59,25 +84,53 @@ float wetMask( vec3 P, vec3 N, vec3 E ) {
 	float top = inside ? 1.0 - smoothstep( 0.3, 0.55, abs( P.y - textureLod( uWet.occ, uv, 0.0 ).r ) ) : 1.0;
 	// 一塊一塊濕：遠的不分塊（細的雜訊遠看會閃）
 	float dist = distance( P, E );
-	float n = mix( 0.65 * wetNoise( P.xz * 1.3 ) + 0.35 * wetNoise( P.xz * 3.4 + 7.0 ), 0.5, smoothstep( 12.0, 40.0, dist ) );
+	float n = 0.5 + ( mix( 0.65 * wetNoise( P.xz * 1.3 ) + 0.35 * wetNoise( P.xz * 3.4 + 7.0 ), 0.5, smoothstep( 12.0, 40.0, dist ) ) - 0.5 ) * calm + bias;
 	return up * top * max( smoothstep( n - 0.12, n + 0.12, uWet.amount * 1.25 - 0.1 ), damp );
+}
+float wetMask( vec3 P, vec3 N, vec3 E ) { return wetMask( P, N, E, 0.0, 1.0 ); }
+// 石板上的一點（pave.js 的 aStone、aSeed，P 是世界座標，從 E 看）：
+// seam 縫和石頭邊那一圈（1 在縫上，離縫三四公分以外是 0）、bias 和 calm 交給 wetMask、soak 這塊石頭濕了多深。
+// 濕地反射（ssr.js）畫石板的那張小圖也用這一段，倒影跟材質哪裡乾哪裡濕才對得上
+void wetStone( vec4 st, float seed, vec3 P, vec3 E, out float seam, out float bias, out float calm, out float soak ) {
+	vec2 l = st.xy, h = st.zw;
+	// 離縫幾公尺：長方的量到最近的邊，圓的碎石（h.y 負的）量到圓周；縫底那一層 h 是 0，就在縫上
+	float edge = max( h.y < 0.0 ? - h.y - length( l ) : min( h.x - abs( l.x ), h.y - abs( l.y ) ), 0.0 );
+	float inner = clamp( edge / max( min( h.x, abs( h.y ) ) * 0.8, 0.02 ), 0.0, 1.0 );
+	float fw = fwidth( edge );
+	// 大雨裡整片都是濕的，雨小了、停了才分得出哪裡先乾；遠的不分（一塊一塊遠看會閃）
+	float settle = smoothstep( 1.05, 0.7, uWet.amount ) * ( 1.0 - smoothstep( 14.0, 30.0, distance( P, E ) ) );
+	bias = ( ( seed - 0.5 ) * 0.5 + ( sqrt( inner ) - 0.4 ) * 0.55 ) * settle;
+	calm = 1.0 - 0.5 * settle;
+	// 縫邊那一圈：比一個像素還細的時候淡掉，不然遠處每塊石頭描一圈邊會閃
+	seam = ( 1.0 - smoothstep( 0.0, 0.035 + fw, edge ) ) * ( 1.0 - smoothstep( 0.015, 0.04, fw ) );
+	soak = 0.9 + 0.2 * seed;   // 有的石頭吃水，濕了深一點
 }
 `;
 
 export const WET_GLSL = WET_BASE_GLSL + `
+#ifdef WET_STONE
+	varying vec4 vStone;
+	varying float vSeed;
+#endif
 // col 是輸出空間的顏色，P 是世界座標。面朝哪用位置的導數算（平面著色，算出來剛好是那一面）
 vec3 wetSurface( vec3 col, vec3 P ) {
 	vec3 N = normalize( cross( dFdx( P ), dFdy( P ) ) );
-	float m = wetMask( P, N, cameraPosition );
+	// 石板：seam 是石縫和石頭邊那一圈，bias 讓縫先濕、中間先乾、每塊乾得不一樣（wetStone）
+	float seam = 0.0, bias = 0.0, calm = 1.0, soak = 1.0;
+	#ifdef WET_STONE
+		wetStone( vStone, vSeed, P, cameraPosition, seam, bias, calm, soak );
+	#endif
+	float m = wetMask( P, N, cameraPosition, bias, calm );
 	if ( m <= 0.0 ) return col;
 	vec2 uv = ( P.xz - uWet.box.xy ) * uWet.box.zw;
 	bool inside = all( greaterThan( uv, vec2( 0.0 ) ) ) && all( lessThan( uv, vec2( 1.0 ) ) );
 	bool srgb = gradeSrgbOut();
 	vec3 c = srgb ? sRGBTransferEOTF( vec4( col, 1.0 ) ).rgb : col;
-	c *= mix( 1.0, uWet.darken, m );
+	c *= mix( 1.0, uWet.darken * soak, m );
+	c *= 1.0 - 0.32 * seam * m;   // 縫裡積著水、石頭邊吸飽了，再深一截
 	vec3 V = normalize( P - cameraPosition );
 	float F = 0.02 + 0.98 * pow( 1.0 - max( dot( - V, N ), 0.0 ), 5.0 );
-	c += uGrade.airLin * F * uWet.sheen * m;
+	c += uGrade.airLin * F * uWet.sheen * m * ( 1.0 + 0.8 * seam );   // 縫裡的水面斜看比石面亮
 	// 踩水（wetRipple）：腳邊一圈細細的亮邊往外擴，不到一秒散掉，很淡
 	for ( int i = 0; i < 6; i++ ) {
 		vec4 r = uWet.rip[ i ];
@@ -98,7 +151,7 @@ vec3 wetSurface( vec3 col, vec3 P ) {
 			if ( g > 1e-4 ) {
 				float h = uWet.lightY.x + uWet.lightY.y * L.a / g - P.y, hh = max( h, 0.3 );
 				L = wetLamp( P.xz + R.xz * ( hh * s ), uWet.blur + log2( 1.0 + hh * s * 0.04 ) );
-				c += L.rgb * uWet.shine * ( 0.03 + 0.5 * F ) * m * smoothstep( 0.2, 0.7, h ) * ( 1.0 - smoothstep( 4.5, 7.0, h ) );
+				c += L.rgb * uWet.shine * ( 0.03 + 0.5 * F ) * m * ( 1.0 + 0.6 * seam ) * smoothstep( 0.2, 0.7, h ) * ( 1.0 - smoothstep( 4.5, 7.0, h ) );
 			}
 		}
 	}

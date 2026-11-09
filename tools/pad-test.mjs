@@ -34,7 +34,7 @@ const { send, ev } = b;
 try {
   await send('Page.addScriptToEvaluateOnNewDocument', { source: FAKE });
   // 來過的人（不跳門口的告示）、說明卡關著；手把的設定清空，從第一次接上開始
-  const Q = 'z=gallery&q=mid&debug&crowd=0&beast=0&happen=0&rain=0&dust=0.5&from=haishi';
+  const Q = 'z=gallery&q=mid&debug&crowd=0&beast=0&happen=0&act=0&rain=0&dust=0.5&from=haishi';
   await b.load(Q);
   await ev(`localStorage.clear(); localStorage.setItem('entered', '1'); sessionStorage.clear(); 1`);
   check(await b.load(Q), '畫廊載入');
@@ -211,11 +211,11 @@ try {
   await sleep(350);
   check(!(await st()).pause && !(await map()).show, 'B 兩下：都收起來');
 
-  // L 點一下：表情盤（kaopanel.js）。開著左搖桿照樣走；十字鍵右挑第 1 張臉、A 擺，十字鍵下到動作那排、A 擺；B 收
+  // L 點一下：表情盤（kaopanel.js）。開著左搖桿照樣走；沒擺臉時焦點在第一張（開心 1），十字鍵右挑第二張（興奮 7）、A 擺，十字鍵下到動作那排、A 擺；B 收
   const kaoNow = () => ev('[__g.player.character.kao, __g.kao.open, document.activeElement?.closest?.("#kaopanel") ? document.activeElement.dataset.act + document.activeElement.dataset.i : null]');
   await press(4, 80);
   let kk = await kaoNow();
-  check(kk[1] && kk[2] === 'face0', 'L 點一下：打開表情盤，焦點在現在的臉', kk);
+  check(kk[1] && kk[2] === 'face1', 'L 點一下：打開表情盤，焦點在第一張臉', kk);
   const before = await st();
   await ev('__fakePad.axes([0, -1, 0, 0])');
   await sleep(500);
@@ -226,11 +226,11 @@ try {
   await press(15);
   await press(1);   // 任天堂字：A 在右邊
   kk = await kaoNow();
-  check(kk[0] === 1 && kk[1], '十字鍵右、A：擺上第 1 張臉，盤還開著', kk);
+  check(kk[0] === 7 && kk[1], '十字鍵右、A：擺上第二張臉，盤還開著', kk);
   await press(13);
   await press(1);
   kk = await kaoNow();
-  check((kk[0] & 15) === 1 && (kk[0] >> 4 & 15) > 0, '十字鍵下、A：疊上一個動作，臉不變', kk);
+  check((kk[0] & 15) === 7 && (kk[0] >> 4 & 15) > 0, '十字鍵下、A：疊上一個動作，臉不變', kk);
   await press(0);
   check(!(await kaoNow())[1], 'B：收起表情盤');
   // 擺著時按住 L 是撐，放開不開盤；L 點一下開、在盤裡再按 L 收

@@ -55,7 +55,7 @@ export function hourly({ lead, len }) {
 // 別人的頭（攤販、路人、動物，beast.js 的 beastSight 沒有白獸時問這裡）：附近有事正在高點附近，看那裡
 let live = null;
 export function happenSight(out, x, z) {
-  for (const ev of live?.list ?? []) {
+  for (const ev of [...(live?.list ?? []), ...(live?.more.flatMap((m) => m.list) ?? [])]) {
     const p = ev.seen;
     if (p && (p.x - x) ** 2 + (p.z - z) ** 2 < (ev.look ?? 14) ** 2) {
       out.copy(p);
@@ -86,6 +86,8 @@ export class Happenings {
       ev.sched.off = q === '0';
     }
     this.pending = q && q !== '0' ? q : null;
+    // 別的也要評分、讓人轉頭的（一幕劇 core/act.js）：{ list: [跟上面一樣寫法的演員], busy }，main.js 接上
+    this.more = [];
     // 自己的頭：高點附近，那裡是最吸引人的地方
     attention?.add((push) => {
       for (const ev of list) if (ev.seen) push('happen:' + ev.id, (o) => !!(ev.seen && o.copy(ev.seen)), 'thing', 3);
@@ -97,7 +99,11 @@ export class Happenings {
 
   // 主迴圈要不要照常每幀畫（有事正在發生時不降到 30fps）
   get busy() {
-    return this.list.some((ev) => ev.t != null);
+    return this.list.some((ev) => ev.t != null) || this.more.some((m) => m.busy);
+  }
+  // 快門要不要評分：有事正在發生，或一幕劇的演員在場（躲著不動也算）
+  get judging() {
+    return this.list.some((ev) => ev.t != null) || this.more.some((m) => m.list.some((ev) => ev.t != null));
   }
 
   // 測試用：sec 秒後開始那一件（id）
@@ -165,22 +171,28 @@ export class Happenings {
   // 回傳拍到的每一件 [{ kind, grade, score, peak, place, zone, self }]，一件都沒有是 null
   judge(renderer, camera, aspect, shot) {
     const out = [];
-    for (const ev of this.list) {
+    for (const ev of [...this.list, ...this.more.flatMap((m) => m.list)]) {
       if (ev.t == null) continue;
-      const S = ev.subject?.();
-      if (!S) continue;
-      const m = measure(renderer, this.scene, camera, aspect, { ...S, character: shot.character });
-      if (!m || m.seen.vis < Math.max(6, m.area * 0.0003)) continue;
-      const f = frameFactors(m, camera, S.center, shot), [s0, s1] = ev.size ?? [0.0015, 0.015];
-      const peak = ev.moment?.() ?? 0;
-      const flashed = !!ev.glow && shot.fire && f.d < 12;
-      const core = f.unblocked ** 0.8 * m.framed ** 1.3 * smooth(s0, s1, f.size) * f.focusK * f.fogK * f.compK * (flashed ? 0.8 : 1);
-      const score = core + (0.3 * peak + (f.self ? 0.06 : 0)) * smooth(0.15, 0.45, core);
-      const grade = score >= 0.75 && peak > 0.7 && !flashed ? 3 : score >= 0.5 ? 2 : score >= 0.25 ? 1 : 0;
-      out.push({ kind: ev.id, grade, score: Math.round(score * 100) / 100, peak: peak > 0.7, place: ev.place, zone: this.zone, self: f.self });
+      const r = judgeOne(ev, this.scene, renderer, camera, aspect, shot, this.zone);
+      if (r) out.push(r);
     }
     return out.length ? out : null;
   }
+}
+
+// 一件拍得怎樣：沒拍到回傳 null。ev 的寫法見上面 Happenings 的清單（subject、moment、size、glow、place）
+function judgeOne(ev, scene, renderer, camera, aspect, shot, zone) {
+  const S = ev.subject?.();
+  if (!S) return null;
+  const m = measure(renderer, scene, camera, aspect, { ...S, character: shot.character });
+  if (!m || m.seen.vis < Math.max(6, m.area * 0.0003)) return null;
+  const f = frameFactors(m, camera, S.center, shot), [s0, s1] = ev.size ?? [0.0015, 0.015];
+  const peak = ev.moment?.() ?? 0;
+  const flashed = !!ev.glow && shot.fire && f.d < 12;
+  const core = f.unblocked ** 0.8 * m.framed ** 1.3 * smooth(s0, s1, f.size) * f.focusK * f.fogK * f.compK * (flashed ? 0.8 : 1);
+  const score = core + (0.3 * peak + (f.self ? 0.06 : 0)) * smooth(0.15, 0.45, core);
+  const grade = score >= 0.75 && peak > 0.7 && !flashed ? 3 : score >= 0.5 ? 2 : score >= 0.25 ? 1 : 0;
+  return { kind: ev.id, grade, score: Math.round(score * 100) / 100, peak: peak > 0.7, place: ev.place, zone, self: f.self };
 }
 
 // 事件寫模型時常用的：從 a 到 b 的平滑、某一段的鐘形（上去、撐住、下來）

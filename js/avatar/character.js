@@ -153,10 +153,11 @@ const INK_RGB = FACE_INK.map((c) => (c ? [1, 3, 5].map((i) => parseInt(c.slice(i
 // 畫的臉的著色器：框住的眼睛（uEye，貼圖座標 x0 y0 x1 y1）照 uBlink 往框的中線壓扁，壓到框外的像素不畫（底下的皮膚露出來），
 // 再照 uLook 整框平移一點（瞟一眼）。沒框就跟原本一樣。接在 Lambert 材質的 map_fragment 那一段
 const FACE_GLSL_HEAD = 'uniform vec4 uEye[2]; uniform int uEyeN; uniform float uBlink; uniform vec2 uLook; uniform vec4 uMouth; uniform vec3 uMouthS;\n' +
-  'uniform float uArc; uniform vec3 uSmile; uniform vec3 uInkE; uniform vec3 uInkM;\n';
+  'uniform float uArc; uniform vec3 uSmile; uniform vec3 uInkE; uniform vec3 uInkM; uniform float uTear;\n';
 // 嘴巴框（顏文字的臉）：框裡照 uMouthS（寬、高、轉）縮放，y 是負的就上下翻（笑變撇嘴）；放大時往外長，長出去的那圈只畫嘴巴自己
 // 笑眼、笑嘴不從貼圖來，照框直接畫：眼睛框裡一道 ∩（uArc），嘴巴框裡一道 ∪（uSmile.x）或張開的 ▽（uSmile.y，uSmile.z 是大小），
 // 顏色是框裡最多的那種墨（uInkE、uInkM）。照格子的中心算，跟畫的臉一樣一格一格；權重小的時候縮小，太小就不畫。
+// 眼淚（uTear）：每隻眼睛框底下往下一道淡藍，長度照權重，最下面一格亮一點像一滴
 // 笑眼擺到一半以上，框裡原本的眼睛就不畫；原本的嘴在 JS 那邊照 uMouthS 縮掉
 const FACE_GLSL_MAP = `
 #ifdef USE_MAP
@@ -170,6 +171,13 @@ const FACE_GLSL_MAP = `
     float r = 0.45 * (e.z - e.x) * (0.4 + 0.6 * uArc);
     vec2 d = gc - vec2(0.5 * (e.x + e.z), 0.5 * (e.y + e.w) - 0.3 * r);
     if (d.y >= -0.5 * cell && abs(length(d) - r) < max(0.75 * cell, 0.18 * r)) drawn = vec4(uInkE, 1.0);
+  }
+  if (uTear > 0.15) for (int i = 0; i < 2; i++) {
+    if (i >= uEyeN) break;
+    vec4 e = uEye[i];
+    float w = e.z - e.x, len = 1.3 * max(e.w - e.y, 0.5 * w) * uTear, top = e.y + 0.15 * (e.w - e.y);
+    float hw = max(0.6 * cell, 0.1 * w);
+    if (abs(gc.x - (0.5 * (e.x + e.z) + 0.12 * w)) < hw && gc.y < top && gc.y > top - len) drawn = vec4(gc.y < top - len + 1.6 * cell ? vec3(0.82, 0.94, 1.0) : vec3(0.55, 0.78, 0.94), 1.0);
   }
   float sw = max(uSmile.x, uSmile.y);
   if (uMouth.z > uMouth.x && sw > 0.15) {
@@ -414,6 +422,29 @@ function arcGeo(spots, ink) {
   });
 }
 
+// 眼淚：每隻眼睛底下一道淡藍往下流（streak），最下面一滴（drop）另外一個網格，會慢慢滴下去。
+// 臉是圓的，越往下越往裡收，整道往後傾一點才貼著臉
+const TEAR = '#8cc6ea', TEAR_HI = '#d4eefc';
+function tearGeo(spots) {
+  if (!spots.length) return null;
+  const len = (p) => p.r * 2.4, w = (p) => Math.max(0.007, p.r * 0.27);
+  const at = (p) => [p.x + Math.sign(p.x || 1) * p.r * 0.15, p.y - p.r * 0.55];
+  return {
+    streak: build((k) => {
+      for (const p of spots) {
+        const [x, y] = at(p), l = len(p);
+        k.ball(1, TEAR, x, y - l / 2, p.z - l * 0.12, { sx: w(p), sy: l / 2, sz: 0.004, rx: 0.3, rz: p.rz || 0 });
+      }
+    }),
+    drop: build((k) => {
+      for (const p of spots) {
+        const [x, y] = at(p), l = len(p);
+        k.ball(w(p) * 1.5, TEAR_HI, x, y - l, p.z - l * 0.24, { sy: 1.3, sz: 0.5 });
+      }
+    }),
+  };
+}
+
 // 兩種笑嘴，原點在嘴巴中心：shut 閉著的 ∪，open 張開的 ▽（深色半圓、底下一塊舌頭）
 function smileGeo(r) {
   return {
@@ -459,10 +490,10 @@ function headGeo(L, race, S, skin, split = false) {
     smile = { ...smileGeo(r), at };
   }
   mouth = mouth && mouthAt ? mouth.translate(-mouthAt[0], -mouthAt[1], -mouthAt[2]) : null;
-  const arcs = split ? arcGeo(spots, race.ink || '#1a120c') : null;
+  const arcs = split ? arcGeo(spots, race.ink || '#1a120c') : null, tears = split ? tearGeo(spots) : null;
   const eyeY = ownEye && spots.length ? spots.reduce((s, p) => s + p.y, 0) / spots.length : race.ey + S.fy;
   const eyeWide = spots.some((p) => Math.abs(p.x) > 0.12);
-  return { head, eyes: mergeBucket(ke.lit, false), pupils: mergeBucket(kp.lit, false), mouth, mouthAt, arcs, smile, eyeY, eyeWide };
+  return { head, eyes: mergeBucket(ke.lit, false), pupils: mergeBucket(kp.lit, false), mouth, mouthAt, arcs, tears, smile, eyeY, eyeWide };
 }
 
 // 每種帽子從帽緣往上多高，照鏡子取景用
@@ -668,7 +699,7 @@ export class Character {
     // 每個角色自己一組 uniform，程式三者共用（onBeforeCompile 一樣就同一個程式）
     this.faceU = { uEye: { value: [new THREE.Vector4(), new THREE.Vector4()] }, uEyeN: { value: 0 }, uBlink: { value: 0 }, uLook: { value: new THREE.Vector2() },
       uMouth: { value: new THREE.Vector4() }, uMouthS: { value: new THREE.Vector3(1, 1, 0) },
-      uArc: { value: 0 }, uSmile: { value: new THREE.Vector3(0, 0, 1) }, uInkE: { value: new THREE.Color() }, uInkM: { value: new THREE.Color() } };
+      uArc: { value: 0 }, uTear: { value: 0 }, uSmile: { value: new THREE.Vector3(0, 0, 1) }, uInkE: { value: new THREE.Color() }, uInkM: { value: new THREE.Color() } };
     this.faceMat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.faceU);
       sh.fragmentShader = FACE_GLSL_HEAD + sh.fragmentShader.replace('#include <map_fragment>', FACE_GLSL_MAP);
@@ -687,6 +718,13 @@ export class Character {
     this.arcs = new THREE.Group();
     head.add(this.arcs);
     this.arcMesh = mesh(this.arcs);
+    // 眼淚（哭的臉）：一道往下流，最下面一滴自己一個關節，滴下去再長回來
+    this.tears = new THREE.Group();
+    head.add(this.tears);
+    this.tearMesh = mesh(this.tears);
+    this.dropG = new THREE.Group();
+    this.tears.add(this.dropG);
+    this.dropMesh = mesh(this.dropG);
     this.smile = new THREE.Group();
     head.add(this.smile);
     this.smShut = mesh(this.smile);
@@ -760,7 +798,7 @@ export class Character {
     this.kaoK = 0;                 // 現在擺到幾成
     this.kaoWalkT = 0;             // 姿勢擺出來以後走了多久
     this.kaoBodySeen = false;      // 這個姿勢停著擺出來過了（走著選的還沒）
-    this.kaoFace = { s: 1, sy: 1, dy: 0, mx: 1, my: 1, mr: 0, arc: 0, sa: 0, so: 0, sw: 1 };
+    this.kaoFace = { s: 1, sy: 1, dy: 0, mx: 1, my: 1, mr: 0, arc: 0, sa: 0, so: 0, sw: 1, tear: 0 };
     this.kaoHead = new THREE.Vector3();   // 臉和身體要頭再轉多少，疊在視線上
     this.kaoTurnK = 0;             // 擺著回眸、側身這種自己轉向鏡頭的：視線左右不再另外轉頭
     this.kaoLow = 0;               // 擺著蹲、跪這種往下沉的：長的東西跟坐下一樣先放地上（handclear.js）
@@ -821,7 +859,9 @@ export class Character {
     swap(this.eyesMesh, hg.eyes?.translate(0, -eyeY, 0));
     swap(this.pupilMesh, hg.pupils?.translate(0, -eyeY, 0));
     swap(this.arcMesh, hg.arcs?.translate(0, -eyeY, 0));
-    this.eyes.position.y = this.arcs.position.y = eyeY;
+    swap(this.tearMesh, hg.tears?.streak.translate(0, -eyeY, 0));
+    swap(this.dropMesh, hg.tears?.drop.translate(0, -eyeY, 0));
+    this.eyes.position.y = this.arcs.position.y = this.tears.position.y = eyeY;
     this.eyeWide = hg.eyeWide;
     this.eyeR = 0.06 * S.es * (race.fs ?? 1);   // 眼珠最多偏這麼遠（乘上 lookX、lookY）
     this.head.scale.setScalar(S.hs);
@@ -1382,10 +1422,20 @@ export class Character {
     const kf = this.kaoFace, arc = Math.min(1, kf.arc), open = (1 - 0.88 * this.blink) * kf.sy * (1 - arc);
     const sx = this.eyeWide ? 1 : kf.s;
     this.eyes.scale.set(sx, Math.max(0.03, kf.s * open), 1);
-    this.eyes.position.y = this.arcs.position.y = this.eyeY + kf.dy * this.eyeR;
+    this.eyes.position.y = this.arcs.position.y = this.tears.position.y = this.eyeY + kf.dy * this.eyeR;
     this.eyes.visible = arc < 0.95;
     this.arcs.visible = arc > 0.05;
     this.arcs.scale.set(sx, kf.s * arc, 1);
+    // 眼淚：照權重長出來（從眼睛往下流）；最下面那滴每 1.7 秒滴一次：往下掉、縮小，再從流的末端長回來。第一幀就在半路，不從頭起跑
+    const tear = Math.min(1, kf.tear);
+    this.tears.visible = tear > 0.05;
+    if (this.tears.visible) {
+      this.tears.scale.set(sx, kf.s * tear, 1);
+      const ph = (this.time / 1.7 + 0.45) % 1, fall = Math.max(0, ph - 0.55) / 0.45;
+      this.dropG.position.set(0, -this.eyeR * 1.6 * fall * fall, -this.eyeR * 0.3 * fall);
+      this.dropG.scale.setScalar(ph < 0.25 ? 0.3 + 0.7 * ph / 0.25 : 1 - 0.8 * fall);
+    }
+    this.faceU.uTear.value = tear;
     // 嘴巴：張大、抿成一條、撇下去（y 翻過來）。內建臉轉關節，畫的臉交給著色器照嘴巴框
     // 笑翻成撇嘴的半路會經過 0：留一點厚度，壓扁成 0 的網格法線算不出來
     // 笑嘴（sa 閉著的 ∪、so 張開的 ▽）：原本的嘴縮掉、換上去
@@ -1476,7 +1526,7 @@ export class Character {
 
     // 臉：兩張臉照權重混
     const kf = this.kaoFace, kh = this.kaoHead.set(0, 0, 0);
-    kf.s = kf.sy = kf.mx = kf.my = kf.sw = 1; kf.dy = kf.mr = kf.arc = kf.sa = kf.so = 0;
+    kf.s = kf.sy = kf.mx = kf.my = kf.sw = 1; kf.dy = kf.mr = kf.arc = kf.sa = kf.so = kf.tear = 0;
     const faceAt = (id, w) => {
       const f = FACES[id];
       if (!id || w <= 0) return;
@@ -1485,6 +1535,7 @@ export class Character {
       kf.sy += ((f.sy ?? 1) - 1) * k;
       kf.dy += (f.dy || 0) * k;
       kf.arc += (f.arc || 0) * k;
+      kf.tear += (f.tear || 0) * k;
       if (f.head) { kh.x += f.head[0] * k; kh.y += f.head[1] * k; kh.z += f.head[2] * k; }
       if (f.mo) { kf.mx += (f.mo[0] - 1) * k; kf.my += (f.mo[1] - 1) * k; kf.mr += (f.mo[2] || 0) * k; }
       if (f.sm) { if (f.sm[0] === 'open') kf.so += k; else kf.sa += k; kf.sw += ((f.sm[1] ?? 1) - 1) * k; }

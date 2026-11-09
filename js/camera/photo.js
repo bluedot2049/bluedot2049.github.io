@@ -625,7 +625,7 @@ export class PhotoMode {
       { k: 'turn', label: '方向', gear: true, opts: ['橫拿', '直拿'], get: () => this.upright, set: (i) => { this.upright = i; } },
       { k: 'pose', label: '相機', carry: true, opts: ['掛著', '舉起來'], get: () => this.pose, set: (i) => { this.pose = i; }, note: '舉起：拍面向的方向' },
       // 頭上冒的顏文字是遊戲的字，只有畫廊的眼睛（遊戲自己的鏡頭）拍得到；記在這台裝置
-      { k: 'tag', label: '頭上字', gear: false, studio: false, opts: ['不拍', '拍進去'], get: () => (pref('kaoTagPhoto') ? 1 : 0), set: (i) => setPref('kaoTagPhoto', !!i) },
+      { k: 'tag', label: '頭上表情', gear: false, studio: false, opts: ['不拍', '拍進去'], get: () => (pref('kaoTagPhoto') ? 1 : 0), set: (i) => setPref('kaoTagPhoto', !!i) },
     ];
     // 直橫（帶相機是「方向」、空拍機是「比例」）後面寫鍵：鍵盤照按鍵表，手把帶相機是十字鍵右、空拍機是 R
     const turnKey = (c) => (c.k === 'turn' || c.k === 'aspect' ? `<i class="on-kb" data-kb="turn">F</i><i class="on-pad" data-pad-btn="${c.k === 'turn' ? 15 : 5}"></i>` : '');
@@ -1867,7 +1867,7 @@ export class PhotoMode {
     const ctx = out.getContext('2d');
     const dpr = r.getPixelRatio();
     try {
-      cam.layers.disable(GUIDE_LAYER);   // 標記、站位拍不進照片；頭上的顏文字照「頭上字」（syncTags 已經套好）
+      cam.layers.disable(GUIDE_LAYER);   // 標記、站位拍不進照片；頭上的表情照「頭上表情」（syncTags 已經套好）
       r.setPixelRatio(1);
       // 景深的模糊圈照照片的大小算，取樣也多一點
       dof.long = Math.max(outW, outH);
@@ -1909,7 +1909,7 @@ export class PhotoMode {
   // 白獸（beast.js 的 judge）、這一區正在發生的事（core/happen.js 的 judge）：鏡頭先套上取景框那一塊，照那一塊算拍得好不好，算完放回去。
   // 回傳 { rare, seen }（rare 白獸或 null；seen 拍到的事件清單或 null），兩樣都沒有是 null
   rareShot(fire) {
-    const b = this.beast?.ev ? this.beast : null, h = this.happen?.busy ? this.happen : null;
+    const b = this.beast?.ev ? this.beast : null, h = this.happen?.judging ? this.happen : null;
     if (!b && !h) return null;
     const fr = this.frame, cam = this.camera;
     const shot = { fire, focus: this.gear && dof.on ? { d: this.focusD, k: dof.k, max: dof.max } : null, character: this.character };

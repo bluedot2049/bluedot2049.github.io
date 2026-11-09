@@ -8,6 +8,7 @@ import { Kit, newBucket, rng } from '../../core/props.js';
 import { JETTY, buildHarbor, onJetty } from '../../scene/harbor.js';
 import { buildLore } from './lore.js';
 import { buildTree } from './tree.js';
+import { buildEasel } from './easel.js';
 import { REFLECT_LAYER } from '../../core/scenery.js';
 import { BW, DROP, JETTY_NAME, MEADOW, MEADOW_NAME, ORDER, PAV, SD, SEA_BED, SEA_LEVEL, SUN_DIR, SW, TD, TRAIL, TRAIL_W, TW } from './outdoor-map.js';
 import { buildSea, grass, groundMesh, makeTerrain, meadowWade, nearestOnLine, patch, seeds, smooth, vnoise } from './outdoor-ground.js';
@@ -96,11 +97,14 @@ export function buildOutdoor(room, h) {
     }
   }
 
-  // 大樹和樹下的長椅，長椅面向夕陽。樹冠撐得很開，長椅和石階下來的這一段都在樹蔭底下
-  const benchAt = { x: 7.5, z: Z(23.0) };
+  // 大樹，樹冠撐得很開，石階下來這一段和樹的東邊都在樹蔭底下。
+  // 2026-11-09：樹東邊樹蔭下原本是長椅，換成野餐墊；長椅搬到西邊草地，面向夕陽；野餐墊原本那塊地放畫架（easel.js）
+  // 呼叫的順序和亂數照舊，只換座標，草原上其他擺設的位置才不會跟著變
+  const pic = { x: 7.7, z: Z(23.1) };
+  const benchAt = { x: -9.5, z: Z(28.5) };
   for (let i = 0; i < 80; i++) R();   // 舊的大樹用掉的亂數照取，草原上其他擺設的位置才不會跟著變
-  const treeAt = { x: 4.4, z: Z(23.4) };   // 往後退一點，板根才不會伸到踏腳石和長椅底下
-  const tree = buildTree({ k, group, h, ...treeAt, G, heightAt, face: { x: 0, z: Z(TD + SD) }, clear: [benchAt] });
+  const treeAt = { x: 4.4, z: Z(23.4) };   // 往後退一點，板根才不會伸到踏腳石和野餐墊底下
+  const tree = buildTree({ k, group, h, ...treeAt, G, heightAt, face: { x: 0, z: Z(TD + SD) }, clear: [pic] });
   for (const b of tree.blocks) block(b.x, b.z, b.hw, b.hd);
   const bk = new Kit(R);
   parkBench(bk, G);
@@ -116,8 +120,7 @@ export function buildOutdoor(room, h) {
   jk.emit(bucket, jettyBench.x, jettyBench.z, Math.PI);
   block(jettyBench.x, jettyBench.z, 0.85, 0.3);
 
-  // 野餐墊和籃子
-  const pic = { x: -6.5, z: Z(19.4) };
+  // 野餐墊和籃子：大樹東邊的樹蔭下（位置在上面 pic）
   const stripes = ['#b8423a', '#efe2c8'];
   for (let i = 0; i < 7; i++) k.box(1.9, 0.01, 0.2, stripes[i % 2], pic.x, G + 0.01, pic.z - 0.6 + i * 0.2);
   k.cyl(0.22, 0.18, 0.24, '#a87a40', pic.x + 1.25, G + 0.12, pic.z - 0.2, {}, 9);
@@ -129,7 +132,11 @@ export function buildOutdoor(room, h) {
   goblet(k, pic.x - 0.2, G + 0.01, pic.z + 0.45);
   block(pic.x + 1.25, pic.z - 0.2, 0.25, 0.25);
 
-  // 石階下來的踏腳石，一路分到大樹和野餐墊
+  // 畫架：野餐墊原本那塊地（easel.js）。站在畫布前面，面向夕陽和海；自己一組亂數，不動到草原其他東西
+  const easel = buildEasel({ G, bucket, group, x: -6.5, z: Z(19.4), rot: 0.18 });
+  for (const b of easel.blocks) block(b.x, b.z, b.hw, b.hd, b.rot);
+
+  // 石階下來的踏腳石，一路分到大樹（野餐墊）和畫架
   const path = (x1, r1, cx, cr, x2, r2) => {
     const steps = Math.round(Math.hypot(x2 - x1, r2 - r1) / 0.75);
     for (let i = 1; i < steps; i++) {
@@ -414,6 +421,7 @@ export function buildOutdoor(room, h) {
     table: { x: tableX, z: Z(tableRel), hw: 0.5, hd: tableLen / 2 },
     pavilion: { x: pc.x, z: pc.z, r: PAV.r },
     hollow: tree.hollow,                     // 大樹的樹洞：作者和網站消息（hollow.js）
+    easel,                                   // 原野的畫架（easel.js，面板在 easel-card.js）
     lore,                                    // 偶爾才看得到的東西（lore.js）：大鳥飛過時角色會抬頭看
     // 貓頭鷹停的地方：大樹的枝幹、石階口兩根燈串柱、棧橋的燈柱、涼亭頂上的金球。y 是站的高度，h 是面向，w 是停在那裡的機會
     perches: [

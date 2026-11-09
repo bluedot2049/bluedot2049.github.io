@@ -13,6 +13,7 @@ import { buildRain } from './rain.js';
 import { RainSound } from './rain-sound.js';
 import { Footprints } from '../../core/footprints.js';
 import { buildHappenings, catGather } from './haishi-happen.js';
+import { buildActs } from './haishi-acts.js';
 
 // 一上岸就放。rest：播完停幾秒（最少、最多）再從頭放，中間只剩海、人潮和雨。
 // len：曲子幾秒（ffprobe 量的），有寫就照伺服器時間排，同一區的人聽到同一段（ambience.js 的 musicAt）
@@ -52,6 +53,11 @@ export const beast = {
 // 事件（core/happen.js 排時間、評分）：漁港起網、燈巷整點點燈、貓到淨房門口排隊。拍到的記在相簿那一格。main.js 在 crowd 之後呼叫
 export function happen({ world, animals }) {
   return buildHappenings({ world, animals });
+}
+
+// 一幕劇（core/act.js 管第幾拍、存檔、黑眼那一行）：漁火，碼頭魚桶裡的魚一路逃上星廟。main.js 在黑眼建好之後呼叫
+export function acts(ctx) {
+  return buildActs(ctx);
 }
 
 // 黑眼（scene/guide.js）帶得到的地方，去過才列，渡船 guide.js 自己加在第一個。id 只用小寫英文和數字（會送給別人）。

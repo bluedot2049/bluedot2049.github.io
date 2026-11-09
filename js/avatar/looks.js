@@ -138,6 +138,25 @@ export function wearOnly(L) {
   for (const [k, with_] of Object.entries(WEAR)) for (const f of [k, ...with_]) out[f] = L[f];
   return sanitizeLook(out);
 }
+// 衣櫃兩層（save/progress.js 的 people、outfits）：衣服是 WEAR 那幾欄，人是其他的全部（種族、膚色、頭髮、五官、體型、戴不戴臉）。
+// 衣服不綁人，哪一套都能穿在哪個人身上（跟明信片試穿同一套規則）
+const WEAR_FIELDS = Object.entries(WEAR).flatMap(([k, w]) => [k, ...w]);
+const WEAR_SET = new Set(WEAR_FIELDS);
+export function personOf(L) {
+  const s = sanitizeLook(L), out = {};
+  for (const f in s) if (!WEAR_SET.has(f)) out[f] = s[f];
+  return out;
+}
+export function outfitOf(L) {
+  const s = sanitizeLook(L), out = {};
+  for (const f of WEAR_FIELDS) out[f] = s[f];
+  return out;
+}
+export const dress = (person, outfit) => sanitizeLook({ ...person, ...outfit });
+export const samePerson = (a, b) => !!a && !!b && JSON.stringify(personOf(a)) === JSON.stringify(personOf(b));
+// 比衣服只比穿著的：沒穿的那件顏色不算（存檔碼不記，讀回來是預設色）
+const wornKey = (L) => { const s = sanitizeLook(L); return JSON.stringify(Object.entries(WEAR).map(([k, w]) => (s[k] === 'none' ? [k] : [k, ...w].map((f) => s[f])))); };
+export const sameOutfit = (a, b) => !!a && !!b && wornKey(a) === wornKey(b);
 // 帽子顏色只套在這幾種帽子上，其他帽子有自己的顏色
 export const TINTED_HATS = ['wizard', 'propeller', 'party'];
 // 連身裝裡有頭套或頭盔的，穿了就不戴帽子

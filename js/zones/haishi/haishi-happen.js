@@ -10,8 +10,8 @@ import { DARK, LAMP, LAMP_HI, SEA, WOOD } from './haishi-map.js';
 
 const PENTA = [1, 9 / 8, 5 / 4, 3 / 2, 5 / 3, 2];
 
-// 一組 Kit 做成物件掛在 parent 底下（跟 haishi-harbor.js 的 vessel 一樣），glow：發光的那塊另外換一份自己的材質，才能各自調亮暗
-function piece(parent, build, R) {
+// 一組 Kit 做成物件掛在 parent 底下（跟 haishi-harbor.js 的 vessel 一樣；一幕劇 haishi-acts.js 也用），glow：發光的那塊另外換一份自己的材質，才能各自調亮暗
+export function piece(parent, build, R) {
   const k = new Kit(R), b = { lit: [], glow: [], glows: [], puffs: [], pools: [] }, g = new THREE.Group();
   build(k);
   k.emit(b, 0, 0, 0);
@@ -27,7 +27,7 @@ function piece(parent, build, R) {
   return g;
 }
 // 一顆光暈：大小每幀改（glowPoints 的 aSize）
-function halo(parent, list) {
+export function halo(parent, list) {
   const p = glowPoints(list, { far: true });
   parent.add(p);
   const a = p.geometry.attributes.aSize, base = Float32Array.from(a.array);

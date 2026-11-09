@@ -28,6 +28,8 @@ const SOURCES = [
     } },
   { title: '海市・攤販', file: 'js/npc/vendor-lines.js', note: '照攤位的 id（npc/vendors.js 的 VENDORS）：greet 走近、lines 按「聊天」輪著講、quiet 街上冷清時（晚上最冷清）；暗房 handover 交照片、報社 unsigned 退畫廊的眼睛拍的、printed 照版面（角落、半版、頭版、號外）',
     keys: { VENDOR_LINES: '' } },
+  { title: '海市・一幕劇「漁火」', file: 'js/zones/haishi/haishi-act-lines.js', note: '碼頭魚桶裡的魚一路逃上星廟（zones/haishi/haishi-acts.js），魚販和沿路攤販看到牠時說的話',
+    keys: { FISH_LINES: '碼頭的魚販：bucket 走近魚桶、start 魚跳出去、away 戲還在演時走過魚攤、back 演完回來', SPOT_LINES: '沿路躲的地方，who 是旁邊那攤：hint 你走近時、pop 被你找到飛走時' } },
   { title: '海市・星潮報', file: 'js/save/press.js', note: '報社印出來的報紙（save/press.js）：標題和副標照奇物和版面抽，旁邊填小新聞和廣告',
     keys: { HEADS: '標題', SUBS: '副標', NEWS: '小新聞', ADS: '廣告（店名、賣什麼）' } },
 ];

@@ -3,6 +3,8 @@
 // 海市的地面：石板路的斑駁、碼頭和各層石台（側面就是擋土牆）、長棧橋。
 import * as THREE from 'three';
 import { Kit, rng } from '../../core/props.js';
+import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
+import { WET_MESH, wetStoneMaterial } from '../../core/wet.js';
 import { addRoof } from './eaves.js';
 import { BED, PAVES, paving } from './pave.js';
 import { AREA, AREAS, CARTS, DARK, GOLD, GRAY, PAVE, RISE, SEA, SHOPS, STONE, smooth } from './haishi-map.js';
@@ -17,6 +19,21 @@ export function buildGround(c) {
   const PR = rng('haishi-pave');   // 鋪路自己用一串亂數，房子不會因為前面多抽了幾次整排換樣子
   const SLR = rng('haishi-stair-lamps');   // 石階矮牆上的燈也是
   const MOSS = new THREE.Color('#3e5442'), WET = new THREE.Color('#38445a');
+  // 石板（連同縫底那一層）自己合成一個網格：每個頂點多帶石頭裡的座標，濕的時候照它算離縫多遠（wet.js）
+  const paves = [];
+  // 石台的頂面交給石板的縫底那一層，盒子只留側面
+  const dropTops = (g) => {
+    const pos = g.attributes.position, nor = g.attributes.normal, keep = [];
+    for (let i = 0; i < pos.count; i += 3) if (nor.getY(i) < 0.5) keep.push(i, i + 1, i + 2);
+    const out = new THREE.BufferGeometry();
+    for (const name of ['position', 'normal', 'color']) {
+      const a = g.attributes[name], n = a.itemSize, arr = new Float32Array(keep.length * n);
+      keep.forEach((j, i) => { for (let c = 0; c < n; c++) arr[i * n + c] = a.array[j * n + c]; });
+      out.setAttribute(name, new THREE.BufferAttribute(arr, n));
+    }
+    g.dispose();
+    return out;
+  };
   const fronts = SHOPS.map((s) => ({ x: s.x, z: flatAt(s.at, s.x)?.z0 })).filter((s) => s.z != null);
   const edgeAt = (x, z) => {
     for (const d of [0.12, 0.25, 0.4]) if (!areaAt(x + d, z) || !areaAt(x - d, z) || !areaAt(x, z + d) || !areaAt(x, z - d)) return 1 - d / 0.5;
@@ -61,8 +78,59 @@ export function buildGround(c) {
       for (let j = i; j < i + 6; j++) c.toArray(col, j * 3);
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    k.add(g, null, 0, 0, 0, { ao: false });
+    k.add(dropTops(g), null, 0, 0, 0, { ao: false });
   };
+
+  // ---------- 石台側面＝砌石 ----------
+  // 一層一層的長石，上下層錯縫；每塊一個顏色（GRAY 色梯裡挑），不漸層；石塊之間是跟頂面一樣的縫色，
+  // 縫是同一個平面上的細條（不另外墊底，遠看不閃）。最下面一層暗一階，牆腳才站得住。
+  // 顏色照位置雜湊，不抽亂數（抽了後面整排房子會換樣子）
+  const COURSE = 0.44, SEAMW = 0.035;
+  const hash = (a, b, c) => { const s = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453; return s - Math.floor(s); };
+  const masonry = (x0, x1, z0, z1, yb, yt, tones, grout) => {
+    const H = yt - yb;
+    if (H <= 0.02) return null;
+    const P = [], N = [], C = [], seam = new THREE.Color(grout), tc = tones.map((t) => new THREE.Color(t)), tmp = new THREE.Color();
+    const n = Math.max(1, Math.round(H / COURSE)), ch = H / n;
+    // 四個面：起點、沿著走的方向、朝外的法線、長度
+    const faces = [
+      [x0, z1, 1, 0, 0, 1, x1 - x0], [x1, z1, 0, -1, 1, 0, z1 - z0],
+      [x1, z0, -1, 0, 0, -1, x1 - x0], [x0, z0, 0, 1, -1, 0, z1 - z0],
+    ];
+    const quad = (f, u0, u1, v0, v1, c) => {
+      if (u1 - u0 < 1e-3 || v1 - v0 < 1e-3) return;
+      const [ox, oz, ux, uz, nx, nz] = f;
+      const p = (u, v) => [ox + ux * u, yb + v, oz + uz * u];
+      const a = p(u0, v0), b = p(u1, v0), cc = p(u1, v1), d = p(u0, v1);
+      for (const q of [a, b, cc, a, cc, d]) { P.push(...q); N.push(nx, 0, nz); C.push(c.r, c.g, c.b); }
+    };
+    faces.forEach((f, fi) => {
+      const L = f[6], h2 = SEAMW / 2;
+      for (let r = 0; r < n; r++) {
+        const v0 = r ? r * ch + h2 : 0, v1 = r < n - 1 ? (r + 1) * ch - h2 : H;
+        if (r) quad(f, 0, L, r * ch - h2, r * ch + h2, seam);
+        // 這一層的切點：塊長 0.7–1.3，奇數層先切半塊（錯縫）
+        const cuts = [0];
+        let u = r % 2 ? 0.35 + hash(fi, r, x0 + z0) * 0.3 : 0;
+        while (true) { u += 0.7 + hash(u, r, fi + x1 + z1) * 0.6; if (u >= L - 0.3) break; cuts.push(u); }
+        cuts.push(L);
+        for (let i = 0; i < cuts.length - 1; i++) {
+          const a = cuts[i], b = cuts[i + 1], ua = a ? a + h2 : 0, ub = b < L ? b - h2 : L;
+          const k = hash(f[0] + a, f[1] + r * 3.1, fi), pick = r === 0 ? 0 : 1 + Math.floor(k * (tc.length - 1));
+          tmp.copy(tc[Math.min(pick, tc.length - 1)]).multiplyScalar(0.96 + hash(a, r, fi + 7) * 0.08);
+          quad(f, ua, ub, v0, v1, tmp);
+          if (b < L) quad(f, b - h2, b + h2, v0, v1, seam);
+        }
+      }
+    });
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+    return g;
+  };
+  // 最下面一層用第一個（暗一階），上面的層在後面幾個裡挑
+  const WALL_TONES = [GRAY.wall, GRAY.mid, GRAY.curb, GRAY.cap], DARK_TONES = [GRAY.deep, GRAY.foot, GRAY.dark, GRAY.foot];
 
   // ---------- 地面：碼頭、各層石台，側面就是擋土牆 ----------
   // 這些都是地面本身，不壓環境光遮蔽（ao: false），壓暗的是站在上面的東西的腳
@@ -70,19 +138,16 @@ export function buildGround(c) {
     if (a.id === 'pier' || a.deck) continue;   // 木頭的棧橋另外鋪
     const yb = groundUnder(a.x0, a.x1, a.z0, a.z1);
     if (a.y != null) {
-      // 石台頂面往下收，上面鋪石板，石板之間露出深色的縫。側面照舊由下往上漸亮，頂面那一片塗縫的顏色
+      // 石台頂面往下收，上面鋪石板，石板之間露出深色的縫。側面是砌石（見上面 masonry），底面不畫（看不到）
       const st = paveOf(a), yt = a.y - BED;
       if (a.y === 0) quayWall(a, yb, yt, PAVES[st].grout);
       else {
-      const g = new THREE.BoxGeometry(a.x1 - a.x0, yt - yb, a.z1 - a.z0).toNonIndexed();
-      const pos = g.attributes.position, col = new Float32Array(pos.count * 3), c = new THREE.Color();
-      const dark = a.id === 'summit' || a.temple, lo = new THREE.Color(dark ? GRAY.foot : STONE), hi = new THREE.Color(dark ? GRAY.dark : PAVE), seam = new THREE.Color(PAVES[st].grout);
-      for (let i = 0; i < pos.count; i++) (i >= 12 && i < 18 ? seam : c.copy(lo).lerp(hi, pos.getY(i) / (yt - yb) + 0.5)).toArray(col, i * 3);
-      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-      k.add(g, null, (a.x0 + a.x1) / 2, (yt + yb) / 2, (a.z0 + a.z1) / 2, { ao: false });
+        const dark = a.id === 'summit' || a.temple;
+        const g = masonry(a.x0, a.x1, a.z0, a.z1, yb, yt, dark ? DARK_TONES : WALL_TONES, PAVES[st].grout);
+        if (g) k.add(g, null, 0, 0, 0, { ao: false });
       }
       // 燈巷靠房子那一邊留一道排水溝
-      k.add(paving(a, st, PR, paveTint, a.street === 'lantern' ? { gutter: 'z0' } : {}), null, 0, 0, 0, { ao: false });
+      paves.push(paving(a, st, PR, paveTint, a.street === 'lantern' ? { gutter: 'z0' } : {}));
       solid(a.x0, a.x1, a.z0, a.z1, a.y, true);
       continue;
     }
@@ -214,4 +279,11 @@ export function buildGround(c) {
     gk.fid = fader.add([[-2.9, y + 2.9, z - 0.85, 2.9, y + 5.0, z + 0.85]], [sign]);
     gk.emit(bucket, 0, 0, 0);
   }
+
+  const pave = new THREE.Mesh(mergeGeometries(paves, false), wetStoneMaterial());
+  paves.forEach((g) => g.dispose());
+  pave.userData.kind = 'prop';
+  group.add(pave);
+  WET_MESH.stones = pave;   // 電腦版的濕地反射另外畫它一張小圖（ssr.js）
+  return { pave };
 }

@@ -25,6 +25,7 @@ export const PREFS = {
   quality: { kind: 'json' },                     // quality.js：量過的畫質 { level, dpr, at }
   photo: { kind: 'json' },                       // photo.js：攝影模式的 { aspect, pose, look }
   photoGear: { kind: 'json' },                   // photo.js：每台相機的握法、直拍、閃光、日期
+  calmFlash: { kind: 'flag', init: false },      // concert-rig.js：演唱會減少閃爍（一秒最多 3 下、只在重拍上、亮度減半）
   photoRec: { kind: 'text' },                    // photo.js：錄影：'rec' 錄到一半當掉過、'webm' 這台只能 webm
   eyeSeen: { kind: 'json' },                     // guide.js：黑眼帶路去過的地方，照區域記
   eyeOn: { kind: 'json' },                       // guide.js：黑眼現在叫出來了（1）

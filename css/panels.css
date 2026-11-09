@@ -153,6 +153,19 @@
 }
 .frame.empty { background: none; box-shadow: none; border: 1px dashed var(--line); font: inherit; font-size: 12px; letter-spacing: .15em; color: var(--muted); }
 .closet-slot small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; letter-spacing: .05em; color: var(--muted); }
+/* 衣櫃上面那排人：圓的頭像；身上是這個人、穿著這套的那一格描金邊 */
+.portrait {
+  position: relative; display: block; width: min(100%, 84px); aspect-ratio: 1; padding: 3px;
+  background: #a9763a; border: 0; border-radius: 50%; box-shadow: inset 0 0 0 1px #f6dba6; cursor: var(--cur-pointer);
+}
+.portrait img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; background: #2a1d15; }
+.portrait .face-tag {
+  position: absolute; top: -2px; right: -6px; padding: 1px 6px; font-style: normal; font-size: 10px; letter-spacing: .1em;
+  color: #2a1a0c; background: var(--gold-fill); border-radius: 999px; pointer-events: none;
+}
+.portrait.empty { background: none; box-shadow: none; border: 1px dashed var(--line); font: inherit; font-size: 12px; letter-spacing: .15em; color: var(--muted); }
+.portrait.on, .frame.on { box-shadow: inset 0 0 0 1px #f6dba6, 0 0 0 2px #1d140e, 0 0 0 3.5px var(--gold); }
+.closet.people { margin-bottom: 16px; }
 .closet-slot .store {
   height: 28px; padding: 0 12px; font: inherit; font-size: 12px; letter-spacing: .1em; color: var(--text);
   background: none; border: 1px solid var(--line); border-radius: 999px; cursor: var(--cur-pointer);

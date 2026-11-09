@@ -1167,7 +1167,7 @@ export class Player {
     this.events.onInput('tap');
     const ch = this.character;
     switch (t.kind) {
-      case 'lens': this.attn.toggle(t.p.id); break;
+      case 'lens': this.attn.toggle(t.p.id, !t.on); break;
       case 'painting': this.goToPainting(t.p); break;
       case 'mirror': this.goToMirror(); break;
       case 'cameras': this.events.onCameras?.(); break;

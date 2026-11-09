@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>演唱會試聽</title>
+  <!-- 樹洞接案「演唱會」的試聽：每一團一顆按鈕，同一份節目表（js/zones/concert/concert-show.js），聲音和舞台燈讀同一個時鐘。
+       按快門看那一下好不好拍。舞台是平面示意，遊戲裡是 3D -->
+  <style>
+    html, body { margin: 0; background: #1c1814; color: #e9e0cc; font-family: "Noto Serif TC", serif; }
+    main { max-width: 1000px; margin: 0 auto; padding: 18px 16px 48px; }
+    h1 { margin: 0; font-size: 17px; font-weight: 600; color: #c9a86e; }
+    .note { font-size: 13px; opacity: .7; margin-top: 4px; line-height: 1.6; }
+    .styles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin-top: 14px; }
+    .styles button { text-align: left; padding: 9px 12px; border: 1px solid #3a3229; border-radius: 8px; background: #2a241e; color: inherit; font: inherit; cursor: pointer; }
+    .styles button.on { border-color: #e8b86a; }
+    .styles b { display: block; font-size: 15px; font-weight: 600; }
+    .styles span { display: block; font-size: 12px; opacity: .7; margin-top: 3px; line-height: 1.5; }
+    .styles i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+    canvas#stage { display: block; width: 100%; aspect-ratio: 16 / 9; margin-top: 12px; background: #120d10; border-radius: 8px; }
+    #timeline { position: relative; display: flex; height: 38px; margin-top: 8px; border-radius: 6px; overflow: hidden; background: #120f0d; cursor: pointer; user-select: none; }
+    #timeline .sec { position: relative; border-right: 1px solid #2a241e; font-size: 11px; color: #a8987e; padding: 4px 5px; box-sizing: border-box; white-space: nowrap; overflow: hidden; }
+    #timeline .win { position: absolute; bottom: 0; height: 9px; background: #e8b86a; opacity: .75; border-radius: 2px; }
+    #timeline .head { position: absolute; top: 0; bottom: 0; width: 2px; background: #f5e9d4; pointer-events: none; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+    .row button { padding: 8px 14px; border: 1px solid #5a4e3e; border-radius: 6px; background: #2a241e; color: inherit; font: inherit; font-size: 14px; cursor: pointer; }
+    .row button.main { border-color: #e8b86a; }
+    .row label { display: flex; align-items: center; gap: 5px; font-size: 13px; opacity: .85; cursor: pointer; }
+    #info { font: 12px/1.4 Consolas, monospace; color: #cfc2ae; margin-left: auto; }
+    #now { min-height: 20px; margin-top: 6px; font-size: 13px; color: #e8b86a; }
+    #sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
+    #sheet figure { margin: 0; }
+    #sheet canvas { width: 100%; border-radius: 4px; display: block; }
+    #sheet figcaption { font-size: 12px; margin-top: 4px; line-height: 1.45; }
+    #sheet .g { color: #e8b86a; }
+    #sheet .m { color: #cfc2ae; }
+    #sheet .x { color: #8a7d6a; }
+    #score { font-size: 13px; margin-top: 10px; color: #cfc2ae; }
+    h2 { font-size: 16px; font-weight: 600; margin: 28px 0 4px; }
+    .seg { display: inline-flex; border: 1px solid #4a3f35; border-radius: 6px; overflow: hidden; }
+    .seg button { border: 0; border-radius: 0; }
+    .seg button.on { background: #6b5536; color: #fff3df; }
+    #drop { border: 1px dashed #5a4c3e; border-radius: 8px; padding: 14px; margin-top: 10px; font-size: 13px; opacity: .85; line-height: 1.6; }
+    #drop.over { background: #2a2119; }
+    #status { font-size: 13px; margin-top: 6px; color: #cfc2ae; white-space: pre-line; }
+    #warn { font-size: 13px; margin-top: 4px; color: #e0a070; white-space: pre-line; }
+    .mixgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; margin-top: 10px; }
+    .card { background: #1b1512; border: 1px solid #33291f; border-radius: 8px; padding: 10px 12px; }
+    .card b { display: flex; justify-content: space-between; align-items: center; font-size: 14px; margin-bottom: 6px; }
+    .card b label { font-weight: 400; font-size: 12px; margin-left: 8px; opacity: .8; }
+    .sl { display: grid; grid-template-columns: 92px 1fr 46px; align-items: center; gap: 6px; font-size: 12px; margin: 3px 0; }
+    .sl input { width: 100%; min-width: 0; accent-color: #c9a46a; }
+    .sl output { text-align: right; opacity: .75; font-variant-numeric: tabular-nums; }
+    .spec { font-size: 13px; opacity: .8; line-height: 1.7; margin-top: 12px; }
+    .spec code { background: #241c16; padding: 0 4px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>演唱會試聽</h1>
+  <div class="note">燈完全跟著拍子走，所以「好拍的那一下」是固定的：時間軸下方的金條就是那些時機。<br>
+    按快門（空白鍵）試拍，下面會排出印樣和判定。點時間軸跳段。舞台之後在遊戲裡是 3D 的，這裡只看時機、光的形狀和顏色。</div>
+
+  <div class="styles" id="styles"></div>
+  <canvas id="stage" width="960" height="540"></canvas>
+  <div id="timeline"></div>
+  <div class="row">
+    <button id="play" class="main">播放</button>
+    <button id="shutter">快門（空白鍵）</button>
+    <button id="clear">清掉印樣</button>
+    <label><input type="checkbox" id="hint" checked>顯示好拍的時機</label>
+    <span id="info"></span>
+  </div>
+  <div id="now"></div>
+  <div id="score"></div>
+  <div id="sheet"></div>
+
+  <h2>分軌與空間混音</h2>
+  <div class="row">
+    <span class="seg"><button id="src-synth" class="on">合成版</button><button id="src-stems">分軌</button></span>
+    <button id="mine" class="main">載入 Claude 做的「晨」</button>
+    <button id="mkstems">用合成版算出分軌</button>
+    <input type="file" id="files" multiple accept="audio/*,.mid,.midi,.json" hidden><button id="pickfiles">選檔案…</button>
+    <button id="savemix">下載混音設定</button>
+    <button id="savewav">下載這組分軌（wav）</button>
+    <button id="export">匯出成一首（wav）</button>
+  </div>
+  <div id="drop">把分軌（wav、m4a、mp3、flac）和 MIDI 拖到這裡，也可以拖之前下載的混音設定（mix-*.json）。分軌的檔名就是軌名。滑桿雙擊回預設。</div>
+  <div id="status"></div>
+  <div id="warn"></div>
+  <div id="mixer"></div>
+  <div class="spec" id="spec"></div>
+</main>
+
+<script type="module">
+import { BANDS, songBars, barSec, songSec, cueAt } from '../js/zones/concert/concert-show.js';
+import { ConcertSong } from '../js/zones/concert/concert-music.js';
+import { ConcertStems, synthStems, mixdown, defaultMix, HALL, ECHO, STEM } from '../js/zones/concert/concert-stems.js';
+import { readMidi, bandFromMidi } from '../js/zones/concert/concert-midi.js';
+
+const $ = (id) => document.getElementById(id);
+const cv = $('stage'), g = cv.getContext('2d');
+const W = 960, H = 540;
+let band = BANDS[0], ctx = null, song = null, pausedT = 0, shots = [];
+
+// ---------- 曲風按鈕 ----------
+for (const b of BANDS) {
+  const el = document.createElement('button');
+  el.innerHTML = `<b>${b.name}</b><span>${b.palette.map((c) => `<i style="background:${c}"></i>`).join('')} ${b.bpm} 拍／分</span><span>${b.note}</span>`;
+  el.onclick = () => pick(b);
+  b.el = el;
+  $('styles').append(el);
+}
+function pick(b) {
+  const playing = song && !song.paused;
+  const bar = Math.floor(nowT() / barSec(band));
+  band = b;
+  for (const x of BANDS) x.el.classList.toggle('on', x === b);
+  buildTimeline();
+  pausedT = bar * barSec(b);
+  if (song) song.setBand(b);
+  if (playing) song.playFrom(bar);
+}
+
+// ---------- 時間 ----------
+function nowT() {
+  if (!song || song.paused) return pausedT;
+  const lat = ctx.outputLatency || ctx.baseLatency || 0;
+  return Math.max(0, ctx.currentTime - song.t0 - lat);
+}
+function ensureAudio() {
+  if (ctx) return;
+  ctx = new AudioContext();
+  synth = song = new ConcertSong(ctx, ctx.destination, band);
+}
+
+// ---------- 分軌、MIDI、空間混音 ----------
+let synth = null, stems = null;
+// 合成版算分軌時怎麼分組：[軌名, [合成版的聲層]]
+const GROUPS = [['鼓', ['kick', 'snare', 'ride', 'china']], ['吉他', ['gtr', 'bass']], ['鍵盤', ['piano', 'clean', 'harm']],
+  ['人聲', ['choir', 'voice']], ['法器', ['bowl', 'gong', 'fb']], ['觀眾', ['crowd']]];
+const status = (t) => ($('status').textContent = t);
+function mergeMix(j) {
+  const d = defaultMix();
+  return { master: j.master ?? d.master, hall: { ...d.hall, ...j.hall }, echo: { ...d.echo, ...j.echo }, stems: { ...j.stems } };
+}
+async function loadMix() {
+  try {
+    const r = await fetch(`../js/zones/concert/mix-${band.id}.json`, { cache: 'no-store' });
+    if (r.ok) return mergeMix(await r.json());
+  } catch { /* 沒有就用預設 */ }
+  return defaultMix();
+}
+async function ensureStems() {
+  ensureAudio();
+  if (!stems) stems = new ConcertStems(ctx, ctx.destination, band, await loadMix());
+  return stems;
+}
+// 換播放來源：在哪一小節就從哪一小節接著放
+function useSource(kind) {
+  const next = kind === 'stems' ? stems : synth;
+  if (!next) return;
+  for (const [id, k] of [['src-synth', 'synth'], ['src-stems', 'stems']]) $(id).classList.toggle('on', k === kind);
+  if (next === song) return;
+  const playing = song && !song.paused, bar = Math.floor(nowT() / barSec(band));
+  song?.pause();
+  song = next;
+  if (playing) song.playFrom(bar);
+  else pausedT = bar * barSec(band);
+}
+$('src-synth').onclick = () => { ensureAudio(); useSource('synth'); };
+$('src-stems').onclick = () => (stems?.list.length ? useSource('stems') : status('還沒有分軌：先按「用合成版算出分軌」或拖你的分軌進來'));
+$('mkstems').onclick = async () => {
+  await ensureStems();
+  status('算分軌中…（整首離線算一次）');
+  const t = performance.now();
+  stems.setStems(await synthStems(band, ConcertSong, GROUPS, { onProgress: (k) => status(`算分軌中… ${Math.round(k * 100)}%`) }));
+  status(`合成版分軌 ${GROUPS.length} 軌，算了 ${((performance.now() - t) / 1000).toFixed(1)} 秒`);
+  renderMixer();
+  useSource('stems');
+};
+// MIDI 換了段落和速度：時間軸、兩個播放器都換
+function useBand(b) {
+  const playing = song && !song.paused;
+  band = b;
+  buildTimeline();
+  pausedT = 0;
+  synth?.setBand(b);
+  stems?.setBand(b);
+  if (playing) song.playFrom(0);
+}
+async function takeFiles(files) {
+  const audio = [], warn = [];
+  for (const f of files) {
+    const name = f.name.replace(/\.[^.]+$/, '');
+    try {
+      if (/\.midi?$/i.test(f.name)) {
+        const r = bandFromMidi(BANDS.find((x) => x.id === band.id) ?? BANDS[0], readMidi(await f.arrayBuffer()));
+        warn.push(...r.warn);
+        useBand(r.band);
+        status(`MIDI：${Math.round(r.band.bpm * 100) / 100} 拍／分，${r.band.sections.map((s) => `${s.name} ${s.bars}`).join('、')} 小節`);
+      } else if (/\.json$/i.test(f.name)) {
+        await ensureStems();
+        stems.mix = mergeMix(JSON.parse(await f.text()));
+        stems.setStems(stems.list.map(({ name: n, buffer }) => ({ name: n, buffer })));
+        renderMixer();
+        status(`讀進混音設定 ${f.name}`);
+      } else {
+        ensureAudio();
+        audio.push({ name, buffer: await ctx.decodeAudioData(await f.arrayBuffer()) });
+      }
+    } catch (e) { warn.push(`${f.name}：${e.message}`); }
+  }
+  if (audio.length) {
+    await ensureStems();
+    stems.setStems(audio);
+    const T = songSec(band), lens = audio.map((a) => a.buffer.duration);
+    if (lens.some((d) => d < T - 0.05)) warn.push(`有分軌比曲子短（曲子 ${T.toFixed(1)} 秒）：短的那軌後面會空著`);
+    status(`分軌 ${audio.length} 軌：${audio.map((a) => a.name).join('、')}`);
+    renderMixer();
+    useSource('stems');
+  }
+  $('warn').textContent = warn.join('\n');
+}
+// tools/concert/concert-make.mjs 做出來的曲子（只在本機：tools/out 不上傳）
+$('mine').onclick = async () => {
+  const dir = '../tools/out/concert/morning/';
+  status('載入中…');
+  try {
+    const list = await (await fetch(dir + 'stems.json', { cache: 'no-store' })).json();
+    const get = async (f) => new File([await (await fetch(dir + f, { cache: 'no-store' })).blob()], f);
+    await takeFiles([await get(list.midi), ...(await Promise.all(list.stems.map((s) => get(s.file))))]);
+  } catch (e) { status(`讀不到 ${dir}stems.json：先跑 node tools/concert/concert-make.mjs（${e.message}）`); }
+};
+$('pickfiles').onclick = () => $('files').click();
+$('files').onchange = (e) => takeFiles([...e.target.files]);
+const drop = $('drop');
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); takeFiles([...e.dataTransfer.files]); };
+$('savemix').onclick = () => {
+  if (!stems) return status('還沒有分軌，沒有混音可以存');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(stems.mix, null, 2)], { type: 'application/json' }));
+  a.download = `mix-${band.id}.json`;
+  a.click();
+  status(`下載了 mix-${band.id}.json：放進 js/zones/concert/ 取代舊的，下次打開這頁就是這組設定`);
+};
+
+// 分軌存成 16 位元 wav：合成版的替身算一次（要一兩分鐘）存起來，下次直接拖進來；也可以丟進編曲軟體當參考
+function wav(buf) {
+  const n = buf.numberOfChannels, len = buf.length, sr = buf.sampleRate, out = new DataView(new ArrayBuffer(44 + len * n * 2));
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) out.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, 'RIFF'); out.setUint32(4, 36 + len * n * 2, true); str(8, 'WAVEfmt '); out.setUint32(16, 16, true);
+  out.setUint16(20, 1, true); out.setUint16(22, n, true); out.setUint32(24, sr, true); out.setUint32(28, sr * n * 2, true);
+  out.setUint16(32, n * 2, true); out.setUint16(34, 16, true); str(36, 'data'); out.setUint32(40, len * n * 2, true);
+  const ch = [...Array(n)].map((_, c) => buf.getChannelData(c));
+  for (let i = 0, o = 44; i < len; i++) for (let c = 0; c < n; c++, o += 2) out.setInt16(o, Math.max(-1, Math.min(1, ch[c][i])) * 32767, true);
+  return new Blob([out], { type: 'audio/wav' });
+}
+$('savewav').onclick = async () => {
+  if (!stems?.list.length) return status('還沒有分軌');
+  for (const s of stems.list) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(wav(s.buffer));
+    a.download = `${s.name}.wav`;
+    a.click();
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  status(`下載了 ${stems.list.length} 個 wav（瀏覽器問要不要允許多個下載時按允許）`);
+};
+
+// 照現在的混音算成一首：遊戲裡放的就是這個（assets/concert/morning.m4a，concert-make.mjs --mix 會自己複製過去；手動匯出的轉成 m4a 放那裡）
+async function exportMix() {
+  if (!stems?.list.length) throw new Error('還沒有分軌');
+  return mixdown(band, stems.mix, stems.list);
+}
+window.__exportMix = async () => { window.__mixbuf = await exportMix(); return window.__mixbuf.length; };
+window.__mixChunk = (from, n) => {
+  const b = window.__mixbuf, L = b.getChannelData(0), R = b.getChannelData(1), end = Math.min(b.length, from + n), out = new Int16Array((end - from) * 2);
+  for (let i = from, j = 0; i < end; i++) { out[j++] = Math.max(-1, Math.min(1, L[i])) * 32767; out[j++] = Math.max(-1, Math.min(1, R[i])) * 32767; }
+  const u8 = new Uint8Array(out.buffer);
+  let s = '';
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+$('export').onclick = async () => {
+  try {
+    status('匯出中…（整首照混音算一次）');
+    const buf = await exportMix(), a = document.createElement('a');
+    a.href = URL.createObjectURL(wav(buf));
+    a.download = 'mix.wav';
+    a.click();
+    status('下載了 mix.wav：轉成 m4a（ffmpeg -i mix.wav -c:a aac -b:a 192k mix.m4a）存成 assets/concert/morning.m4a，遊戲裡就放這一首');
+  } catch (e) { status(e.message); }
+};
+
+// 一條滑桿：path 是混音設定裡的位置；雙擊回預設
+function slider(path, spec, value) {
+  const row = document.createElement('div');
+  row.className = 'sl';
+  const fmt = (v) => (spec.step >= 1 ? String(Math.round(v)) : (+v).toFixed(spec.step < 0.1 ? 2 : 1));
+  row.innerHTML = `<span>${spec.label}</span><input type="range" min="${spec.min}" max="${spec.max}" step="${spec.step}" value="${value}"><output>${fmt(value)}</output>`;
+  const inp = row.querySelector('input'), out = row.querySelector('output');
+  inp.oninput = () => { stems.set(path, +inp.value); out.textContent = fmt(inp.value); };
+  inp.ondblclick = () => { inp.value = spec.def; inp.oninput(); };
+  return row;
+}
+function card(title, extra = '') {
+  const c = document.createElement('div');
+  c.className = 'card';
+  c.innerHTML = `<b><span>${title}</span><span>${extra}</span></b>`;
+  return c;
+}
+function renderMixer() {
+  const box = $('mixer'), m = stems.mix;
+  box.innerHTML = '';
+  const grid = document.createElement('div');
+  grid.className = 'mixgrid';
+  const main = card('總');
+  main.append(slider('master', { label: '主音量', min: 0, max: 1.5, step: 0.01, def: 0.8 }, m.master));
+  const hall = card('殘響（空間）');
+  for (const [k, sp] of Object.entries(HALL)) hall.append(slider(`hall.${k}`, sp, m.hall[k]));
+  const echo = card('回聲');
+  for (const [k, sp] of Object.entries(ECHO)) echo.append(slider(`echo.${k}`, sp, m.echo[k]));
+  grid.append(main, hall, echo);
+  for (const s of stems.list) {
+    const v = m.stems[s.name];
+    const c = card(s.name, `<label><input type="checkbox" data-k="solo" ${v.solo ? 'checked' : ''}>獨奏</label><label><input type="checkbox" data-k="mute" ${v.mute ? 'checked' : ''}>靜音</label>`);
+    c.querySelectorAll('input[type=checkbox]').forEach((x) => (x.onchange = () => stems.set(`stems.${s.name}.${x.dataset.k}`, x.checked)));
+    for (const [k, sp] of Object.entries(STEM)) c.append(slider(`stems.${s.name}.${k}`, sp, v[k]));
+    grid.append(c);
+  }
+  box.append(grid);
+}
+// 交件規格（段落名照這一團）
+$('spec').innerHTML = `<b>從編曲軟體匯出</b><br>
+  分軌：每軌都從第 1 小節的開頭匯出、一樣長，wav 或 m4a；殘響、回聲這類空間效果先不要印進去，留給上面調。<br>
+  MIDI：要有速度；段落記號（marker）放在每段第一拍，字寫段落的名字或代號：${BANDS[0].sections.map((s) => `<code>${s.name}</code>／<code>${s.id}</code>`).join('　')}。<br>
+  段落長短、速度都可以改，燈會照記號重新排；好拍的瞬間跟著段落走（例如靜止那段最後一拍全黑）。`;
+$('play').onclick = () => {
+  ensureAudio();
+  ctx.resume();
+  if (song.paused) {
+    song.playFrom(Math.floor(pausedT / barSec(band)));
+    $('play').textContent = '暫停';
+  } else {
+    pausedT = nowT() % songSec(band);
+    song.pause();
+    $('play').textContent = '播放';
+  }
+};
+
+// ---------- 時間軸：段落＋好拍的時機（取樣 cueAt 找 q 夠高的地方）----------
+function buildTimeline() {
+  const tl = $('timeline');
+  tl.innerHTML = '';
+  for (const s of band.sections) {
+    const d = document.createElement('div');
+    d.className = 'sec';
+    d.style.width = `${(s.bars / songBars(band)) * 100}%`;
+    d.textContent = s.name;
+    tl.append(d);
+  }
+  const T = songSec(band), N = 4000;
+  let start = -1;
+  for (let i = 0; i <= N; i++) {
+    const c = i < N ? cueAt(band, (i / N) * T) : null;
+    const good = c?.moment?.q > 0.75;
+    if (good && start < 0) start = i;
+    if (!good && start >= 0) {
+      const w = document.createElement('div');
+      w.className = 'win';
+      w.style.left = `${(start / N) * 100}%`;
+      w.style.width = `max(2px, ${((i - start) / N) * 100}%)`;
+      tl.append(w);
+      start = -1;
+    }
+  }
+  const head = document.createElement('div');
+  head.className = 'head';
+  tl.append(head);
+  tl.head = head;
+  $('hint').onchange = () => tl.querySelectorAll('.win').forEach((w) => (w.style.display = $('hint').checked ? '' : 'none'));
+  $('hint').onchange();
+}
+$('timeline').onclick = (e) => {
+  const r = e.currentTarget.getBoundingClientRect();
+  const bar = Math.floor(((e.clientX - r.left) / r.width) * songBars(band));
+  pausedT = bar * barSec(band);
+  if (song && !song.paused) song.playFrom(bar);
+};
+
+// ---------- 畫 ----------
+const rgb = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${Math.max(0, Math.min(1, a))})`;
+const mixc = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
+const INK = rgb('#1b1317'), SKIN = rgb('#e9d2b4'), WARM = rgb('#fff1dc');
+const hash = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+
+function draw(c) {
+  const P = band.palette.map(rgb);
+  const cy = 318 - c.ring.y * 150, R = 120;
+  const add = () => (g.globalCompositeOperation = 'lighter');
+  const norm = () => (g.globalCompositeOperation = 'source-over');
+  g.save();
+  g.fillStyle = '#0f0b0e';
+  g.fillRect(0, 0, W, H);
+
+  add();
+  // 煙裡的底色：整個舞台後面一大片
+  if (c.haze.a > 0.01) {
+    const rg = g.createRadialGradient(480, 300, 20, 480, 300, 520);
+    rg.addColorStop(0, rgba(P[c.haze.col], c.haze.a * 0.55));
+    rg.addColorStop(1, rgba(P[c.haze.col], 0));
+    g.fillStyle = rg;
+    g.fillRect(0, 0, W, H);
+  }
+  // 頂上直光
+  c.pillars.a.forEach((a, i) => {
+    if (a <= 0) return;
+    const x = 120 + i * 120;
+    const lg = g.createLinearGradient(0, 0, 0, 330);
+    lg.addColorStop(0, rgba(P[c.pillars.col], a * 0.15));
+    lg.addColorStop(1, rgba(P[c.pillars.col], a * 0.6));
+    g.fillStyle = lg;
+    g.beginPath(); g.moveTo(x - 11, 0); g.lineTo(x + 11, 0); g.lineTo(x + 24, 330); g.lineTo(x - 24, 330); g.closePath(); g.fill();
+  });
+  // 放射的光
+  if (c.rays.a > 0.01) {
+    for (let i = 0; i < c.rays.n; i++) {
+      const a = (i / c.rays.n) * Math.PI * 2 + c.rays.rot, s = 0.035, L = 900;
+      const lg = g.createRadialGradient(480, cy, R, 480, cy, L);
+      lg.addColorStop(0, rgba(P[c.rays.col], c.rays.a * 0.5));
+      lg.addColorStop(1, rgba(P[c.rays.col], 0));
+      g.fillStyle = lg;
+      g.beginPath();
+      g.moveTo(480 + Math.cos(a - s) * R, cy + Math.sin(a - s) * R);
+      g.lineTo(480 + Math.cos(a - s * 2) * L, cy + Math.sin(a - s * 2) * L);
+      g.lineTo(480 + Math.cos(a + s * 2) * L, cy + Math.sin(a + s * 2) * L);
+      g.lineTo(480 + Math.cos(a + s) * R, cy + Math.sin(a + s) * R);
+      g.closePath(); g.fill();
+    }
+  }
+  // 地平線
+  if (c.horizon.a > 0.01) {
+    const lg = g.createLinearGradient(0, 0, W, 0);
+    lg.addColorStop(0, rgba(P[c.horizon.col], 0));
+    lg.addColorStop(0.5, rgba(P[c.horizon.col], c.horizon.a));
+    lg.addColorStop(1, rgba(P[c.horizon.col], 0));
+    g.fillStyle = lg;
+    g.fillRect(0, 318 - c.horizon.w / 2, W, c.horizon.w);
+    const up = g.createLinearGradient(0, 228, 0, 318);
+    up.addColorStop(0, rgba(P[c.horizon.col], 0));
+    up.addColorStop(1, rgba(P[c.horizon.col], c.horizon.a * 0.25));
+    g.fillStyle = up;
+    g.fillRect(0, 228, W, 90);
+  }
+  // 太陽（光環填起來）
+  if (c.ring.fill > 0.01) {
+    const rg = g.createRadialGradient(480, cy, 0, 480, cy, R * 1.6);
+    rg.addColorStop(0, rgba(P[2], c.ring.fill));
+    rg.addColorStop(0.55, rgba(P[c.ring.col], c.ring.fill * 0.9));
+    rg.addColorStop(0.62, rgba(P[c.ring.col], c.ring.fill * 0.25));
+    rg.addColorStop(1, rgba(P[c.ring.col], 0));
+    g.fillStyle = rg;
+    g.beginPath(); g.arc(480, cy, R * 1.6, 0, Math.PI * 2); g.fill();
+  }
+  // 光環：從正上方順時針畫，粗的暈＋細的線
+  if (c.ring.a > 0.01 && c.ring.draw > 0) {
+    const a0 = -Math.PI / 2, a1 = a0 + c.ring.draw * Math.PI * 2;
+    for (const [w, k] of [[18, 0.12], [8, 0.3], [3, 1]]) {
+      g.strokeStyle = rgba(P[c.ring.col], c.ring.a * k);
+      g.lineWidth = w;
+      g.beginPath(); g.arc(480, cy, R, a0, a1); g.stroke();
+    }
+  }
+  // 煙：幾團大的，被光照到才看得見
+  const lightLv = Math.min(1, c.haze.a + c.ring.a * 0.4 + c.ring.fill * 0.5 + c.rays.a + c.sheet.a * 0.5 + c.top * 0.3);
+  for (let i = 0; i < 4; i++) {
+    const x = 480 + Math.sin(c.t * 0.11 + i * 1.9) * 320, y = 240 + Math.sin(c.t * 0.07 + i) * 50 + i * 30;
+    const rg = g.createRadialGradient(x, y, 0, x, y, 280);
+    rg.addColorStop(0, rgba(P[c.haze.col], c.smoke * lightLv * 0.1));
+    rg.addColorStop(1, rgba(P[c.haze.col], 0));
+    g.fillStyle = rg;
+    g.fillRect(0, 0, W, H);
+  }
+  norm();
+
+  // 地面：舞台以下全部擋掉（光環還沒升起時下半圈藏在這裡）
+  g.fillStyle = '#140f12';
+  g.fillRect(0, 330, W, H - 330);
+  g.fillStyle = '#1d1519';
+  g.beginPath(); g.moveTo(130, 330); g.lineTo(830, 330); g.lineTo(930, 450); g.lineTo(30, 450); g.closePath(); g.fill();
+
+  const washC = mixc(SKIN, P[c.haze.col], 0.4);
+  const rimCol = c.ring.fill > 0.3 ? P[2] : P[c.ring.col];
+  const rim = Math.min(1, c.ring.a * 0.6 + c.ring.fill * 0.6 + c.haze.a);
+  // 混音台的人：站在光環正前方
+  figure(480, 330 + c.bob * 2, 125, c.face.desk, washC, rimCol, rim, c);
+  g.fillStyle = '#1a1316';
+  g.beginPath(); g.moveTo(420, 268); g.lineTo(540, 268); g.lineTo(530, 342); g.lineTo(430, 342); g.closePath(); g.fill();
+  add();
+  g.fillStyle = rgba(P[c.haze.col], 0.15 + 0.5 * c.bob * c.face.desk);
+  g.fillRect(426, 268, 108, 2);
+  norm();
+
+  // 鋼琴和鋼琴手
+  grandPiano(165, 430, c, P, washC);
+
+  // 頂上窄窄一束打在鋼琴手的手上
+  if (c.top > 0.01) {
+    add();
+    const lg = g.createLinearGradient(0, 0, 0, 440);
+    lg.addColorStop(0, rgba(WARM, 0.04 * c.top));
+    lg.addColorStop(1, rgba(WARM, 0.3 * c.top));
+    g.fillStyle = lg;
+    g.beginPath(); g.moveTo(222, 0); g.lineTo(238, 0); g.lineTo(285, 440); g.lineTo(175, 440); g.closePath(); g.fill();
+    norm();
+  }
+
+  // 雷射光幕：從光環中心打出一整片，碰到煙的那條線最亮
+  if (c.sheet.a > 0.01) {
+    add();
+    const ys = (x) => 340 + c.sheet.y * 200 + c.sheet.tilt * (x - 480);
+    g.lineWidth = 1;
+    for (let k = 0; k <= 48; k++) {
+      const x = -100 + (k / 48) * 1160;
+      g.strokeStyle = rgba(P[c.sheet.col], c.sheet.a * 0.1);
+      g.beginPath(); g.moveTo(480, cy); g.lineTo(x, ys(x)); g.stroke();
+    }
+    g.strokeStyle = rgba(P[c.sheet.col], c.sheet.a * 0.25);
+    g.lineWidth = 10;
+    g.beginPath(); g.moveTo(0, ys(0)); g.lineTo(W, ys(W)); g.stroke();
+    g.strokeStyle = rgba(P[c.sheet.col], c.sheet.a);
+    g.lineWidth = 2;
+    g.beginPath(); g.moveTo(0, ys(0)); g.lineTo(W, ys(W)); g.stroke();
+    norm();
+  }
+
+  crowd(c, P);
+
+  if (c.strobe > 0) { g.fillStyle = rgba(WARM, c.strobe * 0.75); g.fillRect(0, 0, W, H); }
+  const vg = g.createRadialGradient(W / 2, H / 2, 220, W / 2, H / 2, 620);
+  vg.addColorStop(0, 'rgba(8,5,7,0)');
+  vg.addColorStop(1, 'rgba(8,5,7,0.65)');
+  g.fillStyle = vg;
+  g.fillRect(0, 0, W, H);
+  g.restore();
+}
+
+// 剪影用的一節手腳：兩點之間一條粗線，末端圓頭
+function limbTo(path, ax, ay, bx, by, w) {
+  const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1, nx = (-dy / L) * w / 2, ny = (dx / L) * w / 2;
+  path.moveTo(ax + nx, ay + ny); path.lineTo(bx + nx, by + ny); path.lineTo(bx - nx, by - ny); path.lineTo(ax - nx, ay - ny); path.closePath();
+  path.moveTo(bx + w / 2, by); path.arc(bx, by, w / 2, 0, Math.PI * 2);
+}
+
+// 混音台的人（貓）：幾個大形狀拼成剪影，背光描一圈邊，正面的光把剪影往膚色推
+function figure(x, y, u, lit, washC, rimCol, rim, c) {
+  const path = new Path2D(), limb = (...a) => limbTo(path, ...a);
+  limb(x - 0.07 * u, y - 0.45 * u, x - 0.1 * u, y, 0.08 * u);
+  limb(x + 0.07 * u, y - 0.45 * u, x + 0.1 * u, y, 0.08 * u);
+  path.moveTo(x - 0.16 * u, y - 0.78 * u); path.lineTo(x + 0.16 * u, y - 0.78 * u); path.lineTo(x + 0.12 * u, y - 0.42 * u); path.lineTo(x - 0.12 * u, y - 0.42 * u); path.closePath();
+  const L = c.lift, bob = c.bob * 0.02;
+  let hl = [-0.14, -0.52 + bob], hr = [0.14, -0.52 + bob];   // 手放在台上
+  if (c.desk === 'one') hl = [-0.2 - 0.05 * L, -0.52 - 0.72 * L];
+  if (c.desk === 'arms') { hl = [-0.14 - 0.2 * L, -0.52 - 0.72 * L]; hr = [0.14 + 0.2 * L, -0.52 - 0.72 * L]; }
+  limb(x - 0.15 * u, y - 0.75 * u, x + hl[0] * u, y + hl[1] * u, 0.065 * u);
+  limb(x + 0.15 * u, y - 0.75 * u, x + hr[0] * u, y + hr[1] * u, 0.065 * u);
+  const hx = x, hy = y - 0.93 * u, r = 0.13 * u;
+  path.moveTo(hx + r, hy); path.arc(hx, hy, r, 0, Math.PI * 2);
+  path.moveTo(hx - r * 0.95, hy - r * 0.3); path.lineTo(hx - r * 0.75, hy - r * 1.45); path.lineTo(hx - r * 0.2, hy - r * 0.85); path.closePath();
+  path.moveTo(hx + r * 0.95, hy - r * 0.3); path.lineTo(hx + r * 0.75, hy - r * 1.45); path.lineTo(hx + r * 0.2, hy - r * 0.85); path.closePath();
+  if (rim > 0.03) {
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.translate(x, y - 0.5 * u); g.scale(1.05, 1.035); g.translate(-x, -(y - 0.5 * u) - 2);
+    g.fillStyle = rgba(rimCol, rim);
+    g.fill(path);
+    g.restore();
+  }
+  g.fillStyle = rgba(mixc(INK, washC, lit * 0.85), 1);
+  g.fill(path);
+}
+
+// 側面的平台鋼琴，琴蓋撐開；鋼琴手（兔子）坐在左邊琴凳上面向右
+function grandPiano(x, y, c, P, washC) {
+  const kx = x + 52, top = y - 36, bot = y - 12;
+  g.fillStyle = '#1a1316';
+  // 琴身：左邊鍵盤那頭平的，右邊尾巴收圓
+  g.beginPath();
+  g.moveTo(kx, top); g.lineTo(kx + 150, top);
+  g.quadraticCurveTo(kx + 245, top - 2, kx + 240, top + 14);
+  g.quadraticCurveTo(kx + 232, bot + 2, kx + 170, bot);
+  g.lineTo(kx, bot); g.closePath(); g.fill();
+  // 琴蓋和撐桿、三隻腳
+  g.beginPath(); g.moveTo(kx + 40, top); g.lineTo(kx + 236, top); g.lineTo(kx + 120, top - 78); g.closePath(); g.fill();
+  g.strokeStyle = '#1a1316'; g.lineWidth = 3;
+  g.beginPath(); g.moveTo(kx + 130, top); g.lineTo(kx + 122, top - 74); g.stroke();
+  g.lineWidth = 6;
+  g.beginPath(); for (const lx of [kx + 8, kx + 160, kx + 220]) { g.moveTo(lx, bot); g.lineTo(lx, y + 18); } g.stroke();
+  // 被頂上那束照到的琴蓋邊和鍵盤
+  g.globalCompositeOperation = 'lighter';
+  g.strokeStyle = rgba(WARM, 0.55 * c.top);
+  g.lineWidth = 2;
+  g.beginPath(); g.moveTo(kx + 40, top); g.lineTo(kx + 120, top - 78); g.lineTo(kx + 236, top); g.stroke();
+  g.fillStyle = rgba(WARM, 0.15 + 0.5 * c.top);
+  g.fillRect(kx - 4, top + 6, 26, 3);
+  g.globalCompositeOperation = 'source-over';
+
+  // 鋼琴手
+  const sx = x, sy = y - 6, up = c.piano.up, k = c.piano.strike * 3;
+  const path = new Path2D(), limb = (...a) => limbTo(path, ...a);
+  limb(sx, sy, sx + 34, sy + 2, 13);
+  limb(sx + 34, sy + 2, sx + 37, sy + 40, 11);
+  path.moveTo(sx - 12, sy); path.lineTo(sx + 14, sy); path.lineTo(sx + 22, sy - 60); path.lineTo(sx - 2, sy - 62); path.closePath();
+  const hx = sx + 60 - up * 8, hy = top + 4 + k - up * 46;
+  limb(sx + 14, sy - 54, sx + 34, sy - 28 - up * 30, 9);
+  limb(sx + 34, sy - 28 - up * 30, hx, hy, 8);
+  path.moveTo(sx + 31, sy - 80); path.arc(sx + 16, sy - 80, 15, 0, Math.PI * 2);
+  path.moveTo(sx + 11, sy - 110); path.ellipse(sx + 6, sy - 110, 5, 19, -0.35, 0, Math.PI * 2);
+  path.moveTo(sx + 21, sy - 112); path.ellipse(sx + 16, sy - 112, 5, 19, -0.1, 0, Math.PI * 2);
+  g.fillStyle = rgba(mixc(INK, washC, c.face.piano * 0.85), 1);
+  g.fill(path);
+  g.fillStyle = '#1a1316';
+  g.fillRect(sx - 22, sy + 2, 46, 6);
+  g.fillRect(sx - 18, sy + 8, 5, 34); g.fillRect(sx + 15, sy + 8, 5, 34);
+}
+
+// 觀眾：前景一排頭和肩膀，頭型輪著換
+function crowd(c, P) {
+  const top = mixc(INK, P[c.sheet.a > 0.1 ? c.sheet.col : c.haze.col], 0.06 + c.haze.a * 0.15);
+  for (let i = 0; i < 15; i++) {
+    const x = 20 + i * 66 + hash(i) * 20, r = 24 + hash(i + 5) * 8;
+    const y = 505 - c.crowd.jump * 10 * (0.5 + hash(i + 2)) + hash(i + 7) * 14;
+    g.fillStyle = rgba(top, 1);
+    g.beginPath(); g.ellipse(x, y + r * 1.6, r * 1.6, r * 1.1, 0, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    const kind = i % 5;
+    g.beginPath();
+    if (kind === 1) { g.moveTo(x - r, y - 4); g.lineTo(x - r * 0.7, y - r * 1.4); g.lineTo(x - r * 0.2, y - r * 0.8); g.moveTo(x + r, y - 4); g.lineTo(x + r * 0.7, y - r * 1.4); g.lineTo(x + r * 0.2, y - r * 0.8); }
+    if (kind === 2) { g.ellipse(x - r * 0.4, y - r * 1.3, r * 0.22, r * 0.7, -0.15, 0, Math.PI * 2); g.ellipse(x + r * 0.4, y - r * 1.3, r * 0.22, r * 0.7, 0.15, 0, Math.PI * 2); }
+    if (kind === 3) { g.ellipse(x, y - r * 0.5, r * 1.45, r * 0.7, 0, Math.PI, 0); }
+    g.fill();
+    const light = hash(i + 17) < c.crowd.lights;
+    if (hash(i + 11) < c.crowd.hands || light) {
+      const side = hash(i + 13) < 0.5 ? -1 : 1, hx = x + side * r * 1.1, hy = y - r * 2.2 - Math.sin(c.t * 4 + i) * 6 * c.crowd.jump;
+      g.strokeStyle = rgba(top, 1); g.lineWidth = 10; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(x + side * r, y + r * 0.8); g.lineTo(hx, hy); g.stroke();
+      if (light) {
+        g.globalCompositeOperation = 'lighter';
+        const rg = g.createRadialGradient(hx, hy - 8, 0, hx, hy - 8, 22);
+        rg.addColorStop(0, rgba([248, 196, 120], 0.8));
+        rg.addColorStop(1, rgba([248, 196, 120], 0));
+        g.fillStyle = rg; g.fillRect(hx - 24, hy - 32, 48, 48);
+        g.globalCompositeOperation = 'source-over';
+      }
+    }
+  }
+}
+
+// ---------- 快門 ----------
+function shutter() {
+  const t = nowT(), c = cueAt(band, t);
+  draw(c);
+  const th = document.createElement('canvas');
+  th.width = 320; th.height = 180;
+  th.getContext('2d').drawImage(cv, 0, 0, 320, 180);
+  const q = c.moment?.q ?? 0;
+  let cls, text;
+  if (q > 0.75) { cls = 'g'; text = `好　${c.moment.name}`; }
+  else if (q > 0.35) { cls = 'm'; text = `差一點　${c.moment.name}`; }
+  else if (c.face.desk > 0.6 || c.face.piano > 0.6) { cls = 'x'; text = '人是亮的，但沒有事'; }
+  else { cls = 'x'; text = '錯過'; }
+  shots.push(q);
+  const fig = document.createElement('figure');
+  fig.innerHTML = `<figcaption><span class="${cls}">${text}</span><br><span class="x">${c.sec.name} 第 ${c.bar + 1} 小節 ${(c.beat + 1).toFixed(2)} 拍</span></figcaption>`;
+  fig.prepend(th);
+  $('sheet').prepend(fig);
+  const good = shots.filter((v) => v > 0.75).length;
+  $('score').textContent = `拍了 ${shots.length} 張，好的 ${good} 張`;
+}
+$('shutter').onclick = shutter;
+$('clear').onclick = () => { $('sheet').innerHTML = ''; shots = []; $('score').textContent = ''; };
+addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); shutter(); }
+});
+
+// ---------- 主迴圈 ----------
+function frame() {
+  const t = nowT(), c = cueAt(band, t);
+  draw(c);
+  const tl = $('timeline');
+  if (tl.head) tl.head.style.left = `${(c.t / songSec(band)) * 100}%`;
+  $('info').textContent = `${c.sec.name}　${c.bar + 1}/${c.sec.bars} 小節　${Math.floor(c.beat) + 1} 拍`;
+  $('now').textContent = $('hint').checked && c.moment && c.moment.q > 0.3 ? `此刻：${c.moment.name}（${Math.round(c.moment.q * 100)}）` : '';
+  requestAnimationFrame(frame);
+}
+pick(BANDS[0]);
+frame();
+// 測試用：指定曲風、第幾秒停在那裡
+window.__concert = { BANDS, ConcertSong, songBars, at(i, t) { if (band !== BANDS[i]) pick(BANDS[i]); pausedT = t; } };
+</script>
+</body>
+</html>

@@ -412,6 +412,67 @@ body.desk #radio { cursor: var(--cur-grab); }
 body #radio.moved { left: var(--mx, 16px); top: var(--my, 16px); right: auto; bottom: auto; width: var(--mw, 324px); max-width: none; margin: 0; transform: none; animation-name: guide-up; }
 @media (prefers-reduced-motion: reduce) { #radio.show { animation: none; } #radio .dial, #radio .eye i { transition: none; } }
 
+/* 原野畫架的面板（easel-card.js）：照畫架做，跟收音機同一種深墨棕木框、內圈細金線；中間是那張畫（麻布色的邊，像繃在框上），
+   底下 ‹ 場景 ›、一排三顆小銅鈕（自動、換色、畫框，換色、畫框右上角寫現在第幾版、哪一種），最下面「收進相簿」「好了」。
+   位置跟收音機一樣（手機橫拿靠左、直拿貼底，電腦長在畫架旁邊）。畫的大小照畫面高算，直拿留上半給場景 */
+#easel {
+  position: fixed; left: calc(24px + env(safe-area-inset-left)); top: 50%; z-index: 25;
+  display: none; flex-direction: column; align-items: center; gap: 10px; transform: translateY(-50%);
+  padding: 18px 18px 14px; border-radius: 10px;
+  background:
+    linear-gradient(115deg, rgba(246, 219, 166, .07), transparent 30%, transparent 72%, rgba(0, 0, 0, .22)),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, .09) 0 1px, transparent 1px 7px, rgba(246, 219, 166, .025) 7px 9px, transparent 9px 13px),
+    linear-gradient(180deg, #3a2618, #2a1b12 60%, #1e130c);
+  border: 1px solid #120b07;
+  box-shadow: inset 0 1px 0 rgba(246, 219, 166, .12), inset 0 -2px 4px rgba(0, 0, 0, .45), 0 10px 30px rgba(0, 0, 0, .55);
+  color: var(--text);
+}
+#easel.show { display: flex; animation: guide-in .4s ease-out both; }
+#easel::before { content: ''; position: absolute; inset: 5px; border-radius: 7px; border: 1px solid var(--line); pointer-events: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), inset 0 0 0 1px rgba(0, 0, 0, .3); }
+#easel .board {
+  --bh: min(420px, calc(100vh - 220px));
+  position: relative; height: var(--bh); aspect-ratio: 3 / 4; touch-action: none;
+  background: #ece2cc; box-shadow: 0 0 0 3px #e2d6bc, 0 0 0 4px rgba(20, 12, 6, .7), 0 6px 14px rgba(0, 0, 0, .45);
+}
+#easel .board canvas, #easel .board svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#easel .board .h { cursor: var(--cur-grab, grab); }
+#easel .pick { display: flex; align-items: center; gap: 6px; width: 100%; }
+#easel .sname { flex: 1; text-align: center; font-weight: 500; letter-spacing: .3em; color: var(--gold-hi); text-shadow: 0 -1px 0 rgba(0, 0, 0, .6); }
+#easel .tools, #easel .foot { display: flex; gap: 8px; width: 100%; }
+#easel .tools button, #easel .foot button { flex: 1; }
+#easel button {
+  position: relative; min-height: 34px; padding: 4px 10px; font: inherit; font-size: 13px; letter-spacing: .16em; color: #3e2810;
+  border: 1px solid rgba(90, 58, 24, .95); border-radius: 3px; cursor: var(--cur-pointer);
+  background:
+    linear-gradient(118deg, transparent 6%, rgba(255, 238, 205, .25) 20%, transparent 34%, transparent 60%, rgba(255, 238, 205, .15) 76%, transparent 90%),
+    linear-gradient(180deg, #cd9f5b, #ba8d4a 45%, #9c7036);
+  box-shadow: inset 0 1px 1px rgba(245, 222, 180, .48), inset 0 -2px 3px rgba(50, 30, 10, .5), 0 2px 4px rgba(0, 0, 0, .4);
+  text-shadow: 0 1px 0 rgba(255, 238, 205, .45); transition: transform .1s; white-space: nowrap;
+}
+#easel button:active { transform: scale(.95); }
+#easel button:disabled { filter: saturate(.4) brightness(.8); }
+#easel .prev, #easel .next { flex: none; width: 36px; padding: 0; font-size: 18px; letter-spacing: 0; }
+/* 換色、畫框右上角一個小字：第幾版、哪一種 */
+#easel .ver::after, #easel .frm::after { content: attr(data-n); position: absolute; right: 4px; top: 2px; font-size: 9px; letter-spacing: .04em; opacity: .7; }
+#easel .enter { display: flex; align-items: center; justify-content: center; gap: 8px; }
+#easel .enter kbd { min-width: 20px; padding: 0 4px; font: 11px/1.5 var(--latin); color: inherit; border: 1px solid rgba(62, 40, 16, .5); border-radius: 2px; }
+@media (orientation: portrait) {
+  #easel { left: 16px; right: 16px; top: auto; bottom: calc(16px + env(safe-area-inset-bottom)); max-width: 420px; margin: 0 auto; transform: none; }
+  #easel .board { --bh: min(46vh, 380px); }
+  #easel.show { animation-name: guide-up; }
+}
+/* 手機橫拿：畫面矮，畫放左邊撐滿高度，按鈕排成右邊一欄 */
+@media (orientation: landscape) and (max-height: 540px) {
+  body:not(.desk) #easel.show { display: grid; grid-template-columns: auto 132px; grid-template-rows: auto auto 1fr auto; column-gap: 14px; row-gap: 8px; align-items: start; padding: 14px; }
+  body:not(.desk) #easel .board { --bh: calc(100vh - 44px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); grid-row: 1 / 5; }
+  body:not(.desk) #easel .tools, body:not(.desk) #easel .foot { flex-direction: column; }
+  body:not(.desk) #easel .foot { grid-row: 4; align-self: end; }
+}
+body.desk #easel { left: var(--cx, 50%); top: var(--cy, 20%); right: auto; bottom: auto; transform: none; }
+body.desk #easel .board { --bh: min(420px, calc(100vh / var(--ui, 1) - 240px)); }
+body.desk #easel.show { animation-name: guide-up; }
+@media (prefers-reduced-motion: reduce) { #easel.show { animation: none; } }
+
 /* 胖頭指著畫面上的按鈕（ask.js 的 beckon）：外圈一道金光往外擴，跟互動鍵的光暈同一種，亮幾下就停 */
 .beckon { position: relative; border-color: var(--gold) !important; color: var(--gold-hi) !important; }
 .beckon::before {
@@ -471,10 +532,49 @@ body #radio.moved { left: var(--mx, 16px); top: var(--my, 16px); right: auto; bo
 @keyframes hollow-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-.8px); } }
 @keyframes hollow-glint { 0%, 100% { opacity: .6; } 50% { opacity: .3; } }
 /* 底下按鈕：「留話」窄、確認撐滿；寫字的時候換成「返回」「投進樹洞」 */
+/* 接案卡（hollow.js 照 hollow-jobs.js 排進 #hollow .jobs）：一張像釘在樹洞裡的案子，雙金線框、四角菱形；
+   多張時橫著排、一次看一張（scroll-snap），底下小點。圖畫得比框大，框照版面的比例裁（直拿 16:9、電腦 2:1、手機橫拿 5:2） */
+#hollow .jobs { flex: none; display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding-top: 12px; border-top: 1px solid rgba(232, 184, 106, .1); }
+#hollow .jobs::-webkit-scrollbar { display: none; }
+#hollow .job { position: relative; flex: 0 0 100%; scroll-snap-align: start; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 10px 12px; border: 1px solid rgba(232, 184, 106, .3); background: rgba(232, 184, 106, .025); }
+#hollow .job::before { content: ""; position: absolute; inset: 3px; border: 1px solid rgba(232, 184, 106, .1); pointer-events: none; }
+#hollow .job > i { position: absolute; width: 5px; height: 5px; background: var(--gold-lo); transform: rotate(45deg); }
+#hollow .job > i:nth-of-type(1) { left: -3px; top: -3px; }
+#hollow .job > i:nth-of-type(2) { right: -3px; top: -3px; }
+#hollow .job > i:nth-of-type(3) { left: -3px; bottom: -3px; }
+#hollow .job > i:nth-of-type(4) { right: -3px; bottom: -3px; }
+#hollow .job header { align-self: stretch; display: flex; justify-content: space-between; align-items: baseline; padding: 0 2px 6px; font-size: 11px; letter-spacing: .3em; color: var(--muted); }
+#hollow .job .no { font: 12px/1 var(--latin); letter-spacing: .12em; }
+#hollow .job .art { align-self: stretch; aspect-ratio: 16 / 9; overflow: hidden; border-top: 1px solid rgba(232, 184, 106, .45); border-bottom: 1px solid rgba(232, 184, 106, .45); }
+#hollow .job .art svg { display: block; width: 100%; height: 100%; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+#hollow .job .sun { fill: #f6dba6; animation: job-rise 6s ease-in-out infinite; }
+#hollow .job .orbit { stroke: var(--gold); stroke-width: .5; opacity: .45; }
+#hollow .job .stars path { fill: var(--gold-hi); animation: job-star 3.2s ease-in-out infinite; }
+#hollow .job .stars path:nth-child(2n) { animation-delay: -1.1s; }
+#hollow .job .stars path:nth-child(3n) { animation-delay: -2.3s; }
+#hollow .job .dust circle { fill: var(--gold-hi); opacity: .5; }
+#hollow .job .far { fill: #1a1418; }
+#hollow .job .near { fill: #0e0a0c; }
+#hollow .job .ridge { stroke: var(--gold); stroke-width: .8; opacity: .7; }
+#hollow .job .title { margin: 8px 0 0; font: 500 24px/1.1 var(--latin); letter-spacing: .22em; margin-right: -.22em; color: var(--gold-hi); }
+#hollow .job .desc { margin: 0; font-size: 13px; letter-spacing: .16em; color: var(--text); }
+#hollow .job .flash { margin: 6px 0 0; font-size: 11.5px; letter-spacing: .12em; color: var(--muted); }
+#hollow .job .calm { display: flex; align-items: center; gap: 6px; font-size: 12px; letter-spacing: .12em; color: var(--muted); cursor: var(--cur-pointer); }
+#hollow .job .calm input { accent-color: var(--gold); margin: 0; }
+#hollow .job-dots { flex: none; display: flex; justify-content: center; gap: 8px; }
+#hollow .job-dots[hidden] { display: none; }
+#hollow .job-dots i { width: 5px; height: 5px; background: rgba(232, 184, 106, .3); transform: rotate(45deg); }
+#hollow .job-dots i.on { background: var(--gold); }
+body.desk #hollow .job .art { aspect-ratio: 2 / 1; }
+/* 電腦：卡片比較高，底下的互動鍵（聽樹洞）會從按鈕之間露出來，開著時收起來 */
+body.desk:has(#hollow.show) #action-btn { visibility: hidden; }
+@keyframes job-rise { 0%, 100% { transform: translateY(1.5px); } 50% { transform: translateY(-1.5px); } }
+@keyframes job-star { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
 #hollow .foot { flex: none; display: flex; gap: 8px; }
-#hollow .foot .write { flex: none; min-height: 42px; margin-top: 4px; padding: 0 16px; letter-spacing: .3em; }
-#hollow .foot .enter { flex: 1; width: auto; }
-#hollow.writing .scene { display: none; }
+#hollow .foot .write, #hollow .foot .shut { flex: none; min-height: 42px; margin-top: 4px; padding: 0 16px; gap: 8px; letter-spacing: .3em; }
+#hollow .foot .enter { flex: 1; width: auto; min-width: 0; gap: 10px; padding: 0 14px; letter-spacing: .3em; white-space: nowrap; }
+/* 寫字的時候：主鈕變「投進樹洞」，關上收起來（「返回」回演唱會那頁） */
+#hollow.writing .scene, #hollow.writing .jobs, #hollow.writing .job-dots, #hollow.writing .foot .shut { display: none; }
 #hollow.writing .foot .enter kbd { display: none; }
 /* 留話：署名一行、內文框、附圖；字用 16px，iPhone 點進去才不會整頁放大 */
 #hollow .letter { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
@@ -517,13 +617,19 @@ body #radio.moved { left: var(--mx, 16px); top: var(--my, 16px); right: auto; bo
   #hollow .plate .name { width: 60px; }
   #hollow .words { font-size: 13.5px; letter-spacing: .14em; text-align: center; }
   #hollow .scene { grid-area: scene; align-self: center; padding-top: 0; border-top: 0; }
+  #hollow .jobs { grid-area: scene; align-self: center; padding-top: 0; border-top: 0; }
+  #hollow .job { padding: 8px 10px 10px; gap: 2px; }
+  #hollow .job .art { aspect-ratio: 5 / 2; }
+  #hollow .job .title { margin-top: 4px; font-size: 20px; }
+  #hollow .job .flash { display: none; }
+  #hollow .job-dots { display: none; }
   #hollow .letter { grid-area: scene; }
   #hollow .foot { grid-area: foot; }
   #hollow.kb { grid-template: "scene" minmax(0, 1fr) "foot" auto / minmax(0, 1fr); }
   #hollow.kb .who { display: none; }
   #hollow.kb .letter { grid-area: scene; }
 }
-@media (prefers-reduced-motion: reduce) { #hollow.show, #hollow .scene * { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #hollow.show, #hollow .scene *, #hollow .job * { animation: none; } }
 
 /* ───────── 一般按鈕 ───────── */
 .icon-btn {
@@ -727,7 +833,7 @@ body.desk .snapsave img { max-width: 120px; max-height: 160px; }
 /* 表情盤（kaopanel.js）：常用、表情、動作、姿勢四排，一排一層，橫著捲。開著照樣能走：手機不蓋搖桿和拇指那排，
    位置、寬高由 place 照裝置算（直拿貼在拇指那排上面、橫拿在搖桿另一邊的上半、電腦在下方那排上面）。開著時提示、地名讓位。
    三層各一個顏色，取門口讀取條的色票再提亮一點（暗底上讀得清楚）：表情珊瑚、動作薰衣草、姿勢草綠；常用是金。
-   排名、格子的框、亮的那格都照那排的色（--k），字照層分色（.kf 臉、.kh 手、.kb 身體），動作那排的臉淡一點，讓手那段跳出來 */
+   排名、格子的框、亮的那格都照那排的色（--k）。表情、動作是系統 emoji（.kp-e），姿勢是自己角色的小圖（.kp-t，thumbs.js 拍的） */
 #kaopanel {
   --k-face: #f0a080; --k-hand: #c3a0e8; --k-body: #9cc27e;
   position: fixed; z-index: 26; display: none; flex-direction: column; gap: 6px; padding: 10px 10px 8px;
@@ -756,12 +862,15 @@ body.kao-open:not(.desk):has(#kaopanel.side) #top-btns { opacity: 0; pointer-eve
 }
 .kp-chips button[hidden] { display: none; }
 .kp-chips button.on { background: color-mix(in srgb, var(--k) 26%, rgba(16, 11, 9, .5)); border-color: var(--k); font-weight: 600; }
-.kp-chips i { font-style: normal; }
-.kp-chips .kf { color: var(--k-face); } .kp-chips .kh { color: var(--k-hand); } .kp-chips .kb { color: var(--k-body); } .kp-chips .k0 { color: var(--muted); }
-.kp-hand .kf { opacity: .5; }
-.kp-hand button.on .kf { opacity: .8; }
-.kp-body .kp-chips button { padding: 0 7px; color: var(--k-body); }
-.kp-body .kp-chips button svg { width: 30px; height: 30px; }
+/* emoji 一格一個，圓的；常用一格排幾個（臉、手、姿勢小圖） */
+.kp-e { font: 23px/1 "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.kp-face .kp-chips button[data-i], .kp-hand .kp-chips button[data-i] { width: 42px; padding: 0; justify-content: center; }
+.kp-chips button:not(.on) .kp-e { opacity: .92; }
+/* 姿勢：自己的角色擺好的小圖，格子高一點；還沒拍好先空著 */
+.kp-t { display: block; flex: 0 0 auto; width: 34px; height: 34px; object-fit: contain; }
+.kp-chips .kp-pose { height: 54px; width: 50px; padding: 0; justify-content: center; border-radius: 14px; }
+.kp-chips .kp-pose .kp-t { width: 50px; height: 52px; }
+.kp-fav .kp-chips button[data-i] { padding: 0 8px; gap: 2px; }
 .kp-chips button kbd, .kp-foot button kbd { font: 11px/1.4 var(--latin); padding: 0 4px; color: var(--muted); border: 1px solid rgba(232, 184, 106, .3); border-radius: 2px; }
 .kp-chips button.on kbd, .kp-foot button.on kbd { color: var(--gold-hi); border-color: rgba(232, 184, 106, .6); }
 /* ＋存：常用最前面，虛線框像一個等著放東西的空位；沒擺東西時暗著，擺的已經在常用裡變「－移出」（實線、淡字）。存進去的那格閃一下 */
@@ -782,11 +891,15 @@ body.desk .kp-row { align-items: start; }
 body.desk .kp-name { padding-top: 9px; }
 body.desk .kp-chips { flex-wrap: wrap; overflow: visible; padding: 1px; -webkit-mask-image: none; mask-image: none; }
 body.desk .kp-chips button { height: 34px; }
+body.desk .kp-chips .kp-pose { height: 52px; }
 /* 橫拿高度不夠：格子矮一點 */
 #kaopanel.side { padding: 8px 8px 6px; gap: 5px; }
 #kaopanel.side .kp-chips button { height: 33px; font-size: 14px; padding: 0 9px; }
-#kaopanel.side .kp-body .kp-chips button { padding: 0 6px; }
-#kaopanel.side .kp-body .kp-chips button svg { width: 27px; height: 27px; }
+#kaopanel.side .kp-face .kp-chips button[data-i], #kaopanel.side .kp-hand .kp-chips button[data-i] { width: 37px; padding: 0; }
+#kaopanel.side .kp-e { font-size: 20px; }
+#kaopanel.side .kp-chips .kp-pose { height: 46px; width: 42px; padding: 0; }
+#kaopanel.side .kp-chips .kp-pose .kp-t { width: 42px; height: 44px; }
+#kaopanel.side .kp-t { width: 30px; height: 30px; }
 #kaopanel.side .kp-foot button { height: 26px; }
 /* 暫停選單：跟操作說明同一種卡，放在畫面中間 */
 #pause { position: fixed; left: 50%; top: 50%; z-index: 27; display: none; width: 380px; max-height: calc(100vh / var(--ui, 1) - 24px); overflow-y: auto; transform: translate(-50%, -50%); background: rgba(16, 11, 9, .94); box-shadow: var(--shadow); }

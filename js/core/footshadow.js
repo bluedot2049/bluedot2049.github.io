@@ -4,12 +4,11 @@
 // 每一幀先把腳下的影子從正上方畫進一張影子圖，吃光的材質（MeshLambertMaterial）照完光讀它，之後照常過調色、霧和曲線，跟房子的影子走同一條路：
 // 房子的影子裡本來就沒有直射，太陽那一片自然不見；影子的顏色是這一區的天光和調色給的，不是黑色。沒有陰影圖的區域照舊是一張貼圖疊上去，畫面不變
 import * as THREE from 'three';
-import { sunShadow } from './scenery.js';
+import { sunShadow, FOOT_LAYER as LAYER } from './scenery.js';
 
 const PEAK = 0.55;             // shadowTexture 中心的不透明度：除掉它，貼圖中心就是一整片影子
 export const CONTACT = 0.85;   // 腳底那一圈的半徑是圓影的幾成：要比身體踩著的那一塊大，露出一圈才看得到
 const AO = 0.7;                // 腳底那一圈的中心擋掉幾成天光
-const LAYER = 4;               // 只有影子圖的鏡頭看這一層，平常的畫面不畫這一片（ANIMAL_LAYER 1、REFLECT_LAYER 2、白獸評分 6）
 const SIZE = 56;               // 影子圖蓋多大（公尺），中心在鏡頭前面一點
 const Y0 = -16, YR = 40;       // 藍色版存腳的高度（-16 到 24 公尺，一格約 16 公分）：只有差不多高的地面才吃這片影子，樓上樓下、台階外不會浮一塊
 

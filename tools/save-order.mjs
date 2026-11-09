@@ -36,9 +36,11 @@ function sample() {
   o.hatC = L.HAT_COLORS.length - 1;
   for (const [k] of L.SLIDERS) o[k] = 10;
   const a = L.sanitizeLook(o), b = L.sanitizeLook({ ...L.presetLook(2), topC: 20, hand: L.OPTIONS.hand[5][0] });
-  return { look: a, closet: [b, null, a], unlocked: L.lockKeys().filter((_, i) => i % 2), visits: { tailor: '2026-11-05' }, face: '', camera: 'candle', padKeys: null, deskKeys: null };
+  return { look: a, closet: [b, null, a], people: [{ ...L.personOf(b), last: 2 }, null, { ...L.personOf(a), last: 0 }], outfits: [L.outfitOf(b), null, L.outfitOf(a), null, null, L.outfitOf(b)], unlocked: L.lockKeys().filter((_, i) => i % 2), visits: { tailor: '2026-11-05' }, face: '', camera: 'candle', padKeys: null, deskKeys: null };
 }
-const shape = (sv) => JSON.stringify({ look: sv.look, closet: sv.closet, unlocked: [...sv.unlocked].sort(), visits: sv.visits, camera: sv.camera });
+// 衣櫃的人和衣服（存檔 v3 起）有東西才放進來，比對舊的碼時跟當初記下的一樣
+const shape = (sv) => JSON.stringify({ look: sv.look, closet: sv.closet, unlocked: [...sv.unlocked].sort(), visits: sv.visits, camera: sv.camera,
+  ...(sv.people?.length || sv.outfits?.length ? { people: sv.people, outfits: sv.outfits } : {}) });
 
 if (!fs.existsSync(FILE) || process.argv.includes('--save')) {
   const code = S.encodeSave(sample());

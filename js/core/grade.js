@@ -12,7 +12,7 @@
 // 自己寫的 ShaderMaterial（霧、煙、光暈這些疊上去的層）不經過內建的霧，要自己引入 GRADE_GLSL，見下面的 gradeUniforms
 import * as THREE from 'three';
 import { TONES } from './tones.js';
-import { WET, WET_GLSL } from './wet.js';
+import { WET, WET_GLSL, WET_VERT, WET_VERT_PARS } from './wet.js';
 import { hash } from './servertime.js';
 
 // density：相機高度的霧有多濃；falloff：每往上一公尺變淡多少；base：霧最濃的高度（海面）；start：鏡頭前幾公尺不起霧；maxFog：高度霧最多蓋掉幾成
@@ -465,7 +465,7 @@ export function installGrade(preset = {}, scene = null, wet = false) {
   GRADE.on = 1;
   installed = true;
   Object.assign(THREE.ShaderChunk, {
-    fog_pars_vertex: PARS_VERTEX, fog_vertex: VERTEX, fog_pars_fragment: PARS_FRAGMENT(wet), fog_fragment: FRAGMENT(wet),
+    fog_pars_vertex: `${PARS_VERTEX}\n${WET_VERT_PARS}`, fog_vertex: `${VERTEX}\n${WET_VERT}`, fog_pars_fragment: PARS_FRAGMENT(wet), fog_fragment: FRAGMENT(wet),
   });
   for (const lib of Object.values(THREE.ShaderLib)) {
     if (!lib.fragmentShader.includes('fog_fragment')) continue;

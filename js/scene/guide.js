@@ -303,7 +303,7 @@ export class Guide {
   render() {
     const here = this.hereName();
     this.hereEl.textContent = here ? `在${here}` : '';
-    this.rows = this.dests.filter((d) => d.ship || this.seen.has(d.id));
+    this.rows = this.dests.filter((d) => d.ship || d.quest || this.seen.has(d.id));
     this.listEl.innerHTML = this.rows.map((d, i) => {
       const at = this.inside(d), on = this.mode === 'lead' && this.dest === d;
       const tag = at ? '這裡' : on ? '帶路中' : d.tag || '';
@@ -396,7 +396,7 @@ export class Guide {
 
   // 卡片最上面那行「在哪裡」：清單裡的地方優先（店、房間比整條街準），船寫「渡船邊」，都不是就用這張地圖的地名
   hereName() {
-    const d = this.dests.find((q) => !q.ship && this.inside(q)), p = this.player.pos;
+    const d = this.dests.find((q) => !q.ship && !q.quest && this.inside(q)), p = this.player.pos;
     if (d) return d.name;
     const name = this.world.placeAt?.(p.x, p.z)?.name;
     if (name) return name;
@@ -407,13 +407,32 @@ export class Guide {
   checkSeen() {
     let added = false;
     for (const d of this.dests) {
-      if (d.ship || this.seen.has(d.id) || !this.inside(d)) continue;
+      if (d.ship || d.quest || this.seen.has(d.id) || !this.inside(d)) continue;
       this.seen.add(d.id);
       added = true;
     }
     if (!added) return;
     this.seenAll[this.zone] = [...this.seen];
     save(KEY_SEEN, this.seenAll);
+    if (this.isOpen) {
+      this.render();
+      this.place();
+    }
+  }
+
+  // 一幕劇（core/act.js）正在演的那一拍：清單在船下面多一行，沒去過也列；換了一拍就換地方，正在帶路的跟著改道。d 是 null 就拿掉
+  quest(d) {
+    const i = this.dests.findIndex((q) => q.quest), old = i >= 0 ? this.dests[i] : null;
+    const p = d ? this.prepare({ ...d, id: 'act', quest: true }) : null;
+    if (i >= 0) this.dests.splice(i, 1);
+    if (p) this.dests.splice(this.dests[0]?.ship ? 1 : 0, 0, p);
+    if (old && this.dest === old) {
+      this.dest = p;
+      this.route = null;
+      this.routeT = -Infinity;
+      this.follow = null;
+      if (!p) this.mode = 'idle';
+    }
     if (this.isOpen) {
       this.render();
       this.place();

@@ -23,8 +23,8 @@ const viaShare = iOS && 'canShare' in navigator;
 export const saveTip = viaShare ? '存下時選「儲存影像」' : '';
 // 多一顆「分享」：存下本來就是分享選單的（iPhone）不用，電腦也不放
 export const canShare = android && 'canShare' in navigator;
-// 相簿裡照片以外的東西。kind 沒寫的是照片（舊版相簿裡的也是）。mate 是湊過去看、收下來的隊友照片（social/peek.js，小圖）
-export const KINDS = { video: '錄影', mirror: '鏡中', 'mirror-save': '存檔', postcard: '明信片', 'postcard-save': '存檔', mate: '隊友' };
+// 相簿裡照片以外的東西。kind 沒寫的是照片（舊版相簿裡的也是）。mate 是湊過去看、收下來的隊友照片（social/peek.js，小圖）；painting 是原野畫架畫的（easel-card.js）
+export const KINDS = { video: '錄影', mirror: '鏡中', 'mirror-save': '存檔', postcard: '明信片', 'postcard-save': '存檔', mate: '隊友', painting: '畫' };
 const LATEST = new Set(['mirror-save', 'postcard-save']);
 export const labOk = (it) => it.state === 'shot' && !it.kind;
 // 奇物：拍到白獸這類東西，快門當下算好的結果記在照片上（rare：{ kind, grade, zone, where, place }，見 beast.js 的 judge）。

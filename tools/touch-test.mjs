@@ -43,7 +43,7 @@ try {
   await screen(LAND);
   await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   // 來過的人（不跳門口的告示）、說明卡關著；設定清空
-  const Q = 'z=gallery&q=mid&debug&crowd=0&beast=0&happen=0&rain=0&dust=0.5&from=haishi';
+  const Q = 'z=gallery&q=mid&debug&crowd=0&beast=0&happen=0&act=0&rain=0&dust=0.5&from=haishi';
   await b.load(Q);
   await ev(`localStorage.clear(); localStorage.setItem('entered', '1'); localStorage.setItem('guideOff', '1'); sessionStorage.clear(); 1`);
   check(await b.load(Q), '畫廊載入（橫拿、觸控）');

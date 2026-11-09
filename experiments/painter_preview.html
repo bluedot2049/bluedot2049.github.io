@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>畫架試筆</title>
+<style>
+  :root { --bg: #1d1a20; --ink: #e8e0d2; --dim: #9a9086; --line: #4a4250; --gold: #c9a86a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.6 sans-serif; min-height: 100vh; }
+  main { display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; justify-content: center; align-items: flex-start; }
+  .frame { position: relative; touch-action: none; user-select: none; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45); }
+  .frame canvas, .frame img { display: block; width: 100%; height: 100%; }
+  #ref { background: #2a262e; }
+  #ref.none::after { content: '沒有對照圖（先跑 python tools/painter-palette.py --ref）'; position: absolute; inset: 0; display: grid; place-items: center; color: var(--dim); padding: 24px; text-align: center; }
+  svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: hidden; }
+  @media (min-width: 901px) { #ref { order: 1; } #panel { order: 2; } }
+  .hide-handles svg { display: none; }
+  .h { cursor: grab; }
+  .h:active { cursor: grabbing; }
+  #panel { width: 260px; max-width: 100%; display: flex; flex-direction: column; gap: 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  button { background: #2c2730; color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 5px 10px; font: inherit; cursor: pointer; }
+  button.on { background: var(--gold); border-color: var(--gold); color: #1d1a20; }
+  input[type=text] { flex: 1; min-width: 0; background: #2c2730; color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; font: 12px monospace; }
+  .note { color: var(--dim); font-size: 12px; }
+  #stat { font: 12px monospace; color: var(--dim); }
+  h1 { font-size: 15px; font-weight: normal; margin: 0; letter-spacing: 0.1em; }
+</style>
+</head>
+<body>
+<main>
+  <div class="frame" id="easel">
+    <canvas id="cv"></canvas>
+    <svg id="ov"></svg>
+  </div>
+  <div id="panel">
+    <h1>畫架</h1>
+    <div class="row" id="scenes"></div>
+    <div class="row">
+      <button id="auto">自動一張</button>
+      <button id="next">換一張</button>
+      <button id="reset">回原作構圖</button>
+    </div>
+    <div class="row">
+      <button id="ver">換色 1/3</button>
+      <button id="frm">畫框：滿版</button>
+    </div>
+    <div class="row">
+      <button id="look">看畫</button>
+      <button id="cmp">對照原作</button>
+      <button id="save">存成 PNG</button>
+    </div>
+    <div class="row"><input type="text" id="code" spellcheck="false"><button id="load">讀</button></div>
+    <div class="note">
+      拖三個東西：<br>
+      虛線＝分界（吸到三分線和上下兩端）<br>
+      圓圈＝光（硬線和光暈從這裡出來）<br>
+      三角＝人（放在分界哪一邊，會畫成人、船或鳥；有地面的會自己站上去）<br>
+      巨影、門、城谷靠近正中線會吸過去。<br>
+      換色只換大色面，人和線的顏色不動。其他都照規則畫。
+    </div>
+    <div id="stat"></div>
+  </div>
+  <div class="frame" id="ref" hidden><img id="refimg" alt=""></div>
+</main>
+<script type="module">
+  // 畫架試筆：js/core/painter.js 的試筆頁。拖分界、光、人三個把手，其餘照規則；旁邊放原作對照（tools/out/painter-ref，不上傳）
+  // 網址：?code=短碼 直接開那一張；?s=場景
+  import { SCENES, SCENE_KEYS, FRAMES, compose, describe, paint, startParams, autoParams, toCode, fromCode, versionCount } from '../js/core/painter.js';
+
+  const ASPECT = 3 / 4;
+  const easel = document.getElementById('easel'), cv = document.getElementById('cv'), ov = document.getElementById('ov');
+  const refBox = document.getElementById('ref'), refImg = document.getElementById('refimg');
+  const codeIn = document.getElementById('code'), stat = document.getElementById('stat');
+  const q = new URLSearchParams(location.search);
+
+  let p = fromCode(q.get('code') || '') || startParams(SCENES[q.get('s')] ? q.get('s') : 'sea', 1 + Math.floor(Math.random() * 99999));
+  let guides = [];
+
+  // ---------- 大小 ----------
+  let cssH = 600;
+  function layout() {
+    const wide = innerWidth > 900;
+    const availW = wide ? (innerWidth - 260 - 64) / (refBox.hidden ? 1 : 2) : innerWidth - 32;
+    const availH = wide ? innerHeight - 32 : innerHeight * 0.78;
+    cssH = Math.floor(Math.min(availH, availW / ASPECT));
+    for (const el of [easel, refBox]) { el.style.width = `${Math.round(cssH * ASPECT)}px`; el.style.height = `${cssH}px`; }
+    ov.setAttribute('viewBox', `0 0 ${ASPECT} 1`);
+    queue(false);
+  }
+
+  // ---------- 畫（拖的時候小張、停下來畫整張） ----------
+  let pending = 0, fullTimer = 0;
+  function queue(fast) {
+    cancelAnimationFrame(pending);
+    pending = requestAnimationFrame(() => {
+      const h = fast ? 320 : Math.min(1400, Math.round(cssH * Math.min(devicePixelRatio, 2)));
+      if (cv.height !== h) { cv.height = h; cv.width = Math.round(h * ASPECT); }
+      const ms = paint(cv, p);
+      stat.textContent = `${cv.width}×${cv.height}　${ms.toFixed(0)} ms`;
+      drawHandles();
+      codeIn.value = toCode(p);
+      history.replaceState(null, '', `?code=${toCode(p)}`);
+    });
+    clearTimeout(fullTimer);
+    if (fast) fullTimer = setTimeout(() => queue(false), 160);
+  }
+
+  // ---------- 把手（SVG，座標＝畫高為 1） ----------
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+  function drawHandles() {
+    ov.replaceChildren();
+    const s = 1 / cssH;   // 一個 CSS 像素
+    for (const g of guides) {
+      ov.append(g.axis === 'y'
+        ? el('line', { x1: 0, x2: ASPECT, y1: g.at, y2: g.at, stroke: '#fff', 'stroke-opacity': 0.35, 'stroke-width': s })
+        : el('line', { y1: 0, y2: 1, x1: g.at * ASPECT, x2: g.at * ASPECT, stroke: '#fff', 'stroke-opacity': 0.35, 'stroke-width': s }));
+    }
+    const { angle, kind } = describe(p, ASPECT);
+    const dx = p.div.x * ASPECT, dy = p.div.y, cx = Math.cos(angle) * 2, cy = Math.sin(angle) * 2;
+    const line = el('g', { class: 'h', 'data-h': 'div' });
+    line.append(el('line', { x1: dx - cx, y1: dy - cy, x2: dx + cx, y2: dy + cy, stroke: 'transparent', 'stroke-width': 24 * s }));
+    line.append(el('line', { x1: dx - cx, y1: dy - cy, x2: dx + cx, y2: dy + cy, stroke: '#fff', 'stroke-opacity': 0.8, 'stroke-width': 1.5 * s, 'stroke-dasharray': `${6 * s} ${5 * s}` }));
+    line.append(el('circle', { cx: dx, cy: dy, r: 7 * s, fill: '#fff', 'fill-opacity': 0.9, stroke: '#000', 'stroke-opacity': 0.3, 'stroke-width': s }));
+    ov.append(line);
+    const lt = el('g', { class: 'h', 'data-h': 'light' });
+    lt.append(el('circle', { cx: p.light.x * ASPECT, cy: p.light.y, r: 18 * s, fill: 'transparent' }));
+    lt.append(el('circle', { cx: p.light.x * ASPECT, cy: p.light.y, r: 13 * s, fill: 'none', stroke: '#fff', 'stroke-width': 2 * s }));
+    lt.append(el('circle', { cx: p.light.x * ASPECT, cy: p.light.y, r: 13 * s, fill: 'none', stroke: '#000', 'stroke-opacity': 0.3, 'stroke-width': 0.8 * s, 'stroke-dasharray': `${2 * s} ${3 * s}` }));
+    ov.append(lt);
+    const fx = p.fig.x * ASPECT, fy = p.fig.y;
+    const fg = el('g', { class: 'h', 'data-h': 'fig' });
+    fg.append(el('circle', { cx: fx, cy: fy + 10 * s, r: 18 * s, fill: 'transparent' }));
+    fg.append(el('path', { d: `M${fx} ${fy + 3 * s} l${-7 * s} ${12 * s} h${14 * s} z`, fill: '#fff', stroke: '#000', 'stroke-opacity': 0.3, 'stroke-width': s }));
+    const t = el('text', { x: fx + 10 * s, y: fy + 14 * s, fill: '#fff', 'font-size': 11 * s, 'paint-order': 'stroke', stroke: '#000', 'stroke-opacity': 0.4, 'stroke-width': 2 * s });
+    t.textContent = kind;
+    fg.append(t);
+    ov.append(fg);
+  }
+
+  // ---------- 拖 ----------
+  let drag = null;
+  const toUnit = (e) => { const r = easel.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }; };
+  ov.addEventListener('pointerdown', (e) => {
+    const h = e.target.closest('.h');
+    if (!h) return;
+    const at = toUnit(e), key = h.dataset.h;
+    drag = { key, off: { x: p[key].x - at.x, y: p[key].y - at.y }, id: e.pointerId };
+    ov.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  ov.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const at = toUnit(e), raw = { ...p, [drag.key]: { x: at.x + drag.off.x, y: at.y + drag.off.y } };
+    ({ p, guides } = compose(raw, ASPECT, drag.key));
+    queue(true);
+  });
+  const end = (e) => { if (drag && e.pointerId === drag.id) { drag = null; guides = []; queue(false); } };
+  ov.addEventListener('pointerup', end);
+  ov.addEventListener('pointercancel', end);
+
+  // ---------- 面板 ----------
+  const sceneBox = document.getElementById('scenes');
+  const verB = document.getElementById('ver'), frmB = document.getElementById('frm');
+  function markScene() {
+    for (const b of sceneBox.children) b.classList.toggle('on', b.dataset.k === p.scene);
+    verB.textContent = `換色 ${p.ver + 1}/${versionCount(p.scene)}`;
+    frmB.textContent = `畫框：${FRAMES[p.frame]}`;
+  }
+  for (const k of SCENE_KEYS) {
+    const b = document.createElement('button');
+    b.textContent = SCENES[k].name;
+    b.dataset.k = k;
+    b.onclick = () => { p = { ...startParams(k, p.seed, ASPECT), frame: p.frame }; markScene(); setRef(); queue(false); };
+    sceneBox.append(b);
+  }
+  document.getElementById('auto').onclick = () => { p = autoParams(1 + Math.floor(Math.random() * 999999), ASPECT); markScene(); setRef(); queue(false); };
+  document.getElementById('next').onclick = () => { p = compose({ ...p, seed: 1 + Math.floor(Math.random() * 999999) }, ASPECT).p; queue(false); };
+  document.getElementById('reset').onclick = () => { p = { ...startParams(p.scene, p.seed, ASPECT), ver: p.ver, frame: p.frame }; queue(false); };
+  verB.onclick = () => { p = { ...p, ver: (p.ver + 1) % versionCount(p.scene) }; markScene(); setRef(); queue(false); };
+  frmB.onclick = () => { p = { ...p, frame: (p.frame + 1) % FRAMES.length }; markScene(); queue(false); };
+  const lookB = document.getElementById('look');
+  lookB.onclick = () => { lookB.classList.toggle('on', easel.classList.toggle('hide-handles')); };
+  const cmpB = document.getElementById('cmp');
+  cmpB.onclick = () => { refBox.hidden = !refBox.hidden; cmpB.classList.toggle('on', !refBox.hidden); setRef(); layout(); };
+  function setRef() {
+    if (refBox.hidden) return;
+    refBox.classList.remove('none');
+    refImg.hidden = false;
+    // 換色版本有自己的原作就放那張（bands2.jpg…），沒有就放第一張
+    const base = `../tools/out/painter-ref/${SCENES[p.scene].ref}`;
+    refImg.onerror = () => {
+      if (refImg.src.endsWith(`${p.ver + 1}.jpg`)) { refImg.src = `${base}.jpg`; return; }
+      refImg.hidden = true; refBox.classList.add('none');
+    };
+    refImg.src = p.ver ? `${base}${p.ver + 1}.jpg` : `${base}.jpg`;
+    refImg.style.objectFit = 'cover';
+  }
+  document.getElementById('save').onclick = () => {
+    const big = document.createElement('canvas');
+    big.height = 2400; big.width = Math.round(2400 * ASPECT);
+    paint(big, p);
+    big.toBlob((b) => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${toCode(p)}.png`; a.click(); });
+  };
+  document.getElementById('load').onclick = () => { const n = fromCode(codeIn.value); if (n) { p = n; markScene(); setRef(); queue(false); } };
+
+  markScene();
+  addEventListener('resize', layout);
+  layout();
+</script>
+</body>
+</html>

@@ -134,8 +134,8 @@ function bodyMaterial(U, horn) {
   });
 }
 
-// 一張圓形漸層的貼圖：stops 是 [位置 0–1, 'rgba(...)']
-function radial(stops, size = 128) {
+// 一張圓形漸層的貼圖：stops 是 [位置 0–1, 'rgba(...)']（海市的漁火 haishi-acts.js 也用）
+export function radial(stops, size = 128) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const g = c.getContext('2d'), gr = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);

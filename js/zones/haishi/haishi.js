@@ -185,7 +185,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
 
   const { house, frontage, tower, darkroom, signs, flatAt, streetOf, noren, lattice } = houseKit({ R, pick, STONES, OCHRE, coarse, lantern, solid, fader, wbox, bucket, doors, LEAF, BAMBOO, groundUnder, obstacles, group });
 
-  buildGround({ k, rail, flatAt, groundUnder, solid, farLamps, STRING, lantern, pick, R, obstacles, group, fader, bucket });
+  const { pave } = buildGround({ k, rail, flatAt, groundUnder, solid, farLamps, STRING, lantern, pick, R, obstacles, group, fader, bucket });
 
   const { shops, newsTop } = buildStreets({ house, groundUnder, frontage, R, SEEK, tower, darkroom, k, obstacles, string, streetOf, pick, lantern, flatAt, noren, fader, bucket, signs, solid, wbox, doors, group, lattice, coarse, STONES, BAMBOO });
 
@@ -307,7 +307,7 @@ export function buildHaishi(scene, { coarse = false } = {}) {
     index: 0, id: 'haishi', data: { name: '海市', subtitle: 'Fata Morgana', paintings: [] },
     group, obstacles, paintings: [], center: new THREE.Vector3(0, 0, -20),
   };
-  const raycastTargets = [...meshes.filter((o) => o.isMesh), sea];
+  const raycastTargets = [...meshes.filter((o) => o.isMesh), pave, sea];
 
   return {
     rooms: [room], paintings: [], mirror: null, outdoor: null, raycastTargets, env, shops, newsTop,

@@ -19,14 +19,14 @@
 <body>
   <div class="row" id="row"></div>
   <script type="module">
-    // 四種版面並排：照片拿空拍照代替，臉是預設的學徒。網址 pen= 換筆名，place= 換地名
+    // 四種版面並排：照片拿空拍照代替，臉是預設的學徒。網址 pen= 換筆名，place= 換地名，photo= 換照片（從這一頁算的路徑，像 ../tools/out/shoot/haishi.png）
     import { makePaper, pressReady, RANKS } from '../js/save/press.js';
     import { portrait } from '../js/avatar/thumbs.js';
     import { presetLook, sanitizeLook } from '../js/avatar/looks.js';
 
     const q = new URLSearchParams(location.search);
     const img = new Image();
-    img.src = '../assets/aerial/gallery-海上看碼頭-1920.webp';
+    img.src = q.get('photo') || '../assets/aerial/gallery-海上看碼頭-1920.webp';
     await img.decode();
     const photo = await createImageBitmap(img);
     const face = portrait(sanitizeLook(presetLook(0)));

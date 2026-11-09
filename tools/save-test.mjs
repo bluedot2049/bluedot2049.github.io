@@ -45,7 +45,9 @@ if (args.includes('--limit')) {
     const r = () => L.randomLook(L.presetLook(Math.random() * 4 | 0));
     const a = { ...r(), face };
     localStorage.clear();
-    P.putSave({ look: a, closet: [{ ...r(), face }, r(), r()], unlocked: L.lockKeys(), face, camera: 'candle',
+    // 衣櫃塞滿：三個人（第一個戴臉）、六套衣服
+    P.putSave({ look: a, people: [0, 1, 2].map((i) => ({ ...L.personOf(i ? r() : { ...r(), face }), last: i })), outfits: Array.from({ length: P.OUTFITS }, () => L.outfitOf(r())),
+      unlocked: L.lockKeys(), face, camera: 'candle',
       visits: Object.fromEntries(Object.keys(L.GIFTS).map((k, i) => [k, '2026-' + (10 + i % 3) + '-' + String(1 + i * 2).padStart(2, '0')])),
       padKeys: [1, 0, 3, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], deskKeys: Array.from({ length: 12 }, (_, i) => (0x100000 + i * 0x10101).toString(16)).join('') });
     const ph = document.createElement('canvas'); ph.width = 930; ph.height = 1340;
@@ -109,7 +111,9 @@ const SETUP = `(async () => {
   const A = L.encodeFace(sym()), C = L.encodeFace(odd());
   const a = { ...L.randomLook(L.presetLook(1)), face: A, keep: 1, outer: 'haori', bottom: 'hakama', back: 'shell', one: 'none' }, b = L.randomLook(L.presetLook(2)), c = { ...L.randomLook(L.presetLook(3)), face: C };
   localStorage.clear();
-  P.putSave({ look: a, closet: [{ ...a, topC: 3 }, b, c], unlocked: L.lockKeys().filter((_, i) => i % 3), visits: { fishwife: '2026-10-21' }, camera: 'candle' });
+  // 衣櫃：跟舊樣本一樣是三套整個人（身上那個人換件上衣、b、c），新的程式拆成人和衣服；--make-old 時還沒有 splitCloset，照舊放 closet
+  const wardrobe = P.splitCloset ? P.splitCloset([{ ...a, topC: 3 }, b, c]) : { closet: [{ ...a, topC: 3 }, b, c] };
+  P.putSave({ look: a, ...wardrobe, unlocked: L.lockKeys().filter((_, i) => i % 3), visits: { fishwife: '2026-10-21' }, camera: 'candle' });
   window.__faces = { A, C };
   const ph = document.createElement('canvas'); ph.width = 930; ph.height = 1340;
   const g = ph.getContext('2d'), gr = g.createLinearGradient(0, 0, 930, 1340); gr.addColorStop(0, '#6a4a7a'); gr.addColorStop(1, '#e0a070'); g.fillStyle = gr; g.fillRect(0, 0, 930, 1340);
@@ -159,12 +163,12 @@ if (makeOld) {
   process.exit(0);
 }
 
-// 讀回來：讀到的存檔整理成「身上、衣櫃三套各戴哪張臉（A／C／無）」和整份存檔的臉
+// 讀回來：讀到的存檔整理成「身上、衣櫃三個人各戴哪張臉（A／C／無）」、幾個人、幾套衣服，和整份存檔的臉
 const READ = (kind, data, faces) => `(async () => {
   const S = await import('/js/save/savecode.js'), PK = await import('/js/save/pack.js'), P = await import('/js/save/progress.js');
   const faces = ${JSON.stringify(faces)};
   const name = (f) => (!f ? '-' : f === faces.A ? 'A' : f === faces.C ? 'C' : '?');
-  const shape = (s) => ({ face: name(s.face), wear: [s.look, ...s.closet].map((x) => (x ? name(x.face) : '空')).join(''), note: s.faceNote | 0, closet: s.closet.length, unlocked: s.unlocked.length, cam: s.camera });
+  const shape = (s) => ({ face: name(s.face), wear: [s.look, ...s.people].map((x) => (x ? name(x.face) : '空')).join(''), note: s.faceNote | 0, people: s.people.filter(Boolean).length, outfits: s.outfits.filter(Boolean).length, unlocked: s.unlocked.length, cam: s.camera });
   let r = null;
   const kind = ${JSON.stringify(kind)}, data = ${JSON.stringify(data)};
   if (kind === 'code') { const sv = S.decodeSave(data); if (sv) { S.restoreSave(sv); r = shape(P.getSave()); } }
@@ -201,7 +205,7 @@ const report = async (label, kind, data, faces) => {
     await sleep(800);
     r = await b.ev(`(async () => { const P = await import('/js/save/progress.js'); const s = P.getSave(), f = ${JSON.stringify(faces)};
       const name = (x) => (!x ? '-' : x === f.A ? 'A' : x === f.C ? 'C' : '?');
-      return { face: name(s.face), wear: [s.look, ...s.closet].map((x) => (x ? name(x.face) : '空')).join(''), note: s.faceNote | 0, closet: s.closet.length, unlocked: s.unlocked.length, cam: s.camera }; })()`);
+      return ({ face: name(s.face), wear: [s.look, ...s.people].map((x) => (x ? name(x.face) : '空')).join(''), note: s.faceNote | 0, people: s.people.filter(Boolean).length, outfits: s.outfits.filter(Boolean).length, unlocked: s.unlocked.length, cam: s.camera }); })()`);
   }
   console.log(label.padEnd(22), JSON.stringify(r));
 };

@@ -13,6 +13,8 @@ export const REFLECT_LAYER = 2;
 export const GUIDE_LAYER = 3;
 // 頭上冒的表情、顏文字：一樣只給人看、拍不進照片，跟標記分開一層，之後拍照的人可以自己開關要不要拍進去
 export const TAG_LAYER = 4;
+// 腳下的影子：只有 footshadow.js 畫影子圖的鏡頭看這層，主鏡頭不能開（開了腳下會冒出一片發亮的色塊）。6 號是 framejudge.js 量自己用的
+export const FOOT_LAYER = 5;
 
 export const uTime = { value: 0 };
 

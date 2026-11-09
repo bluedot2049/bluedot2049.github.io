@@ -186,15 +186,23 @@ export function buildHeilin(scene, { coarse = false } = {}) {
 
   for (const obj of bucketObjects(bucket)) group.add(obj);
 
-  // ---------- 杉樹：一棵是樹幹加三層錐，全部同一個網格、照位置縮放 ----------
+  // ---------- 杉樹：樹幹加三層錐，三種形狀輪流用、照位置縮放 ----------
+  // 形狀語言：每層錐不疊在正中間（左右差幾 %），樹幹單側彎、頂端往同一邊歪；三種歪法不同，加上每棵隨便轉，林子不會一排一樣
+  const FIR = [
+    { bow: [0.02, 0, 0.3], lean: [0.05, 0.015], off: [[0.012, 0], [-0.018, 0.01], [0.02, -0.008]], r: [1, 0.96, 1.04] },
+    { bow: [-0.015, 0.012, 0.7], lean: [-0.035, 0.04], off: [[-0.01, 0.014], [0.016, 0], [-0.006, 0.022]], r: [1.05, 1, 0.92] },
+    { bow: [0, -0.02, 0.3], lean: [0.02, -0.055], off: [[0, -0.012], [0.01, -0.02], [0.018, -0.03]], r: [0.95, 1.06, 1] },
+  ];
+  const firGeo = (f) => {
+    const k = new Kit(rng('heilin:fir'));
+    k.cyl(0.035, 0.05, 0.3, BARK, 0, 0.15, 0, { bow: f.bow }, 6);
+    k.cone(0.34 * f.r[0], 0.42, NEEDLE, f.off[0][0], 0.36, f.off[0][1], { color2: '#243630' });
+    k.cone(0.27 * f.r[1], 0.38, '#223229', f.off[1][0], 0.58, f.off[1][1], { color2: '#2b4236', lean: [f.lean[0] * 0.5, f.lean[1] * 0.5] });
+    k.cone(0.18 * f.r[2], 0.34, '#28392f', f.off[2][0], 0.82, f.off[2][1], { color2: NEEDLE2, lean: f.lean });
+    return mergeBucket(k.lit, false);
+  };
   const trees = [];
   {
-    const k = new Kit(rng('heilin:fir'));
-    k.cyl(0.035, 0.05, 0.3, BARK, 0, 0.15, 0, {}, 6);
-    k.cone(0.34, 0.42, NEEDLE, 0, 0.36, 0, { color2: '#243630' });
-    k.cone(0.27, 0.38, '#223229', 0, 0.58, 0, { color2: '#2b4236' });
-    k.cone(0.18, 0.34, '#28392f', 0, 0.82, 0, { color2: NEEDLE2 });
-    const geo = mergeBucket(k.lit, false);
     const R = rng('heilin:trees'), GRID = 3.6, { x0, x1, z0, z1 } = P.box;
     // 從這幾點看得到谷底的光：中間擋到的樹不長
     const eyes = SIGHTS.map((s) => (s === 'start' ? { x: S0.x, y: S0.y + 1.6, z: S0.z } : s === 'hook' ? { x: P.bends[1].x, y: P.bends[1].y + 1.6, z: P.bends[1].z } : (() => { const o = P.nooks.find((q) => q.id === s); return { x: o.x, y: o.y + 1.6, z: o.z }; })()));
@@ -222,14 +230,21 @@ export function buildHeilin(scene, { coarse = false } = {}) {
       trees.push({ x, y, z, h, w, a: R() * Math.PI * 2, tint: 0.82 + R() * 0.3 });
     }
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-    const firs = new THREE.InstancedMesh(geo, mat, trees.length), m = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color();
-    trees.forEach((t, i) => {
-      m.compose(new THREE.Vector3(t.x, t.y, t.z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), t.a), new THREE.Vector3(t.w, t.h, t.w));
-      firs.setMatrixAt(i, m);
-      firs.setColorAt(i, c.setRGB(t.tint, t.tint * 1.02, t.tint));
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color();
+    // 哪一棵用哪種形狀照位置雜湊決定，不多抽亂數（多抽一次後面的樹全會換位置）
+    const kind = (t) => Math.floor((Math.abs(Math.sin(t.x * 12.9898 + t.z * 78.233)) * 43758.5453 % 1) * FIR.length);
+    FIR.forEach((f, v) => {
+      const mine = trees.filter((t) => kind(t) === v);
+      if (!mine.length) return;
+      const firs = new THREE.InstancedMesh(firGeo(f), mat, mine.length);
+      mine.forEach((t, i) => {
+        m.compose(new THREE.Vector3(t.x, t.y, t.z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), t.a), new THREE.Vector3(t.w, t.h, t.w));
+        firs.setMatrixAt(i, m);
+        firs.setColorAt(i, c.setRGB(t.tint, t.tint * 1.02, t.tint));
+      });
+      firs.computeBoundingSphere();
+      group.add(firs);
     });
-    firs.computeBoundingSphere();
-    group.add(firs);
   }
 
   scene.add(group);

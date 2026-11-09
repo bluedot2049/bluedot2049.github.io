@@ -24,7 +24,7 @@ window.inApp = (function () {
   var progress = false;
   try {
     var s = JSON.parse(localStorage.getItem('save'));
-    progress = !!s && (s.v | 0) >= 1 && ((s.unlocked || []).length > 0 || (s.closet || []).some(Boolean));
+    progress = !!s && (s.v | 0) >= 1 && ((s.unlocked || []).length > 0 || [s.closet, s.people, s.outfits].some((a) => (a || []).some(Boolean)));
   } catch (e) {}
   var out = { app: app, progress: progress, leave: null };
   if (app === 'LINE' && !tried) {

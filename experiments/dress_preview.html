@@ -22,10 +22,10 @@
   </aside>
   <script type="module">
     import { Creator } from '../js/avatar/creator.js';
-    import { presetLook, randomLook, putSave, lockKeys } from '../js/avatar/looks.js';
+    import { presetLook, randomLook, putSave, lockKeys, personOf, outfitOf } from '../js/avatar/looks.js';
     const q = new URLSearchParams(location.search);
     // ?fill：衣櫃放兩套、海市的東西拿一半，看衣櫃頁和紅印
-    if (q.has('fill')) putSave({ closet: [randomLook(presetLook(1)), randomLook(presetLook(3))], unlocked: lockKeys().filter((_, i) => i % 2) });
+    if (q.has('fill')) putSave({ people: [{ ...personOf(randomLook(presetLook(1))), last: 0 }], outfits: [outfitOf(randomLook(presetLook(1))), outfitOf(randomLook(presetLook(3)))], unlocked: lockKeys().filter((_, i) => i % 2) });
     const c = new Creator({ onChange() {}, onView() {}, onPaint() {} });
     if (q.get('tab')) c.tab = q.get('tab');
     if (q.get('sub')) c.sub[c.tab] = q.get('sub');

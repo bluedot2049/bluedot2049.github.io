@@ -77,7 +77,7 @@ const res = {};
 const avg = (a, k) => { const v = a.map((x) => x[k]).filter((x) => x != null); return v.length ? +(v.reduce((s, x) => s + x, 0) / v.length).toFixed(3) : null; };
 try {
   for (const zone of ['gallery', 'haishi']) {
-    const Q = `z=${zone}&q=mid&debug&crowd=0&beast=0&happen=0&rain=0&dust=0.5&from=haishi`;
+    const Q = `z=${zone}&q=mid&debug&crowd=0&beast=0&happen=0&act=0&rain=0&dust=0.5&from=haishi`;
     await b.load(Q);
     await ev(`localStorage.setItem('entered', '1'); localStorage.setItem('guideOff', '1'); 1`);
     if (!(await b.load(Q))) throw new Error(zone + ' 載入失敗');

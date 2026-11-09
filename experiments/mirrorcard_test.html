@@ -26,13 +26,13 @@
     import { Character } from '../js/avatar/character.js';
     import { Eye } from '../js/camera/eye.js';
     import { makeMirrorCard, readMirrorCard, drawLids, PHOTO_W, PHOTO_H, CARD_W, LID_STRIP, DATE_TRACK, capacity } from '../js/save/mirrorcard.js';
-    import { presetLook, randomLook, putSave, getSave, lockKeys, encodeFace, GIFTS } from '../js/avatar/looks.js';
+    import { presetLook, randomLook, putSave, getSave, lockKeys, encodeFace, GIFTS, personOf, outfitOf, samePerson, sameOutfit } from '../js/avatar/looks.js';
 
     const log = (s) => { out.textContent = (out.textContent === 'running…' ? '' : out.textContent) + s + '\n'; };
     const face = () => { const c = new Uint8Array(4096); for (let i = 0; i < 4096; i++) if (((i * 2654435761) >>> 0) % 7 < 2) c[i] = 1 + (i % 8); return c; };
     const smile = () => { const c = new Uint8Array(4096); for (let x = 18; x < 46; x++) c[(40 + Math.round(Math.sin((x - 18) / 28 * Math.PI) * 5)) * 64 + x] = 3; c[24 * 64 + 22] = c[24 * 64 + 41] = 1; return c; };
     const a = { ...randomLook(presetLook(1)), face: encodeFace(smile()) }, b = randomLook(presetLook(2)), c = { ...randomLook(presetLook(3)), face: encodeFace(face()) };
-    putSave({ look: a, closet: [a, b, c], unlocked: lockKeys().filter((_, i) => i % 3), visits: Object.fromEntries(Object.keys(GIFTS).map((k) => [k, '2026-10-2' + (k.length % 10)])) });
+    putSave({ look: a, people: [a, b, c].map((x, i) => ({ ...personOf(x), last: i })), outfits: [a, b, c].map(outfitOf), unlocked: lockKeys().filter((_, i) => i % 3), visits: Object.fromEntries(Object.keys(GIFTS).map((k) => [k, '2026-10-2' + (k.length % 10)])) });
     const save = getSave();
     log('capacity ' + JSON.stringify(capacity));
 
@@ -71,15 +71,15 @@
       if (!m) { log(`${name} (${cv.width}×${cv.height}, ${Math.round(blob.size / 1024)} KB): 讀不到`); continue; }
       const okLook = same({ ...m.save.look, face: '' }, { ...save.look, face: '' }) || same(m.save.look.race, save.look.race);
       const okUn = same([...m.save.unlocked].sort(), [...save.unlocked].sort());
-      const okCloset = m.full && m.save.closet.length === 3 && m.save.closet.every((x, i) => x && x.race === save.closet[i].race);
-      const okFaces = m.save.face === save.face && [m.save.look, ...m.save.closet].every((x, i) => (x?.face || '') === ([save.look, ...save.closet][i]?.face || ''));
+      const okCloset = m.full && m.save.people.every((x, i) => samePerson(x, save.people[i])) && m.save.outfits.every((x, i) => sameOutfit(x, save.outfits[i]));
+      const okFaces = m.save.face === save.face && [m.save.look, ...m.save.people].every((x, i) => (x?.face || '') === ([save.look, ...save.people][i]?.face || ''));
       log(`${name} (${cv.width}×${cv.height}, ${Math.round(blob.size / 1024)} KB): look ${okLook} unlocks ${okUn} full ${m.full} closet ${okCloset} visits ${same(m.save.visits, save.visits)} faces ${JSON.stringify(okFaces)}`);
     }
     // 舊版照片（?old=網址）也要讀得回來
     const old = new URLSearchParams(location.search).get('old');
     if (old) {
       const m = await readMirrorCard(await (await fetch(old)).blob());
-      log(`舊版照片: ${m ? `讀到 full ${m.full} closet ${m.save.closet.length} visits ${same(m.save.visits, save.visits)} face ${!!m.save.face}` : '讀不到'}`);
+      log(`舊版照片: ${m ? `讀到 full ${m.full} 人 ${m.save.people.length} 衣服 ${m.save.outfits.length} visits ${same(m.save.visits, save.visits)} face ${!!m.save.face}` : '讀不到'}`);
     }
 
     // 字距：拖了就重畫（不印存檔，快一點）

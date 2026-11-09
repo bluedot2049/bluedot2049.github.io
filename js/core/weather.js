@@ -4,7 +4,7 @@
 // 時間切成二十分鐘一格，每格抽一次籤，抽中的下雨，連著抽中就是一場長雨。雨從格子邊界前後錯開的一刻開始和停（交界兩邊共用同一個數，連著的格子才接得起來）。
 // 一場雨：雲先聚，起雨一分半由疏到密，雨勢跟著每一格的強弱慢慢起伏；收雨兩分鐘，雲幾分鐘內散開，地十到十五分鐘才乾（雨後）。
 // 毛毛雨為主，偶爾中雨，很少大雨。大約三成的時間是濕的（下著或雨後）。
-// ?rain=0 不下（無頭測試、空拍）、?rain=0.4 照這個雨量一直下、?rain=1 大雨、?rain=after 雨後。?debug 時 window.__rain：
+// ?rain=0 不下（無頭測試、空拍）、?rain=0.4 照這個雨量一直下、?rain=1 大雨、?rain=after 雨後、?rain=after:0.5 雨後乾到剩五成濕。?debug 時 window.__rain：
 //   __rain.force(0.4 | 'after' | null)　__rain.next() 下一場什麼時候　__rain.soon(秒) 幾秒後開始下　__rain.end(秒) 幾秒後停
 // 沙塵（蜃樓）：空氣裡一直有一層塵，濃淡另外排（見檔尾的 Dust）。?dust=0 沙停、?dust=0.5 平常、?dust=1 風沙，固定不動；?debug 時 window.__dust
 import { hash, seedOf, serverNow, syncTime } from './servertime.js';
@@ -90,6 +90,9 @@ export function nextRain(zone, now, hours = 72) {
   return null;
 }
 
+// ?rain= 和 force() 的值：'after'、'after:0.5'（雨後還剩幾成濕）照字串留著，數字是雨量，其他的不固定
+const forcedOf = (v) => (v == null ? null : /^after(:[\d.]+)?$/.test(v) ? v : Number.isFinite(+v) ? clamp01(+v) : null);
+
 // 一區的天氣，每一幀 update 一次。dock 是海上的漁船收工了幾成：跟著雲，晚一分半（一盞一盞回港、雨停了再一盞一盞出海）
 export class Weather {
   constructor(zone, params) {
@@ -97,7 +100,7 @@ export class Weather {
     this.shift = 0;   // 測試用：往後跳了幾毫秒（__rain.soon、end）
     Object.assign(this, { rain: 0, wet: 0, cloud: 0, wind: 0, dock: 0 });
     const q = params?.get('rain');
-    this.forced = q == null ? null : q === 'after' ? 'after' : Number.isFinite(+q) ? clamp01(+q) : null;
+    this.forced = forcedOf(q);
     syncTime();
     if (params?.has('debug')) window.__rain = this;
     this.update();
@@ -106,8 +109,8 @@ export class Weather {
   update() {
     const f = this.forced;
     if (f != null) {
-      const after = f === 'after', r = after ? 0 : f;
-      return Object.assign(this, { rain: r, wet: after || r > 0 ? 1 : 0, cloud: after ? 0.15 : r > 0 ? 1 : 0, wind: r > 0 ? 0.25 + 0.75 * r : 0, dock: after ? 0.3 : r > 0 ? 0.8 : 0 });
+      const after = typeof f === 'string', r = after ? 0 : f;
+      return Object.assign(this, { rain: r, wet: after ? (f.length > 6 ? clamp01(+f.slice(6)) : 1) : r > 0 ? 1 : 0, cloud: after ? 0.15 : r > 0 ? 1 : 0, wind: r > 0 ? 0.25 + 0.75 * r : 0, dock: after ? 0.3 : r > 0 ? 0.8 : 0 });
     }
     const now = serverNow() + this.shift;
     Object.assign(this, weatherAt(this.zone, now));
@@ -115,9 +118,9 @@ export class Weather {
     return this;
   }
 
-  // 測試用：固定成一個雨量（'after' 是雨後），null 回到照時間
+  // 測試用：固定成一個雨量（'after' 是雨後、'after:0.5' 雨後乾到一半），null 回到照時間
   force(v = null) {
-    this.forced = v === 'after' ? 'after' : v == null ? null : clamp01(+v);
+    this.forced = forcedOf(v);
     return this.update();
   }
 

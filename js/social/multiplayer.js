@@ -10,7 +10,8 @@ import { CAMERAS } from '../camera/cameras.js';
 import { Eye } from '../camera/eye.js';
 import { sanitizeLook, lookKey, presetLook, lookFromOutfit, toOutfit, ROBES } from '../avatar/looks.js';
 import { drawEmote } from './emotes.js';
-import { isKao, kaoParts, kaoText, kaoGrew } from '../avatar/kaomoji-parts.js';
+import { isKao, kaoParts, kaoGrew, kaoFaceNew, FACES } from '../avatar/kaomoji-parts.js';
+import { emojiCanvas } from '../core/emoji.js';
 import { TAG_LAYER } from '../core/scenery.js';
 import { pref } from '../save/prefs.js';
 
@@ -175,33 +176,15 @@ function emoteTexture(e) {
   return emoteTextures.get(e);
 }
 
-// 頭上冒的顏文字：一般字型寫，描深色邊、金色字、同一種光暈。a 是寬高比。組合上千種，存太多就整批丟掉重畫
+// 頭上冒的表情：只冒臉那層的系統 emoji（core/emoji.js），十來張，畫過就留著
 const kaoTextures = new Map();
-function kaoTexture(text) {
-  if (!kaoTextures.has(text)) {
-    if (kaoTextures.size > 48) { kaoTextures.forEach((k) => k.t.dispose()); kaoTextures.clear(); }
-    const c = document.createElement('canvas'), g = c.getContext('2d'), H = 80;
-    const font = `600 52px ${getComputedStyle(document.body).fontFamily}`;
-    g.font = font;
-    const W = Math.ceil(g.measureText(text).width) + 28;
-    c.width = W;
-    c.height = H;
-    g.font = font;
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.lineJoin = 'round';
-    g.lineWidth = 9;
-    g.strokeStyle = 'rgba(40, 24, 12, .5)';
-    g.strokeText(text, W / 2, H / 2 + 2);
-    g.shadowColor = 'rgba(255, 205, 130, .85)';
-    g.shadowBlur = 10;
-    g.fillStyle = '#f6dba6';
-    g.fillText(text, W / 2, H / 2 + 2);
-    const t = new THREE.CanvasTexture(c);
+function kaoTexture(f) {
+  if (!kaoTextures.has(f)) {
+    const t = new THREE.CanvasTexture(emojiCanvas(FACES[f].e));
     t.colorSpace = THREE.SRGBColorSpace;
-    kaoTextures.set(text, { t, a: W / H });
+    kaoTextures.set(f, t);
   }
-  return kaoTextures.get(text);
+  return kaoTextures.get(f);
 }
 
 export class Multiplayer {
@@ -351,7 +334,7 @@ export class Multiplayer {
     const aim = p.camAim;
     const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room, s: p.sitCode, f: p.character.foodCode, a: aim ? aim.grip + 1 : 0, q: aim ? Math.round(aim.pitch * 20) / 20 : 0, w: this.away ? 1 : 0, l: Math.round((p.gaze || 0) * 20) / 20, v: Math.round((p.gazeP || 0) * 20) / 20 };
     if (p.gazeId) st.g = p.gazeId === 'self' ? this.id : p.gazeId;
-    // k：擺著的顏文字（kaomoji-parts.js 的代號），b：撐著，n：頭上不冒字（表情盤「頭上字」關了「自己」）。沒擺不送
+    // k：擺著的顏文字（kaomoji-parts.js 的代號），b：撐著，n：頭上不冒（表情盤「頭上表情」關了「自己」）。沒擺不送
     const ch = p.character;
     if (ch.kao) {
       st.k = ch.kao;
@@ -566,12 +549,13 @@ export class Multiplayer {
     this.addFx(group, ch.dims.topY + 0.22, emoteTexture(e), 1, 0.45);
   }
 
-  // 頭上冒出顏文字（kaomoji-parts.js 的代號）：同一個人換了組合，舊的那串直接收掉
+  // 頭上冒出表情（kaomoji-parts.js 的代號）：只冒臉那層的 emoji，手和姿勢看身體。同一個人換了臉，舊的那個直接收掉
   popKao(ch, code) {
-    if (!code) return;
-    const group = ch.group, k = kaoTexture(kaoText(...kaoParts(code)));
+    const fc = kaoParts(code)[0];
+    if (!fc || !FACES[fc]?.e) return;
+    const group = ch.group;
     for (const f of this.fx) if (f.group === group && f.kao) f.t = Math.max(f.t, EMOTE_TIME - 0.15);
-    this.addFx(group, ch.dims.topY + 0.18, k.t, k.a, 0.2).kao = true;
+    this.addFx(group, ch.dims.topY + 0.24, kaoTexture(fc), 1, 0.36).kao = true;
   }
 
   addFx(group, y, map, a, size) {
@@ -752,12 +736,12 @@ export class Multiplayer {
       if (t.s) o.ch.lift = seat ? seat.lift : t.s === -3 ? 0.3 : 0.02;   // -3 坐在邊上垂腳（player.sitCode）
       o.ch.lying = t.s === -2;
       if (t.f !== o.ch.foodCode) o.ch.setFoodCode(t.f);
-      // 顏文字：照收到的變了才換（角色走起來會自己放下，不能每幀拿舊的蓋回去）。只是收掉幾層不冒字、不出聲
+      // 顏文字：照收到的變了才換（角色走起來會自己放下，不能每幀拿舊的蓋回去）。只是收掉幾層不出聲；頭上只在換了臉時冒
       if (t.k !== o.kaoIn) {
-        const grew = kaoGrew(o.kaoIn ?? 0, t.k);
+        const grew = kaoGrew(o.kaoIn ?? 0, t.k), face = kaoFaceNew(o.kaoIn ?? 0, t.k);
         o.kaoIn = t.k;
         o.ch.setKao?.(t.k);
-        if (grew && !t.n && pref('kaoTagOthers')) this.popKao(o.ch, t.k);
+        if (face && !t.n && pref('kaoTagOthers')) this.popKao(o.ch, t.k);
         if (grew) this.events.onKao?.(o.ch, t.k);
       }
       o.ch.brace?.(!!t.b);

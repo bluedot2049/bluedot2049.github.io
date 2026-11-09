@@ -32,6 +32,8 @@ export const TONES = {
   '畫廊01': { density: 0, falloff: 0.04, base: -0.6, start: 6, maxFog: 1, far: 0, farAir: 0, drift: 0, driftSize: 160, scatter: 0, scatterPow: 6, exposure: 0, desat: 0, keep: 0.75, cool: 0, sat: 1, vivid: 0, contrast: 1, glow: 1, shadow: '#000000', gain: '#ffffff', scatterColor: '#ffe2b8', curves: { l: [[0, 0], [0.2734, 0.3665], [1, 1]] } },
   // 櫻花01（汀）：暗部提亮、亮部稍壓，紅和藍的暗部抬起；飽和、對比拉高，綠往藍綠推，發光的幾層亮很多（1.63）
   '櫻花01': { density: 0, falloff: 0.04, base: -0.6, start: 6, maxFog: 1, far: 0, farAir: 0, drift: 0, driftSize: 160, scatter: 0, scatterPow: 6, exposure: 0.08, desat: 0, keep: 0.76, cool: 1.01, sat: 1.31, vivid: 0.2, contrast: 1.17, glow: 1.63, shadow: '#000000', gain: '#ffffff', scatterColor: '#ffe2b8', curves: { l: [[0, 0], [0.0721, 0.1757], [0.6622, 0.6568], [1, 1]], r: [[0, 0], [0.2289, 0.3033], [0.6329, 0.6142], [1, 1]], b: [[0, 0], [0.0668, 0.08], [0.2582, 0.3564], [1, 1]] } },
+  // 演唱會01（使用者調的）：曝光 +0.4、對比收一點（0.89）、發光 1.31，亮度曲線把偏暗的中間調抬起，紅的中間調壓一點（不偏粉）
+  '演唱會01': { density: 0, falloff: 0.04, base: -0.6, start: 6, maxFog: 1, far: 0, farAir: 0, drift: 0, driftSize: 160, scatter: 0, scatterPow: 6, exposure: 0.4, desat: 0, keep: 0.85, cool: 0.08, sat: 1, vivid: 0.29, contrast: 0.89, glow: 1.31, shadow: '#0e1218', gain: '#ffffff', scatterColor: '#ffe2b8', curves: { l: [[0, 0], [0.1864, 0.2488], [0.5399, 0.7431], [1, 1]], r: [[0, 0], [0.3273, 0.2833], [0.6159, 0.5598], [1, 1]], b: [[0, 0], [0.0801, 0.076], [1, 1]] } },
   // 只把顏色放回原樣，霧不動：分區裡想讓某一塊看起來沒調過時用
   不調色: { exposure: 0, desat: 0, cool: 0, sat: 1, vivid: 0, contrast: 1, glow: 1, shadow: '#000000', gain: '#ffffff', curves: { l: [[0, 0], [1, 1]], r: [[0, 0], [1, 1]], g: [[0, 0], [1, 1]], b: [[0, 0], [1, 1]] } },
 };

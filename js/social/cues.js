@@ -62,7 +62,6 @@ export class Cues {
     Object.assign(this, { mp, party, photo, player, character, attention, ambience, flashFx, scene, ui });
     this.count = null;          // 自己在數：{ t, beats }
     this.fx = [];               // 別人的口令浮在他相機上：{ o, k, t, beats, s }
-    this.lockWant = null;       // 剛站上站位：等那個鏡頭對到自己就看著它 { id, until }
     this.last = {};
     this.mouse = null;
     this.tmp = new THREE.Vector3();
@@ -161,7 +160,10 @@ export class Cues {
     if (voices?.[k]) this.flashFx.sound(at, voices[k], 1, 0.4);
     else this.flashFx.sound(at, EYE_VOICE[k][0], EYE_VOICE[k][1], 0.35);
     o.ch.cue?.(k);
-    if (k === 'done') this.party?.dropSpotOf(o.id);
+    if (k === 'done') {
+      this.party?.dropSpotOf(o.id);
+      this.attention.release(o.id);   // 好了：看著他的鏡頭的放掉
+    }
     this.fx.push({ o, k, t: 0, s: this.sprite(cueTexture(k), at) });
   }
 
@@ -187,16 +189,15 @@ export class Cues {
     return out;
   }
 
-  // 走到隊友給的站位：轉身對著他的鏡頭，等鏡頭對到自己就看著它（mpId 是他在 multiplayer 的代號）
+  // 走到隊友給的站位：轉身對著他的鏡頭，等鏡頭對到自己就看著它（mpId 是他在 multiplayer 的代號；attention.expect 站著都等，走開就不等）
   arrived(mpId, face) {
     if (face != null && !this.player.shoulder) this.player.faceYaw = face;
-    if (mpId) this.lockWant = { id: mpId, until: performance.now() + 4000 };
+    if (mpId) this.attention.expect(mpId);
   }
 
   // ───────── 每一幀 ─────────
 
   update(dt) {
-    const now = performance.now();
     // 自己數：放下相機、進照相館就不數了
     const c = this.count;
     if (c) {
@@ -236,15 +237,6 @@ export class Cues {
       if (f.done) this.drop(f);
     }
     this.fx = this.fx.filter((f) => !f.done);
-    // 站上站位：拍的人的鏡頭對到自己就看著它
-    const w = this.lockWant;
-    if (w) {
-      if (now > w.until) this.lockWant = null;
-      else if (this.attention.seen.get(w.id)?.on) {
-        this.attention.lock = w.id;
-        this.lockWant = null;
-      }
-    }
     // 手機小網上的「站這」：沒同行就不放
     const solo = !this.party?.together;
     if (this.spotBtn && this.spotBtn.hidden !== solo) this.spotBtn.hidden = solo;

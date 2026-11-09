@@ -52,6 +52,27 @@ function paint(geo, color, color2) {
   return g;
 }
 
+// 形狀語言（美術原則「一、建模」）：零件在自己的座標裡，由底到頂往旁邊推，在擺放之前做。
+// lean [x, z]：頂端推多少公尺，一路線性＝整根歪。bow [x, z, apex]：中段往一邊鼓、兩頭不動＝單側 C 彎，
+// 鼓最多的地方在 apex（0.3 往上衝、0.7 往下垂，不要 0.5）。沒給就不動，亂數也不抽。
+function bend(g, lean, bow) {
+  const pos = g.attributes.position;
+  let y0 = Infinity, y1 = -Infinity;
+  for (let i = 0; i < pos.count; i++) { const y = pos.getY(i); if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  const span = y1 - y0 || 1, ap = bow ? Math.min(0.9, Math.max(0.1, bow[2] ?? 0.3)) : 0.3;
+  for (let i = 0; i < pos.count; i++) {
+    const t = (pos.getY(i) - y0) / span;
+    let dx = 0, dz = 0;
+    if (lean) { dx += lean[0] * t; dz += lean[1] * t; }
+    if (bow) {
+      const f = t < ap ? Math.sin(Math.PI / 2 * t / ap) : Math.cos(Math.PI / 2 * (t - ap) / (1 - ap));
+      dx += bow[0] * f; dz += bow[1] * f;
+    }
+    pos.setX(i, pos.getX(i) + dx); pos.setZ(i, pos.getZ(i) + dz);
+  }
+  g.computeVertexNormals();
+}
+
 // 一件家具的零件清單
 export class Kit {
   constructor(R) {
@@ -64,6 +85,7 @@ export class Kit {
   }
   add(geo, color, x, y, z, o = {}) {
     const g = paint(geo, color, o.color2);
+    if (o.lean || o.bow) bend(g, o.lean, o.bow);
     _e.set(o.rx || 0, o.ry || 0, o.rz || 0, 'YXZ');
     _q.setFromEuler(_e);
     _m.compose(_p.set(x, y, z), _q, _s.set(o.sx || 1, o.sy || 1, o.sz || 1));

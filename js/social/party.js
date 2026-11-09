@@ -66,6 +66,7 @@ const touch = () => document.body.classList.contains('touch');
 export const COLORS = ['#f0b060', '#82c4d6', '#e69088', '#a9d08a'];   // 琥珀、海藍、珊瑚、青苔，照入隊先後分
 const HAIL_PITCH = [1, 1.19, 0.86, 1.09];   // 每個顏色的哨子高低（音色本身一樣），錯開一成以上才聽得出來
 // 區域名牌上的字。不在這裡的區域照樣收，只是名牌寫「別的地方」
+const SHOW_RE = /^-?\d{1,10}\.\d{12,14}$/;   // 一場的代號：種子.開演時刻（concert.js 的 showKey）
 const zoneName = (z) => PLACES.find((d) => (d.to || d.dev) === z)?.name ?? '別的地方';
 // 自動說的話：收到代號自己組字（note 事件），不從網路收文字
 const NOTES = { go: (z) => `去${zoneName(z)}了`, at: (z) => `到${zoneName(z)}了` };
@@ -187,8 +188,9 @@ const _v = new THREE.Vector3(), _w = new THREE.Vector3();
 export class Party {
   // channel：隊伍頻道名稱的開頭，後面接隊伍代號；busy()：攝影模式或面板打開時回傳 true，這時不開打字框
   // ambience：放哨音（沒有就不出聲）
-  constructor({ mp, player, character, camera, scene, world, zone, ui, channel, busy, ambience }) {
-    Object.assign(this, { mp, player, character, camera, scene, world, zone, ui, prefix: channel, busy, ambience });
+  // show：這一區一場一場分開的（演唱會，zone 的 show）：{ key() 自己在哪一場, adopt(k) 隊友那場要不要換過去 }
+  constructor({ mp, player, character, camera, scene, world, zone, ui, channel, busy, ambience, show = null }) {
+    Object.assign(this, { mp, player, character, camera, scene, world, zone, ui, prefix: channel, busy, ambience, show });
     // { pid, me, j, guest, met }：隊伍代號、自己在隊伍裡的代號（換頁不變）、入隊時間、是不是答應別人的邀請進來的、真的跟隊友接上過沒有
     this.state = null;
     this.mates = new Map();         // 隊友代號 -> { m, s, j, zn, go, x, z, seen, el, bubble, heard, called }
@@ -364,7 +366,7 @@ export class Party {
   }
 
   // 報自己在哪：這一區的代號（找得到畫面上的角色）、區域、座標。
-  // a：還在等隊友回話　n：剛答應邀請、第一次進來　go：正要換頁去哪一區　pk：有照片給隊友湊過來看（peek.js）
+  // a：還在等隊友回話　n：剛答應邀請、第一次進來　go：正要換頁去哪一區　pk：有照片給隊友湊過來看（peek.js）　sh：在哪一場（演唱會）
   // 頻道還沒接上就不報，接上時馬上報一次
   beat() {
     if (!this.live) return;
@@ -372,7 +374,7 @@ export class Party {
     this.lastBeat = performance.now();
     this.send('hi', {
       s: this.mp.id, j: s.j, zn: this.zone, x: +p.x.toFixed(2), z: +p.z.toFixed(2), w: this.away ? 1 : 0,
-      a: this.asking ? 1 : 0, n: s.guest && !s.met ? 1 : 0, ...(this.going && { go: this.going }), ...(this.pk && { pk: this.pk }),
+      a: this.asking ? 1 : 0, n: s.guest && !s.met ? 1 : 0, ...(this.going && { go: this.going }), ...(this.pk && { pk: this.pk }), ...(this.show && { sh: this.show.key() }),
     });
   }
 
@@ -478,6 +480,16 @@ export class Party {
 
   // 渡船卡用：每一區有哪些隊友（顏色），還有一打開該翻到哪一區：
   // 剛從這裡出發的隊友去的地方優先（同船），再來是隊友最多的那區
+  // 隊友正在 zone 的哪一場（演唱會）：從樹洞進去時帶著，進到同一場；好幾場就挑最早開演的
+  showFor(zone) {
+    let best = null;
+    for (const o of this.mates.values()) {
+      if (o.zn !== zone || o.go || !o.sh) continue;
+      if (!best || +o.sh.split('.')[1] < +best.split('.')[1]) best = o.sh;
+    }
+    return best;
+  }
+
   ferryInfo() {
     const at = new Map();
     let lead = null, leadT = -Infinity;
@@ -517,7 +529,10 @@ export class Party {
     const go = isZone(p.go) ? p.go : null;
     if (go && go !== o.go) o.goAt = performance.now();   // 什麼時候出發的：渡船卡翻到最近出發的那個人去的地方
     const pk = Number.isInteger(p.pk) && p.pk > 0 && p.pk < 2 ** 31 ? p.pk : 0;
-    Object.assign(o, { s: p.s, j: p.j, zn: p.zn, go, x: p.x, z: p.z, w: p.w === 1 ? 1 : 0, pk, seen: performance.now() });
+    const sh = typeof p.sh === 'string' && SHOW_RE.test(p.sh) ? p.sh : null;
+    Object.assign(o, { s: p.s, j: p.j, zn: p.zn, go, x: p.x, z: p.z, w: p.w === 1 ? 1 : 0, pk, sh, seen: performance.now() });
+    // 同一區、隊友在另一場（兩個人差不多同時進場）：交給 main 照 show.adopt 決定換不換過去
+    if (sh && this.show && p.zn === this.zone && !go && sh !== this.show.key()) this.onShow?.(sh);
     // 對方還沒聽到任何隊友：多半是剛答應、剛渡海，頻道還沒接好，漏掉了這邊上一次的回報。馬上再報一次，不讓他等五秒
     if (p.a === 1) this.beatSoon();
     if (!fresh) return;

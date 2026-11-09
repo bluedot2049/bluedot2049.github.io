@@ -12,6 +12,7 @@ import { TD } from './outdoor-map.js';
 import { StudyNight } from '../../audio/study.js';
 import { VestibuleSound } from './vestibule-sound.js';
 import { RadioCard } from './radio-card.js';
+import { EaselCard } from './easel-card.js';
 import { CAMERAS, SOON } from '../../camera/cameras.js';
 import { Ask } from './ask.js';
 import { CellarVoice } from './cellar-voice.js';
@@ -46,7 +47,7 @@ export const beast = {
     { x: 0, z: -15, place: '長廊', room: 1 },
     { x: 1.8, z: -24.5, place: '展廳', room: 2 },
     { x: 4, z: -34.4, place: '陽台', room: 3 },
-    { x: -6, z: -47, place: '原野', room: 3 },
+    { x: -10.5, z: -49, place: '原野', room: 3 },   // 原本 (-6, -47)，2026-11-09 那裡放了畫架
     { x: 9, z: -56.5, place: '原野', room: 3 },
     { x: -11, z: -58, place: '原野', room: 3 },
     { x: 1, z: -50, place: '大樹下', room: 3 },
@@ -110,6 +111,11 @@ export function radio({ world, ambience, player, camera }) {
   return world.radio ? new RadioCard({ world, ambience, player, camera }) : null;
 }
 
+// 原野的畫架（easel-card.js）：互動鍵「畫畫」打開面板，畫裡的人是自己的角色（look 回傳現在的造型）。main.js 建好角色、鏡頭以後叫這裡
+export function easel({ world, player, camera, look }) {
+  return world.outdoor?.easel ? new EaselCard({ world, player, camera, look }) : null;
+}
+
 // 地下室會說話的那幅畫（cellar-voice.js）：站到畫前互動鍵「聊天」。main.js 建好角色、鏡頭以後叫這裡
 export function cellarVoice({ world, player, camera }) {
   return world.cellar?.paintings.some((p) => p.data.talks) ? new CellarVoice({ world, player, camera }) : null;
@@ -152,8 +158,12 @@ export function attention({ world, player }) {
 // 從別區搭船回來（from=區名）：站在小划船往草原走幾步的地方，面向草原，鏡頭就在角色背後；走歸門的（from=door）才回前廳
 // ?go=房間.畫 是在別區點了清單裡的畫，到了直接站到那幅畫前面
 export function arrive({ player, world, params, ui }) {
-  const ferry = world.exits[0], from = params.get('from');
-  if (from && from !== 'door' && ferry) {
+  const ferry = world.exits[0], from = params.get('from'), ho = world.outdoor?.hollow;
+  if (from === 'concert' && ho) {
+    // 從演唱會出來：站在大樹的樹洞前，背對樹洞往外走
+    player.place(ho.x + ho.n.x * 2.4, ho.z + ho.n.z * 2.4, Math.atan2(ho.n.x, ho.n.z));
+    world.frontDoor?.shut(0, true);
+  } else if (from && from !== 'door' && ferry) {
     player.place(ferry.x, ferry.z + 1.8, 0);
     world.frontDoor?.shut(0, true);
   } else if (world.frontDoor) {
