@@ -6,9 +6,11 @@
 // 點亮著的那格是拿掉那一層；常用點一下擺整組，正擺著就放下。常用一格寫成臉的 emoji＋手的 emoji 或小圖＋姿勢小圖。
 // 三層各一個顏色（門口讀取條的色票）：表情珊瑚、動作薰衣草、姿勢草綠，排名和格子的框照層分色。
 // 擺多久照性子：表情一直留著；動作寫了 once 的（揮手、拍手、敬禮…）做完一輪自己收，其他留著；姿勢一走就放下（character.js 的 kaoPose）。
-// 以上是在盤上擺的。電腦數字鍵 1–5 是做一下（quick）：擺 4 秒回到原本的、按住撐到放開；在盤上動過就變回擺著。
+// 以上是在盤上擺的。電腦數字鍵 1–5 是做一下（quick）：擺 4 秒全部放下（盤上擺的被換掉、不擺回來）、按住撐到放開；在盤上動過就變回擺著。
 // 擺著時按住表情鍵不放是撐（character.js 的 brace）。常用五組跟著人走（progress.js 的 kaoFav，數字鍵 1–5，0 是空格），一開始全空、玩家自己組：
-// 常用最前面一顆「＋存」把現在擺的接在最後面（五格滿了是「已滿」，要先移出一組），擺的已經在常用裡就變「－移出」；手把 X 同一顆。
+// 常用那排最前面三顆（2026-11-09 改明確）：「復原」全部放下回到原本的樣子（沒擺東西時暗著）；「＋存」只存：把現在擺的接在最後面，
+// 已經存過是「已存」（再按閃一下存在哪格）、五格滿了是「已滿」（再按閃「刪除」），手把 X 同一顆；「刪除」進刪除狀態：每格標 ×、點哪格刪哪格，
+// 按「完成」、刪光、收盤就出來。存和刪各一顆，不用先擺上那組才能移出。
 // 看哪（擺著表情時頭看哪，prefs 的 kaoGaze）：自動＝身邊有人就對著那個人做（隊友、正在看的優先），沒人看鏡頭；鏡頭＝一直看跟拍鏡頭；
 // 隨意＝表情不管頭。自動、鏡頭站著轉不到時身體轉過來（attention.js 的 emote、aimFor，player.js 的 poseTurn）。數字鍵做一下、盤上擺著都照它；
 // 點別人的角色揮手那一下不算（頭看他）；被別人拍時互動鍵的看鏡、自己在拍照樣優先。電腦 L（keymap 的 kaoLook，盤收著也能按，提示一行）、手把盤開著時 R
@@ -66,6 +68,7 @@ export class KaoPanel {
     this.held = false;          // 表情鍵還按著
     this.painted = -1;          // 畫的時候角色擺著什麼
     this.onceT = 0;             // 動作做完一輪就收的計時
+    this.deleting = false;      // 常用在刪除狀態：點格子是刪掉那格
     this.brief = null;          // 快捷鍵做一下：{ i 第幾組, back 做完回到哪組, until 到什麼時候, held 鍵還按著 }
     this.el = document.createElement('div');
     this.el.id = 'kaopanel';
@@ -118,7 +121,10 @@ export class KaoPanel {
     const row = (cls, name, list) => `<div class="kp-row ${cls}"><span class="kp-name">${name}</span><div class="kp-chips">${list}</div></div>`;
     const chips = (act, ids) => ids.map((i) => `<button type="button" data-act="${act}" data-i="${i}"></button>`).join('');
     const poses = PANEL.pose.map(([l, i]) => `<button type="button" class="kp-pose" data-act="${l === 'h' ? 'hand' : 'body'}" data-i="${i}"></button>`).join('');
-    this.el.innerHTML = row('kp-fav', '常用', '<button type="button" class="kp-keep" data-act="keep"></button>' + chips('fav', [0, 1, 2, 3, 4]) + '<small class="kp-empty">擺好一組，按＋存</small>')
+    const tools = '<button type="button" class="kp-reset" data-act="reset" title="全部放下，回到原本的樣子">復原</button>'
+      + '<button type="button" class="kp-keep" data-act="keep"></button>'
+      + '<button type="button" class="kp-del" data-act="del" title="刪掉常用裡的一組">刪除</button>';
+    this.el.innerHTML = row('kp-fav', '常用', tools + chips('fav', [0, 1, 2, 3, 4]) + '<small class="kp-empty">擺好一組，按＋存</small>')
       + row('kp-face', '表情', chips('face', PANEL.face))
       + row('kp-hand', '動作', chips('hand', PANEL.hand))
       + row('kp-body', '姿勢', poses)
@@ -152,8 +158,8 @@ export class KaoPanel {
             + (cf ? emo(FACES[cf].e || FACES[cf].t) : '')
             + (ch ? (HAND_EMOJI.has(ch) ? emo(HANDS[ch].e) : this.pic(kaoCode(0, ch, 0), want)) : '')
             + (cb ? this.pic(kaoCode(0, 0, cb), want) : '');
-          label = kaoName(cf, ch, cb);
-          on = favs[i] === now && now !== 0;
+          label = favs[i] ? (this.deleting ? '刪掉 ' : '') + kaoName(cf, ch, cb) : '';
+          on = !this.deleting && favs[i] === now && now !== 0;
           break;
         }
         case 'face': html = emo(FACES[i].e); label = FACES[i].n; on = i === f; break;
@@ -173,14 +179,23 @@ export class KaoPanel {
       this.asked = lk + '|' + want.map((j) => j.id).join();
       request(want, () => { if (this.open) { this.asked = null; this.render(); } });
     }
-    // ＋存：沒擺東西時暗著；擺的已經在常用裡就是移出；五格滿了寫「已滿」、暗著
-    const keep = this.el.querySelector('.kp-keep'), saved = now !== 0 && favs.includes(now), full = !saved && favs.filter(Boolean).length >= 5;
-    const kh = (cls.contains('pad') ? `<kbd>${padBtn(2)}</kbd>` : '') + (saved ? '－移出' : full ? '已滿' : '＋存');
+    // 復原：沒擺東西時暗著
+    this.el.querySelector('.kp-reset').classList.toggle('off', !now);
+    // ＋存：沒擺東西、已經存過（已存）、五格滿了（已滿）、刪除狀態時暗著
+    const keep = this.el.querySelector('.kp-keep'), saved = now !== 0 && favs.includes(now), count = favs.filter(Boolean).length, full = !saved && count >= 5;
+    const kh = (cls.contains('pad') ? `<kbd>${padBtn(2)}</kbd>` : '') + (saved ? '已存' : full ? '已滿' : '＋存');
     if (keep.dataset.html !== kh) { keep.dataset.html = kh; keep.innerHTML = kh; }
-    keep.classList.toggle('off', !now || full);
-    keep.classList.toggle('saved', saved);
-    keep.setAttribute('aria-label', saved ? '從常用移出' : full ? '常用五格滿了，先移出一組' : '存進常用');
-    this.el.querySelector('.kp-empty').hidden = favs.some(Boolean);
+    keep.classList.toggle('off', !now || full || saved || this.deleting);
+    keep.setAttribute('aria-label', saved ? '這組已經在常用裡' : full ? '常用五格滿了，先刪除一組' : '存進常用');
+    // 刪除：常用是空的就不出現；刪除狀態寫「完成」、亮著，格子標 ×
+    if (!count) this.deleting = false;
+    const del = this.el.querySelector('.kp-del');
+    del.hidden = !count;
+    del.textContent = this.deleting ? '完成' : '刪除';
+    del.classList.toggle('on', this.deleting);
+    del.setAttribute('aria-pressed', this.deleting);
+    this.el.querySelector('.kp-fav').classList.toggle('deleting', this.deleting);
+    this.el.querySelector('.kp-empty').hidden = !!count;
     for (const [act, id] of [['tag-mine', 'kaoTagMine'], ['tag-others', 'kaoTagOthers']]) {
       const el = this.el.querySelector(`[data-act="${act}"]`), on = pref(id);
       el.classList.toggle('on', on);
@@ -244,6 +259,7 @@ export class KaoPanel {
   close() {
     if (!this.open) return;
     this.open = false;
+    this.deleting = false;
     this.el.classList.remove('open');
     document.body.classList.remove('kao-open');
     // 開著時做一輪就收的手不收；關了從現在起再做完一輪才放下，不在關的瞬間切掉
@@ -269,10 +285,16 @@ export class KaoPanel {
   // 點了面板上的一顆
   press(b) {
     const i = +b.dataset.i, [f, h, bd] = kaoParts(this.ch.kao);
+    if (b.dataset.act === 'fav' && this.deleting) return this.remove(i);
     if (/^(fav|face|hand|body)$/.test(b.dataset.act)) this.brief = null;   // 在盤上動過就是擺著，不再自己收
     switch (b.dataset.act) {
       case 'fav': return this.fav(i);
       case 'keep': return this.keep();
+      case 'reset': return this.reset();
+      case 'del':
+        this.deleting = !this.deleting;
+        sfx('tap');
+        return this.render();
       case 'face': return this.set(kaoCode(i === f ? 0 : i, h, bd));
       case 'hand': return this.set(kaoCode(f, i === h ? 0 : i, bd));
       case 'body': return this.set(kaoCode(f, h, i === bd ? 0 : i));
@@ -322,16 +344,17 @@ export class KaoPanel {
     this.set(this.ch.kao === c ? 0 : c);
   }
 
-  // 快捷鍵（電腦數字鍵）做一下：按一下擺 BRIEF 秒（做一輪就收的動作等它做完），時間到回到按之前擺的；按住撐著、放開才收。
+  // 快捷鍵（電腦數字鍵）做一下：按一下擺 BRIEF 秒（做一輪就收的動作等它做完），時間到全部放下；按住撐著、放開才收。
+  // 盤上擺著的會被換掉、做完不再擺回來（不然 1–5 做完，盤上那組又冒出來一次）。
   // 做一下時再按同一個收掉、按別組換過去重算；本來就擺著這組（盤上擺的）按了是放下
   quick(i) {
     const c = favorites()[i], q = this.brief;
     if (!c) return;
     if (q && q.i === i) return void this.endQuick();
     if (!q && this.ch.kao === c) return void this.set(0);
-    const back = q ? q.back : this.ch.kao, h = kaoParts(c)[1];
+    const h = kaoParts(c)[1];
     this.set(c);
-    this.brief = { i, back, held: true, until: performance.now() + Math.max(BRIEF, (h && HANDS[h].once) || 0) * 1000 };
+    this.brief = { i, back: 0, held: true, until: performance.now() + Math.max(BRIEF, (h && HANDS[h].once) || 0) * 1000 };
   }
 
   // 快捷鍵放開（換視窗也算放開）：按超過 BRIEF 秒的現在收，沒到的照時間收
@@ -356,16 +379,39 @@ export class KaoPanel {
     if (q) this.set(q.back);
   }
 
-  // ＋存（手把 X）：現在擺的接在常用最後面，五格滿了就不能存（要先移出一組）；已經在常用裡就移出，後面的往前補
+  // ＋存（手把 X）：現在擺的接在常用最後面。只存不刪：已經存過閃那一格告訴你在哪，五格滿了閃「刪除」（要先刪一組）
   keep() {
     const now = this.ch.kao, favs = favorites().filter(Boolean), at = favs.indexOf(now);
-    if (!now || (at < 0 && favs.length >= 5)) return void sfx('deny');
-    const list = at >= 0 ? favs.filter((c) => c !== now) : [...favs, now];
-    setFavorites([...list, 0, 0, 0, 0, 0].slice(0, 5));
-    sfx(at >= 0 ? 'down' : 'seal');
+    if (!now || this.deleting) return void sfx('deny');
+    if (at >= 0) { sfx('deny'); return this.flash(`.kp-fav button[data-i="${at}"]`); }
+    if (favs.length >= 5) { sfx('deny'); return this.flash('.kp-del'); }
+    setFavorites([...favs, now, 0, 0, 0, 0, 0].slice(0, 5));
+    sfx('seal');
     this.render();
-    if (at >= 0) return;
-    const b = this.el.querySelector(`.kp-fav button[data-i="${list.length - 1}"]`);
+    this.flash(`.kp-fav button[data-i="${favs.length}"]`);
+  }
+
+  // 刪除狀態點了第 i 格：刪掉，後面的往前補（數字鍵跟著往前）
+  remove(i) {
+    const favs = favorites();
+    if (!favs[i]) return;
+    setFavorites([...favs.filter((c, j) => c && j !== i), 0, 0, 0, 0, 0].slice(0, 5));
+    sfx('down');
+    this.render();
+  }
+
+  // 復原：三層全部放下，做一下的也收掉，回到原本站著的樣子
+  reset() {
+    if (!this.ch.kao) return void sfx('deny');
+    this.brief = null;
+    this.set(0);
+    sfx('down');
+  }
+
+  // 閃一下那一顆，捲過去看得到
+  flash(sel) {
+    const b = this.el.querySelector(sel);
+    if (!b) return;
     b.classList.remove('flash');
     void b.offsetWidth;
     b.classList.add('flash');

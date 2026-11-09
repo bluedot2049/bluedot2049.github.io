@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { Kit, mergeBucket } from '../../core/props.js';
 import { HEADS } from '../../avatar/heads.js';
 import { RACES, SKINS } from '../../avatar/looks.js';
+import { RELIGHT_SPEED } from './concert-stage.js';
 
 const NECK = 0.8, SH = [0.19, 0.72];   // 頭和肩膀的關節（跟 Character 一樣的比例）
 // 記號色：組幾何時先用這三色畫「膚色、嘴邊、袍子」，合併後照顏色標上 aMat（1 膚、2 嘴邊、3 袍子、0 照原色），記號換成白的；
@@ -85,9 +86,9 @@ const VERT_HEAD = /* glsl */ `
   attribute vec3 aMe;   // 種子、離舞台多遠、面向（yaw）
   attribute vec3 aSkin, aRobe;   // 這個人的膚色、袍子色
   attribute vec3 aMe2;           // 在哪一區的個性（0 一般、1 虔誠、2 狂熱、3 燭光）、固定的樣子（-1 沒有）、拿不拿大燈
-  uniform float uBeat, uKick, uHeat, uPhrase, uPhraseT, uWave, uT;
+  uniform float uBeat, uKick, uHeat, uPhrase, uPhraseT, uWave, uT, uSnuff, uRelight;
   uniform vec2 uPlayer;
-  varying float vRim, vEmis, vFace;
+  varying float vRim, vEmis, vFace, vZ;
   float h1(float s, float k) { return fract(sin(s * 127.1 + k * 311.7) * 43758.5453); }
   mat3 rX(float a) { float c = cos(a), s = sin(a); return mat3(1., 0., 0., 0., c, s, 0., -s, c); }
   mat3 rZ(float a) { float c = cos(a), s = sin(a); return mat3(c, s, 0., -s, c, 0., 0., 0., 1.); }
@@ -141,12 +142,15 @@ const VERT_BODY = /* glsl */ `
     mat3 m = rX(ax) * rZ(left ? -az : az);
     p = m * (p - q) + q; n = m * n;
     if (part >= 4 && candle < 0.5 && aMe2.z < 0.5) p = vec3(0.0, -20.0, 0.0);   // 沒舉蠟燭的人蠟燭收起來（拿大燈的人一直拿著）
+    // 靜默那一拍火苗全熄；日出時從台前往後一波波點回來（跟 concert-obscura.js 的 candleGate 同一個波）
+    if (part == 5 && (uSnuff > 0.5 || (uRelight >= 0.0 && dist / ${RELIGHT_SPEED.toFixed(1)} > uRelight))) p = vec3(0.0, -20.0, 0.0);
   }
   mat3 bm = rZ(body.y) * rX(body.z);
   p = bm * p; n = bm * n;
   p.y += body.w;
   // 你走過去，人往兩邊讓開（世界座標算，再轉回這個人的方向）
   vec3 at = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+  vZ = at.z;
   vec2 d = at.xz - uPlayer; float dl = length(d);
   if (dl < 1.7 && dl > 0.001) { vec2 push = d / dl * (1.7 - dl) * 0.85; float c = cos(-yaw), s = sin(-yaw); p.x += push.x * c - push.y * s; p.z += push.x * s + push.y * c; }
   vec3 transformed = p;
@@ -166,6 +170,7 @@ export class Crowd {
     this.u = {
       uBeat: { value: 0 }, uKick: { value: 0 }, uHeat: { value: 0 }, uPhrase: { value: 0 }, uPhraseT: { value: 0 }, uWave: { value: 99 }, uT: { value: 0 },
       uPlayer: { value: new THREE.Vector2(999, 999) }, uRim: { value: new THREE.Color() }, uCandle: { value: new THREE.Color(1, 0.65, 0.3) },
+      uSnuff: { value: 0 }, uRelight: { value: -1 }, uDawn: { value: -99 }, uDawnA: { value: 0 }, uDawnCol: { value: new THREE.Color() },
     };
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
     mat.onBeforeCompile = (sh) => {
@@ -178,8 +183,8 @@ export class Crowd {
         else if (mt == 3) vColor.rgb = aRobe;`);
       // 台上的燈照在布上：邊光乘布自己的顏色（酒紅照亮還是酒紅，不會整片洗成米白）；背對舞台的那面壓到一成（從後面看是一片剪影），
       // 外緣一圈輪廓光（看的方向跟表面越平行越亮），就是演唱會照片裡台下剪影的樣子。只是幾行運算，不加燈
-      sh.fragmentShader = 'uniform vec3 uRim, uCandle; uniform float uT; varying float vRim, vEmis, vFace;\n' + sh.fragmentShader
-        .replace('#include <opaque_fragment>', 'outgoingLight *= mix(0.1, 1.0, smoothstep(-0.2, 0.6, vFace));\n float fres = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 2.5);\n outgoingLight += uRim * vRim * diffuseColor.rgb * 2.2 + uRim * fres * fres * (0.25 + 2.2 * diffuseColor.rgb);\n if (vEmis > 0.5) outgoingLight = uCandle * (0.85 + 0.15 * sin(uT * 23.0 + gl_FragCoord.x));\n#include <opaque_fragment>');
+      sh.fragmentShader = 'uniform vec3 uRim, uCandle, uDawnCol; uniform float uT, uDawn, uDawnA; varying float vRim, vEmis, vFace, vZ;\n' + sh.fragmentShader
+        .replace('#include <opaque_fragment>', 'float front = smoothstep(-0.2, 0.6, vFace);\n outgoingLight *= mix(0.03, 1.0, front);\n float fres = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 4.0);\n outgoingLight += uRim * vRim * diffuseColor.rgb * 2.2 + uRim * fres * fres * (0.25 + 2.2 * diffuseColor.rgb) * mix(0.6, 1.0, front);\n outgoingLight += uDawnCol * uDawnA * (exp(-abs(vZ - uDawn) * 0.9) * 0.8 + 0.05 * step(vZ, uDawn)) * (0.15 + diffuseColor.rgb);\n if (vEmis > 0.5) outgoingLight = uCandle * (0.85 + 0.15 * sin(uT * 23.0 + gl_FragCoord.x));\n#include <opaque_fragment>');
     };
     mat.customProgramCacheKey = () => 'concert-crowd';
     // 前幾排：種族頭（挑幾個種族，一個種族一組）；後面：深色風帽一組
@@ -225,8 +230,11 @@ export class Crowd {
     }
   }
   // 每一幀：拍子（連續的拍數）、大鼓、多熱、第幾句和句子裡走到哪、人浪開始了幾秒、玩家在哪、邊光的顏色
-  update({ beat, kick, heat, phrase, phraseT, wave, t, feet, rim }) {
+  // snuff 燭火全熄、relight 日出後第幾秒（-1 沒在點）、黎明線在哪（z）多亮什麼顏色
+  update({ beat, kick, heat, phrase, phraseT, wave, t, feet, rim, snuff = 0, relight = -1, dawnZ = -99, dawnA = 0, dawnCol = null }) {
     const u = this.u;
+    u.uSnuff.value = snuff; u.uRelight.value = relight; u.uDawn.value = dawnZ; u.uDawnA.value = dawnA;
+    if (dawnCol) u.uDawnCol.value.copy(dawnCol);
     u.uBeat.value = beat; u.uKick.value = kick; u.uHeat.value = heat; u.uPhrase.value = phrase; u.uPhraseT.value = phraseT;
     u.uWave.value = wave; u.uT.value = t;
     if (feet) u.uPlayer.value.set(feet.x, feet.z);

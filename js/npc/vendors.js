@@ -5,7 +5,7 @@
 // 介面跟 visitors.js 一樣（nearest、blocks、list），玩家的動作按鈕和照鏡子時的半透明直接沿用。
 // 角色只在玩家附近、同一層附近時才畫，攤販多也不會拖慢手機
 // 沖洗師傅（lab）：相簿裡交給他的照片，本人走來聊天才拿得回來（album.js），有照片等著時按鈕寫「取照片」
-// 星潮報（press）：星台的編輯收奇物照片（pressdesk.js），下街眺台的報童有你的報紙時按鈕寫「看報」
+// 星潮報（press）：星台的編輯收奇物照片（pressdesk.js），下街眺台的報童有你的報紙時按鈕寫「看報」；還沒有就喊傻眼小故事（tales，tell 一段一段講）
 import * as THREE from 'three';
 import { Character } from '../avatar/character.js';
 import { sanitizeLook, presetLook, RACES, GIFTS, unlock, unlockedSet, isOpen } from '../avatar/looks.js';
@@ -16,6 +16,7 @@ import { atLab, collect, LABS } from '../camera/album.js';
 import { latest, readPaper, submit } from '../save/pressdesk.js';
 import { beastSight } from './beast.js';
 import { VENDOR_LINES } from './vendor-lines.js';
+import { LOCAL, WIRE } from '../save/press-lines.js';
 
 const SAY_TIME = 3800, GREET_DIST = 3.2, TALK_DIST = 2.4, SHOW_DIST = 22, SHOW_DY = 3.5;
 // 視線：多遠以內的路人會被看、頭和身子最多離櫃台正面多少（弧度）、每次看多久（秒）、沒在說話時看玩家的機會
@@ -77,7 +78,6 @@ export const VENDORS = {
   },
   newsboy: {
     press: 'stand', name: '報童', race: 'toast', look: { hat: 'none', top: 'shirt', topC: 16, bottom: 'shorts', botC: 5, outer: 'vest', outC: 3, back: 'satchel', backC: 2, shoes: 'geta', shoeC: 8 },
-    greet: () => latest()?.head ?? pick(VENDOR_LINES.newsboy.greet),
   },
   // 小吃推車，id 對應 haishi.js 的 CARTS
   squid: {
@@ -127,6 +127,8 @@ class Vendor {
     this.bubble.className = 'speech';
     document.body.appendChild(this.bubble);
     this.hideTimer = 0;
+    this.tellTimer = 0;
+    this.taleBag = [];
     this.lookAt = null;             // 正在看的：(out) => 還在不在；null 是看櫃台前面
     this.lookYou = false;
     this.lookT = Math.random() * 2; // 每攤錯開換目標的時間
@@ -165,14 +167,35 @@ class Vendor {
   }
   setGhost(a) { this.ch.setGhost(a); }
 
-  say(text) {
+  say(text, inTale = false) {
+    if (!inTale) clearTimeout(this.tellTimer);
     clearTimeout(this.hideTimer);
     this.bubble.textContent = text;
     this.bubble.classList.add('show');
     this.hideTimer = setTimeout(() => this.bubble.classList.remove('show'), SAY_TIME);
   }
 
+  // 一段一段講（報童的小故事）：每段照字數停一下再換下一段，最後一段是笑點、停久一點。走遠了 hush 收掉
+  tell(parts) {
+    clearTimeout(this.tellTimer);
+    const step = (i) => {
+      this.say(parts[i], true);
+      if (i + 1 < parts.length) this.tellTimer = setTimeout(() => step(i + 1), Math.max(1700, parts[i].length * 190));
+    };
+    step(0);
+  }
+
+  // 報童喊什麼：有你的報紙多半喊你那則，偶爾喊別欄的小新聞；還沒上報就講一段傻眼小故事
+  shout() {
+    const paper = latest();
+    if (paper && Math.random() < 0.7) return this.say(paper.rare.grade === 3 ? `號外 ${paper.head}` : paper.head);
+    if (paper) return this.say(pick([...LOCAL, ...WIRE]).replace(/　/g, ' '));
+    if (!this.taleBag.length) this.taleBag = [...this.spec.tales].sort(() => Math.random() - 0.5);
+    this.tell(this.taleBag.pop());
+  }
+
   hush() {
+    clearTimeout(this.tellTimer);
     clearTimeout(this.hideTimer);
     this.bubble.classList.remove('show');
   }
@@ -203,13 +226,14 @@ class Vendor {
       });
       return;
     }
-    // 報童：喊你那一則的標題，把報紙遞過來
+    // 報童：喊你那一則的標題，把報紙遞過來；還沒上報就講一段小故事
     const paper = press === 'stand' && latest();
     if (paper) {
       this.say(paper.rare.grade === 3 ? `號外 ${paper.head}` : paper.head);
       setTimeout(() => readPaper(paper), 900);
       return;
     }
+    if (press === 'stand') { this.shout(); return; }
     const lab = this.spec.lab;
     if (lab && atLab(lab)) {
       collect(lab).then((n) => {
@@ -252,7 +276,8 @@ class Vendor {
     if (!show) return;
     if (d < GREET_DIST && !this.greeted) {
       this.greeted = true;
-      this.say(typeof this.spec.greet === 'function' ? this.spec.greet() : pick(this.spec.greet));
+      if (this.spec.press === 'stand') this.shout();
+      else this.say(typeof this.spec.greet === 'function' ? this.spec.greet() : pick(this.spec.greet));
     } else if (d > GREET_DIST + 3) this.greeted = false;
     // 視線：頭去看，身子只跟著轉一點，不會轉身背對櫃台。目標隔幾秒才換一次，每幀只算一個點的角度
     const talking = d < 6 && this.bubble.classList.contains('show');

@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>靈魂明信片試做</title>
+<script src="../vendor/qrcode.js"></script>
+<script type="importmap">{ "imports": { "three": "../vendor/three.module.min.js" } }</script>
+<style>
+  body { margin: 0; background: #1d1a1f; color: #eee; font: 14px/1.6 monospace; padding: 16px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 12px; align-items: center; }
+  .bar label { margin-right: 8px; }
+  .cards { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  .cards figure { margin: 0; }
+  .cards img { height: 82vh; display: block; }
+  .cards figcaption { color: #aaa; margin-top: 4px; }
+  pre { white-space: pre-wrap; margin: 0; }
+  button { font: inherit; }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <span>紙邊：<span id="layout"></span></span>
+    <span>墨點：<span id="mark"></span></span>
+    <span>墨色：<span id="ink"></span></span>
+    <button id="zoom">看細節</button>
+  </div>
+  <div class="cards">
+    <figure><img id="soul" alt=""><figcaption>靈魂版（帶存檔）</figcaption></figure>
+    <figure><img id="plain" alt=""><figcaption>普通版（只帶衣服，現在的明信片）</figcaption></figure>
+    <pre id="out">running…</pre>
+  </div>
+  <script type="module">
+    // 靈魂明信片：用一個小場景拍角色，做成兩種明信片並排；換紙邊樣式就重畫，再壓 JPEG、縮小看讀不讀得回來
+    import * as THREE from 'three';
+    import { Character } from '../js/avatar/character.js';
+    import { makeEyePost, readEyePost, INKS, info } from '../js/save/eyepost.js';
+    import { makePostcard, loadQR } from '../js/save/postcard.js';
+    import { encodeLook } from '../js/save/savecode.js';
+    import { presetLook, randomLook, putSave, getSave, lockKeys, encodeFace, GIFTS, personOf, outfitOf, samePerson, sameOutfit, sanitizeLook, wearOnly } from '../js/avatar/looks.js';
+
+    const out = document.getElementById('out');
+    const log = (s) => { out.textContent = (out.textContent === 'running…' ? '' : out.textContent) + s + '\n'; };
+    const smile = () => { const c = new Uint8Array(4096); for (let x = 18; x < 46; x++) c[(40 + Math.round(Math.sin((x - 18) / 28 * Math.PI) * 5)) * 64 + x] = 3; c[24 * 64 + 22] = c[24 * 64 + 41] = 1; return c; };
+    const a = { ...randomLook(presetLook(1)), face: encodeFace(smile()) }, b = randomLook(presetLook(2)), c = randomLook(presetLook(3));
+    putSave({ look: a, people: [a, b, c].map((x, i) => ({ ...personOf(x), last: i })), outfits: [a, b, c].map(outfitOf), unlocked: lockKeys().filter((_, i) => i % 3), visits: Object.fromEntries(Object.keys(GIFTS).map((k) => [k, '2026-10-2' + (k.length % 10)])) });
+    const save = getSave();
+    log('版面 ' + JSON.stringify(info));
+
+    // 小場景：海市的夜、角色正面站著（照相館那種構圖）
+    const PW = 1200, PH = 1500;
+    const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    r.outputColorSpace = THREE.SRGBColorSpace;
+    r.setSize(PW, PH, false);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x2a3352);
+    scene.add(new THREE.HemisphereLight(0xffe4c8, 0x34304a, 1.8));
+    const sun = new THREE.DirectionalLight(0xffb880, 1.4); sun.position.set(2, 4, 3); scene.add(sun);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshLambertMaterial({ color: 0x4a4c5c })); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+    for (const [x, z, col] of [[-1.6, -2, 0xff7a4a], [1.4, -2.6, 0xffb060], [0.2, -3.4, 0xff7a4a]]) {
+      const l = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), new THREE.MeshBasicMaterial({ color: col })); l.position.set(x, 1.9, z); scene.add(l);
+    }
+    const ch = new Character(null, a); ch.shadow.visible = false; scene.add(ch.group); ch.update(1, 0);
+    const cam = new THREE.PerspectiveCamera(45, PW / PH, 0.1, 50);
+    cam.position.set(0, ch.dims.topY * 0.55, 3.2); cam.lookAt(0, ch.dims.topY * 0.5, 0);
+    r.render(scene, cam);
+    const photo = document.createElement('canvas'); photo.width = PW; photo.height = PH;
+    photo.getContext('2d').drawImage(r.domElement, 0, 0);
+
+    // 普通版：跟遊戲裡一樣，茜紅郵票只帶衣服
+    await loadQR();
+    const qr = { kind: 'look', text: location.origin + '/#look=' + encodeLook(wearOnly(sanitizeLook(save.look)), { face: false }) };
+    document.getElementById('plain').src = makePostcard(photo, new Date(2026, 10, 9), { qr }).toDataURL('image/jpeg', 0.9);
+
+    // 樣式選單：選了記在網址上
+    const q = new URLSearchParams(location.search);
+    const style = { layout: q.get('layout') || 'one', mark: q.get('mark') || 'dot', ink: q.get('ink') || 'brown' };
+    const OPTS = { layout: [['one', '一圈'], ['two', '兩圈']], mark: [['dot', '圓點'], ['square', '方塊'], ['tick', '短痕']], ink: Object.keys(INKS).map((k) => [k, { brown: '棕墨', indigo: '藍染', madder: '茜紅' }[k]]) };
+    for (const [k, list] of Object.entries(OPTS)) {
+      const box = document.getElementById(k);
+      for (const [v, label] of list) {
+        const l = document.createElement('label');
+        l.innerHTML = `<input type="radio" name="${k}" value="${v}" ${style[k] === v ? 'checked' : ''}> ${label}`;
+        l.querySelector('input').onchange = () => { style[k] = v; q.set(k, v); history.replaceState(null, '', '?' + q); draw(); };
+        box.appendChild(l);
+      }
+    }
+
+    const blobOf = (cv, qq) => new Promise((ok) => cv.toBlob(ok, 'image/jpeg', qq));
+    const scaled = (cv, k) => { const s = document.createElement('canvas'); s.width = Math.round(cv.width * k); s.height = Math.round(cv.height * k); const g = s.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(cv, 0, 0, s.width, s.height); return s; };
+    const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+    let card = null, run = 0;
+    async function draw() {
+      const me = ++run;
+      out.textContent = 'running…';
+      const t0 = performance.now();
+      const res = await makeEyePost(photo, { save, date: new Date(2026, 10, 9), style });
+      if (me !== run) return;
+      card = res.canvas;
+      document.getElementById('soul').src = URL.createObjectURL(await blobOf(card, 0.92));
+      log(`${JSON.stringify(style)}  ${Math.round(performance.now() - t0)} ms  臉放不下：${res.lost}`);
+      log(`容量：紙邊 ${info[style.layout].band} 位元組（${info[style.layout].rows} 列），鏡中照片的鏡框 986`);
+      // 截圖：手機畫面上，卡片在中間偏上、四周是遊戲的顏色和按鈕；再壓一次 LINE
+      const shotOf = (w, h, x, y, cw) => { const s = document.createElement('canvas'); s.width = w; s.height = h; const g = s.getContext('2d'); g.fillStyle = '#2b2630'; g.fillRect(0, 0, w, h); g.fillStyle = '#c9a46a'; g.fillRect(w * 0.1, h - 180, w * 0.8, 70); g.drawImage(card, x, y, cw, cw * 4 / 3); return s; };
+      const padded = () => { const s = document.createElement('canvas'); s.width = 1170; s.height = 2532; const g = s.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, s.width, s.height); const h = 1170 * 4 / 3; g.drawImage(card, 0, (2532 - h) / 2, 1170, h); return s; };
+      const phone = shotOf(1170, 2532, 83, 260, 1003), desk = shotOf(1920, 1080, 690, 70, 640);
+      for (const [name, cv, qq] of [['原圖 JPEG .92', card, 0.92], ['LINE 1280 長邊 .8', scaled(card, 0.64), 0.8], ['縮一半 .7', scaled(card, 0.5), 0.7], ['縮到 0.4 .7', scaled(card, 0.4), 0.7],
+        ['iPhone 上下黑邊', padded(), 0.85], ['手機截圖', phone, 0.9], ['手機截圖再壓 LINE', scaled(phone, 0.5), 0.8], ['電腦截圖', desk, 0.9]]) {
+        const blob = await blobOf(cv, qq);
+        const m = await readEyePost(blob, { layout: style.layout });
+        if (me !== run) return;
+        if (!m) { log(`${name} (${cv.width}×${cv.height}, ${Math.round(blob.size / 1024)} KB)：讀不到`); continue; }
+        const okUn = same([...m.save.unlocked].sort(), [...save.unlocked].sort());
+        const okCloset = m.full && m.save.people.every((x, i) => samePerson(x, save.people[i])) && m.save.outfits.every((x, i) => sameOutfit(x, save.outfits[i]));
+        log(`${name} (${cv.width}×${cv.height}, ${Math.round(blob.size / 1024)} KB)：眼紋 ${okUn ? '✓' : '✗'}  紙邊 ${m.full ? '✓' : '✗'}  衣櫃 ${okCloset ? '✓' : '✗'}  日子 ${same(m.save.visits, save.visits) ? '✓' : '✗'}  臉 ${m.save.face === save.face ? '✓' : '✗'}`);
+      }
+      log('done');
+    }
+    // 看細節：郵票和右上角的紙邊放大
+    document.getElementById('zoom').onclick = () => {
+      const z = document.createElement('canvas'); z.width = 640; z.height = 640;
+      z.getContext('2d').drawImage(card, 900, 0, 600, 600, 0, 0, 640, 640);
+      window.open().document.body.innerHTML = `<body style="margin:0;background:#111"><img src="${z.toDataURL()}" style="height:96vh;image-rendering:pixelated"></body>`;
+    };
+    await draw();
+  </script>
+</body>
+</html>

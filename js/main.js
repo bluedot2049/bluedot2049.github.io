@@ -1154,6 +1154,7 @@ async function start() {
     rt?.dispose();
   }
   await photo.warmUI();   // 攝影介面也趁讀取畫面蓋著先畫一次（見 photo.js）
+  if (!fx && carried()) dofPass.prepare(renderer);   // 沒有後製時景深自己畫進一張全螢幕的圖：帶著相機的先配好，第一次舉起來不用等
   window.loadbar?.mark('compiled');
   const stats =params.has('debug') ? debugStats(renderer, quality) : null;
   // 改地圖、調色用的小工具：?ref= 疊參考圖，?debug 開右邊的調色台（調色、分區、光線、參考圖，見 devtools.js）
@@ -1418,7 +1419,10 @@ async function start() {
     frame++;
     const idle = !photo.active && !player.moving && !othersMoving && !fading && !talking && !world.home?.busy && !beast.busy && !happen.busy && !guide.flying && performance.now() - lastInput > 2000;
     if (idle && frame % 2) return;
-    if (!idle) quality.sample(dt);
+    // 攝影模式裡不量：景深讓幀變慢，降解析度要重配畫布（取景時頓一下、變糊），電腦版第一步還是把後製關掉而且記住。
+    // 一直 pause 著，收起來以後也多等一秒才開始量
+    if (photo.active) quality.pause(1000);
+    else if (!idle) quality.sample(dt);
     if (stats) renderer.info.reset();
     lensBoost();
     draw(dt);

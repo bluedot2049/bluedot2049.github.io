@@ -5,11 +5,42 @@
 // 比這裡遠的點模糊圈最多算到這裡的兩倍，糊掉的背景就不會漫到清楚的人身上。
 // 有後製時接在環境光遮蔽之後、泛光之前，深度圖由後製給；沒有後製時自己先把場景畫進一張帶深度的圖。
 // 攝影模式每幀算好 dof，這裡只管畫。
+// 取景時順便套相機的色調（develop 的 filter 換成一個顏色矩陣，toneOf）：以前是 CSS filter 蓋在畫布上，手機每幀合成要多一道全螢幕。
+// 拍照那一張（hq）不套，照片的色調照舊在 photo.js 的 compose 用 ctx.filter 上
 import * as THREE from 'three';
 
 // on：要不要糊；focus：對焦的距離（公尺）；k：每差一個屈光度（1/公尺），模糊圈的直徑佔照片長邊多少；
-// max：模糊圈半徑最大佔長邊多少；long：照片長邊在畫布上幾個像素
-export const dof = { on: false, focus: 3, k: 0.02, max: 0.01, long: 1000 };
+// max：模糊圈半徑最大佔長邊多少；long：照片長邊在畫布上幾個像素；tone：取景的色調（toneOf 算的），null 不套
+export const dof = { on: false, focus: 3, k: 0.02, max: 0.01, long: 1000, tone: null };
+
+// CSS filter 的 sepia、saturate、contrast、brightness 換成 sRGB 上的 3×3 矩陣加位移（照 Filter Effects 規格的矩陣），照寫的順序疊。
+// 別的函式不認得就回傳 null（取景不套，照片照樣有）
+export function toneOf(filter) {
+  if (!filter) return null;
+  let m = new THREE.Matrix3(), b = new THREE.Vector3();
+  for (const [, fn, arg, pct] of filter.matchAll(/([a-z-]+)\(\s*([\d.]+)(%?)\s*\)/g)) {
+    const v = parseFloat(arg) / (pct ? 100 : 1);
+    const n = new THREE.Matrix3(), o = new THREE.Vector3();
+    if (fn === 'sepia') {
+      const a = 1 - Math.min(1, v);
+      n.set(0.393 + 0.607 * a, 0.769 - 0.769 * a, 0.189 - 0.189 * a,
+        0.349 - 0.349 * a, 0.686 + 0.314 * a, 0.168 - 0.168 * a,
+        0.272 - 0.272 * a, 0.534 - 0.534 * a, 0.131 + 0.869 * a);
+    } else if (fn === 'saturate') {
+      n.set(0.213 + 0.787 * v, 0.715 - 0.715 * v, 0.072 - 0.072 * v,
+        0.213 - 0.213 * v, 0.715 + 0.285 * v, 0.072 - 0.072 * v,
+        0.213 - 0.213 * v, 0.715 - 0.715 * v, 0.072 + 0.928 * v);
+    } else if (fn === 'contrast') {
+      n.set(v, 0, 0, 0, v, 0, 0, 0, v);
+      o.setScalar(0.5 - 0.5 * v);
+    } else if (fn === 'brightness') n.set(v, 0, 0, 0, v, 0, 0, 0, v);
+    else return null;
+    // 先 m 再 n：n(m x + b) + o
+    b = b.applyMatrix3(n).add(o);
+    m = n.multiply(m);
+  }
+  return { m, b };
+}
 
 // 光圈換成 k：模糊圈直徑 = 焦距 × 光圈口徑 × |1/對焦 − 1/距離|，除以底片長邊 36mm
 export const dofK = (focal, fstop) => ((focal / 1000) * (focal / 1000 / fstop)) / 0.036;
@@ -24,8 +55,12 @@ void main() {
 const FRAG = /* glsl */ `
 uniform sampler2D tDiffuse, tDepth;
 uniform vec2 uTexel;
-uniform float uNear, uFar, uFocus, uK, uMax;
+uniform float uNear, uFar, uFocus, uK, uMax, uTone;
+uniform mat3 uToneM;
+uniform vec3 uToneB;
 varying vec2 vUv;
+vec3 toSrgb(vec3 c) { c = max(c, 0.0); return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
+vec3 toLinear(vec3 c) { c = max(c, 0.0); return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
 float dist(vec2 uv) {
   float d = texture2D(tDepth, uv).r;
   return uNear * uFar / (uFar - (uFar - uNear) * d);
@@ -47,7 +82,10 @@ void main() {
     col += mix(col / tot, texture2D(tDiffuse, uv).rgb, m);
     tot += 1.0;
   }
-  gl_FragColor = vec4(col / tot, 1.0);
+  col /= tot;
+  // 相機的色調：CSS filter 是在 sRGB 上算的，這裡也換過去算再換回來
+  if (uTone > 0.5) col = toLinear(uToneM * toSrgb(col) + uToneB);
+  gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
 }`;
 
@@ -59,6 +97,7 @@ export class DofPass {
       uniforms: {
         tDiffuse: { value: null }, tDepth: { value: null }, uTexel: { value: new THREE.Vector2() },
         uNear: { value: 0.1 }, uFar: { value: 400 }, uFocus: { value: 3 }, uK: { value: 0 }, uMax: { value: 1 },
+        uTone: { value: 0 }, uToneM: { value: new THREE.Matrix3() }, uToneB: { value: new THREE.Vector3() },
       },
       vertexShader: VERT,
       fragmentShader: FRAG,
@@ -102,17 +141,33 @@ export class DofPass {
     u.uFocus.value = Math.max(0.05, dof.focus);
     u.uK.value = dof.k * dof.long;
     u.uMax.value = Math.max(1, dof.max * dof.long);
+    const tone = this.hq ? null : dof.tone;
+    u.uTone.value = tone ? 1 : 0;
+    if (tone) { u.uToneM.value.copy(tone.m); u.uToneB.value.copy(tone.b); }
     renderer.setRenderTarget(out);
     renderer.render(this.scene, this.cam);
   }
 
   // 沒有後製時：場景先畫進 target 再糊到螢幕
   renderScene(renderer, scene, camera) {
-    const t = this.target, s = renderer.getDrawingBufferSize(this.size);
-    if (t.width !== s.x || t.height !== s.y) t.setSize(s.x, s.y);
+    const t = this.fit(renderer);
     renderer.setRenderTarget(t);
     renderer.clear();
     renderer.render(scene, camera);
     this.draw(renderer, t.texture, t.depthTexture, null);
+  }
+
+  // target 照畫布的大小配好
+  fit(renderer) {
+    const t = this.target, s = renderer.getDrawingBufferSize(this.size);
+    if (t.width !== s.x || t.height !== s.y) t.setSize(s.x, s.y);
+    return t;
+  }
+
+  // 先把全螢幕大的 target 配出來（清一次才真的跟顯示卡要），第一次舉相機不用等。只給沒有後製、身上帶著相機的
+  prepare(renderer) {
+    renderer.setRenderTarget(this.fit(renderer));
+    renderer.clear();
+    renderer.setRenderTarget(null);
   }
 }

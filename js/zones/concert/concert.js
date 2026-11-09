@@ -17,20 +17,26 @@ import { LongShadows } from './concert-shadows.js';
 import { Lasers } from './concert-lasers.js';
 import { StageSymbols } from './concert-symbols.js';
 import { lastAt } from './concert-band.js';
+import { Obscura, candleGate, CANDLE, IRIS } from './concert-obscura.js';
 
 // 這一團的曲子：做好的一首（tools/concert/concert-make.mjs --mix 算好複製過來）＋ MIDI（燈和人照它）。讀不到就用合成版
 const SONG = { mix: 'assets/concert/morning.m4a', midi: 'assets/concert/morning.mid' };
 
 // 一場＝種子＋開演的時刻（伺服器時間，毫秒）：同一場的人燈、樂手、聲音都在同一秒（組隊同場，main.js 照 party 傳 ?show=種子.開演）。
 // 進去才開始：網址沒帶就自己開一場。seed 是樂手的雜訊、表情、招牌動作、觀眾怎麼站的種子；?seed= 只換種子
-// 時鐘：有在放的時候照聲音（不然燈會跟聲音漂開），沒在放（還沒點畫面、靜音、分頁切走）照伺服器時間走；放的聲音離伺服器時間太遠就拉回來（world.update）
+// 時鐘：聲音真的在出聲的時候照聲音（不然燈會跟聲音漂開），沒在放（還沒點畫面、靜音、分頁切走）或還在下載、跳轉中照伺服器時間走；放的聲音離伺服器時間太遠就拉回來（world.update）。
+// 只看 paused 不夠：剛跳轉、還在等資料的時候 paused 是 false、時間卻停著，畫面會一直被拉回跳轉那一秒（以前一進場就卡在開頭重播）
 export const SHOW = { band: BANDS[0], t0: Date.now(), engine: null, ctx: null, ready: null, seed: (Math.random() * 2 ** 31) | 0, own: true };
 const loopT = (t) => { const T = songSec(SHOW.band); return ((t % T) + T) % T; };
 // 照伺服器時間這一場該在第幾秒
 export const showClock = () => loopT((serverNow() - SHOW.t0) / 1000);
 export function showTime() {
   const e = SHOW.engine;
-  return e && !e.paused ? loopT(e.now()) : showClock();
+  const c = showClock();
+  if (!e || e.paused || !e.live) return c;
+  // 聲音離伺服器時間一秒以上（剛跳轉完、還沒校正）：畫面先照伺服器時間，不跟著前後跳，等 world.update 把聲音拉回來
+  const t = loopT(e.now()), T = songSec(SHOW.band), d = Math.abs(t - c);
+  return Math.min(d, T - d) < 1 ? t : c;
 }
 // 這一場的代號（隊伍互報、帶進網址）
 export const showKey = () => `${SHOW.seed}.${SHOW.t0}`;
@@ -90,12 +96,22 @@ export class ConcertBgm {
         a.src = mix;
         ctx.createMediaElementSource(a).connect(out);
         const lat = () => ctx.outputLatency || ctx.baseLatency || 0;
-        this.engine = { a, get paused() { return a.paused; }, now: () => Math.max(0, a.currentTime - lat()),
-          play: (t) => { a.currentTime = t; return a.play(); }, pause: () => a.pause() };
+        // 跳轉要等下載：跳過去那一秒，伺服器時間已經往前走了。記下上次跳完開始出聲時落後多少（lead），下次往前多跳那麼多，一兩次就對上，不會一直追
+        let lead = 0, seeked = false;
+        a.addEventListener('playing', () => {
+          if (!seeked) return;
+          seeked = false;
+          const T = songSec(SHOW.band), d = ((showClock() - (a.currentTime - lat())) % T + T) % T, miss = d > T / 2 ? d - T : d;
+          if (miss > 0.15) lead = Math.min(4, lead + miss);
+          else if (miss < -0.3) lead = Math.max(0, lead + miss);
+        });
+        this.engine = { a, get paused() { return a.paused; }, get live() { return !a.paused && !a.seeking && a.readyState >= 3; },
+          now: () => Math.max(0, a.currentTime - lat()),
+          play: (t) => { seeked = true; a.currentTime = (t + lead) % songSec(SHOW.band); return a.play(); }, pause: () => a.pause() };
       } else {
         const song = new ConcertSong(ctx, out, SHOW.band);
         const lat = () => ctx.outputLatency || ctx.baseLatency || 0;
-        this.engine = { song, get paused() { return song.paused; }, now: () => ctx.currentTime - song.t0 - lat(),
+        this.engine = { song, get paused() { return song.paused; }, live: true, now: () => ctx.currentTime - song.t0 - lat(),
           play: (t) => song.playFrom(Math.floor(t / (240 / SHOW.band.bpm))), pause: () => song.pause() };
       }
       SHOW.engine = this.engine;
@@ -126,7 +142,7 @@ export function buildConcert(scene, { coarse }) {
   const stage = new Stage(scene, SHOW.band, { crowd: 0 });
   // 台下分區：中央、橫向、兩側走道給攝影師走，四個區塊各有個性，沿走道圍矮欄留缺口；特別的人（找人任務的目標）記在 SHOW.notables
   const plan = floorPlan(INNER, SEATS.z0);
-  const posts = buildFences(scene, plan.fences, coarse).userData.flames;
+  const fenceG = buildFences(scene, plan.fences, coarse), posts = fenceG.userData.flames;
   {
     // 燭火光暈：石欄、燭台柱頂每一盞小燭火一圈淡光，全部一次畫完
     const c = document.createElement('canvas'), S = 64, g2 = c.getContext('2d'), gr = g2.createRadialGradient(32, 32, 0, 32, 32, 32);
@@ -140,7 +156,13 @@ export function buildConcert(scene, { coarse }) {
     const halo = new THREE.Points(geo, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(c), size: 0.55, color: 0xff9440, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
     halo.frustumCulled = false;
     scene.add(halo);
+    // 靜默那一拍全熄、日出從台前往後點回來：燭台柱、石欄、看台座位的燭火和這圈光暈
+    for (const m of [fenceG.userData.flameMesh.material, stage.railFlameMesh.material, hall.cand.material]) candleGate(m);
+    candleGate(halo.material, true);
   }
+  // 暗箱：台後的光圈、光圈外的天、沿中軸的光、後牆的倒影、柱子的刻度燈、黎明線
+  const obscura = new Obscura(scene, SHOW.band.palette);
+  if (window.__show) window.__show.obscura = obscura;
   const { spots, notables } = placeCrowd(plan, { seed: SHOW.seed, scale: coarse ? 0.55 : 1 });
   SHOW.notables = notables;
   // 長影子：觀眾、燭台柱、攝影溝石欄（柱子和中間的石板），朝離開舞台的方向拉長，離台越遠越長
@@ -224,6 +246,11 @@ export function buildConcert(scene, { coarse }) {
     const red = rig.red ?? 0;
     if (red > 0) { key.lerp(tmp.copy(BLOOD).multiplyScalar(1.4), red * 0.85); sun.color.copy(key); hemi.color.lerp(tmp.setRGB(0.14, 0.01, 0.01), red * 0.8); }
     hemi.intensity = Math.PI;
+    // 建築本身多亮（節目表的 arch）：全暗、靜默那一拍整座殿沉下去，只剩火和燭光的點；閃白時照樣看得到
+    const ak = Math.max(0.08 + 0.92 * (c.arch ?? 1), Math.min(1, c.strobe * 1.5));
+    hemi.color.multiplyScalar(ak);
+    hemi.groundColor.multiplyScalar(0.3 + 0.7 * ak);
+    if (c.snuff) { key.multiplyScalar(0.12); sun.color.copy(key); }   // 靜默那一拍：台上的燈也收掉，只剩光環的線
     // 遠冷近暖：霧往冷紫偏，遠的地方淡進冷色，近處的火和燈保持暖
     if (scene.fog) scene.fog.color.copy(P[c.haze.col ?? 0]).multiplyScalar(0.05 + c.haze.a * 0.12).lerp(COOL, 0.55).lerp(tmp.setRGB(0.07, 0.004, 0.004), red * 0.8);
     if (scene.background?.isColor) scene.background.copy(P[c.haze.col ?? 0]).multiplyScalar(0.03 + c.haze.a * 0.06 + c.strobe * 0.3);
@@ -233,7 +260,8 @@ export function buildConcert(scene, { coarse }) {
     index: 0, id: 'concert', data: { name: '演唱會', subtitle: 'Concert', paintings: [] },
     group: stage.group, obstacles: [], paintings: [], center: new THREE.Vector3(0, 0, 6),
   };
-  let band = null, cue = cueAt(SHOW.band, 0), driftAt = 0;
+  let band = null, cue = cueAt(SHOW.band, 0), driftAt = 0, on = false;
+  const silDir = new THREE.Vector3(), silCol = new THREE.Color();
   SHOW.ready.then(({ band: b }) => {
     SHOW.band = b;
     stage.band = b;
@@ -241,7 +269,7 @@ export function buildConcert(scene, { coarse }) {
   });
   return {
     rooms: [room], paintings: [], mirror: null, outdoor: null, raycastTargets: [stage.floor], env, shops: [],
-    camDistMax: 6, camLift: 0.9,   // 碰到牆先繞著頭往上抬（最多約 50 度），抬不過才往前推
+    camDistMax: 24, camLift: 0.9,   // 大廳 56×18 公尺，拉遠看得到整個台和人群；碰到牆先繞著頭往上抬（最多約 50 度），抬不過才往前推
     spawn: { x: 0, z: HALL.rear - 4.8, heading: Math.PI },   // 大門進來的斜坡上段：站得比全場高，整個大廳在腳下   // 從最後面的大門進來，站在階梯座位中間的走道，整個大廳在眼前；攝影溝要穿過人群走過去
     // 出口：最上面的大門、兩側牆上的側門（橫走道兩頭，從台前走幾步就到，看到一半想走不用穿過整個大廳），都回畫廊的樹洞（門光換頁，不渡海）
     exits: [
@@ -249,6 +277,15 @@ export function buildConcert(scene, { coarse }) {
       ...[-1, 1].map((s) => ({ x: s * (X1 - 0.4), z: hall.sideDoor.z, r: 2.2, to: 'gallery', gate: true, title: '側門', label: '出去' })),
     ],
     home: null, concertStage: stage,
+    // 自己的角色也是剪影（avatar/mirrorlight.js 的 setStageLight，main.js 每幀照 world.stage.lightOn 寫）：光從台後的光圈來，背對它的那面壓到幾乎全黑、
+    // 邊上一圈台上燈色的逆光、正對舞台的那面吃台上的燈（主光本身從觀眾頭頂打，照不到正面）。不加燈，只在自己的材質裡多算幾項
+    stage: {
+      lightOn(at, top = 1.35) {
+        silDir.set(-at.x, IRIS.y - (at.y ?? 0) - top * 0.6, IRIS.z - at.z).normalize();
+        silCol.copy(key);
+        return { color: silCol, k: on ? 0.55 : 0, rim: on ? 0.9 : 0, sil: on ? 1 : 0, dir: silDir };
+      },
+    },
     roomIndexAt: () => 0,
     placeAt: () => null,
     walkable, findWalkable, findPath, groundY, camFloor: groundY, camClip,
@@ -260,7 +297,7 @@ export function buildConcert(scene, { coarse }) {
       stage.fenceFor(cam, feet);
       // 放的聲音離伺服器時間太遠（卡過、分頁切走回來、隊友那邊開的場）：兩秒看一次，差超過 0.35 秒就拉回來
       const e = SHOW.engine, now = performance.now();
-      if (e && !e.paused && now - driftAt > 2000) {
+      if (e && !e.paused && e.live && now - driftAt > 2000) {   // 還在下載、跳轉中不拉（拉了又要等，會一直追不上）
         driftAt = now;
         const T = songSec(SHOW.band), d = Math.abs(loopT(e.now()) - showClock());
         if (Math.min(d, T - d) > 0.35) e.play(showClock());
@@ -274,7 +311,12 @@ export function buildConcert(scene, { coarse }) {
       cue.strobe = Math.max(cue.strobe, (fx.stop ?? 0) * 0.85);   // 靜止段每一下齊奏全場閃白
       if (rig.calm) { cue.strobe = Math.min(cue.strobe, 0.35); fx.blind = Math.min(fx.blind ?? 0, 0.35); }   // 減少閃爍：什麼閃都壓在一半以下
       cue.frenzy = rig.F;
+      cue.red = rig.red ?? 0;
+      CANDLE.uSnuff.value = cue.snuff;
+      CANDLE.uRelight.value = cue.relight;
       light(cue);
+      on = true;
+      obscura.update(cue, t, key);
       fx.update(cue, t, key, lead);
       hall.update(t, cue);
       lasers.update(t, cue, rig.F ?? 0, SHOW.seed, LASER, rig.red ?? 0, stage.sun.position, cue.rays.rot, rig.kickK ?? 0);
@@ -288,6 +330,7 @@ export function buildConcert(scene, { coarse }) {
       crowd.update({
         beat: t / (60 / bpm), kick: rig.kickK ?? 0, heat: Math.max(rig.F ?? 0, (cue.crowd?.hands ?? 0) * 0.6),
         phrase: Math.floor(cue.gbar / 4), phraseT: ((cue.gbar % 4) + cue.beat / 4) / 4, wave, t, feet, rim: saturate(tmp.copy(key)).multiplyScalar(0.6),
+        snuff: cue.snuff, relight: cue.relight, dawnZ: obscura.dawnZ, dawnA: obscura.dawnA, dawnCol: obscura.dawn.material.color,
       });
     },
   };

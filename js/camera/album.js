@@ -87,7 +87,8 @@ export async function addPhoto(blob, { name, cam, quiet = false, ...more }) {
   const dot = name.lastIndexOf('.'), base = name.slice(0, dot), ext = name.slice(dot);
   for (let k = 2; items.some((x) => x.name === name); k++) name = `${base}-${k}${ext}`;
   const it = { blob, name, t: Date.now(), cam, film: !more.kind && !!CAMERAS[cam]?.film, state: 'shot', ...more };
-  if (LATEST.has(it.kind)) await drop(items.filter((x) => x.kind === it.kind));
+  // 存檔只留最新一張，鏡中照片和靈魂明信片算同一種
+  if (LATEST.has(it.kind)) await drop(items.filter((x) => LATEST.has(x.kind)));
   try { it.id = await idb(STORE, 'readwrite', (s) => s.add(it)); } catch {}
   items.push(it);
   if (!persisted) {

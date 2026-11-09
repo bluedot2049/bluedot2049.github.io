@@ -3,6 +3,7 @@
 // 台下怎麼分區：中央走道、橫走道、兩側走道給攝影師走，四個區塊各有個性（狂熱、一般、燭光、虔誠），區塊沿走道圍矮欄、留缺口；
 // 每個區塊照密度撒人（燭光區有三五成群面對面的），露臉的種族打散在各區；每一場照種子挑幾個「特別的人」（找人任務的目標）。
 import * as THREE from 'three';
+import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
 import { STAGE, RAIL } from './concert-stage.js';
 
 // 區塊：x 從哪到哪、z 從哪到哪（舞台座標，z 往觀眾）、每平方公尺幾個人、個性（concert-crowd.js 的 aZone：0 一般、1 虔誠、2 狂熱、3 燭光）、三五成群的比例
@@ -33,7 +34,7 @@ export function floorPlan(INNER, SEATS_Z0) {
 // 區塊之間：黑鐵燭台立柱（柱頂一盞小燭火），柱子之間垂一條深紅絨繩（像教堂、博物館圍起來的那種；不擋視線、拍照拍得過去）
 export function buildFences(scene, fences, coarse) {
   const g = new THREE.Group(), IRON = new THREE.MeshLambertMaterial({ color: 0x1c1a1e, flatShading: true }), ROPE = new THREE.MeshLambertMaterial({ color: 0x6a1420, flatShading: true });
-  const H = 0.95, posts = [];
+  const H = 0.95, posts = [], ropes = [];
   for (const [ax, az, bx, bz] of fences) {
     const L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / 2.2));
     const pts = [];
@@ -43,9 +44,12 @@ export function buildFences(scene, fences, coarse) {
     for (let i = 0; i < n; i++) {
       const [x0, z0] = pts[i], [x1, z1] = pts[i + 1], curve = [];
       for (let k = 0; k <= 8; k++) { const u = k / 8; curve.push(new THREE.Vector3(x0 + (x1 - x0) * u, H - 0.08 - 0.2 * 4 * u * (1 - u), z0 + (z1 - z0) * u)); }
-      g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curve), 8, 0.025, 4, false), ROPE));
+      ropes.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curve), 8, 0.025, 4, false));
     }
   }
+  // 全部的繩子併成一個（一段一次繪製的話，五十幾段就是五十幾次）
+  if (ropes.length) g.add(new THREE.Mesh(mergeGeometries(ropes, false), ROPE));
+  for (const r of ropes) r.dispose();
   const m4 = new THREE.Matrix4();
   const post = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.025, 0.04, H, 6), IRON, posts.length);
   const base = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.13, 0.15, 0.04, 8), IRON, posts.length);
@@ -59,6 +63,7 @@ export function buildFences(scene, fences, coarse) {
   });
   g.add(post, base, cup, flame);
   g.userData.flames = posts.map(([x, z]) => [x, H + 0.1, z]);
+  g.userData.flameMesh = flame;
   scene.add(g);
   return g;
 }

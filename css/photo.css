@@ -18,7 +18,8 @@ body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #swap-btn, body.p
 #ph-frame.masked { box-shadow: 0 0 0 100vmax rgba(10, 6, 3, .62); outline: 1px solid rgba(246, 219, 166, .4); }
 #ph-frame > div { position: absolute; inset: 0; }
 #ph-frame .vig { background: radial-gradient(ellipse 75% 70% at 50% 50%, rgba(20, 10, 4, 0) 55%, rgba(20, 10, 4, var(--vig, .32)) 100%); }
-#ph-frame .grain { background-size: 128px 128px; mix-blend-mode: overlay; opacity: 0; }
+/* 顆粒只上照片（photo.js 的 compose）：取景時全螢幕的 overlay 混合疊在畫布上，手機每幀合成都要多一道 */
+#ph-frame .grain { display: none; }
 #ph-frame .sig { position: absolute; width: auto; opacity: .82; }
 #ph-frame::after { content: ""; position: absolute; inset: 0; background: #fff; opacity: 0; }
 #ph-frame.flash::after { animation: ph-flash .4s ease-out; }
@@ -50,8 +51,9 @@ body.photo-expose #ph-frame { outline-color: rgba(196, 69, 45, .7); }
 
 /* 眼睛貼上觀景窗（舉起相機、切自拍）：墨色蓋一下再淡開，鏡頭換位置那一下不硬切。舉相機的快門、拿法照樣浮在上面 */
 #ph-dark { position: fixed; inset: 0; z-index: 13; background: #0e0906; opacity: 0; pointer-events: none; }
-#ph-dark.on { animation: ph-dark .26s ease-out both; }
-@keyframes ph-dark { 0%, 30% { opacity: 1; } 100% { opacity: 0; } }
+/* 只蓋住鏡頭跳到手上的那一兩幀，馬上淡開：舉起來要跟手 */
+#ph-dark.on { animation: ph-dark .14s ease-out both; }
+@keyframes ph-dark { 0%, 15% { opacity: 1; } 100% { opacity: 0; } }
 
 /* 閃光燈泡燒完冒的煙：從取景框上緣飄過去，慢慢散掉 */
 #ph-smoke { position: fixed; inset: 0; z-index: 12; pointer-events: none; overflow: hidden; }
@@ -524,6 +526,10 @@ body.photo-guest #ph-shutter { visibility: hidden; }
   object-fit: contain; border: 1px solid var(--line-soft); background: #000;
   -webkit-touch-callout: default; -webkit-user-select: auto; user-select: auto;
 }
+/* 明信片兩版的切換（普通版／靈魂版），在照片和說明中間 */
+#ph-kind[hidden] { display: none; }
+#ph-kind button { height: 30px; font-size: 12px; letter-spacing: .12em; }
+#ph-result:has(#ph-kind:not([hidden])) :is(#ph-media img, #ph-media video) { max-height: calc(100dvh - 214px * var(--ui, 1)); }
 #ph-tip { margin: 0; font-size: 12px; letter-spacing: .1em; color: var(--muted); }
 #ph-tip:empty { display: none; }
 .ph-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }

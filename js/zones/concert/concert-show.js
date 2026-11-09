@@ -95,7 +95,9 @@ const pulse = (x, k = 6) => (x < 0 ? 0 : Math.exp(-x * k));   // 打在拍點上
 // ring 光環（draw 畫到幾成、y 升起幾成、fill 填成太陽幾成）、horizon 地平線、pillars 頂上七道直光、rays 從光環放射的光、
 // sheet 雷射光幕（y 0 在頭頂高處、1 壓到人群裡）、top 打在鋼琴手上那一束、haze 煙裡的底色、strobe 全場閃白、smoke 煙多濃、
 // face 兩個人臉上多亮、desk 混音台的人（desk 手放台上、one 舉一手、arms 雙手舉起）、lift 動作做到幾成、
-// piano 鋼琴手（strike 按下去那一下、up 手抬起來幾成）、crowd 觀眾（hands 舉手、jump 跳、lights 舉燈）、moment 此刻好拍的事
+// piano 鋼琴手（strike 按下去那一下、up 手抬起來幾成）、crowd 觀眾（hands 舉手、jump 跳、lights 舉燈）、moment 此刻好拍的事。
+// 暗箱（concert-obscura.js）：iris 台後的光圈（a 開多大、spin 葉片轉、sun 光圈裡的太陽升到哪、sky 天多亮、warp 迷幻色帶幾成、pin 針孔的亮點）、
+// arch 建築本身多亮（大廳的天光；全暗、靜默那一拍沉到幾乎看不見）、snuff 燭火全熄、relight 日出後第幾秒（燭火、火把從台前往後一波波點回來，-1 沒在點）
 export function cueAt(b, t) {
   const w = where(b, t);
   const { sec, bar, beat } = w;
@@ -112,6 +114,7 @@ export function cueAt(b, t) {
     face: { piano: 0, desk: 0 }, desk: 'desk', lift: 0, bob: pulse(bf, 5),
     piano: { strike: 0, up: 0 },
     crowd: { hands: 0, jump: 0, lights: 0 }, moment: null,
+    iris: { a: 0, spin: 0, sun: 0, sky: 0, warp: 0, pin: 0 }, arch: 0.2, snuff: 0, relight: -1,
   };
   const moment = (id, q) => { if (q > 0.04 && (!c.moment || q > c.moment.q)) c.moment = { id, name: MOMENTS[id], q }; };
   const strike = pulse((beat * 2) % 1, 5);   // 鋼琴一個八分音符一下
@@ -124,6 +127,8 @@ export function cueAt(b, t) {
       c.piano.strike = strike;
       c.crowd.lights = 0.4;
       c.bob = 0;
+      c.iris = { a: 0.03 * smooth(sp * 3), spin: 0, sun: 0, sky: 0.6, warp: 0, pin: smooth(sp * 3) };   // 光圈只剩一個針孔
+      c.arch = 0.1;
       moment('hands', c.top * pulse(beat, 1.6));
       break;
     }
@@ -138,6 +143,8 @@ export function cueAt(b, t) {
       c.piano.strike = strike;
       c.bob = 0;
       c.crowd.lights = 0.3; c.crowd.hands = 0.1;
+      c.iris = { a: 0.03 + 0.24 * smooth(sp), spin: 0, sun: 0.12 * sp, sky: 0.45 + 0.3 * sp + 0.4 * close, warp: 0.08, pin: 1 - smooth(sp * 2) };
+      c.arch = 0.18;
       moment('ring', close);
       break;
     }
@@ -151,6 +158,8 @@ export function cueAt(b, t) {
       c.face = { piano: 0.4, desk: 0.3 };
       c.piano.strike = strike;
       c.crowd.hands = 0.3 + 0.3 * sp; c.crowd.jump = 0.3 * Math.abs(Math.sin(Math.PI * beat));
+      c.iris = { a: 0.27 + 0.48 * smooth(sp), spin: 0, sun: 0.85 * smooth(sp), sky: 0.7 + 0.3 * sp, warp: 0.1 + 0.25 * sp, pin: 0 };   // 光圈打開、太陽從底下升上來
+      c.arch = 0.2 + 0.45 * smooth(sp);   // 黎明線掃過去，建築第一次被看清楚
       break;
     }
     case 'still': {   // 直光收掉、白霧，倒數第二小節舉起一隻手；最後一拍全黑，只剩光環的線
@@ -165,6 +174,11 @@ export function cueAt(b, t) {
       c.piano.strike = gap ? 0 : strike;
       c.crowd.hands = 0.2 + 0.4 * c.lift;
       c.bob = 0;
+      // 舉手時光圈收窄一點；最後一拍「喀」一下闔上，燭火全熄
+      const shut = bar === last ? smooth((beat - 3) / 0.08) : 0;
+      c.iris = { a: (0.75 - 0.15 * c.lift) * (1 - shut), spin: 0, sun: 0.9, sky: 0.8, warp: 0.05, pin: 0 };
+      c.arch = gap ? 0.02 : 0.45;
+      c.snuff = gap ? 1 : 0;
       if (bar === last) moment('breath', smooth((beat - 3) / 0.12));
       break;
     }
@@ -178,6 +192,10 @@ export function cueAt(b, t) {
       c.face = { piano: 0.6, desk: 0.85 };
       if (bar % 4 === 0 && beat < 2.4) { c.lift = Math.sin(Math.PI * Math.min(1, beat / 1.2) / 2); c.desk = 'arms'; moment('arms', Math.pow(c.lift, 2) * c.ring.fill * (beat < 1.8 ? 1 : 1 - (beat - 1.8) / 0.6)); }
       c.crowd.hands = 1; c.crowd.jump = Math.abs(Math.sin(Math.PI * beat));
+      // 光圈一口氣全開、開得比光環還大；開口在拍子上呼吸，外面的天變成往外流的色帶
+      c.iris = { a: bar === 0 ? 0.55 + 0.5 * smooth(beat / 0.3) : 1.05 + 0.05 * p, spin: t * 0.05, sun: 1, sky: 0.45, warp: 0.55 + (bar >= sec.bars / 2 ? 0.2 : 0), pin: 0 };
+      c.arch = 1;
+      c.relight = (bar * 4 + beat) * (60 / b.bpm);
       break;
     }
     case 'veil': {    // 太陽退成光環，光幕從頭頂慢慢壓下來掃過舉起的手再升回去，兩小節一趟
@@ -191,6 +209,9 @@ export function cueAt(b, t) {
       c.face = { piano: 0.6, desk: 0.5 };
       c.piano.strike = strike;
       c.crowd.hands = 0.9; c.crowd.jump = 0.6 * Math.abs(Math.sin(Math.PI * beat));
+      // 光幕壓下來時光圈收窄、葉片整組轉起來
+      c.iris = { a: 1.0 - 0.4 * swing, spin: t * 0.35, sun: 1, sky: 0.45, warp: 0.85, pin: 0 };
+      c.arch = 0.85;
       moment('sheet', clamp01(1 - Math.abs(c.sheet.y - 0.55) / 0.07));
       break;
     }
@@ -203,6 +224,9 @@ export function cueAt(b, t) {
       c.piano.up = bar === last ? smooth(beat / 0.8) : 0;
       c.crowd.lights = 0.6; c.crowd.hands = 0.4;
       c.bob = 0;
+      // 太陽沉回去、光圈慢慢關回一個針孔，最後針孔也熄
+      c.iris = { a: bar < last ? 0.3 - 0.25 * smooth(sp * 2) : 0.04 * (1 - smooth((beat - 1) / 3)), spin: 0, sun: 1 - smooth(sp), sky: 0.5, warp: 0.05, pin: bar < last ? smooth(sp * 2) : 1 - smooth((beat - 1) / 3) };
+      c.arch = 0.15 * (1 - sp);
       if (bar === last) moment('last', c.piano.up * c.ring.a / 0.8 * (beat < 2 ? 1 : 0));
       break;
     }

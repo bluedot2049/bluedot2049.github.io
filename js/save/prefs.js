@@ -38,6 +38,7 @@ export const PREFS = {
   kaoTagOthers: { kind: 'flag', init: true },    // 同上：看別人頭上的顏文字
   kaoGaze: { kind: 'text', init: 'auto' },      // kaopanel.js、attention.js：擺著表情時頭看哪（表情盤的「看哪」）'auto' 自動／'cam' 鏡頭／'free' 隨意
   kaoTagPhoto: { kind: 'flag', init: false },    // photo.js：畫廊的眼睛拍得進頭上的顏文字（攝影模式的「頭上字」）
+  postcardSoul: { kind: 'flag', init: false },   // photo.js：海市明信片上次選靈魂版（帶存檔），不然是普通版
   radioAt: { kind: 'json' },                     // radio-card.js：收音機面板拖到哪 { desk|land|port: { dx, dy } }，左上角離畫面中心多遠
 };
 

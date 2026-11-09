@@ -7,6 +7,7 @@ import { STAGE } from './concert-stage.js';
 import { lastAt, nextAfter, hitK } from './concert-band.js';
 import { where } from './concert-show.js';
 import { pref } from '../../save/prefs.js';
+import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
 
 const smooth = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
 const hash = (a, b = 0, c = 0) => { let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ Math.imul(c | 0, 2246822519); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
@@ -23,11 +24,13 @@ function beamTex() {
   g.fillStyle = gr; g.fillRect(0, 0, 4, 128);
   return new THREE.CanvasTexture(c);
 }
-// 一道光：底在原點、沿 +y 長 len，底細頂粗
-function cone(len, r0, r1, tex) {
+// 一組光：底在原點、沿 +y 長 len，底細頂粗；instanced，每一道的亮度和顏色寫在 instanceColor（加法混色，顏色乘亮度就是一樣的）
+function cones(n, len, r0, r1, tex) {
   const geo = new THREE.CylinderGeometry(r1, r0, len, 12, 1, true).translate(0, len / 2, 0);
-  const m = add(new THREE.MeshBasicMaterial({ map: tex, color: 0xffffff, opacity: 0 }));
-  return new THREE.Mesh(geo, m);
+  const m = new THREE.InstancedMesh(geo, add(new THREE.MeshBasicMaterial({ map: tex, color: 0xffffff })), n);
+  for (let i = 0; i < n; i++) m.setColorAt(i, new THREE.Color(0, 0, 0));
+  m.frustumCulled = false;
+  return m;
 }
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -51,25 +54,27 @@ export class LightRig {
     this.fifths = ['#f0b860', '#e8902a', '#d8452e', '#b0201c', '#f6ecdc', '#ffcf8a', '#c8341a', '#8a1418', '#f0b860', '#33468f', '#e8902a', '#ffd9a0'].map((h) => new THREE.Color(h));
     this.crimson = new THREE.Color('#a8141c');
     this.gold = new THREE.Color('#ffd590');
-    // 追光：前桁架上每人一盞，打在那個人身上（他走開了光也跟著），地上一圈
-    this.spots = [];
-    for (let i = 0; i < 7; i++) {
-      const b = cone(1, 0.04, 0.55, tex);
-      const pool = new THREE.Mesh(new THREE.CircleGeometry(0.75, 24).rotateX(-Math.PI / 2), add(new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0 })));
-      g.add(b, pool);
-      this.spots.push({ b, pool });
-    }
-    // 搖頭燈：台後地上六盞，往觀眾頭上掃；燈頭一個小盒子
+    // 追光：前桁架上每人一盞，打在那個人身上（他走開了光也跟著），地上一圈。七道一組、七圈一組
+    this.spotBeams = cones(7, 1, 0.04, 0.55, tex);
+    this.spotPools = new THREE.InstancedMesh(new THREE.CircleGeometry(0.75, 24).rotateX(-Math.PI / 2), add(new THREE.MeshBasicMaterial({ color: 0xffffff })), 7);
+    for (let i = 0; i < 7; i++) this.spotPools.setColorAt(i, new THREE.Color(0, 0, 0));
+    this.spotPools.frustumCulled = false;
+    g.add(this.spotBeams, this.spotPools);
+    // 搖頭燈：台後地上六盞，往觀眾頭上掃；燈頭一個小盒子（六個盒子併成一塊）
     this.heads = [];
+    const boxes = [];
     for (let i = 0; i < 6; i++) {
       const s = i < 3 ? -1 : 1, k = i % 3, x = s * (2.2 + k * 2.3);
-      const base = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.25, 0.4), METAL);
-      base.position.set(x, STAGE.y + 0.12, STAGE.back + 1.2);
-      const b = cone(26, 0.08, 1.1, tex);
-      b.position.set(x, STAGE.y + 0.35, STAGE.back + 1.2);
-      g.add(base, b);
-      this.heads.push({ b, s, k, x });
+      boxes.push(new THREE.BoxGeometry(0.4, 0.25, 0.4).translate(x, STAGE.y + 0.12, STAGE.back + 1.2));
+      this.heads.push({ s, k, x, pos: new THREE.Vector3(x, STAGE.y + 0.35, STAGE.back + 1.2) });
     }
+    g.add(new THREE.Mesh(mergeGeometries(boxes, false), METAL));
+    this.headBeams = cones(6, 26, 0.08, 1.1, tex);
+    g.add(this.headBeams);
+    this.m4 = new THREE.Matrix4();
+    this.one = new THREE.Vector3(1, 1, 1);
+    this.sc = new THREE.Vector3();
+    this.tc = new THREE.Color();
     this.col = new THREE.Color();
     this.v = new THREE.Vector3();
     this.q = new THREE.Quaternion();
@@ -108,38 +113,42 @@ export class LightRig {
     const kicks = R.drums?.notes ?? [], ik = lastAt(kicks, t, ['kick']), kickK = ik >= 0 ? hitK(t - kicks[ik].t, 0.12) * kicks[ik].vel : 0;
     this.kickK = kickK;
     // ---------- 追光：誰出聲誰亮 ----------
-    const warm = this.stage.P[2];
+    const warm = this.stage.P[2], { m4, one, sc, tc, q } = this;
+    let anySpot = false;
     band.members.forEach((mb, i) => {
-      const sp = this.spots[i], p = mb.ch.group.position, act = mb.act ?? 0;
-      const src = this.v.set(p.x * 0.55, 11.2, STAGE.front - 0.6), dx = p.x - src.x, dy = p.y + 1.1 - src.y, dz = p.z - src.z, len = Math.hypot(dx, dy, dz);
-      sp.b.position.copy(src);
-      sp.b.scale.set(1, len, 1);
-      sp.b.quaternion.setFromUnitVectors(UP, this.v.set(dx, dy, dz).normalize());
+      if (i >= 7) return;
+      const p = mb.ch.group.position, act = mb.act ?? 0;
+      const sx = p.x * 0.55, sy = 11.2, sz = STAGE.front - 0.6, dx = p.x - sx, dy = p.y + 1.1 - sy, dz = p.z - sz, len = Math.hypot(dx, dy, dz);
+      q.setFromUnitVectors(UP, this.v.set(dx, dy, dz).normalize());
+      this.spotBeams.setMatrixAt(i, m4.compose(this.v.set(sx, sy, sz), q, sc.set(1, len, 1)));
       const a = Math.min(1, act * 1.1) * (0.45 + 0.55 * Math.min(1, c.haze.a + 0.4));
-      sp.b.material.color.copy(warm).lerp(hue, 0.3);
-      sp.b.material.opacity = a * 0.22;
-      sp.pool.position.set(p.x, p.y + 0.02, p.z);
-      sp.pool.material.color.copy(sp.b.material.color);
-      sp.pool.material.opacity = a * 0.4;
-      sp.b.visible = sp.pool.visible = a > 0.01;
+      tc.copy(warm).lerp(hue, 0.3);
+      this.spotBeams.setColorAt(i, this.col.copy(tc).multiplyScalar(a * 0.22));
+      this.spotPools.setMatrixAt(i, m4.makeTranslation(p.x, p.y + 0.02, p.z));
+      this.spotPools.setColorAt(i, this.col.copy(tc).multiplyScalar(a * 0.4));
+      if (a > 0.01) anySpot = true;
     });
+    this.spotBeams.instanceMatrix.needsUpdate = this.spotBeams.instanceColor.needsUpdate = true;
+    this.spotPools.instanceMatrix.needsUpdate = this.spotPools.instanceColor.needsUpdate = true;
+    this.spotBeams.visible = this.spotPools.visible = anySpot;
     // ---------- 搖頭燈：每一段一個設計好的畫面（不是越熱越多），顏色照和聲、大鼓推一下 ----------
     // 升起：從低處慢慢抬起來（天亮）；日出：從太陽後面扇形放射；光幕：從兩側往中間交叉成尖拱（呼應大廳的拱肋，光搭起一座穹頂）
     const look = { rise: 'dawn', sun: 'burst', veil: 'vault' }[w.sec.id];
     const sp = (w.bar + w.beat / 4) / w.sec.bars, swing = 0.5 - 0.5 * Math.cos(Math.PI * ((w.bar % 2) + w.beat / 4));
     const I = !look ? 0 : look === 'dawn' ? smooth((sp - 0.3) / 0.4) * 0.8 : 1;
-    for (const h of this.heads) {
+    this.heads.forEach((h, hi) => {
       let pan = 0, tilt = 0.7;
       const k = h.k, s = h.s;
       if (look === 'dawn') { pan = s * (0.12 + k * 0.18); tilt = 1.25 - 1.0 * smooth(sp); }
       else if (look === 'burst') { pan = s * (0.18 + k * 0.28) + 0.06 * Math.sin(c.rays.rot * 4); tilt = 0.32 + 0.12 * k - 0.08 * kickK; }
       else if (look === 'vault') { pan = -s * (0.32 + 0.1 * k); tilt = 0.32 + 0.38 * swing; }
       const d = this.v.set(Math.sin(tilt) * Math.sin(pan), Math.cos(tilt), Math.sin(tilt) * Math.cos(pan));
-      h.b.quaternion.setFromUnitVectors(UP, d);
-      h.b.material.color.copy(look === 'burst' && !this.red ? this.gold : hue);
-      h.b.material.opacity = I * (0.14 + 0.16 * kickK);
-      h.b.visible = I > 0.01;
-    }
+      q.setFromUnitVectors(UP, d);
+      this.headBeams.setMatrixAt(hi, m4.compose(h.pos, q, one));
+      this.headBeams.setColorAt(hi, tc.copy(look === 'burst' && !this.red ? this.gold : hue).multiplyScalar(I * (0.14 + 0.16 * kickK)));
+    });
+    this.headBeams.instanceMatrix.needsUpdate = this.headBeams.instanceColor.needsUpdate = true;
+    this.headBeams.visible = I > 0.01;
     this.look = look;
     // ---------- 後排燈具彈琶音：低音在左、高音在右，一個音亮一下 ----------
     const fx = this.stage.fx;

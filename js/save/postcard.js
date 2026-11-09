@@ -8,7 +8,7 @@ import { filmGeometry, filmCapacity, drawFilm, readFilm, unpackFace, tone } from
 const PAPER = '#f2ead8', INK = 'rgba(52, 36, 28, 0.62)', BROWN = '#4a3022';
 
 // 郵票的紙和齒孔：以原點為中心、寬 w 高 h，齒孔用明信片的紙色挖掉
-function perforate(g, w, h, nx, ny, r) {
+export function perforate(g, w, h, nx, ny, r) {
   g.fillStyle = '#fbf6ea';
   g.fillRect(-w / 2, -h / 2, w, h);
   g.fillStyle = PAPER;
@@ -54,7 +54,7 @@ function stampArt(g, x, y, s) {
   g.restore();
 }
 
-function postmark(g, x, y, r, date) {
+export function postmark(g, x, y, r, date) {
   // 郵戳：一個圓圈，上面寫海市、下面寫日期，左邊拖幾道波浪線
   g.save();
   g.strokeStyle = INK;

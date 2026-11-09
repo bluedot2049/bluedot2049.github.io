@@ -5,6 +5,7 @@
 // 照片和臉都印成四階油墨、交界是網點，照片裡的燈籠另外印一個紅色專色（見 printPhoto），整張再鋪紙紋、對摺的摺痕
 import { drawGlyph, drawText } from '../core/glyphs.js';
 import { hourMark } from '../camera/album.js';
+import { LOCAL, WIRE, NOTICE, SERIALS, ADS } from './press-lines.js';
 
 export const PRESS = { name: '星潮報', latin: 'Aestus Siderum' };
 export const RANKS = ['角落', '半版', '頭版', '號外'];
@@ -32,10 +33,7 @@ export const SUBS = [
   ['目擊者當場拍下　清楚可見', '牠在燈下站了片刻才離開'],
   ['旅人當場拍下　清清楚楚', '全城傳閱　本報加印'],
 ];
-// 其他版面的小新聞：只有標題讀得懂
-export const NEWS = ['燈巷新到一批紙燈籠', '漁港今夜大潮', '工坊街木工收學徒', '渡船誤點半刻', '星廟籤筒換新', '山路的貓又多一隻',
-  '玻璃爐火七日未熄', '畫廊來信　鏡子擦乾淨了', '昨夜流星三顆', '海圖店新到南方星圖', '裁縫徵求舊布', '遠眺台石欄修好了', '包子攤改早上開'];
-export const ADS = [['火記光學', '燭火乙式'], ['海市暗房', '洗照片'], ['信差站', '明信片'], ['燈籠師傅', '紙要糊三層']];
+// 其他版面的小新聞、連載、廣告在 press-lines.js：只有標題讀得懂
 // 內文用的字：丟進 glyphs.js 都變成海市的字
 const BODY = '海市白獸光夜燈巷星潮人船港山廟風雨月橋石街茶火紙門窗看見來去今昨時刻旅者行走拍照鏡影水雲聲遠近上下東西南北一二三';
 
@@ -50,6 +48,34 @@ function dateline(t) {
   const d = new Date(t + 8 * 3600e3);
   const no = Math.max(1, Math.floor((t - Date.UTC(2025, 11, 31, 16)) / 86400e3) + 1);
   return { date: `${d.getUTCFullYear()}年${d.getUTCMonth() + 1}月${d.getUTCDate()}日`, hour: hourMark(t), no };
+}
+
+// 一到九百九十九寫成國字（連載的貓幾隻、校對幾夜）
+const DIGIT = '〇一二三四五六七八九';
+function cnum(n) {
+  n = Math.max(0, Math.min(999, n | 0));
+  if (n < 10) return DIGIT[n];
+  const h = Math.floor(n / 100), t = Math.floor(n / 10) % 10, o = n % 10;
+  let s = h ? DIGIT[h] + '百' : '';
+  if (t) s += (t === 1 && !h ? '' : DIGIT[t]) + '十';
+  else if (h && o) s += '〇';
+  return s + (o ? DIGIT[o] : '');
+}
+
+// 連載今天登哪一句：跟著期號，同一天的報紙一樣
+export function serialLine(sr, no) {
+  if (sr.days) return sr.days[((no % sr.days.length) + sr.days.length) % sr.days.length];
+  const { from, min } = sr.count;
+  return sr.text.replace('{n}', cnum(Math.max(min, min + no - from)));
+}
+
+// 這份報紙的小新聞，照版面用的順序：[0] 頭條（本地，四成機會是連載）、[1] 外地或啟事、[2] 另一種、[3] 本地
+function pickNews(R, no) {
+  const mix = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const local = mix(LOCAL), wire = mix(WIRE), notice = mix(NOTICE);
+  if (R() < 0.4) local.unshift(serialLine(SERIALS[Math.floor(R() * SERIALS.length)], no));
+  const [a, b] = R() < 0.5 ? [wire, notice] : [notice, wire];
+  return { news: [local[0], a[0], b[0], local[1]], ads: mix(ADS) };
 }
 
 // 筆名：去掉換行和控制字元，最多 12 個字
@@ -198,11 +224,17 @@ function cameo(g, face, cx, cy, r, pen, px = 30) {
   line(g, pen || '一位旅人', cx, cy + r + px * 2.5, r * 2.6, px);
 }
 
-// 一則小新聞：讀得懂的標題、一條細線、底下直排內文
+// 一則小新聞：讀得懂的標題（「新聞　笑點」的後半印成小一號的副標）、一條細線、底下直排內文
 function brief(g, x, y, w, h, title, R, px = 34) {
-  line(g, title, x + w / 2, y + px, w, px);
-  rule(g, x + w * 0.2, x + w * 0.8, y + px + 14, 1.5);
-  column(g, x, y + px + 30, w, h - px - 30, R, 20);
+  const cut = title.indexOf('　'), main = cut < 0 ? title : title.slice(0, cut), rest = cut < 0 ? '' : title.slice(cut + 1);
+  line(g, main, x + w / 2, y + px, w, px);
+  let ry = y + px + 14;
+  if (rest) {
+    line(g, rest, x + w / 2, ry + px * 0.62, w, Math.round(px * 0.64), { w: 500, color: SOFT });
+    ry += px * 0.62 + 12;
+  }
+  rule(g, x + w * 0.2, x + w * 0.8, ry, 1.5);
+  column(g, x, ry + 16, w, h - (ry + 16 - y), R, 20);
 }
 
 // 廣告框：粗框、店名、一句、一顆海市的字當商標
@@ -315,7 +347,7 @@ export function makePaper({ photo, face = null, pen = '', rare, t = Date.now() }
   const g = c.getContext('2d'), R = seeded(t), grade = Math.max(0, Math.min(3, rare.grade | 0));
   const what = RARE[rare.kind] || RARE.beast, at = (rare.where || '') + (rare.place || '');
   const head = HEADS[grade][Math.floor(R() * 2)](what, at), sub = SUBS[grade][Math.floor(R() * 2)];
-  const news = [...NEWS].sort(() => R() - 0.5), ads = [...ADS].sort(() => R() - 0.5);
+  const { news, ads } = pickNews(R, dateline(t).no);
   pen = cleanPen(pen);
   paper(g, R);
   let y = masthead(g, t, R);

@@ -30,8 +30,10 @@ const SOURCES = [
     keys: { VENDOR_LINES: '' } },
   { title: '海市・一幕劇「漁火」', file: 'js/zones/haishi/haishi-act-lines.js', note: '碼頭魚桶裡的魚一路逃上星廟（zones/haishi/haishi-acts.js），魚販和沿路攤販看到牠時說的話',
     keys: { FISH_LINES: '碼頭的魚販：bucket 走近魚桶、start 魚跳出去、away 戲還在演時走過魚攤、back 演完回來', SPOT_LINES: '沿路躲的地方，who 是旁邊那攤：hint 你走近時、pop 被你找到飛走時' } },
-  { title: '海市・星潮報', file: 'js/save/press.js', note: '報社印出來的報紙（save/press.js）：標題和副標照奇物和版面抽，旁邊填小新聞和廣告',
-    keys: { HEADS: '標題', SUBS: '副標', NEWS: '小新聞', ADS: '廣告（店名、賣什麼）' } },
+  { title: '海市・星潮報', file: 'js/save/press.js', note: '報社印出來的報紙（save/press.js）：你那則的標題和副標照奇物和版面抽',
+    keys: { HEADS: '標題', SUBS: '副標' } },
+  { title: '海市・星潮報的其他報導', file: 'js/save/press-lines.js', note: '旁邊那幾欄：頭條抽本地（四成是連載），其他欄混外地和啟事。「新聞　笑點」的後半在小欄裡印成副標',
+    keys: { LOCAL: '海市本地', WIRE: '別區傳來的', NOTICE: '啟事、更正、招領', SERIALS: '連載：days 照期號一天一句輪；count 的 {n} 從 from 那期起一天加一', ADS: '廣告（店名、一句）' } },
 ];
 
 const esc = (s) => String(s).replace(/\|/g, '\|');

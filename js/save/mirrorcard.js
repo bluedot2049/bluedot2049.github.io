@@ -22,8 +22,8 @@ export const PHOTO_W = WIN.r - WIN.l, PHOTO_H = WIN.b - (WIN.cy - WIN.R);
 const FRAME = { BAND: 140, ROWS: 19, CELL: 6.4 }, OLD_FRAME = { BAND: 110, ROWS: 12, CELL: 7.5 };
 const { BAND, ROWS, CELL } = FRAME, IN = 10;
 // 眼睛：虹膜圓心、半徑；資料圈從 IRIS0 開始，每圈 RING 寬，弧長約 ARC
-const EYE = { x: 750, y: 215, R: 165 }, IRIS0 = 62, RING = 9, IRIS_RINGS = 11, ARC = 9;
-const ECC_IRIS = 0.3, ECC_BAND = 0.3;
+export const EYE = { x: 750, y: 215, R: 165 }, IRIS0 = 62, RING = 9, IRIS_RINGS = 11, ARC = 9;
+export const ECC_IRIS = 0.3, ECC_BAND = 0.3;
 const INK = '#2a1d15', GOLD = '#c9a46a', BG = '#0b0910';
 // 外框的兩道細金線：離符文鏡框外緣多遠、多粗（外粗內細，同掛布）；下襬尖角的尖端（線往外推之前）
 const LINES = [[28, 2], [44, 4.5]], HEM = 1935;
@@ -65,7 +65,7 @@ function bandCells({ ROWS, CELL }) {
   return out;
 }
 
-const IRIS = irisCells(), BANDC = bandCells(FRAME);
+export const IRIS = irisCells(), BANDC = bandCells(FRAME);
 export const capacity = { iris: codeCapacity(IRIS.length, ECC_IRIS), band: codeCapacity(BANDC.length, ECC_BAND) };
 
 // ---------- 要印的資料 ----------
@@ -73,7 +73,7 @@ const enc = new TextEncoder(), dec = new TextDecoder();
 const OLD_FACES = 4;   // 第 1 版的鏡框：身上那套、衣櫃三套各一張
 
 // 眼紋：身上這套和拿到的東西（不含各攤日子，日子可能很長；也不含手把按鍵這種只放鏡框的）
-const irisPayload = (save) => enc.encode(encodeSave({ ...save, visits: {} }, { closet: false, face: false, iris: true }));
+export const irisPayload = (save) => enc.encode(encodeSave({ ...save, visits: {} }, { closet: false, face: false, iris: true }));
 
 // 存檔文字裡有很多重複的日子和代號，壓過再印
 const pipe = async (bytes, stream) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
@@ -82,13 +82,13 @@ const inflate = (bytes) => pipe(bytes, new DecompressionStream('deflate-raw')).c
 
 // 鏡框：[2][存檔長度 2][壓過的完整存檔][臉的長度 2][壓過的臉]。臉放不下就不印，lost 是 true。
 // 第 1 版是 [1][存檔][4 張臉各自長度 + 格子]，讀的時候還認得
-async function bandPayload(save) {
+export async function bandPayload(save, cap = capacity.band) {
   const text = await deflate(enc.encode(encodeSave(save, { face: false })));
   const c = decodeFace(save.face);
   let face = c ? await packFace(c) : new Uint8Array(0);
   const build = () => Uint8Array.from([2, text.length >> 8, text.length & 255, ...text, face.length >> 8, face.length & 255, ...face]);
   let data = build(), lost = false;
-  if (data.length > capacity.band && face.length) {
+  if (data.length > cap && face.length) {
     face = new Uint8Array(0);
     lost = true;
     data = build();
@@ -430,7 +430,7 @@ function eye(g, bits) {
 
 // 瞳孔裡的鏡面（同 mirror.js 的 glassTexture、glassMaterial）：上亮下暗的底色，三層星——近的少而暖、遠的多而小而冷，
 // 遠的沿一條斜斜的星河聚著；一顆四芒星浮在前面；最後靠邊壓暗，像從洞口看進去
-function pupilGlass(g, x, y, r) {
+export function pupilGlass(g, x, y, r) {
   g.save();
   g.beginPath();
   g.arc(x, y, r, 0, Math.PI * 2);
@@ -587,7 +587,7 @@ export function drawLids(g, card, k) {
 // ---------- 讀 ----------
 
 // 一張圖 → 照片版面的幾種可能（整張就是、上下多了黑邊、左右多了黑邊），各自是 卡片座標 → 圖上座標 的縮放和位移
-function fits(W, H) {
+export function fits(W, H) {
   const out = [], seen = new Set();
   for (const s of [W / CARD_W, H / CARD_H]) {
     const f = { s, ox: (W - CARD_W * s) / 2, oy: (H - CARD_H * s) / 2 };
@@ -605,7 +605,7 @@ function fits(W, H) {
 const goldness = (d, i) => Math.min(1, Math.max(0, (d[i] - d[i + 2] - 20) / 75));
 
 // 虹膜的候選：在縮小的金色比例圖上，用方塊估「瞳孔沒有金、外圈一半金、兩旁眼白沒有金」。回傳原圖座標的圓心和半徑，最像的在前面
-function irisSpots(img) {
+export function irisSpots(img) {
   const { width: W, height: H, data: d } = img, q = Math.max(1, Math.round(W / 400));
   const w = Math.floor(W / q), h = Math.floor(H / q), S = new Float64Array((w + 1) * (h + 1));
   for (let y = 0; y < h; y++) {
@@ -687,7 +687,7 @@ function frameShape(F) {
 const FRAMES = [frameShape(FRAME), frameShape(OLD_FRAME)];
 
 // 一串取樣跟理想的樣子有多像（相關係數）。at(t) 把卡片座標換成取樣的值，出了圖是 NaN
-function corr(tpl, at) {
+export function corr(tpl, at) {
   let n = 0, sp = 0, st = 0, spp = 0, stt = 0, spt = 0;
   for (const [t, v] of tpl) {
     const p = at(t);
@@ -697,7 +697,7 @@ function corr(tpl, at) {
   const cov = spt - (sp * st) / n, vp = spp - (sp * sp) / n, vt = stt - (st * st) / n;
   return vp > 1e-9 && vt > 1e-9 ? cov / Math.sqrt(vp * vt) : -1;
 }
-const lerp = (P, X) => {
+export const lerp = (P, X) => {
   const i = Math.floor(X);
   return i < 0 || i + 1 >= P.length ? NaN : P[i] + (P[i + 1] - P[i]) * (X - i);
 };
@@ -761,7 +761,7 @@ function* locate(img) {
 }
 
 // 每格的亮度（附近幾點平均）→ 比中間值暗的是 1
-function sample(img, cells, f, r) {
+export function sample(img, cells, f, r) {
   const { width: W, height: H, data: d } = img;
   const lum = (x, y) => {
     const xi = Math.min(W - 1, Math.max(0, Math.round(x))), yi = Math.min(H - 1, Math.max(0, Math.round(y))), i = (yi * W + xi) * 4;
@@ -777,7 +777,7 @@ function sample(img, cells, f, r) {
   return Uint8Array.from(v, (x) => (x < t ? 1 : 0));
 }
 
-async function imageData(file) {
+export async function imageData(file) {
   const bmp = await createImageBitmap(file);
   const k = Math.min(1, 4000 / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas');
@@ -816,7 +816,7 @@ export async function readMirrorCard(file) {
 }
 
 // 鏡框解開：存檔，後面第 2 版一張臉、第 1 版四張
-async function unpackBand(b) {
+export async function unpackBand(b) {
   let at = 1;
   const n = (b[at] << 8) | b[at + 1];
   at += 2;

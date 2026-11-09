@@ -12,6 +12,7 @@
 import { decodeSave, decodeLook, tryOn, codeFrom, hasProgress, restoreSave, attachFaces } from './savecode.js';
 import { readPostcard, joinFace } from './postcard.js';
 import { readMirrorCard } from './mirrorcard.js';
+import { readEyePost } from './eyepost.js';
 import { encodeFace } from '../avatar/looks.js';
 import { getSave, savePrint } from './progress.js';
 import { dockR, hugMedia, panelW, uiScale } from '../controls/ui.js';
@@ -654,20 +655,23 @@ export class Pack {
     input.click();
   }
 
-  // 先當鏡中的照片讀（眼紋、鏡框符文），讀不到再當海市的明信片（郵票、底片邊）。
-  // 鏡中的照片和更早寄給自己的明信片：整份還原（先問），臉接回戴著的那幾套（舊的每套一張，併成一張）。明信片：只換衣服和配件，穿在自己身上，沒拿到的那件不動（savecode.js 的 tryOn）。
+  // 先當鏡中的照片讀（眼紋、鏡框符文），再當海市的靈魂明信片（郵票的眼紋、紙邊符文），都讀不到再當普通明信片（郵票、底片邊）。
+  // 鏡中的照片、靈魂明信片和更早寄給自己的明信片：整份還原（先問），臉接回戴著的那幾套（舊的每套一張，併成一張）。明信片：只換衣服和配件，穿在自己身上，沒拿到的那件不動（savecode.js 的 tryOn）。
   // 回傳讀到什麼：'save'（要重新整理了）、'look'、null
   async read(file, b = null) {
     const small = b?.querySelector('small'), was = small?.textContent;
     if (small) small.textContent = '讀取中…';
     if (b) b.disabled = true;
     try {
-      let m = null;
+      let m = null, e = null;
       try { m = await readMirrorCard(file); } catch {}
+      // 兩種的眼紋是同一套，靈魂明信片的郵票也會被當鏡中照片讀到一半：鏡框沒讀全就再當靈魂明信片讀，讀全的那個算
+      if (!m?.full) try { e = await readEyePost(file); } catch {}
+      if (e && (e.full || !m)) m = e;
       if (m) {
-        const sv = m.save;
-        const ask = !m.full ? '鏡框讀不清楚，只能還原身上這套和拿到的東西，衣櫃和畫的臉不會回來。要用這張嗎？'
-          : hasProgress() ? '這台裝置已有存檔。用這張照片覆蓋？' : null;
+        const sv = m.save, card = m === e;
+        const ask = !m.full ? `${card ? '紙邊' : '鏡框'}讀不清楚，只能還原身上這套和拿到的東西，衣櫃和畫的臉不會回來。要用這張嗎？`
+          : hasProgress() ? `這台裝置已有存檔。用這張${card ? '明信片' : '照片'}覆蓋？` : null;
         if (ask && !confirm(ask)) return null;
         this.restore(sv, m.full);
         return 'save';

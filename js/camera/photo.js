@@ -20,11 +20,12 @@ import * as THREE from 'three';
 import { lens, fitSource, unbend, COVER } from '../core/lens.js';
 import { makePostcard, loadQR } from '../save/postcard.js';
 import { sanitizeLook, wearOnly } from '../avatar/looks.js';
-import { getSave } from '../save/progress.js';
+import { getSave, savePrint } from '../save/progress.js';
+import { makeEyePost } from '../save/eyepost.js';
 import { encodeLook } from '../save/savecode.js';
 import { CAMERAS, carried, dateKnob, drawDate, eyeShutter, flashKnob, longTan, shutterKnob } from './cameras.js';
 import { MARKS, markURL } from './marks.js';
-import { dof, dofK } from '../core/dof.js';
+import { dof, dofK, toneOf } from '../core/dof.js';
 import { LENSFX } from '../core/halation.js';
 import { GUIDE_LAYER, TAG_LAYER } from '../core/scenery.js';
 import { addPhoto, canShare, discard, onSnap, saveChosen, saveTip, shareChosen } from './album.js';
@@ -379,7 +380,7 @@ export class PhotoMode {
     sh.innerHTML = '';
     sh.classList.remove('gear', 'locked', 'snap', 'jam', 'eye', 'blink');
     this.$('#photo').hidden = true;
-    this.renderer.domElement.style.filter = '';
+    dof.tone = null;
     this.character.group.visible = true;
     this.character.group.userData.mirrorOnly = false;
     this.player.marker.visible = true;
@@ -396,18 +397,11 @@ export class PhotoMode {
 
   // 載入畫面還蓋著時，把舉相機的介面（取景框、快門、旋鈕）和畫廊的眼睛的快門各擺出來幾幀再收掉。
   // 瀏覽器第一次畫這些要先編它自己畫網頁用的著色器（Windows 上十幾支、兩百毫秒），不先畫過的話第一次舉相機會凍一下。
-  // 相機套在畫布上的色調（develop 的 filter）是合成時才畫的，被讀取畫面蓋住就不會畫：另外在讀取畫面上放一個跟底色一樣的小點套同一串 filter。
   // 只動介面，鏡頭、角色、景深、暈光都照原樣；main.js 在讀取條滿之前呼叫
   async warmUI() {
     const frame = () => new Promise((r) => requestAnimationFrame(r));
     const body = document.body, ph = this.$('#photo'), sh = this.$('#ph-shutter'), id = Object.keys(CAMERAS)[0];
-    const keep = { pitch: this.pitch, aimPitch: this.aimPitch, filter: this.renderer.domElement.style.filter };
-    const bg = getComputedStyle(document.getElementById('loading') || body).backgroundColor;
-    const dots = [...new Set(Object.values(CAMERAS).map((c) => c.develop?.filter).filter(Boolean))].map((f) => {
-      const d = document.createElement('div');
-      d.style.cssText = `position:fixed;left:0;top:0;width:2px;height:2px;z-index:2147483647;pointer-events:none;will-change:transform;background:${bg};filter:${f}`;
-      return body.appendChild(d);
-    });
+    const keep = { pitch: this.pitch, aimPitch: this.aimPitch };
     for (const gear of [id, null]) {
       if (gear) this.holdGear(gear);
       else sh.innerHTML = eyeShutter();
@@ -421,8 +415,8 @@ export class PhotoMode {
     }
     this.gear = null;
     dof.on = LENSFX.on = false;
-    Object.assign(this, { pitch: keep.pitch, aimPitch: keep.aimPitch });
-    this.renderer.domElement.style.filter = keep.filter;
+    dof.tone = null;
+    Object.assign(this, keep);
     this.character.group.visible = true;
     this.character.group.userData.mirrorOnly = false;
     this.player.marker.visible = true;
@@ -430,7 +424,6 @@ export class PhotoMode {
     sh.innerHTML = '';
     sh.classList.remove('gear', 'locked', 'eye');
     ph.hidden = true;
-    for (const d of dots) d.remove();
   }
 
   // 照相館的鏡頭：固定在 c 的位置和方向；null 就回到自己拍
@@ -673,9 +666,9 @@ export class PhotoMode {
     this.$('#ph-share').addEventListener('click', () => this.share());
     this.$('#ph-save').addEventListener('click', () => this.keep());
     this.$('#ph-again').addEventListener('click', () => this.retake());
+    this.$('#ph-kind').addEventListener('click', (e) => this.pickCard(e.target.closest('button')?.dataset.v));
     this.$('#ph-done').addEventListener('click', () => this.exit());
     this.$('#ph-result .save-tip').textContent = saveTip;
-    this.$('#ph-frame .grain').style.backgroundImage = `url(${this.noise.toDataURL()})`;
     window.addEventListener('resize', () => this.active && this.refresh());
   }
 
@@ -718,7 +711,8 @@ export class PhotoMode {
       Object.assign(LENSFX, { halation: g.glow.halation, radius: g.glow.radius, fringe: g.glow.fringe });
       LENSFX.tint.set(g.glow.tint);
     }
-    this.renderer.domElement.style.filter = look.filter;
+    // 取景的色調在景深那一道裡套（dof.js 的 toneOf），不再用 CSS filter 蓋在畫布上
+    dof.tone = g ? toneOf(look.filter) : null;
     const seen = g ? this.grip === 3 : this.self;
     this.character.group.visible = seen;
     // 手持看不到自己，但鏡子裡照樣有（鏡宮的倒影看這個旗子）
@@ -727,8 +721,7 @@ export class PhotoMode {
     document.body.classList.add('photo-hush');   // 對話框拍不進照片，取景時也藏起來
     const fr = this.$('#ph-frame');
     fr.classList.toggle('masked', this.ratio() > 0);
-    fr.style.setProperty('--vig', look.vig);
-    fr.querySelector('.grain').style.opacity = look.grain;
+    fr.style.setProperty('--vig', look.vig);   // 顆粒只上照片（compose），取景不疊：全螢幕的 overlay 混合手機每幀都要多合成一次
     this.layoutFrame();
   }
 
@@ -1473,11 +1466,11 @@ export class PhotoMode {
   // ───────── 合成：畫面 → 2D 畫布 ─────────
 
   // 把剛畫好的 3D 畫面（src 的 sx..sh 那一塊）加上相機的色調、對話框、暗角、顆粒和落款，畫進 ctx（W × H）
-  // k：取景框裡 1 個 CSS 像素對應輸出幾個像素
-  compose(ctx, src, sx, sy, sw, sh, W, H, k, grainShift) {
-    const look = this.gear ? this.gear.develop : PLAIN;
+  // k：取景框裡 1 個 CSS 像素對應輸出幾個像素；toned：src 是取景的畫面，色調已經在景深那一道套過（長曝光、錄影拷的是它），不再套一次
+  compose(ctx, src, sx, sy, sw, sh, W, H, k, grainShift, toned = false) {
+    const look = this.gear ? this.gear.develop : PLAIN, filter = toned ? '' : look.filter || '';
     ctx.save();
-    ctx.filter = look.filter || 'none';
+    ctx.filter = filter || 'none';
     ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
     ctx.restore();
     // 亮的地方暈開一點：再疊一張糊過的上去（不支援 ctx.filter 的瀏覽器就不疊，免得整張變亮）。
@@ -1486,7 +1479,7 @@ export class PhotoMode {
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
       ctx.globalAlpha = look.halo;
-      ctx.filter = `blur(${Math.max(2, Math.round(Math.max(W, H) * 0.006))}px) ${look.filter || ''}`;
+      ctx.filter = `blur(${Math.max(2, Math.round(Math.max(W, H) * 0.006))}px) ${filter}`;
       ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
       ctx.restore();
     }
@@ -1518,6 +1511,11 @@ export class PhotoMode {
       const sw = this.signed() && img.naturalWidth ? s * this.markH * img.naturalWidth / img.naturalHeight + s * 0.8 : 0;
       drawDate(this.gear.id, ctx, W - s * 1.3 - sw, H - s * 1.15, s * 0.62);
     }
+  }
+
+  // 畫面上的取景已經套了相機色調（景深那一道，dof.js）
+  toned() {
+    return dof.on && !!dof.tone;
   }
 
   // 落款開著，而且這次有記號可蓋（有些相機的照片只留它自己的印記）
@@ -1820,7 +1818,7 @@ export class PhotoMode {
     const shot = document.createElement('canvas');
     shot.width = e.w;
     shot.height = e.h;
-    this.compose(shot.getContext('2d'), raw, 0, 0, e.w, e.h, e.w, e.h, e.w / this.frame.w, Math.random());
+    this.compose(shot.getContext('2d'), raw, 0, 0, e.w, e.h, e.w, e.h, e.w / this.frame.w, Math.random(), this.toned());
     this.flash();
     this.burned();
     if (fire) this.fired();
@@ -2069,7 +2067,7 @@ export class PhotoMode {
     const src = this.renderer.domElement, fr = this.frame;
     const px = src.width / window.innerWidth;
     rec.shift = (rec.shift + 0.37) % 1;
-    this.compose(rec.ctx, src, fr.x * px, fr.y * px, fr.w * px, fr.h * px, rec.canvas.width, rec.canvas.height, rec.k, rec.shift);
+    this.compose(rec.ctx, src, fr.x * px, fr.y * px, fr.w * px, fr.h * px, rec.canvas.width, rec.canvas.height, rec.k, rec.shift, this.toned());
     const sec = (performance.now() - rec.start) / 1000;
     const label = `${pad2(Math.floor(sec / 60))}:${pad2(Math.floor(sec % 60))}`;
     if (label !== rec.label) {
@@ -2081,31 +2079,65 @@ export class PhotoMode {
 
   // ───────── 拍好之後 ─────────
 
-  // 明信片只印身上的衣服和配件（不帶存檔、種族、臉；存檔只在鏡中照片）：茜紅郵票是造型碼（looks.js 的 wearOnly），沒有底片邊。
-  // 讀回來是試穿，穿在讀的人自己身上：寄給朋友，或自己留著當衣櫃外的一套。更早的明信片（帶臉、寄給自己）照樣讀得回來
-  async postcardResult() {
-    await loadQR();
+  // 明信片兩版，拍好後上面兩個鈕切換，記得上次選哪個（prefs 的 postcardSoul）：
+  //   普通版：只印身上的衣服和配件（不帶存檔、種族、臉）：茜紅郵票是造型碼（looks.js 的 wearOnly），沒有底片邊。
+  //           讀回來是試穿，穿在讀的人自己身上：寄給朋友，或自己留著當衣櫃外的一套
+  //   靈魂版：黑眼在郵票上蓋眼印、紙邊印整份存檔（eyepost.js），跟鏡中照片一樣能整份還原；照片裁成 4:5。相簿裡的存檔只留最新一張
+  // 更早的明信片（帶臉、寄給自己）照樣讀得回來
+  async postcardResult(soul = pref('postcardSoul')) {
     const sh = this.shot;
     if (!sh) return;
-    const qr = { kind: 'look', text: location.origin + location.pathname + '#look=' + encodeLook(wearOnly(sanitizeLook(getSave().look)), { face: false }) };
-    const card = makePostcard(sh, new Date(), { qr });
-    const blob = await new Promise((ok) => card.toBlob(ok, 'image/jpeg', 0.92));
-    if (!blob || this.shot !== sh) return;   // 等的時候離開了
-    this.showCard(blob, `海市明信片-${stamp()}.jpg`);
+    let canvas, lost = false, more;
+    if (soul) {
+      ({ canvas, lost } = await makeEyePost(sh, { save: getSave() }));
+      more = { kind: 'postcard-save', k: savePrint() };
+    } else {
+      await loadQR();
+      const qr = { kind: 'look', text: location.origin + location.pathname + '#look=' + encodeLook(wearOnly(sanitizeLook(getSave().look)), { face: false }) };
+      canvas = makePostcard(sh, new Date(), { qr });
+      more = { kind: 'postcard' };
+    }
+    const blob = await new Promise((ok) => canvas.toBlob(ok, 'image/jpeg', 0.92));
+    if (!blob || this.shot !== sh || this.result?.blob) return;   // 等的時候離開了、換了另一版
+    this.showCard(blob, `${soul ? '海市靈魂明信片' : '海市明信片'}-${stamp()}.jpg`, more);
     this.ambience.voice('print', 0.35);
-    this.$('#ph-tip').textContent = canShare ? '郵票印著這身衣服。分享給朋友試穿，或自己留著，衣櫃外多收一套'
+    const kind = this.$('#ph-kind');
+    kind.hidden = false;
+    kind.querySelectorAll('button').forEach((b) => b.classList.toggle('on', (b.dataset.v === 'soul') === !!soul));
+    this.$('#ph-tip').textContent = soul ? (lost ? '存檔已印上。臉太滿，沒有印上' : '這張是存檔，存下或截圖都可以。換裝置時在行囊讀這張就能還原')
+      : canShare ? '郵票印著這身衣服。分享給朋友試穿，或自己留著，衣櫃外多收一套'
       : saveTip ? '郵票印著這身衣服。按存下寄給朋友試穿，或自己留著，衣櫃外多收一套'
       : '郵票印著這身衣服。存下寄給朋友試穿，或自己留著，衣櫃外多收一套';
   }
 
+  // 換另一版：看著的這張還沒存下就從相簿拿掉，印另一版
+  pickCard(v) {
+    const r = this.result;
+    if (!v || !r || this.$('#ph-kind').hidden) return;
+    const soul = v === 'soul';
+    if (soul === pref('postcardSoul')) return;
+    setPref('postcardSoul', soul);
+    if (!r.kept) {
+      r.dropped = true;
+      if (r.item) discard([r.item]);
+    }
+    this.result = { pending: true };
+    this.$('#ph-kind').querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b.dataset.v === v); b.disabled = true; });
+    this.$('#ph-save').disabled = true;
+    this.postcardResult(soul).finally(() => this.$('#ph-kind').querySelectorAll('button').forEach((b) => { b.disabled = false; }));
+  }
+
   // 明信片一印好就收進相簿
-  showCard(blob, name) {
+  showCard(blob, name, more = { kind: 'postcard' }) {
     const shot = this.shot;
     this.closeResult();
     this.shot = shot;
     const url = URL.createObjectURL(blob);
     const r = (this.result = { blob, url, name, item: null });
-    addPhoto(blob, { name, cam: this.gear?.id || 'eye', kind: 'postcard', quiet: true }).then((it) => { r.item = it; });
+    addPhoto(blob, { name, cam: this.gear?.id || 'eye', ...more, quiet: true }).then((it) => {
+      r.item = it;
+      if (r.dropped && !r.kept) discard([it]);
+    });
     const box = this.$('#ph-media');
     box.innerHTML = '';
     const m = document.createElement('img');
@@ -2121,7 +2153,8 @@ export class PhotoMode {
 
   closeResult() {
     if (!this.result) return;
-    URL.revokeObjectURL(this.result.url);
+    this.$('#ph-kind').hidden = true;
+    if (this.result.url) URL.revokeObjectURL(this.result.url);
     this.result = null;
     this.shot = null;
     this.$('#ph-media').innerHTML = '';
@@ -2143,7 +2176,10 @@ export class PhotoMode {
     const where = await saveChosen([r.item]);
     if (this.result !== r) return;
     if (where == null) b.disabled = false;
-    else b.querySelector('span').textContent = '存好了';
+    else {
+      r.kept = true;
+      b.querySelector('span').textContent = '存好了';
+    }
   }
 
   // Android 的分享：分享出去的照樣留在相簿
