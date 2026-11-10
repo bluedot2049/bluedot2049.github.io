@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 
 const GOLD = '#d4a54a';
+const mix = (a, b, t) => '#' + new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString();
 
 // 兩點之間的一根棍子（圓柱或方條），軸向對準 a → b
 export function rod(k, a, b, r, c, o = {}) {
@@ -197,6 +198,21 @@ export const HEADS = {
 
   human(k, c) {
     k.ball(0.2, c, 0, 0.2, 0);
+  },
+  // 矮人：頭寬一點，一顆偏紅的圓鼻頭。頭髮和大鬍子是頭髮的顏色，由 character.js 長（race.beard）
+  dwarf(k, c) {
+    k.ball(0.2, c, 0, 0.2, 0, { sx: 1.1 });
+    k.ball(0.042, mix(c, '#c8584a', 0.3), 0, 0.165, 0.2);
+  },
+  // 精靈：臉窄一點、長一點，一對往外上方翹、朝後斜的長尖耳（扁的，正面看得到耳面）
+  elf(k, c, c2) {
+    k.ball(0.2, c, 0, 0.21, 0, { sx: 0.94, sy: 1.05 });
+    for (const s of [-1, 1]) {
+      const d = [s * 0.82, 0.5, -0.3], n = Math.hypot(...d), u = d.map((v) => v / n), len = 0.24, b = [s * 0.16, 0.2, -0.02];
+      const at = (t) => b.map((v, i) => v + u[i] * t), rot = { rx: Math.acos(u[1]), ry: Math.atan2(u[0], u[2]) };
+      k.cone(0.05, len, c, ...at(len / 2), { ...rot, sx: 0.4 });
+      k.cone(0.028, len * 0.7, mix(c, '#d88a8a', 0.35), ...at(len * 0.38).map((v, i) => v + [0, 0, 0.012][i]), { ...rot, sx: 0.3 });
+    }
   },
   egg(k) {
     k.ball(0.2, '#f6efe2', 0, 0.26, 0, { sx: 0.95, sy: 1.3, sz: 0.95 });

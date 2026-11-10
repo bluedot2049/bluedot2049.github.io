@@ -18,6 +18,13 @@ body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #swap-btn, body.p
 #ph-frame.masked { box-shadow: 0 0 0 100vmax rgba(10, 6, 3, .62); outline: 1px solid rgba(246, 219, 166, .4); }
 #ph-frame > div { position: absolute; inset: 0; }
 #ph-frame .vig { background: radial-gradient(ellipse 75% 70% at 50% 50%, rgba(20, 10, 4, 0) 55%, rgba(20, 10, 4, var(--vig, .32)) 100%); }
+/* 取景框小的相機（拍立拿a500 的 finder）：框外暗得多，框裡一圈圈菲涅耳鏡的紋、四角暗，看得到但不好看懂。只在取景，照片不帶 */
+#ph-frame.finder.masked { box-shadow: 0 0 0 100vmax rgba(14, 13, 12, .88); outline-color: rgba(220, 214, 200, .35); border-radius: 3px; }
+#ph-frame.finder .vig {
+  background:
+    repeating-radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0) 0 9px, rgba(255, 255, 255, .05) 10px, rgba(255, 255, 255, 0) 11px),
+    radial-gradient(ellipse 72% 72% at 50% 50%, rgba(10, 12, 14, 0) 45%, rgba(10, 12, 14, .55) 100%);
+}
 /* 顆粒只上照片（photo.js 的 compose）：取景時全螢幕的 overlay 混合疊在畫布上，手機每幀合成都要多一道 */
 #ph-frame .grain { display: none; }
 #ph-frame .sig { position: absolute; width: auto; opacity: .82; }
@@ -48,6 +55,10 @@ body.photo-expose #ph-frame { outline-color: rgba(196, 69, 45, .7); }
 #ph-af.hunt { opacity: 1; animation: ph-hunt .3s ease-in-out infinite alternate; }
 #ph-af.lock { opacity: 1; border-color: var(--gold); transform: scale(.82); transition: transform .12s, opacity .4s; }
 @keyframes ph-hunt { from { transform: scale(1.12); } to { transform: scale(.94); } }
+/* 日晷III 的追焦鎖定：框是冷白的、帶一圈淡紫，一直跟著被鎖的人；跑出畫面時貼在框邊、變虛線 */
+#ph-af.track { opacity: 1; border-color: #eef2ff; box-shadow: 0 0 0 1px rgba(169, 140, 255, .45), inset 0 0 0 1px rgba(169, 140, 255, .3); transition: opacity .2s; }
+#ph-af.track.lock { transform: scale(.82); }
+#ph-af.track.edge { border-style: dashed; opacity: .75; }
 
 /* 眼睛貼上觀景窗（舉起相機、切自拍）：墨色蓋一下再淡開，鏡頭換位置那一下不硬切。舉相機的快門、拿法照樣浮在上面 */
 #ph-dark { position: fixed; inset: 0; z-index: 13; background: #0e0906; opacity: 0; pointer-events: none; }
@@ -200,6 +211,24 @@ body.joy-left:not(.desk) #ph-lens { left: auto; right: calc(var(--jx) - var(--se
     conic-gradient(#c69650, #9d7137 45deg, #bf8f4b 90deg, #d5ae6d 135deg, #bf8f4b 180deg, #986a34 225deg, #c69650 270deg, #dfbe83 315deg, #c69650);
   box-shadow: inset 0 1px 1px rgba(245, 222, 180, .48), inset 0 -2px 3px rgba(50, 30, 10, .5), 0 2px 8px rgba(0, 0, 0, .5);
 }
+/* 日晷III 的銀鈕：亮面銀，外圈是變焦撥桿，推著時整圈轉過去（--zl：1 拉近往右推、-1 拉遠往左推） */
+#ph-shutter.gear.silver {
+  border-color: rgba(70, 76, 84, .9);
+  background:
+    radial-gradient(circle, transparent 60%, rgba(30, 34, 40, .3) 100%),
+    conic-gradient(#e6e9ec, #a8afb6 45deg, #dfe3e6 90deg, #f4f5f6 135deg, #b9c0c6 180deg, #9aa1a8 225deg, #e6e9ec 270deg, #fafbfb 315deg, #e6e9ec);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .6), inset 0 -2px 3px rgba(30, 34, 40, .45), 0 2px 8px rgba(0, 0, 0, .5);
+}
+/* 拍立拿a500：奶油白亮面圓盤，中間番茄紅大圓鈕（cameras.js 的 SHUTTERS.pola）；下緣三個小窗亮著是還剩幾張，用掉的暗下去 */
+#ph-shutter.gear.pola {
+  border-color: rgba(120, 112, 100, .8);
+  background: radial-gradient(circle at 40% 32%, #fffdf7, #f1ede3 55%, #d9d3c6 100%);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .8), inset 0 -2px 3px rgba(90, 80, 66, .35), 0 2px 8px rgba(0, 0, 0, .5);
+}
+#ph-shutter.pola .model { font: 800 6.4px "Arial Rounded MT Bold", "Varela Round", "Nunito", system-ui, sans-serif; letter-spacing: .6px; fill: #8b939b; }
+#ph-shutter.pola .f { fill: #ffd27a; stroke: #8b939b; stroke-width: .6; transition: fill .4s; }
+#ph-shutter.pola .f.used { fill: #3a3d42; }
+#ph-shutter.silver .zring { transform: rotate(calc(var(--zl, 0) * -24deg)); transition: transform .15s ease-out; }
 #ph-shutter.gear::after, #ph-shutter.gear::before { content: none; }
 #ph-shutter.gear svg { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 #ph-shutter .groove { fill: #3e2810; stroke: #2a1a0a; stroke-width: .6; }
@@ -336,6 +365,15 @@ body.joy-left:not(.desk) #ph-look { left: auto; right: var(--x); }
 #ph-flash.swap .old { animation: ph-bulb-out var(--swap, 1.6s) ease-in both; }
 #ph-flash.swap .new { animation: ph-bulb-in var(--swap, 1.6s) ease-out both; }
 #ph-flash.swap .puff { animation: ph-puff .9s ease-out both; }
+/* 拍立拿a500 的紀念模式（cameras.js 的 KNOBS.memo）：一枚紀念章，關著霧銀、開著金的、微微發光 */
+#ph-flash.memo { background: radial-gradient(circle at 40% 32%, #fbf8f0, #e4dfd3 72%); border-color: #a9b0b7; }
+#ph-flash.memo .med { fill: #c3c8cd; transition: fill .3s; }
+#ph-flash.memo .rim { fill: none; stroke: #8b939b; stroke-width: 1; }
+#ph-flash.memo .w { fill: none; stroke: #6d747b; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+#ph-flash.memo .ten { font: 800 7px "Arial Rounded MT Bold", "Varela Round", "Nunito", system-ui, sans-serif; fill: #6d747b; }
+#ph-flash.memo.on .med { fill: #e2b95e; filter: drop-shadow(0 0 3px rgba(255, 210, 120, .8)); }
+#ph-flash.memo.on .rim, #ph-flash.memo.on .w { stroke: #7a5218; }
+#ph-flash.memo.on .ten { fill: #7a5218; }
 #ph-flash.swap .ring { opacity: 1; animation: ph-ring var(--swap, 1.6s) linear both; }
 @keyframes ph-bulb-out { 0%, 30% { opacity: 1; transform: none; } 50%, 100% { opacity: 0; transform: translateY(26px); } }
 @keyframes ph-bulb-in { 0%, 55% { opacity: 0; transform: translateY(26px); } 100% { opacity: 1; transform: none; } }
@@ -377,6 +415,24 @@ body.joy-left:not(.desk) #ph-look { left: auto; right: var(--x); }
 #ph-date .lid { transition: transform .3s cubic-bezier(.3, .8, .3, 1); }
 #ph-date .lid path { fill: #4d4a48; }
 #ph-date.on .lid { transform: translateY(-21px); }
+/* 日晷III 的打孔銀條（距離印記）：亮面銀板，孔後面透冷白帶紫的光；關掉時銀蓋滑下來 */
+#ph-date.silver {
+  border-color: rgba(70, 76, 84, .9);
+  background:
+    linear-gradient(118deg, transparent 6%, rgba(255, 255, 255, .5) 20%, transparent 34%, transparent 60%, rgba(255, 255, 255, .3) 76%, transparent 90%),
+    linear-gradient(180deg, #eef0f2, #c3c9cf 45%, #9aa1a8);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .6), inset 0 -2px 3px rgba(30, 34, 40, .4), 0 2px 6px rgba(0, 0, 0, .45);
+}
+#ph-date.silver .well { fill: #1c1f25; }
+#ph-date.silver.on .well { fill: #232733; }
+#ph-date.silver .lit { fill: #343a44; }
+#ph-date.silver.on .lit { fill: #eef2ff; filter: drop-shadow(0 0 1.2px #a98cff); }
+#ph-date.silver .glow rect { fill: #cbb8ff; }
+#ph-date.silver.burn .lit { animation: ph-burn-s 1s ease-out both; }
+#ph-date.silver .lid path { fill: #a9b0b7; }
+#ph-date.silver .sill { stroke: #5c636a; }
+#ph-date.silver .rivet { fill: #e3e6e9; stroke: #6f767d; }
+@keyframes ph-burn-s { 0% { fill: #ffffff; } 100% { fill: #eef2ff; } }
 @keyframes ph-burn { 0% { opacity: .85; } 100% { opacity: 0; } }
 @keyframes ph-burn-lit { 0% { fill: #fff0c8; } 100% { fill: #ffa44a; } }
 
@@ -474,6 +530,8 @@ body.photo-quick #ph-grip {
   left: calc(100% + 18px); top: 50%; transform: translateY(-50%); white-space: nowrap;
 }
 body.photo-quick.photo-gear #ph-grip .g-gear, body.photo-quick:not(.photo-gear) #ph-grip .g-drone { display: block; }
+body.photo-quick.photo-zoom #ph-grip .g-gear { display: none; }
+body.photo-quick.photo-zoom #ph-grip .g-zoom { display: block; }
 #ph-grip b { font-size: 14px; font-weight: 600; letter-spacing: .2em; color: var(--gold-hi); }
 #ph-grip small { font-size: 11px; letter-spacing: .05em; color: var(--muted); }
 #ph-grip em { font-style: normal; color: var(--gold-hi); }

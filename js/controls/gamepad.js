@@ -46,7 +46,7 @@ export function padPair(a, b, labels) {
 }
 // 換鍵卡上的每一列：原本那顆（-1、-2 是確認、返回，照牌子換位置）、走動時做什麼、舉著相機時做什麼（一樣的不寫）
 const ROWS = [
-  [-1, '互動', '快門'], [-2, '返回、起來', '放下'], [N, '跳', '自拍'], [W, '坐', '閃光'],
+  [-1, '互動', '快門'], [-2, '返回、起來', '放下'], [N, '跳', '自拍'], [W, '坐', '閃光、紀念'],
   [ZL, '舉相機', ''], [ZR, '快門', ''], [L, '表情', '日期'], [R, '黑眼帶路', '重新對焦'],
   [R3, '標記', '重新對焦'], [L3, '', '空拍機加速'], [UP, '拉近', '舉高、上升'], [DOWN, '拉遠', '蹲低、下降'],
   [LEFT, '同行', '空拍機變焦'], [RIGHT, '說話', '直橫'], [PLUS, '暫停選單', ''], [MINUS, '行囊', ''],
@@ -94,7 +94,7 @@ let rumbler = null;
 // 別的模組要震時呼叫：手把在用、頁面在最前面、設定沒關才震（頁面被蓋住時瀏覽器照樣回 complete，不能靠回覆判斷）
 export const rumble = (kind) => rumbler?.(kind);
 
-export function bindGamepad({ player, photo, ui, desk, party, cues, ambience }) {
+export function bindGamepad({ player, photo, ui, desk, party, cues, ambience, teach }) {
   const saved = pref('pad') || {};
   const opt = { sens: Number.isFinite(saved.sens) ? saved.sens : 1, invert: saved.invert === true, labels: saved.labels ?? null, forced: saved.forced === true, told: saved.told === true, rumble: saved.rumble !== false };
   const keep = () => setPref('pad', opt);
@@ -180,12 +180,13 @@ export function bindGamepad({ player, photo, ui, desk, party, cues, ambience }) 
     firstTell();
   }
 
-  // 第一次用手把：底下那行說最基本的幾顆（全部的在暫停選單的「手把按鍵」），講完才說聲音的事。問 A 的那句先等答了
+  // 第一次用手把：照進門的教學從走教起（main.js 的 teach：左搖桿走、走一段再教右搖桿、跳、坐；全部的在暫停選單的「手把按鍵」），
+  // 講完才說聲音的事。問 A 的那句先等答了
   function firstTell() {
     if (opt.told) return soundHint();
     opt.told = true;
     keep();
-    ui.hint(`左搖桿走路　右搖桿轉視角　${padBtn(3)} 跳　${padBtn(2)} 坐　${padBtn(-1)} 互動`, 6000);
+    teach?.()?.start('pad');
     setTimeout(soundHint, 6200);
   }
 
@@ -366,12 +367,15 @@ export function bindGamepad({ player, photo, ui, desk, party, cues, ambience }) 
     if (pr(B)) return void photo.exit();
     if (gear) {
       photo.padFly(0, false);
-      if (photo.quick && pr(UP)) photo.gripWheel(-1);
-      if (photo.quick && pr(DOWN)) photo.gripWheel(1);
+      // 變焦鏡（日晷III）：十字鍵上下按住是變焦（舉著、完整攝影模式都是），沒有高低
+      if (gear.zoom) photo.padZoomHold((on[UP] ? 1 : 0) - (on[DOWN] ? 1 : 0));
+      else if (photo.quick && pr(UP)) photo.gripWheel(-1);
+      if (!gear.zoom && photo.quick && pr(DOWN)) photo.gripWheel(1);
       // 重新對焦兩顆都行：按下右搖桿（瞄準的拇指本來就在上面），或 R（食指在快門正上方，對焦、往下一滑就拍，像相機的半按）
       if (pr(R3) || pr(R)) photo.refocus();
       if (pr(N)) photo.toggleSelfie();
-      if (pr(W) && gear.flash) photo.toggleFlash();
+      if (pr(W) && (gear.flash || gear.memo)) photo.toggleFlash();
+      else if (pr(W) && gear.track) photo.toggleTrack();   // 日晷III：Y 是追焦鎖定   // 拍立拿a500 是紀念模式
       if (pr(LEFT) && gear.date) photo.toggleDate();
       if (pr(RIGHT)) photo.turn();
     } else {

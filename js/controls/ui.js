@@ -5,6 +5,7 @@
 import { alchemyCovers } from '../core/alchemy-glyphs.js';
 import { pref, setPref } from '../save/prefs.js';
 import { sfx, thing } from '../audio/ui-voices.js';
+import { demoEl, showOverlay, removeOverlay } from './demos.js';
 
 const $ = (s) => document.querySelector(s);
 
@@ -392,6 +393,8 @@ export class UI {
   //   hint(text, ms)                  回饋、事件（已還原、有人加入）：至少停到讀得完（readMs），走動不收
   //   hint(text, { id, hold: true })  狀態：一直在，到 hideHint(id) 才收（問手把的 A、沖洗中、點要標記的地方）
   //   tip(id, text, ms)               教學：這台裝置出現過兩次、或做過那件事（learned(id)）就不再出現；做了當場收
+  //   tip(id, text, ms, { demo, plat, on, lock })  教學帶動態示範：字前面放 demos.js 的那張（plat：touch／desk／pad）；
+  //                                   觸控有 on 時另外疊一張在那顆按鈕上（'#joy'）或拖曳的空處（'open'）
   // 同時來：狀態壓過回饋、回饋壓過教學。被壓下去、還沒停夠的教學和狀態排在後面，上面那個收了再出來。
   // hideHint(id) 只收那一個，id 寫成 'photo:' 收這一組，不給 id 全收
   hint(text, o = 5000) {
@@ -399,9 +402,9 @@ export class UI {
     this.showHint({ text, id: opt.id ?? null, pri: opt.hold ? 3 : 2, ms: opt.hold ? Infinity : Math.max(opt.ms ?? 0, readMs(text)) });
   }
 
-  tip(id, text, ms = 0) {
+  tip(id, text, ms = 0, demo = null) {
     if (!this.fresh(id)) return false;
-    this.showHint({ text, id, pri: 1, ms: Math.max(ms, readMs(text)) });
+    this.showHint({ text, id, pri: 1, ms: Math.max(ms, readMs(text)), demo });
     return true;
   }
 
@@ -441,6 +444,7 @@ export class UI {
       ? TOAST_KEEP - (now - (this.toastAt ?? 0)) : 0;
     if (wait > 0) {
       $('#hint').classList.remove('show');
+      removeOverlay();
       h.end = now + wait + h.ms;
       this.hintTimer = setTimeout(() => this.putHint(h), wait);
     } else this.putHint(h);
@@ -450,6 +454,12 @@ export class UI {
     if (short() && this.toastEl.classList.contains('show')) this.toastEl.classList.add('yield');
     const el = $('#hint');
     el.textContent = h.text;
+    removeOverlay();
+    const d = h.demo && demoEl(h.demo.demo, h.demo.plat, h.demo);
+    if (d) {
+      el.prepend(d);
+      if (h.demo.on && h.demo.plat === 'touch') showOverlay(h.demo.demo, h.demo.on);
+    }
     el.classList.add('show');
     h.end = performance.now() + h.ms;
     clearTimeout(this.hintTimer);
@@ -458,6 +468,7 @@ export class UI {
 
   endHint() {
     $('#hint').classList.remove('show');
+    removeOverlay();
     this.hintCur = null;
     // 排著的等這句淡掉（.5 秒）再換字
     if (this.hintNext) this.hintTimer = setTimeout(() => {

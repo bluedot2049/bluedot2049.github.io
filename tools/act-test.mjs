@@ -1,5 +1,5 @@
 // 一幕劇走一遍（core/act.js、zones/haishi/haishi-acts.js）：無頭 Edge 在海市按魚桶「看看」開演，跟在魚後面，
-// 每一拍躲好時從旁邊拍一張（tools/out/act/），再站上去面對牠讓牠飛走，到星廟演完，看演到一半存檔沒記、演完才記、頁面沒有錯誤。約兩分鐘
+// 每一拍躲好時從旁邊拍一張（tools/out/act/），再站上去面對牠讓牠飛走，到星廟鑽進火盆演完（火盆近看、火傳下山各拍一張），看演到一半存檔沒記、演完才記、頁面沒有錯誤。約兩分鐘
 //   node tools/act-test.mjs
 // 改 haishi-acts.js 的位置、姿勢、找到的條件，或 act.js、黑眼那一行之後跑
 import fs from 'node:fs';
@@ -62,10 +62,18 @@ try {
   let m = 0, s;
   while ((s = await st()).phase === 'finale' && m++ < 80) await sleep(250);
   const end = await saved();
+  // 火魚鑽進火盆：火盆燒著，近看一張；等火傳到海邊，從廟埕往南看整座鎮一張（haishi-brazier.js）
+  const lit = await b.ev(`__act.acts[0].brazier.lit`);
+  log('火盆', lit ? '燒著' : '沒燒');
+  await b.ev(`__g.player.place(-6, -101, 0)`);
+  await snap('7-brazier', [-5.2, 48.2, -105.6], [-1.8, 47.5, -108.25]);
+  let w = 0;
+  while ((await b.ev(`__act.acts[0].brazier.age`)) < 19 && w++ < 80) await sleep(250);
+  await snap('8-town', [-3.5, 49.5, -104.5], [0, 14, -15]);
   log('演到一半的存檔', [...new Set(mid)].join(' '), '演完', s, '存檔', end);
   const midOk = mid.every((v) => v === '[]'), endOk = end === '["fish"]';
   const e = JSON.parse(await b.ev(`JSON.stringify(__errs)`));
-  log(s.done && s.b === 0 && midOk && endOk && !e.length ? '✓ 演完了' : `✗ ${!midOk ? '演到一半就存了' : !endOk ? '存檔不對' : '沒演完或有錯'}`, e.length ? e : '');
+  log(s.done && s.b === 0 && midOk && endOk && lit && !e.length ? '✓ 演完了' : `✗ ${!midOk ? '演到一半就存了' : !endOk ? '存檔不對' : !lit ? '火盆沒燒' : '沒演完或有錯'}`, e.length ? e : '');
 } finally {
   b.close();
 }

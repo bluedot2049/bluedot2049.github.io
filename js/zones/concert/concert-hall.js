@@ -3,7 +3,7 @@
 // 演唱會的大廳：像一座巨大的地下教團聖殿。九對石柱撐尖拱肋的屋頂、兩側兩層看台、觀眾背後一層層的階梯座位（中間走道通大門）、台口兩尊高舉火盆的兜帽巨像、柱上火把、暗紅長幡（後牆大門上方是暗箱的倒影，concert-obscura.js）。
 // 一進來（從後面大門）火把從最後面一支支點到舞台，最後巨像的火盆燒起來。也管鏡頭碰牆：clip(頭, 鏡頭) 回傳鏡頭可以退到幾成，不穿出牆、柱子、看台、屋頂。
 import * as THREE from 'three';
-import { STAGE, mergeStatic, RELIGHT_SPEED } from './concert-stage.js';
+import { STAGE, mergeStatic, RELIGHT_SPEED, doorWall } from './concert-stage.js';
 import { flameCard, SHAPE } from '../../core/flame.js';
 import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
 import { ROBES } from './concert-crowd.js';
@@ -15,8 +15,10 @@ export const INNER = COL.x - COL.w / 2;                                         
 export const BALC = { depth: 3.6, ys: [6.5, 12], z0: 2, z1: 40 };                      // 兩層看台：從柱子往裡伸多深、高度、前後到哪
 export const SEATS = { z0: HALL.rear - 11, steps: 10, rise: 0.5, aisle: 2.4 };          // 後面的階梯座位：從哪開始、幾階、一階多高、中間走道半寬
 // 腳下多高：中間的走道是一條斜坡，從大門（最高那階）一路下到地面
+// 階梯座位的頂面多高（鏡頭不鑽進台階：concert.js 的 camFloor）
+export const seatTop = (x, z) => (z > SEATS.z0 && Math.abs(x) > SEATS.aisle ? Math.min(SEATS.steps, Math.floor(z - SEATS.z0) + 1) * SEATS.rise : 0);
 export const groundAt = (x, z) => (z > SEATS.z0 && Math.abs(x) < SEATS.aisle ? Math.min(1, (z - SEATS.z0) / (HALL.rear - SEATS.z0)) * SEATS.steps * SEATS.rise : 0);
-const TORCH = { base: '#ff4a22', tip: '#a00c10', hot: '#ff9a70' };                    // 火把：血紅（2026-11-10 全場紅，原本偏橘）
+const TORCH = { base: '#ff6a2a', tip: '#b81c10', hot: '#ffc080' };                    // 火把：橘紅（比海市燈籠紅、比血紅亮，安靜段也看得出是火）
 const IGNITE = { t0: 1.2, run: 7.5, giant: 9.4 };                                     // 進來後幾秒開始點火、從最後面點到舞台要幾秒、巨像的火盆什麼時候燒起來
 
 // 鏡頭會撞到的實心東西（左右對稱，x 寫正的那邊）：[x0, x1, z0, z1, y0, y1]
@@ -117,12 +119,13 @@ export class Hall {
     g.add(new THREE.Mesh(new THREE.TubeGeometry(pointedArch(GATE.w, GATE.y + GATE.h - 2, GATE.y + GATE.h + 1.2, HALL.rear - 0.3), 30, 0.35, 5, false), RIB));
     // 門外：一條暗暗的通道，盡頭一點冷光（從外面的世界進來）
     mesh(new THREE.BoxGeometry(GATE.w * 2, GATE.h, 0.2), DARK, 0, GATE.y + GATE.h / 2, HALL.rear + 6);
-    const out = mesh(new THREE.PlaneGeometry(GATE.w * 1.6, GATE.h * 0.8), add(new THREE.MeshBasicMaterial({ map: tex, color: 0x3a3438, opacity: 0.7 })), 0, GATE.y + GATE.h * 0.45, HALL.rear + 5.8);
+    const out = mesh(new THREE.PlaneGeometry(GATE.w * 1.6, GATE.h * 0.8), add(new THREE.MeshBasicMaterial({ map: tex, color: 0x34405a, opacity: 0.7 })), 0, GATE.y + GATE.h * 0.45, HALL.rear + 5.8);
     out.rotation.y = Math.PI;
     for (const s of [-1, 1]) mesh(new THREE.BoxGeometry(0.2, GATE.h, 6), DARK, s * GATE.w, GATE.y + GATE.h / 2, HALL.rear + 3);
     mesh(new THREE.BoxGeometry(GATE.w * 2, 0.2, 6.5), DARK, 0, GATE.y - 0.1, HALL.rear + 3);
     // 背牆（舞台後面）整片、上面山牆
-    mesh(new THREE.PlaneGeometry(HALL.x * 2, HALL.wall), DARK, 0, HALL.wall / 2, HALL.back - 0.02);
+    this.backWall = mesh(doorWall(HALL.x * 2, HALL.wall), DARK, 0, 0, HALL.back - 0.02);   // 兩邊的門通後台、休息室（concert-backstage.js）；人在後台、鏡頭在大廳時藏起來，不合併
+    this.backWall.userData.keep = true;
     mesh(new THREE.ShapeGeometry(gable), DARK, 0, HALL.wall, HALL.back - 0.02);
     // ---------- 石柱、尖拱肋 ----------
     for (const z of COL.zs) for (const s of [-1, 1]) {
@@ -155,7 +158,7 @@ export class Hall {
     }
     const rampTop = SEATS.steps * SEATS.rise, L = HALL.rear - SEATS.z0, ramp = mesh(new THREE.BoxGeometry(SEATS.aisle * 2, 0.3, Math.hypot(L, rampTop)), DARK, 0, rampTop / 2 - 0.15, SEATS.z0 + L / 2);
     ramp.rotation.x = -Math.atan2(rampTop, L);   // 門口那頭（+z）高、地面那頭低
-    const [sil, cand] = silhouettes(spots, lam(0xffffff), new THREE.MeshBasicMaterial({ color: 0xff4a28 }));
+    const [sil, cand] = silhouettes(spots, lam(0xffffff), new THREE.MeshBasicMaterial({ color: 0xff7034 }));
     g.add(sil, cand);
     this.cand = cand;   // 看台、座位上的蠟燭（靜默那一拍熄掉，concert.js 接 candleGate）
     // ---------- 台口的尖拱門（框住整個舞台）----------
@@ -221,13 +224,13 @@ export class Hall {
         const hole = new THREE.Shape();
         hole.moveTo(-sd.w, 0); hole.lineTo(-sd.w, sd.h - 1); hole.quadraticCurveTo(-sd.w, sd.h - 0.1, 0, sd.h + 0.5); hole.quadraticCurveTo(sd.w, sd.h - 0.1, sd.w, sd.h - 1); hole.lineTo(sd.w, 0);
         d.add(new THREE.Mesh(new THREE.ShapeGeometry(hole), lam(0x07060a)));
-        const glow = new THREE.Mesh(new THREE.PlaneGeometry(sd.w * 1.7, sd.h * 0.9), add(new THREE.MeshBasicMaterial({ map: tex, color: 0x4a4246, opacity: 1 })));
+        const glow = new THREE.Mesh(new THREE.PlaneGeometry(sd.w * 1.7, sd.h * 0.9), add(new THREE.MeshBasicMaterial({ map: tex, color: 0x46587e, opacity: 1 })));
         glow.position.set(0, sd.h * 0.42, 0.02);
         d.add(glow);
         const rib = new THREE.Mesh(new THREE.TubeGeometry(pointedArch(sd.w + 0.15, sd.h - 1, sd.h + 0.65, 0.05), 24, 0.16, 5, false), RIB);
         d.add(rib);
         for (const k of [-1, 1]) { const j = new THREE.Mesh(new THREE.BoxGeometry(0.3, sd.h - 1, 0.3), RIB); j.position.set(k * (sd.w + 0.15), (sd.h - 1) / 2, 0.05); d.add(j); }
-        const pool = mesh(new THREE.PlaneGeometry(5.5, 2.6), add(new THREE.MeshBasicMaterial({ map: tex, color: 0x2a2426, opacity: 0.5 })), s * (HALL.x - 2.6), 0.03, sd.z);
+        const pool = mesh(new THREE.PlaneGeometry(5.5, 2.6), add(new THREE.MeshBasicMaterial({ map: tex, color: 0x24304a, opacity: 0.5 })), s * (HALL.x - 2.6), 0.03, sd.z);
         pool.rotation.x = -Math.PI / 2;
       }
     }
@@ -242,7 +245,7 @@ export class Hall {
         g.add(f);
         flames.push(f);
       }
-      const halo = new THREE.Sprite(add(new THREE.SpriteMaterial({ map: tex, color: 0xff3a1e, opacity: 0 })));
+      const halo = new THREE.Sprite(add(new THREE.SpriteMaterial({ map: tex, color: 0xff5a26, opacity: 0 })));
       halo.position.set(x, y + 0.35 * k, z);
       halo.scale.setScalar(2.2 * k);
       g.add(halo);
@@ -259,14 +262,14 @@ export class Hall {
       const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.06, 0.25, 6), IRON);
       cup.position.set(x, y - 0.12, z);
       g.add(arm, cup);
-      const pool = new THREE.Mesh(new THREE.PlaneGeometry(5, 7), add(new THREE.MeshBasicMaterial({ map: tex, color: 0xff3018, opacity: 0 })));
+      const pool = new THREE.Mesh(new THREE.PlaneGeometry(5, 7), add(new THREE.MeshBasicMaterial({ map: tex, color: 0xff5420, opacity: 0 })));
       pool.position.set(s * (INNER - 0.01), y, z);
       pool.rotation.y = -s * Math.PI / 2;
       g.add(pool);
       const tr = fire(x, y, z, 1.5, 1, when(z) + (s > 0 ? 0.12 : 0));
       tr.pool = pool;
       // 地上的光池：火把底下的地板一圈火光
-      const fp = new THREE.Mesh(new THREE.CircleGeometry(3.2, 20).rotateX(-Math.PI / 2), add(new THREE.MeshBasicMaterial({ map: tex, color: 0xff3018, opacity: 0 })));
+      const fp = new THREE.Mesh(new THREE.CircleGeometry(3.2, 20).rotateX(-Math.PI / 2), add(new THREE.MeshBasicMaterial({ map: tex, color: 0xff5420, opacity: 0 })));
       fp.position.set(s * (INNER - 1.6), 0.02, z);
       g.add(fp);
       tr.floor = fp;
@@ -281,7 +284,7 @@ export class Hall {
       const tr = fire(f.x, f.y, f.z, 4.2, 4, IGNITE.giant);
       tr.giant = true;
       // 火光往下照在巨像身上（兜帽、肩、袍子前面）：一片加亮的暖光貼在雕像前面
-      const lit = new THREE.Mesh(new THREE.PlaneGeometry(7, 13), add(new THREE.MeshBasicMaterial({ map: tex, color: 0xff3018, opacity: 0 })));
+      const lit = new THREE.Mesh(new THREE.PlaneGeometry(7, 13), add(new THREE.MeshBasicMaterial({ map: tex, color: 0xff5420, opacity: 0 })));
       lit.position.set(f.x, 12.5, GIANT.z + 2.5);
       g.add(lit);
       tr.pool = lit;
@@ -313,19 +316,25 @@ export class Hall {
     for (const e of this.eyes) e.material.opacity = (0.25 + 0.75 * Math.max(fr, 0.15 * Math.sin(t * 0.8) + 0.15)) * giantLit;
   }
 
-  // 鏡頭碰牆：從頭 a 拉到鏡頭 b，撞到柱子內面、後牆、屋頂、看台、拱門、巨像就停在前面一點；回傳可以退到幾成
-  clip(a, b) {
+  // 大空間的牆：柱子內面、後牆、屋頂、台後的背牆。從頭 a 拉到鏡頭 b，碰到就停在前面一點；回傳可以退到幾成（自己的鏡頭只躲這些，concert.js 的 camWalls）
+  walls(a, b) {
     let k = 1;
     const m = 0.35, dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
     const lim = (from, d, edge) => (d !== 0 ? (edge - from) / d : 1);
     if (Math.abs(b.x) > INNER - m) k = Math.min(k, lim(a.x, dx, Math.sign(b.x) * (INNER - m)));
     if (b.z > HALL.rear - m) k = Math.min(k, lim(a.z, dz, HALL.rear - m));
     if (b.y > HALL.wall - m) k = Math.min(k, lim(a.y, dy, HALL.wall - m));
-    // 後面的階梯座位：鏡頭不鑽進台階
-    const seatY = (z) => (z > SEATS.z0 ? Math.min(SEATS.steps, Math.floor(z - SEATS.z0) + 1) * SEATS.rise : 0);
+    if (b.z < HALL.back + 0.15 && a.z > HALL.back) k = Math.min(k, lim(a.z, dz, HALL.back + 0.15));
+    return Math.max(0, Math.min(1, k));
+  }
+
+  // 看不看得到（attention.js：被拍時別人的鏡頭看不看得到自己）：大空間的牆之外，看台、拱門、巨像、階梯座位也擋
+  clip(a, b) {
+    let k = this.walls(a, b);
+    const m = 0.35, dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
     for (let i = 1; i <= 16; i++) {
       const u = (i / 16) * k, x = a.x + dx * u, y = a.y + dy * u, z = a.z + dz * u, ax = Math.abs(x);
-      const inSeat = ax > SEATS.aisle && y < seatY(z) + m;
+      const inSeat = ax > SEATS.aisle && y < seatTop(x, z) + m;
       if (inSeat || SOLIDS.some(([x0, x1, z0, z1, y0, y1]) => ax > x0 - m && ax < x1 + m && z > z0 - m && z < z1 + m && y > y0 - m && y < y1 + m)) { k = ((i - 1) / 16) * k; break; }
     }
     return Math.max(0, Math.min(1, k));

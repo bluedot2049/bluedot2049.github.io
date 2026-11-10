@@ -102,6 +102,35 @@ body.desk #toast .t2 { font-size: 22px; margin-top: 12px; }
   background: var(--gold); transform: rotate(45deg); opacity: .7;
 }
 #hint.show { opacity: 1; }
+
+/* ───────── 教學的動態示範圖（js/controls/demos.js）：提示那行字前面一張；觸控另外疊一張在搖桿上或拖曳的空處。
+   只動 transform、opacity。--ph 是第一幀從哪開始（負的 delay），減少動態時停在那一格 ───────── */
+.demo { display: inline-block; flex: 0 0 auto; --T: 2.6s; }
+.demo svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.demo * { animation-duration: var(--T); animation-iteration-count: infinite; animation-timing-function: ease-in-out;
+          animation-delay: calc(var(--T) * (var(--ph, 0) + var(--o, 0)) * -1); }
+@media (prefers-reduced-motion: reduce) { .demo * { animation-play-state: paused !important; } }
+#hint .demo { width: 28px; height: 28px; margin: -6px 0; }
+.demo-on { position: fixed; z-index: 21; pointer-events: none; opacity: 0; transition: opacity .5s; }
+.demo-on.show { opacity: 1; }
+.demo-on .demo { width: 100%; height: 100%; }
+.demo-on.bare .dm-chrome { display: none; }
+.dm-ln { fill: none; stroke: var(--gold); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.dm-dim { opacity: .5; }
+.dm-touch { fill: none; stroke: var(--gold-hi); stroke-width: 1.6; }
+.dm-cap { fill: rgba(18, 12, 8, .6); stroke: var(--gold); stroke-width: 1.8; }
+.dm-capt { fill: var(--gold-hi); font: 700 7px Georgia, var(--font); text-anchor: middle; dominant-baseline: central; }
+.dm-lit .dm-cap { fill: var(--gold-fill); stroke: var(--gold-hi); }
+.dm-lit .dm-capt { fill: #2a1a0c; }
+/* 搖桿推出去停一下再回來；箭頭只在推著時在 */
+@keyframes demo-push-ur { 0%, 12% { transform: translate(0, 0); } 38%, 68% { transform: translate(6px, -8px); } 90%, 100% { transform: translate(0, 0); } }
+@keyframes demo-push-up { 0%, 12% { transform: translate(0, 0); } 38%, 68% { transform: translate(0, -6px); } 90%, 100% { transform: translate(0, 0); } }
+@keyframes demo-pushed { 0%, 30% { opacity: 0; } 40%, 66% { opacity: 1; } 76%, 100% { opacity: 0; } }
+/* 左右拖、左右推 */
+@keyframes demo-sway9 { 0%, 100% { transform: translateX(-9px); } 50% { transform: translateX(9px); } }
+@keyframes demo-sway6 { 0%, 100% { transform: translateX(-6px); } 50% { transform: translateX(6px); } }
+/* 四顆鍵輪流按（--o 錯開四分之一） */
+@keyframes demo-key-quarter { 0%, 21% { opacity: 1; transform: translateY(.8px); } 24%, 97% { opacity: 0; transform: translateY(0); } 100% { opacity: 1; transform: translateY(.8px); } }
 /* 側欄開著（作品資訊、換裝；手機橫拿也是）：跟按鈕列一樣排到剩下那塊畫面的中間，不壓到面板。直拿 --panel-w 是 0，不動 */
 body.panel-open #hint { left: calc((100vw / var(--ui, 1) - var(--panel-w)) / 2); max-width: calc(100vw / var(--ui, 1) - var(--panel-w) - 32px); }
 /* 手機的行囊做成側欄時（橫拿、平板）也一樣，房名和提示排到剩下那塊的中間。行囊平常在左邊，搖桿換到左邊或鏡子開著時在右邊（panels.css） */
@@ -712,6 +741,17 @@ body.photo-gear #photo-btn {
     inset 0 1px 1px rgba(245, 222, 180, .48), inset 0 -1px 2px rgba(50, 30, 10, .5);
 }
 body.photo-gear #photo-btn svg { filter: drop-shadow(0 .7px 0 rgba(245, 222, 180, .45)); }
+/* 日晷III：收起鈕跟它的快門同一種亮面銀（#ph-shutter.silver） */
+body.photo-gear.photo-silver #photo-btn {
+  color: #2a2d33; border-color: rgba(70, 76, 84, .9);
+  background:
+    radial-gradient(circle, rgba(250, 250, 248, .7) 0 18%, transparent 46%),
+    radial-gradient(circle, transparent 58%, rgba(30, 34, 40, .3) 100%),
+    conic-gradient(from var(--sheen), #e6e9ec, #a8afb6 45deg, #dfe3e6 90deg, #f4f5f6 135deg, #b9c0c6 180deg, #9aa1a8 225deg, #e6e9ec 270deg, #fafbfb 315deg, #e6e9ec);
+  box-shadow: 0 0 0 3px rgba(20, 22, 26, .85), 0 0 0 4px rgba(190, 196, 204, .5),
+    inset 0 1px 1px rgba(255, 255, 255, .6), inset 0 -1px 2px rgba(30, 34, 40, .45);
+}
+body.photo-gear.photo-silver #photo-btn svg { filter: drop-shadow(0 .7px 0 rgba(255, 255, 255, .5)); }
 #photo-btn .x, body.photo #photo-btn .cam { display: none; }
 body.photo #photo-btn .x { display: block; }
 #photo-btn:active { transform: scale(.92); }

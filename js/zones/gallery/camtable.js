@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { Kit, newBucket } from '../../core/props.js';
 import { bucketObjects, tag } from '../../core/scenery.js';
-import { TABLE, SOON, cameraModel } from '../../camera/cameras.js';
+import { TABLE, SOON, cameraModel, chromeMat, isChrome } from '../../camera/cameras.js';
 
 export const TABLE_W = 2.4, TABLE_D = 0.66;
 const H = 0.74;            // 桌面高度
@@ -528,13 +528,16 @@ export function buildCamTable(x, z, rot) {
     holder.position.copy(sl.local);
     holder.rotation.y = sl.base;
     holder.scale.setScalar(SHOW);
-    for (const o of bucketObjects(cb)) holder.add(o);
+    for (const o of bucketObjects(cb)) {
+      if (isChrome(sl.id) && o.isMesh) o.material = chromeMat();   // 日晷III 是亮面銀
+      holder.add(o);
+    }
     group.add(holder);
     sl.holder = holder;
   }
 
   // 桌前的長毯，每個位置正前方的地上一格。格子是魔法印泥：桌上這台拿得走，那格就亮著、慢慢呼吸；
-  // 帶走了、還沒開放（日晷III）、空位置都是暗的
+  // 帶走了、還沒開放（望）、空位置都是暗的
   const rug = new THREE.Mesh(rugGeometry(), new THREE.MeshLambertMaterial({ map: rugTexture() }));
   rug.position.y = 0.006;
   group.add(tag(rug, 'floor'));

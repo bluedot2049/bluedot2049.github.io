@@ -5,7 +5,7 @@
 // 淡掉是在著色器裡丟掉一部分像素（網點），不用半透明：合併成一大塊的網格不用拆，前後也不會排錯。
 // 鏡頭本身不再被房子推來推去，距離和斜度都照玩家拖的。lead 是提早淡：照角色和鏡頭的速度往前推一點時間，那時會擋住的先淡（海市、蜃樓都開）
 import * as THREE from 'three';
-import { uTime, LAMP_FLICKER } from './scenery.js';
+import { uTime, LAMP_FLICKER, LAMP_FIRE } from './scenery.js';
 
 const FADED = 0.22;   // 擋住時留下幾成像素，看得出輪廓
 const SPEED = 4;      // 淡出、淡回的速度（每秒）
@@ -93,15 +93,16 @@ export class Fader {
   }
 
   // boxes：這一組佔的範圍，可以好幾塊；objs：跟著一起藏的獨立物件（牌樓的匾）。回傳的編號給 Kit 的 fid
+  // near：鏡頭離這一組多近就算鑽進去、整組藏（預設 0.6）；給 0 是只有擋住才淡（演唱會後台的前牆：鏡頭在大廳貼著背牆時不藏門框）
   // 一塊範圍是 [x0, y0, z0, x1, y1, z1]，或斜放的 { x, z, a, hw, hd, y0, y1 }（中心、角度、半寬、半深，角度的轉法跟擋路方塊一樣）
-  add(boxes, objs = [], { faded = this.faded } = {}) {
+  add(boxes, objs = [], { faded = this.faded, near = 0.6 } = {}) {
     boxes = boxes.map((b) => {
       if (Array.isArray(b)) return b;
       const r = [-b.hw, b.y0, -b.hd, b.hw, b.y1, b.hd];
       r.rot = { x: b.x, z: b.z, c: Math.cos(b.a), s: Math.sin(b.a) };
       return r;
     });
-    this.units.push({ boxes, objs, faded, a: 1, want: 1, hold: 0 });
+    this.units.push({ boxes, objs, faded, near, a: 1, want: 1, hold: 0 });
     return this.units.length - 1;
   }
 
@@ -142,12 +143,14 @@ export class Fader {
         .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + SWAY_VERT);
       // 發光的零件帶掛點的就是燈籠：紙跟著裡面的燭火亮暗（scenery.js 的 LAMP_FLICKER），暗下去也留六成，不會像熄掉
       if (lamp) {
+        sh.uniforms.uLampFire = LAMP_FIRE;
         sh.vertexShader = sh.vertexShader
-          .replace('#include <common>', '#include <common>\n' + LAMP_FLICKER + '\nvarying float vLamp;')
-          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLamp = aHangK > 0.0 ? mix(1.0, lampFlicker(aHang.xz, uSwayT), 0.6) : 1.0;');
+          .replace('#include <common>', '#include <common>\n' + LAMP_FLICKER + '\nvarying float vLamp; varying float vHot;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nfloat fw = aHangK > 0.0 ? fireWave(aHang.xz) : 1.0; vLamp = aHangK > 0.0 ? mix(1.0, lampFlicker(aHang.xz, uSwayT), 0.6) * fw : 1.0; vHot = max(0.0, fw - 1.0);');
+        // 火盆的火傳過來（fireWave 大於 1）：紙已經亮到頂，再乘看不出來。改成自己跟自己 screen，亮的色版推得多、暗的推得少，橘的變熱橘，不會洗白
         sh.fragmentShader = sh.fragmentShader
-          .replace('#include <common>', '#include <common>\nvarying float vLamp;')
-          .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= vLamp;');
+          .replace('#include <common>', '#include <common>\nvarying float vLamp; varying float vHot;')
+          .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= vLamp;\ndiffuseColor.rgb = 1.0 - (1.0 - diffuseColor.rgb) * (1.0 - diffuseColor.rgb * min(0.55, vHot * 1.1));');
       }
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', '#include <common>\nvarying float vFade;')
@@ -184,7 +187,7 @@ export class Fader {
         continue;
       }
       let want = 1;
-      if (u.boxes.some((b) => inside(cam, b, 0.6))) want = 0;
+      if (u.boxes.some((b) => inside(cam, b, u.near))) want = 0;
       else if (eyes.some((e) => u.boxes.some((b) => cross(e, cam, b))) || (ahead && u.boxes.some((b) => cross(ahead.eye, ahead.cam, b)))) want = u.faded;
       if (want < 1) { u.want = want; u.hold = HOLD; }
       else if ((u.hold -= dt) <= 0) u.want = 1;

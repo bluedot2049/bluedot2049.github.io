@@ -133,7 +133,7 @@ export function buildBack({ coarse = false } = {}) {
   }
 
   // ================= 回收空片盒 =================
-  // 換新片盒時收回來的空盒子，倒在工廠東邊堆成一座小山；旁邊一個奶油色的回收口，上面一盞琥珀燈（之後換片盒在這裡）
+  // 換新片盒時收回來的空盒子，倒在工廠東邊堆成一座小山；旁邊一個奶油色的回收口，上面一盞琥珀燈（換片盒在這裡，jinghai-film.js）
   const pile = { x: 20, z: -46, rx: 4.6, rz: 4, h: 2.6 };
   for (let i = 0; i < (coarse ? 130 : 260); i++) {
     const a = R() * Math.PI * 2, u = Math.sqrt(R()), x = pile.x + Math.cos(a) * pile.rx * u, z = pile.z + Math.sin(a) * pile.rz * u;

@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { presetLook, sanitizeLook, RACES, SLIDERS, CLOTH, SKINS } from '../../avatar/looks.js';
 import { rng } from '../../core/props.js';
-import { hash, wrap, CharacterPool, FarFigures, dodgeFrom, easeOffset, turnHead, ghostStep } from '../../npc/crowdkit.js';
+import { hash, wrap, CharacterPool, FarFigures, dodgeFrom, easeOffset, turnHead, ghostStep, linkTrack } from '../../npc/crowdkit.js';
 import { signOf } from '../../scene/places.js';
 import { ENDS, LINES, SPOTS, STATION, doorFloor } from './ting-station.js';
 import { TREE } from './ting-marsh.js';
@@ -230,6 +230,7 @@ export class Travelers {
     });
     // 遠處的人：身體一個形狀、頭一個形狀
     this.far = new FarFigures(scene, 24);
+    linkTrack(this.pool, this.far);   // 日晷III 追焦鎖定跟著人走
   }
 
   // 要搭第 b 條線第 kb 班的人，照上車的先後排好：離車門近的先上，走到門口的順序才不會亂
@@ -344,7 +345,7 @@ export class Travelers {
     for (const q of people) {
       if (shown.has(q.plan.key) || q.alpha < 0.05) continue;
       const L = q.plan.look, s = q.alpha;
-      this.far.add(q.fx, q.fy + (q.sit ? 0.15 : 0), q.fz, q.heading, s, q.sit ? s * 0.8 : s, s, CLOTH[L.one !== 'none' ? L.oneC : L.outer !== 'none' ? L.outC : L.topC], SKINS[L.skin]);
+      this.far.add(q.fx, q.fy + (q.sit ? 0.15 : 0), q.fz, q.heading, s, q.sit ? s * 0.8 : s, s, CLOTH[L.one !== 'none' ? L.oneC : L.outer !== 'none' ? L.outC : L.topC], SKINS[L.skin], q.plan.key);
     }
     this.far.end();
   }

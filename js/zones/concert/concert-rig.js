@@ -5,10 +5,10 @@
 import * as THREE from 'three';
 import { STAGE } from './concert-stage.js';
 import { lastAt, nextAfter, hitK } from './concert-band.js';
-import { where } from './concert-show.js';
+import { where, bloodMix } from './concert-show.js';
 import { pref } from '../../save/prefs.js';
 import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
-const RED_FLOOR = 0.5;   // 全場紅最少幾成（主光、天光、霧、雷射、光圈裡的天都照 rig.red 推）
+const RED_FLOOR = 0.5;   // 血紅段（cue.blood＝1）全場紅最少幾成（主光、天光、霧、雷射、光圈裡的天都照 rig.red 推）
 
 
 const smooth = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
@@ -53,9 +53,12 @@ export class LightRig {
     // 十二格顏色：這一團的四色照五度圈排一圈，中間漸變（音近色也近）
     const P = band.palette.map((h) => new THREE.Color(h));
     // 十二格照五度圈排，挑過的：金、琥珀、朱紅、深紅、血紅、燭光、暖白，藍只有黎明藍一格；不在兩色之間漸變（紅漸到藍中間會變粉紫）
-    this.fifths = ['#e01e14', '#ff3418', '#b0101a', '#8a0a12', '#ff2a10', '#c81410', '#a00818', '#6a060c', '#e01e14', '#5a0410', '#ff3418', '#d0180e'].map((h) => new THREE.Color(h));
+    // 安靜段（N）和強段（R，全是紅只差深淺）兩套，照 cue.blood 推（update 開頭）
+    this.fifthsN = ['#f0b860', '#e8902a', '#d8452e', '#b0201c', '#f6ecdc', '#ffcf8a', '#c8341a', '#8a1418', '#f0b860', '#33468f', '#e8902a', '#ffd9a0'].map((h) => new THREE.Color(h));
+    this.fifthsR = ['#e01e14', '#ff3418', '#b0101a', '#8a0a12', '#ff2a10', '#c81410', '#a00818', '#6a060c', '#e01e14', '#5a0410', '#ff3418', '#d0180e'].map((h) => new THREE.Color(h));
+    this.fifths = this.fifthsN.map((c) => c.clone());
     this.crimson = new THREE.Color('#a8141c');
-    this.gold = new THREE.Color('#ff2a14');   // 日出放射的搖頭燈（原本是金）
+    this.goldN = new THREE.Color('#ffd590'); this.goldR = new THREE.Color('#ff2a14'); this.gold = this.goldN.clone();   // 日出放射的搖頭燈：安靜是金、血紅段是紅
     // 追光：前桁架上每人一盞，打在那個人身上（他走開了光也跟著），地上一圈。七道一組、七圈一組
     this.spotBeams = cones(7, 1, 0.04, 0.55, tex);
     this.spotPools = new THREE.InstancedMesh(new THREE.CircleGeometry(0.75, 24).rotateX(-Math.PI / 2), add(new THREE.MeshBasicMaterial({ color: 0xffffff })), 7);
@@ -102,6 +105,9 @@ export class LightRig {
   update(c, t, band) {
     if (!band) return;
     const w = where(band.members[0].band, t), R = band.byRole, beat = w.beat;
+    const bl = c.blood ?? 0;
+    this.fifths.forEach((f, i) => bloodMix(f, this.fifthsN[i], this.fifthsR[i], bl));
+    bloodMix(this.gold, this.goldN, this.goldR, bl);
     const hue = this.harmony(t, R.synth, R.drums).clone();
     // 全場宗教紅：靜止段整段紅；光幕每四小節照種子抽一次「紅句」。開關在一拍裡淡進淡出
     {
@@ -109,9 +115,9 @@ export class LightRig {
       let red = 0;
       if (w.sec.id === 'still') red = smooth((w.bar * 4 + w.beat) / 1);
       else if (w.sec.id === 'veil' && hash(this.seed, phrase, 30) < 0.4) red = smooth(inP / 1) * smooth((16 - inP) / 1);
-      // 2026-11-10 全場血紅：平常也推一半進紅，靜止段、紅句推滿
-      this.red = red = Math.max(red, RED_FLOOR);
-      hue.lerp(this.crimson, red);
+      // 血紅的段落（cue.blood）平常就推一半進紅，靜止段、紅句推滿；安靜段不推
+      this.red = red = Math.max(red, RED_FLOOR * bl);
+      if (red > 0) hue.lerp(this.crimson, red);
     }
     const kicks = R.drums?.notes ?? [], ik = lastAt(kicks, t, ['kick']), kickK = ik >= 0 ? hitK(t - kicks[ik].t, 0.12) * kicks[ik].vel : 0;
     this.kickK = kickK;
@@ -148,7 +154,7 @@ export class LightRig {
       const d = this.v.set(Math.sin(tilt) * Math.sin(pan), Math.cos(tilt), Math.sin(tilt) * Math.cos(pan));
       q.setFromUnitVectors(UP, d);
       this.headBeams.setMatrixAt(hi, m4.compose(h.pos, q, one));
-      this.headBeams.setColorAt(hi, tc.copy(look === 'burst' && !this.red ? this.gold : hue).multiplyScalar(I * (0.14 + 0.16 * kickK)));
+      this.headBeams.setColorAt(hi, (look === 'burst' ? tc.copy(this.gold).lerp(hue, this.red) : tc.copy(hue)).multiplyScalar(I * (0.14 + 0.16 * kickK)));
     });
     this.headBeams.instanceMatrix.needsUpdate = this.headBeams.instanceColor.needsUpdate = true;
     this.headBeams.visible = I > 0.01;

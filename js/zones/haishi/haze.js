@@ -3,7 +3,7 @@
 // 海市的空氣：霧、煙、蒸氣，還有燈照在石板上的一圈光。
 // 全部都是一片一片面向鏡頭（或平貼地面）的小方塊，每一種合成一次畫完，手機也撐得住
 import * as THREE from 'three';
-import { uTime, LAMP_FLICKER } from '../../core/scenery.js';
+import { uTime, LAMP_FLICKER, LAMP_FIRE } from '../../core/scenery.js';
 import { GRADE_VERT, GRADE_GLSL, gradeUniforms, TUNE } from '../../core/grade.js';
 
 // 這幾層都不經過內建的霧，自己接上 grade.js：霧和煙當成一般的東西調色、混霧；疊加發光的跟著霧淡掉（見 gradeLight）。
@@ -148,15 +148,16 @@ export function pools(list, gain = 1, flicker = false) {
     ['aColor', 3, list.flatMap((p) => { const c = new THREE.Color(p.color); const a = p.a * gain; return [c.r * a, c.g * a, c.b * a]; })],
   ], list.length);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uTime, uFlicker: { value: flicker ? 0.5 : 0 }, ...gradeUniforms() },
+    uniforms: { uTime, uFlicker: { value: flicker ? 0.5 : 0 }, uLampFire: LAMP_FIRE, ...gradeUniforms() },
     vertexShader: GRADE_VERT + LAMP_FLICKER + `
       uniform float uTime; uniform float uFlicker;
       attribute vec3 aPos; attribute float aR; attribute vec3 aColor;
       varying vec2 vP; varying vec3 vC;
       void main() {
-        vec4 mv = modelViewMatrix * vec4(aPos + vec3(position.x, 0.0, -position.y) * aR * 2.0, 1.0);
+        float fw = uFlicker > 0.0 ? fireWave(aPos.xz) : 1.0;   // 火盆的火傳過來：光圈亮一截、也攤開一點
+        vec4 mv = modelViewMatrix * vec4(aPos + vec3(position.x, 0.0, -position.y) * aR * 2.0 * mix(1.0, fw, 0.5), 1.0);
         vP = position.xy * 2.0;
-        vC = aColor * (1.0 - smoothstep(40.0, 120.0, -mv.z)) * gradeLight(gradeFog(${WORLD})) * mix(1.0, lampFlicker(aPos.xz, uTime), uFlicker);
+        vC = aColor * (1.0 - smoothstep(40.0, 120.0, -mv.z)) * gradeLight(gradeFog(${WORLD})) * mix(1.0, lampFlicker(aPos.xz, uTime), uFlicker) * fw;
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `

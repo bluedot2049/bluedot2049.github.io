@@ -36,7 +36,7 @@ const DROP = 2.5;       // 太靠近鏡頭時，看的那一點最多往下移�
 const DOZE = 120;       // 主人這麼久沒操作（秒），跟在身邊的黑眼打瞌睡：眼皮闔到剩一條縫、晃得慢、往下沉到肩邊
 const NAP = 300;        // 再久到這麼久就自己收回去：忘記收的人不會一直出現在別人的照片裡
 const STEP = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 2, ArrowUp: -2 };   // 方向鍵：清單是兩欄
-const KEY_SEEN = 'eyeSeen', KEY_ON = 'eyeOn', KEY_TOLD = 'eyeTold', KEY_STAY = 'eyeStay';
+const KEY_SEEN = 'eyeSeen', KEY_ON = 'eyeOn', KEY_STAY = 'eyeStay';
 
 const load = (k, d) => pref(k) ?? d;
 const save = (k, v) => setPref(k, v);
@@ -377,10 +377,9 @@ export class Guide {
     this.routeT = -Infinity;
     this.follow = null;
     this.chase = null;
-    if (!load(KEY_TOLD, 0)) {
-      save(KEY_TOLD, 1);
-      this.ui.hint(document.body.classList.contains('pad') ? `走近黑眼按 ${padBtn(-1)} 跟隨` : this.coarse ? '走近黑眼按「跟著」' : `走近黑眼按 ${key('interact')} 跟隨`, 5000);
-    }
+    // 教學（ui.js 的 tip）：每種操作說兩次，跟著走過一次就不再說
+    const k = this.kind();
+    this.ui.tip(`eye-follow-${k}`, k === 'pad' ? `走近黑眼　${padBtn(-1)} 跟著` : k === 'touch' ? '走近黑眼　按「跟著」' : `走近黑眼　${key('interact')} 跟著`, 5000);
   }
 
   // ───────── 在哪裡、去過哪裡 ─────────
@@ -474,12 +473,19 @@ export class Guide {
     pl.walkTo(d.sx, d.sz, d.sy);
     if (!pl.path.length) return this.lost();
     this.follow = { goal: pl.goal };
+    this.ui.learned(`eye-follow-${this.kind()}`);
+  }
+
+  // 現在用哪一種操作：教學照這個分開記
+  kind() {
+    return document.body.classList.contains('pad') ? 'pad' : this.coarse ? 'touch' : 'desk';
   }
 
   // 隊友的黑眼：每隔一下照它現在在哪重找路跟過去，停在它底下旁邊一點；它不動了、自己動了、它收起來了就不跟
   chaseEye(id) {
     this.follow = null;
     this.chase = { id, goal: null, t: -Infinity, x: 0, z: 0, still: 0 };
+    this.ui.learned(`eye-follow-${this.kind()}`);
   }
 
   updateChase(now) {

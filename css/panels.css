@@ -328,6 +328,8 @@ body.desk .album-grid { grid-template-columns: repeat(auto-fill, minmax(128px, 1
 /* 相簿格子左上的印泥：等過的照片才有。亮著＝新的；看過剩一個淡印 */
 .ph-cell .ink { position: absolute; left: 5px; top: 5px; width: 11px; height: 11px; opacity: .5; box-shadow: 0 0 0 1.5px rgba(20, 14, 10, .7); }
 .ph-cell .ink.lit { opacity: 1; }
+/* 拍立得：整張連白邊放進格子，不裁 */
+.ph-cell.pola img { object-fit: contain; padding: 3px; }
 .ph-cell.film span { font-size: 18px; letter-spacing: .15em; color: rgba(246, 219, 166, .75); }
 .ph-cell.slip { cursor: var(--cur-default); background: repeating-linear-gradient(-45deg, #2a1d14 0 6px, #241910 6px 12px); border-style: dashed; }
 .ph-cell.slip span { font-size: 13px; letter-spacing: .2em; color: var(--text); }

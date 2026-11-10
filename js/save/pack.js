@@ -20,6 +20,7 @@ import { set as padFocus } from '../controls/padnav.js';
 import { sfx, thing } from '../audio/ui-voices.js';
 import { album, canPick, canShare, discard, folderName, hourMark, KINDS, LABS, labOk, loadAlbum, pickFolder, putBack, saveChosen, saveTip, seen, shareChosen, toLab, visible } from '../camera/album.js';
 import { pref, setPref } from './prefs.js';
+import { developing, peek, ripen } from '../camera/instant.js';
 import { is } from '../controls/keymap.js';
 
 const ICONS = {
@@ -284,6 +285,22 @@ export class Pack {
     this.watchFresh(grid);
     this.albumFoot();
     this.paintNote();
+    this.paintPola();
+  }
+
+  // 顯影中的拍立得：格子裡畫現在顯到哪，行囊開著就每幾秒重畫一次，顯好的順手烤掉（instant.js）
+  async paintPola() {
+    clearTimeout(this.polaTimer);
+    const tok = (this.polaTok = (this.polaTok || 0) + 1);   // 重畫過就換一輪，舊的那輪畫完不再排下一次
+    const list = album(), imgs = [...this.card.querySelectorAll('img[data-pola]')];
+    if (!imgs.length || this.card.hidden || this.page !== 'album') return;
+    ripen();
+    for (const img of imgs) {
+      const it = list[img.dataset.pola];
+      if (it && developing(it)) img.src = await peek(it).catch(() => img.src);
+    }
+    if (tok !== this.polaTok) return;
+    this.polaTimer = setTimeout(() => this.paintPola(), 3000);
   }
 
   // 新照片的格子捲進畫面一半以上，就算看到了（記在 shown，收起行囊時才熄）
@@ -333,17 +350,22 @@ export class Pack {
     // 全部丟光了也要留著底下那行，才按得到復原
     const note = '<p class="album-note" hidden></p>';
     if (!list.length) return '<p class="pack-how">還沒有照片。照片、錄影、明信片、鏡中照片都收在這裡</p>' + note;
-    const cells = list.map((it, i) => {
+    const cell = (it, i) => {
       if (it.state === 'lab') return `<div class="ph-cell slip"><i class="ink lit"></i><span>取件單</span><small>${LABS[it.lab]?.name ?? ''}</small></div>`;
       const on = this.chosen.has(it) ? ' on' : '';
+      // 拍立得顯影中：小圖由 paintPola 畫上去
+      if (developing(it)) return `<button class="ph-cell pola${on}" data-i="${i}"><img data-pola="${i}" alt=""><b>${it.pola.rare ? '紀念・' : ''}顯影中</b><i class="chk"></i></button>`;
       if (!visible(it)) return `<button class="ph-cell film${on}" data-i="${i}"><span>${hourMark(it.t)}</span><i class="chk"></i></button>`;
       const label = it.state === 'back' && LABS[it.lab] ? LABS[it.lab].style
-        : it.kind === 'video' ? `${KINDS.video} ${clock(it.dur)}` : KINDS[it.kind];
+        : it.kind === 'video' ? `${KINDS.video} ${clock(it.dur)}` : it.pola?.rare ? '紀念' : KINDS[it.kind];
       const tag = label ? `<b>${label}</b>` : '';
       // 等過的（師傅那裡拿回來的）左上角一顆印：新的亮著，看過剩淡印
       const ink = it.fresh ? '<i class="ink lit"></i>' : it.state === 'back' ? '<i class="ink"></i>' : '';
-      return `<button class="ph-cell${on}" data-i="${i}"><img src="${this.thumb(it.poster ?? it.blob)}" alt="" loading="lazy">${tag}${ink}<i class="chk"></i><i class="zoom" title="看大圖"></i></button>`;
-    }).join('');
+      return `<button class="ph-cell${it.pola ? ' pola' : ''}${on}" data-i="${i}"><img src="${this.thumb(it.poster ?? it.blob)}" alt="" loading="lazy">${tag}${ink}<i class="chk"></i><i class="zoom" title="看大圖"></i></button>`;
+    };
+    // 顯影中的拍立得排在一起、放最前面
+    const cells = [...list.map((it, i) => [it, i]).filter(([it]) => developing(it)), ...list.map((it, i) => [it, i]).filter(([it]) => !developing(it))]
+      .map(([it, i]) => cell(it, i)).join('');
     const labs = Object.entries(LABS).map(([id, L]) => `<button data-act="lab" data-lab="${id}" disabled>交給${L.name}</button>`).join('');
     return `<div class="album-sel"><span class="album-n"></span><button data-act="all">全選</button></div>
       <div class="album-grid">${cells}</div>
@@ -360,8 +382,8 @@ export class Pack {
     const n = this.card.querySelector('.album-n');
     if (!n) return;
     const all = album().filter((it) => it.state !== 'lab'), c = [...this.chosen];
-    const keep = c.filter(visible), send = c.filter(labOk), film = c.length - keep.length;
-    n.textContent = c.length ? `選了 ${c.length} 張` + (film ? `，其中 ${film} 張底片要先沖` : '') : all.length ? '點選，點兩下看大圖' : '';
+    const keep = c.filter(visible), send = c.filter(labOk), dev = c.filter(developing).length, film = c.length - keep.length - dev;
+    n.textContent = c.length ? `選了 ${c.length} 張` + (film ? `，其中 ${film} 張底片要先沖` : '') + (dev ? `，${dev} 張還在顯影` : '') : all.length ? '點選，點兩下看大圖' : '';
     const a = this.card.querySelector('[data-act="all"]');
     a.hidden = !all.length;
     a.textContent = all.length && all.every((it) => this.chosen.has(it)) ? '全不選' : '全選';

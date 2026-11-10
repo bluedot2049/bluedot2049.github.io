@@ -33,7 +33,7 @@ export const ASK = [
   { id: 'lost', q: '迷路怎麼辦', a: '叫黑眼 它記得路', to: '#eye-btn', key: ['eye', '黑眼'] },
   { id: 'photos', q: '照片去哪了', a: '都在行囊裡 要的自己存下來', to: '#pack-btn', key: ['pack', '行囊'], need: 'photo' },
   { id: 'soul', q: '鏡子裡那隻眼睛', a: '它會幫你拍一張 那張留好 換手機拿那張回來', to: 'mirror', need: 'mirror' },
-  { id: 'friends', q: '可以跟朋友一起嗎', a: '走到他旁邊按同行 就一起走了', to: '#party-btn', key: ['party', '同行'] },
+  { id: 'friends', q: '可以跟朋友一起嗎', a: '走到朋友旁邊按同行 就一起走了', to: '#party-btn', key: ['party', '同行'] },
   { id: 'ferry', q: '船會去哪', a: '那面牆上的海報 都是船會到的地方', to: 'exit', need: 'out' },
   { id: 'film', q: '底片怎麼洗', a: '海市有暗房師傅 拿去給他', need: 'haishi' },
   { id: 'shy', q: '為什麼不給拍', a: '哈哈 秘密', need: 'shy' },

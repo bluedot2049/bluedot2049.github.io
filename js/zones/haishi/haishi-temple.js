@@ -62,20 +62,9 @@ export function buildTemple(c) {
       pk.emit(bucket, 0, 0, 0);
     }
 
-    // 廟前的石埕：正中一座銅香爐冒著煙，上殿的石階兩旁各一盞石燈
+    // 廟前的石埕：上殿的石階兩旁各一盞石燈。原本正中的銅香爐換成東半邊的大火盆（haishi-brazier.js，漁火那齣用），石階到殿前那條直線空著
     const C = AREA.tCourt, H = AREA.tHall;
-    {
-      const x = (AREA.tS7.x0 + AREA.tS7.x1) / 2, z = (C.z0 + C.z1) / 2 + 0.4, y = C.y;
-      tk.cyl(0.55, 0.45, 0.6, BRONZE, x, y + 0.5, z, {}, 10);
-      tk.torus(0.55, 0.05, Math.PI * 2, BRONZE, x, y + 0.8, z, { rx: Math.PI / 2 });
-      for (let i = 0; i < 3; i++) {
-        const a = (i / 3) * Math.PI * 2 + 0.5;
-        tk.cyl(0.05, 0.07, 0.3, BRONZE, x + Math.cos(a) * 0.38, y + 0.15, z + Math.sin(a) * 0.38, {}, 5);
-      }
-      tk.puff(x, y + 0.9, z, 'smoke', 0.8);
-      obstacles.push({ x, z, hw: 0.6, hd: 0.6 });
-      for (const sx of [AREA.tS7.x0 - 0.5, AREA.tS7.x1 + 0.5]) stoneLamp(sx, C.y, C.z0 + 0.4);
-    }
+    for (const sx of [AREA.tS7.x0 - 0.5, AREA.tS7.x1 + 0.5]) stoneLamp(sx, C.y, C.z0 + 0.4);
     // 觀星樓：石埕西頭一座瘦高的樓，三層往上收，底層木構、上兩層白灰牆（霧裡才浮得出來），頂上沒有屋頂，只有一座銅渾天儀。從山下看是廟的記號
     {
       const x = C.x0 + 1.7, z = (C.z0 + C.z1) / 2 - 0.2, y = C.y, ok = new Kit(TR);

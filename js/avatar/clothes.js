@@ -46,13 +46,78 @@ const ONE_COAT = { dino: SUIT_COAT, panda: SUIT_COAT, astronaut: SUIT_COAT, bana
 
 // 身上最外層在 y 高度離中線多遠（前後一樣）。領帶、項鍊、背包、腰包照它擺，穿了斗篷、蓑衣也不會埋進去。
 // 沒穿寬外套時就是 chest()，原本的位置不變
-function shell(L, W) {
+export function shell(L, W) {
   const segs = (L.one !== 'none' ? ONE_COAT[L.one] : COAT[L.outer]) || [];
   return (y) => {
     let r = chest(y, W);
     for (const [y0, y1, r0, r1] of segs) if (y >= y0 && y <= y1) r = Math.max(r, lerp(r0, r1, (y - y0) / (y1 - y0)) * W);
     return r;
   };
+}
+
+// ---------- 帶子 ----------
+// 沿著身上走的扁帶（背包、書包、吊帶、郵差包、吉他、圍裙、相機的背帶）。以前是兩三根直棍，中間埋在身體裡，看起來是一塊直線。
+// pts 是一串 [x, y, z, nx, ny, nz]：點和那裡表面朝外的方向。每段一片薄板，寬面貼著表面，相鄰兩段在接點重疊一點，轉彎不會裂開
+const _ba = new THREE.Vector3(), _bb = new THREE.Vector3(), _bu = new THREE.Vector3(), _bn = new THREE.Vector3(), _bw = new THREE.Vector3(), _bm = new THREE.Matrix4();
+export function band(k, pts, w, c, t = 0.008) {
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const p = pts[i], q = pts[i + 1];
+    _ba.set(p[0], p[1], p[2]);
+    _bb.set(q[0], q[1], q[2]);
+    const len = _ba.distanceTo(_bb);
+    if (len < 1e-4) continue;
+    _bu.subVectors(_bb, _ba).divideScalar(len);
+    _bn.set(p[3] + q[3], p[4] + q[4], p[5] + q[5]);
+    _bn.addScaledVector(_bu, -_bn.dot(_bu));
+    if (_bn.lengthSq() < 1e-8) _bn.set(0, 0, 1).addScaledVector(_bu, -_bu.z);
+    _bn.normalize();
+    _bw.crossVectors(_bu, _bn);
+    const g = new THREE.BoxGeometry(w, len + t, t);
+    g.applyMatrix4(_bm.makeBasis(_bw, _bu, _bn).setPosition((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2));
+    k.add(g, c, 0, 0, 0);
+  }
+}
+// 身上 (x, y) 那一點貼在表面上：face 1 前面、-1 後面，R(y) 是那一面離中線多遠。走到身體旁邊（|x| 比 R 大）就貼在側面
+const onSide = (R, x, y, face, off = 0.006) => {
+  const r = R(y) + off, z = face * Math.sqrt(Math.max(0, r * r - x * x)), l = Math.hypot(x, z) || 1;
+  return [x, y, z, x / l, 0, z / l];
+};
+// 一串 [x, y] 折線，每 step 取一點貼在表面
+export function along(R, face, line, step = 0.04, off = 0.006) {
+  const out = [];
+  for (let i = 0; i + 1 < line.length; i++) {
+    const [x0, y0] = line[i], [x1, y1] = line[i + 1], n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / step));
+    for (let j = i ? 1 : 0; j <= n; j++) out.push(onSide(R, x0 + (x1 - x0) * j / n, y0 + (y1 - y0) * j / n, face, off));
+  }
+  return out;
+}
+// 從背後繞過肩頭到前面：back 由下往上、front 由上往下的 [x, y]，最後一點、第一點自己接到肩頭。
+// Rb、Rf 是背面、正面的表面；肩頭頂在背後 topB、前面 topF 高（披上披風時背後是披風頂，比較高），轉角照半徑 e 彎過去
+export function overShoulder(Rb, Rf, back, front, topB = 0.8, topF = 0.8, e = 0.035, off = 0.006) {
+  const xb = back.at(-1)[0], xf = front[0][0];
+  const out = along(Rb, -1, [...back, [xb, topB - e]], 0.04, off);
+  const zb = out.at(-1)[2], zf = Math.sqrt(Math.max(0, (Rf(topF - e) + off) ** 2 - xf * xf));
+  const N = 4;
+  for (let i = 1; i <= N; i++) {
+    const f = (i / N) * Math.PI / 2;
+    out.push([xb, topB - e + e * Math.sin(f) + off, zb + e - e * Math.cos(f), 0, Math.sin(f), -Math.cos(f)]);
+  }
+  for (let i = 0; i <= N; i++) {
+    const f = Math.PI / 2 - (i / N) * Math.PI / 2;
+    out.push([xf, topF - e + e * Math.sin(f) + off, zf - e + e * Math.cos(f), 0, Math.sin(f), Math.cos(f)]);
+  }
+  return out.concat(along(Rf, 1, [[xf, topF - e], ...front], 0.04, off).slice(1));
+}
+// 繞著脖子後面一圈：從兩邊 (±x, y) 正面的點往後繞到後頸，半徑 r
+function neckLoop(k, x, y, zf, r, w, c) {
+  for (const s of [-1, 1]) {
+    const a0 = Math.atan2(x, zf), pts = [];
+    for (let i = 0; i <= 6; i++) {
+      const a = a0 + (Math.PI - a0) * i / 6, rr = r + (Math.hypot(x, zf) - r) * (1 - i / 6) ** 2;
+      pts.push([s * Math.sin(a) * rr, y, Math.cos(a) * rr, s * Math.sin(a), 0, Math.cos(a)]);
+    }
+    band(k, pts, w, c);
+  }
 }
 
 // 一段下粗上細（或反過來）的圓筒，照花紋上色。y0 在下、y1 在上。
@@ -173,8 +238,8 @@ function bottom(k, L, W, P) {
       k.box(0.2 * W, 0.2, 0.015, c, 0, 0.56, fz(0.56), { rx: -th });
       for (const s of [-1, 1]) {
         const x = s * 0.075 * W;
-        rod(k, [x, 0.65, fz(0.65)], [s * 0.1 * W, 0.8, 0], 0.012, c, { flat: 0.01 });
-        rod(k, [s * 0.1 * W, 0.8, 0], [x, 0.58, -fz(0.58)], 0.012, c, { flat: 0.01 });
+        const R = (y) => chest(y, W) + 0.006;
+        band(k, overShoulder(R, R, [[x, 0.58], [s * 0.1 * W, 0.72]], [[s * 0.1 * W, 0.72], [x, 0.65]]), 0.024, c);
         k.rock(0.016, GOLD, x, 0.645, fz(0.645) + 0.01);
       }
       break;
@@ -244,8 +309,9 @@ function outer(k, L, W, P) {
       const zt = chest(0.75, W) + 0.012, zb = 0.3 * W + 0.02, a = Math.atan((zb - zt) / 0.5);
       k.box(0.3 * W, 0.5, 0.012, c, 0, 0.5, (zt + zb) / 2, { rx: -a });
       k.box(0.12 * W, 0.07, 0.014, c2, 0, 0.42, lerp(zt, zb, 0.66) + 0.006, { rx: -a });
+      neckLoop(k, 0.09, 0.795, chest(0.79, W) + 0.014, 0.115, 0.018, c);
       for (const s of [-1, 1]) {
-        rod(k, [s * 0.12 * W, 0.74, zt], [s * 0.06, 0.82, -0.02], 0.008, c, { seg: 4 });
+        band(k, along((y) => chest(y, W) + 0.012, 1, [[s * 0.12 * W, 0.74], [s * 0.09, 0.79]], 0.03, 0.002), 0.018, c);
         k.ball(0.035, c2, s * 0.05, 0.52, -chest(0.52, W) - 0.02, { sz: 0.5 });
       }
       break;
@@ -408,13 +474,18 @@ function neck(k, L, W, P) {
 // ---------- 背上 ----------
 // 翅膀和尾巴會動，另外做；這裡是背著不動的東西
 
-function back(k, L, W, P) {
-  // 背的東西貼著最外層：穿了斗篷、蓑衣，包包背在外面
-  const c = P.back, sh = shell(L, W), bz = (y) => -sh(y) - 0.005;
+function back(k, L, W, P, cape = null) {
+  // 背的東西貼著最外層：穿了斗篷、蓑衣，包包背在外面；披了披風背在披風外面（cape 是披風外緣，方位 0 是正後方）
+  // 披風往下越來越開：背的東西照它往下 20 公分內最寬的地方擺，下緣才不會陷進披風
+  const capeB = cape && ((y) => Math.max(...[0, 0.05, 0.1, 0.15, 0.2].map((d) => cape(y - d, 0))));
+  const c = P.back, sh = shell(L, W), bs = cape ? (y) => Math.max(sh(y), capeB(y)) : sh, bz = (y) => -bs(y) - 0.005;
+  // 背帶：背後貼著 bs、前面貼著 sh；披風時肩上那段走在披風頂上、離脖子遠一點（領口和頭）
+  const lane = (x) => (cape ? Math.sign(x) * Math.max(Math.abs(x), 0.19) : x), topB = cape ? 0.85 : 0.8;
+  const strap = (backPath, frontPath, w, col) => band(k, overShoulder(bs, sh, backPath, frontPath, topB, 0.8), w, col);
   switch (L.back) {
     case 'pouch': {
       // 掛在右後腰，避開垂下來的右手
-      const r = 0.255 * W + sh(0.42) - chest(0.42, W);
+      const r = cape ? cape(0.42, 0.73) + 0.06 : 0.255 * W + sh(0.42) - chest(0.42, W);
       k.box(0.16, 0.16, 0.08, c, -r * Math.sin(0.73), 0.42, -r * Math.cos(0.73), { rx: 0.15, ry: 0.7, rz: 0.1 });
       break;
     }
@@ -422,8 +493,8 @@ function back(k, L, W, P) {
       k.ball(0.15, c, 0, 0.6, bz(0.6) - 0.08, { sx: 0.9 * Math.max(1, W * 0.8), sy: 1.1, sz: 0.55 });
       k.ball(0.09, mix(c, '#000000', 0.15), 0, 0.52, bz(0.52) - 0.14, { sx: 1.1, sy: 0.7, sz: 0.4 });
       for (const s of [-1, 1]) {
-        rod(k, [s * 0.09, 0.72, bz(0.72)], [s * 0.1 * W, 0.8, 0], 0.012, mix(c, '#000000', 0.25), { flat: 0.01 });
-        rod(k, [s * 0.1 * W, 0.8, 0], [s * 0.1 * W, 0.55, sh(0.55) + 0.006], 0.012, mix(c, '#000000', 0.25), { flat: 0.01 });
+        const x = lane(s * 0.1 * W);
+        strap([[s * 0.09, 0.62], [x, 0.72]], [[x, 0.72], [s * 0.1 * W, 0.55]], 0.026, mix(c, '#000000', 0.25));
       }
       break;
     case 'schoolbag':
@@ -432,15 +503,15 @@ function back(k, L, W, P) {
       k.box(0.265 * Math.max(1, W * 0.8), 0.2, 0.135, mix(c, '#000000', 0.2), 0, 0.66, bz(0.6) - 0.065);
       k.box(0.05, 0.03, 0.01, GOLD, 0, 0.57, bz(0.6) - 0.135);
       for (const s of [-1, 1]) {
-        rod(k, [s * 0.08, 0.72, bz(0.72)], [s * 0.1 * W, 0.8, 0], 0.012, BLACK, { flat: 0.01 });
-        rod(k, [s * 0.1 * W, 0.8, 0], [s * 0.1 * W, 0.55, sh(0.55) + 0.006], 0.012, BLACK, { flat: 0.01 });
+        const x = lane(s * 0.1 * W);
+        strap([[s * 0.08, 0.66], [x, 0.72]], [[x, 0.72], [s * 0.1 * W, 0.55]], 0.026, BLACK);
       }
       break;
     case 'satchel': {
       // 斜背的郵差包，袋口露出一封信
-      const x = -sh(0.42) - 0.05;
-      rod(k, [0.15 * W, 0.8, sh(0.8) + 0.01], [x + 0.02, 0.46, 0.1 * W], 0.02, LEATHER, { flat: 0.012 });
-      rod(k, [0.15 * W, 0.8, -sh(0.8) - 0.01], [x + 0.02, 0.46, -0.1 * W], 0.02, LEATHER, { flat: 0.012 });
+      // 背帶從右肩斜過胸前、背後，在左邊腰側接到包上
+      const x = -(cape ? Math.max(sh(0.42), cape(0.42, Math.PI / 2)) : sh(0.42)) - 0.05, t = lane(0.15 * W);
+      strap([[x + 0.03, 0.47], [t, 0.72]], [[t, 0.72], [x + 0.03, 0.47]], 0.03, LEATHER);
       k.box(0.1, 0.22, 0.3, c, x, 0.4, 0.02);
       k.box(0.02, 0.06, 0.1, WHITE, x - 0.02, 0.52, 0.05);
       break;
@@ -451,7 +522,10 @@ function back(k, L, W, P) {
       k.ball(0.1, c, -0.02, 0.58, z, { sz: 0.35 });
       k.cyl(0.035, 0.035, 0.01, BLACK, 0.03, 0.47, z - 0.046, { rx: Math.PI / 2 }, 10);
       rod(k, [-0.03, 0.62, z], [-0.2, 1.05, z], 0.02, WOOD, { flat: 0.015 });
-      rod(k, [0.15 * W, 0.8, sh(0.8) + 0.01], [-0.2 * W, 0.4, sh(0.4) + 0.01], 0.012, BLACK, { flat: 0.008 });
+      // 背帶：琴頸那頭從右肩上來，斜過胸前到左邊腰側，繞到背後接琴身的尾巴。披了披風就收在腰側披風前緣裡面，不繞出去
+      const t = lane(0.15 * W), sx = -sh(0.38) - 0.01;
+      strap([[-0.03, 0.62], [t, 0.72]], [[t, 0.72], [sx, 0.38]], 0.022, BLACK);
+      if (!cape) band(k, along(bs, -1, [[sx, 0.38], [0.02, 0.33]]), 0.022, BLACK);
       break;
     }
     case 'sword': {
@@ -471,6 +545,39 @@ function back(k, L, W, P) {
       }
       break;
     }
+    case 'shield': {
+      // 圓盾：木頭盾面（背上的顏色），鐵邊、正中一顆鐵釘頭，幾條木板縫
+      const y = 0.55, z = bz(y) - 0.03, r = 0.25;
+      k.cyl(r, r, 0.03, c, 0, y, z, { rx: Math.PI / 2 }, 12);
+      k.torus(r, 0.016, Math.PI * 2, METAL, 0, y, z);
+      for (const x of [-0.09, 0.09]) k.box(0.008, r * 1.8, 0.004, mix(c, '#000000', 0.35), x, y, z - 0.016);
+      k.ball(0.055, METAL, 0, y, z - 0.02, { sz: 0.6 });
+      break;
+    }
+    case 'kite': {
+      // 騎士盾：上方下尖，盾面是背上的顏色，一道淺色人字紋（不放十字：宗教的記號）
+      const z = bz(0.6) - 0.03, light = mix(c, '#f4f2ec', 0.6), top = 0.78;
+      k.box(0.36, 0.2, 0.03, c, 0, top - 0.1, z);
+      k.cyl(0.208, 0.208, 0.03, c, 0, top - 0.2 - 0.104, z, { rx: Math.PI / 2 }, 3);
+      for (const s of [-1, 1]) k.box(0.2, 0.055, 0.034, light, s * 0.075, top - 0.2, z, { rz: s * -0.55 });
+      k.box(0.38, 0.025, 0.036, GOLD, 0, top, z);
+      break;
+    }
+    case 'bowpack': {
+      // 弓和箭筒：弓斜背在外面，箭筒在裡面，箭羽從右肩冒出來
+      const z = bz(0.6) - 0.06, r = 0.42, a0 = -0.35 * Math.PI, arc = 0.7 * Math.PI, cx = 0.12, cy = 0.62, rz = Math.PI * 0.62;
+      const qa = [-0.08, 0.5, z], qb = [0.12, 0.92, z];
+      rod(k, qa, qb, 0.06, c);
+      for (let i = 0; i < 3; i++) {
+        const x = qb[0] + (i - 1) * 0.03, y = qb[1] + 0.06, zz = z + (i - 1) * 0.02;
+        rod(k, [x - 0.02, y - 0.1, zz], [x + 0.02, y + 0.06, zz], 0.007, WOOD, { seg: 3 });
+        k.box(0.04, 0.06, 0.006, '#f0ece0', x + 0.02, y + 0.04, zz, { rz: -0.4 });
+      }
+      k.torus(r, 0.016, arc, WOOD, cx, cy, z - 0.07, { rz: rz + a0 });
+      const end = (t) => [cx + Math.cos(rz + a0 + t) * r, cy + Math.sin(rz + a0 + t) * r, z - 0.07];
+      rod(k, end(0), end(arc), 0.004, '#e8e0d0', { seg: 3 });
+      break;
+    }
     case 'shell': {
       // 龜殼：綠色的大殼，上面一塊一塊凸起來
       const z = bz(0.55) + 0.02;
@@ -483,7 +590,8 @@ function back(k, L, W, P) {
   }
 }
 
-export function bodyGeo(L, W) {
+// cape：披了披風時，披風外緣在 (y, 方位) 多遠（capeGeo 的 envelope）；背的東西改背在披風外面
+export function bodyGeo(L, W, cape = null) {
   const P = palette(L);
   return build((k) => {
     if (L.one !== 'none') onepiece(k, L, W, P);
@@ -493,7 +601,7 @@ export function bodyGeo(L, W) {
       outer(k, L, W, P);
     }
     neck(k, L, W, P);
-    back(k, L, W, P);
+    back(k, L, W, P, cape);
   });
 }
 
@@ -593,20 +701,126 @@ function shoe(k, L, P, skin, side) {
   }
 }
 
-// 披風：原點在後頸，往下垂。character.js 讓它跟著走路和跳往後飄
-export function capeGeo(L, W) {
-  if (L.one !== 'none' || L.outer !== 'cape') return null;
-  const P = palette(L);
+// 相機的頸帶：從相機上緣兩邊往上貼著胸口，到脖子下面就停（寫意，不畫繞過後頸那段）。y0、z0 是相機掛在哪（character.js 的 camHang），cs 是相機的大小（CAM_S）
+export function camStrap(L, W, y0, z0, cs = 0.9) {
+  const sh = shell(L, W), c = cs / 0.9;
   return build((k) => {
-    k.box(0.44 * W, 0.66, 0.025, P.out, 0, -0.33, -0.012);
-    k.box(0.42 * W, 0.64, 0.01, P.out2, 0, -0.33, 0.006);
+    for (const s of [-1, 1]) band(k, [[s * 0.07 * c, y0 + 0.09 * c, z0 + 0.02 * c, 0, 0.3, 1], ...along(sh, 1, [[s * 0.085, 0.62], [s * 0.1, 0.77]], 0.04, 0.008)], 0.016, DARK);
   });
 }
-export const capeAt = (W) => [0, 0.8, -chest(0.8, W) - 0.01];
 
-// 翅膀：一邊一片，原點在背上，往 side 那一側伸出去，平面朝後
+// ---------- 披風 ----------
+// 像黑武士那樣的大披風：脖子一圈 → 蓋過肩頭 → 背後往下越張越開、垂到快碰地；兩側包到手臂後面，前面開著，手從兩邊出來。
+// 一圈一圈往下，每圈從左後到右後一排點；外面一層披風色、裡面一層襯裡，邊上縫起來。
+// 每一點離中線多遠，取這幾樣最遠的再加一點：身體（不含背的東西，handclear.js 的 shapeOf 量的表）、頭（左右轉也碰不到，鬍子、長髮都算）、
+// 手臂垂著往後擺到最後面、腿往後跨到最大；往下再張開一點、加一道道直褶。背的東西、翅膀、尾巴改到披風外面（envelope）。
+// 網格就在身體的座標裡（關節不動）。走路、跳、風吹時 character.js 的 bendCape 照每一點的 t（肩上 0、下襬 1）把下面往後彎、碰地就貼著地，
+// 肩上那段不動，所以彎起來只會離身體更遠，不會穿進身體和手臂
+export const CAPE_BEND = 1.1;   // 下襬最多往後彎幾弧度（character.js 照這個上限，背的東西照這個留空間）
+export const capeT = (t) => t ** 1.4;   // 從上往下彎的比例
+export function capeGeo(L, W, o) {
+  if (L.one !== 'none' || L.outer !== 'cape') return null;
+  const P = palette(L), { body, head, reach, points, hs = 1, drop = 0, leg = 1, bend = 1 } = o;
+  const COLS = 16, TH = 0.014, Y_TOP = 0.8, Y_RING = 0.83, yBot = drop + 0.07;
+  // 會擋到的東西取成一串點 [x, y, z, 半徑]（只取右邊，左右對稱）
+  const pts = [], sh = 0.07 + 0.17 * W, armR = 0.055 * Math.sqrt(W) + 0.035;
+  for (let f = 0; f <= 0.901; f += 0.1) for (let d = 0; d <= 0.381; d += 0.03) {
+    const y0 = -d * Math.cos(0.28);   // 手臂往外張 0.28（character.js 的 ARM_OUT），往後擺 f
+    pts.push([sh + d * Math.sin(0.28), 0.72 + y0 * Math.cos(f), y0 * Math.sin(f), armR]);
+  }
+  const fx = 0.09 * Math.max(0.75, W), legR = 0.065 * Math.sqrt(W) + 0.05;
+  for (let f = 0; f <= 0.751; f += 0.15) for (let d = 0; d <= 0.42 * leg + 0.001; d += 0.04) pts.push([fx, 0.42 - d * Math.cos(f), -d * Math.sin(f) - 0.03, legR]);
+  // 頭（含頭髮、鬍子、角）：左右轉最多 1.2、抬頭 0.6、低頭 0.45（player.js 的 GAZE_*，再加淋雨、顏文字的低頭），原點在脖子、乘頭的大小
+  const hp = points(head).filter((p) => p[1] * hs < 0.45), m = new THREE.Matrix4(), e = new THREE.Euler(0, 0, 0, 'YXZ');
+  for (let yaw = -1.2; yaw <= 1.21; yaw += 0.3) for (const pitch of [-0.6, -0.3, 0, 0.25, 0.45]) {
+    const q = m.makeRotationFromEuler(e.set(pitch, yaw, 0)).elements;
+    for (const [x, y, z] of hp) {
+      const Y = (q[1] * x + q[5] * y + q[9] * z) * hs;
+      if (Y < 0.15) pts.push([(q[0] * x + q[4] * y + q[8] * z) * hs, 0.8 + Y, (q[2] * x + q[6] * y + q[10] * z) * hs, 0.05]);
+    }
+  }
+  // 這一圈（高度 y）、這個方位（th：0 正後方，往右是正）至少要多遠
+  // near：這一圈高度碰得到的點，每圈先算一次（離中線多遠 rr、方位 pa、在這高度多粗 w、擋住的方位寬 half），十幾個方位共用
+  const need = (y, th, near) => {
+    const a = Math.atan2(Math.sin(th), -Math.cos(th));   // handclear 的方位：0 是正前方
+    let r = reach(body, y, a) + 0.035;
+    const at = Math.abs(th);
+    for (const n of near) if (Math.abs(at - n.pa) < n.half) r = Math.max(r, n.rr + n.w);
+    return r;
+  };
+  const nearAt = (y) => {
+    const out = [];
+    for (const [px, py, pz, pr] of pts) {
+      const dy = Math.abs(py - y);
+      if (dy >= pr) continue;
+      const w = Math.sqrt(pr * pr - dy * dy), rr = Math.hypot(px, pz);
+      out.push({ rr, w, pa: Math.atan2(Math.abs(px), -pz), half: Math.asin(Math.min(1, w / Math.max(rr, w))) + 0.1 });
+    }
+    return out;
+  };
+  // 每一圈的高度：領口、肩頭，再往下大約每 10 公分一圈到下襬
+  const n = Math.max(3, Math.ceil((Y_TOP - yBot) / 0.1)), ys = [Y_RING, Y_TOP];
+  for (let j = 1; j <= n; j++) ys.push(Y_TOP - (Y_TOP - yBot) * j / n);
+  const tOf = (y) => Math.min(1, Math.max(0, (Y_TOP - y) / (Y_TOP - yBot)));
+  const span = (y) => 1.22 + 0.28 * tOf(y);   // 包到多前面：肩上 70 度（手臂前面空著）、下襬 86 度（手垂在身邊拿的東西在披風前緣外面）
+  const R = ys.map((y) => {
+    const near = nearAt(y);
+    return Array.from({ length: COLS + 1 }, (_, i) => need(y, span(y) * (2 * i / COLS - 1), near));
+  });
+  for (let j = 2; j < ys.length; j++) for (let i = 0; i <= COLS; i++) R[j][i] = Math.max(R[j][i], R[j - 1][i]);   // 往下只會更開
+  // 左右對稱、相鄰的柔一點，再張開、加褶
+  for (const row of R) for (let i = 0; i <= COLS / 2; i++) row[i] = row[COLS - i] = Math.max(row[i], row[COLS - i]);
+  for (let j = 1; j < ys.length; j++) {
+    const t = tOf(ys[j]), row = R[j].slice();
+    for (let i = 0; i <= COLS; i++) R[j][i] = Math.max(row[i], (row[Math.max(0, i - 1)] + 2 * row[i] + row[Math.min(COLS, i + 1)]) / 4) + 0.1 * (Y_TOP - ys[j]) + (i % 2) * 0.035 * t ** 0.8;
+  }
+  const NR = ys.length, NV = NR * (COLS + 1);
+  const pos = new Float32Array(NV * 2 * 3), colr = new Float32Array(NV * 2 * 3), tt = new Float32Array(NV * 2);
+  const out = new THREE.Color(P.out), lin = new THREE.Color(P.out2), dk = out.clone().multiplyScalar(0.82);
+  for (let j = 0; j < NR; j++) for (let i = 0; i <= COLS; i++) {
+    const th = span(ys[j]) * (2 * i / COLS - 1), v = j * (COLS + 1) + i;
+    for (const [layer, r, c] of [[0, R[j][i], i % 2 ? out : dk], [1, R[j][i] - TH, lin]]) {
+      const q = (layer * NV + v) * 3;
+      pos[q] = Math.sin(th) * r; pos[q + 1] = ys[j] - (layer && !j ? 0.004 : 0); pos[q + 2] = -Math.cos(th) * r;
+      colr[q] = c.r; colr[q + 1] = c.g; colr[q + 2] = c.b;
+      tt[layer * NV + v] = j ? tOf(ys[j]) : 0;
+    }
+  }
+  const idx = [], V = (l, j, i) => l * NV + j * (COLS + 1) + i;
+  for (let j = 0; j + 1 < NR; j++) for (let i = 0; i < COLS; i++) {
+    const a = V(0, j, i), b = V(0, j + 1, i), c = V(0, j, i + 1), d = V(0, j + 1, i + 1);
+    idx.push(a, c, b, c, d, b);
+    const A = V(1, j, i), B = V(1, j + 1, i), C = V(1, j, i + 1), D = V(1, j + 1, i + 1);
+    idx.push(A, B, C, C, B, D);
+  }
+  // 邊：兩側、下襬、領口，外層和裡層縫起來（兩面都畫）
+  const seam = (p, q) => { const P0 = p + NV, Q0 = q + NV; idx.push(p, q, P0, q, Q0, P0, p, P0, q, q, P0, Q0); };
+  for (let j = 0; j + 1 < NR; j++) { seam(V(0, j, 0), V(0, j + 1, 0)); seam(V(0, j, COLS), V(0, j + 1, COLS)); }
+  for (let i = 0; i < COLS; i++) { seam(V(0, NR - 1, i), V(0, NR - 1, i + 1)); seam(V(0, 0, i), V(0, 0, i + 1)); }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colr, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  // 外緣：背的東西、翅膀、尾巴擺在這外面。加上下襬最多往後彎多少（bend 是這套造型彎的上限比例，背了東西就彎少一點）
+  const back = R.map((row) => row[COLS / 2]);
+  const envelope = (y, th = 0) => {
+    if (y > Y_RING + 0.03 || y < yBot - 0.03 || Math.abs(th) > span(y) + 0.1) return 0;
+    let j = 1;
+    while (j + 1 < NR && ys[j + 1] > y) j++;
+    const col = Math.min(COLS, Math.max(0, Math.round((th / span(y) + 1) / 2 * COLS)));
+    // 上下兩圈取遠的（褶也算進去），左右也多看一格
+    let r = 0;
+    for (const jj of [j, Math.min(NR - 1, j + 1)]) for (const ii of [col - 1, col, col + 1]) r = Math.max(r, R[jj][Math.min(COLS, Math.max(0, ii))]);
+    return r + 0.035 + Math.max(0, Y_TOP - y) * Math.sin(CAPE_BEND * bend * capeT(tOf(y)));
+  };
+  geo.userData.cape = { base: pos.slice(), t: tt, pivot: [0, Y_TOP, -back[1]], yBot, envelope };
+  return geo;
+}
+
+// 翅膀：一邊一片，原點在背上，往 side 那一側伸出去，平面朝後。披了披風長在披風外面（cape 是披風外緣）
 export const hasWings = (L) => L.one === 'none' && ['wingA', 'wingB', 'wingC'].includes(L.back);
-export const wingAt = (L, W, side) => [side * 0.06, 0.66, -shell(L, W)(0.66) - 0.03];
+export const wingAt = (L, W, side, cape = null) => [side * 0.06, 0.66, -Math.max(shell(L, W)(0.66), cape ? cape(0.66, 0) : 0) - 0.03];
 export function wingGeo(L, side) {
   if (!hasWings(L)) return null;
   const c = col(L.backC);
@@ -641,7 +855,8 @@ export function wingGeo(L, side) {
 }
 
 // 尾巴：背上選了尾巴，或穿了恐龍裝、熊貓裝。原點在屁股後面，往後下方垂再翹起來
-export const tailAt = (W) => [0, 0.32, -0.22 * W];
+// 尾巴：y 是身體座標（短腿的種族照 character.js 換過），披了披風長在披風外面
+export const tailAt = (W, y = 0.32, cape = null) => [0, y, -Math.max(0.22 * W, cape ? cape(y, 0) + 0.02 : 0)];
 export function tailGeo(L, skin) {
   const dino = L.one === 'dino';
   if (!dino && !(L.one === 'none' && L.back === 'tail')) return null;
@@ -660,18 +875,21 @@ export function tailGeo(L, skin) {
 
 // ---------- 右手 ----------
 // 右手拿的東西一樣一行，新的東西照抄一行、在 handGeo 加造型就好：
-// pose：hang 手垂著拿、hold 手往前抬拿在胸前、up 手舉高東西在頭上
+// pose：hang 手垂著拿、hold 手往前抬拿在胸前、up 手舉高東西在頭上、tuck 夾在腋下（手臂微張、幾乎不擺）
 // kind：性子，表情的手勢只跟性子打交道（kaomoji-parts.js）。long 長的跟著手轉、cup 杯子保持水平、lamp 燈保持直立、
 //       flat 書和框正面朝前、top 留在頭頂、float 飄著拖在後面
 // swing：垂著時跟著手盪多少（負的是拖在後面），swingW 擺的快慢（每秒弧度，沒寫是 6）
+// ground：下端拄到地上（法杖、長矛），短腿的種族在手裡往上滑（handclear.js）
 // sit：坐下時先放到身邊地上；float 的躺下也不放，其他躺下全部放下（handclear.js）
 // stand：放在地上時立著，其他的橫躺
+// tuck 的東西沿著手臂畫（+y 順著手臂往上、+x 往身體那邊，x=0 是手臂外緣），handclear.js 量手臂多粗往內推、跟著手臂斜。
+// grab：手臂抬起來時從腋下拿到手上，網格移多少 [x, y, z]、轉回直立
 // 拿的東西由 character.js 抵銷手臂的轉動，一直保持直立
 export const ITEMS = {
-  staff: { pose: 'hang', kind: 'long', swing: 0.35, sit: true },
+  staff: { pose: 'hang', kind: 'long', swing: 0.35, sit: true, ground: true },
   umbrella: { pose: 'up', kind: 'top' },
   balloon: { pose: 'hold', kind: 'float', swing: -0.6, swingW: 2.2 },
-  book: { pose: 'hold', kind: 'flat' },
+  book: { pose: 'tuck', kind: 'flat', grab: [-0.02, 0.05, 0.09] },
   flower: { pose: 'hold', kind: 'long', swing: 0.5 },
   boba: { pose: 'hold', kind: 'cup', swing: 0.25, stand: true },
   chicken: { pose: 'hold', kind: 'cup' },
@@ -687,6 +905,15 @@ export const ITEMS = {
   baguette: { pose: 'hang', kind: 'long', swing: 0.3, sit: true },
   teacup: { pose: 'hold', kind: 'cup', swing: 0.12, stand: true },
   squid: { pose: 'hold', kind: 'long' },
+  // 中古奇幻的配件：只是打扮，沒有戰鬥（基本原則）。長的垂著拿、坐下放地上
+  sword: { pose: 'hang', kind: 'long', swing: 0.25, sit: true },
+  axe: { pose: 'hang', kind: 'long', swing: 0.3, sit: true },
+  hammer: { pose: 'hang', kind: 'long', swing: 0.3, sit: true },
+  spear: { pose: 'hang', kind: 'long', swing: 0.3, sit: true, ground: true },
+  bow: { pose: 'hang', kind: 'long', swing: 0.25, sit: true },
+  wand: { pose: 'hold', kind: 'long', swing: 0.15 },
+  root: { pose: 'hang', kind: 'long', swing: 0.35, sit: true, ground: true },
+  dawn: { pose: 'hold', kind: 'long', swing: 0.2 },   // 還沒升起的太陽（演唱會地平線下最深處拿的）
 };
 const NO_ITEM = {};
 export const itemOf = (id) => ITEMS[id] || NO_ITEM;
@@ -713,11 +940,21 @@ export function handGeo(L, reach = 0) {
         k.ball(0.13, c, 0.04, 1.1, 0.06, { sy: 1.2 });
         k.cone(0.02, 0.035, c, 0.04, 0.95, 0.06, { rx: Math.PI });
         break;
-      case 'book':
-        k.box(0.16, 0.21, 0.05, c, 0, 0.06, 0.05, { rx: -0.2 });
-        k.box(0.145, 0.195, 0.052, '#f0e6d0', 0.01, 0.06, 0.05, { rx: -0.2 });
-        k.rock(0.02, GOLD, 0, 0.07, 0.08);
+      case 'book': {
+        // 夾在腋下：貼著手臂內側（tuck，見 ITEMS），長邊前後、書背朝下，手臂從外面壓著、手垂在下面。
+        // 封面朝兩側（金角＋寶石），上緣書口扣一道扣環；從前後看是一疊書頁夾在兩片封面中間
+        // t 半厚（直直的手臂和身體之間塞得下的厚度）、h 高、w 前後長；y 沿著手臂離手心多高（越低手臂離身體越遠）
+        const t = 0.02, h = 0.16, w = 0.22, y = 0.05, z = 0.01, x = t;
+        for (const s of [-1, 1]) k.box(0.01, h, w, c, x + s * (t - 0.005), y, z);
+        k.box(t * 2, 0.016, w, mix(c, BLACK, 0.25), x, y - h / 2 + 0.008, z);
+        k.box(t * 2 - 0.016, h - 0.012, w - 0.014, '#f0e6d0', x, y + 0.004, z);
+        k.box(t * 2 + 0.004, 0.014, 0.034, GOLD, x, y + h / 2, z);
+        for (const s of [-1, 1]) {
+          k.rock(0.022, GOLD, x + s * (t + 0.002), y, z, { sx: 0.3 });
+          for (const dz of [-1, 1]) k.box(0.016, 0.028, 0.028, GOLD, x + s * (t - 0.004), y + h / 2 - 0.012, z + dz * (w / 2 - 0.014));
+        }
         break;
+      }
       case 'flower':
         rod(k, [0, -0.02, 0.01], [0, 0.22, 0.03], 0.006, '#4a8a3a', { seg: 4 });
         for (let i = 0; i < 5; i++) {
@@ -777,14 +1014,33 @@ export function handGeo(L, reach = 0) {
         k.cyl(0.018, 0.018, 0.07, '#d8eef4', 0, 0.14, 0.03, {}, 8);
         k.cyl(0.022, 0.022, 0.015, '#8a6a4a', 0, 0.18, 0.03, {}, 8);
         break;
+      case 'dawn':
+        // 還沒升起的太陽：一支短柄，頂上一圈黑鐵的光圈（九邊），中間夾著一顆金色的小太陽
+        rod(k, [0, -0.06, 0.02], [0, 0.17, 0.03], 0.012, WOOD);
+        k.cyl(0.1, 0.1, 0.022, '#2a2420', 0, 0.27, 0.03, { rx: Math.PI / 2 }, 9);
+        k.cyl(0.074, 0.074, 0.03, '#ffc860', 0, 0.27, 0.03, { rx: Math.PI / 2 }, 9);
+        break;
       case 'frame':
         for (const y of [0.07, 0.33]) k.box(0.32, 0.03, 0.025, GOLD, 0, y, 0.06);
         for (const x of [-0.145, 0.145]) k.box(0.03, 0.26, 0.025, GOLD, x, 0.2, 0.06);
         break;
-      case 'scope':
-        k.cyl(0.022, 0.032, 0.32, '#b8903a', 0, 0.12, 0.08, { rx: 0.9 }, 8);
-        k.cyl(0.036, 0.036, 0.02, '#5a4020', 0, 0.12, 0.08, { rx: 0.9 }, 8);
+      case 'scope': {
+        // 拉開的黃銅望遠鏡：握在目鏡那頭，整支往前上斜伸出去（手勢平舉時才不會沿著手臂往後戳）。
+        // 兩節細的抽筒在手邊、粗的主筒在前；接縫深色箍、主筒中段皮革、前頭一片鏡片
+        const a = 0.95, n = 1.2, at = (t) => [0, 0.02 + t * n * Math.cos(a), 0.02 + t * n * Math.sin(a)];
+        const tube = (t1, t2, r1, r2, col) => rod(k, at(t1), at(t2), r2 * n, col, { r2: r1 * n, seg: 10 });
+        const BRASS = '#c89a3e', RING = '#6a4a20';
+        tube(-0.02, 0.07, 0.018, 0.018, BRASS);
+        tube(0.06, 0.16, 0.025, 0.025, BRASS);
+        tube(0.14, 0.43, 0.034, 0.04, BRASS);
+        tube(-0.035, -0.015, 0.022, 0.022, RING);
+        tube(0.06, 0.08, 0.029, 0.029, RING);
+        tube(0.13, 0.16, 0.038, 0.038, RING);
+        tube(0.23, 0.32, 0.039, 0.04, LEATHER);
+        tube(0.41, 0.445, 0.045, 0.045, RING);
+        tube(0.445, 0.45, 0.035, 0.035, '#9ad0e8');
         break;
+      }
       case 'baguette':
         k.ball(0.04, '#c8843f', 0, 0.05, -0.02, { sy: 6, rx: 0.25 });
         for (let i = 0; i < 4; i++) k.box(0.05, 0.01, 0.01, '#e8b878', 0, -0.1 + i * 0.09, 0.02 + i * 0.022, { rx: 0.25, rz: 0.4 });
@@ -801,6 +1057,57 @@ export function handGeo(L, reach = 0) {
           const x = (i - 1.5) * 0.018;
           rod(k, [x, 0.2, 0.02], [x * 1.6, 0.08, 0.02], 0.008, '#b85020', { r2: 0.012, seg: 4 });
         }
+        break;
+      case 'sword':
+        // 長劍：劍身朝上、寬面朝前，護手和劍首金色
+        rod(k, [0, -0.07, 0], [0, 0.05, 0], 0.016, LEATHER);
+        k.ball(0.024, GOLD, 0, -0.085, 0);
+        k.box(0.17, 0.026, 0.036, GOLD, 0, 0.06, 0);
+        k.box(0.05, 0.54, 0.012, METAL, 0, 0.34, 0, { color2: '#d8dce0' });
+        k.cone(0.036, 0.09, '#d8dce0', 0, 0.655, 0, { sz: 0.33 });
+        break;
+      case 'axe':
+        // 斧頭：木柄，刃往前，柄頂一圈顏色
+        rod(k, [0, -0.14, 0], [0, 0.5, 0], 0.017, WOOD);
+        k.cyl(0.1, 0.1, 0.028, METAL, 0, 0.42, 0.09, { rz: Math.PI / 2, color2: '#d8dce0' }, 6);
+        k.box(0.04, 0.07, 0.07, METAL, 0, 0.42, -0.02);
+        k.cyl(0.022, 0.022, 0.05, c, 0, 0.32, 0, {}, 6);
+        break;
+      case 'hammer':
+        // 戰鎚：短柄、方方的大鎚頭，中間一圈顏色
+        rod(k, [0, -0.12, 0], [0, 0.42, 0], 0.018, WOOD);
+        k.box(0.1, 0.11, 0.24, METAL, 0, 0.47, 0, { color2: '#c8ccd2' });
+        k.box(0.105, 0.115, 0.05, c, 0, 0.47, 0);
+        k.cyl(0.024, 0.024, 0.06, LEATHER, 0, -0.02, 0, {}, 6);
+        break;
+      case 'spear':
+        // 長矛：比人高，柳葉形的矛頭，下面垂一撮穗子
+        rod(k, [0, -0.4, 0], [0, 1.2, 0], 0.014, WOOD, { r2: 0.012 });
+        k.cyl(0.02, 0.022, 0.05, GOLD, 0, 1.2, 0, {}, 6);
+        k.ball(0.042, METAL, 0, 1.33, 0, { sy: 2.6, sz: 0.35, color2: '#d8dce0' });
+        k.cone(0.034, 0.12, c, 0, 1.12, 0, { rx: Math.PI });
+        break;
+      case 'bow': {
+        // 長弓：握在中間，弓背朝身體、弦和弓梢朝外（拿在身體外側，不往前後伸，披風、身體都碰不到），正面看得到整把弓
+        const r = 0.5, a = 0.8, tip = (s) => [-r + r * Math.cos(a), s * r * Math.sin(a), 0];
+        k.torus(r, 0.014, a * 2, WOOD, -r, 0, 0, { rz: -a });
+        rod(k, tip(-1), tip(1), 0.003, '#efe8d8', { seg: 3 });
+        k.cyl(0.022, 0.022, 0.08, c, 0, 0, 0, {}, 6);
+        for (const s of [-1, 1]) k.ball(0.014, GOLD, ...tip(s));
+        break;
+      }
+      case 'wand':
+        // 魔杖：短短一根，頂端一顆寶石
+        rod(k, [0, -0.05, 0], [0, 0.3, 0.02], 0.01, DARK, { r2: 0.007 });
+        k.torus(0.016, 0.006, Math.PI * 2, GOLD, 0, 0.3, 0.02, { rx: Math.PI / 2 });
+        k.add(new THREE.OctahedronGeometry(0.035, 0), c, 0, 0.35, 0.022, { sy: 1.5 });
+        break;
+      case 'root':
+        // 樹杖：彎彎的老樹枝，頂上分叉托著一顆圓珠，掛兩片葉子
+        for (const [a, b, r] of [[[0, -0.38, 0], [0.025, 0.2, 0.01], 0.022], [[0.025, 0.2, 0.01], [-0.02, 0.72, 0], 0.02], [[-0.02, 0.72, 0], [0.04, 0.9, 0.01], 0.017]]) rod(k, a, b, r, WOOD, { r2: r * 0.85 });
+        rod(k, [-0.02, 0.72, 0], [-0.08, 0.9, 0], 0.013, WOOD);
+        k.ball(0.05, c, -0.02, 0.92, 0.005);
+        for (const s of [-1, 1]) k.cone(0.025, 0.09, '#5a8a3a', s * 0.05, 0.8, 0.02, { rz: -s * 1.9, sz: 0.3 });
         break;
     }
   });

@@ -17,7 +17,8 @@ export const ACTIONS = [
   ['emote1', '收藏一', 'walk', ['Digit1']], ['emote2', '收藏二', 'walk', ['Digit2']], ['emote3', '收藏三', 'walk', ['Digit3']],
   ['emote4', '收藏四', 'walk', ['Digit4']], ['emote5', '收藏五', 'walk', ['Digit5']],
   ['raise', '舉相機', 'all', ['Mouse2']], ['shutter', '快門', 'cam', ['Mouse0', 'Space']], ['refocus', '重新對焦', 'gear', ['KeyR']],
-  ['selfie', '自拍', 'gear', ['Mouse1']], ['flash', '閃光', 'gear', ['KeyQ']], ['date', '日期', 'gear', ['Backquote']],
+  ['selfie', '自拍', 'gear', ['Mouse1']], ['flash', '閃光、紀念、追焦', 'gear', ['KeyQ']], ['date', '日期', 'gear', ['Backquote']],
+  ['zoomIn', '拉近', 'gear', ['Equal']], ['zoomOut', '拉遠', 'gear', ['Minus']],
   ['turn', '直橫', 'cam', ['KeyF']], ['look', '看鏡', 'cam', ['KeyC']], ['bare', '收起介面', 'cam', ['KeyX']],
   ['up', '空拍機上升', 'drone', ['KeyE']], ['down', '空拍機下降', 'drone', ['KeyQ']], ['fast', '空拍機加速', 'drone', ['Shift']],
   ['photo', '攝影模式', 'all', ['KeyZ']], ['pack', '行囊', 'all', ['Tab']], ['save', '存讀檔', 'all', ['KeyM']],
@@ -32,7 +33,7 @@ export const ACTIONS = [
 // 換鍵卡上的分組和順序
 const GROUPS = [
   ['走動', ['fwd', 'back', 'left', 'right', 'jump', 'sit', 'interact', 'view', 'wheel', 'emote1', 'emote2', 'emote3', 'emote4', 'emote5', 'kaoLook']],
-  ['相機', ['raise', 'shutter', 'refocus', 'selfie', 'flash', 'date', 'turn', 'look', 'bare', 'up', 'down', 'fast', 'count', 'again', 'done', 'spot']],
+  ['相機', ['raise', 'shutter', 'refocus', 'selfie', 'flash', 'date', 'zoomIn', 'zoomOut', 'turn', 'look', 'bare', 'up', 'down', 'fast', 'count', 'again', 'done', 'spot']],
   ['介面', ['photo', 'pack', 'save', 'eye', 'eyeOff', 'list', 'party', 'talk', 'mark', 'whistle', 'tidy', 'cursor']],
 ];
 // 能指定的鍵：只能往後加（存檔記第幾個）。Esc、Enter、方向鍵、Backspace、Delete、F1–F12、Windows 鍵留給選單和瀏覽器

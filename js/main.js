@@ -37,7 +37,7 @@ import { Peek } from './social/peek.js';
 import { lens, LensPass, bend } from './core/lens.js';
 import { dof, DofPass } from './core/dof.js';
 import { fullscreenButton, keepFullscreen } from './controls/screen.js';
-import { CAMERAS, SOON, TABLE, carried, carry } from './camera/cameras.js';
+import { CAMERAS, SOON, TABLE, carried, carry, chromeLight } from './camera/cameras.js';
 import { FlashFx } from './camera/flashfx.js';
 import { installGrade, gradeAt, NEUTRAL } from './core/grade.js';
 import { Hollow } from './zones/gallery/hollow.js';
@@ -46,6 +46,7 @@ import { bindDeskKeys } from './controls/deskkeys.js';
 import { bindVolume } from './controls/volume.js';
 import { bindGamepad, rumble, padBtn } from './controls/gamepad.js';
 import { is, key } from './controls/keymap.js';
+import { warmDemos } from './controls/demos.js';
 import { Beast } from './npc/beast.js';
 import { Happenings } from './core/happen.js';
 import { Acts } from './core/act.js';
@@ -63,7 +64,8 @@ const ZONES = {
   ting: { load: () => import('./zones/ting/zone-ting.js') },
   jinggong: { load: () => import('./zones/jinggong/zone-jinggong.js') },   // 海市星廟裡的鏡宮，不搭船，從星門進出
   heilin: { load: () => import('./zones/heilin/zone-heilin.js') },   // 黑森林，還在蓋（places.js 的 dev）
-  concert: { load: () => import('./zones/concert/zone-concert.js') },   // 演唱會：從畫廊的樹洞進去，不搭船（places.js 的 boat: false）
+  concert: { load: () => import('./zones/concert/zone-concert.js') },
+  gorge: { load: () => import('./zones/gorge/zone-gorge.js') },   // 深谷：演唱會的第二個場地，灰模型（places.js 的 dev）   // 演唱會：從畫廊的樹洞進去，不搭船（places.js 的 boat: false）
 };
 // 渡船能去的地方在 scene/places.js，每個渡口都照那個順序一張一張卡
 
@@ -274,6 +276,7 @@ async function start() {
     hemi.color.copy(a.sky).lerp(b.sky, t);
     hemi.groundColor.copy(a.ground).lerp(b.ground, t);
     hemi.intensity = a.hi + (b.hi - a.hi) * t;
+    chromeLight(hemi.color, hemi.intensity);   // 日晷III 的亮面銀不吃場景的光，整體亮度照天光調
     sun.color.copy(a.sun).lerp(b.sun, t);
     sun.intensity = a.si + (b.si - a.si) * t;
     sun.position.copy(a.dir).lerp(b.dir, t);
@@ -330,6 +333,8 @@ async function start() {
   let studio = null;   // 海市信差站的照相館（studio.js），畫廊沒有
   let place = null;   // 戶外現在在哪裡：null 是陽台，否則是草原或棧橋盡頭的地名
   let sitHinted = false, mirrorTurnHinted = false;
+  // 照鏡子轉身的教學：觸控和滑鼠都是拖曳，記同一個；手把是右搖桿，另外記
+  const mirrorTip = (k) => (k === 'pad' ? 'mirror-turn-pad' : 'mirror-turn');
 
   // 捏角色：每改一下就套到角色身上、存起來、告訴別人，鏡頭重取全身（換到臉那幾頁角色轉回正面）
   let dressView = 'face';
@@ -400,6 +405,13 @@ async function start() {
   }
 
   const player = new Player(camera, renderer.domElement, world, character, {
+    // 真的左右轉了：照鏡子時是轉身，其他時候是轉視角
+    onLook() {
+      const k = inputKind();
+      if (player.focus?.kind === 'mirror') return ui.learned(mirrorTip(k));
+      teach.looked.add(k);
+      ui.learned(`look-${k}`);
+    },
     onInput(kind) {
       lastInput = performance.now();
       ui.hidePainting();
@@ -410,7 +422,6 @@ async function start() {
       guide?.closeCard();
       // 照鏡子時拖曳、縮放是在轉著看自己，面板留著
       if (!(kind === 'drag' && player.focus?.kind === 'mirror')) ui.hideDress();
-      else ui.learned('mirror-turn');
       // 提示不跟著收：回饋、事件停到讀得完，教學等做了那件事才收（ui.js 的 hint、tip）
       ui.hideGuide();
       hollow.close();
@@ -429,7 +440,8 @@ async function start() {
       creator.open(look);
       if (!mirrorTurnHinted) {
         mirrorTurnHinted = true;
-        ui.tip('mirror-turn', '拖曳轉身', 3500);
+        const k = inputKind();
+        ui.tip(mirrorTip(k), k === 'pad' ? '右搖桿　轉身' : '拖曳　轉身', 3500, { demo: 'look', plat: k });
       }
     },
     onJump(k = 1) {
@@ -443,11 +455,13 @@ async function start() {
     },
     onSit(on) {
       mp?.sendNow();
+      // 坐下的教學：怎麼起身（跟走路同一個動作，示範圖也用走的）
+      const k = inputKind();
       if (on && !sitHinted) {
         sitHinted = true;
-        ui.tip(`stand-${coarse ? 'touch' : 'desk'}`, coarse ? (player.shoulder ? '推搖桿起身' : '推搖桿或點地面起身') : '走動或點地面起身', 4000);
+        ui.tip(`stand-${k}`, `${teach.how(k)}　起身`, 4000, { demo: 'walk', plat: k, on: '#joy' });
       }
-      if (!on) ui.learned(`stand-${coarse ? 'touch' : 'desk'}`);
+      if (!on) ui.learned(`stand-${k}`);
     },
     onFood() {
       mp?.sendNow();
@@ -567,7 +581,7 @@ async function start() {
     if (traveling) return;
     traveling = true;
     const q = new URLSearchParams(location.search);
-    for (const k of ['z', 'from', 'go', 'via', 'show']) q.delete(k);
+    for (const k of ['z', 'from', 'go', 'via', ...(to === zone ? [] : ['show'])]) q.delete(k);   // 同一區換頁（演唱會地平線下順著光回大門）留在同一場
     if (to !== 'gallery') q.set('z', to);
     q.set('from', zone);
     for (const [k, v] of Object.entries(extra)) q.set(k, v);
@@ -666,10 +680,13 @@ async function start() {
       ambience.voice('setdown', 0.35);
       setTimeout(() => ambience.voice('strap', 0.45), 380);
     } else ambience.voice(next ? 'strap' : 'setdown', 0.45);
-    ui.hint(next ? `帶著${CAMERAS[next].name}。按相機鈕拍照` : '已放回桌上。拍照改用畫廊的眼睛', 4000);
+    // 怎麼拍照照現在的操作寫：手機按相機鈕，電腦、手把寫舉相機那顆（換過鍵寫換過的）
+    const k = inputKind(), raise = k === 'touch' ? '按相機鈕拍照' : `${k === 'pad' ? padBtn(6) : key('raise')} 舉相機`;
+    ui.hint(next ? `帶著${CAMERAS[next].name}。${raise}` : '已放回桌上。拍照改用畫廊的眼睛', 4000);
     showCams(f.slot);
   });
   dropPref('director');   // 導演運鏡拿掉了，舊的開關設定清掉
+  dropPref('eyeTold');   // 黑眼「跟著」改成教學提示（ui.js 的 tipsSeen 記），舊的說過一次清掉
   player.debug = params.has('debug');
 
   // 手機操作：搖桿走路，靠近畫作或鏡子時出現按鈕
@@ -875,6 +892,7 @@ async function start() {
       onStudio: (m) => studio?.onMessage(m),
       onParty: (m) => party?.onInvite(m),
       onGate: (m) => world.home?.receive(m),
+      onAct: (m) => acts?.receive(m),
       onFlash: (ch) => {
         flashFx.fire(ch);
         lookAtOther(otherOf(ch), 1.2);
@@ -1048,7 +1066,56 @@ async function start() {
   // 手把：每幀在主迴圈讀（tick），按鍵類的動作借電腦按鍵的規則；有動就送 padinput（閒置、掛機都聽它）
   // 拍照人的口令：舉著相機時表情換成數拍、再一張、好了、站這
   if (mp) cues = new Cues({ mp, party, photo, player, character, attention, ambience, flashFx, scene, ui });
-  const pad = bindGamepad({ player, photo, ui, desk, party: () => party, cues: () => cues, ambience });
+  const pad = bindGamepad({ player, photo, ui, desk, party: () => party, cues: () => cues, ambience, teach: () => teach });
+  // 現在用哪一種操作：教學照這個分開記（ui.js 的 tip），示範圖也照這個畫（demos.js）
+  const inputKind = () => (pad.active ? 'pad' : coarse ? 'touch' : 'desk');
+  // 進門的教學：走 → 轉視角。鍵照換過的寫（keymap.js、gamepad.js）；作品上架前（ui.js 的 WORKS_OPEN）不提看畫
+  // 每種操作分開記學會了沒（looked、moved）；手把第一次接上（gamepad.js）從走開始再教一次手把的
+  const teach = {
+    armed: false, kind: null, walked: 0, x: 0, z: 0, looked: new Set(), moved: new Set(),
+    // 怎麼走：起身（onSit）也用這句。越肩點不到地面
+    how(k) {
+      const wasd = ['fwd', 'left', 'back', 'right'].map((id) => key(id)).join('');
+      return k === 'pad' ? '左搖桿' : k === 'touch' ? (player.shoulder ? '推搖桿' : '推搖桿或點地面') : player.shoulder ? wasd : `點地面或 ${wasd}`;
+    },
+    walkTip(k = inputKind()) {
+      this.kind = k;
+      ui.tip(`move-${k}`, `${this.how(k)}　走路`, 6000, { demo: 'walk', plat: k, on: '#joy' });
+    },
+    // 換了一種操作：從頭量。正在教的就是這一種就不重說（tip 每說一次都算一次）
+    start(k) {
+      if (this.armed && this.kind === k) return;
+      this.walked = 0;
+      this.armed = true;
+      this.walkTip(k);
+    },
+    lookTip() {
+      const k = inputKind(), art = zone === 'gallery' && WORKS_OPEN;
+      ui.tip(`look-${k}`, k === 'pad' ? `右搖桿　轉視角　${padBtn(3)} 跳　${padBtn(2)} 坐${art ? `　${padBtn(-1)} 看畫` : ''}`
+        : k === 'touch' ? '拖曳　轉視角'
+        : `${player.locked ? '移動滑鼠' : '拖曳'}　轉視角　${key('jump')} 跳　${key('sit')} 坐${art ? `　${key('interact')} 看畫` : ''}`,
+        6000, { demo: 'look', plat: k, on: 'open', lock: player.locked });
+    },
+    // 每幀量走了多遠（一幀最多算半公尺，搭船、傳送不算）：1.5 公尺算學會走，8 公尺還沒轉過視角就教轉
+    tick() {
+      if (!this.armed) return;
+      const p = player.pos, d = Math.hypot(p.x - this.x, p.z - this.z);
+      this.x = p.x;
+      this.z = p.z;
+      if (d < 0.5) this.walked += d;
+      const k = inputKind();
+      if (this.walked > 1.5 && !this.moved.has(k)) {
+        this.moved.add(k);
+        ui.learned(`move-${k}`);
+      }
+      if (this.walked > 8) {
+        this.armed = false;
+        if (!this.looked.has(k)) this.lookTip();
+      }
+    },
+  };
+  teach.x = player.pos.x;
+  teach.z = player.pos.z;
   window.addEventListener('padinput', () => { lastInput = performance.now(); });
   const selfie = new Selfie({
     renderer, scene, camera, player, character, ambience, render: draw,
@@ -1096,6 +1163,7 @@ async function start() {
   // 一幕劇（core/act.js，zone 匯出 acts）：在地圖上一拍一拍演的戲，找到演員才往下，演到哪一拍黑眼清單多一行。演員跟事件一樣評分、讓人轉頭（happen.more）
   acts = new Acts({ guide, player, params, list: Z.acts?.({ world, scene, vendors, ambience, attention, camera, player }) ?? [] });
   happen.more.push(acts);
+  acts.send = (m) => mp?.act(m);
   player.actionables.push((x, z) => acts.target(x, z));
   // 前廳胖頭的教學（zones/gallery/ask.js）：走近說下一步，站在他旁邊互動鍵是「問」。泡泡底下那行小字照現在的操作方式寫鍵
   const PAD_OF = { interact: -1, raise: 6, pack: 8, eye: 5, party: 14 };
@@ -1154,6 +1222,7 @@ async function start() {
     rt?.dispose();
   }
   await photo.warmUI();   // 攝影介面也趁讀取畫面蓋著先畫一次（見 photo.js）
+  await warmDemos();      // 教學的示範圖也是（demos.js）
   if (!fx && carried()) dofPass.prepare(renderer);   // 沒有後製時景深自己畫進一張全螢幕的圖：帶著相機的先配好，第一次舉起來不用等
   window.loadbar?.mark('compiled');
   const stats =params.has('debug') ? debugStats(renderer, quality) : null;
@@ -1208,9 +1277,9 @@ async function start() {
     if (params.has('photo')) photo.enter();
     // 鍵照換過的寫（keymap.js、gamepad.js）；作品上架前（ui.js 的 WORKS_OPEN）不提看畫
     // 教學：每種操作（手把、觸控、鍵盤滑鼠）這台裝置說兩次就夠了
-    else if (!homeDoor) setTimeout(() => (byDoor && lastInput > at) || ui.tip(`move-${pad.active ? 'pad' : coarse ? 'touch' : 'desk'}`, pad.active ? `左搖桿走路　右搖桿轉視角　${padBtn(3)} 跳　${padBtn(2)} 坐${zone === 'gallery' && WORKS_OPEN ? `　${padBtn(-1)} 看畫` : ''}`
-      : coarse ? `${document.body.classList.contains('joy-left') ? '左' : '右'}下搖桿${player.shoulder ? '走路　拖曳轉視角' : '或點地面走路　拖曳轉視角'}`
-      : `點地面或 ${['fwd', 'left', 'back', 'right'].map((id) => key(id)).join('')} 走路　拖曳轉視角　${key('jump')} 跳　${key('sit')} 坐${zone === 'gallery' && WORKS_OPEN ? `　${key('interact')} 看畫` : ''}`, 6000), byDoor ? 2600 : 0);
+    // 教學分兩步：先教走（觸控的示範疊在搖桿上），走過一段還沒轉過視角再教轉（teach，在 tick 裡量走了多遠）
+    else if (!homeDoor) setTimeout(() => (byDoor && lastInput > at) || teach.start(inputKind()), byDoor ? 2600 : 0);
+    teach.armed = true;
   });
 
   // 挑相機時鏡頭差不多就在自己頭的高度，帽子、頭上的東西會擋在桌上那台前面：鏡頭飛過去時自己淡掉，離開再淡回來。
@@ -1321,6 +1390,7 @@ async function start() {
     ambience.listen(photo.active ? photo.pos : character.group.position, camera);
     pad.poll(dt);
     player.update(dt);
+    teach.tick();
     photo.update(dt);
     selfie.update(dt);
     updateSelfGhost(dt);

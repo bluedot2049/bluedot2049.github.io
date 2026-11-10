@@ -8,7 +8,7 @@
 //   3. 大的二進位（照片、報紙）→ IndexedDB：相簿在 camera/album.js、報紙在 save/pressdesk.js
 // 欄位的意思變了、要搬位置，才把 SAVE_V 加一、MIGRATIONS 寫一條「舊版轉下一版」的函式；不要再清空舊存檔。
 // 音量、操作習慣這些屬於裝置，不放這裡（prefs.js）
-import { personOf, outfitOf, samePerson } from '../avatar/looks.js';
+import { personOf, outfitOf, samePerson, lockedBy } from '../avatar/looks.js';
 
 export const SAVE_V = 3;
 // 衣櫃兩層：三個人、六套衣服（creator.js 的衣櫃頁）。存檔碼裡是 r=、w=（savecode.js）
@@ -41,6 +41,8 @@ export const FIELDS = [
   { key: 'kaoFav', init: () => null, read: kaoFav, code: { tag: 'e', iris: false, enc: (v) => (v ? v.map((c) => c.toString(16).padStart(3, '0')).join('').replace(/(000)+$/, '') : ''), dec: (s) => (/^([0-9a-f]{3}){1,5}$/.test(s) ? kaoFav([...s.match(/.{3}/g).map((h) => parseInt(h, 16)), 0, 0, 0, 0].slice(0, 5)) : null) } },
   // 前廳胖頭的教學（zones/gallery/ask.js）：tour 是做過的事（mirror 照過鏡子、photo 拍過照、out 走出後門、各區的 zone 名字、shy 被他拒拍過），
   // asked 是問過他哪幾題（ASK 的 id）。跟著這個人走，但不進存檔碼：換了裝置只是題目又亮起來
+  // 拍立拿a500 的片盒（camera/instant.js）：left 還剩幾張（帶相機就附第一盒）、day 上次在月球換盒是哪天（一天一盒）。跟著人走、不進存檔碼
+  { key: 'instant', init: () => ({ left: 3, day: '' }), read: (v) => ({ left: Number.isInteger(v?.left) && v.left >= 0 && v.left <= 3 ? v.left : 3, day: typeof v?.day === 'string' ? v.day.slice(0, 10) : '' }) },
   { key: 'tour', init: () => [], read: words },
   { key: 'asked', init: () => [], read: words },
   // 舊存檔每套各畫一張臉，併成一張時丟掉了幾張不一樣的。換裝面板說一次就歸零（creator.js）
@@ -111,6 +113,18 @@ function wearFace(s) {
   for (const k of ['closet', 'people']) if (Array.isArray(s[k])) s[k] = s[k].map(fit);
 }
 
+// 身上的算拿到：身上、衣櫃的人和衣服用著還沒拿到的東西（之後才上鎖的種族、衣服），記成拿到了。
+// 舊的鏡中照片、靈魂明信片、存檔碼讀回來（restoreSave 走 putSave），和這台裝置原本的存檔，都不會一讀就被脫掉。
+// 普通明信片、#look 不走這裡：tryOn 只穿讀的人拿到了的。直接改 s，回傳有沒有多記
+function ownWorn(s) {
+  const have = new Set(s.unlocked), n = have.size;
+  for (const L of [s.look, ...s.people, ...s.outfits]) if (L && typeof L === 'object')
+    for (const [k, v] of Object.entries(L)) if (typeof v === 'string' && lockedBy(k, v)) have.add(k + ':' + v);
+  if (have.size === n) return false;
+  s.unlocked = [...have];
+  return true;
+}
+
 let cache = null;
 export function getSave() {
   if (cache) return cache;
@@ -126,6 +140,8 @@ export function getSave() {
   cache = { v: SAVE_V };
   for (const f of FIELDS) cache[f.key] = f.key in s ? f.read(s[f.key]) : f.init();
   wearFace(cache);
+  // 東西是存檔之後才上鎖的：記下來，下次讀不用再算
+  if (ownWorn(cache) && !fresh) try { localStorage.setItem('save', JSON.stringify(cache)); } catch {}
   if (fresh) {
     putSave({});
     // 請瀏覽器別隨便清掉（不保證有用）
@@ -139,6 +155,7 @@ export function putSave(patch) {
   const s = Object.assign(getSave(), patch);
   if (!('face' in patch) && patch.look?.face) s.face = patch.look.face;
   wearFace(s);
+  ownWorn(s);
   try { localStorage.setItem('save', JSON.stringify(s)); } catch {}
   // 行囊（pack.js）聽這個，看封蠟要不要亮
   if (typeof dispatchEvent === 'function') dispatchEvent(new Event('savechange'));

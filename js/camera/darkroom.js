@@ -33,6 +33,17 @@ export const LABS = {
       colorGrading: { shadows: { hue: 202, sat: 42, lum: -6 }, midtones: { hue: 221, sat: 31 }, highlights: { hue: 36, sat: 39, lum: 2 } },
     },
   },
+  // 不是師傅，是日晷III 機身裡的影像處理（cameras.js 的 lab）：拍下那一刻就洗好（developNow），不用交件。
+  // 大法師科技的味道是鏡片鍍膜的紫綠：亮部一點淡紫、暗部一點青綠，中間調乾淨、偏冷、清楚，跟燭火乙式的暖舊反過來。
+  // 放在這裡是為了能用 experiments/darkroom_preview.html 調
+  gui: {
+    name: '大法師科技', who: '日晷III', style: '鍍膜', camera: true,
+    settings: {
+      contrast: 14, highlights: -14, shadows: 10, whites: 6, blacks: -8, temperature: -12, tint: 6, vibrance: 10, saturation: -8, dehaze: 6, clarity: 12, texture: 6,
+      curves: { rgb: [[0, 4], [64, 60], [192, 198], [255, 252]] },
+      colorGrading: { shadows: { hue: 168, sat: 24, lum: -2 }, midtones: { hue: 220, sat: 6 }, highlights: { hue: 272, sat: 20, lum: 2 } },
+    },
+  },
 };
 
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
@@ -692,6 +703,16 @@ export class Darkroom {
 }
 
 let shared = null;
+// 拿畫布當場洗（相機機身裡的處理，cameras.js 的 lab）：回傳洗好的畫布，要馬上畫走，畫完叫 developDone() 放掉大圖。
+// 沒有 WebGL2 會丟錯，呼叫的地方接住、照原本的畫
+export function developNow(source, L) {
+  shared ??= new Darkroom();
+  shared.setImage(source);
+  shared.render(fullSettings(L.settings));
+  return shared.canvas;
+}
+export const developDone = () => shared?.release();
+
 // 洗一張：照師傅的配方洗好，回傳 JPEG。整個遊戲共用一個引擎，洗完把大圖放掉
 export async function develop(blob, L) {
   const bmp = await createImageBitmap(blob);

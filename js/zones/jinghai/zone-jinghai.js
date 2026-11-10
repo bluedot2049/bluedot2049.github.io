@@ -6,6 +6,7 @@ import { buildManatees } from './manatees.js';
 import { burgerCounter } from './jinghai-burger.js';
 import { stallCounter } from './jinghai-stalls.js';
 import { liftCounter } from './jinghai-lift.js';
+import { filmCounter } from './jinghai-film.js';
 import { buildGuests } from './jinghai-guests.js';
 import { ATRIUM, CANTEEN, CONTROL, STORE, LEVELS } from './jinghai-hq.js';
 import { BURGER } from './jinghai-burger.js';
@@ -46,12 +47,14 @@ export function env(world) {
 }
 
 // 海牛人：排隊打飯、逛街、搭手扶梯、坐在控制室、速食店點餐和煎肉排。室內有一點人聲，比海市小很多。偶爾有幾個搭船來逛的人（jinghai-guests.js）。?crowd=0 都不放
-// 點餐（點餐機、取餐口、溫室的海草）和總部裡的小攤（冰淇淋、汽水、熱茶）當成攤販接上互動鍵，沒有海牛人也照樣能拿
+// 點餐（點餐機、取餐口、溫室的海草）、總部裡的小攤（冰淇淋、汽水、熱茶）和片盒回收口（換片盒）當成攤販接上互動鍵，沒有海牛人也照樣能拿
 export function crowd({ scene, world, shadowTex, coarse, params, ambience, player, ui }) {
   const burger = burgerCounter({ shop: world.burger, harvest: world.harvest, player, ui, ambience, board: world.burger.orderBoard });
   const stalls = stallCounter({ player, ui, ambience });
   // 透明電梯：站進車廂按一下就走，另一站門口按「叫電梯」
   const lift = liftCounter({ lift: world.lift, player });
+  // 片盒工廠旁的回收口：拍立拿a500 用空盒加海草換新片盒
+  const film = filmCounter({ player, ui, ambience });
   world.burger.hear = (kind, vol) => ambience?.voice(kind, vol);
   world.lift.hear = (kind, vol) => ambience?.voice(kind, vol);
   // 幾邊一起當一個攤販：離得近的那個
@@ -59,7 +62,7 @@ export function crowd({ scene, world, shadowTex, coarse, params, ambience, playe
     list: [],
     nearest(x, z) {
       let best = null;
-      for (const c of [burger, stalls, lift]) {
+      for (const c of [burger, stalls, lift, film]) {
         const n = c.nearest(x, z);
         if (n && (!best || n.d < best.d)) best = n;
       }

@@ -16,6 +16,7 @@ export const PLACES = [
   { to: 'ting', name: '汀', desc: '時間之外。', tags: ['捷運', '沼澤'] },
   { dev: 'heilin', name: '黑森林', desc: '往下的路。', tags: ['工坊'] },
   { to: 'concert', boat: false, name: '演唱會', desc: '樹洞裡的一場。', tags: ['舞台'] },
+  { dev: 'gorge', name: '深谷', desc: '谷底的一場。', tags: ['舞台'] },
 ];
 
 // 站牌上的名字：to 是 ?z= 的名字

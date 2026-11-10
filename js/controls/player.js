@@ -120,7 +120,7 @@ export class Player {
     this.dom = dom;
     this.world = world;
     this.character = character;
-    this.events = events;           // { onArrivePainting, onArriveMirror, onJump, onSit(seat), onFood, onPet(animal), onExit(exit), onRoomChange, onInput(kind) }
+    this.events = events;           // { onArrivePainting, onArriveMirror, onJump, onSit(seat), onFood, onPet(animal), onExit(exit), onRoomChange, onInput(kind), onLook（真的左右轉了視角） }
     this.pos = new THREE.Vector3(0, 0, -2);
     this.heading = Math.PI;
     this.path = [];
@@ -452,6 +452,7 @@ export class Player {
       d.last = now;
     } else this.camPitch = THREE.MathUtils.clamp(this.camPitch + dy * k * s, PITCH_MIN, PITCH_MAX);
     this.events.onInput('drag');
+    if (dx) this.events.onLook?.();
   }
 
   // 鎖滑鼠：要原始的移動量（不吃系統的滑鼠加速），瀏覽器不支援就退回一般的
@@ -502,6 +503,7 @@ export class Player {
     this.shPitch = THREE.MathUtils.clamp(this.shPitch + dp, ...SH_PITCH);
     this.lookHold = 1.2;
     this.events.onInput('drag');
+    if (dx) this.events.onLook?.();
   }
 
   // 準心：點畫面正中間對到的東西（畫、鏡子、動物、立牌、樹洞）
@@ -608,6 +610,7 @@ export class Player {
     o.last = now;
     o.touched = true;
     this.events.onInput('drag');
+    if (dx) this.events.onLook?.();
   }
 
   mirrorFling() {
@@ -888,6 +891,7 @@ export class Player {
     } else this.camPitch = THREE.MathUtils.clamp(this.camPitch + dp, PITCH_MIN, PITCH_MAX);
     this.lookHold = 1.2;
     this.events.onInput('drag');
+    if (yawRate) this.events.onLook?.();
   }
 
   setPadOn(on) {
@@ -1404,10 +1408,12 @@ export class Player {
     );
     // 角色和鏡頭之間隔著山坡或石台時，鏡頭繞著角色的頭往上抬，抬到剛好看得到，遠近不變；抬到 CLIP_LIFT 還擋著，才沿原方向往前移。
     // 不直接往前推：順著陡石階往下走時鏡頭跟坡面差不多斜，擋住的那一點會在近處和遠處之間跳，鏡頭一下拉近一下放開；
-    // 要抬多少是跟著地形連續變的。房子不推鏡頭，是淡掉。區域寫了 camFree（靜海）就什麼都不躲，擋住的東西藏起來
-    if (this.world.camClip && !this.world.camFree) {
+    // 要抬多少是跟著地形連續變的。房子不推鏡頭，是淡掉。區域寫了 camFree（靜海）就什麼都不躲，擋住的東西藏起來。
+    // 區域寫了 camWalls 就只躲它（大空間的牆：演唱會大廳、深谷的岩壁），camClip 留給「看不看得到」（attention.js）用
+    const clipFn = this.world.camWalls ?? this.world.camClip;
+    if (clipFn && !this.world.camFree) {
       const head = this.headPos.set(this.pos.x, this.pos.y + 1.2, this.pos.z);
-      if (this.world.camClip(head, outPos) < 1) {
+      if (clipFn(head, outPos) < 1) {
         const dx = outPos.x - head.x, dy = outPos.y - head.y, dz = outPos.z - head.z;
         const h = Math.hypot(dx, dz) || 1e-4, len = Math.hypot(h, dy), e0 = Math.atan2(dy, h);
         const lifted = (a) => {
@@ -1417,16 +1423,16 @@ export class Player {
         // 二分找最少要抬多少
         // 區域可以寫 camLift 改最多抬多少：鏡宮有天花板，抬了反而撞上去，給 0 就是直接往前移
         let lo = 0, hi = this.world.camLift ?? CLIP_LIFT, turn = hi, near = 0.15;
-        if (this.world.camClip(head, lifted(hi)) >= 1) {
+        if (clipFn(head, lifted(hi)) >= 1) {
           for (let i = 0; i < 8; i++) {
             const m = (lo + hi) / 2;
-            if (this.world.camClip(head, lifted(m)) < 1) lo = m;
+            if (clipFn(head, lifted(m)) < 1) lo = m;
             else hi = m;
           }
           turn = hi;
         }
         outPos.copy(lifted(turn));
-        const clip = this.world.camClip(head, outPos);
+        const clip = clipFn(head, outPos);
         if (clip < 1) outPos.lerpVectors(head, outPos, Math.max(clip, near));
       }
     }
@@ -1566,7 +1572,8 @@ export class Player {
     const e = Math.max(p, SH_LOW), ce = Math.cos(e);
     outPos.set(piv.x - fx * ce * d, piv.y + Math.sin(e) * d, piv.z - fz * ce * d);
     // 背後是山坡或石台：越肩不往上抬，往肩膀收近。收近要快才不會穿進坡裡，退回去慢慢來，免得一抽一抽
-    const reach = Math.max(this.world.camClip && !this.world.camFree ? this.world.camClip(piv, outPos) : 1, 0.25), r0 = this.sh.reach;
+    const clipFn = this.world.camWalls ?? this.world.camClip;
+    const reach = Math.max(clipFn && !this.world.camFree ? clipFn(piv, outPos) : 1, 0.25), r0 = this.sh.reach;
     this.sh.reach = r0 == null ? reach : r0 + (reach - r0) * Math.min(1, this.sh.dt * (reach < r0 ? SH_REACH_IN : SH_REACH_OUT));
     if (this.sh.reach < 1) outPos.lerpVectors(piv, outPos, this.sh.reach);
     outPos.y = Math.max(outPos.y, this.world.camFloor(outPos.x, outPos.z, this.pos.y) + 0.3);

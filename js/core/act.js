@@ -13,6 +13,7 @@ import { getSave, putSave } from '../save/progress.js';
 //   where(b)：第 b 拍（1 以後）黑眼帶到哪 { x, z, tag, look }
 //   target(x, z)：互動鍵（player.actionables 的寫法），沒有回 null
 //   moving：演員這一幀在動，主迴圈別降幀
+//   receive(m)：同一區別人送來的消息（沒有就不收）；send(m)：這裡塞給每一齣，送給同一區的人（多人沒開就是空的）
 //   actors：給 happen.js 評分、轉頭的清單，寫法跟 happen.js 的事件一樣（id、place、t 不是 null 才算在場、sight、look、subject、moment、size、glow）
 export class Acts {
   constructor({ guide, player, params, list = [] }) {
@@ -29,9 +30,16 @@ export class Acts {
       a.init(this.off ? 0 : a.state.b);
     }
     this.list = this.off ? [] : list.flatMap((a) => a.actors ?? []);
+    // 多人（main.js 接 multiplayer.js 的 act）：各齣送的消息加上 a＝哪一齣；收到的照 a 交給那一齣
+    this.send = null;
+    for (const a of list) a.send = (m) => this.send?.({ a: a.id, ...m });
     this.cue = { b: 0, player, next: null, finish: null };
     this.syncGuide();
     if (params?.has('debug')) window.__act = this;
+  }
+
+  receive(m) {
+    if (!this.off) this.acts.find((x) => x.id === m.a)?.receive?.(m);
   }
 
   get busy() {

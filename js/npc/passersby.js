@@ -14,7 +14,7 @@ import { CLOTH, SKINS } from '../avatar/looks.js';
 import { glowPoints } from '../core/scenery.js';
 import { beastSight } from './beast.js';
 import { personLook } from './cast.js';
-import { hash, wrap, CharacterPool, FarFigures, dodgeFrom, easeOffset, turnHead, ghostStep } from './crowdkit.js';
+import { hash, wrap, CharacterPool, FarFigures, dodgeFrom, easeOffset, turnHead, ghostStep, linkTrack } from './crowdkit.js';
 
 const _b = new THREE.Vector3();
 const SLOTS = 110, SLOTS_LOW = 60;   // 最多幾組人
@@ -354,6 +354,7 @@ export class Passersby {
     // 遠處的人：身體一個形狀、頭一個形狀，各自一次畫完
     const max = this.slots * 2;
     this.far = new FarFigures(scene, max);
+    linkTrack(this.pool, this.far);   // 日晷III 追焦鎖定跟著人走
     // 提燈籠的人手上那盞燈
     this.glows = glowPoints(Array.from({ length: max }, () => ({ x: 0, y: -50, z: 0, color: '#ffb060', size: 0 })));
     scene.add(this.glows);
@@ -479,7 +480,7 @@ export class Passersby {
       }
       if (shown.has(q.key)) continue;
       const bob = q.walking ? Math.abs(Math.sin(q.tt * 7 + q.i)) * 0.05 : 0, s = q.alpha;
-      this.far.add(q.fx, q.fy + bob, q.fz, q.heading, s, s, s, CLOTH[look.outer !== 'none' ? look.outC : look.topC], SKINS[look.skin]);
+      this.far.add(q.fx, q.fy + bob, q.fz, q.heading, s, s, s, CLOTH[look.outer !== 'none' ? look.outC : look.topC], SKINS[look.skin], q.key);
     }
     for (let j = g; j < size.count; j++) size.setX(j, 0);
     pos.needsUpdate = size.needsUpdate = true;

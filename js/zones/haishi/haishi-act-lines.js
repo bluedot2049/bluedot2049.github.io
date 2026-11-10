@@ -8,8 +8,15 @@ export const FISH_LINES = {
   bucket: ['這桶今天特別不安分', '剛撈的 還在跳', '那條會燙手 別摸'],
   start: ['欸 跑了一條', '又跑了 往山上去了'],
   away: ['那條還在山上吧', '還沒回來呢'],
-  back: ['回海上了吧', '牠每次都這樣 跑一圈就回去'],
+  back: ['上去就不下來了', '牠每次都這樣 跑回山上去燒', '海上那盞是新的'],
 };
+
+// 火從星廟的火盆傳下山（haishi-brazier.js），經過這攤時說一句，你在附近才聽得到。自己演完、別人演完都會傳下來
+export const FIRE_LINES = [
+  { who: 'lanterns', lines: ['燈怎麼自己亮了一截', '山上又點火了'] },
+  { who: 'tea', lines: ['風是熱的', '廟裡燒起來了'] },
+  { who: 'fish', lines: ['又一條回去了', '火下來了'] },
+];
 
 // 沿路躲的地方，who 是旁邊那攤（vendors.js 的 id）：hint 你走近那裡時說、pop 魚被你找到飛走時說
 export const SPOT_LINES = {

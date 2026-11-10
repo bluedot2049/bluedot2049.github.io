@@ -1,5 +1,6 @@
 // 顏文字姿勢穿模檢查：每樣手上的東西 × 每種手勢 × 每種身體（再換幾頂帽子、胖瘦）在 Node 裡擺好、撐著，
-// 量最後畫出來的網格穿進去多深：手上的東西對身體、頭、帽子、胸前的相機、另一隻手、地板；兩隻手對頭、帽子，手心對身體、地板。
+// 量最後畫出來的網格穿進去多深：手上的東西對身體、頭、帽子、胸前的相機、拿著它的手臂（手心握的那段不算）、另一隻手、地板；兩隻手對頭、帽子，手心對身體、地板。
+// 站著拿東西就穿的另外列在最前面（顏文字的統計會扣掉它們）
 // 新增手上的東西、手勢、身體、帽子之後跑一次，列出最糟的組合，再去 experiments/clip_sheet.html?set=kaohand 看圖。
 //   node tools/check-poses.mjs                 全部，印最糟的 30 個、每種手勢和身體各自最糟的
 //   node tools/check-poses.mjs --top=60        多印幾個
@@ -18,7 +19,7 @@ const argv = process.argv.slice(2);
 const opt = (k, d) => { const a = argv.find((x) => x.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
 const TOP = +opt('top', 30), MIN = +opt('min', 0.015);
 const items = opt('hand', null)?.split(',') ?? OPTIONS.hand.map(([id]) => id);
-const PALM = 0.33, ARM_R = 0.045;
+const PALM = 0.33, ARM_R = 0.045, GRIP = 0.08;   // GRIP：離手心這麼近的算握在手裡，不算穿進手臂（handclear.js 同一個數）
 // 外觀：預設學徒（尖帽）、斗笠（帽緣寬）、不戴帽子胖一點、竹蜻蜓、帶相機
 const LOOKS = [
   { name: '尖帽', L: {} },
@@ -73,11 +74,11 @@ function measure() {
   const add = (what, d) => { if (d > MIN) out.push({ what, d }); };
   const torso = [ch.torso, shapeFor(ch.torso)], head = [ch.headMesh, shapeFor(ch.headMesh)], hat = [ch.hatMesh, shapeFor(ch.hatMesh)];
   const cam = ch.camMesh.visible && ch.camMesh.geometry.attributes.position?.count ? [ch.camMesh, shapeFor(ch.camMesh)] : null;
-  const other = armSeg(ch.armR, new THREE.Line3());
+  const other = armSeg(ch.armR, new THREE.Line3()), own = armSeg(ch.armL, new THREE.Line3());
   // 手上的東西：網格上取的點（handclear 量好的）
   const P = ch.clear.pts;
   if (P && ch.handMesh.visible && ch.handSwing.visible) {
-    let dT = 0, dH = 0, dC = 0, dF = 0, dA = 0, dK = 0;
+    let dT = 0, dH = 0, dC = 0, dF = 0, dA = 0, dK = 0, dO = 0;
     const p = new THREE.Vector3(), c = new THREE.Vector3();
     for (let i = 0; i < P.length; i += 3) {
       p.set(P[i], P[i + 1], P[i + 2]).applyMatrix4(ch.handMesh.matrixWorld);
@@ -88,8 +89,9 @@ function measure() {
       dF = Math.max(dF, -p.y);
       other.closestPointToPoint(p, true, c);
       dA = Math.max(dA, ARM_R - p.distanceTo(c));
+      if (p.distanceTo(own.end) > GRIP) { own.closestPointToPoint(p, true, c); dO = Math.max(dO, ARM_R - p.distanceTo(c)); }
     }
-    add('東西→身體', dT); add('東西→頭', dH); add('東西→帽子', dC); add('東西→相機', dK); add('東西→地板', dF); add('東西→左手', dA);
+    add('東西→身體', dT); add('東西→頭', dH); add('東西→帽子', dC); add('東西→相機', dK); add('東西→地板', dF); add('東西→左手', dA); add('東西→右手臂', dO);
   }
   // 兩隻手：從手肘那段到手心對頭和帽子，手心對身體和地板
   for (const [arm, name] of [[ch.armL, '右手'], [ch.armR, '左手']]) {
@@ -126,6 +128,12 @@ for (const look of LOOKS) for (const item of items) {
   look.L.hand = item;
   pose(look, 0);
   for (const r of measure()) base.set(`${look.name}|${item}|${r.what}`, r.d);
+}
+const still = [...base].filter(([, d]) => d > MIN).sort((a, b) => b[1] - a[1]);
+if (still.length) {
+  console.log(`站著拿東西就穿的 ${still.length} 處（下面顏文字的統計已扣掉）：`);
+  for (const [k, d] of still.slice(0, TOP)) { const [look, item, what] = k.split('|'); console.log(`  ${(d * 100).toFixed(1).padStart(5)} 公分  ${what.padEnd(8)}  ${item}  ${look}`); }
+  console.log('');
 }
 const worse = rows.map((r) => ({ ...r, d: r.d - (base.get(`${r.look}|${r.item}|${r.what}`) || 0) })).filter((r) => r.d > MIN);
 

@@ -183,6 +183,8 @@ const ITEM = {
   'back:guitar': 'string', 'back:sword': 'metal', 'back:wingA': 'wing', 'back:wingB': 'wing', 'back:wingC': 'wing', 'back:tail': 'fluff', 'back:shell': 'wood', 'back:pouch': 'leather',
   'hand:staff': 'wood', 'hand:umbrella': 'umbrella', 'hand:balloon': 'balloon', 'hand:book': 'paper', 'hand:flower': 'straw', 'hand:spatula': 'metal',
   'hand:lantern': 'paper', 'hand:brush': 'wood', 'hand:flask': 'glass', 'hand:frame': 'wood', 'hand:scope': 'trinket', 'hand:baguette': 'paper', 'hand:teacup': 'glass', 'hand:chicken': 'paper',
+  'hand:sword': 'metal', 'hand:axe': 'metal', 'hand:hammer': 'metal', 'hand:spear': 'wood', 'hand:bow': 'wood', 'hand:wand': 'wood', 'hand:root': 'wood',
+  'back:shield': 'wood', 'back:kite': 'metal', 'back:bowpack': 'leather',
   'glasses:groucho': 'plastic', 'glasses:3d': 'paper',
 };
 // 一次換好幾樣（骰子、重來、衣櫃）時，照這個順序挑最顯眼的兩樣出聲

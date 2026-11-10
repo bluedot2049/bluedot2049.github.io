@@ -181,7 +181,8 @@ const READ = (kind, data, faces) => `(async () => {
     // 讀的人：另一個種族、沒畫臉、什麼都還沒拿到。明信片只換衣服和配件，沒拿到的那件不動
     const L = await import('/js/avatar/looks.js'), PC = await import('/js/save/postcard.js');
     const me = L.sanitizeLook({ ...L.presetLook(3), race: 'cat', hand: 'staff', handC: 5 });
-    P.putSave({ look: me, face: '', unlocked: [] });
+    // 衣櫃也清空：衣櫃裡有的算拿到了（progress.js 的 ownWorn）
+    P.putSave({ look: me, face: '', unlocked: [], people: [], outfits: [] });
     let got = null, worn = null;
     proto.restore = function (sv) { S.restoreSave(sv); got = shape(P.getSave()); };
     const fake = Object.assign(Object.create(proto), { events: { onTryOn: (o) => { worn = o; } }, close() {} });
@@ -214,6 +215,35 @@ const faces = await b.ev('window.__faces');
 const tmp = (k) => out[k];
 console.log('— 現在的程式做的 —　存檔碼', out.code.length, '字　鏡框放不下', JSON.stringify(out.mirrorLost), '明信片放不下', JSON.stringify(out.selfLost));
 for (const [label, kind, k] of [['存檔碼', 'code', 'code'], ['裝置存檔', 'raw', 'raw'], ['鏡中照片', 'img', 'mirror'], ['行囊明信片', 'img', 'self'], ['寄朋友的明信片', 'img', 'friend']]) await report(label, kind, tmp(k), faces);
+
+// 身上的算拿到（progress.js 的 ownWorn）：之後才上鎖的種族、衣服，舊照片裡的人身上有，讀回來要記成拿到了。
+// 用現在就鎖著的燈籠、羽織（身上）和木屐（衣櫃的衣服）代替，存檔裡的解鎖是空的。靈魂明信片和鏡中照片一樣走 restoreSave
+{
+  const WANT = ['hand:lantern', 'outer:haori', 'shoes:geta'];
+  const worn = await b.ev(`(async () => {
+    const P = await import('/js/save/progress.js'), S = await import('/js/save/savecode.js'), M = await import('/js/save/mirrorcard.js'), L = await import('/js/avatar/looks.js');
+    const want = ${JSON.stringify(WANT)}, has = () => want.filter((k) => P.getSave().unlocked.includes(k)).length + '/' + want.length;
+    const look = L.sanitizeLook({ ...L.presetLook(0), hand: 'lantern', outer: 'haori', one: 'none' });
+    const old = { ...P.getSave(), look, people: [], outfits: [L.outfitOf({ ...look, shoes: 'geta' })], unlocked: [] };
+    const blank = () => P.putSave({ look: L.presetLook(0), people: [], outfits: [], unlocked: [] });
+    blank(); S.restoreSave(S.decodeSave(S.encodeSave(old)));
+    const code = has();
+    blank();
+    const card = await M.makeMirrorCard(window.__photo, { save: old });
+    const file = new File([await new Promise((ok) => card.canvas.toBlob(ok, 'image/jpeg', 0.92))], 'x.jpg', { type: 'image/jpeg' });
+    const m = await M.readMirrorCard(file).catch(() => null);
+    if (m?.save) S.restoreSave(m.save);
+    const mirror = m?.save ? has() : '讀不到';
+    localStorage.setItem('save', JSON.stringify(old));
+    return { code, mirror };
+  })()`);
+  await b.send('Page.reload');
+  await sleep(800);
+  const raw = await b.ev(`(async () => { const P = await import('/js/save/progress.js'); const u = P.getSave().unlocked, w = ${JSON.stringify(WANT)};
+    return w.filter((k) => u.includes(k)).length + '/' + w.length + (JSON.parse(localStorage.getItem('save')).unlocked.length ? '' : '（沒寫回去）'); })()`);
+  const ok = worn.code === '3/3' && worn.mirror === '3/3' && raw === '3/3';
+  console.log('— 身上的算拿到 —'.padEnd(22), JSON.stringify({ 存檔碼: worn.code, 鏡中照片: worn.mirror, 裝置存檔: raw }), ok ? '對' : '不對');
+}
 
 for (const name of fs.existsSync(FIX) ? fs.readdirSync(FIX) : []) {
   const dir = path.join(FIX, name), f = JSON.parse(fs.readFileSync(path.join(dir, 'faces.json'), 'utf8'));

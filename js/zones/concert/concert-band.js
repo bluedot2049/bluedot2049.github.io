@@ -3,6 +3,7 @@
 // 台上的樂手：照節目表的 members 組角色和樂器，每一幀照 MIDI 裡自己那幾軌的音擺姿勢（打之前先舉、打下去、停住），疊上重拍、雜訊、情緒（臉）和抽籤的招牌動作。全部照（種子, 秒）算，跳到哪一秒都對、每一場不一樣。
 import * as THREE from 'three';
 import { Character } from '../../avatar/character.js';
+import { HIP } from '../../avatar/clothes.js';
 import { presetLook, sanitizeLook } from '../../avatar/looks.js';
 import { kaoCode } from '../../avatar/kaomoji-parts.js';
 import { barSec, where, secAtBar, songSec, songBars } from './concert-show.js';
@@ -207,6 +208,16 @@ function wob(seed, ch, t, rate) {
 }
 // 重拍：第一拍最重、第三拍次之、二四拍輕，拍點上那一下最大、往後掉
 const accent = (beat) => [1, 0.4, 0.7, 0.4][Math.floor(beat) % 4] * Math.exp(-(beat % 1) * 6);
+// 律動（每種樂手）：dip 重拍沉多深（公尺，坐著跪著的 0）、pump 上身往前壓、sway 左右晃、twist 扭肩
+const GROOVE = {
+  guitar: { dip: 0.07, pump: 0.24, sway: 0.1, twist: 0.12 },
+  bass: { dip: 0.08, pump: 0.14, sway: 0.14, twist: 0.1 },
+  theremin: { dip: 0.05, pump: 0.1, sway: 0.12, twist: 0.06 },
+  synth: { dip: 0.04, pump: 0.16, sway: 0.08, twist: 0.05 },
+  drums: { dip: 0, pump: 0.12, sway: 0.05, twist: 0.08 },
+  ritual: { dip: 0, pump: 0.07, sway: 0.08, twist: 0 },
+  taiko: { dip: 0.03, pump: 0.08, sway: 0.06, twist: 0.05 },
+};
 // 每一段有多熱（情緒的底）
 const heat = (id, sp) => ({ night: 0.12, horizon: 0.3, rise: 0.3 + 0.5 * sp, still: 0.55, sun: 1, veil: 0.9, end: 0.25 })[id] ?? 0.4;
 
@@ -540,6 +551,20 @@ class Member {
     P.tilt += 0.08 * wob(seed, id + 4, t, 0.11);
     P.look += 0.3 * wob(seed, id + 5, t, 0.05);
     P.nod += 0.1 * pe.bang * Math.min(1, E) * accent(beat);
+    // 律動：重拍上整個身體沉下去、上身往前壓、頭跟著甩，半小節一邊晃、兩小節扭一次肩；越熱越大。
+    // 每個人拍點差一點（有人拖、有人搶），身體在拍點後一點點才到最低（被音推下去的感覺）
+    const G = GROOVE[this.m.role];
+    let sink = 0;
+    if (G && w.sec.id !== 'still' && !roam?.walking) {
+      const gb = w.gbar * 4 + beat - (hash(seed, this.i, 77) - 0.35) * 0.12, f = gb - Math.floor(gb);
+      const k = [1, 0.45, 0.75, 0.45][Math.floor(gb) & 3] * (1 - Math.exp(-f * 25)) * Math.exp(-f * 3.5), e = Math.min(1, E);
+      sink = G.dip * k * e;
+      P.lean += G.pump * k * e;
+      P.nod += 0.22 * pe.bang * k * e;
+      P.side += G.sway * e * Math.cos(Math.PI * gb / 2);
+      P.turn += G.twist * e * Math.sin(Math.PI * gb / 4);
+      P.drop -= sink;
+    }
     // 招牌動作：淡入淡出地蓋上去
     const gst = this.gesture(t, w, seed);
     this.move = gst?.name ?? null;
@@ -587,6 +612,9 @@ class Member {
     ch.group.position.z += P.dz;
     if (P.legL != null) ch.footL.rotation.x = P.legL;
     if (P.legR != null) ch.footR.rotation.x = P.legR;
+    // 沉下去多少，兩腿就往外撐多開（腳底剛好還踩在台上，看起來是膝蓋彎）
+    const spread = sink > 0 ? Math.acos(Math.max(0.5, 1 - sink / (HIP * ch.S.leg * ch.S.H))) : 0;
+    ch.footL.rotation.z = -spread; ch.footR.rotation.z = spread;
     if (this.gear.userData.rz != null) this.gear.rotation.z = this.gear.userData.rz + P.gearRz * (ch.left ? 1 : -1);
     if (this.sticks[1]) this.sticks[1].rotation.z = P.twirl;
     if (this.m.role === 'theremin') { ch.group.updateMatrixWorld(true); ch.armR.localToWorld(this.hand.set(0, -0.34, 0)); }

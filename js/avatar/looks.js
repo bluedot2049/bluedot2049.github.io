@@ -25,6 +25,8 @@ const WHITE = 16, BOOT = 18;
 // 種族。head 是 heads.js 的造型；own 表示頭上本來就有五官，選了「原本」就不另外貼
 // ey 眼睛高度、ex 眼睛離中線多遠、fs 五官大小，都從脖子算；top 帽子戴多高、hs 帽子大小；skin 預設膚色
 // hood: false 頭比連身裝的頭套大，不戴頭套；helmet: false 太空衣的玻璃罩罩不住
+// hair 有頭髮；beard 斑紋選「原本」或「大鬍子」時長矮人的大鬍子（頭髮的顏色）
+// body 體型的倍數（H 身高、W 胖瘦、hs 頭，乘在滑桿上；leg 腿長：屁股以下壓短，上半身不變，見 character.js 的 shorten）
 export const RACES = [
   { id: 'human', name: '人', head: 'human', ey: 0.2, ex: 0.07, top: 0.33, hs: 1, skin: 0, hair: true },
   { id: 'cat', name: '貓', head: 'cat', own: true, ey: 0.23, ex: 0.08, top: 0.33, hs: 1, skin: 7 },
@@ -52,6 +54,9 @@ export const RACES = [
   { id: 'box', name: '紙箱', head: 'box', ey: 0.25, ex: 0.09, top: 0.4, hs: 1.2, odd: true, hood: false, helmet: false },
   { id: 'robot', name: '機器人', head: 'robot', ey: 0.23, ex: 0.08, top: 0.36, hs: 1.05, odd: true, hood: false },
   { id: 'snowman', name: '雪人', head: 'snowman', ey: 0.25, ex: 0.07, top: 0.36, hs: 1, odd: true },
+  // 中古奇幻的兩族：矮人短腿、矮壯、頭大、大鬍子；精靈高瘦、頭小、尖耳朵
+  { id: 'dwarf', name: '矮人', head: 'dwarf', ey: 0.22, ex: 0.075, top: 0.33, hs: 1.08, skin: 1, hair: true, beard: true, helmet: false, body: { H: 0.92, W: 1.25, hs: 1.15, leg: 0.55 } },
+  { id: 'elf', name: '精靈', head: 'elf', ey: 0.215, ex: 0.065, top: 0.35, hs: 1, skin: 4, hair: true, helmet: false, body: { H: 1.1, W: 0.85, hs: 0.94 } },
 ];
 const RACE_BY_ID = new Map(RACES.map((r) => [r.id, r]));
 export const raceOf = (L) => RACE_BY_ID.get(L.race) || RACES[0];
@@ -75,10 +80,11 @@ export const OPTIONS = {
   shoes: [['boots', '靴子'], ['bare', '赤腳'], ['sneakers', '運動鞋'], ['slippers', '藍白拖'], ['rainboots', '雨鞋'], ['heels', '高跟鞋'], ['ballet', '芭蕾舞鞋'], ['clown', '小丑鞋'], ['geta', '木屐'], ['odd', '只有一隻']],
   one: [['none', '不穿'], ['dino', '恐龍裝'], ['panda', '熊貓裝'], ['banana', '香蕉裝'], ['astronaut', '太空衣'], ['yukata', '浴衣']],
   neck: [['scarf', '圍巾'], ['none', '沒有'], ['tie', '領帶'], ['bowtie', '領結'], ['necklace', '項鍊'], ['lei', '花環'], ['bell', '鈴鐺'], ['towel', '毛巾']],
-  back: [['pouch', '腰包'], ['none', '沒有'], ['backpack', '背包'], ['schoolbag', '書包'], ['satchel', '郵差包'], ['guitar', '吉他'], ['sword', '大劍'], ['quiver', '箭筒'], ['wingA', '天使翅膀'], ['wingB', '蝙蝠翅膀'], ['wingC', '蝴蝶翅膀'], ['tail', '尾巴'], ['shell', '龜殼']],
+  back: [['pouch', '腰包'], ['none', '沒有'], ['backpack', '背包'], ['schoolbag', '書包'], ['satchel', '郵差包'], ['guitar', '吉他'], ['sword', '大劍'], ['quiver', '箭筒'], ['wingA', '天使翅膀'], ['wingB', '蝙蝠翅膀'], ['wingC', '蝴蝶翅膀'], ['tail', '尾巴'], ['shell', '龜殼'], ['shield', '圓盾'], ['kite', '騎士盾'], ['bowpack', '弓和箭筒']],
   // 右手拿的東西。左手留著拿點心，之後探索世界撿東西也用左手
   hand: [['none', '空手'], ['staff', '法杖'], ['umbrella', '雨傘'], ['balloon', '氣球'], ['book', '魔法書'], ['flower', '花'], ['boba', '珍奶'], ['chicken', '雞排'], ['selfie', '自拍棒'], ['spatula', '鍋鏟'],
-    ['lantern', '燈籠'], ['candle', '蠟燭'], ['fish', '魚'], ['brush', '大畫筆'], ['flask', '燒瓶'], ['frame', '畫框'], ['scope', '望遠鏡'], ['baguette', '法國麵包'], ['teacup', '茶杯'], ['squid', '烤魷魚']],
+    ['lantern', '燈籠'], ['candle', '蠟燭'], ['fish', '魚'], ['brush', '大畫筆'], ['flask', '燒瓶'], ['frame', '畫框'], ['scope', '望遠鏡'], ['baguette', '法國麵包'], ['teacup', '茶杯'], ['squid', '烤魷魚'],
+    ['sword', '長劍'], ['axe', '斧頭'], ['hammer', '戰鎚'], ['spear', '長矛'], ['bow', '長弓'], ['wand', '魔杖'], ['root', '樹杖'], ['dawn', '還沒升起的太陽']],
 };
 export const optionName = (k, id) => OPTIONS[k]?.find(([v]) => v === id)?.[1] ?? id;
 // 顏色：存的是色號
@@ -91,6 +97,11 @@ const COUNTS = {
 // ---------- 海市攤販送的東西 ----------
 // 不在這張表裡的，鏡子裡一開始就有。表裡的要去海市跟那一攤聊天才拿得到，記在這台裝置的瀏覽器裡
 // 沒寫條件的，聊天就送；need：右手要拿著那樣東西來換；night：要在街上冷清的時候；again：第一次只記下來，隔天再來才送。ask 是還沒滿足時攤販講的話
+// items 的第一格是 OPTIONS 的類別，或 'race'（種族，RACES 的 id）。
+// 不是海市攤販送的（任務、一幕劇演完、別區）也寫在這張表：寫 hint（衣櫃點上鎖那格時說去哪拿，例如「在月球，幫海牛修好望遠鏡」），
+// 不算進衣櫃的海市印章；id 別跟攤販的 id 重複（vendors.js 照攤販 id 找）。做完那件事時呼叫 unlock(GIFTS.那一項.items)。
+// 存檔照這張表展開的順序一件一個位元：新的一項、一項裡多送的東西都只能加在最後面，加完跑 tools/save-order.mjs。
+// 原本就有的東西之後才上鎖也可以：身上、衣櫃裡已經用著的算拿到（progress.js 的 ownWorn），舊照片讀回來不會被脫掉
 export const GIFTS = {
   tailor: { who: '裁縫', line: '這幾件你拿去穿穿看', items: [['one', 'yukata'], ['outer', 'haori'], ['bottom', 'hakama'], ['shoes', 'geta']] },
   junk: { who: '舊貨攤', line: '嘰咕 這兩個送你 不能退喔', items: [['back', 'shell'], ['shoes', 'odd']] },
@@ -105,6 +116,7 @@ export const GIFTS = {
   bakery: { who: '麵包師傅', line: '這條烤太長了 拿去', items: [['hand', 'baguette']] },
   tea: { who: '茶攤', line: '杯子帶走沒關係', items: [['hand', 'teacup']] },
   squid: { who: '烤魷魚', line: '這串請你', items: [['hand', 'squid']] },
+  dawn: { hint: '演唱會的後台　再往裡面走', items: [['hand', 'dawn']] },   // 地平線下最深處（concert-under.js）
 };
 const LOCKS = new Map();
 for (const [v, g] of Object.entries(GIFTS)) for (const [k, id] of g.items) LOCKS.set(k + ':' + id, v);
@@ -169,10 +181,12 @@ const SLIDER_MAX = 10;
 // 滑桿換成實際的倍數。中間是原本的樣子，兩頭故意拉得很誇張
 const spread = (v, lo, hi) => (v < 5 ? 1 - (1 - lo) * (5 - v) / 5 : 1 + (hi - 1) * (v - 5) / 5);
 export function sizes(L) {
+  const b = raceOf(L).body;
   return {
-    H: spread(L.tall, 0.65, 1.4),
-    W: spread(L.fat, 0.55, 1.7),
-    hs: spread(L.head, 0.45, 1.8),
+    H: spread(L.tall, 0.65, 1.4) * (b?.H ?? 1),
+    W: spread(L.fat, 0.55, 1.7) * (b?.W ?? 1),
+    hs: spread(L.head, 0.45, 1.8) * (b?.hs ?? 1),
+    leg: b?.leg ?? 1,
     es: spread(L.eyeSize, 0.4, 2.4),
     eg: spread(L.eyeGap, 0.35, 1.9),
     odd: L.eyeOdd / SLIDER_MAX,
@@ -312,7 +326,7 @@ export const toOutfit = (L) => [toOld(L.topC, 0), L.hatC, toOld(L.neckC, ROBES.l
 // 骰子：種族、五官、衣服、顏色、比例全部亂抽，還沒拿到的東西不抽。自己畫的臉留著
 export function randomLook(prev, set = new Set()) {
   const R = (n) => Math.floor(Math.random() * n);
-  const race = RACES[R(RACES.length)];
+  const races = RACES.filter((r) => isOpen('race', r.id, set)), race = races[R(races.length)];
   const L = { ...prev, race: race.id, skin: Math.random() < 0.6 ? race.skin ?? R(SKINS.length) : R(SKINS.length) };
   for (const k in OPTIONS) {
     const open = OPTIONS[k].filter(([id]) => isOpen(k, id, set));

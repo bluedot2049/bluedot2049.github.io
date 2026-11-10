@@ -8,9 +8,9 @@ import { sunShadow } from '../core/scenery.js';
 import { CONTACT, footShadow } from '../core/footshadow.js';
 import { HEADS, rod } from './heads.js';
 import { HAT_COLORS, HAIR_COLORS, SKINS, CLOTH, FACE, FACE_INK, raceOf, sizes, sanitizeLook, lookKey, decodeFace } from './looks.js';
-import { strapModel, cameraModel } from '../camera/cameras.js';
-import { HIP, HOODED, itemOf, bodyGeo, armGeo, legGeo, capeGeo, capeAt, wingGeo, wingAt, hasWings, tailGeo, tailAt, hood } from './clothes.js';
-import { HandClear } from './handclear.js';
+import { CAMERAS, GUI_EYE, cameraModel, cameraPart, cameraParts, chromeMat, isChrome } from '../camera/cameras.js';
+import { HIP, HOODED, shell, itemOf, bodyGeo, armGeo, legGeo, capeGeo, CAPE_BEND, capeT, camStrap, wingGeo, wingAt, hasWings, tailGeo, tailAt, hood } from './clothes.js';
+import { HandClear, shapeOf, reachAt, shapePoints } from './handclear.js';
 import { FACES, HANDS, BODIES, kaoCode, kaoParts } from './kaomoji-parts.js';
 import { BREEZE } from '../core/weather.js';
 
@@ -25,10 +25,12 @@ export const setGravity = (k) => { gravity = GRAVITY * k; };
 const ACT_TIME = 1.6;
 const AIM_TIME = 0.45;     // 舉起相機要多久：前三分之一收起手上的東西，後面才舉
 const STOW = 0.35;
-const CAM_S = 0.9;         // 掛在身上的相機的大小
+const CAM_S = 1.35;        // 掛在身上的相機的大小（原本 0.9，2026-11-10 放大 1.5 倍）。掛在胸口、舉到臉前的位置照它往前推，背帶照它張開
+const CAM_BACK = 0.045;    // 相機模型背面離中心多遠（cameras.js 燭火乙式機身半個深度），乘 CAM_S 就是要往前讓多少
 const PET_TIME = 2.4;      // 摸動物摸多久
 // 長袍上窄下寬，手臂要從肩膀往外張開一點，手才會沿著袍子外側垂下，不會插進身體
 const ARM_OUT = 0.28;
+const _capeInv = new THREE.Matrix4();
 const NECK = 0.8;          // 頭的原點（脖子）離腳底多高，身高另外整個縮放
 const SIT_TIME = 0.8;      // 坐下或站起來花幾秒
 const LIE_TIME = 0.9;      // 從坐著躺下去（或坐起來）花幾秒
@@ -64,6 +66,32 @@ function build(fn) {
   fn(k);
   return mergeBucket(k.lit, false);
 }
+// 腿長（looks.js 的 S.leg，矮人的短腿）：只動屁股以下，上半身的座標全部照舊。
+// 身體的網格屁股（HIP）以下往屁股壓；腿和鞋（原點在腿的關節、地面在 -HIP）腿的部分照比例縮、鞋子不壓只往上移；
+// 整個身體再往下移 drop（update 的 body.position.y），腿的關節就落在 HIP × leg，腳剛好踩地。法線跟著壓扁換
+const SHOE_H = 0.1;
+function shorten(geo, k, legs = false) {
+  if (!geo || k === 1) return geo;
+  const P = geo.attributes.position, N = geo.attributes.normal;
+  const a = (HIP * k - SHOE_H) / (HIP - SHOE_H), floor = SHOE_H - HIP;
+  for (let i = 0; i < P.count; i++) {
+    const y = P.getY(i);
+    let ny = y, s = 1;
+    if (!legs && y < HIP) { ny = HIP - (HIP - y) * k; s = k; }
+    else if (legs && y < floor) ny = y + HIP * (1 - k);
+    else if (legs) { ny = y * a; s = a; }
+    P.setY(i, ny);
+    if (N && s !== 1) {
+      const nx = N.getX(i), nyy = N.getY(i) / s, nz = N.getZ(i), l = Math.hypot(nx, nyy, nz) || 1;
+      N.setXYZ(i, nx / l, nyy / l, nz / l);
+    }
+  }
+  P.needsUpdate = true;
+  if (N) N.needsUpdate = true;
+  geo.computeBoundingSphere();
+  return geo;
+}
+
 // 換掉網格的幾何，舊的丟掉。沒有東西就藏起來
 function swap(m, geo) {
   if (m.geometry !== EMPTY) m.geometry.dispose();
@@ -261,6 +289,27 @@ function hair(k, style, c, hat = false) {
   }
 }
 
+// 矮人的大鬍子（race.beard，斑紋選「原本」或「大鬍子」）：頭髮的顏色，畫了臉也照樣長，跟頭髮一樣。
+// 兩撇八字鬍蓋著嘴角、兩頰連到下巴一大團，垂到胸前束一個金環。從嘴下面長，跟著五官高低走。
+// 脖子以下那段貼在身上最外層前面（clothes.js 的 shell；頭的座標要換成身體的：加脖子高度、乘頭的縮放），
+// 鬍子前緣離脖子這條軸比胸口遠，頭左右轉也不會埋進去
+function beard(k, L, race, S, m, c) {
+  const fs = race.fs ?? 1, my = race.ey + S.fy - 0.11 * fs, out = shell(L, S.W);
+  // 頭很小、身體很胖時胸口在頭的座標裡很遠，最多推到 0.3（寧可埋一點，也不要鬍子飄在臉前面）
+  const front = (x, y) => Math.max(surf(m, x, y) + 0.02, Math.min(0.3, out(NECK + y * S.hs) / S.hs + 0.035));
+  if (L.glasses !== 'groucho') {
+    for (const s of [-1, 1]) {
+      const x = s * 0.045 * fs, y = my + 0.032 * fs;
+      k.ball(0.042 * fs, c, x, y, surf(m, x, y) + 0.008, { sx: 1.5, sy: 0.6, sz: 0.5, rz: -s * 0.3 });
+    }
+  }
+  for (const s of [-1, 1]) k.ball(0.085, c, s * 0.11, my - 0.06, Math.max(surf(m, s * 0.11, my - 0.06), front(s * 0.11, my - 0.06) - 0.03) - 0.045, { sy: 1.2, sz: 0.75, rz: s * 0.3 });
+  const yc = my - 0.17, yt = my - 0.36;
+  k.ball(0.14, c, 0, yc, front(0, yc) - 0.08, { sx: 1.25, sz: 0.58 });
+  k.cone(0.085, 0.2, c, 0, yt, front(0, yt) - 0.05, { rx: Math.PI, sz: 0.6 });
+  k.cyl(0.042, 0.05, 0.035, '#d4a54a', 0, yt + 0.02, front(0, yt + 0.02) - 0.05, { sz: 0.75 }, 8);
+}
+
 // 五官：照臉的表面一個一個貼上去。眼睛、眉毛、鼻子、嘴巴的位置都從眼睛的高度往下排。
 // 眼睛另外放進兩個零件（ke 眼白、閉著的線、眼皮；kp 眼珠），Character 掛在自己的關節上：眨眼整組壓扁，看東西時眼珠先溜過去
 // km：給了就把嘴巴畫在這裡（角色擺過顏文字才拆，見 setKao），回傳嘴巴中心 [x, y, z]
@@ -344,7 +393,8 @@ function features(k, ke, kp, L, race, S, m, skin, km = null, spots = []) {
   }
 
   const cx = ex + 0.05 * fs, cyk = ey - 0.05 * fs;
-  const mark = L.mark === 'base' ? (race.id === 'human' ? 'blush' : null) : groucho && L.mark === 'stache' ? null : L.mark;
+  const mark = race.beard && (L.mark === 'base' || L.mark === 'beard') ? null   // 矮人的大鬍子另外長（beard）
+    : L.mark === 'base' ? (race.id === 'human' ? 'blush' : null) : groucho && L.mark === 'stache' ? null : L.mark;
   switch (mark) {
     case 'blush': for (const s of [-1, 1]) put(0.03 * fs, '#f29a8a', s * cx, cyk, 0, { sz: 0.25 }); break;
     case 'stache': for (const s of [-1, 1]) put(0.035 * fs, hc, s * 0.03 * fs, ny - 0.03 * fs, 0.006, { sx: 1.4, sy: 0.55, sz: 0.5, rz: s * 0.25 }); break;
@@ -471,6 +521,7 @@ function headGeo(L, race, S, skin, split = false) {
     HEADS[race.head](k, skin, mix(skin, '#f8f0e4', 0.55), f);
     const hooded = HOODED.includes(L.one);
     if (race.hair) hair(k, hooded ? TUCKED[L.hair] ?? L.hair : L.hair, hex(HAIR_COLORS[L.hairC]), !hooded && L.hat !== 'none');
+    if (race.beard && (L.mark === 'base' || L.mark === 'beard')) beard(k, L, race, S, m, hex(HAIR_COLORS[L.hairC]));
     if (!drawn) mouthAt = features(k, ke, kp, L, race, S, m, skin, km, spots);
     glasses(k, L, race, S, m);
     hood(k, L, race);
@@ -671,6 +722,8 @@ export class Character {
     this.aimP = 0;                  // 舉相機的進度：0 放下、1 舉好
     this.aimG = { grip: 1, pitch: 0 };   // 正在演的拿法，放下的途中還記著
     this.camLocal = true;           // 自己的畫面裡要不要畫胸前那台（自拍時會擋住鏡頭）
+    this.camParts = [];             // 會動的零件（日晷III 的抽管）：掛在 camMesh 底下，照 zoomExt 往前推
+    this.zoomGoal = 0;              // 變焦鏡要伸到幾成（setZoom），zoomExt 是現在伸到哪，照馬達的速度追
     // 會動的衣服：披風、翅膀、尾巴各掛在一個關節上
     const joint = (parent) => {
       const p = new THREE.Group();
@@ -678,6 +731,8 @@ export class Character {
       return [p, mesh(p)];
     };
     [this.cape, this.capeMesh] = joint(body);
+    this.capeMesh.frustumCulled = false;   // 披風每幀彎，原本量的範圍不準
+    this.capeX = this.capeZ = 0;
     this.wings = [-1, 1].map(() => joint(body));
     [this.tail, this.tailMesh] = joint(body);
 
@@ -797,6 +852,7 @@ export class Character {
     this.kaoSag = 0;               // 垮下來喘的倒數
     this.kaoK = 0;                 // 現在擺到幾成
     this.kaoWalkT = 0;             // 姿勢擺出來以後走了多久
+    this.kaoSpinT = Infinity;      // 有 spin 的手勢擺出來以後轉了多久
     this.kaoBodySeen = false;      // 這個姿勢停著擺出來過了（走著選的還沒）
     this.kaoFace = { s: 1, sy: 1, dy: 0, mx: 1, my: 1, mr: 0, arc: 0, sa: 0, so: 0, sw: 1, tear: 0 };
     this.kaoHead = new THREE.Vector3();   // 臉和身體要頭再轉多少，疊在視線上
@@ -806,6 +862,7 @@ export class Character {
     this.sitting = false;
     this.sitP = 0;                 // 坐下的進度：0 站著、1 坐好，站起來時倒著走
     this.lift = 0;                 // 坐的地方離地多高
+    this.drop = 0;                 // 短腿的種族身體往下移多少（身體座標，見 shorten）
     this.lying = false;            // 坐在地上再躺下去（player.toggleSit）
     this.lieP = 0;                 // 躺的進度：0 坐著、1 躺平
     this.jumpK = 1;                // 這一跳多高（點自己的小跳是 0.55）
@@ -839,6 +896,12 @@ export class Character {
     this.setLook(look);
   }
 
+  // 站著時身體座標 y（腳底 0、脖子 0.8 那套）離地多高：短腿的種族屁股以下壓短、以上往下移（小圖、穿模總表取景用）
+  bodyY(y) {
+    const k = this.S.leg;
+    return this.S.H * (y >= HIP ? y - this.drop : HIP - (HIP - y) * k - this.drop);
+  }
+
   // 換外觀：整個重建。外觀一樣就不動
   setLook(look) {
     const L = sanitizeLook(look), key = lookKey(L);
@@ -847,8 +910,21 @@ export class Character {
     this.look = L;
     const race = raceOf(L), S = sizes(L), skin = hex(SKINS[L.skin]), W = S.W;
     this.S = S;
-    swap(this.torso, bodyGeo(L, W));
+    this.drop = HIP * (1 - S.leg);   // 腿短了多少（身體座標），整個身體往下移這麼多
     const hg = headGeo(L, race, S, skin, this.splitMouth), eyeY = hg.eyeY;
+    // 披風照身體（不含背的東西）、頭量出來；背的東西、翅膀、尾巴再擺到披風外面（clothes.js 的 capeGeo）
+    let capeG = null, env = null;
+    if (L.one === 'none' && L.outer === 'cape') {
+      const bare = shorten(bodyGeo({ ...L, back: 'none' }, W), S.leg);
+      capeG = capeGeo(L, W, { body: shapeOf([{ geo: bare }]), head: shapeOf([{ geo: hg.head }]), reach: reachAt, points: shapePoints, hs: S.hs, drop: this.drop, leg: S.leg, bend: L.back !== 'none' ? 0.4 : 1 });
+      bare.dispose();
+      env = capeG.userData.cape.envelope;
+    }
+    this.capeData = capeG?.userData.cape ?? null;
+    this.capeK = L.back !== 'none' ? 0.4 : 1;   // 背了東西在披風外面，披風彎少一點
+    // 背的東西在壓短腿之前的座標裡擺，屁股以下的高度換過去再問披風
+    const envPre = env && ((y, th) => env(y < HIP ? HIP - (HIP - y) * S.leg : y, th));
+    swap(this.torso, shorten(bodyGeo(L, W, envPre), S.leg));
     swap(this.headMesh, hg.head);
     swap(this.mouthMesh, hg.mouth);
     if (hg.mouthAt) this.mouth.position.set(...hg.mouthAt);
@@ -889,21 +965,20 @@ export class Character {
     const fx = 0.09 * Math.max(0.75, W);
     this.footL.position.x = -fx;
     this.footR.position.x = fx;
-    swap(fL, legGeo(L, W, skin, -1));
-    swap(fR, legGeo(L, W, skin, 1));
+    swap(fL, shorten(legGeo(L, W, skin, -1), S.leg, true));
+    swap(fR, shorten(legGeo(L, W, skin, 1), S.leg, true));
 
     swap(this.scarfTail, L.neck === 'scarf' ? build((k) => k.box(0.08, 0.28, 0.04, hex(CLOTH[L.neckC]), 0, 0, 0)) : null);
     this.scarfTail.position.set(0.08, 0.68, -0.17 * W);
-    swap(this.capeMesh, capeGeo(L, W));
-    this.cape.position.set(...capeAt(W));
+    swap(this.capeMesh, capeG);
     this.wings.forEach(([p, m], i) => {
       const side = i ? 1 : -1;
       swap(m, wingGeo(L, side));
-      p.position.set(...wingAt(L, W, side));
+      p.position.set(...wingAt(L, W, side, env));
     });
     this.flaps = hasWings(L);
     swap(this.tailMesh, tailGeo(L, skin));
-    this.tail.position.set(...tailAt(W));
+    this.tail.position.set(...tailAt(W, HIP - (HIP - 0.32) * S.leg, env));
     swap(this.handMesh, this.clear.setLook(L));
     const item = itemOf(L.hand);
     this.handPose = item.pose || null;
@@ -918,17 +993,19 @@ export class Character {
     const cells = decodeFace(L.face);
     this.paintFace(cells);
     this.setEyeFrames(cells?.eyes || [], cells?.mouth, cells);
-    this.swingK = item.swing || 0;
+    this.capeLong = !!capeG && item.kind === 'long' && item.pose === 'hang';
+    this.swingK = (item.swing || 0) * (this.capeLong ? 0.3 : 1);
     this.swingW = item.swingW || 6;
 
     // 照鏡子時鏡頭要知道臉和頭頂在哪
     // 頭頂算到帽尖。舉高的雨傘、氣球不算，手機上要全身入鏡，傘頂切掉一點沒關係
-    const H = S.H, hs = S.hs, head = Math.max(hooded ? race.top + 0.15 * race.hs : this.hatY + (HAT_H[L.hat] ?? 0.1) * race.hs * grow, fit?.top ?? 0);
+    const H = S.H, hs = S.hs, N = NECK - this.drop, head = Math.max(hooded ? race.top + 0.15 * race.hs : this.hatY + (HAT_H[L.hat] ?? 0.1) * race.hs * grow, fit?.top ?? 0);
     this.dims = {
-      faceY: H * (NECK + hs * (race.ey + S.fy)),
-      topY: H * (NECK + hs * head),
+      faceY: H * (N + hs * (race.ey + S.fy)),
+      topY: H * (N + hs * head),
       headH: H * hs * head,
-      crownY: H * (NECK + hs * race.top),   // 頭頂，不算帽子
+      crownY: H * (N + hs * race.top),   // 頭頂，不算帽子
+      eyeX: H * hs * race.ex * (S.eg ?? 1),   // 眼睛離中線多遠（日晷III 舉起來貼著右眼）
     };
     this.shadowS = Math.max(0.85, W) * H;
   }
@@ -943,10 +1020,29 @@ export class Character {
   // 用背帶掛在胸口，離身體多遠照胖瘦算；換造型時身形變了要重掛
   hangCamera() {
     const id = this.camId;
-    this.camHang = new THREE.Vector3(0, 0.4, 0.235 * (this.S?.W ?? 1) + 0.05);
-    swap(this.strapMesh, id ? build((k) => strapModel(k, this.camHang.y, this.camHang.z)) : null);
-    swap(this.camMesh, id ? build((k) => cameraModel(k, id)) : null);
+    this.camHang = new THREE.Vector3(0, 0.4, 0.235 * (this.S?.W ?? 1) + 0.01 + CAM_BACK * CAM_S);
+    swap(this.strapMesh, id ? camStrap(this.look || {}, this.S?.W ?? 1, this.camHang.y, this.camHang.z, CAM_S) : null);
+    const parts = id ? cameraParts(id) : null;
+    swap(this.camMesh, id ? build((k) => (parts ? cameraPart(k, id, 'body') : cameraModel(k, id))) : null);
+    // 亮面的相機（日晷III）換反光材質；會動的零件各自一個網格，掛在機身底下
+    this.camMesh.material = id && isChrome(id) ? chromeMat() : this.mat;
+    for (const m of this.camParts) {
+      m.removeFromParent();
+      m.geometry.dispose();
+    }
+    this.camParts = (parts || []).map((pt) => {
+      const m = new THREE.Mesh(build((k) => cameraPart(k, id, pt.part)), this.camMesh.material);
+      m.userData.slide = pt.slide;
+      this.camMesh.add(m);
+      return m;
+    });
+    this.zoomExt = this.zoomGoal = 0;
     this.camG.position.copy(this.camHang);
+  }
+
+  // 變焦鏡伸到幾成（0 收起、1 全伸出）：攝影模式每幀給，別人的照收到的焦距給；抽管照馬達的速度追過去
+  setZoom(ext) {
+    this.zoomGoal = Math.max(0, Math.min(1, ext || 0));
   }
 
   // 舉相機（攝影模式）：a = { grip, pitch }，null 是放下。grip：0 蹲低、1 眼高、2 舉高、3 自拍（左手伸長、相機轉過來），
@@ -1107,6 +1203,7 @@ export class Character {
     });
     if (!was) { this.kaoE = 1; this.kaoSag = 0; }
     if (next[2] !== kaoParts(was)[2]) this.kaoBodySeen = false;
+    if (next[1] !== kaoParts(was)[1]) this.kaoSpinT = 0;   // 換了手勢：有 spin 的從頭轉一圈
     this.kaoWalkT = 0;
   }
 
@@ -1149,7 +1246,7 @@ export class Character {
     const cadence = 4 + speed * STEP_CADENCE;
     this.phase += dt * (cadence * this.walk + 6 * this.turnW * (1 - this.walk));
     // 擺幅照速度算：一步兩腳掃過的距離（2 × 腿長 × sin 擺幅）剛好是這一步走的距離，腳才黏在地上不溜。原地轉身的小步照原本的
-    const reach = walking ? Math.asin(Math.min(1, (speed * Math.PI) / (2 * HIP * this.S.H * cadence))) : STRIDE_IDLE;
+    const reach = walking ? Math.asin(Math.min(1, (speed * Math.PI) / (2 * HIP * this.S.leg * this.S.H * cadence))) : STRIDE_IDLE;
     this.stride = (this.stride ?? STRIDE_IDLE) + (THREE.MathUtils.clamp(reach, STRIDE[0], STRIDE[1]) - (this.stride ?? STRIDE_IDLE)) * Math.min(1, dt * 8);
     // 兩腳張到最開的那一刻算踩到地，交給 onStep 出聲（海市路人的木屐）
     if (this.onStep && this.walk > 0.5 && !this.airborne && !this.sitP) {
@@ -1158,7 +1255,7 @@ export class Character {
     }
 
     const s = Math.sin(this.phase), w = this.walk, wf = Math.max(w, this.turnW);
-    this.body.position.y = Math.abs(s) * 0.06 * wf;
+    this.body.position.y = Math.abs(s) * 0.06 * wf - this.drop * this.S.H;
     // 起步往前傾、煞車往後仰一點、轉彎往內側斜：只跟著速度的變化，站著不動時是 0（不是站著的小動作）
     const acc = this.lastSpeed == null ? 0 : (speed - this.lastSpeed) / Math.max(dt, 1e-3);
     this.lastSpeed = speed;
@@ -1170,6 +1267,8 @@ export class Character {
     this.body.rotation.x = 0.08 * w + this.leanF;
     this.body.rotation.z = s * 0.04 * w + this.leanS;
     this.armL.rotation.x = s * 0.7 * w;
+    // 披著披風拿長的東西（法杖、長矛）垂著走：那隻手往後擺得少，東西才不會掃進披風（往前照擺）
+    if (this.capeData && this.capeLong) this.armL.rotation.x = Math.min(this.armL.rotation.x, 0.12);
     this.armR.rotation.x = -s * 0.7 * w;
     this.footL.rotation.x = -s * this.stride * wf;
     this.footR.rotation.x = s * this.stride * wf;
@@ -1184,7 +1283,9 @@ export class Character {
     // 竹蜻蜓一直轉，走路時轉更快
     if (this.prop.visible) this.prop.rotation.y += dt * (5 + w * 12);
     // 披風走路時往後飄，往下掉的時候整片掀起來；翅膀慢慢搧，走路搧快一點；尾巴左右甩
-    if (this.capeMesh.visible) this.cape.rotation.x = 0.22 + w * 0.4 + Math.sin(this.time * 5) * 0.04 * w + Math.min(0.6, Math.max(0, -this.jumpV) * 0.1);
+    // 披風往後彎多少（下襬的角度，bendCape 照這個彎）：站著微微張開，走路、往下掉時飄起來
+    this.capeX = 0.15 + w * 0.5 + Math.sin(this.time * 5) * 0.05 * w + Math.min(0.6, Math.max(0, -this.jumpV) * 0.1);
+    this.capeZ = 0;
     if (this.flaps) {
       const f = 0.35 + Math.sin(this.time * (2 + 5 * w)) * 0.25;
       this.wings[0][0].rotation.y = -f;
@@ -1242,14 +1343,14 @@ export class Character {
       const upright = 1 - this.sitP, loose = 1 - this.hatK;
       this.body.rotation.x -= lz * 0.1 * wk * upright;
       this.body.rotation.z += lx * 0.08 * wk * upright;
-      this.cape.rotation.x += (Math.max(0, -lz) * 0.9 + 0.15 + fl * 0.12) * wk;
-      this.cape.rotation.z = (lx * 0.5 + fl * 0.05) * wk;
+      this.capeX += (Math.max(0, -lz) * 0.9 + 0.15 + fl * 0.12) * wk;
+      this.capeZ = (lx * 0.5 + fl * 0.05) * wk;
       this.scarfTail.rotation.x += (Math.max(0, -lz) * 0.8 + fl * 0.15) * wk;
       this.scarfTail.rotation.z = (lx * 0.6 + fl * 0.1) * wk;
       this.hat.rotation.z += (lx * 0.25 + fl * 0.12) * wk * loose;
       this.hat.rotation.x = -lz * 0.2 * wk * loose;
       this.hat.position.y += Math.max(0, fl) * 0.03 * wk * loose * Bz.gust;
-    } else this.cape.rotation.z = this.scarfTail.rotation.z = this.hat.rotation.x = 0;
+    } else this.scarfTail.rotation.z = this.hat.rotation.x = 0;
     if (this.hatK > 0.001) {
       const R = this.armR.rotation, hk = smooth(this.hatK);
       R.x += (HAT_ARM[0] - R.x) * hk;
@@ -1297,14 +1398,16 @@ export class Character {
       R.x += (0.2 - R.x) * lie; R.y += (0 - R.y) * lie; R.z += (0.6 - R.z) * lie;
     }
 
-    // 右手拿著東西：垂著的照樣小幅擺動，拿在胸前的手往前抬，雨傘這種舉過頭
+    // 右手拿著東西：垂著的照樣小幅擺動，拿在胸前的手往前抬，雨傘這種舉過頭，夾在腋下的手臂張開幾乎不擺
     this.handK += ((this.handPose ? 1 : 0) - this.handK) * Math.min(1, dt * 8);
     if (this.handPose && this.handK > 0.001) {
       // 放到地上（坐、躺）的途中手慢慢空下來
       const A = this.armL.rotation, hk = this.handK * (1 - this.clear.down);
-      const tx = this.handPose === 'up' ? -2.6 : this.handPose === 'hold' ? -0.75 : A.x * 0.4;
+      const P = this.handPose, tx = P === 'up' ? -2.6 : P === 'hold' ? -0.75 : A.x * (P === 'tuck' ? 0.12 : 0.4);
       A.x += (tx - A.x) * hk;
-      if (this.handPose !== 'hang') A.z += (-0.1 - A.z) * hk;
+      // 夾在腋下的手臂往外張一點，留出書的厚度
+      if (P === 'tuck') A.z += (-0.36 - A.z) * hk;
+      else if (P !== 'hang') A.z += (-0.1 - A.z) * hk;
     }
 
     // 拿著點心時左手舉在胸前，咬一口時送到嘴邊
@@ -1342,7 +1445,9 @@ export class Character {
     // 坐地上時整個人再往下沉，腿從屁股伸出去才會貼著地
     const hop = this.lift > 0.2 ? Math.sin(lower * Math.PI) * 0.1 : 0;
     // 坐椅子：褲子底部在身體座標 0.3，抬到剛好貼著椅面（lift 是椅面高度）
-    const up = this.jumpY + (this.lift > 0.2 ? this.lift - SEAT_BUTT : -0.24) * lower + hop + 0.44 * lie;
+    // 短腿（drop）：屁股低了，坐椅子少抬、坐地上少沉。躺下不用另外補（量過：跟同樣高矮胖瘦的人差 2 公分內）
+    const butt = SEAT_BUTT - this.drop * (SEAT_BUTT / HIP);
+    const up = this.jumpY + (this.lift > 0.2 ? this.lift - butt : butt - SEAT_BUTT - 0.24) * lower + hop + 0.44 * lie;
     this.group.position.y += up;
     // 影子留在地面，越高越小
     this.shadow.position.y = 0.012 - up;
@@ -1496,6 +1601,39 @@ export class Character {
     }
     // 手上的東西抵銷手臂的轉動一直直立、讓開帽子和身體，轉角疊上擺盪（handclear.js）
     this.clear.update(dt);
+    // 跪、趴時小腿往後折：腿往後多少，披風就多掀起來多少
+    this.bendCape(this.capeX + 0.35 * this.sitP + Math.max(0, this.footL.rotation.x - 0.6, this.footR.rotation.x - 0.6), this.capeZ);
+  }
+
+  // 披風照走路、跳、風往後彎（bx 前後、bz 左右），碰到地就貼著地。肩上不動、越下面彎越多（clothes.js 的 capeGeo、capeT），
+  // 只會往後、往上離開身體；左右晃很小，留的空間蓋得住
+  bendCape(bx, bz) {
+    const C = this.capeData;
+    if (!C || !this.capeMesh.visible) return;
+    const a = this.capeMesh.geometry.attributes.position, P = a.array, B = C.base, T = C.t, py = C.pivot[1], pz = C.pivot[2];
+    bx = Math.min(CAPE_BEND, Math.max(0, bx)) * this.capeK;
+    bz = Math.max(-0.2, Math.min(0.2, bz)) * this.capeK;
+    this.body.updateMatrix();
+    const m = this.body.matrix, e = m.elements, floor = this.shadow.position.y - 0.012 + 0.005;
+    let inv = null;
+    for (let i = 0, n = T.length; i < n; i++) {
+      const q = i * 3, t = capeT(T[i]), ax = bx * t, az = bz * t;
+      const x = B[q], y = B[q + 1] - py, z = B[q + 2] - pz;
+      const c = Math.cos(ax), s = Math.sin(ax), y1 = y * c - z * s, z1 = y * s + z * c;
+      const c2 = Math.cos(az), s2 = Math.sin(az);
+      let X = x * c2 - y1 * s2, Y = x * s2 + y1 * c2 + py, Z = z1 + pz;
+      // 碰地：換到角色的座標比地面，壓到地面上再換回來
+      const gy = e[1] * X + e[5] * Y + e[9] * Z + e[13];
+      if (gy < floor) {
+        const gx = e[0] * X + e[4] * Y + e[8] * Z + e[12], gz = e[2] * X + e[6] * Y + e[10] * Z + e[14];
+        inv ??= _capeInv.copy(m).invert().elements;
+        X = inv[0] * gx + inv[4] * floor + inv[8] * gz + inv[12];
+        Y = inv[1] * gx + inv[5] * floor + inv[9] * gz + inv[13];
+        Z = inv[2] * gx + inv[6] * floor + inv[10] * gz + inv[14];
+      }
+      P[q] = X; P[q + 1] = Y; P[q + 2] = Z;
+    }
+    a.needsUpdate = true;
   }
 
   // 顏文字擺著（kaomoji-parts.js）：臉、手、身體三層，各自從舊的換到新的。疊在拿東西之後、表情和舉相機之前。
@@ -1570,16 +1708,26 @@ export class Character {
     const handAt = (id, w) => {
       const h = HANDS[id];
       if (!id || w <= 0) return;
-      const k = w * A;
+      const k = w * (h.firm ? Math.min(1, A / KAO_LOOSE) : A);   // firm：要碰到東西的（壓帽），點一下也擺滿
       const a = usable(this.armR, h.free) ? this.armR : usable(this.armL, h.free) ? this.armL : null;
       const b = a === this.armR ? this.armL : this.armR;
       if (a) setArm(a, h.a, k, h.osc, t);
       if (h.b && usable(b, h.bfree)) setArm(b, h.b, k, h.osc, t);
       if (h.tilt && this.itemKind === 'long' && (a === this.armL || (h.b && b === this.armL))) tilt = Math.max(tilt, h.tilt * k);
       if (h.hat) this.hat.rotation.x += h.hat * k;
+      // 頭跟著手：換右手做就左右鏡像（往做的那隻手歪）
+      if (h.head) { const m = a === this.armL ? -1 : 1; kh.x += h.head[0] * k; kh.y += h.head[1] * k * m; kh.z += h.head[2] * k * m; }
     };
     handAt(lh.prev, lh.wp);
     handAt(lh.cur, lh.w);
+    // 轉圈（施法）：擺出來那一下原地轉一圈，帽子被甩得歪一下；走著選的不轉
+    const spin = HANDS[lh.cur].spin;
+    if (spin && this.kaoSpinT < spin) {
+      this.kaoSpinT += dt;
+      const p = Math.min(1, this.kaoSpinT / spin);
+      B.y += smooth(p) * Math.PI * 2 * still;
+      this.hat.rotation.z -= Math.sin(p * Math.PI) * 0.3 * still;
+    }
     this.itemTilt += (tilt - this.itemTilt) * Math.min(1, dt * 8);
 
     // 身體：坐著不做；走起來淡掉（一走就放下，見上面）
@@ -1621,6 +1769,11 @@ export class Character {
   // 放下時同一段倒著走：先放下手，東西最後才長回來。東西只是藏起來，咬到第幾口都還在
   aimPose(dt) {
     this.aimP = clamp01(this.aimP + (this.aim ? dt : -dt) / AIM_TIME);
+    if (this.camParts.length && this.zoomExt !== this.zoomGoal) {
+      const d = this.zoomGoal - this.zoomExt, v = dt / (CAMERAS[this.camId]?.motor || 1.2);
+      this.zoomExt = Math.abs(d) <= v ? this.zoomGoal : this.zoomExt + Math.sign(d) * v;
+      for (const m of this.camParts) m.position.z = m.userData.slide * this.zoomExt;
+    }
     const a = this.aimG, p = this.aimP, selfie = a.grip === 3;
     const stow = smooth(clamp01(p / STOW));
     let r = smooth(clamp01((p - STOW) / (1 - STOW))), up = 0;
@@ -1634,7 +1787,8 @@ export class Character {
     }
     this.handG.scale.setScalar(selfie ? 1 : 1 - stow);
     if (this.foodMesh) this.foodMesh.scale.setScalar((1 - this.bites * 0.28) * (1 - stow));
-    this.head.rotation.x = -(selfie ? 0.1 : a.grip === 4 ? 0 : a.pitch * 0.7) * r;
+    // 腰平（5）：低頭看機頂的小窗
+    this.head.rotation.x = (a.grip === 5 ? 0.45 : -(selfie ? 0.1 : a.grip === 4 ? 0 : a.pitch * 0.7)) * r;
     if (!this.camId && a.grip !== 4) return;
     this.strapMesh.visible = !!this.camId && r < 0.3;
     this.camMesh.visible = !!this.camId && (this.camLocal || r < 0.5);
@@ -1648,8 +1802,8 @@ export class Character {
       L.x += (lx - L.x) * r; L.y += (ly - L.y) * r; L.z += (lz - L.z) * r;
       R.x += (rx - R.x) * r; R.y += (ry - R.y) * r; R.z += (rz - R.z) * r;
     };
-    const hs = this.S.hs, face = this.dims.faceY / this.S.H, front = 0.25 * hs + 0.05;
-    const to = new THREE.Vector3(0, face - 0.05, front), lift = a.grip === 2;
+    const hs = this.S.hs, face = this.dims.faceY / this.S.H, front = 0.25 * hs + 0.01 + CAM_BACK * CAM_S;
+    const to = new THREE.Vector3(0, face - 0.055 * CAM_S, front), lift = a.grip === 2;
     if (a.grip === 4) arms(-2.5, 0.2, -0.45, -2.5, -0.2, 0.45);
     else if (selfie) {
       arms(L.x, L.y, L.z, -1.75, -0.15, 0.05);
@@ -1658,6 +1812,15 @@ export class Character {
     } else if (lift) {
       arms(-2.85, 0.3, -0.05, -2.85, -0.3, 0.05);
       to.set(0, this.dims.crownY / this.S.H, front * 0.8);
+    } else if (CAMERAS[this.camId]?.eyepiece) {
+      // 日晷III：機背的小圓孔貼著右眼，機身往右手那邊讓開（鼻子在左邊空著）
+      arms(-2.4, 0.75, -0.1, -2.5, -0.35, 0.15);
+      const ex = (this.dims.eyeX ?? 0.07 * this.S.H) / this.S.H;
+      to.set(-ex - GUI_EYE.x * CAM_S, face - GUI_EYE.y * CAM_S, front);
+    } else if (a.grip === 5) {
+      // 腰平（拍立拿a500）：雙手把相機捧在肚子前面
+      arms(-0.95, 0.55, -0.1, -0.95, -0.55, 0.1);
+      to.set(0, face * 0.62, front * 1.25);
     } else arms(-2.45, 0.6, -0.1, -2.45, -0.6, 0.1);
     if (up && !selfie) {
       L.x -= 0.3 * up;

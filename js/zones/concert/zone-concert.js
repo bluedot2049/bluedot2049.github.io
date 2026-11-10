@@ -4,12 +4,14 @@
 import { buildConcert, ConcertBgm, SHOW, showTime, showKey, adoptShow } from './concert.js';
 import { Band } from './concert-band.js';
 import { STAGE } from './concert-stage.js';
+import { MONO } from './concert-under.js';
 
 // 背景音樂就是台上的歌：一進來就在唱（從全場時鐘的那一秒接著放）
 export const bgm = { from: 'concert', src: ConcertBgm };
 
 // 調色：用使用者在調色台調好的「演唱會01」
-export const grade = { tone: '演唱會02' };   // 使用者調的色調（core/tones.js）
+// 地平線下黑白時（concert-under.js 的 MONO）那一塊不調色：調色會把黑推成咖啡、白推成淡藍
+export const grade = { tone: '演唱會02', regions: MONO ? [{ name: '地平線下', box: [-16, -86, 16, -26.6], fade: 2, tone: '不調色' }] : [] };   // 使用者調的色調（core/tones.js）
 
 // 一場一個房間：多人頻道名字後面接這一場的種子，同一場（組隊帶著同一個 ?show= 進來）才看得到彼此，不跟陌生人共用（main.js 的 mp）
 export const room = () => `-${SHOW.seed >>> 0}`;
@@ -44,7 +46,8 @@ export function crowd({ scene, world, shadowTex }) {
 }
 
 // 抵達：從最後面的大門進來（火把從後面一支支點到舞台），面向舞台；攝影溝要穿過人群走過去
-export function arrive({ player, world }) {
+export function arrive({ player, world, ui }) {
+  world.setUI?.(ui);   // 地平線下拿到太陽時說一句（concert-under.js）
   player.camDist = 5.5;
   player.camPitch = 0.04;   // 一進門：站在高處、鏡頭放平，整個大廳和五十公尺外的舞台在眼前   // 鏡頭在台面以上，台子的正面才不會擋掉半個畫面
   player.place(world.spawn.x, world.spawn.z, world.spawn.heading);

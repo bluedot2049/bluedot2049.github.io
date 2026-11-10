@@ -152,6 +152,27 @@ export const VOICES = {
     hiss(ctx, out, noise, t, 0.025, 'bandpass', 2300 * p, 0.8, 2);
     return 0.035;
   },
+  // ---------- 日晷III（沙島的現代產品）：乾淨、細、有一點電子感 ----------
+  // 快門：反光鏡沒有，只有一片電子控制的快門簾，「嗒」一聲很短很實，尾巴一絲高頻
+  eshutter(ctx, out, t, p, noise) {
+    hiss(ctx, out, noise, t, 0.012, 'bandpass', 4200 * p, 0.9, 2.5);
+    osc(ctx, 'sine', t + 0.004, 0.03, [[0, 520 * p], [0.03, 300 * p]]).connect(envelope(ctx, t + 0.004, 0.001, 0.03, 0.35)).connect(out);
+    hiss(ctx, out, noise, t + 0.04, 0.01, 'bandpass', 6000 * p, 0.35, 3);
+    return 0.06;
+  },
+  // 變焦馬達：一小段細細的「嗚」，轉著的時候每一小段接著放，聽起來是連著的
+  zoom(ctx, out, t, p, noise) {
+    const o = osc(ctx, 'sawtooth', t, 0.18, [[0, 300 * p], [0.18, 312 * p]]);
+    o.connect(biquad(ctx, 'bandpass', 2400 * p, 3)).connect(envelope(ctx, t, 0.03, 0.18, 0.05)).connect(out);
+    hiss(ctx, out, noise, t, 0.18, 'bandpass', 5200 * p, 0.03, 1.5);
+    return 0.2;
+  },
+  // 變焦停下：齒輪咬住一下，輕輕「喀」
+  zoomstop(ctx, out, t, p, noise) {
+    hiss(ctx, out, noise, t, 0.008, 'bandpass', 3600 * p, 0.45, 3);
+    osc(ctx, 'sine', t, 0.025, [[0, 900 * p], [0.025, 620 * p]]).connect(envelope(ctx, t, 0.001, 0.025, 0.12)).connect(out);
+    return 0.04;
+  },
   // ---------- 畫廊的眼睛（photo.js、鏡子前的 selfie.js）：偏機械的細小手感，像換彈匣，不做成生物的聲音 ----------
   // 眨一下：眼皮滑下來「嚓」，到底一記扎實的「喀」，彈回來再輕輕一扣；尾巴留一絲玻璃光
   blink(ctx, out, t, p, noise) {
@@ -336,7 +357,7 @@ export const VOICES = {
     }
     return 0.35;
   },
-  // 日晷III浮起來：機身裡的細沙往一邊流過去，沙沙一陣，越流越細
+  // 細沙往一邊流過去，沙沙一陣，越流越細（原本是舊版日晷III 在桌上浮起來的聲音，現在沒有相機用）
   sand(ctx, out, t, p, noise) {
     air(ctx, out, noise, t, [[0, 5200 * p], [0.7, 3400 * p]], 0.12, 0.8, 0.5, 1.4, 'bandpass');
     for (let i = 0; i < 9; i++) hiss(ctx, out, noise, t + 0.05 + Math.random() * 0.6, 0.006, 'bandpass', 5000 + Math.random() * 3000, 0.3 + Math.random() * 0.3, 4);
@@ -349,6 +370,17 @@ export const VOICES = {
     hiss(ctx, out, noise, t + 0.02, 0.26, 'bandpass', 2600 * p, 0.05, 1.2);
     hiss(ctx, out, noise, t + 0.33, 0.012, 'bandpass', 3400 * p, 0.45, 4);
     return 0.45;
+  },
+  // 拍立拿a500 的快門：塑膠機身悶悶「喀嚓」，接著吐片的小馬達「滋——」把照片推出來，到底彈片一扣
+  polashut(ctx, out, t, p, noise) {
+    hiss(ctx, out, noise, t, 0.016, 'bandpass', 2600 * p, 0.9, 2);
+    osc(ctx, 'sine', t, 0.07, [[0, 210 * p], [0.07, 110 * p]]).connect(envelope(ctx, t, 0.002, 0.07, 0.5)).connect(out);
+    hiss(ctx, out, noise, t + 0.05, 0.014, 'bandpass', 1800 * p, 0.6, 2);
+    const m = osc(ctx, 'sawtooth', t + 0.14, 0.62, [[0, 140 * p], [0.1, 250 * p], [0.55, 236 * p], [0.62, 180 * p]]);
+    m.connect(biquad(ctx, 'bandpass', 1500 * p, 2.2)).connect(envelope(ctx, t + 0.14, 0.04, 0.62, 0.07)).connect(out);
+    air(ctx, out, noise, t + 0.16, [[0, 2200 * p], [0.55, 3000 * p]], 0.05, 0.58, 0.05, 1.4, 'bandpass');
+    hiss(ctx, out, noise, t + 0.8, 0.012, 'bandpass', 3200 * p, 0.4, 4);
+    return 0.86;
   },
   // 靜海速食店的叫號：叮、咚兩聲，第二聲低一點
   pickup(ctx, out, t, p) {

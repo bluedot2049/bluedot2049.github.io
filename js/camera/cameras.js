@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { rod } from '../avatar/heads.js';
 import { getSave, putSave } from '../save/progress.js';
 import { strokes } from '../core/glyphs.js';
-import { punch } from '../core/icode.js';
+import { punch, slits } from '../core/icode.js';
 
 // 等效全片幅的焦距換成視角：照片長邊對應底片的 36mm
 export const longTan = (mm) => 18 / mm;
@@ -28,6 +28,12 @@ export const longTan = (mm) => 18 / mm;
 // af：自動對焦的個性。time 轉到位要幾秒、hunt 快到時多轉過頭幾成再退回來（找焦）、
 //     priority 'release' 快門隨時按得下去（還在找焦就照當下的焦距拍），'focus' 對好才放快門（按了先記著，對好自己拍）
 // make：哪家工坊做的。mark 是商號（用海市的字刻），model 型號、serial 序號（用蘇州碼子的數字刻）；shutter：快門鈕長什麼樣（SHUTTERS）
+// zoom：變焦鏡的兩頭 [最廣, 最長]（mm），focal 是剛拿起來的焦距；motor 電動變焦從一頭跑到另一頭要幾秒（等速）。
+//   身上那台的抽管照焦段伸出來（cameraParts），別人也看得到
+// near：最近對焦距離（公尺），比這近的對不到，只能退開
+// grips：只能用哪幾種拿法（photo.js 的 GRIPS）；只有自拍和另一種時滾輪就在兩種之間換。selfie：自拍換的鏡頭 { mm 焦距, up 手舉高幾公尺, pitch 往下拍多少 }
+// eyepiece：舉起來是單眼貼著機背的小孔看（character.js aimPose）
+// sway：長焦手持會晃（sway.js），舉越久越穩、過一陣又晃，循環
 export const CAMERAS = {
   bulb: {
     name: '燭火乙式',
@@ -50,13 +56,50 @@ export const CAMERAS = {
     develop: { filter: 'sepia(.16) saturate(.92) contrast(1.08) brightness(1.02)', vig: 0.62, grain: 0.07, halo: 0.16 },
     glow: { halation: 0.85, tint: '#ff7d4e', radius: 1.6, fringe: 0.004 },   // 燭火：燈籠、閃光外面滲一圈偏橘紅的暈，老鏡頭邊上一點色邊
   },
+  // 沙島「日晷III」：哲學是「留著距離」——看得清楚，但不用走近。追焦咬得住動的東西；太近對不到、沒有閃光；
+  // 長端手持會晃，抓穩的空檔按。別人被長鏡頭對著時看得到鏡片反光（multiplayer.js）
+  gui: {
+    name: '日晷III',
+    spec: ['35–85mm 電動變焦', '數位式'],
+    maker: '大法師科技製造',
+    focal: 35, zoom: [35, 85], motor: 1, prime: false, fstop: 2.8, bokeh: 3, near: 2.5, focus: 'follow', aspect: 3 / 2,
+    af: { time: 0.32, hunt: 0.05, priority: 'release' },
+    grips: [1, 3], eyepiece: true, sway: true,
+    track: true,   // 追焦鎖定：Q（閃光那顆）、手把 Y、點畫面，鎖住一個人一直跟著對焦（photo.js 的 toggleTrack）
+    make: { mark: '#', model: 3 }, shutter: 'silver',
+    date: { knob: 'strip', ink: 'punch' },   // 不印日期，印「站多遠、幾 mm」：I 碼打孔＋點陣的數字和單位（INKS.punch）
+    lab: 'gui',   // 拍下就照 darkroom.js 的 LABS.gui 洗：大法師科技機身裡的影像處理，鍍膜的紫綠
+    rattle: 'zoom',
+    voices: { shutter: 'eshutter', focus: 'focus', raise: 'raise', lower: 'lower', grip: 'hand', turn: 'swivel', zoom: 'zoom', zoomEnd: 'zoomstop', again: 'zoomstop', done: 'lower', dateOn: 'zoomstop', dateOff: 'zoomstop' },
+    // 取景時只能套近似的（dof.js 的 toneOf 只認這幾種）；照片照 lab 洗，這行不再套
+    develop: { filter: 'contrast(1.06) saturate(.95) brightness(1.01)', vig: 0.12, grain: 0.015, halo: 0 },
+  },
+  // 月球「拍立拿a500　月球廠十周年紀念限定款」：海牛族大企業的拍立得，哲學是「看見要帶著走」。
+  // instant：一盒幾張（片盒和顯影在 instant.js）。拍下去吐出一片藍綠，收進行囊慢慢顯影，帶到哪裡顯影就染上那裡的顏色。
+  // focus 'fixed'：泛焦，焦點釘在 fixed 公尺，不能對焦，太近才糊。finder：取景框只有可用範圍的幾成大，看得到但不好看懂。
+  // 沒有閃光、日期、落款；照片的樣子全在顯影，拍下來不上色調
+  wang: {
+    name: '拍立拿a500',
+    spec: ['月球廠十周年紀念限定款', '一盒三張，帶著走顯影', '泛焦'],
+    maker: '海牛族月球廠製造',
+    focal: 40, prime: true, fstop: 11, bokeh: 1, focus: 'fixed', fixed: 3, aspect: 1, finder: 0.62,   // 一公尺外全清楚；玩具感靠顯影的鏡頭（instant.js），不靠景深
+    instant: 3,
+    // 拿法只有腰平（5，低頭看機頂的小窗）和自拍，滾輪上自拍、下腰平。自拍換超廣角 13mm，手舉高 up 公尺、往下拍 pitch：手和全身都進得來
+    grips: [5, 3], selfie: { mm: 13, up: 0.3, pitch: -0.3 },
+    shutter: 'pola',
+    rattle: 'whir',
+    voices: { shutter: 'polashut', raise: 'raise', lower: 'lower', grip: 'hand', jam: 'jam', prime: 'stop', again: 'whir', done: 'lower', memoOn: 'tink', memoOff: 'hand' },
+    // 紀念模式（閃光那顆鍵、閃光開關的位置）：開著時漏光、晃糊、顏色壞掉都變三分之二，但 rare 的機會吐出十周年紀念的限定照片（金邊、乾淨不壞）
+    memo: { knob: 'memo', rare: 1 / 12 },
+    develop: { filter: '', vig: 0, grain: 0, halo: 0 },
+  },
 };
 
 // 桌上從左到右的位置；null 是還沒做出來的，留一個空位
 export const TABLE = ['bulb', 'gui', 'wang'];
 
-// 擺在桌上、還拿不走的：只有模型和名字，面板寫名字，按鈕是灰的
-export const SOON = { gui: { name: '日晷III', rattle: 'sand' }, wang: { name: '望', rattle: 'whir' } };
+// 擺在桌上、還拿不走的：只有模型和名字，面板寫名字，按鈕是灰的（現在沒有）
+export const SOON = {};
 
 // 帶在身上的相機，記在存檔裡
 export const carried = () => (CAMERAS[getSave().camera] ? getSave().camera : null);
@@ -80,9 +123,11 @@ function blade(k, a, b, w0, w1, t, c, n) {
 
 // 相機的模型，畫進 Kit：原點在機身底部中間，鏡頭朝 +z。
 // 照真的拿法擺：拍照的人站在後面往 +z 看，快門在右手邊（-x），觀景窗、閃光在左手邊（+x）
+// 會伸縮的相機可以寫成「id@伸出幾成」，例如 gui@0.5（預覽頁用）；沒寫是收起來
 export function cameraModel(k, id) {
+  const [base, ext] = String(id).split('@');
+  if (base === 'gui') return guiModel(k, +ext || 0);
   if (id === 'bulb') bulbModel(k);
-  else if (id === 'gui') guiModel(k);
   else if (id === 'wang') wangCuteModel(k);
   else if (id === 'wangbox') wangModel(k);
 }
@@ -115,67 +160,109 @@ function bulbModel(k) {
   k.ball(0.016, '#f6f1e2', fx, fy, fz + 0.012);
 }
 
-// 沙漠工坊「日晷III」：躺著的觀星儀。III 是蜃樓那座城的記號。古銅偏金的機身左右不對稱，右頭一隻疊影窗，中間伸出短胖的變形鏡筒，頂上一面日晷盤裝著圓盤底片。
-// 快門在左邊矮的那階（拍照的人的右手邊），發條鑰匙在高的那頭
-const BRZ = '#8f6d3c', WORN = '#6b502c', GILT = '#c09a4e', DBRZ = '#4a3720', DIAL = '#b08e4c',
-  CLOTH = '#34374a', LENS = '#3a5058', SAND = '#c9a66e', PALE = '#a9bcbc', VIAL = '#f3b457', HOLE = '#22190f';
-function guiModel(k) {
-  const W = 0.22, H = 0.09, D = 0.06, yc = H / 2, front = D / 2, face = { rx: Math.PI / 2 };
-  const rx = 0.065, lx = -0.075, step = -0.04, lh = 0.068, lr = lh / 2;
-  k.box(rx - step, H, D, BRZ, (rx + step) / 2, yc, 0);
-  k.box(step - lx, lh, D, BRZ, (step + lx) / 2, lh / 2, 0);
-  k.cyl(yc, yc, D, BRZ, rx, yc, 0, face, 14);
-  k.cyl(lr, lr, D, BRZ, lx, lr, 0, face, 12);
-  k.box(rx - lx + 0.002, 0.012, D + 0.002, WORN, (rx + lx) / 2, 0.006, 0);
-  // 上緣一條金邊
-  k.box(rx - step, 0.004, 0.002, GILT, (rx + step) / 2, H - 0.007, front + 0.001);
-  k.box(0.01, 0.012, 0.012, DBRZ, 0.07, H + 0.004, -0.02);
-  k.box(0.01, 0.012, 0.012, DBRZ, lx, lh + 0.004, -0.02);
-  // 疊影窗
-  const wx = rx + 0.012;
-  k.cyl(0.017, 0.017, 0.003, DBRZ, wx, yc, front + 0.0015, face, 12);
-  k.cyl(0.0105, 0.012, 0.014, GILT, wx, yc, front + 0.008, face, 10);
-  k.cyl(0.0075, 0.0075, 0.002, LENS, wx, yc, front + 0.0152, face, 10);
-  // 鏡筒：素面防沙布、古銅筒、對焦環、橫橢圓遮光罩
-  const z0 = front;
-  k.cyl(0.031, 0.031, 0.004, DBRZ, 0, yc, z0 + 0.002, { ...face, sx: 1.6 }, 12);
-  k.cyl(0.031, 0.031, 0.03, CLOTH, 0, yc, z0 + 0.019, face, 12);
-  k.cyl(0.028, 0.028, 0.026, BRZ, 0, yc, z0 + 0.047, face, 12);
-  k.cyl(0.032, 0.032, 0.012, GILT, 0, yc, z0 + 0.064, face, 12);
-  k.cyl(0.029, 0.027, 0.022, DBRZ, 0, yc, z0 + 0.081, { ...face, sx: 1.3 }, 12);
-  k.cyl(0.0295, 0.0295, 0.003, GILT, 0, yc, z0 + 0.0915, { ...face, sx: 1.3 }, 12);
-  k.cyl(0.0235, 0.0235, 0.002, LENS, 0, yc, z0 + 0.0935, { ...face, sx: 1.3 }, 12);
-  // 打孔銘牌：I 碼的 III（城），在左邊矮的那階正面
-  const px = -0.062, py = 0.034;
-  k.box(0.03, 0.011, 0.002, GILT, px, py, front + 0.001);
-  punch(k, '#', { x: px, y: py, z: front + 0.0025, h: 0.008, w: 0.0022, gap: 0.0043, depth: 0.001, color: HOLE });
-  // 日晷盤：一面盤，只有影子落的那一格是暗的，晷針平貼盤面指著它
-  const top = H + 0.016, dx = 0.012, sa = 7.5 * Math.PI / 4;
-  k.cyl(0.047, 0.047, 0.012, DBRZ, dx, H + 0.006, 0, {}, 16);
-  k.cyl(0.041, 0.041, 0.004, DIAL, dx, H + 0.014, 0, {}, 16);
-  k.box(0.024, 0.0016, 0.013, DBRZ, dx + Math.cos(sa) * 0.026, top, -Math.sin(sa) * 0.026, { ry: sa });
-  k.box(0.03, 0.0012, 0.003, DBRZ, dx + Math.cos(sa) * 0.016, top + 0.0014, -Math.sin(sa) * 0.016, { ry: sa });
-  k.cyl(0.0055, 0.0055, 0.003, GILT, dx, top + 0.0015, 0, {}, 8);
-  // 快門在矮的那階上，發條鑰匙在高的那頭
-  k.cyl(0.007, 0.008, 0.007, GILT, -0.058, lh + 0.0035, 0.01, {}, 8);
-  k.cyl(0.0025, 0.0025, 0.01, DBRZ, 0.082, 0.089, -0.004, {}, 6);
-  k.box(0.016, 0.009, 0.002, GILT, 0.082, 0.097, -0.004);
-  // 左邊掛沙漏：上半是空的玻璃，下半積了沙
-  const hx = lx - lr - 0.013;
-  k.box(0.012, 0.008, 0.008, DBRZ, lx - lr + 0.002, 0.05, 0);
-  for (const y of [0.034, 0.074]) k.cyl(0.0135, 0.0135, 0.005, GILT, hx, y, 0, {}, 8);
-  k.cone(0.011, 0.019, PALE, hx, 0.0625, 0, { rx: Math.PI });
-  k.cone(0.011, 0.019, SAND, hx, 0.0455, 0);
-  // 右邊掛集光瓶：灌滿了，從裡面亮
-  const vx = W / 2 + 0.014;
-  k.box(0.01, 0.008, 0.008, DBRZ, W / 2 + 0.004, 0.054, 0);
-  k.cyl(0.012, 0.012, 0.036, VIAL, vx, 0.05, 0, { glow: true }, 10);
-  k.cyl(0.0125, 0.0125, 0.004, DBRZ, vx, 0.05, 0, {}, 10);
-  k.cyl(0.0065, 0.0065, 0.007, GILT, vx, 0.0715, 0, {}, 8);
+// 沙島「日晷III」：沙島的現代產品。電動伸縮變焦 35–85mm、數位、照片 3:2（一般數位相機的比例）、整台純銀亮面（顏色寫在頂點，亮面靠 chromeMat 的反光貼圖）。
+// 收起來是一塊扁的圓角磚，鏡頭只露一小截；三節抽管（III）往前伸，最前面是 3:2 的長方遮光罩，不做成圓筒才不像槍管。
+// 右手邊（-x）握把，頂上快門外面套一圈變焦撥桿；左手邊（+x）機背一個小圓孔，貼著眼睛看；I 碼打孔在正面左上。
+// 會動的零件分開畫（part）：'body' 機身和固定的外節、1 中節、2 內節連遮光罩；沒給 part 是整台照 ext 擺好（桌上、預覽）。
+// 手上那台照焦段把 1、2 往前推（GUI_SLIDE 是全伸出時各推多遠），不用每幀重畫
+const CHR = '#eceef0', CHRSH = '#c4c9ce', CHRDK = '#8f959c', COAT = '#2a2737', PIT = '#1c1e22';
+// GUI_S：整台放大幾倍（底下的尺寸都是放大前的，畫完整批縮放；比燭火乙式大一號，長鏡頭要有份量）
+const GUI_S = 1.4;
+const GUI_SLIDE = [0, 0.034, 0.068], GUI_EYE0 = { x: 0.048, y: 0.058 };
+export const GUI_EYE = { x: GUI_EYE0.x * GUI_S, y: GUI_EYE0.y * GUI_S };   // 機背小圓孔在哪（放大後的模型座標），舉起來時對著眼睛
+function guiModel(k, ext = 0, part = null) {
+  const a = k.lit.length, b = k.glow.length;
+  guiDraw(k, ext, part);
+  for (const g of [...k.lit.slice(a), ...k.glow.slice(b)]) g.scale(GUI_S, GUI_S, GUI_S);
+}
+function guiDraw(k, ext, part) {
+  const W = 0.15, H = 0.08, D = 0.055, front = D / 2, back = -D / 2, face = { rx: Math.PI / 2 };
+  const lx = 0.006, ly = 0.042, base = front + 0.008;
+  ext = Math.max(0, Math.min(1, ext));
+  const has = (p) => part === null || part === p;
+  const slide = (i) => (part === null ? ext * GUI_SLIDE[i] : 0);
+  if (has('body')) {
+    roundSlab(k, W, H, D, 0.018, CHR, 0, H / 2, 0);
+    // 握把：正面凸出一塊圓角，頂上快門＋變焦撥桿（一圈環、往前伸一片小舌）
+    const gx = -W / 2 + 0.021;
+    roundSlab(k, 0.034, H - 0.008, 0.02, 0.012, CHRSH, gx, H / 2, front + 0.01);
+    k.cyl(0.0125, 0.0125, 0.004, CHRDK, gx, H + 0.002, 0.008, {}, 14);
+    k.box(0.007, 0.003, 0.01, CHRDK, gx, H + 0.002, 0.024);
+    k.cyl(0.0085, 0.0085, 0.005, CHR, gx, H + 0.005, 0.008, {}, 14);
+    k.cyl(0.037, 0.037, 0.008, CHRDK, lx, ly, front + 0.004, face, 18);
+    // I 碼：正面左上（拍照的人的左手邊）打 III
+    punch(k, '#', { x: 0.052, y: 0.064, z: front + 0.0008, h: 0.011, w: 0.0026, gap: 0.0042, depth: 0.0012, color: PIT });
+    // 機背的小圓孔：一圈暗的、裡面一點鍍膜色
+    k.cyl(0.0105, 0.0105, 0.006, CHRDK, GUI_EYE0.x, GUI_EYE0.y, back - 0.003, face, 14);
+    k.cyl(0.0065, 0.0065, 0.002, COAT, GUI_EYE0.x, GUI_EYE0.y, back - 0.0065, face, 12);
+    for (const s of [-1, 1]) k.box(0.01, 0.007, 0.006, CHRDK, s * (W / 2 - 0.012), H + 0.0035, back + 0.008);
+  }
+  // 三節抽管：外面那節固定在鏡頭座上，裡面兩節一節拉一節（每節後段留在前一節裡面），一節比一節細
+  const R = [0.034, 0.0305, 0.027], L = [0.04, 0.046, 0.046];
+  R.forEach((r, i) => {
+    if (!has(i === 0 ? 'body' : i)) return;
+    const f = base + 0.036 + i * 0.006 + slide(i);
+    k.cyl(r, r, L[i], i === 1 ? CHRSH : CHR, lx, ly, f - L[i] / 2, face, 18);
+    k.cyl(r + 0.0012, r + 0.0012, 0.003, CHRDK, lx, ly, f - 0.0015, face, 18);   // 接縫
+  });
+  if (!has(2)) return;
+  // 鍍膜鏡片和 3:2 長方遮光罩，接在最前面那節
+  const tip = base + 0.048 + slide(2);
+  k.cyl(0.021, 0.021, 0.002, COAT, lx, ly, tip + 0.0005, face, 18);
+  const hw = 0.076, hh = 0.0507, hd = 0.024, t = 0.0028, hz = tip - 0.004 + hd / 2;
+  for (const s of [-1, 1]) {
+    k.box(hw, t, hd, CHR, lx, ly + s * (hh - t) / 2, hz);
+    k.box(t, hh - 2 * t, hd, CHRSH, lx + s * (hw - t) / 2, ly, hz);
+  }
+  k.box(hw - 2 * t, hh - 2 * t, 0.002, CHRDK, lx, ly, tip - 0.003);
 }
 
-// 望的方盒版（第一版，比較用，只在 experiments/camera_preview.html?ids=wang,wangbox 看，不上桌）：
-// 靜海海牛族「望」：拍立得，登月年代的器材。白漆方盒、霧銀面板和螺絲，片盒門在底下，照片從鏡頭下的縫吐出來。
+// 會動的零件：[{ part, slide }]，slide 是全伸出時往 +z 推多遠（模型座標）。沒有就是 null
+export const cameraParts = (id) => (id === 'gui' ? [{ part: 1, slide: GUI_SLIDE[1] * GUI_S }, { part: 2, slide: GUI_SLIDE[2] * GUI_S }] : null);
+// 只畫某個零件（cameraParts 的 part；'body' 是不動的那些）
+export function cameraPart(k, id, part) {
+  if (id === 'gui') guiModel(k, 0, part);
+}
+
+// 會用亮面的相機（顏色乘上 chromeMat 的反光）
+export const isChrome = (id) => String(id).split('@')[0] === 'gui';
+// 純銀亮面：一張反光貼圖（matcap），上半是天、下半是地，正中間最亮、偏下一道暗線，像產品照。
+// 天和地用那一區的顏色，最亮停在淡暖白，不用純白。反光貼圖不吃場景的光，所以整體亮度另外照環境光調（chromeLight，main.js 換光時叫）
+let chromeShared = null;
+export function chromeMat(sky = '#c9d4de', ground = '#8a7863') {
+  const shared = arguments.length === 0;
+  if (shared && chromeShared) return chromeShared;
+  const N = 256, cv = document.createElement('canvas');
+  cv.width = cv.height = N;
+  const ctx = cv.getContext('2d'), img = ctx.createImageData(N, N);
+  const S = new THREE.Color(sky), G = new THREE.Color(ground), HI = new THREE.Color('#fbf6ec'), DK = new THREE.Color('#3a3e46'), c = new THREE.Color();
+  const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  // 正對鏡頭的面落在貼圖正中間，所以中間最亮；暗線放在稍微偏下的一窄條，朝下的面才是地的顏色
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const x = (i + 0.5) / N * 2 - 1, y = 1 - (j + 0.5) / N * 2, r = Math.hypot(x, y);
+    if (y > -0.16) c.copy(HI).lerp(S, ss(0.05, 0.85, y)).multiplyScalar(1 - 0.1 * ss(-0.05, -0.16, y));
+    else if (y > -0.3) c.copy(DK).lerp(HI, 1 - ss(-0.16, -0.2, y)).lerp(G, ss(-0.24, -0.3, y));
+    else c.copy(G).multiplyScalar(1 - 0.3 * ss(-0.3, -1, y));
+    c.multiplyScalar(1 - 0.22 * ss(0.82, 1, r));
+    c.convertLinearToSRGB();
+    const o = (j * N + i) * 4;
+    img.data[o] = c.r * 255; img.data[o + 1] = c.g * 255; img.data[o + 2] = c.b * 255; img.data[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.MeshMatcapMaterial({ matcap: tex, vertexColors: true, flatShading: true });
+  if (shared) chromeShared = mat;
+  return mat;
+}
+// 環境光（天光的顏色 × 強度）換算成亮面整體多亮：白天照原樣，室內、夜裡跟著暗、帶那裡的顏色
+export function chromeLight(sky, hi) {
+  const m = chromeMat(), k = Math.min(1.05, 0.25 + hi * 0.5);
+  m.color.copy(sky).lerp(new THREE.Color(1, 1, 1), 0.55).multiplyScalar(k);
+}
+
+// 拍立拿a500 的方盒版（第一版，比較用，只在 experiments/camera_preview.html?ids=wang,wangbox 看，不上桌）：
+// 月球海牛族的拍立得，登月年代的器材。白漆方盒、霧銀面板和螺絲，片盒門在底下，照片從鏡頭下的縫吐出來。
 // 頂上是腰平取景的遮光罩，低頭看裡面一小塊毛玻璃；右手邊（-x）一支大握把，頂上一顆大快門給鰭按。
 // 左邊側面是變亮變暗的三格轉盤，機背小窗露出片盒還剩幾張；新片盒的遮光片拖著一條紅布條
 const PAINT = '#eeede8', PAINTSH = '#dddcd6', ALU = '#a7aeb6', ALUHI = '#cfd4d9', ALUDK = '#757c84',
@@ -227,7 +314,7 @@ function wangModel(k) {
   for (const s of [-1, 1]) k.box(0.012, 0.008, 0.006, ALUDK, s * (W / 2 - 0.01), H + 0.004, back + 0.008);
 }
 
-// 靜海海牛族「望」，桌上擺的這台：拍立得，登月年代的器材，白漆配霧銀，做得圓一點。
+// 月球海牛族「拍立拿a500」，桌上擺的這台：拍立得，登月年代的器材，白漆配霧銀，做得圓一點。
 // 矮胖、正面圓角、肚子一圈銀腰帶，鏡頭放大當眼睛，取景罩的兩片側板往外翻像耳朵，紅布條像舌頭，
 // 握把是圓頭連指手套，頂上一支小碟形天線（前哨站的那座）
 const CREAM = '#f3f0e8', CREAMSH = '#e2ded4', SILV = '#bcc3ca', SILVHI = '#dde2e6', SILVDK = '#8b939b';
@@ -283,10 +370,7 @@ function wangCuteModel(k) {
   for (const s of [-1, 1]) k.box(0.01, 0.007, 0.006, SILVDK, s * (W / 2 - 0.014), H + 0.0035, back + 0.008);
 }
 
-// 背帶：繞過脖子垂到胸口，相機（cameraModel）另外一個網格掛在 y0、z0，舉起來時才拿得走。y0 是相機底部的高度，z0 是胸口前緣
-export function strapModel(k, y0, z0) {
-  for (const x of [-0.07, 0.07]) rod(k, [x, y0 + 0.09, z0 + 0.02], [x * 1.2, y0 + 0.36, z0 - 0.06], 0.006, DARK, { seg: 4 });
-}
+// 背帶貼著身上繞過脖子，在 avatar/clothes.js 的 camStrap（要照身上最外層走）
 
 // 閃光開關的樣子，每台相機各一種，畫成 SVG 放在快門旁邊。開、關、閃過、換燈泡的動作寫在 css/photo.css 的 #ph-flash
 const KNOBS = {
@@ -324,7 +408,30 @@ const KNOBS = {
   },
 };
 
-export const flashKnob = (id) => KNOBS[CAMERAS[id]?.flash?.knob]?.() || '';
+// 打孔銀條：日晷III 的距離印記開關。銀板開一條窗，窗裡一片暗板打著 I 碼的 III 和一排點陣孔，
+// 開著時孔後面透出冷白帶一點紫的光（跟照片上印的一樣），關掉時打了細縫的銀蓋滑下來擋住（#ph-date.silver）
+KNOBS.strip = () => {
+  const { list, width } = slits('#', 2.2, 2, 3);
+  const code = list.map((c) => `<rect x="${(c.x - width / 2 - 12).toFixed(2)}" y="${(-6 + c.top * 12).toFixed(2)}" width="2.2" height="${((c.bottom - c.top) * 12).toFixed(2)}" rx=".5"/>`).join('');
+  const dots = dotPath('85', 1.6).map(([x, y]) => `<circle cx="${(x + 2).toFixed(2)}" cy="${(y + 3.2).toFixed(2)}" r=".75"/>`).join('');
+  return '<svg viewBox="-32 -20 64 40" aria-hidden="true">'
+    + '<defs><clipPath id="dt-strip"><rect x="-24" y="-10" width="48" height="20" rx="1.5"/></clipPath></defs>'
+    + '<g clip-path="url(#dt-strip)"><rect class="well" x="-24" y="-10" width="48" height="20"/>'
+    + '<g class="glow"><rect x="-24" y="-10" width="48" height="20"/></g>'
+    + `<g class="lit">${code}${dots}</g>`
+    + '<g class="lid"><path fill-rule="evenodd" d="M-24-10H24V10H-24ZM-20-3.2H20V-1.4H-20ZM-20 1.4H20V3.2H-20Z"/></g></g>'
+    + '<rect class="sill" x="-24.5" y="-10.5" width="49" height="21" rx="1.8"/>'
+    + '<circle class="rivet" cx="-28" cy="-15" r="1.3"/><circle class="rivet" cx="28" cy="-15" r="1.3"/>'
+    + '<circle class="rivet" cx="-28" cy="15" r="1.3"/><circle class="rivet" cx="28" cy="15" r="1.3"/></svg>';
+};
+
+// 紀念模式的開關（拍立拿a500）：一枚圓形紀念章，中間海牛嘴邊肉 ω、底下「10」。關著是霧銀，開著是金的（css/photo.css 的 #ph-flash.memo）
+KNOBS.memo = () => '<svg viewBox="-30 -30 60 60" aria-hidden="true">'
+  + '<circle class="med" r="21"/><circle class="rim" r="17.5"/>'
+  + '<path class="w" d="M-10-4.5Q-10 4.5-5 4.5Q0 4.5 0-1.5Q0 4.5 5 4.5Q10 4.5 10-4.5"/>'
+  + '<text class="ten" y="13.2" text-anchor="middle">10</text></svg>';
+
+export const flashKnob = (id) => KNOBS[CAMERAS[id]?.flash?.knob]?.() || KNOBS[CAMERAS[id]?.memo?.knob]?.() || '';
 export const dateKnob = (id) => KNOBS[CAMERAS[id]?.date?.knob]?.() || '';
 
 // 快門鈕的樣子：帶著相機時換掉畫廊的金色快門。動作寫在 css/photo.css 的 #ph-shutter.gear
@@ -380,6 +487,45 @@ const SHUTTERS = {
       + shutterRing(g, ticks) + '</svg>';
   },
 };
+
+// 銀鈕：日晷III。亮面銀圓頂，外面一圈是變焦撥桿，撥片在下緣：往左推（左下打一條縫 I）拉遠、往右推（右下打 III）拉近，
+// 推著的時候整圈跟著轉過去（--zl，-1～1，photo.js 給）。手機上按住外圈那一圈就是推撥桿，按中間才是快門
+SHUTTERS.silver = () => {
+  const code = (t, x) => {
+    const { list, width } = slits(t, 1.3, 1.2, 2);
+    return list.map((c) => `<rect x="${(x + c.x - width / 2).toFixed(2)}" y="${(25.6 + c.top * 4.6).toFixed(2)}" width="1.3" height="${((c.bottom - c.top) * 4.6).toFixed(2)}" rx=".3"/>`).join('');
+  };
+  return '<svg viewBox="-36 -36 72 72" aria-hidden="true">'
+    + '<defs><radialGradient id="sh-silver" cx=".42" cy=".36" r=".72" fx=".34" fy=".26">'
+    + '<stop offset="0" stop-color="#fbf8f1"/><stop offset=".38" stop-color="#d9dde1"/><stop offset=".62" stop-color="#9aa1a8"/><stop offset=".8" stop-color="#e3e6e9"/><stop offset="1" stop-color="#7d848b"/></radialGradient>'
+    + '<linearGradient id="sh-ring" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef0f2"/><stop offset=".55" stop-color="#a9b0b7"/><stop offset="1" stop-color="#d4d8dc"/></linearGradient></defs>'
+    + '<g class="zring"><circle r="29" fill="none" stroke="url(#sh-ring)" stroke-width="10"/>'
+    + '<circle r="33.6" fill="none" stroke="#6f767d" stroke-width=".6"/><circle r="24.4" fill="none" stroke="#6f767d" stroke-width=".6"/>'
+    + `<g fill="#2a2d33" transform="rotate(40)">${code('I', 0)}</g><g fill="#2a2d33" transform="rotate(-40)">${code('#', 0)}</g>`
+    + '<rect x="-4.2" y="30.5" width="8.4" height="5.4" rx="1.6" fill="url(#sh-ring)" stroke="#6f767d" stroke-width=".6"/></g>'
+    + '<circle r="23.4" fill="#4a4f56"/>'
+    + '<g class="cap"><circle r="21.6" fill="url(#sh-silver)"/><circle r="21.6" fill="none" stroke="#f4f5f6" stroke-width=".7" opacity=".7"/>'
+    + '<ellipse cx="-7" cy="-8.5" rx="6.5" ry="3.2" fill="#fff" opacity=".35" transform="rotate(-38 -7 -8.5)"/></g></svg>';
+};
+// 拍立拿a500：奶油白圓盤、霧銀一圈，中間一顆番茄紅的大圓鈕給鰭按。上緣印型號，下緣三個小窗是片盒還剩幾張
+// （.f 一格一張，用掉的加 .used 變暗；photo.js 的 filmDots），片盒空了窗全暗、鈕按不下去（.jam）
+SHUTTERS.pola = (g) => {
+  const n = g.instant || 3, wins = Array.from({ length: n }, (_, i) => {
+    const a = ((i - (n - 1) / 2) * 17) * Math.PI / 180, x = Math.sin(a) * 28.6, y = Math.cos(a) * 28.6;
+    return `<circle class="f" cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="2.5"/>`;
+  }).join('');
+  return '<svg viewBox="-36 -36 72 72" aria-hidden="true">'
+    + '<defs><radialGradient id="sh-pola" cx=".4" cy=".34" r=".72" fx=".32" fy=".26">'
+    + '<stop offset="0" stop-color="#ff9a7c"/><stop offset=".45" stop-color="#e2553a"/><stop offset=".85" stop-color="#b8432f"/><stop offset="1" stop-color="#8e2f20"/></radialGradient></defs>'
+    + '<circle r="33.8" fill="none" stroke="#a9b0b7" stroke-width="1.2"/>'
+    + '<text class="model" y="-25.4" text-anchor="middle">a500</text>'
+    + `<g class="film">${wins}</g>`
+    + '<circle r="22.6" fill="#d8d4ca"/>'
+    + '<g class="cap"><circle r="20.4" fill="url(#sh-pola)"/><circle r="20.4" fill="none" stroke="#ffd2c0" stroke-width=".7" opacity=".55"/>'
+    + '<ellipse cx="-6.5" cy="-8" rx="7" ry="3.6" fill="#fff" opacity=".3" transform="rotate(-38 -6.5 -8)"/></g></svg>';
+};
+// 快門外圈是變焦撥桿的相機：外圈從半徑幾成開始算撥桿（跟上面的 24.4 / 36 對齊）
+export const LEVER_R = 0.68;
 
 export const shutterKnob = (id, ticks) => {
   const g = CAMERAS[id];
@@ -613,7 +759,57 @@ const INKS = {
   },
 };
 
-// 把這台相機的日期印記畫上照片
-export function drawDate(id, ctx, x, y, h) {
-  INKS[CAMERAS[id]?.date?.ink]?.(ctx, x, y, h, new Date());
+// 點陣字：打孔的數字和單位，一個字 3 欄（m 是 5 欄）× 5 列，1 是打了孔。日晷III 的距離印記用
+const DOTS = {
+  0: ['111', '101', '101', '101', '111'], 1: ['010', '110', '010', '010', '111'], 2: ['111', '001', '111', '100', '111'],
+  3: ['111', '001', '111', '001', '111'], 4: ['101', '101', '111', '001', '001'], 5: ['111', '100', '111', '001', '111'],
+  6: ['111', '100', '111', '101', '111'], 7: ['111', '001', '010', '010', '010'], 8: ['111', '101', '111', '101', '111'],
+  9: ['111', '101', '111', '001', '111'], '.': ['0', '0', '0', '0', '1'], m: ['00000', '00000', '11110', '10101', '10101'],
+};
+// 一行點陣字的孔（左下角是原點，往上是負的）：d 孔距、gap 字距（以孔距算）；回傳 [x, y] 的清單，最後一個元素多帶 width
+function dotPath(text, d, gap = 1) {
+  const out = [];
+  let x = 0;
+  for (const ch of String(text)) {
+    if (ch === ' ') { x += d * 2.5; continue; }
+    const g = DOTS[ch];
+    if (!g) continue;
+    g.forEach((row, r) => [...row].forEach((v, c) => { if (v === '1') out.push([x + c * d, -(4 - r) * d]); }));
+    x += (g[0].length + gap) * d;
+  }
+  out.width = x - gap * d;
+  return out;
+}
+// 距離怎麼寫：10 公尺以內寫到小數一位，再遠寫整數
+export const distText = (m) => (m < 10 ? m.toFixed(1) : String(Math.round(m)));
+
+INKS.punch = (ctx, x, y, h, date, info) => {
+  if (!info) return;
+  const dist = distText(info.d), mm = String(Math.round(info.mm));
+  // 上一行 I 碼：整數的公尺、空一格、mm（I 碼沒有小數點）；下一行點陣：37m 85mm
+  const word = `${Math.round(info.d)} ${mm}`, sw = h * 0.06, gap = h * 0.09;
+  const { list, width: iw } = slits(word, sw, gap, gap * 3);
+  const d = h * 0.15, dots = dotPath(`${dist}m  ${mm}mm`, d), dw = dots.width, r = d * 0.36;
+  const w = Math.max(iw, dw), ih = h * 0.62;
+  ctx.save();
+  ctx.translate(x - w, y);
+  ctx.globalCompositeOperation = 'screen';
+  const draw = (blur, alpha, color) => {
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    if ('filter' in ctx) ctx.filter = blur ? `blur(${blur}px)` : 'none';
+    ctx.beginPath();
+    for (const t of list) ctx.rect(w - iw + t.x, -d * 5.2 - ih + t.top * ih, sw, (t.bottom - t.top) * ih);
+    for (const [px, py] of dots) { ctx.moveTo(w - dw + px + r, py); ctx.arc(w - dw + px, py, r, 0, Math.PI * 2); }
+    ctx.fill();
+  };
+  // 外面一圈淡紫的暈（鍍膜的顏色），裡面冷白的孔
+  draw(Math.max(1, h * 0.12), 0.45, '#a98cff');
+  draw(0, 0.88, '#eef2ff');
+  ctx.restore();
+};
+
+// 把這台相機的印記畫上照片：日期的照今天，距離的要 info（{ d 對焦幾公尺, mm 焦距 }）
+export function drawDate(id, ctx, x, y, h, info = null) {
+  INKS[CAMERAS[id]?.date?.ink]?.(ctx, x, y, h, new Date(), info);
 }

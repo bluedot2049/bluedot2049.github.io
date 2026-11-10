@@ -4,6 +4,7 @@
 //   hash、wrap：幾個整數攪成 0 到 1 的數（連續的小整數也要打得很散）、角度收進 ±π
 //   CharacterPool：近處的人用完整的角色（Character），固定幾個輪著用；換外觀要重建網格，一幀最多換一個（呼叫的那邊管）
 //   FarFigures：遠處的人兩個簡單的形狀（身體、頭），各自一次畫完
+//   linkTrack：日晷III 的追焦鎖定跟著「這個人」走，不管他現在是完整的角色還是遠處的人形（photo.js 的 toggleTrack）
 //   dodgeFrom、easeOffset、turnHead、ghostStep：玩家靠近往旁邊讓的量、偏移慢慢追上去、轉頭慢慢跟過去、淡入淡出的格數
 // 誰在哪裡、走去哪（時間表）每種人自己算：路人照雜湊排行程，旅客照時刻表，海牛人照路線（timeline.js）；選角在 cast.js
 import * as THREE from 'three';
@@ -86,10 +87,13 @@ export class FarFigures {
     this.c = new THREE.Color();
   }
   begin() { this.n = 0; }
-  // 一個人：位置、面向、三個方向的縮放（淡入淡出用縮放）、身體和頭的顏色（十六進位整數）。滿了回傳 false
-  add(x, y, z, heading, sx, sy, sz, bodyHex, skinHex) {
+  // 一個人：位置、面向、三個方向的縮放（淡入淡出用縮放）、身體和頭的顏色（十六進位整數）。滿了回傳 false。
+  // key 是這個人是誰（跟 CharacterPool 的 key 同一種），追焦鎖定照它找人
+  add(x, y, z, heading, sx, sy, sz, bodyHex, skinHex, key = null) {
     if (this.n >= this.max) return false;
     const n = this.n++;
+    (this.keys ??= [])[n] = key;
+    (this.at ??= [])[n] = [x, y, z];
     this.q.setFromAxisAngle(this.v.set(0, 1, 0), heading);
     this.m4.compose(this.v.set(x, y, z), this.q, this.s.set(sx, sy, sz));
     this.bodies.setMatrixAt(n, this.m4);
@@ -106,6 +110,29 @@ export class FarFigures {
     }
   }
   hide() { this.bodies.count = this.heads.count = 0; }
+  // 這一幀畫了的人裡，key 那個人在哪（腳底）；沒有回 null
+  where(key, out) {
+    const i = key == null || !this.keys ? -1 : this.keys.indexOf(key);
+    return i >= 0 && i < this.n ? out.set(...this.at[i]) : null;
+  }
+}
+
+// 日晷III 的追焦鎖定：對到路人時跟著這個人走。近的是完整的角色、遠的是人形，走遠走近會換來換去，
+// 所以鎖的是 key，每一幀先找完整的角色、再找人形；兩邊都沒有（走出這一區、被收掉）就回 null，鎖放開。
+// 在完整角色的整個身體、遠處人形的網格上掛 userData.track(hit) → 回傳每幀拿位置的函式（photo.js 用）
+export function linkTrack(pool, far) {
+  const follow = (key, dy) => (out) => {
+    const e = pool.find(key);
+    if (e && e.ch.group.visible) return out.copy(e.ch.group.position).setY(e.ch.group.position.y + dy);
+    const p = far.where(key, out);
+    return p ? p.setY(p.y + Math.min(dy, 1.1)) : null;
+  };
+  for (const e of pool.list) e.ch.group.userData.track = (hit) => (e.key ? follow(e.key, hit.point.y - e.ch.group.position.y) : null);
+  const onFar = (hit) => {
+    const key = far.keys?.[hit.instanceId], at = far.at?.[hit.instanceId];
+    return key != null && at ? follow(key, hit.point.y - at[1]) : null;
+  };
+  far.bodies.userData.track = far.heads.userData.track = onFar;
 }
 
 // 玩家在 DODGE 以內：往自己行進方向的側邊讓一點，玩家在哪一側就往另一側。q 有 x、z、heading、d（離玩家多遠）；回傳 [tx, tz]

@@ -29,7 +29,6 @@ export const PREFS = {
   photoRec: { kind: 'text' },                    // photo.js：錄影：'rec' 錄到一半當掉過、'webm' 這台只能 webm
   eyeSeen: { kind: 'json' },                     // guide.js：黑眼帶路去過的地方，照區域記
   eyeOn: { kind: 'json' },                       // guide.js：黑眼現在叫出來了（1）
-  eyeTold: { kind: 'json' },                     // guide.js：說過一次怎麼用（1）
   eyeStay: { kind: 'json' },                     // guide.js：黑眼留在身邊（1）：帶到了、很久沒操作都不自己收
   verbsSeen: { kind: 'json' },                   // main.js：互動鍵出現過哪些動詞（第一次出現光暈多擴幾圈）
   tipsSeen: { kind: 'json' },                    // ui.js：教學提示 { 代號: 出現過幾次，或 'done' 做過了 }
@@ -39,6 +38,7 @@ export const PREFS = {
   kaoGaze: { kind: 'text', init: 'auto' },      // kaopanel.js、attention.js：擺著表情時頭看哪（表情盤的「看哪」）'auto' 自動／'cam' 鏡頭／'free' 隨意
   kaoTagPhoto: { kind: 'flag', init: false },    // photo.js：畫廊的眼睛拍得進頭上的顏文字（攝影模式的「頭上字」）
   postcardSoul: { kind: 'flag', init: false },   // photo.js：海市明信片上次選靈魂版（帶存檔），不然是普通版
+  polaAlive: { kind: 'num', init: 0 },          // instant.js：還有拍立得在顯影時，遊戲上次還開著是什麼時候（中間關掉的那段算放口袋）
   radioAt: { kind: 'json' },                     // radio-card.js：收音機面板拖到哪 { desk|land|port: { dx, dy } }，左上角離畫面中心多遠
 };
 

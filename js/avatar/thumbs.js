@@ -16,14 +16,14 @@ const POSE_SIDE = 2.3;      // 姿勢小圖鏡頭往旁邊偏多少（× 0.34，
 
 // 拍哪一段：y 是畫面中心在身高的哪裡（或從 dims 算），s 是畫面要裝多高
 const FRAMES = {
-  head: (c) => { const n = c.S.H * 0.8; return { y: (n + c.dims.topY) / 2, s: (c.dims.topY - n) * 1.25 + 0.12 }; },
+  head: (c) => { const n = c.bodyY(0.8); return { y: (n + c.dims.topY) / 2, s: (c.dims.topY - n) * 1.25 + 0.12 }; },
   face: (c) => ({ y: c.dims.faceY, s: 0.42 * c.S.H * c.S.hs }),
-  neck: (c) => ({ y: c.S.H * 0.72, s: 0.45 * c.S.H }),
-  body: (c) => ({ y: c.S.H * 0.55, s: 0.72 * c.S.H }),
-  legs: (c) => ({ y: c.S.H * 0.25, s: 0.6 * c.S.H }),
-  feet: (c) => ({ y: c.S.H * 0.08, s: 0.38 * c.S.H }),
+  neck: (c) => ({ y: c.bodyY(0.72), s: 0.45 * c.S.H }),
+  body: (c) => ({ y: c.bodyY(0.55), s: 0.72 * c.S.H }),
+  legs: (c) => ({ y: c.bodyY(0.25), s: 0.6 * c.S.H * c.S.leg }),
+  feet: (c) => ({ y: c.bodyY(0.08), s: 0.38 * c.S.H }),
   full: (c) => ({ y: c.dims.topY / 2, s: c.dims.topY * 1.08 }),
-  back: (c) => ({ y: c.S.H * 0.55, s: 0.95 * c.S.H, back: true }),
+  back: (c) => ({ y: c.bodyY(0.55), s: 0.95 * c.S.H, back: true }),
   // 表情盤的姿勢：全身，從斜前方四十度看，彎腰、跪、弓步才看得出前後；蹲下去的（group 往下沉）中心跟著往下
   pose: (c) => ({ y: (c.dims.topY + c.group.position.y) * 0.46, s: c.dims.topY * 0.92, side: POSE_SIDE }),
   hand: (c) => {

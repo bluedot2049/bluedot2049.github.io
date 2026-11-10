@@ -294,7 +294,7 @@ export class Creator {
     switch (id) {
       case 'race': return this.tiles('race', '人和動物', races(false), false) + this.tiles('race', '其他', races(true));
       case 'shape': return this.slider('tall') + this.slider('fat') + this.slider('head');
-      case 'hair': return !raceOf(L).hair ? '<p class="dress-note">只有「人」有頭髮</p>'
+      case 'hair': return !raceOf(L).hair ? '<p class="dress-note">這個種族沒有頭髮</p>'
         : (HOODED.includes(L.one) && TUCKED[L.hair] ? `<p class="dress-note">${optionName('one', L.one)}蓋住頭髮<button data-act="unone">脫掉</button></p>` : '') + this.tiles('hair');
       case 'parts': return (L.face && !L.keep ? `<p class="dress-note">畫的臉蓋住五官<button data-act="keep">顯示五官</button></p>` : '')
         + (!L.face && getSave().face ? `<p class="dress-note">這套沒戴畫的臉<button data-act="wearface">戴上</button></p>` : '')
@@ -364,7 +364,8 @@ export class Creator {
         : `<button class="frame empty" data-act="keepoutfit" data-i="${i}" aria-label="把身上這套存進第 ${i + 1} 格">空的</button>`;
       return `<div class="closet-slot">${pic}<small>${s ? outfitName(s) : '空的'}</small><button class="store" data-act="keepoutfit" data-i="${i}">存進來</button></div>`;
     }).join('');
-    const gifts = Object.entries(GIFTS), got = gifts.filter(([, g]) => g.items.every(([k, id]) => this.unlocked.has(k + ':' + id)));
+    // 印章只算海市攤販送的；寫了 hint 的（任務、別區）不在這裡
+    const gifts = Object.entries(GIFTS).filter(([, g]) => !g.hint), got = gifts.filter(([, g]) => g.items.every(([k, id]) => this.unlocked.has(k + ':' + id)));
     const stamps = gifts.map(([v, g]) => {
       const [k, id] = g.items[0];
       return got.some(([gv]) => gv === v)
@@ -384,7 +385,7 @@ export class Creator {
     if (b.dataset.sub) { this.show(this.tab, b.dataset.sub); return; }
     if (b.dataset.lock) {
       const g = GIFTS[b.dataset.lock];
-      this.hint = { k: b.dataset.hk, text: `在海市，向${g.who}拿` };
+      this.hint = { k: b.dataset.hk, text: g.hint || `在海市，向${g.who}拿` };
       this.render();
       return;
     }

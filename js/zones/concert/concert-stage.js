@@ -6,7 +6,32 @@ import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
 
 export const STAGE = { y: 1.2, front: 3.0, back: -8.6, w: 20 };   // 台面高、前緣、背牆、寬
 export const RELIGHT_SPEED = 10;                                   // 日出重新點火的波一秒往後走幾公尺（火把、台下和看台的燭火，concert-obscura.js 的 candleGate）
+export const STAIRS = { x0: 6.9, x1: 8.1, len: 1.5, steps: 5 };   // 台口兩角上台的樓梯（左右對稱，x 是離中線多遠）：從攝影溝往台裡爬，len 是從台口往外伸多長
 export const RAIL = 2.4, RAIL_W = 9;                               // 攝影溝多深（台口到圍欄）、圍欄左右到哪（兩邊留走道）
+// 台後面和上面（工作人員的地方，蓋和走在 concert-backstage.js）：台兩側黑幕後面是側台，黑幕開一個口；背牆兩邊各一扇門，東邊後台的兩段樓梯
+// 上到背牆高處的門，沿東邊側天橋往前，接貓道橫過台口後面的上空（黑幕矮到 mask，貓道從上面過）。西邊的門是休息室。x 寫離中線多遠，休息室寫負的
+export const BACKSTAGE = {
+  wall: STAGE.back - 0.65,                                         // 房間從這裡往後（背牆在 STAGE.back − 0.5）
+  door: { x0: 10.75, x1: 12.05, h: 2.7 },                          // 背牆兩邊的門
+  wing: { x0: 10.7, x1: 12.05, z1: 1.8, gap: [-4.2, -2.8] },       // 側台：黑幕到台口拱門柱之間一條；gap 是黑幕上的口
+  mask: 12,                                                        // 黑幕多高
+  hall: { x0: 10.2, x1: 24, z0: -23, top: 15 },                    // 東：後台
+  green: { x0: -22, x1: -10.2, z0: -18, top: 4.8 },                // 西：休息室
+  stair: { a: [12.2, 13.5], b: [13.7, 15], len: 8.4, mid: 6.8, top: 12.4, door: 2.6 },   // a 從門邊往北上、平台、b 往南上到背牆高處的門
+  fly: { x0: 13.7, x1: 15, z1: 1.4, stub: -2 },                    // 側天橋：東邊從高門一路到貓道；西邊只有貓道盡頭一小段（到 stub）
+  cat: { z: 0.8, hw: 0.6 },                                        // 貓道：跟樓梯頂一樣高
+};
+// 背牆（大廳的、台的背幕）上開的門洞：[x0, x1, y0, y1]
+export const BACK_HOLES = [
+  [BACKSTAGE.door.x0, BACKSTAGE.door.x1, STAGE.y, STAGE.y + BACKSTAGE.door.h], [-BACKSTAGE.door.x1, -BACKSTAGE.door.x0, STAGE.y, STAGE.y + BACKSTAGE.door.h],
+  [BACKSTAGE.stair.b[0], BACKSTAGE.stair.b[1], BACKSTAGE.stair.top, BACKSTAGE.stair.top + BACKSTAGE.stair.door],
+];
+// 一面 w×h 的牆（底邊在 y 0、中線 x 0），挖掉 BACK_HOLES 的門洞
+export function doorWall(w, h) {
+  const sh = new THREE.Shape([new THREE.Vector2(-w / 2, 0), new THREE.Vector2(w / 2, 0), new THREE.Vector2(w / 2, h), new THREE.Vector2(-w / 2, h)]);
+  for (const [x0, x1, y0, y1] of BACK_HOLES) sh.holes.push(new THREE.Path([new THREE.Vector2(x0, y0), new THREE.Vector2(x1, y0), new THREE.Vector2(x1, y1), new THREE.Vector2(x0, y1)]));
+  return new THREE.ShapeGeometry(sh);
+}
 export const RING = { z: -8.2, r: 2.8, y0: 4.6, y1: 4.6 };        // 光環在背牆前、台面以上多高；釘在光圈正中（concert-obscura.js），升起改成光圈裡的太陽往上升
 
 const lam = (c) => new THREE.MeshLambertMaterial({ color: c, flatShading: true });
@@ -151,9 +176,13 @@ export class Stage {
       const w = add(B(0.55, 0.22, 0.36), lam(0x3a363a), m.at[0], STAGE.y + 0.11, m.at[1] + 0.85);
       w.rotation.x = -0.45;
     }
-    add(new THREE.PlaneGeometry(40, 18), lam(0x120e12), 0, 9, STAGE.back - 0.5);
-    // 兩側黑幕
-    for (const s of [-1, 1]) add(B(0.1, 14, D + 1), BLACK, s * (STAGE.w / 2 + 0.6), 7, (STAGE.front + STAGE.back) / 2 - 0.5);
+    this.backdrop = add(doorWall(40, 18), lam(0x120e12), 0, 0, STAGE.back - 0.5);   // 背幕（後台的門開在上面）；人在後台、鏡頭在大廳時藏起來，不合併
+    this.backdrop.userData.keep = true;
+    // 兩側黑幕：矮到 BACKSTAGE.mask（貓道從上面過），中間開一個口通側台
+    {
+      const za = STAGE.back - 1, zb = STAGE.front, [g0, g1] = BACKSTAGE.wing.gap, H = BACKSTAGE.mask;
+      for (const s of [-1, 1]) for (const [a, b] of [[za, g0], [g1, zb]]) add(B(0.1, H, b - a), BLACK, s * (STAGE.w / 2 + 0.6), H / 2, (a + b) / 2);
+    }
     // 站高一點的人（members 的 y）腳下各一個台，跟著節目表的位置長；台的正面一條暗紅線
     // 低的台是實心的；高的台（1.2 公尺以上）是鐵架塔：台板、四根腳、正面背面打叉，底下透光（不像祭壇）
     for (const m of band.members) {
@@ -168,6 +197,22 @@ export class Stage {
         for (const sx of [-1, 1]) add(B(0.06, 0.06, d - 0.2), METAL, x + sx * (w / 2 - 0.1), STAGE.y + 0.3, z);
       }
       add(B(w, 0.04, 0.05), GOLD, x, top - 0.02, z + d / 2);
+    }
+    // 台口兩角的樓梯：攝影師從攝影溝上台近拍。一階一塊踏板、兩邊鐵扶手（踏板側面是黑的，從台下看不搶眼）
+    for (const s of [-1, 1]) {
+      const { x0, x1, len, steps } = STAIRS, xm = s * (x0 + x1) / 2, w = x1 - x0, run = len / steps, rise = STAGE.y / steps;
+      for (let i = 0; i < steps; i++) {
+        const h = rise * (i + 1), z = STAGE.front + len - run * (i + 0.5);
+        add(B(w, h, run), BLACK, xm, h / 2, z);
+        add(B(w, 0.03, 0.04), GOLD, xm, h - 0.015, z + run / 2 - 0.02);   // 踏板前緣一條暗紅線
+      }
+      for (const e of [x0, x1]) {
+        const ex = s * e, rail = new THREE.Mesh(B(0.05, 0.05, Math.hypot(len, STAGE.y)), METAL);
+        rail.position.set(ex, STAGE.y / 2 + 0.9, STAGE.front + len / 2);
+        rail.rotation.x = Math.atan2(STAGE.y, len);
+        g.add(rail);
+        for (const k of [0.15, len - 0.15]) add(B(0.05, 0.9, 0.05), METAL, ex, STAGE.y * (1 - k / len) + 0.45, STAGE.front + k);
+      }
     }
     // 吉他、低音背後的音箱牆
     for (const x of [-7.2, 7.2]) for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
@@ -223,7 +268,7 @@ export class Stage {
       }
     }
     // 柱頂的小燭火：一顆小方塊自己亮（instanced，不加燈）
-    const fl = new THREE.InstancedMesh(B(0.05, 0.1, 0.05), new THREE.MeshBasicMaterial({ color: 0xff4a28 }), this.railFlames.length);
+    const fl = new THREE.InstancedMesh(B(0.05, 0.1, 0.05), new THREE.MeshBasicMaterial({ color: 0xff7034 }), this.railFlames.length);
     this.railFlames.forEach(([x, y, z], i) => fl.setMatrixAt(i, new THREE.Matrix4().makeTranslation(x, y, z)));
     fl.userData.keep = true;
     fence.add(fl);

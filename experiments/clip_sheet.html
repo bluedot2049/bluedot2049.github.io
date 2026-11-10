@@ -56,7 +56,7 @@
   const S = SETS[set];
   // ?rows=a,b&cols=c,d 只拍其中幾列、幾欄
   for (const k of ['rows', 'cols']) if (q.get(k)) S[k] = S[k].filter((v) => q.get(k).split(',').includes(v));
-  // ?views=front,back 換拍的角度；?look={"race":…} 每格再疊上的外觀（JSON）
+  // ?views=front,back 換拍的角度（front 斜前、side 左側、right 右側、back 斜後）；?look={"race":…} 每格再疊上的外觀（JSON）
   if (q.get('views')) S.views = q.get('views').split(',');
   if (q.get('look')) { const f = S.look, add = JSON.parse(q.get('look')); S.look = (r, c) => ({ ...f(r, c), ...add }); }
   const CELL = +q.get('cell') || 150, LAB = 90, HEAD = 22, FOV = 26;
@@ -110,12 +110,12 @@
       model.group.updateMatrixWorld(true);
       const h = model.S.H;
       const f = S.frame === 'head'
-        ? { y: (h * 0.8 + model.dims.topY) / 2, s: Math.max(0.5, (model.dims.topY - h * 0.8) * 1.3 + 0.15) }
+        ? { y: (model.bodyY(0.8) + model.dims.topY) / 2, s: Math.max(0.5, (model.dims.topY - model.bodyY(0.8)) * 1.3 + 0.15) }
         : S.frame === 'full' ? { y: h * 0.85, s: 2.1 * h }
         : { y: h * 0.52, s: 0.95 * h };
       const d = f.s / 2 / Math.tan(THREE.MathUtils.degToRad(FOV / 2));
       S.views.forEach((v, vi) => {
-        const a = v === 'front' ? 0.35 : v === 'side' ? Math.PI / 2 : Math.PI - 0.35;
+        const a = v === 'front' ? 0.35 : v === 'side' ? Math.PI / 2 : v === 'right' ? -Math.PI / 2 : Math.PI - 0.35;
         camera.position.set(Math.sin(a) * d, f.y + f.s * 0.1, Math.cos(a) * d);
         camera.lookAt(0, f.y, 0);
         gl.render(scene, camera);

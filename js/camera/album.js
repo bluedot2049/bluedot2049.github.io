@@ -7,6 +7,7 @@
 // 存下的就從相簿拿出來，沒選的留著；不要的自己丟掉，丟掉的放得回來。Android 另外可以分享，分享出去的照樣留在相簿。
 // 選幾張交給沖洗師傅（LABS）：當下就洗好，可是要本人走到那間相館找師傅（vendors.js 的 lab）才拿得回來，拿回來的套上師傅固定的色彩風格（配方和洗的引擎在 darkroom.js）。
 // 只有照片能交給師傅；信物不行，濾鏡會蓋到存檔碼。底片機（cameras.js 的 film）拍的在相簿只看得到拍攝時辰，一定要交給師傅才看得到。
+// 拍立得（pola，instant.js）不用師傅，也不能交給師傅：顯影中也是 film，行囊看得到它在變，顯好了才存得下
 // 拿回來的是新的（fresh）：格子上的印泥亮著，打開相簿看到了、收起行囊才熄成淡印（seen）。
 import { CAMERAS } from './cameras.js';
 import { LABS, develop } from './darkroom.js';
@@ -26,7 +27,7 @@ export const canShare = android && 'canShare' in navigator;
 // 相簿裡照片以外的東西。kind 沒寫的是照片（舊版相簿裡的也是）。mate 是湊過去看、收下來的隊友照片（social/peek.js，小圖）；painting 是原野畫架畫的（easel-card.js）
 export const KINDS = { video: '錄影', mirror: '鏡中', 'mirror-save': '存檔', postcard: '明信片', 'postcard-save': '存檔', mate: '隊友', painting: '畫' };
 const LATEST = new Set(['mirror-save', 'postcard-save']);
-export const labOk = (it) => it.state === 'shot' && !it.kind;
+export const labOk = (it) => it.state === 'shot' && !it.kind && !it.pola;
 // 奇物：拍到白獸這類東西，快門當下算好的結果記在照片上（rare：{ kind, grade, zone, where, place }，見 beast.js 的 judge）。
 // 拍到這一區正在發生的事（core/happen.js）記在 seen：[{ kind 事件 id, grade 0–3, score, peak 是不是高點, place, zone, self }]，之後的照片委託只讀這一格。
 // 報社（pressdesk.js）只收這種，同一張只登一次（pressed 是登出來那份報紙的 id）；畫廊的眼睛拍的沒有相機的落款，不收
@@ -86,7 +87,7 @@ export async function addPhoto(blob, { name, cam, quiet = false, ...more }) {
   // 同一秒拍兩張：檔名後面加 -2、-3，存進資料夾才不會蓋掉
   const dot = name.lastIndexOf('.'), base = name.slice(0, dot), ext = name.slice(dot);
   for (let k = 2; items.some((x) => x.name === name); k++) name = `${base}-${k}${ext}`;
-  const it = { blob, name, t: Date.now(), cam, film: !more.kind && !!CAMERAS[cam]?.film, state: 'shot', ...more };
+  const it = { blob, name, t: Date.now(), cam, film: !more.kind && (!!CAMERAS[cam]?.film || !!more.pola), state: 'shot', ...more };
   // 存檔只留最新一張，鏡中照片和靈魂明信片算同一種
   if (LATEST.has(it.kind)) await drop(items.filter((x) => LATEST.has(x.kind)));
   try { it.id = await idb(STORE, 'readwrite', (s) => s.add(it)); } catch {}
@@ -99,9 +100,15 @@ export async function addPhoto(blob, { name, cam, quiet = false, ...more }) {
   // 剛拍的這一張（前廳胖頭的教學聽：main.js 記「拍過照」、ask.js 叫你拍他之後補一句）
   dispatchEvent(new CustomEvent('photoadd', { detail: it }));
   const n = `${items.filter((x) => x.state !== 'lab').length} 張`;
-  if (!quiet) flash(it.film ? null : it.poster ?? blob, it.film ? `${hourMark(it.t)}・收進底片` : it.rare ? `拍到白獸・收進相簿 ${n}` : `收進相簿・${n}`);
+  if (quiet) return it;
+  if (it.pola) flash(it.pola.rare ? POLA_GOLD : POLA, it.pola.rare ? '十周年紀念・顯影中' : '顯影中・收進行囊');
+  else flash(it.film ? null : it.poster ?? blob, it.film ? `${hourMark(it.t)}・收進底片` : it.rare ? `拍到白獸・收進相簿 ${n}` : `收進相簿・${n}`);
   return it;
 }
+
+// 拍立得剛吐出來：一片藍綠，白邊下巴厚（instant.js 的 card 縮小版）
+const polaSVG = (paper) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="112" height="133"><rect width="112" height="133" fill="${paper}"/><rect x="6" y="6" width="100" height="100" fill="#4f6b69"/></svg>`);
+const POLA = polaSVG('#f3f0e8'), POLA_GOLD = polaSVG('#e2bb64');   // 十周年紀念：金邊
 
 // 停三秒多再淡掉。電腦放在取景框的右上角裡面：照拍的當下量框在哪（CSS 照 --fr、--ft 擺），攝影模式收了就是螢幕右上角
 function flash(blob, text) {
@@ -114,10 +121,10 @@ function flash(blob, text) {
     el.style.setProperty('--ft', `${Math.round(r.top)}px`);
   }
   if (blob) {
-    const img = new Image(), url = URL.createObjectURL(blob);
+    const img = new Image(), url = typeof blob === 'string' ? blob : URL.createObjectURL(blob);
     img.src = url;
     img.alt = '';
-    img.onload = () => URL.revokeObjectURL(url);
+    if (url !== blob) img.onload = () => URL.revokeObjectURL(url);
     el.append(img);
   }
   const t = document.createElement('span');

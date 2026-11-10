@@ -13,8 +13,8 @@ import { happenSight } from '../core/happen.js';
 import { rumble } from '../controls/gamepad.js';
 
 const SLOT = 60e3;              // 一格一分鐘
-const CHANCE = 1 / 120;         // 一格抽中的機率
-const COOL = 30;                // 前三十格（半小時）抽中過，這格就不算：平均每區兩個半小時左右一次
+const CHANCE = 1 / 360;         // 一格抽中的機率
+const COOL = 60;                // 前六十格（一小時）抽中過，這格就不算：平均每區七小時左右一次
 const OMEN = 45, STAY = 8, AFTER = 25;   // 秒：前兆、現身、走了以後蹄印慢慢淡掉
 const LOOK_R = 40;              // 多遠以內的人和動物會轉頭看
 const NEAR = 4;                 // 比這近的人牠不回頭看
@@ -26,7 +26,7 @@ const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const smooth = (x) => { const t = clamp01(x); return t * t * (3 - 2 * t); };
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
-// 這一格抽中、而且前半小時沒有抽中過的，才真的出現
+// 這一格抽中、而且前一小時沒有抽中過的，才真的出現
 const hit = (seed, s) => hash(seed, s, 1) < CHANCE;
 function fires(seed, s) {
   if (!hit(seed, s)) return false;

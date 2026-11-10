@@ -64,6 +64,26 @@ function lensForward(out, yaw, pitch) {
 
 // 別人手上的相機對著自己時，鏡片上那一點反光：中間白、往外淡成暖色
 let glintMat = null;
+// 日晷III 的鏡片反光：鍍膜的紫綠色，遠遠一點閃光（中間淡暖白、外面一圈偏紫、最外一絲綠）
+let coatMat = null;
+function coatMaterial() {
+  if (coatMat) return coatMat;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d'), grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,250,242,1)');
+  grd.addColorStop(0.18, 'rgba(236,214,255,.75)');
+  grd.addColorStop(0.45, 'rgba(176,140,230,.3)');
+  grd.addColorStop(0.7, 'rgba(140,220,190,.12)');
+  grd.addColorStop(1, 'rgba(120,200,170,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 64, 64);
+  coatMat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+  return coatMat;
+}
+// 長鏡頭對著自己多遠以外才看得到反光；反光在畫面上大約多大（離自己每公尺幾公尺，遠近看起來差不多大）
+const COAT_NEAR = 8, COAT_SIZE = 0.016;
+
 function glintMaterial() {
   if (glintMat) return glintMat;
   const c = document.createElement('canvas');
@@ -193,7 +213,7 @@ export class Multiplayer {
     this.shadowTex = shadowTex;
     this.player = player;
     this.cfg = cfg;
-    this.events = events;           // { onCount(n), onReady(), onPet(other, i, m), onAnimal(other, m), onJump(other), onLand(character), onEmote(character, e), onFlash(character), onShot(other, voice, at), onCue(other, k), onKao(character, code), onStudio(m), onParty(m), onGate(m) }
+    this.events = events;           // { onCount(n), onReady(), onPet(other, i, m), onAnimal(other, m), onJump(other), onLand(character), onEmote(character, e), onFlash(character), onShot(other, voice, at), onCue(other, k), onKao(character, code), onStudio(m), onParty(m), onGate(m), onAct(m) }
     this.id = Math.random().toString(36).slice(2, 10);
     this.others = new Map();        // id -> { ch, pos, target, heading, seen, speed }
     this.present = new Set();       // 目前在線上的訪客 id（來自 presence）
@@ -244,6 +264,7 @@ export class Multiplayer {
       .on('broadcast', { event: 'studio' }, ({ payload }) => this.onStudio(payload))
       .on('broadcast', { event: 'party' }, ({ payload }) => this.onParty(payload))
       .on('broadcast', { event: 'gate' }, ({ payload }) => this.onGate(payload))
+      .on('broadcast', { event: 'act' }, ({ payload }) => this.onAct(payload))
       .on('presence', { event: 'sync' }, () => {
         const state = ch.presenceState();
         this.present = new Set(Object.keys(state));
@@ -346,11 +367,13 @@ export class Multiplayer {
     const L = this.lens?.();
     if (L) st.c = [r50(L.pos.x), r50(L.pos.y), r50(L.pos.z), r50(wrapAngle(L.yaw)), r50(L.pitch), Math.round(L.fov), Math.round(L.aspect * 100) / 100, L.kind];
     if (L?.focus) st.d = Math.round(L.focus * 10) / 10;
+    // m：變焦鏡（日晷III）現在幾 mm，別人照這個伸出手上的抽管、算看不看得到鏡片反光。定焦和沒舉不送
+    if (L?.mm) st.m = Math.round(L.mm);
     const E = this.eye?.();
     if (E) st.e = E;
     const l = this.last;
     const changed = !l || Math.abs(st.x - l.x) > 0.02 || Math.abs(st.z - l.z) > 0.02 || Math.abs(wrapAngle(st.h - l.h)) > 0.05 || st.r !== l.r || st.s !== l.s || st.f !== l.f || st.a !== l.a || st.q !== l.q || st.w !== l.w || st.l !== l.l || st.v !== l.v
-      || st.g !== l.g || st.k !== l.k || st.b !== l.b || st.n !== l.n || st.y !== l.y || String(st.c) !== String(l.c) || st.d !== l.d || String(st.e) !== String(l.e);
+      || st.g !== l.g || st.k !== l.k || st.b !== l.b || st.n !== l.n || st.y !== l.y || String(st.c) !== String(l.c) || st.d !== l.d || st.m !== l.m || String(st.e) !== String(l.e);
     if (now - this.lastSent < (changed ? SEND_MOVING : SEND_IDLE)) return;
     this.channel.send({ type: 'broadcast', event: 'pos', payload: { id: this.id, ...st } });
     this.last = st;
@@ -378,7 +401,8 @@ export class Multiplayer {
     const c = m.c;
     m.c = Array.isArray(c) && c.length === 8 && isNum(c[0], COORD_LIMIT) && isNum(c[1], COORD_LIMIT) && isNum(c[2], COORD_LIMIT) && isNum(c[3], 4) && isNum(c[4], 2)
       && c[5] >= 5 && c[5] <= 150 && c[6] > 0.2 && c[6] < 5 && (c[7] === 0 || c[7] === 1) ? c : null;
-    m.d = isNum(m.d, 1000) && m.d > 0 ? m.d : 0;   // 舊版網頁不送，當成沒有對焦的資料（只要在框裡就算被拍）
+    m.d = isNum(m.d, 1000) && m.d > 0 ? m.d : 0;
+    m.m = isNum(m.m, 2000) && m.m >= 10 ? Math.round(m.m) : 0;   // 舊版網頁不送，當成定焦   // 舊版網頁不送，當成沒有對焦的資料（只要在框裡就算被拍）
     const e = m.e;
     m.e = Array.isArray(e) && e.length === 5 && isNum(e[0], COORD_LIMIT) && isNum(e[1], COORD_LIMIT) && isNum(e[2], COORD_LIMIT) && (e[3] === 0 || e[3] === 1)
       && typeof e[4] === 'string' && /^[a-z0-9]{0,16}$/.test(e[4]) ? e : null;
@@ -607,6 +631,19 @@ export class Multiplayer {
     this.events.onGate?.(m);
   }
 
+  // 一幕劇（core/act.js）：a 哪一齣。fire 火盆燒了 s 秒（漁火演完，haishi-acts.js）、ask 晚到的人問
+  act(msg) {
+    if (!this.active || !this.channel) return;
+    this.channel.send({ type: 'broadcast', event: 'act', payload: { id: this.id, ...msg } });
+  }
+
+  onAct(m) {
+    if (!m || !isId(m.id) || m.id === this.id || typeof m.a !== 'string' || !/^[a-z]{1,16}$/.test(m.a)) return;
+    if (m.t === 'fire' && !(Number.isFinite(m.s) && m.s >= 0 && m.s <= 86400)) return;
+    if (!['fire', 'ask'].includes(m.t)) return;
+    this.events.onAct?.(m);
+  }
+
   // ───────── 別人的鏡頭 ─────────
 
   // 畫面上的人正在拍的鏡頭（attention.js 看有沒有對著自己，順手標上 onMe）
@@ -644,6 +681,7 @@ export class Multiplayer {
     L.aspect = c[6];
     L.kind = c[7];
     L.focus = L.kind === 0 ? o.target.d : 0;
+    L.mm = L.kind === 0 ? o.target.m || 0 : 0;
     if (L.kind === 1) {
       if (!L.eye) {
         L.eye = new Eye();
@@ -666,7 +704,21 @@ export class Multiplayer {
       L.eye.dispose();
       L.eye = null;
     }
-    if (L.kind === 0 && L.onMe) {
+    // 長鏡頭（日晷III）對著自己：隔得夠遠、自己在他的取景框裡就看得到鏡片反光，不管自己面向哪、他有沒有對焦在自己身上。
+    // 畫面上大小差不多，拉得越長越大越亮
+    const p = this.player, me = this.tmp2.set(p.pos.x, p.pos.y + p.character.dims.faceY, p.pos.z);
+    const coat = L.kind === 0 && L.mm >= 50 && this.inFrame(L, me);
+    if (coat) {
+      if (!L.coat) {
+        L.coat = new THREE.Sprite(coatMaterial());
+        this.scene.add(L.coat);
+      }
+      const d = me.distanceTo(L.pos), to = this.tmp.copy(me).sub(L.pos).normalize(), k = Math.min(1, (L.mm - 50) / 150);
+      L.coat.position.copy(L.pos).addScaledVector(to, 0.12);
+      L.coat.scale.setScalar(d * COAT_SIZE * (0.6 + 0.6 * k) * (0.9 + 0.1 * Math.sin(performance.now() / 180)));
+      L.coat.visible = true;
+    } else if (L.coat) L.coat.visible = false;
+    if (L.kind === 0 && L.onMe && !coat) {
       if (!L.glint) {
         L.glint = new THREE.Sprite(glintMaterial());
         this.scene.add(L.glint);
@@ -683,6 +735,20 @@ export class Multiplayer {
     if (!L) return;
     if (L.eye) L.eye.group.visible = false;
     if (L.glint) L.glint.visible = false;
+    if (L.coat) L.coat.visible = false;
+  }
+
+  // 自己的臉在不在這個鏡頭的取景框裡、而且隔得夠遠（長鏡頭的反光用）。框照送來的上下視角和寬高比算
+  inFrame(L, me) {
+    const dx = me.x - L.pos.x, dy = me.y - L.pos.y, dz = me.z - L.pos.z, d = Math.hypot(dx, dy, dz);
+    if (d < COAT_NEAR) return false;
+    const f = lensForward(this.tmp, L.yaw, L.pitch), ahead = (dx * f.x + dy * f.y + dz * f.z);
+    if (ahead <= 0) return false;
+    // 左右、上下各自量偏多少（鏡頭的右邊、上面兩個方向）
+    const rx = -Math.cos(L.yaw), rz = Math.sin(L.yaw), side = dx * rx + dz * rz;
+    const up = d * d - ahead * ahead - side * side;
+    const tv = Math.tan(THREE.MathUtils.degToRad(L.fov) / 2), th = tv * (L.aspect || 1);
+    return Math.abs(side) / ahead <= th && Math.sqrt(Math.max(0, up)) / ahead <= tv;
   }
 
   dropLens(o) {
@@ -693,6 +759,7 @@ export class Multiplayer {
       L.eye.dispose();
     }
     if (L.glint) this.scene.remove(L.glint);
+    if (L.coat) this.scene.remove(L.coat);
     o.lens = null;
   }
 
@@ -746,6 +813,9 @@ export class Multiplayer {
       }
       o.ch.brace?.(!!t.b);
       o.ch.setAim?.(t.a ? { grip: t.a - 1, pitch: t.q } : null);
+      // 變焦鏡：舉著時照送來的焦距伸出抽管，放下就收回去
+      const zr = CAMERAS[this.cams.get(o.id)]?.zoom;
+      o.ch.setZoom?.(zr && t.a && t.m ? (t.m - zr[0]) / (zr[1] - zr[0]) : 0);
       this.updateLens(o, dt);
       // 頭看哪：送了 g 就照自己畫面上那個人（或他的鏡頭）的位置算，眼神才對得上；
       // 找不到人、或那一點在這邊畫面上已經跑到他背後（位置還沒跟上），用送來的角度

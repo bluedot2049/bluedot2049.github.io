@@ -17,14 +17,14 @@ export const MOMENTS = {
 // chords 四個和弦一小節一個：root 低音、up 上方三音（MIDI）；hook 是主旋律 [第幾個八分音符, 長幾個八分音符, 音]，四小節一輪。
 // play 的聲部：piano 鋼琴、harm 乾淨吉他泛音、clean 乾淨吉他琶音（五個一輪）、bowl 頌缽、rev 倒放頌缽、choir 合唱（母音照段落開）、chop 合唱照 riff 切開、
 // voice 獨唱（唱主旋律）、riff 八弦吉他咒文（十六分音符）、down 同一段咒文放慢一倍（breakdown）、stops 齊奏重擊和空白、bass 低音吉他、
-// kick 大鼓（跟著 riff）、snare 小鼓、ride 叮叮鈸、china 碎鈸、swell 鑼滾奏漸強、gong 往下潛的大鑼、fb 吉他回授。palette：0 血紅、1 猩紅、2 燙紅、3 黑紅（全場只有紅，深淺冷熱不同）
+// kick 大鼓（跟著 riff）、snare 小鼓、ride 叮叮鈸、china 碎鈸、swell 鑼滾奏漸強、gong 往下潛的大鑼、fb 吉他回授。palette：0 餘燼紅、1 晨光金、2 暖白、3 黎明藍；blood 是同四格的血紅版，照段落推過去（安靜段原色、強段全場血紅）
 // riff 是一段咒文：x 悶切、R 響著的強力和弦、. 空；十三格一輪跟四拍錯開，四小節繞完（13×4＋12）歸位一次
 export const BANDS = [
   {
     id: 'morning', name: 'WASD BAND', note: 'Djent 的儀式：八弦吉他的悶切是一段十三格的咒文，跟四拍錯開繞，四小節唸完一輪才跟小節線對上；乾淨吉他和頌缽開場、riff 隔著門進來、齊奏重擊和空白、日出是放慢一倍的 breakdown、合唱被 riff 切開、往下潛的大鑼。整場是一個早晨：一束光、地平線、光環升起、靜默一拍、日出、光幕',
     bpm: 116,
     riff: 'x.xx.R..xx.R.',
-    // 台上的人（concert-band.js 照這張表擺）。at 是舞台上的位置（x 往右、z 往觀眾，公尺），y 站的台子多高（前排三個會走動、站台面，後面四個高低差拉大：鼓 0.9、法器 1.7、合成器 2.6、大太鼓 3.4 站在光圈前變剪影）；
+    // 台上的人（concert-band.js 照這張表擺）。at 是舞台上的位置（x 往右、z 往觀眾，公尺），y 站的台子多高（前排三個會走動、站台面，後面四個高低差拉大：鼓 0.9、法器 1.7、合成器 2.6、大太鼓 1.9（再高從台下看不到臉）；
     // tracks 是 MIDI 裡哪幾軌歸這個人（軌名裡有這幾個字就算），姿勢照那幾軌的音動；look 蓋在預設外觀上；hand: 'left' 左撇子（琴整把鏡像）。
     // 燈的 face.piano（一束光打的那個人）＝主旋律，desk（日出舉雙手）＝大太鼓
     members: [
@@ -40,10 +40,11 @@ export const BANDS = [
         look: { race: 'frog', top: 'robe', bottom: 'robe', outer: 'mino', hat: 'straw', neck: 'bell', back: 'none', topC: 6, botC: 6 } },
       { id: 'drums', name: '鼓', role: 'drums', at: [2.4, -3.6], y: 0.9, tracks: ['kick', 'snare', 'hat', 'ride', 'china', 'tom', 'shime', 'kane', 'glitch'],
         look: { race: 'robot', top: 'tee', bottom: 'shorts', outer: 'none', hat: 'none', neck: 'towel', back: 'none', topC: 12, botC: 12 } },
-      { id: 'taiko', name: '大太鼓', role: 'taiko', at: [0, -6.6], y: 3.4, tracks: ['odaiko'],
+      { id: 'taiko', name: '大太鼓', role: 'taiko', at: [0, -6.6], y: 1.9, tracks: ['odaiko'],
         look: { race: 'bear', top: 'tank', bottom: 'hakama', outer: 'haori', hat: 'none', neck: 'towel', back: 'none', topC: 0, botC: 12, outC: 1 } },
     ],
-    palette: ['#a80c14', '#e01e14', '#ff3418', '#240406'],   // 2026-11-10 全場血紅：0 血紅、1 猩紅（原本的金）、2 燙紅（原本的暖白）、3 黑紅（原本的黎明藍）
+    palette: ['#d8452e', '#f0b860', '#f6ecdc', '#33468f'],   // 安靜段的顏色：0 餘燼紅、1 晨光金、2 暖白、3 黎明藍
+    blood: ['#a80c14', '#e01e14', '#ff3418', '#240406'],     // 強段的血紅：同一格換成 血紅、猩紅、燙紅、黑紅；cueAt 的 blood 是此刻往這邊推幾成
     sections: [
       { id: 'night', name: '一束光', bars: 4, play: ['piano', 'harm', 'bowl'] },
       { id: 'horizon', name: '地平線', bars: 8, play: ['piano', 'clean', 'choir', 'ride', 'bowl'] },
@@ -67,6 +68,15 @@ export const BANDS = [
       [24, 3, 78], [27, 3, 76], [30, 2, 74]],
   },
 ];
+
+// 安靜色和血紅之間推 k 成（THREE.Color）。藍的先暗到黑再亮成黑紅、白的照色相走（直接混會跑出粉紫、粉紅）
+export function bloodMix(out, a, b, k) {
+  if (k <= 0) return out.copy(a);
+  if (k >= 1) return out.copy(b);
+  if (a.b > a.r) return k < 0.5 ? out.copy(a).multiplyScalar(1 - 2 * k) : out.copy(b).multiplyScalar(2 * k - 1);
+  if (Math.min(a.r, a.g, a.b) > 0.6) return out.copy(a).lerpHSL(b, k);
+  return out.lerpColors(a, b, k);
+}
 
 export const barSec = (b) => 240 / b.bpm;
 export const songBars = (b) => b.sections.reduce((n, s) => n + s.bars, 0);
@@ -115,6 +125,7 @@ export function cueAt(b, t) {
     piano: { strike: 0, up: 0 },
     crowd: { hands: 0, jump: 0, lights: 0 }, moment: null,
     iris: { a: 0, spin: 0, sun: 0, sky: 0, warp: 0, pin: 0 }, arch: 0.2, snuff: 0, relight: -1,
+    blood: 0,
   };
   const moment = (id, q) => { if (q > 0.04 && (!c.moment || q > c.moment.q)) c.moment = { id, name: MOMENTS[id], q }; };
   const strike = pulse((beat * 2) % 1, 5);   // 鋼琴一個八分音符一下
@@ -129,6 +140,7 @@ export function cueAt(b, t) {
       c.bob = 0;
       c.iris = { a: 0.03 * smooth(sp * 3), spin: 0, sun: 0, sky: 0.6, warp: 0, pin: smooth(sp * 3) };   // 光圈只剩一個針孔
       c.arch = 0.1;
+      c.blood = 0.08;
       moment('hands', c.top * pulse(beat, 1.6));
       break;
     }
@@ -145,6 +157,7 @@ export function cueAt(b, t) {
       c.crowd.lights = 0.3; c.crowd.hands = 0.1;
       c.iris = { a: 0.03 + 0.24 * smooth(sp), spin: 0, sun: 0.12 * sp, sky: 0.45 + 0.3 * sp + 0.4 * close, warp: 0.08, pin: 1 - smooth(sp * 2) };
       c.arch = 0.18;
+      c.blood = 0.12;
       moment('ring', close);
       break;
     }
@@ -160,6 +173,7 @@ export function cueAt(b, t) {
       c.crowd.hands = 0.3 + 0.3 * sp; c.crowd.jump = 0.3 * Math.abs(Math.sin(Math.PI * beat));
       c.iris = { a: 0.27 + 0.48 * smooth(sp), spin: 0, sun: 0.85 * smooth(sp), sky: 0.7 + 0.3 * sp, warp: 0.05 + 0.1 * sp, pin: 0 };   // 光圈打開、太陽從底下升上來
       c.arch = 0.2 + 0.45 * smooth(sp);   // 黎明線掃過去，建築第一次被看清楚
+      c.blood = 0.7 * smooth((sp - 0.5) / 0.5);   // 後半段 riff 推上來才開始染紅
       break;
     }
     case 'still': {   // 直光收掉、白霧，倒數第二小節舉起一隻手；最後一拍全黑，只剩光環的線
@@ -179,6 +193,7 @@ export function cueAt(b, t) {
       c.iris = { a: (0.75 - 0.15 * c.lift) * (1 - shut), spin: 0, sun: 0.9, sky: 0.8, warp: 0.05, pin: 0 };
       c.arch = gap ? 0.02 : 0.45;
       c.snuff = gap ? 1 : 0;
+      c.blood = 1;
       if (bar === last) moment('breath', smooth((beat - 3) / 0.12));
       break;
     }
@@ -196,6 +211,7 @@ export function cueAt(b, t) {
       c.iris = { a: bar === 0 ? 0.55 + 0.5 * smooth(beat / 0.3) : 1.05 + 0.05 * p, spin: t * 0.05, sun: 1, sky: 0.45, warp: 0.2 + (bar >= sec.bars / 2 ? 0.1 : 0), pin: 0 };   // 色帶一圈圈的收淡（2026-11-10：圓只留光圈一個）
       c.arch = 1;
       c.relight = (bar * 4 + beat) * (60 / b.bpm);
+      c.blood = 0.9;
       break;
     }
     case 'veil': {    // 太陽退成光環，光幕從頭頂慢慢壓下來掃過舉起的手再升回去，兩小節一趟
@@ -212,6 +228,7 @@ export function cueAt(b, t) {
       // 光幕壓下來時光圈收窄、葉片整組轉起來
       c.iris = { a: 1.0 - 0.4 * swing, spin: t * 0.35, sun: 1, sky: 0.45, warp: 0.35, pin: 0 };
       c.arch = 0.85;
+      c.blood = 0.7;
       moment('sheet', clamp01(1 - Math.abs(c.sheet.y - 0.55) / 0.07));
       break;
     }
@@ -227,6 +244,7 @@ export function cueAt(b, t) {
       // 太陽沉回去、光圈慢慢關回一個針孔，最後針孔也熄
       c.iris = { a: bar < last ? 0.3 - 0.25 * smooth(sp * 2) : 0.04 * (1 - smooth((beat - 1) / 3)), spin: 0, sun: 1 - smooth(sp), sky: 0.5, warp: 0.05, pin: bar < last ? smooth(sp * 2) : 1 - smooth((beat - 1) / 3) };
       c.arch = 0.15 * (1 - sp);
+      c.blood = 0.15;
       if (bar === last) moment('last', c.piano.up * c.ring.a / 0.8 * (beat < 2 ? 1 : 0));
       break;
     }
