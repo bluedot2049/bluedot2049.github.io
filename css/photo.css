@@ -25,6 +25,23 @@ body.photo-bare #ph-rec, body.photo-bare #joy, body.photo-bare #swap-btn, body.p
     repeating-radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0) 0 9px, rgba(255, 255, 255, .05) 10px, rgba(255, 255, 255, 0) 11px),
     radial-gradient(ellipse 72% 72% at 50% 50%, rgba(10, 12, 14, 0) 45%, rgba(10, 12, 14, .55) 100%);
 }
+/* 拍立拿a500 的字條（photo.js 的 note）：貼在取景框上緣外，像機身上印的貼紙。奶油白亮面、圓體字、開頭一顆番茄紅的點，跟快門同一套 */
+#ph-frame .note {
+  position: absolute; left: 50%; bottom: calc(100% + 14px); transform: translateX(-50%);
+  width: max-content; max-width: min(calc(100vw - 32px), 420px); box-sizing: border-box;
+  padding: 9px 16px 9px 30px; border-radius: 12px;
+  background: linear-gradient(180deg, #fffdf7, #f1ede3 70%, #e4dfd3);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .9), inset 0 -1px 2px rgba(90, 80, 66, .3), 0 3px 10px rgba(0, 0, 0, .45);
+  font: 700 15px/1.45 "Arial Rounded MT Bold", "Varela Round", "Nunito", system-ui, sans-serif; letter-spacing: .04em; color: #4a4f56;
+  text-align: left; white-space: normal; word-break: keep-all; overflow-wrap: anywhere;   /* 店名不拆開：只在空格、標點換行，真的放不下才硬切 */
+}
+#ph-frame .note::before {
+  content: ""; position: absolute; left: 12px; top: calc(9px + .725em - 5px); width: 10px; height: 10px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #ff8a72, #e5452e 60%, #b8301f);
+}
+#ph-frame .note[hidden] { display: none; }
+#ph-frame .note.pop { animation: ph-note .22s ease-out; }
+@keyframes ph-note { from { transform: translateX(-50%) translateY(6px); } to { transform: translateX(-50%); } }
 /* 顆粒只上照片（photo.js 的 compose）：取景時全螢幕的 overlay 混合疊在畫布上，手機每幀合成都要多一道 */
 #ph-frame .grain { display: none; }
 #ph-frame .sig { position: absolute; width: auto; opacity: .82; }

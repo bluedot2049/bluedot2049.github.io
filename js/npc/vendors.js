@@ -23,80 +23,90 @@ const SAY_TIME = 3800, GREET_DIST = 3.2, TALK_DIST = 2.4, SHOW_DIST = 22, SHOW_D
 const LOOK_DIST = 9, LOOK_SPAN = 1.1, LOOK_TIME = [2, 5], LOOK_YOU = 0.15;
 const _p = new THREE.Vector3();
 
-// id 對應 haishi.js 的 SHOPS。look 只寫跟預設不一樣的地方；台詞在 vendor-lines.js（同一個 id），建的時候合起來
+// id 對應 haishi.js 的 SHOPS。look 只寫跟 DYE 不一樣的地方；台詞在 vendor-lines.js（同一個 id），建的時候合起來
+// 顏色跟海市本地人一樣用染料（CLOTH 24–34，見 cast.js）：藍染、薯莨、麻、柿澀、苔綠為主，點綴茜紅、薑黃、硃砂，一人最多一處。
+// 不用 robe／clothes 的舊寫法：那套會套上長袍色和亮圍巾（煉金的紫、洋紅、粉藍），在海市太亮
+const ROBE = { top: 'robe', bottom: 'robe', outer: 'none', shoes: 'boots', neck: 'scarf', back: 'pouch' };
+const TANK = { top: 'tank', bottom: 'shorts', outer: 'none', shoes: 'slippers', neck: 'towel', back: 'none' };
+const SUIT = { top: 'shirt', bottom: 'pants', outer: 'blazer', shoes: 'boots', neck: 'tie', back: 'none' };
+const ASA = 28, HAI = 29, KURO = 26, SHU = 27, AI = 24, AI_PALE = 25, NAVY = 22, KAKI = 30, KOKE = 31, AKANE = 32, UKON = 33, SHUSHA = 34;
+const DYE = {
+  hatC: 2, hairC: 0, topC: ASA, topC2: HAI, botC: KURO, botC2: ASA, outC: AI, outC2: ASA, oneC: AI, oneC2: ASA,
+  shoeC: 18, neckC: HAI, backC: SHU, handC: ASA,
+};
 export const VENDORS = {
   post: {
-    name: '信差', race: 'dog', look: { hat: 'none', top: 'shirt', topC: 16, bottom: 'pants', botC: 1, outer: 'blazer', outC: 1, neck: 'tie', back: 'satchel', backC: 2 }, postcard: true,
+    name: '信差', race: 'dog', look: { ...SUIT, hat: 'none', botC: NAVY, outC: 5, neckC: SHUSHA, back: 'satchel', backC: SHU }, postcard: true,
   },
   fish: {
-    name: '魚販', race: 'tails', look: { hat: 'straw', top: 'tank', topC: 16, bottom: 'shorts', botC: 5, outer: 'apron', outC: 19, shoes: 'rainboots', shoeC: 20, neck: 'towel', neckC: 16, back: 'none' },
+    name: '魚販', race: 'tails', look: { hat: 'straw', top: 'tank', bottom: 'shorts', botC: AI, outer: 'apron', outC: 19, shoes: 'rainboots', shoeC: UKON, neck: 'towel', neckC: ASA, back: 'none' },
   },
   pigment: {
-    name: '顏料攤', race: 'mushroom', look: { hat: 'none', top: 'smock', topC: 10, botC: 5, hand: 'brush', handC: 11 },
+    name: '顏料攤', race: 'mushroom', look: { hat: 'none', top: 'smock', topC: HAI, botC: KURO, hand: 'brush', handC: SHUSHA },
   },
   bakery: {
-    name: '麵包師傅', race: 'bear', look: { hat: 'chef', robe: 4 },
+    name: '麵包師傅', race: 'bear', look: { ...ROBE, hat: 'chef', topC: ASA, botC: ASA, neckC: KAKI },
   },
   candle: {
-    name: '蠟燭店', race: 'rabbit', look: { hat: 'none', robe: 6 },
+    name: '蠟燭店', race: 'rabbit', look: { ...ROBE, hat: 'none', topC: KURO, botC: KURO, neckC: SHUSHA },
   },
   tea: {
-    name: '茶攤', race: 'goat', look: { hat: 'straw', robe: 2 },
+    name: '茶攤', race: 'goat', look: { ...ROBE, hat: 'straw', topC: KOKE, botC: KOKE, neckC: HAI },
   },
   tailor: {
-    name: '裁縫', race: 'fox', look: { hat: 'wizard', hatC: 5, top: 'shirt', topC: 16, outer: 'haori', outC: 3, outC2: 9, bottom: 'hakama', botC: 22, botC2: 9, shoes: 'geta', shoeC: 8, neck: 'none', back: 'none' },
+    name: '裁縫', race: 'fox', look: { hat: 'wizard', hatC: 1, top: 'shirt', bottom: 'hakama', botC: NAVY, botC2: ASA, outer: 'haori', outC: NAVY, outC2: UKON, shoes: 'geta', shoeC: SHUSHA, neck: 'none', back: 'none' },
   },
   junk: {
-    name: '舊貨攤', race: 'bigeye', look: { hat: 'cone', top: 'tank', topC: 16, bottom: 'shorts', botC: 7, shoes: 'odd', neck: 'none', back: 'shell' },
+    name: '舊貨攤', race: 'bigeye', look: { hat: 'cone', top: 'tank', topC: HAI, bottom: 'shorts', botC: KURO, shoes: 'odd', neck: 'none', back: 'shell' },
   },
   herbs: {
-    name: '藥草攤', race: 'frog', look: { hat: 'sprout', topC: 2, botC: 2, outer: 'mino', shoes: 'geta', shoeC: 2 },
+    name: '藥草攤', race: 'frog', look: { hat: 'sprout', botC: KOKE, outer: 'mino', shoes: 'geta' },
   },
   lanterns: {
-    name: '燈籠師傅', race: 'cat', look: { hat: 'wizard', hatC: 7, topC: 6, botC: 6, neckC: 14, hand: 'lantern' },
+    name: '燈籠師傅', race: 'cat', look: { hat: 'wizard', hatC: 7, topC: KURO, botC: KURO, neckC: AKANE, hand: 'lantern', handC: 8 },
   },
   glass: {
-    name: '玻璃師傅', race: 'lizard', look: { hat: 'none', clothes: 'suit', robe: 0 },
+    name: '玻璃師傅', race: 'lizard', look: { ...SUIT, hat: 'none', botC: AI, outC: AI, neckC: AI_PALE },
   },
   frames: {
-    name: '木工', race: 'bull', look: { hat: 'none', clothes: 'tank', robe: 1 },
+    name: '木工', race: 'bull', look: { ...TANK, hat: 'none', botC: SHU, neckC: HAI },
   },
   maps: {
-    name: '航海圖店', race: 'pigeon', look: { hat: 'propeller', robe: 5 },
+    name: '航海圖店', race: 'pigeon', look: { ...ROBE, hat: 'propeller', hatC: 1, topC: 5, botC: 5, neckC: AI_PALE },
   },
   // 工坊街東頭的暗房（haishi.js 的 darkroom），站在取件口裡面。相簿交給他的照片在這裡拿（album.js 的 LABS.haishi）
   darkroom: {
     lab: 'haishi',
-    name: '洗照片師傅', race: 'squid', look: { hat: 'none', glasses: 'mono', top: 'shirt', topC: 28, bottom: 'pants', botC: 26, outer: 'apron', outC: 17, shoes: 'geta', shoeC: 26, neck: 'towel', neckC: 17, back: 'none' },
+    name: '洗照片師傅', race: 'squid', look: { hat: 'none', glasses: 'mono', top: 'shirt', bottom: 'pants', outer: 'apron', outC: 17, shoes: 'geta', shoeC: KURO, neck: 'towel', neckC: 17, back: 'none' },
   },
   // 星台的報社（haishi-press.js）：編輯站在收稿窗口，印刷工在門裡顧機器。報童在下街的眺台
   press: {
-    press: 'desk', name: '星潮報編輯', race: 'goat', look: { hat: 'none', glasses: 'round', top: 'shirt', topC: 16, bottom: 'pants', botC: 1, outer: 'vest', outC: 1, neck: 'bowtie', neckC: 2, back: 'none' },
+    press: 'desk', name: '星潮報編輯', race: 'goat', look: { hat: 'none', glasses: 'round', top: 'shirt', bottom: 'pants', botC: NAVY, outer: 'vest', outC: KURO, neck: 'bowtie', neckC: SHUSHA, back: 'none' },
   },
   printer: {
-    name: '印刷工', race: 'dog', look: { hat: 'none', top: 'tank', topC: 16, bottom: 'pants', botC: 26, outer: 'apron', outC: 17, neck: 'towel', neckC: 16, back: 'none' },
+    name: '印刷工', race: 'dog', look: { hat: 'none', top: 'tank', topC: HAI, bottom: 'pants', outer: 'apron', outC: 17, neck: 'towel', neckC: ASA, back: 'none' },
   },
   newsboy: {
-    press: 'stand', name: '報童', race: 'toast', look: { hat: 'none', top: 'shirt', topC: 16, bottom: 'shorts', botC: 5, outer: 'vest', outC: 3, back: 'satchel', backC: 2, shoes: 'geta', shoeC: 8 },
+    press: 'stand', name: '報童', race: 'toast', look: { hat: 'none', top: 'shirt', bottom: 'shorts', botC: AI, outer: 'vest', outC: SHU, back: 'satchel', backC: KURO, shoes: 'geta', shoeC: 18 },
   },
   // 小吃推車，id 對應 haishi.js 的 CARTS
   squid: {
-    name: '烤魷魚', race: 'hammer', look: { hat: 'none', clothes: 'tank', robe: 1 },
+    name: '烤魷魚', race: 'hammer', look: { ...TANK, hat: 'none', botC: SHU, neckC: HAI },
   },
   oden: {
-    name: '關東煮', race: 'onigiri', look: { hat: 'none', robe: 2 },
+    name: '關東煮', race: 'onigiri', look: { ...ROBE, hat: 'none', topC: NAVY, botC: NAVY, neckC: ASA },
   },
   takoyaki: {
-    name: '章魚燒', race: 'egg', look: { hat: 'chef', robe: 4 },
+    name: '章魚燒', race: 'egg', look: { ...ROBE, hat: 'chef', topC: AI, botC: AI, neckC: SHUSHA },
   },
   tanghulu: {
-    name: '糖葫蘆', race: 'boba', look: { hat: 'party', robe: 6 },
+    name: '糖葫蘆', race: 'boba', look: { ...ROBE, hat: 'party', hatC: 7, topC: KAKI, botC: KAKI, neckC: ASA },
   },
   baozi: {
-    name: '包子', race: 'snowman', look: { hat: 'none', robe: 0 },
+    name: '包子', race: 'snowman', look: { ...ROBE, hat: 'none', topC: AI_PALE, botC: AI_PALE, neckC: HAI },
   },
   potato: {
-    name: '烤番薯', race: 'potato', look: { hat: 'straw', robe: 3 },
+    name: '烤番薯', race: 'potato', look: { ...ROBE, hat: 'straw', topC: SHU, botC: SHU, neckC: UKON },
   },
 };
 
@@ -106,7 +116,7 @@ const wrap = (a) => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI)
 class Vendor {
   constructor(scene, shadowTex, spot, spec, i, onPostcard, onGift) {
     const race = RACES.find((r) => r.id === spec.race) || RACES[0];
-    const look = sanitizeLook({ ...presetLook(i), race: race.id, skin: race.skin ?? 0, ...spec.look });
+    const look = sanitizeLook({ ...presetLook(i), ...DYE, race: race.id, skin: race.skin ?? 0, ...spec.look });
     this.ch = new Character(shadowTex, look);
     this.group = this.ch.group;
     this.group.position.set(spot.x, spot.y, spot.z);

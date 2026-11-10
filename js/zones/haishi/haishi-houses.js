@@ -10,6 +10,17 @@ import { AREA, AREAS, BEAM, CARTS, CREAM, DARK, GOLD, GRAY, HOUSE_SIGNS, LAMP, N
 import { heightIn, terrain } from './haishi-terrain.js';
 import { buildNewsStand, buildPress, PRESS_LOT } from './haishi-press.js';
 
+// 房子的木框線（2026-11-11）：灰泥牆上的柱樑、門框、窗框是老木頭，不是黑線；窗格細條深一點。暗房照舊用 DARK
+const FRAME = '#a07850', GRILLE = '#7c5a40';
+
+// 灰泥牆（2026-11-11）：比色票暗一階，燈和窗才是最亮的；牆切上下兩段，牆腳淡淡髒一點，
+// 上緣簷下一條暗帶，deep（最上層，屋簷伸得深）暗得多。多一個盒子，不抽亂數
+function plasterWall(kit, w, h, d, color, x, y, z, deep) {
+  const c = shade(color, -0.13), band = h * (deep ? 0.4 : 0.24), low = h - band;
+  kit.box(w, low, d, shade(c, -0.1), x, y + low / 2, z, { color2: c });
+  kit.box(w, band, d, c, x, y + low + band / 2, z, { color2: shade(c, deep ? -0.34 : -0.2) });
+}
+
 // 牌樓上的字
 export function signTexture(text) {
   const c = document.createElement('canvas');
@@ -69,11 +80,11 @@ export function houseKit(c) {
     const c = Math.cos(ry), s = Math.sin(ry), at = (dx, dz) => [x + dx * c + dz * s, z - dx * s + dz * c];
     kk.plane(w, h, lit ? PAPER : '#3a3038', x, y, z, { glow: true, color2: lit ? '#ffeccc' : '#4a4048', ry });
     const n = Math.max(2, Math.round(w / 0.22));
-    for (let i = 1; i < n; i++) { const [px, pz] = at(-w / 2 + (w * i) / n, 0.015); kk.box(0.025, h, 0.02, BEAM, px, y, pz, { ry }); }
+    for (let i = 1; i < n; i++) { const [px, pz] = at(-w / 2 + (w * i) / n, 0.015); kk.box(0.025, h, 0.02, GRILLE, px, y, pz, { ry }); }
     const [px, pz] = at(0, 0.02);
-    kk.box(w, 0.025, 0.02, BEAM, px, y, pz, { ry });
-    kk.box(w + 0.12, 0.07, 0.05, BEAM, px, y - h / 2 - 0.03, pz, { ry });
-    kk.box(w + 0.12, 0.07, 0.05, BEAM, px, y + h / 2 + 0.03, pz, { ry });
+    kk.box(w, 0.025, 0.02, GRILLE, px, y, pz, { ry });
+    kk.box(w + 0.12, 0.07, 0.05, FRAME, px, y - h / 2 - 0.03, pz, { ry });
+    kk.box(w + 0.12, 0.07, 0.05, FRAME, px, y + h / 2 + 0.03, pz, { ry });
   };
   // 暖簾：門口上緣垂下的幾片布，y 是上緣
   const noren = (kk, x, y, z, w, color, len = 0.6) => {
@@ -92,9 +103,9 @@ export function houseKit(c) {
     if (kind === 'slit') return lattice(kk, x, y, z, 0.3 * s, 0.95 * s, lit, ry);
     const r = (kind === 'round' ? 0.28 : 0.26) * s, seg = kind === 'round' ? 16 : 8, f = Math.sin(ry) * 0.02, g = Math.cos(ry) * 0.02;
     kk.add(new THREE.CircleGeometry(r, seg), lit ? PAPER : '#3a3038', x, y, z, { glow: true, ry, rz: Math.PI / seg, color2: lit ? '#ffeccc' : '#4a4048' });
-    kk.add(new THREE.TorusGeometry(r + 0.03, 0.045, 4, seg), BEAM, x + f, y, z + g, { ry, rz: Math.PI / seg });
-    kk.box(2 * r, 0.03, 0.02, BEAM, x + f, y, z + g, { ry });
-    kk.box(0.03, 2 * r, 0.02, BEAM, x + f, y, z + g, { ry });
+    kk.add(new THREE.TorusGeometry(r + 0.03, 0.045, 4, seg), FRAME, x + f, y, z + g, { ry, rz: Math.PI / seg });
+    kk.box(2 * r, 0.03, 0.02, GRILLE, x + f, y, z + g, { ry });
+    kk.box(0.03, 2 * r, 0.02, GRILLE, x + f, y, z + g, { ry });
   };
   // 一扇門：lit 亮著的格子門、plank 木板門、moon 月洞門。回傳門的寬
   const doorway = (kk, kind, x, y0, z, s, maxH, ry = 0) => {
@@ -108,8 +119,8 @@ export function houseKit(c) {
     const dw = Math.min(1.3, 0.8 * s), dh = Math.min(maxH, 1.8 + (s - 1) * 0.6);
     if (kind === 'lit') lattice(kk, x, y0 + dh / 2, z, dw, dh, true, ry);
     else kk.box(dw, dh, 0.05, pick(['#3a2a20', '#4a3226', '#2e2420']), x + f * 0.02, y0 + dh / 2, z + g * 0.02, { ry });
-    kk.box(dw + 0.2, 0.1, 0.08, DARK, x + f * 0.05, y0 + dh + 0.05, z + g * 0.05, { ry });
-    for (const sx of [-1, 1]) kk.box(0.08, dh, 0.08, DARK, x + sx * (dw / 2 + 0.04) * g + f * 0.04, y0 + dh / 2, z - sx * (dw / 2 + 0.04) * f + g * 0.04, { ry });
+    kk.box(dw + 0.2, 0.1, 0.08, FRAME, x + f * 0.05, y0 + dh + 0.05, z + g * 0.05, { ry });
+    for (const sx of [-1, 1]) kk.box(0.08, dh, 0.08, FRAME, x + sx * (dw / 2 + 0.04) * g + f * 0.04, y0 + dh / 2, z - sx * (dw / 2 + 0.04) * f + g * 0.04, { ry });
     return dw;
   };
   // 符紙：門邊貼一張黃紙，微微發亮
@@ -132,8 +143,10 @@ export function houseKit(c) {
     const h1 = Math.min(o.h, 2.3 + R() * 0.6), m = R();
     const wall1 = m < 0.55 ? pick(TIMBER) : m < 0.8 ? pick(STONES) : pick(OCHRE);
     hk.box(w, h1, d, wall1, 0, y0 + h1 / 2, 0, { color2: shade(wall1, 0.05) });
-    for (const sx of [-1, 1]) hk.box(0.15, h1, 0.15, DARK, sx * (w / 2 - 0.05), y0 + h1 / 2, d / 2 - 0.04);
-    hk.box(w + 0.04, 0.12, 0.1, DARK, 0, y0 + h1 - 0.06, fz);
+    // 土黃灰泥的一樓加腰壁：牆腳一圈深色，泥水濺髒的那一段
+    if (OCHRE.includes(wall1)) hk.box(w + 0.04, 0.75, d + 0.04, shade(wall1, -0.2), 0, y0 + 0.375, 0, { color2: shade(wall1, -0.14) });
+    for (const sx of [-1, 1]) hk.box(0.15, h1, 0.15, FRAME, sx * (w / 2 - 0.05), y0 + h1 / 2, d / 2 - 0.04);
+    hk.box(w + 0.04, 0.12, 0.1, FRAME, 0, y0 + h1 - 0.06, fz);
     if (o.shop) {
       // 店面整片拉開，裡面亮著；門口掛暖簾，或兩邊各垂一條長布幡
       const sw = w - 0.5;
@@ -192,11 +205,13 @@ export function houseKit(c) {
       }
       over = jut;
       const fz2 = d / 2 + over + 0.025;
-      hk.box(ww, fh, d + over, wall, nx, top + fh / 2, over / 2, { color2: shade(wall, plaster ? -0.04 : 0.04) });
       if (plaster) {
-        for (const sx of [-1, 1]) hk.box(0.1, fh, 0.05, BEAM, nx + sx * (ww / 2 - 0.05), top + fh / 2, fz2);
-        hk.box(ww, 0.1, 0.05, BEAM, nx, top + fh - 0.05, fz2);
-      }
+        // 這一層是不是最上面（迴圈還會不會再蓋一層）：最上層頂著大屋簷，簷下的暗帶深
+        const last = !(o.h - (top + fh - y0) > 1.5 && n + 1 < 3);
+        plasterWall(hk, ww, fh, d + over, wall, nx, top, over / 2, last);
+        for (const sx of [-1, 1]) hk.box(0.1, fh, 0.05, FRAME, nx + sx * (ww / 2 - 0.05), top + fh / 2, fz2);
+        hk.box(ww, 0.1, 0.05, FRAME, nx, top + fh - 0.05, fz2);
+      } else hk.box(ww, fh, d + over, wall, nx, top + fh / 2, over / 2, { color2: shade(wall, 0.04) });
       const kind = pick(['grid', 'grid', 'grid', 'slit', 'slit', 'round', 'octa']), feature = kind === 'round' || kind === 'octa';
       const cnt = feature ? 1 : Math.max(1, Math.min(3, Math.round(ww / 1.5 + (R() - 0.5))));
       for (let i = 0; i < cnt; i++) {
@@ -207,7 +222,7 @@ export function houseKit(c) {
         hk.box(ww + 0.2, 0.08, 0.7, WOOD, nx, top + 0.04, fz2 + 0.35);
         hk.box(ww + 0.2, 0.06, 0.06, WOOD, nx, top + 0.82, fz2 + 0.68);
         const mm = Math.max(3, Math.round(ww / 0.32));
-        for (let i = 0; i <= mm; i++) hk.box(0.04, 0.78, 0.04, DARK, nx - ww / 2 - 0.1 + ((ww + 0.2) * i) / mm, top + 0.43, fz2 + 0.68);
+        for (let i = 0; i <= mm; i++) hk.box(0.04, 0.78, 0.04, FRAME, nx - ww / 2 - 0.1 + ((ww + 0.2) * i) / mm, top + 0.43, fz2 + 0.68);
         lampZ = fz2 + 0.45;
       }
       top += fh;
@@ -244,7 +259,7 @@ export function houseKit(c) {
     if (n >= 1 && !o.shop && R() < 0.22) {
       const cw = 1.0 + R() * 0.5, side = R() < 0.5 ? -1 : 1, cx = side * (w / 2 - cw / 2), cy = y0 + h1 + 0.3, ch = 1.3, cz = fz + 0.45 + over;
       hk.box(cw, ch, 0.9, pick(BAMBOO), cx, cy + ch / 2, cz);
-      for (const e of [-1, 1]) hk.box(0.06, 0.9, 0.06, DARK, cx + e * (cw / 2 - 0.1), cy - 0.3, cz + 0.05, { rx: 0.6 });
+      for (const e of [-1, 1]) hk.box(0.06, 0.9, 0.06, FRAME, cx + e * (cw / 2 - 0.1), cy - 0.3, cz + 0.05, { rx: 0.6 });
       opening(hk, 'grid', cx, cy + ch * 0.55, cz + 0.46, 0.75, true);
       addRoof(hk, cx, cy + ch, cz, cw + 0.3, 1.2, 0.3, { tile, lift: 0.1, ridge: (cw + 0.3) / 2 });
     }
@@ -327,7 +342,8 @@ export function houseKit(c) {
     let s = 2 * r * 0.92, y = y0 + 0.1;
     for (let i = 0; i < n; i++) {
       const wall = i ? pick(PLASTER) : pick(TIMBER), last = i === n - 1, eave = s + 1.3, lift = 0.42;
-      tk.box(s, th, s, wall, 0, y + th / 2, 0, { color2: shade(wall, -0.04) });
+      if (i) plasterWall(tk, s, th, s, wall, 0, y, 0, true);
+      else tk.box(s, th, s, wall, 0, y + th / 2, 0, { color2: shade(wall, -0.04) });
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) tk.box(0.14, th, 0.14, '#8a2a22', sx * (s / 2), y + th / 2, sz * (s / 2));
       for (const [a, ox, oz] of [[0, 0, 1], [Math.PI / 2, 1, 0], [Math.PI, 0, -1], [-Math.PI / 2, -1, 0]]) {
         lattice(tk, ox * (s / 2 + 0.02), y + th * 0.5, oz * (s / 2 + 0.02), s * 0.45, th * 0.45, true, a);

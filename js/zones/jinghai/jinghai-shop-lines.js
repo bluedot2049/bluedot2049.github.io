@@ -3,10 +3,10 @@
 // 月球相機店的字（jinghai-film.js 用）：沖印櫃台店員的話、底片牆的提示、展示品按「看看」的說明。改字只動這裡，改完跑 node tools/lines.mjs
 import { WANG_COLORS } from '../../camera/cameras.js';
 
-// 沖印櫃台的店員：talk 按「聊天」輪著講；handover 領件時照這批最搶眼的那張說（minilab.js 的 LOUD）
+// 沖印的店員：talk 按「聊天」輪著講；handover 領件時照這批最搶眼的那張說（minilab.js 的 LOUD）
 export const CLERK = {
   talk: [
-    '底片在那面牆 自己拿',
+    '底片在那三台機器 按一下就掉出來',
     '底片不用錢 拿就對了',
     '出了月球就沒地方補了喔',
     '一盒三張 比別家多一半',
@@ -22,7 +22,7 @@ export const CLERK = {
   },
 };
 
-// 底片牆（提示）
+// 底片機（提示）
 export const FILM = {
   got: '拿了一盒，三張',
   full: '片盒還是滿的',
@@ -32,7 +32,6 @@ export const FILM = {
 
 // 展示品按「看看」
 export const LOOKS = {
-  hero: '拍立拿a500　月球廠十周年紀念限定款',
   colors: `a500 有 ${WANG_COLORS.length} 種顏色：${WANG_COLORS.map((c) => c.name).join('、')}`,
   history: '初代 a100，方的。旁邊是一代一代的片盒',
 };

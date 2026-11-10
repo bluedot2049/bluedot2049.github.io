@@ -32,7 +32,7 @@ export function guide() {
     { id: 'atrium', name: '大廳', tag: '透明電梯', x: 0, z: ATRIUM.z1 - 6, place: '大廳' },
     { id: 'canteen', name: '食堂', ...mid(CANTEEN), place: '食堂' },
     { id: 'galleria', name: '商店街', tag: '冰淇淋', x: 24, z: 0, place: '商店街' },
-    { id: 'camshop', name: '拍立拿旗艦店', tag: '底片', x: 30.5, z: -7.6, place: '拍立拿旗艦店' },
+    { id: 'camshop', name: '灰球朋友旗艦店', tag: '底片', x: 30.5, z: -7.6, place: '灰球朋友旗艦店' },
     { id: 'store', name: '百貨公司', x: STORE.x0 - 2, z: 4, r: 8 },   // 百貨公司裡面進不去、商店街盡頭中間也擋著：站在門口南邊那條走道上
     { id: 'deck', name: '觀星台', tag: '熱茶', x: 9, y: LEVELS[2], z: -11.4, r: 5 },
     { id: 'burger', name: BRAND.name, ...mid(BURGER), place: BRAND.name },

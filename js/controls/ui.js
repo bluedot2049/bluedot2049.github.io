@@ -21,7 +21,7 @@ export const uiScale = () => scale;
 export const uiSize = () => sizePick;
 
 // 提示（#hint）停多久：照字數，一秒約六個字，再加轉過眼睛去看的一秒半；英文字母、數字、鍵名算小半個字
-const readMs = (text) => Math.min(12000, 1500 + 170 * [...String(text).replace(/\s/g, '')].reduce((n, c) => n + (c < '\u0080' ? 0.4 : 1), 0));
+export const readMs = (text) => Math.min(12000, 1500 + 170 * [...String(text).replace(/\s/g, '')].reduce((n, c) => n + (c < '\u0080' ? 0.4 : 1), 0));
 // 教學提示同一台裝置出現幾次就夠了（做過那件事的立刻不再出現）
 const TIP_TIMES = 2;
 // 手機橫拿畫面矮：房名停這麼久再讓位給提示（ui.js 的 putHint、hud.css 的 yield）

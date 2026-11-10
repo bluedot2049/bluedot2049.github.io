@@ -119,7 +119,6 @@ export function buildHQ({ coarse = false, fade = null } = {}) {
     fadeKits.push(fk);
     return fk;
   };
-  let camHero = 0;   // 相機店轉台那組的淡出編號（轉的那一層在 jinghai.js 另外建，跟著它淡）
   const B = (kit, x0, y0, z0, x1, y1, z1, c, o) => kit.box(Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0), c, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, o);
   const block = (x0, z0, x1, z1) => obstacles.push({ x: (x0 + x1) / 2, z: (z0 + z1) / 2, hw: Math.abs(x1 - x0) / 2, hd: Math.abs(z1 - z0) / 2, a: 0 });
   // deck：樓上的地板和欄杆，擋住鏡頭時淡掉。被拍的遮擋（jinghai.js 的 camClip）比頭高的不算
@@ -1005,7 +1004,7 @@ export function buildHQ({ coarse = false, fade = null } = {}) {
 
   // ================= 海牛人 =================
   const plan = makePlan({ seats, shopSpots, coarse, R });
-  return { kit: k, glass: kg, foil: kf, foilIn: kfi, fadeKits, walls: faces.list, obstacles, solids, holes, plan, screens, camHero };
+  return { kit: k, glass: kg, foil: kf, foilIn: kfi, fadeKits, walls: faces.list, obstacles, solids, holes, plan, screens };
 
   // 相機店（北排西頭三間打通，店裡在 jinghai-camshop.js）：西牆、門面、整間的店裡。
   // 門面一樓兩扇大窗夾著沒有門的門口，上面一條奶油色招牌帶；二樓三張放大的拍立得——方的玻璃是照片、白框下巴厚，從二樓走廊看得進挑高的店裡
@@ -1032,7 +1031,7 @@ export function buildHQ({ coarse = false, fade = null } = {}) {
     onFace(k, 'z+', out, cx - 0.38, 4.8, cx + 0.38, 5.3, 0.08, 0.1, DARK);
     onFace(k, 'z+', out, cx - 0.2, 4.58, cx + 0.2, 4.66, 0.08, 0.1, RED);
     for (const sg of [-1, 1]) for (let i = 0; i < 3; i++) k.cyl(0.14, 0.14, 0.05, CREAM, cx + sg * (1.2 + i * 0.5), 4.95, out + 0.03, { rx: Math.PI / 2 }, 16);
-    camHero = buildCamShop({ k, kg, B, SB, block, pane, R, fadeKit }).heroFid;
+    buildCamShop({ k, kg, B, SB, block, pane, R, fadeKit });
     // 海牛人逛街時在三扇窗前停一下（店員另外放，CLERKS）
     for (const x of PH) shopSpots.push({ x, z: zf + 1.7, face: Math.PI, keeper: null });
   }
@@ -1202,10 +1201,10 @@ function makePlan({ seats, shopSpots, coarse, R }) {
   for (const x of [-8, 8]) still.push({ p: [x, 16, -11.75], face: N, outfit: 'jumpsuit', look: 0.08, act: 'gaze' });
   // 店員：站在店裡的櫃台後面；商店街的小亭子、百貨公司門口
   shopSpots.forEach((sp, i) => sp.keeper && still.push({ p: [sp.keeper[0], 0, sp.keeper[1]], face: sp.face === N ? S : N, outfits: ['vest', 'cardigan', 'usher'], look: 0.5, sway: 0.5, fine: i % 2 === 1, act: 'counter' }));
-  // 相機店（jinghai-camshop.js）：穿店裡制服的店員，和進去逛一圈的客人（轉台、底片牆、配色款、沖印櫃台）
+  // 相機店（jinghai-camshop.js）：穿店裡制服的店員，和進去逛一圈的客人（底片機、配色款、沖印）
   for (const c of CLERKS) still.push({ ...c, outfit: 'pola', sway: 0.5 });
   loops.push({ count: 3, outfits: [...CASUAL, 'office', 'engineer'], speed: 0.6, nodes: [
-    P(30.5, 0, -4.4), P(30.5, 0, -7.0, { wait: 3, face: N }), P(27.6, 0, -8.6), P(CAMSPOTS.film.x + 0.8, 0, -10.8, { wait: 4, face: N }),
+    P(30.5, 0, -4.4), P(30.5, 0, -7.0, { wait: 3, face: N }), P(27.6, 0, -8.6), P(CAMSPOTS.film1.x, 0, -11.9, { wait: 4, face: N }),
     P(26.4, 0, -8.1, { wait: 2, face: S }), P(28.6, 0, -7.2), P(34.6, 0, -7.4), P(CAMSPOTS.lab.x - 0.6, 0, -7.7, { wait: 4, face: N }),
     P(35.0, 0, -6.8), P(31.4, 0, -6.4), P(31.4, 0, -4.4), P(36, 0, -3.4), P(24, 0, -3.4)] });
   still.push({ p: [33, 0, 0.6], face: S, outfit: 'cook', look: 0.8, act: 'counter' });

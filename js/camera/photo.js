@@ -35,6 +35,7 @@ import { addPhoto, canShare, discard, onSnap, saveChosen, saveTip, shareChosen }
 import { filmLeft, newRoute, useFilm } from './instant.js';
 import { pref, setPref, dropPref } from '../save/prefs.js';
 import { onFreshTouch } from '../controls/touch.js';
+import { readMs } from '../controls/ui.js';
 import { rumble, padKey, padPair, padBtn } from '../controls/gamepad.js';
 import { is, key } from '../controls/keymap.js';
 import { kind, say } from '../controls/lessons.js';
@@ -312,7 +313,30 @@ export class PhotoMode {
   empty() {
     this.say('jam', 0.2);
     replay(this.$('#ph-shutter'), 'jam');
-    this.ui.hint('片盒空了。到月球用一束海草換一盒', { id: 'photo:empty', ms: 3500 });
+    this.emptyHint();
+  }
+
+  // 片盒空了說去哪拿：最後一張拍完、空了還按，都是這句
+  emptyHint() {
+    this.note('您的底片已用完，請至月球旗艦店 [灰球朋友] 索取', 4000);
+  }
+
+  // 取景框小的相機（拍立拿a500）自己的字條：貼在取景框上緣外，奶油白亮面、番茄紅一點，跟快門同一套（photo.css 的 .note）。
+  // 框外壓得很暗，共用的提示在畫面頂端又小又遠；別台、或相機已經放下了，照舊走共用提示
+  note(text, ms = 2500) {
+    if (!this.active || !this.gear?.finder) return this.ui.hint(text, ms);
+    const el = this.$('#ph-frame .note');
+    el.textContent = text;
+    el.hidden = false;
+    replay(el, 'pop');
+    clearTimeout(this.noteTimer);
+    this.noteTimer = setTimeout(() => this.hideNote(), Math.max(ms, readMs(text)));
+  }
+
+  hideNote() {
+    clearTimeout(this.noteTimer);
+    const el = this.$('#ph-frame .note');
+    if (el) el.hidden = true;
   }
 
   // 現在的焦距：變焦鏡是馬達轉到的地方，定焦就是那一支
@@ -508,6 +532,7 @@ export class PhotoMode {
     this.keys.clear();
     this.joy.x = this.joy.y = 0;
     this.lift = 0;
+    this.hideNote();
     document.body.classList.remove('photo', 'photo-bare', 'photo-hush', 'photo-gear', 'photo-expose', 'photo-zoom', 'photo-silver');
     const sh = this.$('#ph-shutter');
     sh.innerHTML = '';
@@ -989,7 +1014,7 @@ export class PhotoMode {
     const only = c.k === 'grip' && (this.gear?.grips || ANY_GRIP);
     if (only) c.set(only[(only.indexOf(this.grip) + 1) % only.length]);
     else c.set((c.get() + 1) % c.opts.length);
-    if (c.note) this.ui.hint(c.note, 2500);
+    if (c.note) this.note(c.note);
     this.save();
     this.refresh();
     if (c.k === 'grip' || c.k === 'turn') this.say(c.k, 0.2);   // 拿法、方向是手上的相機在動
@@ -1895,7 +1920,7 @@ export class PhotoMode {
     this.save();
     this.refresh();
     this.say(this.memoOn ? 'memoOn' : 'memoOff', 0.28);
-    this.ui.hint(this.memoOn ? '紀念模式：容易拍壞，偶爾出限定照片' : '紀念模式關了', { id: 'photo:memo', ms: 2500 });
+    this.note(this.memoOn ? '紀念模式：容易拍壞，偶爾出限定照片' : '紀念模式關了');
   }
 
   // 浮游燈（獵魔III，閃光那顆鍵：Q、手把 Y、手機閃光開關）：收著 → 左側 → 右側 → 收回，一顆鍵輪著按，燈在外面就是閃光開著。
@@ -2375,7 +2400,7 @@ export class PhotoMode {
     if (this.gear?.instant && !this.postcard) {
       useFilm();
       this.filmDots();
-      if (!filmLeft()) setTimeout(() => this.say('last', 0.35), 950);   // 最後一張吐完，蜂鳴片往下兩聲
+      if (!filmLeft()) setTimeout(() => { this.say('last', 0.35); this.emptyHint(); }, 950);   // 最後一張吐完，蜂鳴片往下兩聲、說去哪拿
     }
     this.deliver(out, rare);
   }
