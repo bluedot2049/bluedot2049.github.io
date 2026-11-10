@@ -69,6 +69,8 @@ export function loadAlbum() {
       for (const o of old || []) await idb(STORE, 'readwrite', (s) => s.add({ blob: o.blob, name: o.name, t: Date.now(), cam: 'bulb', state: 'shot' }));
       if (old?.length) await idb(WAIT, 'readwrite', (s) => s.clear());
       items = (await idb(STORE, 'readonly', (s) => s.getAll())) || [];
+      // 交給已經不在 LABS 的師傅（例如拿掉的大法師科技）：沒人收得回來，退回還沒洗的
+      for (const it of items) if (it.state === 'lab' && !LABS[it.lab]) { it.state = 'shot'; delete it.lab; await put(it); }
     } catch { items = []; }
     changed();
   })());

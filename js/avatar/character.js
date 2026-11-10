@@ -31,7 +31,7 @@ const PET_TIME = 2.4;      // 摸動物摸多久
 // 長袍上窄下寬，手臂要從肩膀往外張開一點，手才會沿著袍子外側垂下，不會插進身體
 const ARM_OUT = 0.28;
 const _capeInv = new THREE.Matrix4();
-const _handM = new THREE.Matrix4(), _handQ = new THREE.Quaternion(), _handE = new THREE.Euler();
+const _handM = new THREE.Matrix4(), _handQ = new THREE.Quaternion(), _handE = new THREE.Euler(), _handS = new THREE.Vector3();
 const NECK = 0.8;          // 頭的原點（脖子）離腳底多高，身高另外整個縮放
 const SIT_TIME = 0.8;      // 坐下或站起來花幾秒
 const LIE_TIME = 0.9;      // 從坐著躺下去（或坐起來）花幾秒
@@ -1776,6 +1776,7 @@ export class Character {
       for (const m of this.camParts) m.position.z = m.userData.slide * this.zoomExt;
     }
     const a = this.aimG, p = this.aimP, selfie = a.grip === 3;
+    this.armR.scale.y = 1;   // 一隻手自拍會把手拉長（下面），其他時候都是原本的長度
     const stow = smooth(clamp01(p / STOW));
     let r = smooth(clamp01((p - STOW) / (1 - STOW))), up = 0;
     // 拍照人的口令（cues.js 的 cue）：再一張把相機舉高一下，好了放到胸前一陣子再舉回去
@@ -1808,13 +1809,24 @@ export class Character {
     if (a.grip === 4) arms(-2.5, 0.2, -0.45, -2.5, -0.2, 0.45);
     else if (selfie) {
       // 一隻手拿（相機的 selfie.arm）：手臂舉到側上方，相機在手上轉回來對著臉；handAt 是舉好時手的位置，photo.js 把鏡頭擺在那裡
-      const hold = CAMERAS[this.camId]?.selfie?.arm, [rx, ry, rz] = hold || [-1.75, -0.15, 0.05];
+      const sf = CAMERAS[this.camId]?.selfie, hold = sf?.arm, [rx, ry, rz] = hold || [-1.75, -0.15, 0.05];
       arms(L.x, L.y, L.z, rx, ry, rz);
       this.armR.updateMatrix();
       to.set(0, -0.36, 0).applyMatrix4(this.armR.matrix);
       if (hold) {
-        _handM.compose(this.armR.position, _handQ.setFromEuler(_handE.set(rx, ry, rz, 'YXZ')), this.armR.scale);
-        this.handAt = (this.handAt || new THREE.Vector3()).set(0, -0.38, 0).applyMatrix4(_handM);
+        // 角色手短，鏡頭在手上只拍得到臉：自己的畫面裡（camLocal 關）那隻手拉長 reach 倍，鏡頭跟著到手上，
+        // 手臂從角落伸進來，全身也進得來。別人看到的手是原本的長度，相機在手上
+        const k = this.camLocal ? 1 : sf.reach || 1;
+        this.armR.scale.y = 1 + (k - 1) * r;
+        _handM.compose(this.armR.position, _handQ.setFromEuler(_handE.set(rx, ry, rz, 'YXZ')), _handS.set(1, k, 1));
+        this.handAt = (this.handAt || new THREE.Vector3()).set(0, -0.36 - 0.06 / k, 0).applyMatrix4(_handM);
+        // 鏡頭在手臂的延長線上，整隻手臂只投成一點：手腕彎一下，鏡頭往身體那邊、往上讓開（selfie.wrist），手臂才從角落伸進來
+        const [wx, wy, wz] = sf.wrist || [0, 0, 0];
+        this.handAt.x -= Math.sign(this.armR.position.x) * wx;
+        this.handAt.y += wy;
+        this.handAt.z += wz;
+        this.armR.updateMatrix();
+        to.set(0, -0.36, 0).applyMatrix4(this.armR.matrix);
       } else this.handAt = null;
     } else if (lift) {
       arms(-2.85, 0.3, -0.05, -2.85, -0.3, 0.05);

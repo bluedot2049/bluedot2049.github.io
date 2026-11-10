@@ -104,7 +104,7 @@ function trip(m, warp = true) {
       // 每一拍：霓虹那條換成下一個顏色、亮一下，色帶往深處推一小步
       .replace('#include <color_fragment>', `#include <color_fragment>
         { float lum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)), li = 1.0 - clamp(lum * 5.0, 0.0, 1.0);
-          float t = vWP.z * 0.03 + vWP.y * 0.025 + 0.12 * sin(vWP.x * 0.15 + uT * 0.3) - uT * 0.1 - uBeat * 0.04, b = floor(t * 10.0);
+          float t = vWP.z * 0.03 + vWP.y * 0.025 + 0.12 * sin(vWP.x * 0.15 + uT * 0.3) + 0.06 * sin(vWP.z * 0.09 - uT * 0.45) - uT * 0.1 - uBeat * 0.04, b = floor(t * 10.0);
           float ci = (floor(b * 0.5) + uStep) / 3.0, fade = 1.0 - 0.35 * clamp((vWP.y + 2.0) / 22.0, 0.0, 1.0);
           diffuseColor.rgb = ${mono('mod(b, 2.0) < 1.0 ? vec3(0.82 + 0.18 * uBeat) : vec3(0.0)', '(mod(b, 2.0) < 1.0 ? pal(ci) * (0.25 + 0.65 * li) * (1.0 + 0.8 * uBeat) : vec3(0.05, 0.004, 0.075)) * fade')}; }`);
     if (m.isMeshLambertMaterial) sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * 0.6;');
@@ -350,6 +350,7 @@ export function buildUnder(scene, { hallRoots, spots, exits = [] }) {
   // eye：人的頭；beat 這一拍打下去多大（0 到 1，往後衰減）、step 第幾格顏色（concert.js 照上面那首歌算）
   // 回傳 0 到 1：人在地平線下多深（0 上面、1 進到倒過來的大廳）
   function update(t, eye, beat = 0, step = 0) {
+    if (MONO) beat = 0;   // 黑白不跟拍子抽（使用者：抽動不要、要流動感），只留連續的流和起伏
     const inSlotNow = !!eye && eye.z < U.stair.z0 + 0.2 && eye.x > U.door.x0 - 1 && eye.x < U.spine + 1;
     const deepNow = !!eye && eye.z < H.z0;
     vault.visible = deep.visible = deepNow;

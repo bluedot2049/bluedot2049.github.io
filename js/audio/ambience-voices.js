@@ -137,15 +137,41 @@ function blow(ctx, out, noise, t, d, pts, vib, peak = 0.9) {
   air(ctx, out, noise, t, [[0, pts[0][1] * 1.4]], 0.02, d, 0.05 * peak / 0.9, 2.5, 'bandpass');
 }
 
-// 金屬敲一下：幾個不成倍數的泛音一起響（打擊金屬片的比例），越高的散得越快。日晷III 的每個聲音都帶一點這個
-const PLATE = [[1, 1], [2.32, 0.5], [4.25, 0.26], [6.63, 0.12]];
+// 金屬敲一下：一串不成倍數的泛音一起響（打擊鋼片的比例），基音旁邊再疊一條差一點點的，兩條互相拍出金屬的顫光；
+// 高的泛音也留得夠久，尾巴亮。日晷III 的每個聲音都帶這個
+const PLATE = [[1, 1], [1.58, 0.75], [2.33, 0.6], [3.71, 0.42], [5.18, 0.26]];
 function metal(ctx, out, t, f, peak, dur) {
-  PLATE.forEach(([r, g], i) => { if (f * r < 15000) ring(ctx, out, t, f * r, peak * g, dur / (1 + i * 0.7)); });
+  PLATE.forEach(([r, g], i) => { if (f * r < 15000) ring(ctx, out, t, f * r, peak * g * 1.4, dur * 1.5 / (1 + i * 0.3)); });
+  ring(ctx, out, t, f * 1.004, peak * 0.8, dur * 1.5);
 }
-// 金屬的小卡榫：極短一下窄頻的雜訊，加一絲叮
+// 整個聲音一起調大小（金屬的高頻聽起來比量出來響，每個聲音照 A 加權量過再壓到跟燭火乙式同一級）
+function trim(ctx, out, g) {
+  const n = ctx.createGain();
+  n.gain.value = g;
+  n.connect(out);
+  return n;
+}
+// 金屬的小卡榫：先一記極短極高的「嗒」（硬東西碰硬東西），再一下窄頻的雜訊，帶一聲清楚的叮
 function tick(ctx, out, noise, t, f, peak) {
-  hiss(ctx, out, noise, t, 0.005, 'bandpass', f, peak, 4);
-  metal(ctx, out, t, f * 0.62, peak * 0.1, 0.05);
+  hiss(ctx, out, noise, t, 0.0025, 'highpass', 7000, peak * 0.8);
+  hiss(ctx, out, noise, t, 0.004, 'bandpass', f, peak, 8);
+  metal(ctx, out, t, f * 0.62, peak * 0.28, 0.09);
+}
+
+// 精密的小馬達嗚一段：低的鋸齒是馬達，上面一條細的齒輪聲，齒一顆顆咬過去會抖；p 越高越小顆，glide 大於 1 往上滑（推出去）、小於 1 往下（收回來）
+function servo(ctx, out, noise, t, dur, p, glide = 1.04, gain = 1, attack = 0.012) {
+  osc(ctx, 'sawtooth', t, dur, [[0, 300 * p], [dur, 300 * p * glide]]).connect(biquad(ctx, 'bandpass', 2400 * p, 3)).connect(envelope(ctx, t, attack, dur, 0.045 * gain)).connect(out);
+  const w = osc(ctx, 'square', t, dur, [[0, 1180 * p], [dur, 1180 * p * glide]]), v = ctx.createGain();
+  v.gain.value = 0.6;
+  lfo(ctx, t, dur, 38 * p, 0.4, v.gain);
+  w.connect(biquad(ctx, 'bandpass', 1190 * p, 9)).connect(envelope(ctx, t, attack, dur, 0.05 * gain)).connect(v).connect(out);
+  hiss(ctx, out, noise, t, dur, 'bandpass', 5200 * p, 0.03 * gain, 1.5);
+}
+// 馬達推到底、零件咬到位：「喀」一下帶一點金屬的叮
+function seat(ctx, out, noise, t, p, gain = 1) {
+  tick(ctx, out, noise, t, 3600 * p, 0.5 * gain);
+  osc(ctx, 'sine', t, 0.025, [[0, 1800 * p], [0.025, 1300 * p]]).connect(envelope(ctx, t, 0.001, 0.025, 0.05 * gain)).connect(out);
+  metal(ctx, out, t, 2350 * p, 0.05 * gain, 0.2);
 }
 
 export const VOICES = {
@@ -165,123 +191,150 @@ export const VOICES = {
   },
   // ---------- 日晷III（沙島大法師科技的現代產品）：整台是金屬，每一下都帶金屬的泛音和尾巴 ----------
   // 燭火乙式是皮殼、布背帶、木頭、紙、火苗，聲音悶、軟、有摩擦；這台反過來：鋁合金機身、鋼片、齒輪、彈簧卡榫，
-  // 聲音硬、準、短，敲到就會「叮」一點不成倍數的泛音（metal）。沒有一個動作跟燭火乙式共用
-  // 快門：電子控制的金屬簾，前簾「嗒」、後簾「嗒」貼得很近，機身跟著輕輕嗡一下
+  // 聲音硬、脆、準，低頻的悶聲都拿掉或拉高，敲到就「叮」出一串不成倍數的泛音（metal），尾巴是亮的。沒有一個動作跟燭火乙式共用。
+  // 精密儀器的感覺靠裡面的小馬達（servo）：幾乎每個動作都是「嗚一小段→喀到位」，大的馬達低、小的高，往外推往上滑、收回來往下滑
+  // 快門：電子控制的金屬簾，前簾「嗒」、後簾「嗒」貼得很近，機身輕輕嗡一下；接著馬達把快門簾上回去，喀一聲準備好
   eshutter(ctx, out, t, p, noise) {
+    out = trim(ctx, out, 0.39);
     tick(ctx, out, noise, t, 5200 * p, 0.45);
     hiss(ctx, out, noise, t, 0.022, 'bandpass', 2300 * p, 0.22, 1.6);
-    osc(ctx, 'sine', t + 0.004, 0.03, [[0, 520 * p], [0.03, 300 * p]]).connect(envelope(ctx, t + 0.004, 0.001, 0.03, 0.12)).connect(out);
+    osc(ctx, 'sine', t + 0.004, 0.03, [[0, 1040 * p], [0.03, 700 * p]]).connect(envelope(ctx, t + 0.004, 0.001, 0.03, 0.06)).connect(out);
     tick(ctx, out, noise, t + 0.03, 4300 * p, 0.35);
-    metal(ctx, out, t + 0.03, 1870 * p, 0.035, 0.4);
+    metal(ctx, out, t + 0.03, 2490 * p, 0.035, 0.45);
+    servo(ctx, out, noise, t + 0.08, 0.11, 1.35 * p, 1.06, 0.8);
+    seat(ctx, out, noise, t + 0.19, 1.15 * p, 0.6);
     return 0.45;
   },
-  // 變焦馬達：低的鋸齒是馬達，上面一條細的齒輪聲，齒一顆顆咬過去會抖（一秒 38 下）；轉著的時候每一小段接著放，聽起來是連著的
+  // 變焦馬達：一直轉的那一段（photo.js 每 0.14 秒送一段，接起來是連著的）
   zoom(ctx, out, t, p, noise) {
-    const o = osc(ctx, 'sawtooth', t, 0.18, [[0, 300 * p], [0.18, 312 * p]]);
-    o.connect(biquad(ctx, 'bandpass', 2400 * p, 3)).connect(envelope(ctx, t, 0.03, 0.18, 0.045)).connect(out);
-    const w = osc(ctx, 'square', t, 0.18, [[0, 1180 * p], [0.18, 1205 * p]]), v = ctx.createGain();
-    v.gain.value = 0.6;
-    lfo(ctx, t, 0.18, 38, 0.4, v.gain);
-    w.connect(biquad(ctx, 'bandpass', 1190 * p, 9)).connect(envelope(ctx, t, 0.03, 0.18, 0.05)).connect(v).connect(out);
-    hiss(ctx, out, noise, t, 0.18, 'bandpass', 5200 * p, 0.03, 1.5);
+    servo(ctx, out, noise, t, 0.18, p, 1.04, 1, 0.03);
     return 0.2;
   },
   // 變焦停下：抽管咬到位，「喀」一下帶一點金屬的叮
   zoomstop(ctx, out, t, p, noise) {
-    tick(ctx, out, noise, t, 3600 * p, 0.5);
-    osc(ctx, 'sine', t, 0.025, [[0, 900 * p], [0.025, 620 * p]]).connect(envelope(ctx, t, 0.001, 0.025, 0.1)).connect(out);
-    metal(ctx, out, t, 2350 * p, 0.05, 0.2);
+    out = trim(ctx, out, 0.38);
+    seat(ctx, out, noise, t, p, 1);
     return 0.22;
   },
-  // 對到焦：鏡頭裡的小馬達「滋」一下推到位，鋼片「叮」一聲（燭火乙式是兩聲電子的嗶嗶）
+  // 對到焦：鏡頭裡最小的對焦馬達「嗞」一小段，鋼片「叮」一聲（燭火乙式是兩聲電子的嗶嗶）
   gfocus(ctx, out, t, p, noise) {
-    osc(ctx, 'sawtooth', t, 0.04, [[0, 700 * p], [0.04, 1300 * p]]).connect(biquad(ctx, 'bandpass', 1800 * p, 4)).connect(envelope(ctx, t, 0.005, 0.04, 0.05)).connect(out);
-    tick(ctx, out, noise, t + 0.045, 6000 * p, 0.25);
-    metal(ctx, out, t + 0.045, 3150 * p, 0.13, 0.14);
-    return 0.2;
+    out = trim(ctx, out, 0.29);
+    servo(ctx, out, noise, t, 0.07, 1.6 * p, 1.1, 1.1);
+    tick(ctx, out, noise, t + 0.075, 6000 * p, 0.25);
+    metal(ctx, out, t + 0.075, 3150 * p, 0.13, 0.14);
+    return 0.25;
   },
-  // 追焦鎖住：馬達推一下，兩聲往上的叮，第二聲高、長一點，卡榫扣上；放開是反過來往下、輕一點
+  // 追焦鎖住：對焦馬達「嗞、嗞」走兩小步，每步一聲往上的叮，最後卡榫扣上；放開是馬達往回一段、叮往下、輕一點
   gtrack(ctx, out, t, p, noise) {
-    osc(ctx, 'sawtooth', t, 0.05, [[0, 800 * p], [0.05, 1500 * p]]).connect(biquad(ctx, 'bandpass', 2000 * p, 4)).connect(envelope(ctx, t, 0.005, 0.05, 0.045)).connect(out);
-    metal(ctx, out, t + 0.04, 2400 * p, 0.1, 0.1);
-    metal(ctx, out, t + 0.11, 3200 * p, 0.12, 0.2);
-    tick(ctx, out, noise, t + 0.11, 5600 * p, 0.3);
-    return 0.33;
+    out = trim(ctx, out, 0.36);
+    servo(ctx, out, noise, t, 0.05, 1.5 * p, 1.08, 1);
+    metal(ctx, out, t + 0.055, 2400 * p, 0.1, 0.1);
+    servo(ctx, out, noise, t + 0.09, 0.05, 1.75 * p, 1.08, 1);
+    metal(ctx, out, t + 0.145, 3200 * p, 0.12, 0.2);
+    tick(ctx, out, noise, t + 0.145, 5600 * p, 0.3);
+    return 0.38;
   },
   guntrack(ctx, out, t, p, noise) {
-    metal(ctx, out, t, 3000 * p, 0.08, 0.08);
-    metal(ctx, out, t + 0.07, 2100 * p, 0.07, 0.14);
-    tick(ctx, out, noise, t + 0.07, 3800 * p, 0.25);
-    return 0.22;
+    out = trim(ctx, out, 0.43);
+    servo(ctx, out, noise, t, 0.08, 1.6 * p, 0.9, 1);
+    metal(ctx, out, t + 0.085, 2100 * p, 0.07, 0.14);
+    tick(ctx, out, noise, t + 0.085, 3800 * p, 0.25);
+    return 0.26;
   },
-  // 舉起來：鋁的機身在手裡滑上來一點亮的摩擦，背帶的鋼扣環晃兩下，機背的孔碰到眼眶，金屬「咚」一下
+  // 舉起來：鋁的機身在手裡滑上來一點亮的摩擦，鋼扣環晃兩下，機背的孔碰到眼眶「叮」；
+  // 接著開機，鏡頭的馬達把抽管推到拍照的位置，喀到位
   graise(ctx, out, t, p, noise) {
+    out = trim(ctx, out, 0.44);
     air(ctx, out, noise, t, [[0, 3000 * p], [0.12, 4600 * p]], 0.03, 0.13, 0.1, 1.4, 'bandpass');
     for (const [dt, f] of [[0.03, 5200], [0.08, 6100]]) tick(ctx, out, noise, t + dt, f * p, 0.2);
-    osc(ctx, 'sine', t + 0.15, 0.06, [[0, 210 * p], [0.06, 150 * p]]).connect(envelope(ctx, t + 0.15, 0.002, 0.06, 0.3)).connect(out);
-    metal(ctx, out, t + 0.15, 660 * p, 0.12, 0.16);
-    return 0.32;
+    osc(ctx, 'sine', t + 0.15, 0.06, [[0, 420 * p], [0.04, 320 * p]]).connect(envelope(ctx, t + 0.15, 0.001, 0.04, 0.12)).connect(out);
+    metal(ctx, out, t + 0.15, 1320 * p, 0.12, 0.2);
+    servo(ctx, out, noise, t + 0.22, 0.16, p, 1.07, 1.1);
+    seat(ctx, out, noise, t + 0.38, 1.05 * p, 0.8);
+    return 0.5;
   },
-  // 放下：扣環先晃，機身往下滑一點，貼到胸前的金屬「叩」比舉起輕
+  // 放下：先關機，馬達把抽管收回去（往下滑）喀一聲收好，扣環晃，貼到胸前的金屬「叩」比舉起輕
   glower(ctx, out, t, p, noise) {
-    for (const [dt, f] of [[0, 5800], [0.05, 4900]]) tick(ctx, out, noise, t + dt, f * p, 0.18);
-    air(ctx, out, noise, t + 0.04, [[0, 4200 * p], [0.14, 2600 * p]], 0.03, 0.15, 0.08, 1.4, 'bandpass');
-    osc(ctx, 'sine', t + 0.19, 0.06, [[0, 170 * p], [0.06, 120 * p]]).connect(envelope(ctx, t + 0.19, 0.003, 0.06, 0.2)).connect(out);
-    metal(ctx, out, t + 0.19, 540 * p, 0.08, 0.14);
-    return 0.34;
+    out = trim(ctx, out, 0.38);
+    servo(ctx, out, noise, t, 0.16, 1.02 * p, 0.92, 1.1);
+    seat(ctx, out, noise, t + 0.16, 0.9 * p, 0.6);
+    for (const [dt, f] of [[0.22, 5800], [0.27, 4900]]) tick(ctx, out, noise, t + dt, f * p, 0.18);
+    air(ctx, out, noise, t + 0.26, [[0, 4200 * p], [0.14, 2600 * p]], 0.03, 0.15, 0.08, 1.4, 'bandpass');
+    osc(ctx, 'sine', t + 0.41, 0.06, [[0, 360 * p], [0.04, 270 * p]]).connect(envelope(ctx, t + 0.41, 0.001, 0.04, 0.08)).connect(out);
+    metal(ctx, out, t + 0.41, 1180 * p, 0.08, 0.18);
+    return 0.56;
   },
   // 換拿法、伸手自拍：手指滑過握把的滾花，細細一串「嗒嗒嗒嗒」，最後一點金屬的叮
   ggrip(ctx, out, t, p, noise) {
+    out = trim(ctx, out, 0.46);
     for (let i = 0; i < 5; i++) hiss(ctx, out, noise, t + i * 0.021, 0.006, 'bandpass', (5600 - i * 180) * p, 0.9 - i * 0.1, 3);
     metal(ctx, out, t + 0.1, 2700 * p, 0.1, 0.12);
     return 0.22;
   },
-  // 直拿、橫拿互換：機身轉九十度，裡面的定位珠滾過三格「喀、喀、喀」，到底一聲實的
+  // 直拿、橫拿互換：機身轉九十度，定位珠滾過三格「喀、喀、喀」，到底一聲實的；裡面的穩定器馬達跟著轉正，嗞一下
   gturn(ctx, out, t, p, noise) {
+    out = trim(ctx, out, 0.19);
     hiss(ctx, out, noise, t, 0.09, 'bandpass', 1500 * p, 0.12, 8);
     for (const dt of [0.02, 0.05, 0.08]) tick(ctx, out, noise, t + dt, 4800 * p, 0.22);
     tick(ctx, out, noise, t + 0.13, 3400 * p, 0.7);
     metal(ctx, out, t + 0.13, 2800 * p, 0.1, 0.22);
-    return 0.36;
+    servo(ctx, out, noise, t + 0.2, 0.08, 1.45 * p, 1.05, 2.2);
+    seat(ctx, out, noise, t + 0.28, 1.3 * p, 1.4);
+    return 0.45;
   },
-  // 打孔條撥出來印距離：鋼片滑過去「刷」一聲到底卡住；收回去是同一片往回滑，音低一點
+  // 打孔條撥出來印距離：小馬達把鋼片推出去，鋼片滑過一點「刷」，到底卡住；收回去是馬達往回、音低一點
   gstrip(ctx, out, t, p, noise) {
-    air(ctx, out, noise, t, [[0, 3500 * p], [0.07, 6200 * p]], 0.02, 0.08, 0.2, 3, 'bandpass');
-    tick(ctx, out, noise, t + 0.08, 4400 * p, 0.7);
-    metal(ctx, out, t + 0.08, 2600 * p, 0.11, 0.18);
-    return 0.28;
+    out = trim(ctx, out, 0.29);
+    servo(ctx, out, noise, t, 0.1, 1.3 * p, 1.08, 2);
+    air(ctx, out, noise, t + 0.02, [[0, 3500 * p], [0.07, 6200 * p]], 0.02, 0.08, 0.1, 3, 'bandpass');
+    tick(ctx, out, noise, t + 0.1, 4400 * p, 0.7);
+    metal(ctx, out, t + 0.1, 2600 * p, 0.11, 0.18);
+    return 0.3;
   },
   gstripoff(ctx, out, t, p, noise) {
-    air(ctx, out, noise, t, [[0, 5600 * p], [0.07, 3200 * p]], 0.02, 0.08, 0.17, 3, 'bandpass');
-    tick(ctx, out, noise, t + 0.08, 3600 * p, 0.65);
-    metal(ctx, out, t + 0.08, 2000 * p, 0.1, 0.16);
-    return 0.26;
+    out = trim(ctx, out, 0.26);
+    servo(ctx, out, noise, t, 0.1, 1.25 * p, 0.92, 2);
+    air(ctx, out, noise, t + 0.02, [[0, 5600 * p], [0.07, 3200 * p]], 0.02, 0.08, 0.085, 3, 'bandpass');
+    tick(ctx, out, noise, t + 0.1, 3600 * p, 0.65);
+    metal(ctx, out, t + 0.1, 2000 * p, 0.1, 0.16);
+    return 0.28;
   },
   // 拍照人說「再一張」：數位的不用捲片，馬達嗚一小段把鏡頭推回原位，喀一聲好了
   gagain(ctx, out, t, p, noise) {
+    out = trim(ctx, out, 0.75);
     VOICES.zoom(ctx, out, t, p * 1.04, noise);
     VOICES.zoomstop(ctx, out, t + 0.17, p, noise);
     return 0.4;
   },
-  // 前廳桌上（main.js 的帶走鈕）：帶走＝金屬機身離開木座，鋼扣環「喀、喀」扣上，背帶的鋼鍊跟著碎碎晃一陣
+  // 前廳桌上（main.js 的帶走鈕）：帶走＝金屬機身離開木座，鋼扣環「喀、喀」扣上，背帶的鋼鍊碎碎晃一陣；
+  // 最後開機自檢：鏡頭伸出去、縮回來，兩段馬達各喀一聲
   gtake(ctx, out, t, p, noise) {
-    osc(ctx, 'sine', t, 0.05, [[0, 260 * p], [0.05, 190 * p]]).connect(envelope(ctx, t, 0.002, 0.05, 0.18)).connect(out);
-    metal(ctx, out, t, 900 * p, 0.06, 0.18);
+    out = trim(ctx, out, 0.14);
+    osc(ctx, 'sine', t, 0.05, [[0, 260 * p], [0.05, 190 * p]]).connect(envelope(ctx, t, 0.002, 0.05, 0.1)).connect(out);
+    metal(ctx, out, t, 1500 * p, 0.06, 0.22);
     for (const [dt, f] of [[0.2, 3300], [0.29, 2900]]) {
       tick(ctx, out, noise, t + dt, f * 1.5 * p, 0.6);
       metal(ctx, out, t + dt, f * p, 0.08, 0.3);
     }
     for (let i = 0; i < 6; i++) tick(ctx, out, noise, t + 0.38 + i * 0.03 + Math.random() * 0.015, (5200 + Math.random() * 1600) * p, 0.14 - i * 0.015);
-    return 0.7;
+    servo(ctx, out, noise, t + 0.62, 0.15, p, 1.06, 2);
+    seat(ctx, out, noise, t + 0.77, 1.05 * p, 2);
+    servo(ctx, out, noise, t + 0.86, 0.12, 1.02 * p, 0.94, 2);
+    seat(ctx, out, noise, t + 0.98, 0.95 * p, 2);
+    return 1.15;
   },
-  // 放回桌上：鋼鍊滑下來碎碎一陣，扣環鬆開一聲，金屬機身坐回木座「叩」
+  // 放回桌上：先關機，鏡頭收回去喀一聲；鋼鍊滑下來碎碎一陣，扣環鬆開，金屬機身坐回木座「叩」
   gput(ctx, out, t, p, noise) {
-    for (let i = 0; i < 5; i++) tick(ctx, out, noise, t + i * 0.035 + Math.random() * 0.015, (5600 - i * 300) * p, 0.12);
-    tick(ctx, out, noise, t + 0.19, 3600 * p, 0.45);
-    metal(ctx, out, t + 0.19, 2600 * p, 0.05, 0.2);
-    osc(ctx, 'sine', t + 0.3, 0.08, [[0, 230 * p], [0.08, 150 * p]]).connect(envelope(ctx, t + 0.3, 0.002, 0.08, 0.2)).connect(out);
-    metal(ctx, out, t + 0.3, 760 * p, 0.1, 0.24);
-    return 0.6;
+    out = trim(ctx, out, 0.24);
+    servo(ctx, out, noise, t, 0.14, 1.02 * p, 0.92, 1.2);
+    seat(ctx, out, noise, t + 0.14, 0.9 * p, 1.1);
+    const d = 0.22;
+    for (let i = 0; i < 5; i++) tick(ctx, out, noise, t + d + i * 0.035 + Math.random() * 0.015, (5600 - i * 300) * p, 0.12);
+    tick(ctx, out, noise, t + d + 0.19, 3600 * p, 0.45);
+    metal(ctx, out, t + d + 0.19, 2600 * p, 0.05, 0.2);
+    osc(ctx, 'sine', t + d + 0.3, 0.08, [[0, 230 * p], [0.06, 160 * p]]).connect(envelope(ctx, t + d + 0.3, 0.002, 0.06, 0.1)).connect(out);
+    metal(ctx, out, t + d + 0.3, 1400 * p, 0.1, 0.3);
+    return 0.85;
   },
   // 桌上浮起來：鏡頭自己伸出去一小截又縮回來，兩聲喀
   grattle(ctx, out, t, p, noise) {
