@@ -442,7 +442,7 @@ body #radio.moved { left: var(--mx, 16px); top: var(--my, 16px); right: auto; bo
 @media (prefers-reduced-motion: reduce) { #radio.show { animation: none; } #radio .dial, #radio .eye i { transition: none; } }
 
 /* 原野畫架的面板（easel-card.js）：照畫架做，跟收音機同一種深墨棕木框、內圈細金線；中間是那張畫（麻布色的邊，像繃在框上），
-   底下 ‹ 場景 ›、一排三顆小銅鈕（自動、換色、畫框，換色、畫框右上角寫現在第幾版、哪一種），最下面「收進相簿」「好了」。
+   底下一排三顆小銅鈕（再畫一張、換色、畫框，換色、畫框右上角寫現在第幾版、哪一種），最下面「收進相簿」「好了」。
    位置跟收音機一樣（手機橫拿靠左、直拿貼底，電腦長在畫架旁邊）。畫的大小照畫面高算，直拿留上半給場景 */
 #easel {
   position: fixed; left: calc(24px + env(safe-area-inset-left)); top: 50%; z-index: 25;
@@ -465,8 +465,6 @@ body #radio.moved { left: var(--mx, 16px); top: var(--my, 16px); right: auto; bo
 }
 #easel .board canvas, #easel .board svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #easel .board .h { cursor: var(--cur-grab, grab); }
-#easel .pick { display: flex; align-items: center; gap: 6px; width: 100%; }
-#easel .sname { flex: 1; text-align: center; font-weight: 500; letter-spacing: .3em; color: var(--gold-hi); text-shadow: 0 -1px 0 rgba(0, 0, 0, .6); }
 #easel .tools, #easel .foot { display: flex; gap: 8px; width: 100%; }
 #easel .tools button, #easel .foot button { flex: 1; }
 #easel button {
@@ -480,9 +478,9 @@ body #radio.moved { left: var(--mx, 16px); top: var(--my, 16px); right: auto; bo
 }
 #easel button:active { transform: scale(.95); }
 #easel button:disabled { filter: saturate(.4) brightness(.8); }
-#easel .prev, #easel .next { flex: none; width: 36px; padding: 0; font-size: 18px; letter-spacing: 0; }
 /* 換色、畫框右上角一個小字：第幾版、哪一種 */
-#easel .ver::after, #easel .frm::after { content: attr(data-n); position: absolute; right: 4px; top: 2px; font-size: 9px; letter-spacing: .04em; opacity: .7; }
+#easel .note { margin: 0; width: 100%; font-size: 11px; line-height: 1.5; color: var(--gold-hi); opacity: .75; text-align: center; }
+#easel .ver::after, #easel .frm::after, #easel .keep::after { content: attr(data-n); position: absolute; right: 4px; top: 2px; font-size: 9px; letter-spacing: .04em; opacity: .7; }
 #easel .enter { display: flex; align-items: center; justify-content: center; gap: 8px; }
 #easel .enter kbd { min-width: 20px; padding: 0 4px; font: 11px/1.5 var(--latin); color: inherit; border: 1px solid rgba(62, 40, 16, .5); border-radius: 2px; }
 @media (orientation: portrait) {

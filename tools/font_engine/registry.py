@@ -10,6 +10,7 @@ from .ids import compose
 from .optics import optical
 from .places import PLACE_GLYPHS
 from .buttons import BUTTON_GLYPHS
+from .digits import DIGIT_GLYPHS
 from .components import (
     RAD_FIRE_LEFT, BODY_JIAN, RAD_GUANG, BODY_LANG_FULL,
     COMP_SUN, COMP_MOON, COMP_WOOD, COMP_EARTH, COMP_WATER, COMP_GATE, COMP_LIGHT,
@@ -86,6 +87,7 @@ GLYPH_REGISTRY.update(PLACE_GLYPHS)
 GLYPH_REGISTRY['畫'] = GLYPH_REGISTRY['画']   # 跟字標一樣寫成「画」
 LOCKED.add('畫')
 GLYPH_REGISTRY.update(BUTTON_GLYPHS)           # 按鈕上的字，見 buttons.py
+GLYPH_REGISTRY.update(DIGIT_GLYPHS)            # 數字（畫架銘牌的日期），見 digits.py
 
 # 5. 光學修正：漢字整組調勻（墨量、字面、重心），規則見 optics.py
 for _ch, _prims in GLYPH_REGISTRY.items():

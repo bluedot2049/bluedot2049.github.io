@@ -13,6 +13,7 @@ import { decodeSave, decodeLook, tryOn, codeFrom, hasProgress, restoreSave, atta
 import { readPostcard, joinFace } from './postcard.js';
 import { readMirrorCard } from './mirrorcard.js';
 import { readEyePost } from './eyepost.js';
+import { readPaintCard } from './paintcard.js';
 import { encodeFace } from '../avatar/looks.js';
 import { getSave, savePrint } from './progress.js';
 import { dockR, hugMedia, panelW, uiScale } from '../controls/ui.js';
@@ -709,10 +710,14 @@ export class Pack {
       // 兩種的眼紋是同一套，靈魂明信片的郵票也會被當鏡中照片讀到一半：鏡框沒讀全就再當靈魂明信片讀，讀全的那個算
       if (!m?.full) try { e = await readEyePost(file); } catch {}
       if (e && (e.full || !m)) m = e;
+      // 原野畫架的畫卡（銘牌上的黑眼和方格）：前兩種都沒讀全才試
+      let pc = null;
+      if (!m?.full) try { pc = await readPaintCard(file); } catch {}
+      if (pc && (pc.full || !m)) m = pc;
       if (m) {
-        const sv = m.save, card = m === e;
-        const ask = !m.full ? `${card ? '紙邊' : '鏡框'}讀不清楚，只能還原身上這套和拿到的東西，衣櫃和畫的臉不會回來。要用這張嗎？`
-          : hasProgress() ? `這台裝置已有存檔。用這張${card ? '明信片' : '照片'}覆蓋？` : null;
+        const sv = m.save, card = m === e, paintc = m === pc;
+        const ask = !m.full ? `${paintc ? '銘牌' : card ? '紙邊' : '鏡框'}讀不清楚，只能還原身上這套和拿到的東西，衣櫃和畫的臉不會回來。要用這張嗎？`
+          : hasProgress() ? `這台裝置已有存檔。用這張${paintc ? '畫' : card ? '明信片' : '照片'}覆蓋？` : null;
         if (ask && !confirm(ask)) return null;
         this.restore(sv, m.full);
         return 'save';
@@ -736,7 +741,7 @@ export class Pack {
         return 'look';
       }
       sfx('fail');
-      alert('讀不到存檔。圖可能被裁切、縮得太小，或不是鏡中照片、海市明信片');
+      alert('讀不到存檔。圖可能被裁切、縮得太小，或不是鏡中照片、海市明信片、畫架的畫');
       return null;
     } finally {
       if (b?.isConnected) {

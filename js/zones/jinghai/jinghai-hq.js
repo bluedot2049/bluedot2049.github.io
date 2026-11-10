@@ -119,6 +119,7 @@ export function buildHQ({ coarse = false, fade = null } = {}) {
     fadeKits.push(fk);
     return fk;
   };
+  let camHero = 0;   // 相機店轉台那組的淡出編號（轉的那一層在 jinghai.js 另外建，跟著它淡）
   const B = (kit, x0, y0, z0, x1, y1, z1, c, o) => kit.box(Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0), c, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, o);
   const block = (x0, z0, x1, z1) => obstacles.push({ x: (x0 + x1) / 2, z: (z0 + z1) / 2, hw: Math.abs(x1 - x0) / 2, hd: Math.abs(z1 - z0) / 2, a: 0 });
   // deck：樓上的地板和欄杆，擋住鏡頭時淡掉。被拍的遮擋（jinghai.js 的 camClip）比頭高的不算
@@ -764,16 +765,18 @@ export function buildHQ({ coarse = false, fade = null } = {}) {
       glowBox(x0 + 0.6, 6.4, zf - s * 0.17, x1 - 0.6, 9.4, zf - s * 0.15, '#ffe9c7');
       for (let q = 1; q < 4; q++) B(k, x0 + 0.6 + q * 1.45 - 0.05, 6.4, zf - s * 0.2, x0 + 0.6 + q * 1.45 + 0.05, 9.4, zf - s * 0.15, SILVER);
       B(k, x0 + 0.3, 9.7, zf - s * 0.2, x1 - 0.3, 10.7, zf - s * 0.1, col);
-      // 店裡：後牆顏色、架子、櫃台、天花板的燈
-      const back = new THREE.Color(col).multiplyScalar(0.72).getStyle();
+      // 店裡：後牆顏色、架子、櫃台、天花板的燈。後牆跟著商店街的後牆淡；架子、櫃台、燈、櫥窗裡的東西整間一組，
+      // 鏡頭轉進店裡（從隔壁相機店穿牆、或從走道拉遠）就淡掉
+      const back = new THREE.Color(col).multiplyScalar(0.72).getStyle(), inner = zf + s * 0.15;
+      const sk = fadeKit([[x0 + 0.2, 0, Math.min(inner, zb), x1 - 0.2, 5.45, Math.max(inner, zb)]]);
       B(k, x0 + 0.2, 0, zb - s * 0.15, x1 - 0.2, 5.5, zb, back);
       for (const sx of [1.2, 3.6]) {
-        B(k, x0 + sx - 1, 0, zb - s * 0.7, x0 + sx + 1, 2.6, zb - s * 0.2, WHITE2);
-        for (let j = 0; j < 3; j++) for (let q = 0; q < 4; q++) B(k, x0 + sx - 0.85 + q * 0.45, 0.4 + j * 0.8, zb - s * 0.62, x0 + sx - 0.55 + q * 0.45, 0.72 + j * 0.8, zb - s * 0.28, FOOD[(i + j + q) % FOOD.length]);
+        B(sk, x0 + sx - 1, 0, zb - s * 0.7, x0 + sx + 1, 2.6, zb - s * 0.2, WHITE2);
+        for (let j = 0; j < 3; j++) for (let q = 0; q < 4; q++) B(sk, x0 + sx - 0.85 + q * 0.45, 0.4 + j * 0.8, zb - s * 0.62, x0 + sx - 0.55 + q * 0.45, 0.72 + j * 0.8, zb - s * 0.28, FOOD[(i + j + q) % FOOD.length]);
       }
-      SB(k, x0 + 4.4, 0, s * 10.4, x0 + 6.6, 1.0, s * 11.1, WHITE2, 0.08);
-      glowBox(x0 + 1, 5.42, s * 8, x1 - 1, 5.47, s * 12, '#fff5e2');
-      display(type, x0 + 2.55, zf + s * 1.1, s);
+      SB(sk, x0 + 4.4, 0, s * 10.4, x0 + 6.6, 1.0, s * 11.1, WHITE2, 0.08);
+      B(sk, x0 + 1, 5.42, s * 8, x1 - 1, 5.47, s * 12, '#fff5e2', { glow: true });
+      display(type, x0 + 2.55, zf + s * 1.1, s, sk);
       shopSpots.push({ x: x0 + 2.55, z: zf - s * 1.7, face: s > 0 ? 0 : Math.PI, keeper: [x0 + 5.5, s * 11.6] });
     }
   }
@@ -1002,7 +1005,7 @@ export function buildHQ({ coarse = false, fade = null } = {}) {
 
   // ================= 海牛人 =================
   const plan = makePlan({ seats, shopSpots, coarse, R });
-  return { kit: k, glass: kg, foil: kf, foilIn: kfi, fadeKits, walls: faces.list, obstacles, solids, holes, plan, screens };
+  return { kit: k, glass: kg, foil: kf, foilIn: kfi, fadeKits, walls: faces.list, obstacles, solids, holes, plan, screens, camHero };
 
   // 相機店（北排西頭三間打通，店裡在 jinghai-camshop.js）：西牆、門面、整間的店裡。
   // 門面一樓兩扇大窗夾著沒有門的門口，上面一條奶油色招牌帶；二樓三張放大的拍立得——方的玻璃是照片、白框下巴厚，從二樓走廊看得進挑高的店裡
@@ -1029,7 +1032,7 @@ export function buildHQ({ coarse = false, fade = null } = {}) {
     onFace(k, 'z+', out, cx - 0.38, 4.8, cx + 0.38, 5.3, 0.08, 0.1, DARK);
     onFace(k, 'z+', out, cx - 0.2, 4.58, cx + 0.2, 4.66, 0.08, 0.1, RED);
     for (const sg of [-1, 1]) for (let i = 0; i < 3; i++) k.cyl(0.14, 0.14, 0.05, CREAM, cx + sg * (1.2 + i * 0.5), 4.95, out + 0.03, { rx: Math.PI / 2 }, 16);
-    buildCamShop({ k, kg, B, SB, block, pane, R });
+    camHero = buildCamShop({ k, kg, B, SB, block, pane, R, fadeKit }).heroFid;
     // 海牛人逛街時在三扇窗前停一下（店員另外放，CLERKS）
     for (const x of PH) shopSpots.push({ x, z: zf + 1.7, face: Math.PI, keeper: null });
   }
@@ -1041,8 +1044,8 @@ export function buildHQ({ coarse = false, fade = null } = {}) {
     else if (type === 'toy') k.cone(0.26, 0.7, c, x, y, z + dz, { sz: 0.2 });
     else k.box(0.8, 0.36, 0.04, type === 'card' || type === 'book' ? c : g, x, y, z + dz, face);
   }
-  // 櫥窗裡擺的東西：x、z 是櫥窗裡面的中間，s 是店在哪一邊（-1 北、1 南）
-  function display(type, x, z, s) {
+  // 櫥窗裡擺的東西：x、z 是櫥窗裡面的中間，s 是店在哪一邊（-1 北、1 南）；k 是那間店淡出的那一組（蓋過外面的 k）
+  function display(type, x, z, s, k) {
     const T = (h) => B(k, x - 1.6, 0, z - 0.5, x + 1.6, h, z + 0.5, WHITE2);
     if (type === 'lens') {
       for (let i = 0; i < 3; i++) {

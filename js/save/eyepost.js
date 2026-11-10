@@ -17,7 +17,7 @@ const PAPER = '#f2ead8', BROWN = '#4a3022';
 const EDGE = 44;              // 卡片邊到外框線
 const CELL = 6.4, IN = 12;    // 符文格子（同鏡框）、離框線多遠
 const GAP = 16;               // 分兩圈時中間空多少
-const K = 0.7;                // 郵票上的虹膜是鏡中照片的幾倍
+export const K = 0.7;         // 郵票上的虹膜是鏡中照片的幾倍
 export const INKS = { brown: '#3a2418', indigo: '#1d3150', madder: '#6a2420' };
 export const STYLE = { layout: 'one', mark: 'dot', ink: 'brown' };
 
@@ -52,7 +52,7 @@ function layout(split) {
 }
 const LAYOUTS = { one: layout(false), two: layout(true) };
 // 虹膜的格子搬到郵票上
-const irisAt = (e) => IRIS.map((c) => ({ ...c, x: e.x + (c.x - EYE.x) * K, y: e.y + (c.y - EYE.y) * K }));
+export const irisAt = (e) => IRIS.map((c) => ({ ...c, x: e.x + (c.x - EYE.x) * K, y: e.y + (c.y - EYE.y) * K }));
 
 export const info = Object.fromEntries(Object.entries(LAYOUTS).map(([k, L]) => [k, { rows: L.rows, cells: L.cells.length, band: L.cap, iris: mirrorCap.iris, photo: `${L.P.w}×${L.P.h}` }]));
 
@@ -155,8 +155,8 @@ function stamp(g, L, bits) {
   drawText(g, '海市', { x: S.x, y: iy + ih + 44, size: 54, step: 62, color: BROWN });
 }
 
-// 虹膜：鏡中照片那顆照 K 縮小。格子的位置和深淺不能動，讀檔靠它
-function iris(g, E, bits) {
+// 虹膜：鏡中照片那顆照 K 縮小。格子的位置和深淺不能動，讀檔靠它（paintcard.js 的銘牌也用這顆）
+export function iris(g, E, bits) {
   g.save();
   g.translate(E.x, E.y);
   g.scale(K, K);

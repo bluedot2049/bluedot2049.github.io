@@ -356,7 +356,7 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
     pole.add(m);
   }
   // 相機店的轉台：放大的 a500 慢慢轉（不投影，影子圖才不用每幀重畫）
-  const spin = buildSpin();
+  const spin = buildSpin(fader, hq.camHero);
   group.add(pole, burger.anim, back.blades, lift.car, spin);
   if (PL.fid) fader.units[PL.fid].objs.push(pole);
 

@@ -605,7 +605,8 @@ export function fits(W, H) {
 const goldness = (d, i) => Math.min(1, Math.max(0, (d[i] - d[i + 2] - 20) / 75));
 
 // 虹膜的候選：在縮小的金色比例圖上，用方塊估「瞳孔沒有金、外圈一半金、兩旁眼白沒有金」。回傳原圖座標的圓心和半徑，最像的在前面
-export function irisSpots(img) {
+// max：留幾個候選（畫卡的金畫框也像一圈金，要多留幾個，paintcard.js）
+export function irisSpots(img, max = 4) {
   const { width: W, height: H, data: d } = img, q = Math.max(1, Math.round(W / 400));
   const w = Math.floor(W / q), h = Math.floor(H / q), S = new Float64Array((w + 1) * (h + 1));
   for (let y = 0; y < h; y++) {
@@ -641,7 +642,7 @@ export function irisSpots(img) {
   }
   found.sort((a, b) => b.score - a.score);
   const keep = [];
-  for (const c of found) if (keep.length < 4 && keep.every((k) => Math.hypot(k.x - c.x, k.y - c.y) > k.R)) keep.push(c);
+  for (const c of found) if (keep.length < max && keep.every((k) => Math.hypot(k.x - c.x, k.y - c.y) > k.R)) keep.push(c);
   return keep.map((c) => {
     const spot = { x: c.x * q, y: c.y * q, R: c.R * q };
     return { ...spot, R: irisRadius(img, spot) };

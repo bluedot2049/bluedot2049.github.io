@@ -159,6 +159,38 @@ export function oil(ctx, img, S, T) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
+// ---------- 方塊厚筆（燭火畫） ----------
+// 整張都蓋滿短而方的厚筆，沒有例外：人、火、桌上的東西也是幾撇色塊。T.dabs 是最大那層一筆多大（畫高的幾分之一）。
+// 第一層整張都刷；後面幾層越來越小，只刷在越來越亮的地方（暗處筆大只剩幾塊顏色，光裡筆小、細節多）。
+// 一筆的顏色是那一塊的平均（跨過邊的筆會把邊打成方塊狀，像點陣），方向順著明暗的輪廓，平的地方幾乎是橫的。
+const DAB_PASSES = [{ k: 1, min: -1 }, { k: 0.8, min: 0.16 }, { k: 0.62, min: 0.34 }, { k: 0.45, min: 0.52 }];   // 最小一層約畫高 1/89（被照亮的臉）
+const DAB_OFF = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
+export function dabs(ctx, img, S, T) {
+  const { W, H } = S, d = img.data, base = T.dabs * H;
+  if (base < 2.5) return;   // 太小張（拖的時候、品質關卡）就不刷
+  const R = rand((S.seed ^ 0xdab5) >>> 0);
+  const at = (x, y) => (clamp(y | 0, 0, H - 1) * W + clamp(x | 0, 0, W - 1)) * 4;
+  const lum = (k) => (d[k] * 0.3 + d[k + 1] * 0.59 + d[k + 2] * 0.11) / 255;
+  for (const ps of DAB_PASSES) {
+    const sz = base * ps.k, step = sz * 0.6;
+    if (sz < 2) continue;
+    for (let gy = -1; gy * step < H + step; gy++) for (let gx = -1; gx * step < W + step; gx++) {
+      const x = (gx + R()) * step, y = (gy + R()) * step, L = lum(at(x, y));
+      if (L < ps.min) continue;
+      let r = 0, g = 0, b = 0;
+      for (const [ox, oy] of DAB_OFF) { const q = at(x + ox * sz * 0.28, y + oy * sz * 0.28); r += d[q]; g += d[q + 1]; b += d[q + 2]; }
+      const e = sz * 0.45, gxv = lum(at(x + e, y)) - lum(at(x - e, y)), gyv = lum(at(x, y + e)) - lum(at(x, y - e));
+      const a = Math.hypot(gxv, gyv) > 0.05 ? Math.atan2(gyv, gxv) + Math.PI / 2 + (R() - 0.5) * 0.4 : (R() - 0.5) * 0.7;
+      const jl = 1 + (R() - 0.5) * 2 * T.jitL, jc = T.jitC * 255;
+      const ca = Math.cos(a), sa = Math.sin(a), w = sz * (0.85 + R() * 0.35), h = sz * (0.55 + R() * 0.25);
+      ctx.setTransform(ca, sa, -sa, ca, x, y);
+      ctx.fillStyle = `rgba(${(r / 5 * jl + (R() - 0.5) * jc) | 0},${(g / 5 * jl + (R() - 0.5) * jc) | 0},${(b / 5 * jl + (R() - 0.5) * jc) | 0},0.95)`;
+      ctx.fillRect(-w / 2, -h / 2, w, h);
+    }
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
 // ---------- 光暈 ----------
 
 // 光那點往外暈（濾色），顏色用場景的 bloom 色（沒給就用奶油白）

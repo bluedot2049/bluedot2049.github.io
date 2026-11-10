@@ -53,6 +53,8 @@ export function buildStalls() {
     k.add(new THREE.IcosahedronGeometry(0.09, 1), MINT, x - 0.73, 2.29, 0);
     k.add(new THREE.ConeGeometry(0.07, 0.16, 8).rotateX(Math.PI), '#d4a462', x - 0.73, 2.16, 0);
     obstacles.push({ x: x + 0.45, z: 0, hw: 1.0, hd: 1.0, a: 0 });
+    // 擋住鏡頭時整台藏起來（jinghai.js 的 onSolid）；不是樓上的東西，被拍時照樣算遮擋
+    solids.push({ x0: x - 0.8, x1: x + 0.6, y0: 0, y1: 2.7, z0: -1.1, z1: 1.1, deck: false });
   }
 
   // ---------- 汽水吧：一樓迴廊的中段平台（第一道扶梯上來、第二道扶梯的口），背靠東邊欄杆，客人面向吧台就看得到後面的望遠鏡 ----------

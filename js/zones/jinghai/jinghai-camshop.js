@@ -43,7 +43,9 @@ function placeCam(k, id, x, y, z, ry, s) {
 }
 
 // h：jinghai-hq.js 的工具（k 一般、kg 玻璃、B 方塊、SB 圓角方塊、block 擋人、pane 一片玻璃、R 亂數）
-export function buildCamShop({ k, kg, B, SB, block, pane, R }) {
+// fadeKit(boxes)：擋住鏡頭（或鏡頭鑽進去）時整組淡掉的 Kit（jinghai-hq.js）。貼在牆上的（內襯、樣張牆、布條、櫃子上的牌子）跟著那面牆淡，
+// 店裡獨立擺的（底片櫃、長桌、轉台、吊燈、望遠鏡、歷代櫃、沖印機、櫃台）各自一組。回傳轉台那組的編號，轉的那一層（buildSpin）跟著它淡
+export function buildCamShop({ k, kg, B, SB, block, pane, R, fadeKit }) {
   const { x0: X0, x1: X1, z0: Z0, z1: Z1 } = CAMSHOP;
   const xi0 = X0 + 0.15, xi1 = X1 - 0.15, zf = Z1 - 0.15;
   // 牆的內襯：後牆一整片、兩邊牆，霧銀踢腳
@@ -62,19 +64,20 @@ export function buildCamShop({ k, kg, B, SB, block, pane, R }) {
   // ================= 西段：底片牆 =================
   // 後牆上一整面櫃子，一格一盒，奶油色片盒、底下一道紅條；最上兩排是十周年的銀盒。空了幾格（有人拿走了）
   {
+    const u = fadeKit([[20.5, 0, Z0 + 0.04, 26.8, 7.75, Z0 + 0.5], [24.85, 0, Z0 + 0.5, 25.75, 7.3, Z0 + 1.2], [26.2, 0, Z0 + 0.8, 27.05, 1.4, Z0 + 1.55]]);
     const c0 = 20.55, c1 = 26.75, top = 7.6, front = Z0 + 0.5;
-    B(k, c0, 0, Z0 + 0.04, c1, top, front - 0.12, '#d8d2c4');
-    for (const x of [c0, c1 - 0.12]) B(k, x, 0, Z0 + 0.04, x + 0.12, top + 0.1, front, SILV);
-    B(k, c0, top, Z0 + 0.04, c1, top + 0.12, front, SILV);
-    B(k, c0, 0, Z0 + 0.04, c1, 0.3, front, SILVDK);
+    B(u, c0, 0, Z0 + 0.04, c1, top, front - 0.12, '#d8d2c4');
+    for (const x of [c0, c1 - 0.12]) B(u, x, 0, Z0 + 0.04, x + 0.12, top + 0.1, front, SILV);
+    B(u, c0, top, Z0 + 0.04, c1, top + 0.12, front, SILV);
+    B(u, c0, 0, Z0 + 0.04, c1, 0.3, front, SILVDK);
     const cols = 9, rows = 12, pw = (c1 - c0 - 0.24) / cols, ph = (top - 0.4) / rows;
     for (let r = 0; r < rows; r++) {
-      B(k, c0 + 0.12, 0.33 + r * ph - 0.03, front - 0.12, c1 - 0.12, 0.33 + r * ph, front, SILV);
+      B(u, c0 + 0.12, 0.33 + r * ph - 0.03, front - 0.12, c1 - 0.12, 0.33 + r * ph, front, SILV);
       for (let c = 0; c < cols; c++) {
         if (R() < 0.07) continue;
         const x = c0 + 0.12 + c * pw + pw / 2, y = 0.33 + r * ph + ph * 0.45, ten = r >= rows - 2;
-        k.box(pw * 0.84, ph * 0.74, 0.14, ten ? SILV : CREAM, x, y, front - 0.07);
-        k.box(pw * 0.84, ph * 0.12, 0.02, ten ? DARK : RED, x, y - ph * 0.28, front + 0.005);
+        u.box(pw * 0.84, ph * 0.74, 0.14, ten ? SILV : CREAM, x, y, front - 0.07);
+        u.box(pw * 0.84, ph * 0.12, 0.02, ten ? DARK : RED, x, y - ph * 0.28, front + 0.005);
       }
     }
     // 櫃子上面一塊霧銀牌子，三顆奶油色大圓點（一盒三張，跟機背那三顆一樣）
@@ -82,19 +85,20 @@ export function buildCamShop({ k, kg, B, SB, block, pane, R }) {
     for (let i = 0; i < 3; i++) k.cyl(0.6, 0.6, 0.06, CREAM, 23.65 + (i - 1) * 1.7, 9.2, Z0 + 0.15, { rx: Math.PI / 2 }, 24);
     // 補貨的梯子靠在櫃子上，旁邊一台推車
     const lean = 0.08;
-    for (const x of [25.0, 25.55]) k.box(0.05, 7.2, 0.05, SILVDK, x, 3.6, front + 0.35, { rx: -lean });
-    for (let i = 1; i < 12; i++) k.box(0.55, 0.035, 0.035, SILV, 25.27, i * 0.6, front + 0.35 + (3.6 - i * 0.6) * lean, {});
-    SB(k, 26.3, 0.2, front + 0.35, 26.95, 0.8, front + 1.0, CREAMSH, 0.05);
-    for (const [x, z] of [[26.35, front + 0.4], [26.9, front + 0.4], [26.35, front + 0.95], [26.9, front + 0.95]]) k.cyl(0.07, 0.07, 0.04, RUBBER, x, 0.07, z, { rz: Math.PI / 2 }, 8);
-    for (let i = 0; i < 4; i++) k.box(0.5, 0.11, 0.42, i % 2 ? CREAM : SILV, 26.62, 0.86 + i * 0.12, front + 0.67, { ry: (R() - 0.5) * 0.2 });
+    for (const x of [25.0, 25.55]) u.box(0.05, 7.2, 0.05, SILVDK, x, 3.6, front + 0.35, { rx: -lean });
+    for (let i = 1; i < 12; i++) u.box(0.55, 0.035, 0.035, SILV, 25.27, i * 0.6, front + 0.35 + (3.6 - i * 0.6) * lean, {});
+    SB(u, 26.3, 0.2, front + 0.35, 26.95, 0.8, front + 1.0, CREAMSH, 0.05);
+    for (const [x, z] of [[26.35, front + 0.4], [26.9, front + 0.4], [26.35, front + 0.95], [26.9, front + 0.95]]) u.cyl(0.07, 0.07, 0.04, RUBBER, x, 0.07, z, { rz: Math.PI / 2 }, 8);
+    for (let i = 0; i < 4; i++) u.box(0.5, 0.11, 0.42, i % 2 ? CREAM : SILV, 26.62, 0.86 + i * 0.12, front + 0.67, { ry: (R() - 0.5) * 0.2 });
     // 拿底片的長桌：桌上散著幾盒
+    const t = fadeKit([[20.9, 0, -12.4, 26.1, 1.1, -11.6]]);
     const tz0 = -12.3, tz1 = -11.7;
-    SB(k, 21.0, 0, tz0, 26.0, 0.86, tz1, CREAM, 0.08);
-    SB(k, 20.95, 0.86, tz0 - 0.05, 26.05, 0.92, tz1 + 0.05, SILV, 0.03);
-    B(k, 21.0, 0.05, tz1 - 0.02, 26.0, 0.16, tz1 + 0.005, RED);
+    SB(t, 21.0, 0, tz0, 26.0, 0.86, tz1, CREAM, 0.08);
+    SB(t, 20.95, 0.86, tz0 - 0.05, 26.05, 0.92, tz1 + 0.05, SILV, 0.03);
+    B(t, 21.0, 0.05, tz1 - 0.02, 26.0, 0.16, tz1 + 0.005, RED);
     for (let i = 0; i < 7; i++) {
       const x = 21.5 + R() * 4, ry = (R() - 0.5) * 1.2;
-      k.box(0.36, 0.08, 0.3, i % 3 ? CREAM : SILV, x, 0.96, -12.0 + (R() - 0.5) * 0.2, { ry });
+      t.box(0.36, 0.08, 0.3, i % 3 ? CREAM : SILV, x, 0.96, -12.0 + (R() - 0.5) * 0.2, { ry });
     }
     block(20.5, Z0, c1 + 0.1, front + 0.1);
     block(21.0, tz0, 26.0, tz1);
@@ -103,26 +107,29 @@ export function buildCamShop({ k, kg, B, SB, block, pane, R }) {
 
   // 配色款：門面西邊大窗後面一張長桌，五台 a500 站在小圓台上對著走道，一台一個顏色
   {
+    const u = fadeKit([[20.9, 0, -7.4, 27.1, 1.5, -6.5]]);
     const tz0 = -7.3, tz1 = -6.6;
-    SB(k, 21.0, 0, tz0, 27.0, 0.8, tz1, CREAM, 0.08);
-    SB(k, 20.95, 0.8, tz0 - 0.05, 27.05, 0.86, tz1 + 0.05, SILV, 0.03);
+    SB(u, 21.0, 0, tz0, 27.0, 0.8, tz1, CREAM, 0.08);
+    SB(u, 20.95, 0.8, tz0 - 0.05, 27.05, 0.86, tz1 + 0.05, SILV, 0.03);
     WANG_COLORS.forEach((_, i) => {
       const x = 21.8 + i * 1.1, h = 0.1 + (i % 2) * 0.12;
-      k.cyl(0.26, 0.26, h, CREAMSH, x, 0.86 + h / 2, -6.95, {}, 20);
-      placeCam(k, `wang@${i}`, x, 0.86 + h, -6.95, (i - 2) * 0.22 + Math.PI * 0.08, 3);
+      u.cyl(0.26, 0.26, h, CREAMSH, x, 0.86 + h / 2, -6.95, {}, 20);
+      placeCam(u, `wang@${i}`, x, 0.86 + h, -6.95, (i - 2) * 0.22 + Math.PI * 0.08, 3);
     });
     block(21.0, tz0, 27.0, tz1);
   }
 
   // ================= 中段：轉台、樣張牆、歷代櫃、望遠鏡 =================
   // 轉台底座不動，上面那層和相機在 spin 裡轉
-  k.cyl(HERO.r + 0.15, HERO.r + 0.2, 0.12, SILV, HERO.x, 0.06, HERO.z, {}, 40);
+  const hero = fadeKit([[HERO.x - 1.75, 0, HERO.z - 1.75, HERO.x + 1.75, 2.5, HERO.z + 1.75]]);
+  hero.cyl(HERO.r + 0.15, HERO.r + 0.2, 0.12, SILV, HERO.x, 0.06, HERO.z, {}, 40);
   block(HERO.x - HERO.r - 0.15, HERO.z - HERO.r - 0.15, HERO.x + HERO.r + 0.15, HERO.z + HERO.r + 0.15);
   // 轉台正上方吊一圈燈
-  k.torus(1.3, 0.06, Math.PI * 2, WARM, HERO.x, 6.4, HERO.z, { rx: Math.PI / 2, glow: true });
+  const ring = fadeKit([[HERO.x - 1.45, 6.25, HERO.z - 1.45, HERO.x + 1.45, CAMSHOP.top, HERO.z + 1.45]]);
+  ring.torus(1.3, 0.06, Math.PI * 2, WARM, HERO.x, 6.4, HERO.z, { rx: Math.PI / 2, glow: true });
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2;
-    k.cyl(0.015, 0.015, CAMSHOP.top - 6.4, SILVDK, HERO.x + Math.sin(a) * 1.3, (CAMSHOP.top + 6.4) / 2, HERO.z + Math.cos(a) * 1.3, {}, 4);
+    ring.cyl(0.015, 0.015, CAMSHOP.top - 6.4, SILVDK, HERO.x + Math.sin(a) * 1.3, (CAMSHOP.top + 6.4) / 2, HERO.z + Math.cos(a) * 1.3, {}, 4);
   }
   k.light(HERO.x, 6.3, HERO.z, WARM, 2.4);
   // 樣張牆：後牆上四排四張放大的拍立得，方的照片、下巴厚的白邊。有的漏光（角落一片橘）、有的糊（顏色淡掉）
@@ -145,25 +152,26 @@ export function buildCamShop({ k, kg, B, SB, block, pane, R }) {
   }
   // 望遠鏡：樣張牆兩邊各一台，白鏡筒架在三腳架上，跟大廳那支一樣對著北邊天上的地球（仰角 34 度）
   for (const x of [27.9, 33.1]) {
-    const z = -12.85, el = (34 * Math.PI) / 180, top = 1.35;
+    const z = -12.85, el = (34 * Math.PI) / 180, top = 1.35, u = fadeKit([[x - 0.55, 0, z - 0.85, x + 0.55, 2.2, z + 0.65]]);
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2 + 0.5;
-      k.box(0.035, 1.42, 0.035, SILVDK, x + Math.sin(a) * 0.22, top / 2, z + Math.cos(a) * 0.22, { rx: Math.cos(a) * -0.32, rz: Math.sin(a) * 0.32 });
+      u.box(0.035, 1.42, 0.035, SILVDK, x + Math.sin(a) * 0.22, top / 2, z + Math.cos(a) * 0.22, { rx: Math.cos(a) * -0.32, rz: Math.sin(a) * 0.32 });
     }
-    k.cyl(0.06, 0.06, 0.12, SILVDK, x, top, z, {}, 8);
-    k.cyl(0.09, 0.1, 1.15, CREAM, x, top + 0.18, z, { rx: -(Math.PI / 2 - el) }, 14);
-    k.cyl(0.11, 0.11, 0.12, SILV, x, top + 0.18 + Math.sin(el) * 0.5, z - Math.cos(el) * 0.5, { rx: -(Math.PI / 2 - el) }, 14);
+    u.cyl(0.06, 0.06, 0.12, SILVDK, x, top, z, {}, 8);
+    u.cyl(0.09, 0.1, 1.15, CREAM, x, top + 0.18, z, { rx: -(Math.PI / 2 - el) }, 14);
+    u.cyl(0.11, 0.11, 0.12, SILV, x, top + 0.18 + Math.sin(el) * 0.5, z - Math.cos(el) * 0.5, { rx: -(Math.PI / 2 - el) }, 14);
     block(x - 0.32, z - 0.45, x + 0.32, z + 0.32);
   }
   // 歷代櫃：白底座上一個玻璃罩，裡面是初代的方盒 a100，旁邊排著一代一代的片盒（越後面越薄）
   {
+    const u = fadeKit([[32.75, 0, -9.25, 33.95, 1.95, -8.25]]);
     const x = 33.35, z = -8.75, w = 1.1, d = 0.9;
-    SB(k, x - w / 2, 0, z - d / 2, x + w / 2, 0.95, z + d / 2, CREAM, 0.06);
-    B(k, x - w / 2 - 0.02, 0.95, z - d / 2 - 0.02, x + w / 2 + 0.02, 0.99, z + d / 2 + 0.02, SILV);
+    SB(u, x - w / 2, 0, z - d / 2, x + w / 2, 0.95, z + d / 2, CREAM, 0.06);
+    B(u, x - w / 2 - 0.02, 0.95, z - d / 2 - 0.02, x + w / 2 + 0.02, 0.99, z + d / 2 + 0.02, SILV);
     B(kg, x - w / 2, 0.99, z - d / 2, x + w / 2, 1.85, z + d / 2, GLASS);
-    B(k, x - w / 2 - 0.02, 1.85, z - d / 2 - 0.02, x + w / 2 + 0.02, 1.89, z + d / 2 + 0.02, SILV);
-    placeCam(k, 'wangbox', x - 0.18, 0.99, z, 0.35, 3);
-    for (let i = 0; i < 3; i++) k.box(0.16, 0.08 - i * 0.02, 0.2, [CREAMSH, SILV, CREAM][i], x + 0.32, 1.03 + i * 0.13, z - 0.1 + i * 0.05, { ry: -0.2 });
+    B(u, x - w / 2 - 0.02, 1.85, z - d / 2 - 0.02, x + w / 2 + 0.02, 1.89, z + d / 2 + 0.02, SILV);
+    placeCam(u, 'wangbox', x - 0.18, 0.99, z, 0.35, 3);
+    for (let i = 0; i < 3; i++) u.box(0.16, 0.08 - i * 0.02, 0.2, [CREAMSH, SILV, CREAM][i], x + 0.32, 1.03 + i * 0.13, z - 0.1 + i * 0.05, { ry: -0.2 });
     block(x - w / 2, z - d / 2, x + w / 2, z + d / 2);
   }
 
@@ -175,26 +183,28 @@ export function buildCamShop({ k, kg, B, SB, block, pane, R }) {
   B(k, 34.35, 3.2, Z0, 34.45, 3.42, -10.35, SILV);
   // 沖印機：一長條奶油色的機器，正面一道暗窗看得到裡面一排滾輪，西頭進片口、東頭出片口疊著洗好的照片，頂上一排琥珀燈
   {
+    const u = fadeKit([[35.5, 0, -13.5, 40.4, 2.1, -10.45]]);
     const m0 = 35.6, m1 = 40.3, mz0 = -13.4, mz1 = -11.0, H = 1.9;
-    SB(k, m0, 0, mz0, m1, H, mz1, CREAM, 0.12);
-    B(k, m0, 0.05, mz1 - 0.02, m1, 0.2, mz1 + 0.005, RED);
-    SB(k, m0 - 0.05, H, mz0 - 0.05, m1 + 0.05, H + 0.1, mz1 + 0.05, SILV, 0.04);
-    B(k, m0 + 0.6, 1.0, mz1, m1 - 1.2, 1.5, mz1 + 0.02, RUBBER);
-    for (let x = m0 + 0.85; x < m1 - 1.3; x += 0.42) k.cyl(0.11, 0.11, 0.36, SILV, x, 1.25, mz1 + 0.03, { rx: Math.PI / 2 }, 10);
-    B(k, m0 + 0.1, 1.1, mz1, m0 + 0.45, 1.16, mz1 + 0.08, RUBBER);
-    SB(k, m1 - 1.0, 0.85, mz1, m1 - 0.15, 0.92, mz1 + 0.45, SILV, 0.02);
-    for (let i = 0; i < 5; i++) k.box(0.42, 0.012, 0.36, '#f6f3ea', m1 - 0.58 + (R() - 0.5) * 0.04, 0.93 + i * 0.014, mz1 + 0.22, { ry: (R() - 0.5) * 0.12 });
-    for (let i = 0; i < 4; i++) B(k, m0 + 0.6 + i * 0.3, H - 0.25, mz1, m0 + 0.8 + i * 0.3, H - 0.15, mz1 + 0.02, i === 1 ? AMBER : '#5a4a32', { glow: i === 1 });
+    SB(u, m0, 0, mz0, m1, H, mz1, CREAM, 0.12);
+    B(u, m0, 0.05, mz1 - 0.02, m1, 0.2, mz1 + 0.005, RED);
+    SB(u, m0 - 0.05, H, mz0 - 0.05, m1 + 0.05, H + 0.1, mz1 + 0.05, SILV, 0.04);
+    B(u, m0 + 0.6, 1.0, mz1, m1 - 1.2, 1.5, mz1 + 0.02, RUBBER);
+    for (let x = m0 + 0.85; x < m1 - 1.3; x += 0.42) u.cyl(0.11, 0.11, 0.36, SILV, x, 1.25, mz1 + 0.03, { rx: Math.PI / 2 }, 10);
+    B(u, m0 + 0.1, 1.1, mz1, m0 + 0.45, 1.16, mz1 + 0.08, RUBBER);
+    SB(u, m1 - 1.0, 0.85, mz1, m1 - 0.15, 0.92, mz1 + 0.45, SILV, 0.02);
+    for (let i = 0; i < 5; i++) u.box(0.42, 0.012, 0.36, '#f6f3ea', m1 - 0.58 + (R() - 0.5) * 0.04, 0.93 + i * 0.014, mz1 + 0.22, { ry: (R() - 0.5) * 0.12 });
+    for (let i = 0; i < 4; i++) B(u, m0 + 0.6 + i * 0.3, H - 0.25, mz1, m0 + 0.8 + i * 0.3, H - 0.15, mz1 + 0.02, i === 1 ? AMBER : '#5a4a32', { glow: i === 1 });
   }
   // 櫃台：奶油色、霧銀台面、底下一道紅條；台上一疊照片袋、一顆叫人的鈴
   {
+    const u = fadeKit([[35.3, 0, -9.1, 39.9, 1.25, -8.2]]);
     const c0 = 35.4, c1 = 39.8, cz0 = -9.0, cz1 = -8.3;
-    SB(k, c0, 0, cz0, c1, 1.0, cz1, CREAM, 0.1);
-    SB(k, c0 - 0.05, 1.0, cz0 - 0.05, c1 + 0.05, 1.06, cz1 + 0.05, SILV, 0.03);
-    B(k, c0, 0.05, cz1 - 0.02, c1, 0.2, cz1 + 0.005, RED);
-    for (let i = 0; i < 4; i++) k.box(0.3, 0.02, 0.22, i % 2 ? CREAM : RED, 36.2, 1.07 + i * 0.022, -8.6, { ry: (R() - 0.5) * 0.3 });
-    k.cyl(0.08, 0.1, 0.04, SILVDK, 38.9, 1.08, -8.55, {}, 12);
-    k.add(new THREE.SphereGeometry(0.07, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), SILV, 38.9, 1.1, -8.55);
+    SB(u, c0, 0, cz0, c1, 1.0, cz1, CREAM, 0.1);
+    SB(u, c0 - 0.05, 1.0, cz0 - 0.05, c1 + 0.05, 1.06, cz1 + 0.05, SILV, 0.03);
+    B(u, c0, 0.05, cz1 - 0.02, c1, 0.2, cz1 + 0.005, RED);
+    for (let i = 0; i < 4; i++) u.box(0.3, 0.02, 0.22, i % 2 ? CREAM : RED, 36.2, 1.07 + i * 0.022, -8.6, { ry: (R() - 0.5) * 0.3 });
+    u.cyl(0.08, 0.1, 0.04, SILVDK, 38.9, 1.08, -8.55, {}, 12);
+    u.add(new THREE.SphereGeometry(0.07, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), SILV, 38.9, 1.1, -8.55);
     block(c0, cz0, c1, cz1);
   }
   // 沖印機上方兩條長布條：片盒紅底，中間一個奶油色的拍立得框
@@ -204,17 +214,20 @@ export function buildCamShop({ k, kg, B, SB, block, pane, R }) {
     B(k, x - 0.28, 7.28, Z0 + 0.12, x + 0.28, 7.8, Z0 + 0.13, DARK);
     B(k, x - 0.62, 10.2, Z0 + 0.04, x + 0.62, 10.26, Z0 + 0.14, SILV);
   }
+  return { heroFid: hero.fid };
 }
 
-// 轉台上轉的那一層和放大的 a500：自己一組網格，jinghai.js 每幀轉
-export function buildSpin() {
+// 轉台上轉的那一層和放大的 a500：自己一組網格，jinghai.js 每幀轉。fader、fid：跟轉台底座同一組淡（buildCamShop 回傳的 heroFid）
+export function buildSpin(fader, fid) {
   const k = new Kit(null), g = new THREE.Group();
   k.cyl(HERO.r, HERO.r, 0.43, CREAM, 0, 0.12 + 0.215, 0, {}, 40);
   k.cyl(HERO.r + 0.02, HERO.r + 0.02, 0.04, SILV, 0, 0.56, 0, {}, 40);
   placeCam(k, 'wang', 0, 0.58, 0, 0, 12);
+  for (const p of k.lit) p.userData.fid = fid;
+  fader.tag(k.lit);
   const b = newBucket();
   k.emit(b, 0, 0, 0);
-  const lit = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const lit = fader.patch(new THREE.MeshLambertMaterial({ vertexColors: true }));
   for (const m of bucketObjects(b)) {
     if (m.isMesh && m.material.isMeshLambertMaterial) { m.material = lit; m.receiveShadow = true; }
     g.add(m);

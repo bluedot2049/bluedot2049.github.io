@@ -9,20 +9,20 @@
 //   署名：B L U E D O T 字距拉開，放在沒有色塊的那頭，顏色只比底色亮一點
 //   自動 autoParams(seed)：一顆種子自動畫一張，守同一套規則；autoPick 再過品質關卡（judge），不合格換下一顆（整套邏輯寫在 docs/畫風邏輯.md）
 //   配色版本 9＝算出來的配色（genColors）：照種子挑主色相，原本的明暗結構不動，色相分兩群轉過去
-//   場景兩套：REF_KEYS 照原作的十六個，COSMOS_KEYS 原野畫架的宇宙畫；autoParams、autoPick 第三個參數挑哪一套
+//   場景兩套：REF_KEYS 照原作的十六個，EASEL_KEYS 原野畫架的燭火畫；autoParams、autoPick 第三個參數挑哪一套
 //   人 who（avatar/silhouette.js 的剪影）：放進人的位置；主色跟背後太近就整個人推亮或壓暗（fitWho）
 // 畫法：先逐像素算色面，再過畫風層（painter-style.js：調色、油畫筆觸、光暈、顏料厚度、畫布），再畫硬線、人、畫框、署名。同一組參數永遠畫出同一張。
 
 import { clamp, hex, rotHue, rand, noise, dist, css } from './painter-kit.js';
 import { SCENES as REF } from './painter-scenes.js';
-import { COSMOS } from './painter-cosmos.js';
-import { styleFor, grade, oil, bloom, surface, toLab, fromLab } from './painter-style.js';
+import { CANDLE } from './painter-candle.js';
+import { styleFor, grade, oil, dabs, bloom, surface, toLab, fromLab } from './painter-style.js';
 
-// 兩套場景：REF 是照原作構圖的十六個（試筆頁、以後的圖集），COSMOS 是原野畫架畫的宇宙畫（painter-cosmos.js）
-export const SCENES = { ...REF, ...COSMOS };
+// 兩套場景：REF 是照原作構圖的十六個（試筆頁、以後的圖集），EASEL 是原野畫架畫的燭火畫（painter-candle.js）
+export const SCENES = { ...REF, ...CANDLE };
 export const SCENE_KEYS = Object.keys(SCENES);
 export const REF_KEYS = Object.keys(REF);
-export const COSMOS_KEYS = Object.keys(COSMOS);
+export const EASEL_KEYS = Object.keys(CANDLE);
 export const FRAMES = ['滿版', '圓框', '留白'];
 
 // 顏色先換成 [r, g, b]
@@ -32,10 +32,14 @@ for (const sc of Object.values(SCENES)) {
   sc.versions = (sc.versions || [{}]).map(parse);
 }
 export const GEN = 9;   // 算出來的配色固定是 9，以後加手配的版本，舊的短碼意思不變
-export const versionCount = (scene) => (SCENES[scene] || SCENES.sea).versions.length + 1;
+// 場景 gen: false 不出算出來的配色（燭火畫：轉色相會把桌布轉成螢光色）
+const hasGen = (scene) => (SCENES[scene] || SCENES.sea).gen !== false;
+export const versionCount = (scene) => (SCENES[scene] || SCENES.sea).versions.length + (hasGen(scene) ? 1 : 0);
 // 換色鈕輪的順序：手配的 0、1、2…，最後是算出來的
-export const versionList = (scene) => [...(SCENES[scene] || SCENES.sea).versions.keys(), GEN];
-const verOk = (scene, v) => (v === GEN || v < (SCENES[scene] || SCENES.sea).versions.length ? v : 0);
+export const versionList = (scene) => [...(SCENES[scene] || SCENES.sea).versions.keys(), ...(hasGen(scene) ? [GEN] : [])];
+// 畫框：場景有 frames 就只能是裡面的（燭火畫的是畫卡的雕花框第幾種，paintcard.js 的 FRAME_STYLES），沒有就是 FRAMES
+const frameOk = (scene, f) => { const l = (SCENES[scene] || SCENES.sea).frames; return l ? (l.includes(f) ? f : l[0]) : f % FRAMES.length; };
+const verOk = (scene, v) => ((v === GEN && hasGen(scene)) || v < (SCENES[scene] || SCENES.sea).versions.length ? v : 0);
 
 // ---------- 構圖規則 ----------
 
@@ -60,7 +64,7 @@ export function compose(p, aspect, moving = null) {
   q.light.x = clamp(q.light.x, 0.04, 0.96);
   q.light.y = clamp(q.light.y, 0.04, 0.96);
   if (sc.center && Math.abs(q[sc.center].x - 0.5) < CENTER_R) { q[sc.center].x = 0.5; guides.push({ axis: 'x', at: 0.5 }); }
-  q.fig.x = clamp(q.fig.x, ...(sc.figX || [0.07, 0.93]));   // 人大的場景（宇宙畫）身體不出畫
+  q.fig.x = clamp(q.fig.x, 0.07, 0.93);
   q.fig.y = clamp(q.fig.y, 0.1, 0.96);
   // 光和人隔開（場景可以用 gap 改：光爆的光核大要隔遠一點，巨影的紅面具就在人頭上所以不隔）
   const a = [q.light.x * aspect, q.light.y], f = [q.fig.x * aspect, q.fig.y], GAP = sc.gap ?? MIN_GAP;
@@ -93,14 +97,14 @@ export function autoParams(seed, aspect = 3 / 4, keys = REF_KEYS) {
   const R = rand((seed ^ 0xa11ce) >>> 0);
   const scene = keys[Math.floor(R() * keys.length)];
   const sc = SCENES[scene], st = sc.start;
-  const ver = R() < 0.35 ? GEN : Math.floor(R() * sc.versions.length);
+  const ver = R() < 0.35 && sc.gen !== false ? GEN : Math.floor(R() * sc.versions.length);
   let frame = R() < 0.7 ? 0 : R() < 0.5 ? 1 : 2;
-  if (sc.frames && !sc.frames.includes(frame)) frame = sc.frames[frame % sc.frames.length];   // 場景可以限定畫框（宇宙畫不挖圓框）
+  if (sc.frames && !sc.frames.includes(frame)) frame = sc.frames[frame % sc.frames.length];   // 場景可以限定畫框（燭火畫不挖圓框）
   const mirror = !sc.center && R() < 0.5;
   const mx = (v) => (mirror ? 1 - v : v);
   const jit = (v, amt) => v + (R() - 0.5) * amt;
   const div = { x: mx(jit(st.div.x, 0.12)), y: jit(st.div.y, 0.06) };
-  const near = SNAP.filter((v) => Math.abs(v - st.div.y) < 0.2);
+  const near = SNAP.filter((v) => Math.abs(v - st.div.y) < (sc.snapNear ?? 0.2));   // 燭火畫只吸 2/3 附近（吸到 85% 上面全是暗牆）
   if (!isSteep(scene) && near.length && R() < 0.35) div.y = near[Math.floor(R() * near.length)];
   const want = describe({ scene, seed, ver, div: st.div, light: st.light, fig: st.fig }, aspect).kind;
   let light, fig;
@@ -125,7 +129,7 @@ export function fromCode(s) {
   if (!m || !SCENES[m[1]]) return null;
   const v = m[5].match(/../g).map((h) => parseInt(h, 16) / 255);
   return {
-    scene: m[1], seed: parseInt(m[2], 36), ver: verOk(m[1], +(m[3] || 0)), frame: +(m[4] || 0) % FRAMES.length,
+    scene: m[1], seed: parseInt(m[2], 36), ver: verOk(m[1], +(m[3] || 0)), frame: frameOk(m[1], +(m[4] || 0)),
     div: { x: v[0], y: v[1] }, light: { x: v[2], y: v[3] }, fig: { x: v[4], y: v[5] },
   };
 }
@@ -361,6 +365,7 @@ export function paint(canvas, p, { sign = true, who = null } = {}) {
   const W = canvas.width, H = canvas.height, ctx = canvas.getContext('2d');
   const S = setup(p, W, H), sc = S.sc, o = [0, 0, 0], frame = p.frame | 0;
   const img = ctx.createImageData(W, H), d = img.data;
+  S.who = who;   // 人畫進色面的場景（燭火畫）在 pixel 裡就要用
   for (let j = 0; j < H; j++) {
     const y = (j + 0.5) / H;
     for (let i = 0; i < W; i++) {
@@ -374,14 +379,15 @@ export function paint(canvas, p, { sign = true, who = null } = {}) {
   grade(img, T);
   S.who = fitWho(who, img, S);
   ctx.putImageData(img, 0, 0);
-  oil(ctx, img, S, T);
+  if (T.dabs) dabs(ctx, img, S, T);   // 燭火畫：整張方塊厚筆
+  else oil(ctx, img, S, T);
   bloom(ctx, S, T);
   ctx.save();
   sc.overlay(ctx, S);
   ctx.restore();
   surface(ctx, S, T);
-  drawFrame(ctx, S, frame);
-  if (sign) signature(ctx, S, frame);
+  drawFrame(ctx, S, sc.cardFrame ? 0 : frame);   // 燭火畫的框不畫在畫上，是畫卡的雕花框（paintcard.js）
+  if (sign && !sc.noSign) signature(ctx, S, frame);   // 燭火畫不署名（2026-11-11）
   // 整張蓋一層很淡的顆粒（柔光）。太多會把顏色洗成粉筆灰，紋理主要靠筆觸
   ctx.save();
   ctx.globalCompositeOperation = 'soft-light';
