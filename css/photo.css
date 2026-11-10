@@ -55,7 +55,7 @@ body.photo-expose #ph-frame { outline-color: rgba(196, 69, 45, .7); }
 #ph-af.hunt { opacity: 1; animation: ph-hunt .3s ease-in-out infinite alternate; }
 #ph-af.lock { opacity: 1; border-color: var(--gold); transform: scale(.82); transition: transform .12s, opacity .4s; }
 @keyframes ph-hunt { from { transform: scale(1.12); } to { transform: scale(.94); } }
-/* 日晷III 的追焦鎖定：框是冷白的、帶一圈淡紫，一直跟著被鎖的人；跑出畫面時貼在框邊、變虛線 */
+/* 獵魔III 的追焦鎖定：框是冷白的、帶一圈淡紫，一直跟著被鎖的人；跑出畫面時貼在框邊、變虛線 */
 #ph-af.track { opacity: 1; border-color: #eef2ff; box-shadow: 0 0 0 1px rgba(169, 140, 255, .45), inset 0 0 0 1px rgba(169, 140, 255, .3); transition: opacity .2s; }
 #ph-af.track.lock { transform: scale(.82); }
 #ph-af.track.edge { border-style: dashed; opacity: .75; }
@@ -211,7 +211,7 @@ body.joy-left:not(.desk) #ph-lens { left: auto; right: calc(var(--jx) - var(--se
     conic-gradient(#c69650, #9d7137 45deg, #bf8f4b 90deg, #d5ae6d 135deg, #bf8f4b 180deg, #986a34 225deg, #c69650 270deg, #dfbe83 315deg, #c69650);
   box-shadow: inset 0 1px 1px rgba(245, 222, 180, .48), inset 0 -2px 3px rgba(50, 30, 10, .5), 0 2px 8px rgba(0, 0, 0, .5);
 }
-/* 日晷III 的銀鈕：亮面銀，外圈是變焦撥桿，推著時整圈轉過去（--zl：1 拉近往右推、-1 拉遠往左推） */
+/* 獵魔III 的銀鈕：亮面銀，外圈是變焦撥桿，推著時整圈轉過去（--zl：1 拉近往右推、-1 拉遠往左推） */
 #ph-shutter.gear.silver {
   border-color: rgba(70, 76, 84, .9);
   background:
@@ -375,6 +375,18 @@ body.joy-left:not(.desk) #ph-look { left: auto; right: var(--x); }
 #ph-flash.memo.on .rim, #ph-flash.memo.on .w { stroke: #7a5218; }
 #ph-flash.memo.on .ten { fill: #7a5218; }
 #ph-flash.swap .ring { opacity: 1; animation: ph-ring var(--swap, 1.6s) linear both; }
+/* 獵魔III 的浮游燈（cameras.js 的 KNOBS.lamp）：亮面銀圓鈕，中間一顆小燈。收著暗、放出去鏡片亮冷白，
+   停的那一側（.l 左、.r 右）的弧亮起來；閃過之後 .charge 鏡片暗下去再慢慢充回來（--charge 秒） */
+#ph-flash.lamp { background: radial-gradient(circle at 40% 32%, #fbfcfd, #c9ced3 70%, #9aa1a8); border-color: #7d848b; }
+#ph-flash.lamp .pod { fill: #dde1e5; stroke: #6f767d; stroke-width: .8; }
+#ph-flash.lamp .pod-hi { fill: #fff; opacity: .6; }
+#ph-flash.lamp .fin { stroke: #6f767d; stroke-width: 1.6; stroke-linecap: round; }
+#ph-flash.lamp .eye { fill: #2a2737; stroke: #8f959c; stroke-width: .6; transition: fill .25s; }
+#ph-flash.lamp .arc { fill: none; stroke: #8f959c; stroke-width: 2.2; stroke-linecap: round; opacity: .45; transition: stroke .25s, opacity .25s; }
+#ph-flash.lamp.on .eye { fill: #eef2ff; filter: drop-shadow(0 0 2.5px rgba(200, 210, 255, .9)); }
+#ph-flash.lamp.l .al, #ph-flash.lamp.r .ar { stroke: #eef2ff; opacity: 1; filter: drop-shadow(0 0 2px rgba(170, 150, 255, .8)); }
+#ph-flash.lamp.charge .eye { animation: ph-charge var(--charge, .9s) ease-in both; }
+@keyframes ph-charge { 0% { fill: #2a2737; } 100% { fill: #eef2ff; } }
 @keyframes ph-bulb-out { 0%, 30% { opacity: 1; transform: none; } 50%, 100% { opacity: 0; transform: translateY(26px); } }
 @keyframes ph-bulb-in { 0%, 55% { opacity: 0; transform: translateY(26px); } 100% { opacity: 1; transform: none; } }
 @keyframes ph-puff { from { opacity: .8; transform: scale(.6); } to { opacity: 0; transform: translate(6px, -16px) scale(2.2); } }
@@ -415,7 +427,7 @@ body.joy-left:not(.desk) #ph-look { left: auto; right: var(--x); }
 #ph-date .lid { transition: transform .3s cubic-bezier(.3, .8, .3, 1); }
 #ph-date .lid path { fill: #4d4a48; }
 #ph-date.on .lid { transform: translateY(-21px); }
-/* 日晷III 的打孔銀條（距離印記）：亮面銀板，孔後面透冷白帶紫的光；關掉時銀蓋滑下來 */
+/* 獵魔III 的打孔銀條（距離印記）：亮面銀板，孔後面透冷白帶紫的光；關掉時銀蓋滑下來 */
 #ph-date.silver {
   border-color: rgba(70, 76, 84, .9);
   background:

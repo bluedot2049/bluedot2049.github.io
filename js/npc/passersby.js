@@ -354,7 +354,7 @@ export class Passersby {
     // 遠處的人：身體一個形狀、頭一個形狀，各自一次畫完
     const max = this.slots * 2;
     this.far = new FarFigures(scene, max);
-    linkTrack(this.pool, this.far);   // 日晷III 追焦鎖定跟著人走
+    linkTrack(this.pool, this.far);   // 獵魔III 追焦鎖定跟著人走
     // 提燈籠的人手上那盞燈
     this.glows = glowPoints(Array.from({ length: max }, () => ({ x: 0, y: -50, z: 0, color: '#ffb060', size: 0 })));
     scene.add(this.glows);

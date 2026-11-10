@@ -24,8 +24,9 @@ const FRAMES = {
   feet: (c) => ({ y: c.bodyY(0.08), s: 0.38 * c.S.H }),
   full: (c) => ({ y: c.dims.topY / 2, s: c.dims.topY * 1.08 }),
   back: (c) => ({ y: c.bodyY(0.55), s: 0.95 * c.S.H, back: true }),
-  // 表情盤的姿勢：全身，從斜前方四十度看，彎腰、跪、弓步才看得出前後；蹲下去的（group 往下沉）中心跟著往下
-  pose: (c) => ({ y: (c.dims.topY + c.group.position.y) * 0.46, s: c.dims.topY * 0.92, side: POSE_SIDE }),
+  // 表情盤的姿勢：全身，從斜前方四十度看，彎腰、跪、弓步才看得出前後。取景照站著的身高、腳底貼著底邊，
+  // 不跟著蹲下去的（group 往下沉）移，每張比例一樣，蹲、跪看得出矮了一截（2026-11-10）
+  pose: (c) => ({ y: c.dims.topY * 0.47, s: c.dims.topY * 1.0, side: POSE_SIDE }),
   hand: (c) => {
     const v = c.handG.getWorldPosition(new THREE.Vector3());
     return { x: v.x, y: v.y + 0.08 * c.S.H, s: 0.7 * c.S.H, side: Math.sign(v.x) || 1 };

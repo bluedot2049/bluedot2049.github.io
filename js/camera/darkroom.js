@@ -33,12 +33,12 @@ export const LABS = {
       colorGrading: { shadows: { hue: 202, sat: 42, lum: -6 }, midtones: { hue: 221, sat: 31 }, highlights: { hue: 36, sat: 39, lum: 2 } },
     },
   },
-  // 先拿掉（2026-11-10）：日晷III 不在機身裡洗，也不出現在相簿的「交給…」。要恢復就把下面整段解開、cameras.js 的 lab: 'gui' 解開
-  // 不是師傅，是日晷III 機身裡的影像處理（cameras.js 的 lab）：拍下那一刻就洗好（developNow），不用交件。
+  // 先拿掉（2026-11-10）：獵魔III 不在機身裡洗，也不出現在相簿的「交給…」。要恢復就把下面整段解開、cameras.js 的 lab: 'gui' 解開
+  // 不是師傅，是獵魔III 機身裡的影像處理（cameras.js 的 lab）：拍下那一刻就洗好（developNow），不用交件。
   // 大法師科技的味道是鏡片鍍膜的紫綠：亮部一點淡紫、暗部一點青綠，中間調乾淨、偏冷、清楚，跟燭火乙式的暖舊反過來。
   // 放在這裡是為了能用 experiments/darkroom_preview.html 調
   // gui: {
-  //   name: '大法師科技', who: '日晷III', style: '鍍膜', camera: true,
+  //   name: '大法師科技', who: '獵魔III', style: '鍍膜', camera: true,
   //   settings: {
   //     contrast: 14, highlights: -14, shadows: 10, whites: 6, blacks: -8, temperature: -12, tint: 6, vibrance: 10, saturation: -8, dehaze: 6, clarity: 12, texture: 6,
   //     curves: { rgb: [[0, 4], [64, 60], [192, 198], [255, 252]] },

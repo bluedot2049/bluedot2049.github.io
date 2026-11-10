@@ -16,7 +16,7 @@
   </script>
 </head>
 <body>
-  <div class="note">拖曳轉、滾輪縮放。上排放大看，下排是掛在角色身上的實際大小。網址 ids=bulb,gui,wang 選要看哪幾台；gui@0.5 是日晷III 伸出五成；aim=1 下排舉起來</div>
+  <div class="note">拖曳轉、滾輪縮放。上排放大看，下排是掛在角色身上的實際大小。網址 ids=bulb,gui,wang 選要看哪幾台；gui@0.5 是獵魔III 伸出五成；aim=1 下排舉起來</div>
   <div class="bar">
     <label id="ext" hidden>伸縮 <input type="range" min="0" max="1" step="0.01" value="0"></label>
     <button data-v="0">正面</button>
@@ -69,7 +69,7 @@
       scene.add(g);
       return g;
     });
-    // 會伸縮的（日晷III）多一條滑桿：拉的時候每台都照「自己寫的 @ 值＋滑桿」重建
+    // 會伸縮的（獵魔III）多一條滑桿：拉的時候每台都照「自己寫的 @ 值＋滑桿」重建
     if (ids.some((id) => id.startsWith('gui'))) {
       const box = document.getElementById('ext'), input = box.querySelector('input');
       box.hidden = false;

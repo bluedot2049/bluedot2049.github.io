@@ -8,12 +8,12 @@ import { Character, isFood } from '../avatar/character.js';
 import { Lantern } from './lantern.js';
 import { CAMERAS } from '../camera/cameras.js';
 import { Eye } from '../camera/eye.js';
+import { LampShell } from '../camera/drone.js';
 import { sanitizeLook, lookKey, presetLook, lookFromOutfit, toOutfit, ROBES } from '../avatar/looks.js';
 import { drawEmote } from './emotes.js';
 import { isKao, kaoParts, kaoGrew, kaoFaceNew, FACES } from '../avatar/kaomoji-parts.js';
 import { emojiCanvas } from '../core/emoji.js';
 import { TAG_LAYER } from '../core/scenery.js';
-import { pref } from '../save/prefs.js';
 
 const SEND_MOVING = 200;    // 走動時每 0.2 秒送一次位置
 const SEND_IDLE = 8000;     // 站著不動時偶爾報一次，確認還在
@@ -33,8 +33,8 @@ const ANIMAL_GAP = 400;     // 同一隻動物同一種反應的最短間隔
 const FLASH_GAP = 1000;     // 別人的閃光最短間隔（燈泡要換），亂送的也只會一秒閃一次
 const SHOT_GAP = 150;       // 別人的快門聲最短間隔，亂送的不會連成一片
 const BLINK = 0.22;         // 別人畫廊的眼睛拍下去眨一下要幾秒
-// 別人的快門：送來的動作對到相機的哪個聲音（cameras.js 的 voices）。s 按下去（沒閃光；閃光走 flash）、o 長曝光葉片打開、c 闔上
-const SHOT_VOICE = { s: 'shutter', o: 'open', c: 'close' };
+// 別人的快門：送來的動作對到相機的哪個聲音（cameras.js 的 voices）。s 按下去（沒閃光；閃光走 flash）、o 長曝光葉片打開、c 闔上、r 拍立拿抽中十周年的旋律
+const SHOT_VOICE = { s: 'shutter', o: 'open', c: 'close', r: 'rare' };
 const CUES = ['count', 'again', 'done'];   // 拍照人的口令（cues.js）
 const CUE_GAP = 400;        // 同一個人的口令最短間隔
 const LOOK_DELAY = 1000;    // 捏角色停手這麼久才送出，連點選項、拖滑桿不會一直送
@@ -55,6 +55,7 @@ const isId = (v) => typeof v === 'string' && /^[a-z0-9]{1,16}$/.test(v);
 const isNum = (v, lim) => typeof v === 'number' && Math.abs(v) <= lim;   // NaN 比較結果為 false，一併擋掉
 const clamp = THREE.MathUtils.clamp;
 const r50 = (v) => Math.round(v * 50) / 50;
+const r10 = (v) => Math.round(v * 10) / 10;
 
 // 鏡頭朝的方向（同 photo.js 的 forward）
 function lensForward(out, yaw, pitch) {
@@ -64,7 +65,7 @@ function lensForward(out, yaw, pitch) {
 
 // 別人手上的相機對著自己時，鏡片上那一點反光：中間白、往外淡成暖色
 let glintMat = null;
-// 日晷III 的鏡片反光：鍍膜的紫綠色，遠遠一點閃光（中間淡暖白、外面一圈偏紫、最外一絲綠）
+// 獵魔III 的鏡片反光：鍍膜的紫綠色，遠遠一點閃光（中間淡暖白、外面一圈偏紫、最外一絲綠）
 let coatMat = null;
 function coatMaterial() {
   if (coatMat) return coatMat;
@@ -355,25 +356,26 @@ export class Multiplayer {
     const aim = p.camAim;
     const st = { x: +p.pos.x.toFixed(2), z: +p.pos.z.toFixed(2), h: +p.heading.toFixed(2), r: p.room, s: p.sitCode, f: p.character.foodCode, a: aim ? aim.grip + 1 : 0, q: aim ? Math.round(aim.pitch * 20) / 20 : 0, w: this.away ? 1 : 0, l: Math.round((p.gaze || 0) * 20) / 20, v: Math.round((p.gazeP || 0) * 20) / 20 };
     if (p.gazeId) st.g = p.gazeId === 'self' ? this.id : p.gazeId;
-    // k：擺著的顏文字（kaomoji-parts.js 的代號），b：撐著，n：頭上不冒（表情盤「頭上表情」關了「自己」）。沒擺不送
+    // k：擺著的顏文字（kaomoji-parts.js 的代號），b：撐著。沒擺不送
     const ch = p.character;
     if (ch.kao) {
       st.k = ch.kao;
       if (ch.braced) st.b = 1;
-      if (!pref('kaoTagMine')) st.n = 1;
     }
     // y：有樓上的區域（靜海）才送，別人照這個知道站在哪一層
     if (p.world.drift) st.y = Math.round(p.pos.y * 10) / 10;
     const L = this.lens?.();
     if (L) st.c = [r50(L.pos.x), r50(L.pos.y), r50(L.pos.z), r50(wrapAngle(L.yaw)), r50(L.pitch), Math.round(L.fov), Math.round(L.aspect * 100) / 100, L.kind];
     if (L?.focus) st.d = Math.round(L.focus * 10) / 10;
-    // m：變焦鏡（日晷III）現在幾 mm，別人照這個伸出手上的抽管、算看不看得到鏡片反光。定焦和沒舉不送
+    // m：變焦鏡（獵魔III）現在幾 mm，別人照這個伸出手上的抽管、算看不看得到鏡片反光。定焦和沒舉不送
     if (L?.mm) st.m = Math.round(L.mm);
+    // u：浮游燈（獵魔III）[燈 x, y, z, 照向 x, y, z]，別人照這個畫出燈和光束。收著不送
+    if (L?.lamp) st.u = [r10(L.lamp.pos.x), r10(L.lamp.pos.y), r10(L.lamp.pos.z), r10(L.lamp.aim.x), r10(L.lamp.aim.y), r10(L.lamp.aim.z)];
     const E = this.eye?.();
     if (E) st.e = E;
     const l = this.last;
     const changed = !l || Math.abs(st.x - l.x) > 0.02 || Math.abs(st.z - l.z) > 0.02 || Math.abs(wrapAngle(st.h - l.h)) > 0.05 || st.r !== l.r || st.s !== l.s || st.f !== l.f || st.a !== l.a || st.q !== l.q || st.w !== l.w || st.l !== l.l || st.v !== l.v
-      || st.g !== l.g || st.k !== l.k || st.b !== l.b || st.n !== l.n || st.y !== l.y || String(st.c) !== String(l.c) || st.d !== l.d || st.m !== l.m || String(st.e) !== String(l.e);
+      || st.g !== l.g || st.k !== l.k || st.b !== l.b || st.y !== l.y || String(st.c) !== String(l.c) || st.d !== l.d || st.m !== l.m || String(st.u) !== String(l.u) || String(st.e) !== String(l.e);
     if (now - this.lastSent < (changed ? SEND_MOVING : SEND_IDLE)) return;
     this.channel.send({ type: 'broadcast', event: 'pos', payload: { id: this.id, ...st } });
     this.last = st;
@@ -397,12 +399,12 @@ export class Multiplayer {
     m.g = isId(m.g) ? m.g : null;
     m.k = isKao(m.k) ? m.k : 0;
     m.b = m.b === 1 ? 1 : 0;
-    m.n = m.n === 1 ? 1 : 0;
     const c = m.c;
     m.c = Array.isArray(c) && c.length === 8 && isNum(c[0], COORD_LIMIT) && isNum(c[1], COORD_LIMIT) && isNum(c[2], COORD_LIMIT) && isNum(c[3], 4) && isNum(c[4], 2)
       && c[5] >= 5 && c[5] <= 150 && c[6] > 0.2 && c[6] < 5 && (c[7] === 0 || c[7] === 1) ? c : null;
     m.d = isNum(m.d, 1000) && m.d > 0 ? m.d : 0;
     m.m = isNum(m.m, 2000) && m.m >= 10 ? Math.round(m.m) : 0;   // 舊版網頁不送，當成定焦   // 舊版網頁不送，當成沒有對焦的資料（只要在框裡就算被拍）
+    m.u = Array.isArray(m.u) && m.u.length === 6 && m.u.every((v) => isNum(v, COORD_LIMIT)) ? m.u : null;
     const e = m.e;
     m.e = Array.isArray(e) && e.length === 5 && isNum(e[0], COORD_LIMIT) && isNum(e[1], COORD_LIMIT) && isNum(e[2], COORD_LIMIT) && (e[3] === 0 || e[3] === 1)
       && typeof e[4] === 'string' && /^[a-z0-9]{0,16}$/.test(e[4]) ? e : null;
@@ -477,7 +479,8 @@ export class Multiplayer {
     const now = performance.now(), o = m && isId(m.id) ? this.others.get(m.id) : null;
     if (!o || !o.ch.group.visible || !o.ch.camG || now - (o.lastFlash || 0) < FLASH_GAP) return;
     o.lastFlash = now;
-    this.events.onFlash?.(o.ch);
+    const lamp = o.lens?.lamp;
+    this.events.onFlash?.(o.ch, lamp?.group.visible ? { pos: lamp.group.position, aim: lamp.aim } : null);
   }
 
   // 快門、長曝光的葉片（閃光的那一下走 flash）：只送動作，聲音照那個人帶的相機、從他的相機那裡發出來
@@ -704,7 +707,21 @@ export class Multiplayer {
       L.eye.dispose();
       L.eye = null;
     }
-    // 長鏡頭（日晷III）對著自己：隔得夠遠、自己在他的取景框裡就看得到鏡片反光，不管自己面向哪、他有沒有對焦在自己身上。
+    // 浮游燈（獵魔III）：照送來的位置滑過去，只畫外殼和光束（不照亮這邊的場景）；收起來就藏
+    const u = L.kind === 0 ? o.target.u : null;
+    if (u) {
+      const cfg = CAMERAS.gui.lamp;
+      if (!L.lamp) {
+        L.lamp = new LampShell(this.scene, cfg.color, cfg.angle);
+        L.lamp.pos = new THREE.Vector3(u[0], u[1], u[2]);
+        L.lamp.aim = new THREE.Vector3(u[3], u[4], u[5]);
+      }
+      const kl = 1 - Math.exp(-dt * 6);
+      L.lamp.pos.lerp(this.tmp.set(u[0], u[1], u[2]), kl);
+      L.lamp.aim.lerp(this.tmp.set(u[3], u[4], u[5]), kl);
+      L.lamp.set(L.lamp.pos, L.lamp.aim, 1);
+    } else L.lamp?.hide();
+    // 長鏡頭（獵魔III）對著自己：隔得夠遠、自己在他的取景框裡就看得到鏡片反光，不管自己面向哪、他有沒有對焦在自己身上。
     // 畫面上大小差不多，拉得越長越大越亮
     const p = this.player, me = this.tmp2.set(p.pos.x, p.pos.y + p.character.dims.faceY, p.pos.z);
     const coat = L.kind === 0 && L.mm >= 50 && this.inFrame(L, me);
@@ -736,6 +753,7 @@ export class Multiplayer {
     if (L.eye) L.eye.group.visible = false;
     if (L.glint) L.glint.visible = false;
     if (L.coat) L.coat.visible = false;
+    L.lamp?.hide();
   }
 
   // 自己的臉在不在這個鏡頭的取景框裡、而且隔得夠遠（長鏡頭的反光用）。框照送來的上下視角和寬高比算
@@ -760,6 +778,7 @@ export class Multiplayer {
     }
     if (L.glint) this.scene.remove(L.glint);
     if (L.coat) this.scene.remove(L.coat);
+    L.lamp?.dispose();
     o.lens = null;
   }
 
@@ -808,7 +827,7 @@ export class Multiplayer {
         const grew = kaoGrew(o.kaoIn ?? 0, t.k), face = kaoFaceNew(o.kaoIn ?? 0, t.k);
         o.kaoIn = t.k;
         o.ch.setKao?.(t.k);
-        if (face && !t.n && pref('kaoTagOthers')) this.popKao(o.ch, t.k);
+        if (face) this.popKao(o.ch, t.k);   // 頭上的臉一律冒（舊版網頁送來的 n「不冒」不理）
         if (grew) this.events.onKao?.(o.ch, t.k);
       }
       o.ch.brace?.(!!t.b);

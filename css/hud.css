@@ -741,7 +741,7 @@ body.photo-gear #photo-btn {
     inset 0 1px 1px rgba(245, 222, 180, .48), inset 0 -1px 2px rgba(50, 30, 10, .5);
 }
 body.photo-gear #photo-btn svg { filter: drop-shadow(0 .7px 0 rgba(245, 222, 180, .45)); }
-/* 日晷III：收起鈕跟它的快門同一種亮面銀（#ph-shutter.silver） */
+/* 獵魔III：收起鈕跟它的快門同一種亮面銀（#ph-shutter.silver） */
 body.photo-gear.photo-silver #photo-btn {
   color: #2a2d33; border-color: rgba(70, 76, 84, .9);
   background:
@@ -944,7 +944,7 @@ body.kao-open:not(.desk):has(#kaopanel.side) #top-btns { opacity: 0; pointer-eve
 .kp-foot button.on { color: var(--gold-hi); border-color: rgba(232, 184, 106, .55); }
 .kp-foot .kp-x { justify-self: end; color: var(--text); }
 /* 看哪：三顆選一，後面一行寫選了會怎樣（換的鍵在最前面） */
-.kp-gaze { grid-template-columns: auto auto auto auto minmax(0, 1fr); }
+.kp-gaze { grid-template-columns: auto auto auto auto minmax(0, 1fr) auto; }
 .kp-say { font-size: 11.5px; letter-spacing: .04em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kp-say kbd { font: 11px/1.4 var(--latin); padding: 0 4px; margin-right: 5px; color: var(--muted); border: 1px solid rgba(232, 184, 106, .3); border-radius: 2px; }
 /* 電腦：不捲，換行攤開，一眼看完 */

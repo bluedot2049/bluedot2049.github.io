@@ -138,7 +138,7 @@ function blow(ctx, out, noise, t, d, pts, vib, peak = 0.9) {
 }
 
 // 金屬敲一下：一串不成倍數的泛音一起響（打擊鋼片的比例），基音旁邊再疊一條差一點點的，兩條互相拍出金屬的顫光；
-// 高的泛音也留得夠久，尾巴亮。日晷III 的每個聲音都帶這個
+// 高的泛音也留得夠久，尾巴亮。獵魔III 的每個聲音都帶這個
 const PLATE = [[1, 1], [1.58, 0.75], [2.33, 0.6], [3.71, 0.42], [5.18, 0.26]];
 function metal(ctx, out, t, f, peak, dur) {
   PLATE.forEach(([r, g], i) => { if (f * r < 15000) ring(ctx, out, t, f * r, peak * g * 1.4, dur * 1.5 / (1 + i * 0.3)); });
@@ -174,6 +174,99 @@ function seat(ctx, out, noise, t, p, gain = 1) {
   metal(ctx, out, t, 2350 * p, 0.05 * gain, 0.2);
 }
 
+// ---------- 拍立拿a500（海牛族月球廠的玩具拍立得）的零件聲 ----------
+// 燭火乙式悶、軟（皮、木、布、紙、火），獵魔III 硬、亮（金屬泛音、精密馬達）；這台是空心塑膠殼加便宜的小馬達：
+// 碰到是「叩」一聲短短的盒子共鳴（中頻、沒有尾巴），卡榫是塑膠的「喀」不會叮，彈簧便宜會嗡一下，
+// 馬達粗、會抖、吃力時會變慢。只有這台有電子的嗶聲和企業旋律（2000 年代日本家電、手機鈴聲那種），從小喇叭出來，音質故意差
+// 空心塑膠殼被碰一下：盒子的共鳴 f（越小越高），一記短短的，底下一點悶的
+function knock(ctx, out, noise, t, f, peak) {
+  hiss(ctx, out, noise, t, 0.03, 'bandpass', f, peak, 4);
+  hiss(ctx, out, noise, t, 0.006, 'bandpass', f * 2.6, peak * 0.5, 3);
+  osc(ctx, 'triangle', t, 0.035, [[0, f * 0.42], [0.035, f * 0.33]]).connect(envelope(ctx, t, 0.001, 0.035, peak * 0.35)).connect(out);
+}
+// 塑膠卡榫「喀」：極短的一下，後面跟一個輕的塑膠回音；spring 是便宜彈簧嗡一下抖多大
+function snap(ctx, out, noise, t, f, peak, spring = 0) {
+  hiss(ctx, out, noise, t, 0.004, 'bandpass', f, peak, 2.5);
+  hiss(ctx, out, noise, t + 0.002, 0.012, 'bandpass', f * 0.45, peak * 0.5, 3);
+  if (!spring) return;
+  const o = osc(ctx, 'triangle', t, 0.09, [[0, 1150], [0.09, 1080]]);
+  lfo(ctx, t, 0.09, 55, 40, o.frequency);
+  o.connect(envelope(ctx, t, 0.001, 0.09, 0.03 * spring)).connect(out);
+}
+// 便宜的小直流馬達帶塑膠齒輪：鋸齒粗粗的嗡、齒輪一抖一抖、碳刷沙沙（獵魔III 的精密馬達細又穩，這台反過來）。pts 是轉速怎麼走，吃力時往下掉
+function motor(ctx, out, noise, t, dur, pts, peak) {
+  const o = osc(ctx, 'sawtooth', t, dur, pts), v = ctx.createGain();
+  v.gain.value = 0.7;
+  lfo(ctx, t, dur, 31 + Math.random() * 6, 0.3, v.gain);
+  o.connect(biquad(ctx, 'bandpass', 900, 1.4)).connect(envelope(ctx, t, 0.03, dur, peak)).connect(v).connect(out);
+  osc(ctx, 'square', t, dur, pts.map(([d, f]) => [d, f * 3])).connect(biquad(ctx, 'bandpass', 2200, 5)).connect(envelope(ctx, t, 0.03, dur, peak * 0.25)).connect(out);
+  hiss(ctx, out, noise, t, dur, 'bandpass', 3400, peak * 0.5, 1.2);
+}
+// 手腕繩：尼龍細繩甩一下（比燭火乙式的布背帶高、細），繩尾的塑膠珠碰一下
+function cord(ctx, out, noise, t, peak) {
+  rub(ctx, out, noise, t, 3200, 1800, 0.02, 0.14, peak, { low: 900, shake: 0.3 });
+  snap(ctx, out, noise, t + 0.1, 5200, peak * 0.6);
+}
+// 機身裡的蜂鳴片「嗶」：方波，薄薄的
+function beep(ctx, out, t, f, dur, peak) {
+  osc(ctx, 'square', t, dur, [[0, f]]).connect(biquad(ctx, 'bandpass', f, 2)).connect(envelope(ctx, t, 0.002, dur, peak)).connect(out);
+}
+// 小喇叭（壞掉的那種）：先推到破音、再把音量切成五階（便宜的音樂晶片），正半邊切得比負半邊兇（紙盆裂了一邊）；
+// 紙盆跟著聲音沙沙震（雜訊乘上聲音本身，有聲音才有沙），低頻完全出不來，中間一個鼻音的共鳴峰、塑膠網罩再一個尖的，高頻糊掉。
+// 回傳要接進去的那一端；t、dur 是震的雜訊從哪裡響到哪裡
+const CRUSH = (() => {
+  const n = 2048, c = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1, y = x > 0 ? Math.tanh(x * 3.2) : Math.tanh(x * 1.9) * 0.8;
+    c[i] = Math.round(y * 5) / 5;
+  }
+  return c;
+})();
+function speaker(ctx, out, peak, noise, t, dur) {
+  const drive = ctx.createGain(), ws = ctx.createWaveShaper(), nose = ctx.createBiquadFilter(), grille = ctx.createBiquadFilter(), g = ctx.createGain();
+  drive.gain.value = 2.2;
+  ws.curve = CRUSH;
+  nose.type = grille.type = 'peaking';
+  nose.frequency.value = 1350;
+  nose.Q.value = 2.2;
+  nose.gain.value = 11;
+  grille.frequency.value = 2900;
+  grille.Q.value = 4;
+  grille.gain.value = 6;
+  g.gain.value = peak;
+  const hp = biquad(ctx, 'highpass', 780, 1);
+  drive.connect(ws).connect(hp).connect(nose).connect(grille).connect(biquad(ctx, 'lowpass', 3000, 1.2)).connect(g).connect(out);
+  if (noise) {
+    const src = ctx.createBufferSource(), buzz = ctx.createGain(), mix = ctx.createGain();
+    src.buffer = noise;
+    buzz.gain.value = 0;
+    mix.gain.value = 0.45;
+    ws.connect(buzz.gain);
+    src.connect(biquad(ctx, 'bandpass', 2400, 0.8)).connect(buzz).connect(mix).connect(hp);
+    src.start(t, Math.random() * 7);
+    src.stop(t + dur);
+  }
+  return drive;
+}
+// 旋律的一個音：兩個運算子的 FM（手機鈴聲的音源），敲下去亮、很快變圓；電池不太夠那樣抖。進喇叭前音量要大，切階才切得出來
+function chip(ctx, out, t, f, dur, peak = 0.55) {
+  const c = ctx.createOscillator(), m = ctx.createOscillator(), mg = ctx.createGain(), g = ctx.createGain();
+  c.frequency.value = f;
+  m.frequency.value = f * 2;
+  mg.gain.setValueAtTime(f * 2.2, t);
+  mg.gain.exponentialRampToValueAtTime(f * 0.25, t + 0.15);
+  m.connect(mg).connect(c.frequency);
+  lfo(ctx, t, dur, 4.5 + Math.random() * 2, f * 0.009, c.frequency);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + 0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  c.connect(g).connect(out);
+  for (const o of [c, m]) { o.start(t); o.stop(t + dur + 0.05); }
+}
+// 月球廠的企業旋律「ド ミ ソ ミ ラ ソー」，最後一個音疊成和弦。紀念模式打開只彈前三個
+const C6 = 1046.5, E6 = 1318.5, G6 = 1568, A6 = 1760;
+const JINGLE = [[0, C6, 0.2], [0.13, E6, 0.2], [0.26, G6, 0.26], [0.42, E6, 0.16], [0.52, A6, 0.24], [0.68, G6, 0.8], [0.68, E6, 0.8], [0.68, C6 / 2, 0.8]];
+
 export const VOICES = {
   // 相機（cameras.js）：葉片快門喀嚓兩下＝葉片張開一聲、闔上一聲。B 快門按住時兩聲分開，中間是開著的時間
   shutter(ctx, out, t, p, noise) {
@@ -189,7 +282,7 @@ export const VOICES = {
     hiss(ctx, out, noise, t, 0.025, 'bandpass', 2300 * p, 0.8, 2);
     return 0.035;
   },
-  // ---------- 日晷III（沙島大法師科技的現代產品）：整台是金屬，每一下都帶金屬的泛音和尾巴 ----------
+  // ---------- 獵魔III（大法師科技的現代產品）：整台是金屬，每一下都帶金屬的泛音和尾巴 ----------
   // 燭火乙式是皮殼、布背帶、木頭、紙、火苗，聲音悶、軟、有摩擦；這台反過來：鋁合金機身、鋼片、齒輪、彈簧卡榫，
   // 聲音硬、脆、準，低頻的悶聲都拿掉或拉高，敲到就「叮」出一串不成倍數的泛音（metal），尾巴是亮的。沒有一個動作跟燭火乙式共用。
   // 精密儀器的感覺靠裡面的小馬達（servo）：幾乎每個動作都是「嗚一小段→喀到位」，大的馬達低、小的高，往外推往上滑、收回來往下滑
@@ -240,6 +333,49 @@ export const VOICES = {
     metal(ctx, out, t + 0.085, 2100 * p, 0.07, 0.14);
     tick(ctx, out, noise, t + 0.085, 3800 * p, 0.25);
     return 0.26;
+  },
+  // 浮游燈放出去：機頂的卡榫彈開「嗒」，小馬達往上推一段，燈離開機身時一陣細的風，飛遠了一聲高的叮
+  glampout(ctx, out, t, p, noise) {
+    out = trim(ctx, out, 0.4);
+    tick(ctx, out, noise, t, 5000 * p, 0.35);
+    servo(ctx, out, noise, t + 0.02, 0.18, 1.45 * p, 1.14, 1);
+    air(ctx, out, noise, t + 0.12, [[0, 2600 * p], [0.3, 5200 * p]], 0.04, 0.32, 0.07, 1.2, 'bandpass');
+    metal(ctx, out, t + 0.3, 3400 * p, 0.09, 0.3);
+    return 0.5;
+  },
+  // 浮游燈換邊：燈裡的小馬達轉一下方向「嗞」，到位一聲叮（比放出去小）
+  glampside(ctx, out, t, p, noise) {
+    out = trim(ctx, out, 0.34);
+    servo(ctx, out, noise, t, 0.09, 1.6 * p, 1.06, 0.9);
+    metal(ctx, out, t + 0.1, 2900 * p, 0.09, 0.18);
+    tick(ctx, out, noise, t + 0.1, 5400 * p, 0.22);
+    return 0.3;
+  },
+  // 浮游燈收回：馬達往下滑一段，燈落回機頂「喀」扣上
+  glampin(ctx, out, t, p, noise) {
+    out = trim(ctx, out, 0.4);
+    air(ctx, out, noise, t, [[0, 4800 * p], [0.25, 2400 * p]], 0.03, 0.26, 0.06, 1.2, 'bandpass');
+    servo(ctx, out, noise, t + 0.12, 0.14, 1.3 * p, 0.9, 1);
+    seat(ctx, out, noise, t + 0.27, 1.1 * p, 0.9);
+    return 0.42;
+  },
+  // 浮游燈閃：電子閃光的「啪」——一下很亮很短的高頻，鋼片叮出一串，底下一聲往下的嗚（跟燭火乙式燒燈泡的悶啪反過來）
+  glampflash(ctx, out, t, p, noise) {
+    out = trim(ctx, out, 0.42);
+    hiss(ctx, out, noise, t, 0.014, 'highpass', 4200 * p, 0.9);
+    tick(ctx, out, noise, t, 6600 * p, 0.45);
+    metal(ctx, out, t + 0.004, 2950 * p, 0.09, 0.32);
+    osc(ctx, 'sine', t, 0.06, [[0, 1700 * p], [0.06, 820 * p]]).connect(envelope(ctx, t, 0.001, 0.06, 0.06)).connect(out);
+    return 0.36;
+  },
+  // 閃過之後充電：電容一聲細細往上爬的嗚，滿了一聲小叮
+  glampcharge(ctx, out, t, p, noise) {
+    out = trim(ctx, out, 0.3);
+    const d = 0.7;
+    osc(ctx, 'sine', t, d, [[0, 2300 * p], [d, 7200 * p]]).connect(envelope(ctx, t, 0.08, d, 0.03)).connect(out);
+    tick(ctx, out, noise, t + d, 6200 * p, 0.2);
+    metal(ctx, out, t + d, 3700 * p, 0.06, 0.16);
+    return d + 0.2;
   },
   // 舉起來：鋁的機身在手裡滑上來一點亮的摩擦，鋼扣環晃兩下，機背的孔碰到眼眶「叮」；
   // 接著開機，鏡頭的馬達把抽管推到拍照的位置，喀到位
@@ -528,13 +664,13 @@ export const VOICES = {
     }
     return 0.35;
   },
-  // 細沙往一邊流過去，沙沙一陣，越流越細（原本是舊版日晷III 在桌上浮起來的聲音，現在沒有相機用）
+  // 細沙往一邊流過去，沙沙一陣，越流越細（原本是舊版獵魔III 在桌上浮起來的聲音，現在沒有相機用）
   sand(ctx, out, t, p, noise) {
     air(ctx, out, noise, t, [[0, 5200 * p], [0.7, 3400 * p]], 0.12, 0.8, 0.5, 1.4, 'bandpass');
     for (let i = 0; i < 9; i++) hiss(ctx, out, noise, t + 0.05 + Math.random() * 0.6, 0.006, 'bandpass', 5000 + Math.random() * 3000, 0.3 + Math.random() * 0.3, 4);
     return 0.9;
   },
-  // 望浮起來：片盒裡的小馬達嗚一聲轉起來又停下，吐片口的彈片喀一下
+  // 小馬達嗚一聲轉起來又停下，彈片喀一下（靜海的升降梯）
   whir(ctx, out, t, p, noise) {
     const o = osc(ctx, 'sawtooth', t, 0.3, [[0, 120 * p], [0.08, 230 * p], [0.3, 190 * p]]);
     o.connect(biquad(ctx, 'bandpass', 1700 * p, 2.5)).connect(envelope(ctx, t, 0.03, 0.3, 0.05)).connect(out);
@@ -542,16 +678,128 @@ export const VOICES = {
     hiss(ctx, out, noise, t + 0.33, 0.012, 'bandpass', 3400 * p, 0.45, 4);
     return 0.45;
   },
-  // 拍立拿a500 的快門：塑膠機身悶悶「喀嚓」，接著吐片的小馬達「滋——」把照片推出來，到底彈片一扣
+  // ---------- 拍立拿a500 的動作（cameras.js 的 voices；零件在 VOICES 上面那段）。沒有一個跟另外兩台共用 ----------
+  // 快門：按鈕「喀」彈簧嗡一下、空心機身「叩」，接著吐片的小馬達「滋——」越推越吃力、照片磨著出片口滑出來，
+  // 到底彈片「啪」，計數輪撥一格
   polashut(ctx, out, t, p, noise) {
-    hiss(ctx, out, noise, t, 0.016, 'bandpass', 2600 * p, 0.9, 2);
-    osc(ctx, 'sine', t, 0.07, [[0, 210 * p], [0.07, 110 * p]]).connect(envelope(ctx, t, 0.002, 0.07, 0.5)).connect(out);
-    hiss(ctx, out, noise, t + 0.05, 0.014, 'bandpass', 1800 * p, 0.6, 2);
-    const m = osc(ctx, 'sawtooth', t + 0.14, 0.62, [[0, 140 * p], [0.1, 250 * p], [0.55, 236 * p], [0.62, 180 * p]]);
-    m.connect(biquad(ctx, 'bandpass', 1500 * p, 2.2)).connect(envelope(ctx, t + 0.14, 0.04, 0.62, 0.07)).connect(out);
-    air(ctx, out, noise, t + 0.16, [[0, 2200 * p], [0.55, 3000 * p]], 0.05, 0.58, 0.05, 1.4, 'bandpass');
-    hiss(ctx, out, noise, t + 0.8, 0.012, 'bandpass', 3200 * p, 0.4, 4);
-    return 0.86;
+    snap(ctx, out, noise, t, 2900 * p, 0.8, 1.5);
+    knock(ctx, out, noise, t + 0.012, 1050 * p, 0.55);
+    snap(ctx, out, noise, t + 0.05, 2400 * p, 0.45);
+    motor(ctx, out, noise, t + 0.13, 0.62, [[0, 90 * p], [0.08, 175 * p], [0.35, 160 * p], [0.55, 138 * p], [0.62, 105 * p]], 0.1);
+    air(ctx, out, noise, t + 0.2, [[0, 2600 * p], [0.5, 3600 * p]], 0.05, 0.52, 0.05, 1.4, 'bandpass');
+    snap(ctx, out, noise, t + 0.78, 3300 * p, 0.5, 0.6);
+    knock(ctx, out, noise, t + 0.79, 1500 * p, 0.15);
+    snap(ctx, out, noise, t + 0.88, 6000 * p, 0.22);
+    return 0.95;
+  },
+  // 舉起＝開機：電源鈕「喀」，鏡筒被馬達推出來「嗚——」，到位撞一下殼，蜂鳴片「嗶」
+  plraise(ctx, out, t, p, noise) {
+    cord(ctx, out, noise, t, 0.12);
+    snap(ctx, out, noise, t + 0.03, 3800 * p, 0.5, 1);
+    motor(ctx, out, noise, t + 0.07, 0.26, [[0, 95 * p], [0.06, 170 * p], [0.26, 152 * p]], 0.085);
+    knock(ctx, out, noise, t + 0.34, 1300 * p, 0.35);
+    beep(ctx, out, t + 0.4, 2730, 0.06, 0.045);
+    return 0.5;
+  },
+  // 放下＝關機：電源鈕「喀」，鏡筒縮回去（越來越慢），殼「叩」，手腕繩甩一下。不嗶
+  pllower(ctx, out, t, p, noise) {
+    snap(ctx, out, noise, t, 3400 * p, 0.45);
+    motor(ctx, out, noise, t + 0.03, 0.24, [[0, 160 * p], [0.18, 122 * p], [0.24, 80 * p]], 0.08);
+    knock(ctx, out, noise, t + 0.28, 1100 * p, 0.3);
+    cord(ctx, out, noise, t + 0.33, 0.13);
+    return 0.5;
+  },
+  // 腰平和自拍互換：手指在塑膠殼上換位置「叩、叩」，手腕繩晃一下
+  plgrip(ctx, out, t, p, noise) {
+    knock(ctx, out, noise, t, 1250 * p, 0.32);
+    cord(ctx, out, noise, t + 0.03, 0.14);
+    knock(ctx, out, noise, t + 0.08, 1420 * p, 0.22);
+    return 0.3;
+  },
+  // 片盒空了還按：按鈕悶悶「喀」沒有彈簧，馬達「嘰」一下轉不動，蜂鳴片低低兩聲
+  pljam(ctx, out, t, p, noise) {
+    snap(ctx, out, noise, t, 2200 * p, 0.8);
+    motor(ctx, out, noise, t + 0.02, 0.08, [[0, 120 * p], [0.08, 55 * p]], 0.12);
+    beep(ctx, out, t + 0.15, 880, 0.08, 0.09);
+    beep(ctx, out, t + 0.28, 660, 0.13, 0.09);
+    return 0.45;
+  },
+  // 剛拍掉最後一張：吐完片，蜂鳴片「嗶啵」往下兩聲
+  pllast(ctx, out, t) {
+    beep(ctx, out, t, 1760, 0.07, 0.04);
+    beep(ctx, out, t + 0.1, 1320, 0.13, 0.04);
+    return 0.3;
+  },
+  // 定焦想變焦：塑膠鏡筒擰不動，「嘰」一下摩擦、殼悶一聲
+  plstop(ctx, out, t, p, noise) {
+    rub(ctx, out, noise, t, 2400 * p, 2000 * p, 0.01, 0.06, 0.35, { type: 'bandpass', Q: 3, low: 1200, shake: 0.5 });
+    knock(ctx, out, noise, t + 0.05, 980 * p, 0.7);
+    return 0.12;
+  },
+  // 拍照人說「再一張」：蜂鳴片「嗶嗶」好了可以拍
+  plready(ctx, out, t) {
+    beep(ctx, out, t, 2730, 0.04, 0.08);
+    beep(ctx, out, t + 0.08, 2730, 0.05, 0.08);
+    return 0.15;
+  },
+  // 紀念模式開：錫片紀念章翻過來「鏘」（薄、便宜，一下就沒了），小喇叭彈企業旋律的前三個音
+  plmemoon(ctx, out, t, p, noise) {
+    snap(ctx, out, noise, t, 4200 * p, 0.3);
+    ring(ctx, out, t, 3100 * p, 0.05, 0.12);
+    ring(ctx, out, t, 4870 * p, 0.02, 0.08);
+    const sp = speaker(ctx, out, 0.025, noise, t + 0.1, 0.5);
+    for (const [dt, f, d] of JINGLE.slice(0, 3)) chip(ctx, sp, t + 0.12 + dt * 0.75, f * p, d);
+    return 0.6;
+  },
+  // 紀念模式關：紀念章翻回去，旋律往下兩個音
+  plmemooff(ctx, out, t, p, noise) {
+    snap(ctx, out, noise, t, 3600 * p, 0.3);
+    ring(ctx, out, t, 2700 * p, 0.035, 0.08);
+    const sp = speaker(ctx, out, 0.028, noise, t + 0.08, 0.4);
+    chip(ctx, sp, t + 0.1, G6 * p, 0.14);
+    chip(ctx, sp, t + 0.2, C6 * p, 0.22);
+    return 0.45;
+  },
+  // 抽中十周年紀念：小喇叭把整段企業旋律彈完（旁邊的人也聽得到，multiplayer.js 的 'r'）
+  plrare(ctx, out, t, p, noise) {
+    const sp = speaker(ctx, out, 0.0375, noise, t, 1.6);
+    for (const [dt, f, d] of JINGLE) chip(ctx, sp, t + dt, f * p, d);
+    return 1.6;
+  },
+  // 前廳桌上浮起來：片盒在空心殼裡咔啦咔啦晃，手腕繩一甩
+  plrattle(ctx, out, t, p, noise) {
+    for (const [dt, f, g] of [[0, 1500, 0.3], [0.07, 1750, 0.22], [0.12, 1350, 0.25], [0.21, 1650, 0.15], [0.27, 1450, 0.1]]) knock(ctx, out, noise, t + dt, f * p, g);
+    cord(ctx, out, noise, t + 0.1, 0.08);
+    return 0.4;
+  },
+  // 從桌上帶走：輕飄飄的塑膠離開木頭，手腕繩套上手
+  pltake(ctx, out, t, p, noise) {
+    osc(ctx, 'sine', t, 0.04, [[0, 260 * p], [0.04, 200 * p]]).connect(envelope(ctx, t, 0.002, 0.04, 0.12)).connect(out);
+    knock(ctx, out, noise, t + 0.01, 1150 * p, 0.3);
+    cord(ctx, out, noise, t + 0.15, 0.2);
+    return 0.4;
+  },
+  // 放回桌上：繩子先落下，空心的殼放到木頭上「叩」，比另外兩台輕
+  plput(ctx, out, t, p, noise) {
+    cord(ctx, out, noise, t, 0.15);
+    osc(ctx, 'sine', t + 0.22, 0.05, [[0, 230 * p], [0.05, 170 * p]]).connect(envelope(ctx, t + 0.22, 0.002, 0.05, 0.15)).connect(out);
+    knock(ctx, out, noise, t + 0.22, 1000 * p, 0.45);
+    return 0.4;
+  },
+  // 月球換片盒：底蓋「啪」彈開，舊盒抽出來、新盒推進去「喀」，蓋上；馬達把最上面的黑色遮光片吐出來，蜂鳴片「嗶」好了
+  plswap(ctx, out, t, p, noise) {
+    snap(ctx, out, noise, t, 3000 * p, 0.6, 1);
+    knock(ctx, out, noise, t + 0.02, 1400 * p, 0.3);
+    rub(ctx, out, noise, t + 0.15, 2600 * p, 1600 * p, 0.02, 0.2, 0.18, { low: 800 });
+    rub(ctx, out, noise, t + 0.6, 1600 * p, 2600 * p, 0.02, 0.2, 0.18, { low: 800 });
+    snap(ctx, out, noise, t + 0.82, 3600 * p, 0.6);
+    snap(ctx, out, noise, t + 1.05, 2600 * p, 0.6, 1);
+    knock(ctx, out, noise, t + 1.06, 1200 * p, 0.45);
+    motor(ctx, out, noise, t + 1.25, 0.5, [[0, 90 * p], [0.08, 180 * p], [0.5, 165 * p]], 0.1);
+    air(ctx, out, noise, t + 1.3, [[0, 2600 * p], [0.4, 3400 * p]], 0.05, 0.42, 0.05, 1.4, 'bandpass');
+    snap(ctx, out, noise, t + 1.78, 3300 * p, 0.5, 0.6);
+    beep(ctx, out, t + 1.95, 2730, 0.06, 0.045);
+    return 2.1;
   },
   // 靜海速食店的叫號：叮、咚兩聲，第二聲低一點
   pickup(ctx, out, t, p) {

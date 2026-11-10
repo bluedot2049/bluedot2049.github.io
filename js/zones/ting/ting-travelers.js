@@ -230,7 +230,7 @@ export class Travelers {
     });
     // 遠處的人：身體一個形狀、頭一個形狀
     this.far = new FarFigures(scene, 24);
-    linkTrack(this.pool, this.far);   // 日晷III 追焦鎖定跟著人走
+    linkTrack(this.pool, this.far);   // 獵魔III 追焦鎖定跟著人走
   }
 
   // 要搭第 b 條線第 kb 班的人，照上車的先後排好：離車門近的先上，走到門口的順序才不會亂

@@ -95,8 +95,19 @@ export class FlashFx {
     if (left <= 0) s.visible = false;
   }
 
-  // ch 是閃燈那個人的角色：燈泡在相機左手邊的上方（cameraModel 的座標）
-  fire(ch) {
+  // ch 是閃燈那個人的角色：燈泡在相機左手邊的上方（cameraModel 的座標）。
+  // lamp：他的浮游燈（獵魔III）{ pos 燈在哪, aim 照向哪 }——光從燈那裡打出來，沒有燈泡彈出來、沒有煙，聲音是電子閃光
+  fire(ch, lamp = null) {
+    if (lamp) {
+      this.pos.copy(lamp.pos);
+      this.at.copy(lamp.pos).lerp(lamp.aim, 0.08);
+      this.t = 0;
+      this.noSmoke = true;
+      const { k, pan } = this.heard(this.pos, HEAR);
+      if (k > 0) this.ambience.voice('glampflash', 0.6 * k, pan);
+      return;
+    }
+    this.noSmoke = false;
     ch.camG.updateWorldMatrix(true, false);
     this.pos.set(0.1, 0.2, 0.024).applyMatrix4(ch.camG.matrixWorld);
     this.at.set(0.1, 0.2, 0.024 + 0.35 / ch.camG.getWorldScale(new THREE.Vector3()).z).applyMatrix4(ch.camG.matrixWorld);
@@ -124,7 +135,7 @@ export class FlashFx {
     }
     for (const p of this.puffs) {
       const a = (t - p.userData.delay) / SMOKE;
-      p.visible = a > 0 && a < 1;
+      p.visible = !this.noSmoke && a > 0 && a < 1;
       if (!p.visible) continue;
       p.position.set(this.pos.x + p.userData.dx + a * 0.15, this.pos.y + a * 0.6, this.pos.z);
       p.scale.setScalar(0.12 + a * 0.5);

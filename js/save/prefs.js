@@ -33,8 +33,6 @@ export const PREFS = {
   verbsSeen: { kind: 'json' },                   // main.js：互動鍵出現過哪些動詞（第一次出現光暈多擴幾圈）
   tipsSeen: { kind: 'json' },                    // ui.js：教學提示 { 代號: 出現過幾次，或 'done' 做過了 }
   radio: { kind: 'json' },                       // radio-sound.js：前廳收音機 { at 指針在刻度哪裡 0～1 }，開關不記，每次上線都是關著
-  kaoTagMine: { kind: 'flag', init: true },      // kaopanel.js、multiplayer.js：自己頭上的顏文字給別人看
-  kaoTagOthers: { kind: 'flag', init: true },    // 同上：看別人頭上的顏文字
   kaoGaze: { kind: 'text', init: 'auto' },      // kaopanel.js、attention.js：擺著表情時頭看哪（表情盤的「看哪」）'auto' 自動／'cam' 鏡頭／'free' 隨意
   kaoTagPhoto: { kind: 'flag', init: false },    // photo.js：畫廊的眼睛拍得進頭上的顏文字（攝影模式的「頭上字」）
   postcardSoul: { kind: 'flag', init: false },   // photo.js：海市明信片上次選靈魂版（帶存檔），不然是普通版

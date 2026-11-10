@@ -246,7 +246,7 @@ export class UI {
     const dots = (cs) => cs.map((c) => `<i style="--pc:${esc(c)}"></i>`).join('');
     $('#ferry-name').innerHTML = esc(d.name) + (d.mates?.length ? `<span class="ferry-mates" title="隊友在這裡">${dots(d.mates)}</span>` : '');
     $('#ferry-desc').textContent = d.desc || '';
-    $('#ferry-tags').innerHTML = (d.tags || []).map((t) => `<li>${esc(t)}</li>`).join('');
+    $('#ferry-tags').innerHTML = (d.tags || []).map((t) => `<li>${esc(t)}</li>`).join('') + (d.wip ? '<li class="wip">未完成</li>' : '');
     $('#ferry-dots').innerHTML = list.map((e, k) => `<i class="${k === i ? 'on' : ''}${e.mates?.length ? ' mate' : ''}"${e.mates?.length ? ` style="--pc:${esc(e.mates[0])}"` : ''}></i>`).join('');
     const go = $('#ferry-go');
     go.textContent = d.to ? '上船' : d.here ? '這裡' : '還不能搭';
@@ -392,7 +392,8 @@ export class UI {
   // 提示（#hint）：上緣一行，只給看、不用點。三種（介面原則「提示」）：
   //   hint(text, ms)                  回饋、事件（已還原、有人加入）：至少停到讀得完（readMs），走動不收
   //   hint(text, { id, hold: true })  狀態：一直在，到 hideHint(id) 才收（問手把的 A、沖洗中、點要標記的地方）
-  //   tip(id, text, ms)               教學：這台裝置出現過兩次、或做過那件事（learned(id)）就不再出現；做了當場收
+  //   tip(id, text, ms)               教學：一頁一次，這台裝置出現過兩次、或做過那件事（learned(id)）就不再出現；做了當場收。
+  //                                   一般不直接呼叫：寫進 lessons.js 的教學表，用 teach('名字')（字照操作分三份、全都要講到）
   //   tip(id, text, ms, { demo, plat, on, lock })  教學帶動態示範：字前面放 demos.js 的那張（plat：touch／desk／pad）；
   //                                   觸控有 on 時另外疊一張在那顆按鈕上（'#joy'）或拖曳的空處（'open'）
   // 同時來：狀態壓過回饋、回饋壓過教學。被壓下去、還沒停夠的教學和狀態排在後面，上面那個收了再出來。
@@ -402,8 +403,12 @@ export class UI {
     this.showHint({ text, id: opt.id ?? null, pri: opt.hold ? 3 : 2, ms: opt.hold ? Infinity : Math.max(opt.ms ?? 0, readMs(text)) });
   }
 
+  // 同一則這一頁只說一次（換區域是換頁，下一頁才說第二次）；tipAt 記上一則什麼時候說的（lessons.js 的「有空再說」隔開用）
   tip(id, text, ms = 0, demo = null) {
-    if (!this.fresh(id)) return false;
+    this.saidNow ??= new Set();
+    if (this.saidNow.has(id) || !this.fresh(id)) return false;
+    this.saidNow.add(id);
+    this.tipAt = performance.now();
     this.showHint({ text, id, pri: 1, ms: Math.max(ms, readMs(text)), demo });
     return true;
   }

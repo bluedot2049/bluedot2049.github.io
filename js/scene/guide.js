@@ -18,8 +18,8 @@ import { Eye } from '../camera/eye.js';
 import { bend } from '../core/lens.js';
 import { uiScale, panelW, dockR } from '../controls/ui.js';
 import { pref, setPref } from '../save/prefs.js';
-import { is, key } from '../controls/keymap.js';
-import { padBtn } from '../controls/gamepad.js';
+import { is } from '../controls/keymap.js';
+import { teach, taught } from '../controls/lessons.js';
 
 const LEAD = 3.2;       // 帶路時飛在角色前面幾公尺（沿著路量）
 const PEEK = 2.4;       // 眼珠看的地方再往前幾公尺：快到轉角就先看下一段
@@ -377,9 +377,8 @@ export class Guide {
     this.routeT = -Infinity;
     this.follow = null;
     this.chase = null;
-    // 教學（ui.js 的 tip）：每種操作說兩次，跟著走過一次就不再說
-    const k = this.kind();
-    this.ui.tip(`eye-follow-${k}`, k === 'pad' ? `走近黑眼　${padBtn(-1)} 跟著` : k === 'touch' ? '走近黑眼　按「跟著」' : `走近黑眼　${key('interact')} 跟著`, 5000);
+    // 教學（lessons.js 的 eyeFollow）：每種操作說兩次，跟著走過一次就不再說
+    teach('eyeFollow');
   }
 
   // ───────── 在哪裡、去過哪裡 ─────────
@@ -473,19 +472,14 @@ export class Guide {
     pl.walkTo(d.sx, d.sz, d.sy);
     if (!pl.path.length) return this.lost();
     this.follow = { goal: pl.goal };
-    this.ui.learned(`eye-follow-${this.kind()}`);
-  }
-
-  // 現在用哪一種操作：教學照這個分開記
-  kind() {
-    return document.body.classList.contains('pad') ? 'pad' : this.coarse ? 'touch' : 'desk';
+    taught('eyeFollow');
   }
 
   // 隊友的黑眼：每隔一下照它現在在哪重找路跟過去，停在它底下旁邊一點；它不動了、自己動了、它收起來了就不跟
   chaseEye(id) {
     this.follow = null;
     this.chase = { id, goal: null, t: -Infinity, x: 0, z: 0, still: 0 };
-    this.ui.learned(`eye-follow-${this.kind()}`);
+    taught('eyeFollow');
   }
 
   updateChase(now) {

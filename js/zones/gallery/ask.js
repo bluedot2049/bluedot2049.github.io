@@ -8,6 +8,7 @@ import { uiScale } from '../../controls/ui.js';
 import { getSave, putSave, markTour } from '../../save/progress.js';
 import { carried } from '../../camera/cameras.js';
 import { HOST_NAME } from '../../npc/names.js';
+import { beckon } from '../../controls/lessons.js';
 import { NEXT, DONE, ASK, AFTER_SHOT } from '../../npc/manatee-lines.js';
 
 const NEAR = 2.2;        // 離他多近出現「問」
@@ -66,13 +67,19 @@ export class Ask {
     return { mirror: t.includes('mirror'), camera: !!carried(), out: t.includes('out') };
   }
 
+  // 第一個還沒做的那一步（都做完了是 null）
+  nextStep() {
+    const s = this.steps();
+    return !s.mirror ? 'mirror' : !s.camera ? 'camera' : !s.out ? 'out' : null;
+  }
+
   // 走近時說的：第一個還沒做的那一步，順手指過去。同一步這次來說過 NEXT_TIMES 回就照原本的招呼
   nextLine() {
     if (this.back) {
       this.back = false;
       return [pick(NEXT.back)];
     }
-    const s = this.steps(), step = !s.mirror ? 'mirror' : !s.camera ? 'camera' : !s.out ? 'out' : null;
+    const step = this.nextStep();
     if (!step) return null;
     this.told[step] = (this.told[step] || 0) + 1;
     if (this.told[step] > NEXT_TIMES) return null;
@@ -87,11 +94,13 @@ export class Ask {
     return { kind: 'ask', p: { name: HOST_NAME, act: () => this.open() }, d, ax: g.x, az: g.z };
   }
 
-  // 題目照做過什麼長出來（need），沒問過的那顆印泥亮著。電腦 1–9 直接挑，Esc 收
+  // 題目照做過什麼長出來（need），沒問過的那顆印泥亮著。電腦 1–9 直接挑，Esc 收。
+  // 排法：下一步那題（manatee-lines.js 的 step）最前面，接著沒問過的，問過的排後面，其餘照表上的順序
   open() {
     if (this.isOpen) return;
-    const s = getSave(), asked = new Set(s.asked), tour = new Set(s.tour);
-    this.shown = ASK.filter((q) => !q.need || tour.has(q.need));
+    const s = getSave(), asked = new Set(s.asked), tour = new Set(s.tour), step = this.nextStep();
+    const rank = (q) => (q.step === step ? 0 : asked.has(q.id) ? 2 : 1);
+    this.shown = ASK.filter((q) => !q.need || tour.has(q.need)).map((q, i) => [q, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([q]) => q);
     this.list.innerHTML = this.shown.map((q, i) => `<li><button type="button" data-q="${q.id}"${asked.has(q.id) ? '' : ' class="fresh"'}>`
       + `<i class="ink" aria-hidden="true"></i><span>${q.q}</span>${i < 9 ? `<kbd class="on-kb">${i + 1}</kbd>` : ''}</button></li>`).join('');
     this.el.classList.add('show');
@@ -155,13 +164,7 @@ export class Ask {
     const m = this.m, w = this.world;
     if (to[0] === '#') {
       m.point(null);
-      const b = document.querySelector(to);
-      if (!b || b.hidden || !b.getClientRects().length) return;
-      b.classList.remove('beckon');
-      void b.offsetWidth;   // 重新開始亮
-      b.classList.add('beckon');
-      clearTimeout(b._beckon);
-      b._beckon = setTimeout(() => b.classList.remove('beckon'), GLOW * 1000);
+      beckon(to, GLOW);
       return;
     }
     // 指概略的方向就好：往裡面的門那面牆指下一間的中間

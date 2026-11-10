@@ -17,7 +17,7 @@ export const ACTIONS = [
   ['emote1', '收藏一', 'walk', ['Digit1']], ['emote2', '收藏二', 'walk', ['Digit2']], ['emote3', '收藏三', 'walk', ['Digit3']],
   ['emote4', '收藏四', 'walk', ['Digit4']], ['emote5', '收藏五', 'walk', ['Digit5']],
   ['raise', '舉相機', 'all', ['Mouse2']], ['shutter', '快門', 'cam', ['Mouse0', 'Space']], ['refocus', '重新對焦', 'gear', ['KeyR']],
-  ['selfie', '自拍', 'gear', ['Mouse1']], ['flash', '閃光、紀念、追焦', 'gear', ['KeyQ']], ['date', '日期', 'gear', ['Backquote']],
+  ['selfie', '自拍', 'gear', ['Mouse1']], ['flash', '閃光、紀念、打燈', 'gear', ['KeyQ']], ['date', '日期', 'gear', ['Backquote']],
   ['zoomIn', '拉近', 'gear', ['Equal']], ['zoomOut', '拉遠', 'gear', ['Minus']],
   ['turn', '直橫', 'cam', ['KeyF']], ['look', '看鏡', 'cam', ['KeyC']], ['bare', '收起介面', 'cam', ['KeyX']],
   ['up', '空拍機上升', 'drone', ['KeyE']], ['down', '空拍機下降', 'drone', ['KeyQ']], ['fast', '空拍機加速', 'drone', ['Shift']],

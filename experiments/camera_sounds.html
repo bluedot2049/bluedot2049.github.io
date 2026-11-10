@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>相機音效試聽</title>
-  <!-- 相機拿在手上時每個動作的聲音（?cam=gui 換日晷III）（cameras.js 的 voices → ambience-voices.js 的 VOICES）一顆一顆聽；下面是遊戲裡真的會連著響的幾段，和改之前的對照。音量照 photo.js 的 say() -->
+  <!-- 相機拿在手上時每個動作的聲音（?cam=gui 換獵魔III、?cam=wang 換拍立拿a500）（cameras.js 的 voices → ambience-voices.js 的 VOICES）一顆一顆聽；下面是遊戲裡真的會連著響的幾段，和改之前的對照。音量照 photo.js 的 say() -->
   <style>
     html, body { margin: 0; background: #1c1814; color: #e9e0cc; font-family: "Noto Serif TC", serif; }
     main { max-width: 900px; margin: 0 auto; padding: 18px 16px 48px; }
@@ -29,7 +29,7 @@
 <body>
 <main>
   <h1 id="title">燭火乙式音效試聽</h1>
-  <div class="note"><a href="?cam=bulb" style="color:#e8b86a">燭火乙式</a>　<a href="?cam=gui" style="color:#e8b86a">日晷III</a></div>
+  <div class="note"><a href="?cam=bulb" style="color:#e8b86a">燭火乙式</a>　<a href="?cam=gui" style="color:#e8b86a">獵魔III</a>　<a href="?cam=wang" style="color:#e8b86a">拍立拿a500</a></div>
   <div class="note">第一下點畫面才建聲音。每次都會差一點高低大小（跟遊戲一樣），連按幾次聽。音量是遊戲裡的實際值，喇叭開到平常玩的大小。</div>
   <div id="warn" class="note" style="opacity:1;color:#ffb38a;display:none"></div>
   <div class="note" id="state">聲音：還沒開（點任何一顆）</div>
@@ -63,7 +63,7 @@
 
   const $ = (id) => document.getElementById(id);
   const log = (s) => { $('log').textContent = [s, ...$('log').textContent.split('\n')].slice(0, 12).join('\n'); };
-  const CAM = new URLSearchParams(location.search).get('cam') === 'gui' ? 'gui' : 'bulb', GUI = CAM === 'gui';
+  const Q = new URLSearchParams(location.search).get('cam'), CAM = ['gui', 'wang'].includes(Q) ? Q : 'bulb', GUI = CAM === 'gui', WANG = CAM === 'wang';
   // 帶走、放回沒寫的相機用皮背帶那套（main.js 的帶走鈕）
   const V = { take: 'strap', put: 'setdown', ...CAMERAS[CAM].voices };
   const B = { take: 'strap', put: 'setdown', ...CAMERAS.bulb.voices };
@@ -124,6 +124,7 @@
     ['track', 0.35, '追焦鎖住', 'Q'], ['untrack', 0.25, '追焦放開', '再按 Q'],
     ['again', 0.45, '再一張', '拍照人口令'], ['done', 0.45, '好了', '拍照人口令'],
     ['take', 0.45, '帶走', '前廳桌上'], ['put', 0.45, '放回', '前廳桌上'],
+    ['memoOn', 0.28, '紀念模式開', 'Q'], ['memoOff', 0.28, '紀念模式關', '再按 Q'], ['last', 0.35, '最後一張', '拍完片盒空了'], ['rare', 0.42, '十周年紀念', '抽中 1/12，吐完片'],
   ].filter(([k]) => V[k]);
   const LEVEL = Object.fromEntries(ACTS.map(([k, v]) => [k, v]));
   const say = (k, dt = 0, vol = LEVEL[k]) => setTimeout(() => amb.voice(V[k], vol), dt * 1000);
@@ -149,7 +150,7 @@
     '換拿法兩格 → 直拿 → 自拍 → 回來': () => { say('grip'); say('grip', 0.4); say('turn', 1.0); say('grip', 1.8); say('grip', 2.6); },
     '想變焦（滾輪一滑只響一聲）': () => say('prime'),
   };
-  // 日晷III：連著拉長的馬達（photo.js 每 0.14 秒送一段）
+  // 獵魔III：連著拉長的馬達（photo.js 每 0.14 秒送一段）
   const motor = (dt, sec) => { for (let x = 0; x < sec; x += 0.14) say('zoom', dt + x); say('zoomEnd', dt + sec); };
   const GSEQ = {
     '舉起 → 對焦 → 拍 → 放下': () => { say('raise'); say('focus', 0.3); say('shutter', 1.1); say('lower', 2.0); },
@@ -160,7 +161,17 @@
     '換拿法兩格 → 直拿 → 自拍 → 回來': () => { say('grip'); say('grip', 0.4); say('turn', 1.0); say('grip', 1.8); say('grip', 2.6); },
     '桌上：帶走 → 放回': () => { say('take'); say('put', 1.4); },
   };
-  for (const [name, fn] of Object.entries(GUI ? GSEQ : SEQ)) {
+  // 拍立拿a500：時間照 photo.js（抽中的旋律、最後一張的嗶啵都在快門後 0.9 秒）
+  const WSEQ = {
+    '舉起（開機）→ 拍 → 放下（關機）': () => { say('raise'); say('shutter', 0.9); say('lower', 2.4); },
+    '紀念模式開 → 拍 → 抽中十周年': () => { say('memoOn'); say('shutter', 1.2); say('rare', 2.1); },
+    '紀念模式關': () => say('memoOff'),
+    '拍掉最後一張 → 空了還按': () => { say('shutter'); say('last', 0.95); say('jam', 2.0); },
+    '腰平 → 自拍 → 腰平': () => { say('grip'); say('grip', 0.7); },
+    '月球換片盒': () => amb.voice('plswap', 0.4),
+    '前廳桌上：浮起來 → 帶走 → 放回': () => { amb.voice(CAMERAS.wang.rattle, 0.3); say('take', 0.9); say('put', 2.3); },
+  };
+  for (const [name, fn] of Object.entries(GUI ? GSEQ : WANG ? WSEQ : SEQ)) {
     const b = document.createElement('button');
     b.textContent = name;
     b.onclick = () => { amb.start(); fn(); log(name); };
@@ -168,10 +179,14 @@
   }
 
   // 改之前：閃光拍只有啪，B 快門按下、放開各一整聲喀嚓
-  // 日晷III：同一個動作跟燭火乙式各響一次，聽差在哪
+  // 獵魔III：同一個動作跟燭火乙式各響一次，聽差在哪
   const both = (k) => () => { amb.voice(B[k], LEVEL[k]); setTimeout(() => amb.voice(V[k], LEVEL[k]), 900); };
-  const GCMP = Object.fromEntries(['shutter', 'raise', 'lower', 'focus', 'grip', 'turn', 'dateOn', 'take', 'put'].map((k) => [`${ACTS.find((a) => a[0] === k)[2]} 燭火→日晷`, both(k)]));
-  const CMP = GUI ? GCMP : {
+  const GCMP = Object.fromEntries(['shutter', 'raise', 'lower', 'focus', 'grip', 'turn', 'dateOn', 'take', 'put'].map((k) => [`${ACTS.find((a) => a[0] === k)[2]} 燭火→獵魔`, both(k)]));
+  // 拍立拿a500：同一個動作三台各響一次
+  const G = { take: 'strap', put: 'setdown', ...CAMERAS.gui.voices };
+  const three = (k) => () => [B, G, V].forEach((S, i) => setTimeout(() => amb.voice(S[k], LEVEL[k]), i * 1100));
+  const WCMP = Object.fromEntries(['shutter', 'raise', 'lower', 'grip', 'take', 'put'].map((k) => [`${ACTS.find((a) => a[0] === k)[2]} 三台`, three(k)]));
+  const CMP = GUI ? GCMP : WANG ? WCMP : {
     '閃光拍 舊': () => { amb.voice('flash', 0.7); setTimeout(() => amb.voice('bulb', 0.45), 450); },
     '閃光拍 新': () => flashShot(),
     'B 快門 2 秒 舊': () => { setTimeout(() => amb.voice('shutter', 0.3), 280); setTimeout(() => amb.voice('shutter', 0.5), 2280); },
@@ -179,7 +194,7 @@
   };
   for (const [name, fn] of Object.entries(CMP)) {
     const b = document.createElement('button');
-    b.innerHTML = `${name}<small>${GUI ? '先燭火乙式、再日晷III' : name.endsWith('舊') ? '原本的' : '現在遊戲裡的'}</small>`;
+    b.innerHTML = `${name}<small>${GUI ? '先燭火乙式、再獵魔III' : WANG ? '燭火乙式 → 獵魔III → 拍立拿a500' : name.endsWith('舊') ? '原本的' : '現在遊戲裡的'}</small>`;
     b.onclick = () => { amb.start(); fn(); log(name); };
     $('cmp').appendChild(b);
   }

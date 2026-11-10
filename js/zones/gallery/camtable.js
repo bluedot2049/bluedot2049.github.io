@@ -529,7 +529,7 @@ export function buildCamTable(x, z, rot) {
     holder.rotation.y = sl.base;
     holder.scale.setScalar(SHOW);
     for (const o of bucketObjects(cb)) {
-      if (isChrome(sl.id) && o.isMesh) o.material = chromeMat();   // 日晷III 是亮面銀
+      if (isChrome(sl.id) && o.isMesh) o.material = chromeMat();   // 獵魔III 是亮面銀
       holder.add(o);
     }
     group.add(holder);

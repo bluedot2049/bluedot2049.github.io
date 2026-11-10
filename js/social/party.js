@@ -12,7 +12,9 @@ import * as THREE from 'three';
 import { PLACES } from '../scene/places.js';
 import { bend } from '../core/lens.js';
 import { GUIDE_LAYER } from '../core/scenery.js';
-import { is } from '../controls/keymap.js';
+import { is, key } from '../controls/keymap.js';
+import { padBtn } from '../controls/gamepad.js';
+import { kind, say } from '../controls/lessons.js';
 
 const MAX = 4;               // 一隊最多幾個人
 const NEAR = 6;              // 多遠以內的人收得到邀請
@@ -549,7 +551,9 @@ export class Party {
       store(this.state);
       this.endWait();
       this.greet(o);
-      this.ui.hint('已同行。按「說話」打字', 4000);
+      // 怎麼說話照現在的操作寫（手機按「說話」那顆，電腦、手把寫鍵，換過鍵寫換過的）
+      const k = kind();
+      this.ui.hint(`已同行。${k === 'touch' ? '按「說話」打字' : say([k === 'pad' ? padBtn(15) : key('talk'), '說話'])}`, 4000);
     } else if (p.n === 1 && this.roster().length <= MAX) {
       this.endWait();
       this.greet(o);

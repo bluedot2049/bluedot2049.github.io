@@ -50,7 +50,7 @@ const HAT_ARM = [-3.0, 0, 0.42];
 // 顏文字擺著（kaomoji-parts.js）：鬆著是七成像、撐著到位、撐不住垮下來。
 // 撐得住幾秒照費力程度在 KAO_HOLD 兩端之間（只換臉 10 秒、最費力 2.5 秒）；垮下來喘 KAO_SAG 秒，還按著就再撐回去，這時只剩一半力氣
 const KAO_LOOSE = 0.72, KAO_LOW = 0.35, KAO_SAG = 1.4, KAO_IN = 0.25;
-const KAO_HOLD = [2.5, 10], KAO_COST = 1.6, KAO_SHAKE = 0.22;
+const KAO_HOLD = [2.5, 10], KAO_COST = 1.6;
 const KAO_WALK = 0.3;   // 姿勢擺出來以後走了多久放下（走著選的姿勢等停下來才擺）
 const clampTo = (v, m) => Math.min(m, Math.max(-m, v));
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -723,7 +723,7 @@ export class Character {
     this.aimP = 0;                  // 舉相機的進度：0 放下、1 舉好
     this.aimG = { grip: 1, pitch: 0 };   // 正在演的拿法，放下的途中還記著
     this.camLocal = true;           // 自己的畫面裡要不要畫胸前那台（自拍時會擋住鏡頭）
-    this.camParts = [];             // 會動的零件（日晷III 的抽管）：掛在 camMesh 底下，照 zoomExt 往前推
+    this.camParts = [];             // 會動的零件（獵魔III 的抽管）：掛在 camMesh 底下，照 zoomExt 往前推
     this.zoomGoal = 0;              // 變焦鏡要伸到幾成（setZoom），zoomExt 是現在伸到哪，照馬達的速度追
     // 會動的衣服：披風、翅膀、尾巴各掛在一個關節上
     const joint = (parent) => {
@@ -1006,7 +1006,7 @@ export class Character {
       topY: H * (N + hs * head),
       headH: H * hs * head,
       crownY: H * (N + hs * race.top),   // 頭頂，不算帽子
-      eyeX: H * hs * race.ex * (S.eg ?? 1),   // 眼睛離中線多遠（日晷III 舉起來貼著右眼）
+      eyeX: H * hs * race.ex * (S.eg ?? 1),   // 眼睛離中線多遠（獵魔III 舉起來貼著右眼）
     };
     this.shadowS = Math.max(0.85, W) * H;
   }
@@ -1025,7 +1025,7 @@ export class Character {
     swap(this.strapMesh, id ? camStrap(this.look || {}, this.S?.W ?? 1, this.camHang.y, this.camHang.z, CAM_S) : null);
     const parts = id ? cameraParts(id) : null;
     swap(this.camMesh, id ? build((k) => (parts ? cameraPart(k, id, 'body') : cameraModel(k, id))) : null);
-    // 亮面的相機（日晷III）換反光材質；會動的零件各自一個網格，掛在機身底下
+    // 亮面的相機（獵魔III）換反光材質；會動的零件各自一個網格，掛在機身底下
     this.camMesh.material = id && isChrome(id) ? chromeMat() : this.mat;
     for (const m of this.camParts) {
       m.removeFromParent();
@@ -1446,9 +1446,11 @@ export class Character {
     // 坐地上時整個人再往下沉，腿從屁股伸出去才會貼著地
     const hop = this.lift > 0.2 ? Math.sin(lower * Math.PI) * 0.1 : 0;
     // 坐椅子：褲子底部在身體座標 0.3，抬到剛好貼著椅面（lift 是椅面高度）
-    // 短腿（drop）：屁股低了，坐椅子少抬、坐地上少沉。躺下不用另外補（量過：跟同樣高矮胖瘦的人差 2 公分內）
+    // 短腿（drop）：屁股低了，坐椅子多抬、坐地上少沉。躺下以腳為軸往後倒，軸（身體原點）要跟一般人一樣高：
+    // 身體原點被 drop 往下移了，把坐地上少沉的那段扣回來、再補上 drop
     const butt = SEAT_BUTT - this.drop * (SEAT_BUTT / HIP);
-    const up = this.jumpY + (this.lift > 0.2 ? this.lift - butt : butt - SEAT_BUTT - 0.24) * lower + hop + 0.44 * lie;
+    const lieUp = 0.44 + this.drop * this.S.H - (SEAT_BUTT - butt);
+    const up = this.jumpY + (this.lift > 0.2 ? this.lift - butt : SEAT_BUTT - butt - 0.24) * lower + hop + lieUp * lie;
     this.group.position.y += up;
     // 影子留在地面，越高越小
     this.shadow.position.y = 0.012 - up;
@@ -1638,7 +1640,7 @@ export class Character {
   }
 
   // 顏文字擺著（kaomoji-parts.js）：臉、手、身體三層，各自從舊的換到新的。疊在拿東西之後、表情和舉相機之前。
-  // 力氣：撐著一直扣、鬆著慢慢回；扣完發抖、垮下來喘一下，還撐著就再起來。自己和別人的畫面用同一組常數各自算
+  // 力氣：撐著一直扣、鬆著慢慢回；扣完垮下來喘一下，還撐著就再起來。自己和別人的畫面用同一組常數各自算
   kaoPose(dt, walking, walk) {
     const [lf, lh, lb] = this.kaoL;
     // 走開：臉和手照樣留著，邊走邊換也不斷；姿勢擺出來過（停著）再走就放下，走著選的姿勢等停下來才擺（bodyAt 乘 still）
@@ -1683,9 +1685,8 @@ export class Character {
     faceAt(lf.cur, lf.w);
     if (A < 0.001) { this.itemTilt *= Math.exp(-dt * 8); this.kaoTurnK = this.kaoLow = 0; return; }
 
-    // 發抖：力氣快用完時手和身體一起抖，拍的人看得到；垮的時候吐一口氣、頭低下去
-    const t = this.time, shake = this.braced && !this.kaoSag && this.kaoE < KAO_SHAKE ? 1 - this.kaoE / KAO_SHAKE : 0;
-    const jit = shake ? (Math.sin(t * 37) * 0.5 + Math.sin(t * 53 + 1.3) * 0.5) * shake : 0;
+    // 垮的時候吐一口氣、頭低下去（快沒力時發抖試過，不好看，拿掉了）
+    const t = this.time;
     const sag = this.kaoSag > 0 ? Math.sin(Math.min(1, (KAO_SAG - this.kaoSag) / 0.4) * Math.PI * 0.5) : 0;
     const B = this.body.rotation, H = this.S.H;
     const still = 1 - walk;
@@ -1699,9 +1700,9 @@ export class Character {
         const o = (osc[3] ? Math.abs(Math.sin(ot * osc[1] * 0.5)) : Math.sin(ot * osc[1])) * osc[2];
         if (osc[0] === 'x') x += o; else if (osc[0] === 'y') y += o * m; else z += o * m;
       }
-      r.x += (x + jit * 0.05 - r.x) * k;
+      r.x += (x - r.x) * k;
       r.y += (y - r.y) * k;
-      r.z += (z + jit * 0.04 * m - r.z) * k;
+      r.z += (z - r.z) * k;
       // 雙手收到胸前、臉前的：肩膀往前一點，手才不會插進胸口（跟 pose 的 front 一樣）
       if (v[1] < -0.3) arm.position.z += (0.08 - arm.position.z) * k;
     };
@@ -1759,7 +1760,6 @@ export class Character {
     bodyAt(lb.cur, lb.w);
     this.kaoTurnK = Math.min(1, turnK);
     this.kaoLow = Math.min(1, low);
-    B.z += jit * 0.012;
     if (sag) {
       B.x += 0.06 * sag;
       kh.x += 0.12 * sag;
@@ -1832,7 +1832,7 @@ export class Character {
       arms(-2.85, 0.3, -0.05, -2.85, -0.3, 0.05);
       to.set(0, this.dims.crownY / this.S.H, front * 0.8);
     } else if (CAMERAS[this.camId]?.eyepiece) {
-      // 日晷III：機背的小圓孔貼著右眼，機身往右手那邊讓開（鼻子在左邊空著）
+      // 獵魔III：機背的小圓孔貼著右眼，機身往右手那邊讓開（鼻子在左邊空著）
       arms(-2.4, 0.75, -0.1, -2.5, -0.35, 0.15);
       const ex = (this.dims.eyeX ?? 0.07 * this.S.H) / this.S.H;
       to.set(-ex - GUI_EYE.x * CAM_S, face - GUI_EYE.y * CAM_S, front);

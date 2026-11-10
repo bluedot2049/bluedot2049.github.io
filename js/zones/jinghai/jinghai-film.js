@@ -23,7 +23,7 @@ export function filmCounter({ player, ui, ambience }) {
     if (swappedToday()) return ui.hint('今天換過了，一天一盒', 3500);
     ch.hold(0);
     refill();
-    ambience?.voice('whir', 0.4);
+    ambience?.voice('plswap', 0.4);
     ui.hint(`換好了，一盒 ${PACK} 張`, 3500);
   }
   function get() {

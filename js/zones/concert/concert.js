@@ -69,35 +69,52 @@ function hold(t) {
   if (q.has('debug')) window.__show = { SHOW, at: hold, key: showKey };
 }
 
-// 先把 MIDI 讀進來（段落、速度、每個人的音）；有 mix.m4a 就記著
+// 曲子整首先抓下來（4MB 壓縮檔，記憶體不怕），放本機的 blob：邊下載邊放的話，手機網路一慢聲音停下來等，接著為了對伺服器時間往前跳，
+// 跳到還沒下載的地方又要重新等，整場斷斷續續。進區域的載入畫面時就開始抓。抓太久（STREAM_AFTER 秒）才退回邊下載邊放
+const STREAM_AFTER = 15;
+const songCtl = new AbortController();
+const songRes = fetch(SONG.mix, { signal: songCtl.signal }).catch(() => null);
+
+// 先把 MIDI 讀進來（段落、速度、每個人的音）；有 mix.m4a 就記著，blob 是抓完的本機網址（抓失敗是 null）
 SHOW.ready = (async () => {
   try {
     // 沒有做好的一首就整套退回合成版（燈、人、聲音都照合成版那一份），不混著用：MIDI 和合成版的速度、段落不一樣
-    if (!(await fetch(SONG.mix, { method: 'HEAD' })).ok) return { band: BANDS[0], mix: null };
+    const res = await songRes;
+    if (!res?.ok) return { band: BANDS[0], mix: null };
+    const blob = res.blob().then((b) => URL.createObjectURL(b), () => null);
     const mid = readMidi(await (await fetch(SONG.midi)).arrayBuffer());
     const { band } = bandFromMidi(BANDS[0], mid);
-    return { band, mix: SONG.mix };
+    return { band, mix: SONG.mix, blob };
   } catch {
     return { band: BANDS[0], mix: null };
   }
 })();
 
 // 背景音樂（ambience.js 的 bgm：new 出來，有 paused、play()、pause()）。做好的一首用 <audio> 邊下載邊放；沒有就現場合成
+// 聲音離伺服器時間多遠（正的＝聲音落後），繞圈取近的那邊
+const offBy = (target, now) => { const T = songSec(SHOW.band); let d = (((target - now) % T) + T) % T; if (d > T / 2) d -= T; return d; };
+const NUDGE = 0.02;   // 差一點點時用速度追：最多快慢 2%（保留音高，聽不出來）
+
 export class ConcertBgm {
   constructor(ctx, out) {
     this.ctx = SHOW.ctx = ctx;
     this.out = out;
-    this.paused = true;
     this.want = false;
-    SHOW.ready.then(({ mix }) => {
+    SHOW.ready.then(async ({ mix, blob }) => {
       if (mix) {
+        let timer;
+        const local = await Promise.race([blob, new Promise((r) => (timer = setTimeout(r, STREAM_AFTER * 1000, null)))]);
+        clearTimeout(timer);
+        if (!local) songCtl.abort();   // 抓太久或抓失敗：不等了，改邊下載邊放
         const a = new Audio();
         a.crossOrigin = 'anonymous';
         a.loop = true;
         a.preload = 'auto';
-        a.src = mix;
+        a.src = local || mix;
         ctx.createMediaElementSource(a).connect(out);
         const lat = () => ctx.outputLatency || ctx.baseLatency || 0;
+        // 第 t 秒下載好了沒（後面留半秒）：blob 整首都在；邊下載邊放時跳到沒下載的地方要重新等
+        const has = (t) => { for (let i = 0; i < a.buffered.length; i++) if (t >= a.buffered.start(i) && t <= a.buffered.end(i) - 0.5) return true; return false; };
         // 跳轉要等下載：跳過去那一秒，伺服器時間已經往前走了。記下上次跳完開始出聲時落後多少（lead），下次往前多跳那麼多，一兩次就對上，不會一直追
         let lead = 0, seeked = false;
         a.addEventListener('playing', () => {
@@ -107,29 +124,38 @@ export class ConcertBgm {
           if (miss > 0.15) lead = Math.min(4, lead + miss);
           else if (miss < -0.3) lead = Math.max(0, lead + miss);
         });
-        this.engine = { a, get paused() { return a.paused; }, get live() { return !a.paused && !a.seeking && a.readyState >= 3; },
+        const e = this.engine = { a, get paused() { return a.paused; }, get live() { return !a.paused && !a.seeking && a.readyState >= 3; },
           now: () => Math.max(0, a.currentTime - lat()),
-          play: (t) => { seeked = true; a.currentTime = (t + lead) % songSec(SHOW.band); return a.play(); }, pause: () => a.pause() };
+          play: (t) => { seeked = true; a.playbackRate = 1; a.currentTime = (t + lead) % songSec(SHOW.band); return a.play(); }, pause: () => a.pause(),
+          // 對伺服器時間（world.update 每秒一次）：差一點點用速度慢慢追，差一秒以上才跳；要跳的地方還沒下載就不跳（跳了又要等），照樣用速度追
+          sync: (target) => {
+            const d = offBy(target, e.now());
+            if (Math.abs(d) < 0.04) { a.playbackRate = 1; return; }
+            if (Math.abs(d) >= 1 && (has((target + lead) % songSec(SHOW.band)) || Math.abs(d) > 8)) { e.play(target); return; }
+            a.playbackRate = 1 + Math.max(-NUDGE, Math.min(NUDGE, d * 0.05));
+          } };
       } else {
         const song = new ConcertSong(ctx, out, SHOW.band);
         const lat = () => ctx.outputLatency || ctx.baseLatency || 0;
-        this.engine = { song, get paused() { return song.paused; }, live: true, now: () => ctx.currentTime - song.t0 - lat(),
-          play: (t) => song.playFrom(Math.floor(t / (240 / SHOW.band.bpm))), pause: () => song.pause() };
+        const e = this.engine = { song, get paused() { return song.paused; }, live: true, now: () => ctx.currentTime - song.t0 - lat(),
+          play: (t) => song.playFrom(Math.floor(t / (240 / SHOW.band.bpm))), pause: () => song.pause(),
+          // 合成版只能跳小節：差超過 0.35 秒才重排
+          sync: (target) => { if (Math.abs(offBy(target, e.now())) > 0.35) e.play(target); } };
       }
       SHOW.engine = this.engine;
       if (this.want) this.play();
     });
   }
+  // 照實際有沒有在放：手機擋了自動播放（play() 被拒）時要是 true，ambience 下一次點畫面才會在手勢裡再叫一次 play()
+  get paused() { return this.engine ? this.engine.paused : !this.want; }
   play() {
     this.want = true;
-    this.paused = false;
     if (!this.engine) return Promise.resolve();
     return Promise.resolve(this.engine.play(showClock())).catch(() => {});
   }
   // 停下來時這一場照樣往下演（伺服器時間），回來接在該在的那一秒
   pause() {
     this.want = false;
-    this.paused = true;
     if (this.engine && !this.engine.paused) this.engine.pause();
   }
 }
@@ -392,12 +418,11 @@ export function buildConcert(scene, { coarse }) {
       }
       const behind = !!eye && eye.z < HALL.back && cam.z > HALL.back - 0.05;
       hall.backWall.visible = stage.backdrop.visible = !behind;
-      // 放的聲音離伺服器時間太遠（卡過、分頁切走回來、隊友那邊開的場）：兩秒看一次，差超過 0.35 秒就拉回來
+      // 放的聲音離伺服器時間太遠（卡過、分頁切走回來、隊友那邊開的場）：一秒看一次，怎麼拉回來照 engine.sync（差一點用速度追，差多才跳）
       const e = SHOW.engine, now = performance.now();
-      if (e && !e.paused && e.live && now - driftAt > 2000) {   // 還在下載、跳轉中不拉（拉了又要等，會一直追不上）
+      if (e && !e.paused && e.live && now - driftAt > 1000) {   // 還在下載、跳轉中不拉（拉了又要等，會一直追不上）
         driftAt = now;
-        const T = songSec(SHOW.band), d = Math.abs(loopT(e.now()) - showClock());
-        if (Math.min(d, T - d) > 0.35) e.play(showClock());
+        e.sync(showClock());
       }
       const t = showTime();
       cue = cueAt(SHOW.band, t);

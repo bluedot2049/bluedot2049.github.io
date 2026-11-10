@@ -25,6 +25,7 @@ import { makeEyePost } from '../save/eyepost.js';
 import { encodeLook } from '../save/savecode.js';
 import { CAMERAS, LEVER_R, carried, dateKnob, drawDate, eyeShutter, flashKnob, longTan, shutterKnob } from './cameras.js';
 import { SWAY, sway } from './sway.js';
+import { FloatLamp } from './drone.js';
 import { LABS, developNow, developDone } from './darkroom.js';
 import { MARKS, markURL } from './marks.js';
 import { dof, dofK, toneOf } from '../core/dof.js';
@@ -36,6 +37,7 @@ import { pref, setPref, dropPref } from '../save/prefs.js';
 import { onFreshTouch } from '../controls/touch.js';
 import { rumble, padKey, padPair, padBtn } from '../controls/gamepad.js';
 import { is, key } from '../controls/keymap.js';
+import { kind, say } from '../controls/lessons.js';
 
 const ASPECTS = [
   { label: '螢幕', r: 0 },
@@ -82,6 +84,9 @@ const _sway = { x: 0, y: 0 }, _sway2 = { x: 0, y: 0 }, _baseQ = new THREE.Quater
 // 晃著按快門：快門開著的這一小段（秒）裡鏡頭晃過的路，拆成幾張疊起來；晃過不到幾個像素就不疊
 const SHAKE_OPEN = 0.1, SHAKE_MIN_PX = 1.5;
 const _trk = new THREE.Vector3(), _trkS = new THREE.Vector3();
+const _lampT = new THREE.Vector3(), _lampHome = new THREE.Vector3(), _probe = new THREE.Raycaster();
+const LAMP_FAR = 30;   // 浮游燈最遠照到離鏡頭多遠（準心對到天空、很遠的地方，燈停在這麼遠）
+const LAMP_SIDE = ['收回', '左側', '右側'];   // 浮游燈停哪：0 收著、1 左側、2 右側（每台相機各自記得）
 // 提示裡寫走路的四個鍵（換過鍵照換過的）
 const wasd = () => ['fwd', 'left', 'back', 'right'].map((id) => key(id)).join('');
 // 一直跟著對（focus 'follow'）：隔幾秒量一次對焦點底下多遠、差多少（屈光度，1/公尺）才轉過去、轉了多少才嗶一聲報距離
@@ -148,9 +153,13 @@ function markRec(on) {
 export class PhotoMode {
   // render(dt)：照目前的設定畫一幀（有後製就走後製）；resizeFX(w, h)：後製跟著換尺寸；lensPass：拍魚眼照片時拿來彎大圖
   // dofPass：景深（dof.js）；flashLight：閃光燈，平常亮度是 0；flashFx：別人閃燈時借用同一盞燈（flashfx.js）
-  // onFlash：自己閃了燈，告訴別人；onShot(t)：沒閃光的快門 's'、長曝光葉片打開 'o'、闔上 'c'，告訴別人（照相館不送，那邊自己同步）
-  constructor({ renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass, dofPass, flashLight, flashFx, onFlash, onShot }) {
-    Object.assign(this, { renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass, dofPass, flashLight, flashFx, onFlash, onShot });
+  // onFlash：自己閃了燈，告訴別人；onShot(t)：沒閃光的快門 's'、長曝光葉片打開 'o'、闔上 'c'、拍立拿抽中十周年 'r'，告訴別人（照相館不送，那邊自己同步）
+  // spotLight：浮游燈（drone.js）用的聚光燈，main.js 一開始就放好、平常亮度 0；envLights：天光和太陽，浮游燈閃的那一張照 lamp.ambient 壓暗
+  constructor({ renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass, dofPass, flashLight, flashFx, spotLight, envLights, onFlash, onShot }) {
+    Object.assign(this, { renderer, scene, camera, player, world, character, ambience, ui, title, coarse, render, resizeFX, lensPass, dofPass, flashLight, flashFx, envLights, onFlash, onShot });
+    this.lamp = spotLight ? new FloatLamp(scene, spotLight) : null;
+    this.lampSide = 0;                      // 浮游燈停哪：LAMP_SIDE 的第幾個
+    this.lampAt = 0;                        // 閃過之後充好電的時間（performance.now）
     this.active = false;
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
@@ -192,7 +201,7 @@ export class PhotoMode {
     this.padZoom = 0;                       // 手把十字鍵上下按著哪邊（gamepad.js 每幀給）
     this.zooming = false;                   // 馬達正在轉
     this.swayT = 0;                         // 舉起來幾秒了，長焦手持的晃照這個算（sway.js）
-    this.track = null;                      // 追焦鎖定（日晷III）：{ get(out) 每幀拿被鎖住的那一點，拿不到回 null }
+    this.track = null;                      // 追焦鎖定（獵魔III）：{ get(out) 每幀拿被鎖住的那一點，拿不到回 null }
     this.af = null;                         // 正在對焦 { from, to, t }
     this.afPoint = null;                    // 對焦點在畫面上的位置 { x, y }；null 是正中間（準心）
     this.afCheck = 0;                       // 隔多久再量一次對焦點底下多遠
@@ -243,7 +252,7 @@ export class PhotoMode {
     const all = this.gearPrefs();
     // 舉相機時中鍵切的自拍不記，下次舉起來還是原本的拿法
     const grip = this.quick && this.grip === 3 ? this.preSelfie ?? 1 : this.grip;
-    all[this.gear.id] = { grip, upright: this.upright, flash: this.flashOn, date: this.dateOn, memo: this.memoOn, ...(this.gear.zoom ? { mm: Math.round(this.mmGoal) } : {}) };
+    all[this.gear.id] = { grip, upright: this.upright, flash: this.flashOn, date: this.dateOn, memo: this.memoOn, ...(this.gear.zoom ? { mm: Math.round(this.mmGoal) } : {}), ...(this.gear.lamp ? { lamp: this.lampSide } : {}) };
     setPref(GEAR_KEY, all);
   }
 
@@ -256,7 +265,10 @@ export class PhotoMode {
     this.flashOn = pick(s.flash, 2, 0);
     this.dateOn = pick(s.date, 2, 0);
     this.memoOn = pick(s.memo, 2, 0);   // 紀念模式（拍立拿a500）預設關
-    // 只能用幾種拿法的相機（日晷III 貼著小孔看，只有眼高和自拍）
+    // 浮游燈（獵魔III）：記得上次停哪一側，舉起來就自己飛過去，不用每次重按；預設收著
+    this.lampSide = g.lamp ? pick(s.lamp, 3, 0) : 0;
+    this.lamp?.use(g.lamp || null);
+    // 只能用幾種拿法的相機（獵魔III 貼著小孔看，只有眼高和自拍）
     if (g.grips && !g.grips.includes(this.grip)) this.grip = g.grips[0];
     // 變焦鏡：記得上次轉到哪
     if (g.zoom) this.mm = this.mmGoal = Number.isFinite(s.mm) ? THREE.MathUtils.clamp(s.mm, g.zoom[0], g.zoom[1]) : g.focal;
@@ -275,6 +287,7 @@ export class PhotoMode {
     knob.innerHTML = flashKnob(id);
     knob.classList.remove('swap');
     knob.classList.toggle('memo', !!g.memo);
+    knob.classList.toggle('lamp', !!g.lamp);
     if (g.flash?.bulb) knob.style.setProperty('--swap', g.flash.bulb + 's');
     this.$('#ph-date').dataset.day = '';
     this.$('#ph-date').classList.toggle('silver', g.shutter === 'silver');
@@ -425,17 +438,19 @@ export class PhotoMode {
     if (quick) this.quickHint();
     else if (studio) this.setStudio(studio);
     else if (postcard) this.ui.hint('拍一張，做成明信片', { id: 'photo:card', ms: 6000 });
-    // 操作那行是教學：每種拿法、每種操作這台裝置說兩次就夠了（ui.js 的 tip）
+    // 操作那行是教學：每種拿法、每種操作這台裝置說兩次就夠了（ui.js 的 tip）。走路、轉身進門時教過了，只說這台相機自己的
     else if (gear) {
       // 每台相機的操作不一樣，各自說兩次（燭火乙式沿用原本的名字，說過的不再說）
       const g = this.gear, id = g.id === 'bulb' ? 'gear' : g.id, af = canFocus(g) ? '點一下對焦　' : '';
       // 方形的照片直橫一樣，不提
       const turn = g.aspect === 1 ? '' : `　${key('turn')} 直橫`;
-      this.ui.tip(`photo:${id}-${this.inputKind()}`, this.padHint() ?? (this.coarse
-        ? `搖桿走路　拖曳轉身　${af}` + (g.zoom ? '推快門外圈變焦' : g.hold ? '按住快門慢慢曝光' : g.instant ? '一盒三張' : '')
-        : `${wasd()} 走路　拖曳轉身　${af}${key('shutter', 1)} 拍照` + (g.hold ? '，按住慢慢曝光' : '') + (g.zoom ? '　滾輪 變焦' : g.grips?.length === 2 && g.grips.includes(3) ? '　滾輪 自拍／腰平' : '') + (g.flash ? `　${key('flash')} 閃光` : '') + (g.track ? `　${key('flash')} 追焦` : '') + turn), 6000);
+      const text = this.padHint() ?? (this.coarse
+        ? `${af}` + (g.zoom ? '推快門外圈變焦' : g.hold ? '按住快門慢慢曝光' : g.instant ? '一盒三張' : '')
+        : `${af}${key('shutter', 1)} 拍照` + (g.hold ? '，按住慢慢曝光' : '') + (g.zoom ? '　滾輪 變焦' : g.grips?.length === 2 && g.grips.includes(3) ? '　滾輪 自拍／腰平' : '') + (g.flash ? `　${key('flash')} 閃光` : '') + (g.lamp ? `　${key('flash')} 打燈` : '') + turn);
+      if (text.replace(/　+$/, '')) this.ui.tip(`photo:${id}-${this.inputKind()}`, text.replace(/　+$/, ''), 6000);
     }
-    else this.ui.tip(`photo:eye-${this.inputKind()}`, this.padHint() ?? (this.coarse ? '拖曳轉頭　雙指變焦　點兩下靠近　點一下收起按鈕' : `${wasd()} 移動　${key('up')} ${key('down')} 升降　拖曳轉頭　滾輪變焦　點兩下靠近　${key('shutter', 1)} 拍照　${key('bare')} 收起按鈕`), 6000);
+    // 畫廊的眼睛：一打開說怎麼飛、轉、變焦，拍了第一張再說靠近、收起按鈕（moreTip）
+    else this.ui.tip(`photo:eye-${this.inputKind()}`, this.padHint() ?? (this.coarse ? say(['拖曳', '轉頭'], ['雙指', '變焦']) : say([wasd(), '移動'], [`${key('up')} ${key('down')}`, '升降'], ['拖曳', '轉頭'], ['滾輪', '變焦'])), 6000);
   }
 
   exit() {
@@ -485,6 +500,7 @@ export class PhotoMode {
     this.character.setZoom?.(0);   // 放下時馬達把抽管收回去
     this.lever = this.padZoom = 0;
     this.track = null;
+    this.lamp?.recall();   // 放下相機，浮游燈飛回機頂收起來（記得停哪一側，下次舉起來再飛出去）
     this.$('#ph-af').classList.remove('track', 'edge');
     this.character.camLocal = true;
     this.postcard = false;
@@ -529,6 +545,14 @@ export class PhotoMode {
       this.useMark();
       this.refresh();
       for (let i = 0; i < 3; i++) await frame();
+    }
+    // 浮游燈的外殼、光束、點陣標記也趁這時畫一次，第一次按 Q 才不會頓一下（drone.js 的 warm）
+    const lampCfg = Object.values(CAMERAS).find((c) => c.lamp)?.lamp;
+    if (this.lamp && lampCfg) {
+      this.lamp.use(lampCfg);
+      this.lamp.warm(this.camera);
+      for (let i = 0; i < 2; i++) await frame();
+      this.lamp.unwarm();
     }
     this.gear = null;
     dof.on = LENSFX.on = false;
@@ -603,6 +627,23 @@ export class PhotoMode {
     this.enter();
   }
 
+  // 相機鈕：電腦越肩時跟短按舉相機一樣（一直舉著、鎖著滑鼠瞄、左鍵快門，再按舉相機或 Esc 放下）；
+  // 手機、一般視角照舊（toggle）。Z 鍵一直是完整攝影模式，不走這裡
+  button() {
+    const p = this.player, f = p.focus;
+    if (this.active || this.coarse || !p.shoulder || (f && f.kind !== 'seat')) return this.toggle();
+    this.aimFirst();
+    this.enter({ quick: true });
+    this.sticky = true;
+    if (p.locked) return;
+    p.lock();   // 點按鈕的當下才鎖得到（瀏覽器規定）；剛按過 Esc 鎖不回來的話，改進完整攝影模式
+    setTimeout(() => {
+      if (!this.active || !this.quick || p.locked) return;
+      this.exit();
+      this.toggle();
+    }, 600);
+  }
+
   // 先瞄準再舉：記下準心（畫面正中間）對到的那一點，舉起來時相機朝那裡、對焦在那裡；什麼都沒對到就當 30 公尺外
   aimFirst() {
     if (!carried()) return;
@@ -624,6 +665,8 @@ export class PhotoMode {
     L.kind = this.gear ? 0 : 1;
     L.focus = this.gear && dof.on ? this.focusD : 0;
     L.mm = this.gear?.zoom ? this.mm : 0;   // 變焦鏡現在幾 mm：別人照這個畫手上的抽管、算看不看得到鏡片反光
+    // 浮游燈在哪、照向哪：別人照這個畫出燈和光束（只有外殼，不照亮他們的場景）
+    L.lamp = this.lamp?.shown && this.gear?.lamp ? this.lamp : null;
     L.studio = !!this.studio;
     return L;
   }
@@ -701,13 +744,19 @@ export class PhotoMode {
   // 完整攝影模式剛打開時上緣那行，手把在用時寫手把的鍵；沒在用回傳 null
   // 現在用什麼操作：教學提示照這個分開記（換到手機或手把的人還沒看過那一套）
   inputKind() {
-    return document.body.classList.contains('pad') ? 'pad' : this.coarse ? 'touch' : 'desk';
+    return kind();
+  }
+
+  // 畫廊的眼睛拍了第一張：剩下的兩件（手把的在 padHint 一次說完）
+  moreTip() {
+    const k = kind();
+    if (k !== 'pad') this.ui.tip(`photo:more-${k}`, say(['點兩下', '靠近'], [k === 'touch' ? '點一下' : key('bare'), '收起按鈕']), 4000);
   }
 
   padHint() {
     if (!document.body.classList.contains('pad')) return null;
     const lb = document.body.dataset.padLabels || null;
-    if (this.gear) return `左搖桿走　右搖桿轉身　${padKey(7, lb)} 拍照` + (this.gear.hold ? '，按住慢慢曝光' : '') + (this.gear.zoom ? `　${padPair(12, 13, lb)} 變焦` : '') + (this.gear.flash ? `　${padKey(2, lb)} 閃光` : '') + (this.gear.aspect === 1 ? '' : `　${padKey(15, lb)} 直橫`) + `　${padBtn(-2)} 離開`;
+    if (this.gear) return `${padKey(7, lb)} 拍照` + (this.gear.hold ? '，按住慢慢曝光' : '') + (this.gear.zoom ? `　${padPair(12, 13, lb)} 變焦` : '') + (this.gear.flash ? `　${padKey(2, lb)} 閃光` : '') + (this.gear.lamp ? `　${padKey(2, lb)} 打燈` : '') + (this.gear.aspect === 1 ? '' : `　${padKey(15, lb)} 直橫`) + `　${padBtn(-2)} 離開`;
     return `左搖桿飛　${padPair(12, 13, lb)}升降　${padPair(14, 15, lb)}變焦　${padKey(7, lb)} 拍照　${padBtn(-2)} 離開`;
   }
 
@@ -760,7 +809,7 @@ export class PhotoMode {
     this.refreshLook();
     // 帶著能長曝光的相機時，按下和放開分開算：按一下是一張，按住不放是長曝光
     const shutter = this.$('#ph-shutter');
-    // 快門外圈是變焦撥桿的相機（日晷III）：按著外圈那一圈是推撥桿，右半邊拉近、左半邊拉遠，按著滑過去就換邊；
+    // 快門外圈是變焦撥桿的相機（獵魔III）：按著外圈那一圈是推撥桿，右半邊拉近、左半邊拉遠，按著滑過去就換邊；
     // 按中間才是快門。外圈按下去的這一次不算快門（下面的 pointerdown、click 都不收）
     let leverId = null, leverEat = false;
     const leverSide = (e) => {
@@ -847,11 +896,15 @@ export class PhotoMode {
       this.lensDof();
       this.$('#ph-frame .gear').textContent = `${g.name}　${this.focalNow()}mm`;
     }
-    const knob = this.$('#ph-flash'), on = this.fires() || !!(g?.memo && this.memoOn);
-    knob.hidden = !g?.flash && !g?.memo;
+    const knob = this.$('#ph-flash'), on = this.fires() || !!(g?.memo && this.memoOn) || !!(g?.lamp && this.lampSide);
+    knob.hidden = !g?.flash && !g?.memo && !g?.lamp;
     knob.classList.toggle('on', on);
+    knob.classList.toggle('l', !!g?.lamp && this.lampSide === 1);
+    knob.classList.toggle('r', !!g?.lamp && this.lampSide === 2);
     knob.setAttribute('aria-pressed', on);
-    knob.title = (g?.memo ? (on ? '紀念模式開著：容易拍壞，偶爾出限定照片' : '紀念模式關著') : (on ? '閃光開著' : '閃光關著') + (g?.flash?.bulb ? '，閃一次要換一顆燈泡' : '')) + (this.coarse ? '' : `（${key('flash')}）`);
+    knob.title = (g?.memo ? (on ? '紀念模式開著：容易拍壞，偶爾出限定照片' : '紀念模式關著')
+      : g?.lamp ? (on ? `浮游燈在${LAMP_SIDE[this.lampSide]}，拍下去會閃` : '浮游燈收著')
+      : (on ? '閃光開著' : '閃光關著') + (g?.flash?.bulb ? '，閃一次要換一顆燈泡' : '')) + (this.coarse ? '' : `（${key('flash')}）`);
     this.$('#ph-grip b').textContent = g ? GRIPS[this.grip] : '空拍機';
     const die = this.dieFace(), dated = this.dated();
     die.hidden = !g?.date;
@@ -1051,7 +1104,7 @@ export class PhotoMode {
       if (!p) return;
       pts.delete(e.pointerId);
       if (this.active && e.type === 'pointerup' && !p.drag && !multi && !this.result && !onSnap(e.clientX, e.clientY)) {
-        if (this.gear?.track) this.toggleTrack(e.clientX, e.clientY);   // 日晷III：點誰就鎖住誰，點空的放開
+        if (this.gear?.track) this.toggleTrack(e.clientX, e.clientY);   // 獵魔III：點誰就鎖住誰，點空的放開（浮游燈跟著飛過去）
         else if (this.gear) this.focusAt(e.clientX, e.clientY);
         else this.tap(e.clientX, e.clientY);
       }
@@ -1105,8 +1158,7 @@ export class PhotoMode {
         return;
       }
       if (is(e, 'bare')) return this.showControls(document.body.classList.contains('photo-bare'));
-      if (is(e, 'flash') && (this.gear?.flash || this.gear?.memo)) return e.repeat || this.toggleFlash();
-      if (is(e, 'flash') && this.gear?.track) return e.repeat || this.toggleTrack();   // 沒有閃光的日晷III：同一顆鍵是追焦鎖定
+      if (is(e, 'flash') && (this.gear?.flash || this.gear?.memo || this.gear?.lamp)) return e.repeat || this.toggleFlash();
       if (is(e, 'date') && this.gear?.date) return e.repeat || this.toggleDate();
       if (is(e, 'selfie') && this.gear) return e.repeat || this.toggleSelfie();
       if (is(e, 'look')) return e.repeat || this.toggleLook();
@@ -1210,7 +1262,7 @@ export class PhotoMode {
     ray.setFromCamera(v, this.camera);
     ray.far = 200;
     for (const h of ray.intersectObject(this.scene, true)) {
-      if (!h.object.isMesh) continue;
+      if (!h.object.isMesh || h.object.userData.noPick) continue;   // 浮游燈自己不擋對焦
       const m = h.object.material;
       if (m && !Array.isArray(m) && (!m.visible || !m.depthWrite || m.blending === THREE.AdditiveBlending || (m.transparent && m.opacity < 0.5))) continue;
       let o = h.object;
@@ -1322,6 +1374,7 @@ export class PhotoMode {
 
   // 每幀在 player.update 之後呼叫，鏡頭交給這裡擺
   update(dt) {
+    this.updateLamp(dt);
     if (!this.active) return;
     // 別人看到的自己：帶著相機就照拿法舉起來；沒帶相機在臉前比個取景框，只給別人看，自己拍到的自己照常站著。
     // 照相館裡是被拍的人，不舉
@@ -1564,10 +1617,11 @@ export class PhotoMode {
     clearTimeout(this.afTimer);
   }
 
-  // 追焦鎖定（日晷III，Q／手把 Y；手機和完整攝影模式點畫面）：鎖住準心（或點的地方）底下的人、動物、東西，
+  // 追焦鎖定（獵魔III，Q／手把 Y；手機和完整攝影模式點畫面）：鎖住準心（或點的地方）底下的人、動物、東西，
   // 之後對焦一直跟著他，他走到哪框跟到哪，跑出畫面時框貼在畫面邊上指著他在哪一邊。再按一次、點空的地方放開。
   // 路人照「這個人」跟（crowdkit.js 的 linkTrack，走遠走近換了畫法也跟得住），其他的跟著被點到的那個模型走
-  toggleTrack(x = null, y = null) {
+  // live：浮游燈放出去時順便鎖——只鎖人（路人、別人、自己），對到景物就不鎖，燈跟著準心照；聲音交給浮游燈
+  toggleTrack(x = null, y = null, live = false) {
     if (!this.active || !this.gear?.track || this.result) return;
     const W = window.innerWidth, H = window.innerHeight, tap = x !== null;
     if (this.track && !tap) return this.dropTrack();
@@ -1575,9 +1629,11 @@ export class PhotoMode {
     if (tap && (px < fr.x || px > fr.x + fr.w || py < fr.y || py > fr.y + fr.h)) return;
     this.camera.updateMatrixWorld();
     const h = this.pickAt((px / W) * 2 - 1, 1 - (py / H) * 2);
-    if (!h || h.distance > 150) return this.dropTrack();
-    let o = h.object, fn = null;
-    while (o && !fn) { fn = o.userData?.track; o = o.parent; }
+    if (!h || h.distance > 150) return live ? null : this.dropTrack();
+    let o = h.object, fn = null, person = false;
+    while (o && !fn) { fn = o.userData?.track; person ||= !!o.userData?.character; o = o.parent; }
+    while (o && !person) { person = !!o.userData?.character; o = o.parent; }
+    if (live && !fn && !person) return;
     let get = fn?.(h) ?? null;
     if (!get) {
       // 一般的東西：記下點到的那一點在那個模型上的位置，模型走到哪跟到哪（一個網格畫很多個的，就當它不動）
@@ -1586,16 +1642,17 @@ export class PhotoMode {
     }
     this.track = { get };
     this.afCheck = 0;
-    this.say('track', 0.35);
     this.$('#ph-af').classList.add('track');
+    if (live) return;
+    this.say('track', 0.35);
     this.showZoom('追焦鎖定');
   }
 
-  dropTrack() {
+  dropTrack(quiet = false) {
     if (!this.track) return;
     this.track = null;
     this.$('#ph-af').classList.remove('track', 'edge');
-    this.say('untrack', 0.25);
+    if (!quiet) this.say('untrack', 0.25);
   }
 
   // 每幀：被鎖住的那一點投到畫面上，框跟過去；照他離鏡頭多遠對焦（隔一下量一次，差夠多才轉）。
@@ -1824,6 +1881,7 @@ export class PhotoMode {
   // 快門旁的閃光開關：點一下就切，每台相機各自記得
   toggleFlash() {
     if (this.gear?.memo) return this.toggleMemo();
+    if (this.gear?.lamp) return this.cycleLamp();
     if (!this.gear?.flash) return;
     this.flashOn ^= 1;
     this.save();
@@ -1838,6 +1896,78 @@ export class PhotoMode {
     this.refresh();
     this.say(this.memoOn ? 'memoOn' : 'memoOff', 0.28);
     this.ui.hint(this.memoOn ? '紀念模式：容易拍壞，偶爾出限定照片' : '紀念模式關了', { id: 'photo:memo', ms: 2500 });
+  }
+
+  // 浮游燈（獵魔III，閃光那顆鍵：Q、手把 Y、手機閃光開關）：收著 → 左側 → 右側 → 收回，一顆鍵輪著按，燈在外面就是閃光開著。
+  // 放出去時準心底下是人就順便鎖住他（toggleTrack 的 live），燈跟著他走；對到景物就跟著準心照。收回時放開鎖定
+  cycleLamp() {
+    if (!this.active || !this.gear?.lamp || this.result) return;
+    const was = this.lampSide;
+    this.lampSide = (was + 1) % 3;
+    if (was === 0 && !this.track) this.toggleTrack(null, null, true);
+    if (this.lampSide === 0) this.dropTrack(true);
+    this.save();
+    this.refresh();
+    this.say(this.lampSide === 0 ? 'lampIn' : was === 0 ? 'lampOut' : 'lampSide', 0.3);
+    this.showZoom(`浮游燈　${LAMP_SIDE[this.lampSide]}`);
+  }
+
+  // 這一張浮游燈會閃：放出去、飛到了、電充好了
+  lampFires() {
+    return !!(this.gear?.lamp && this.lampSide && this.lamp?.ready && performance.now() >= this.lampAt);
+  }
+
+  // 每幀（攝影模式沒開也跑，放下相機後燈要飛回來）：浮游燈照著被拍的人——鎖住的那個，沒鎖就是準心對焦的那一點——停在他側上方。
+  // 照相館裡不放（燈是架好的）
+  updateLamp(dt) {
+    const L = this.lamp;
+    if (!L?.shell) return;
+    const on = this.active && !!this.gear?.lamp && this.lampSide > 0 && !this.studio;
+    const cam = this.camera.position, left = this.lampAt - performance.now();
+    L.charge = left > 0 && this.gear?.lamp ? THREE.MathUtils.clamp(1 - left / (this.gear.lamp.recycle * 1000), 0, 1) : 1;
+    if (on) {
+      const t = this.track?.get(_lampT) || _lampT.copy(cam).addScaledVector(this.camera.getWorldDirection(_fwd), Math.min(this.focusD, LAMP_FAR));
+      if (t.distanceToSquared(cam) > LAMP_FAR * LAMP_FAR) t.sub(cam).setLength(LAMP_FAR).add(cam);
+      L.launch(cam, t, this.lampSide === 1 ? -1 : 1);
+    } else L.recall();
+    // 收回去飛向手上的相機（舉著時就是鏡頭，放下了是胸前那台）
+    const camG = this.character.camG;
+    if (this.active || !camG) _lampHome.copy(cam);
+    else camG.getWorldPosition(_lampHome);
+    const E = (this.lampEnv ??= { target: _lampT, home: _lampHome, probe: (a, b, c) => this.probeWall(a, b, c), floor: this.world.camFloor ? (x, z) => this.world.camFloor(x, z) : null });
+    E.cam = cam;
+    E.lit = on && !this.result;
+    L.update(dt, E);
+  }
+
+  // 從 from 往 dir 量到牆多遠（浮游燈別停進牆裡）：只算擋得住的實心東西，人、燈自己、透明的不算
+  probeWall(from, dir, far) {
+    const ray = _probe;
+    ray.layers.mask = this.camera.layers.mask;
+    ray.set(from, dir);
+    ray.near = 0.3;
+    ray.far = far;
+    for (const h of ray.intersectObject(this.scene, true)) {
+      if (!h.object.isMesh || h.object.userData.noPick) continue;
+      const m = h.object.material;
+      if (m && !Array.isArray(m) && (!m.visible || !m.depthWrite || m.blending === THREE.AdditiveBlending || (m.transparent && m.opacity < 0.5))) continue;
+      let o = h.object, person = false;
+      while (o && o.visible) { person ||= !!o.userData?.character; o = o.parent; }
+      if (!o && !person) return h.distance;
+    }
+    return Infinity;
+  }
+
+  // 浮游燈閃的那一張：燈全亮、天光和太陽壓到 lamp.ambient，被打到的人才跳出來；拍完放回
+  lampLight(on) {
+    const g = this.gear?.lamp;
+    if (!this.lamp || on === !!this.lampLit) return;
+    this.lampLit = on;
+    if (on) {
+      this.envKeep = (this.envLights || []).map((l) => l.intensity);
+      for (const l of this.envLights || []) l.intensity *= g.ambient;
+    } else (this.envLights || []).forEach((l, i) => (l.intensity = this.envKeep[i]));
+    this.lamp.flash(on);
   }
 
   // 閃光開著、這台相機有閃光燈
@@ -1934,7 +2064,11 @@ export class PhotoMode {
   // 閃光燈放在鏡頭上方一點，照對焦的距離調亮：對到焦的人亮度剛好，比他近的過曝，遠的暗下去
   light(on) {
     const L = this.flashLight, c = this.studio;
-    if (!on) return this.flashFx.restore();   // 別人那一閃還沒暗完，就還給它
+    if (!on) {
+      this.lampLight(false);
+      return this.flashFx.restore();   // 別人那一閃還沒暗完，就還給它
+    }
+    if (this.lampFires()) return this.lampLight(true);
     if (c?.light) {
       // 照相館的燈（studio.js 的 LIGHT）：鏡頭後上方偏一邊，照到人身上是 power 那麼亮
       const s = c.light, fx = -Math.sin(c.yaw), fz = -Math.cos(c.yaw);
@@ -1952,6 +2086,19 @@ export class PhotoMode {
 
   // 閃過了：啪一聲，葉片闔上，鏡頭前飄過一陣煙，接著換燈泡
   fired() {
+    // 浮游燈：啪的聲音在畫大圖之前就發了（shoot），這裡只告訴別人、開始充電
+    if (this.gear?.lamp) {
+      rumble('flash');
+      this.onFlash?.();
+      const r = this.gear.lamp.recycle, knob = this.$('#ph-flash');
+      this.lampAt = performance.now() + r * 1000;
+      knob.style.setProperty('--charge', r + 's');
+      replay(knob, 'charge');
+      clearTimeout(this.chargeT);
+      this.chargeT = setTimeout(() => knob.classList.remove('charge'), r * 1000 + 50);
+      setTimeout(() => this.active && this.say('recycle', 0.3), 140);
+      return;
+    }
     this.say('flash', 0.7);
     setTimeout(() => this.active && this.say('close', 0.5), 90);   // 葉片張開那一聲被啪蓋掉，闔上的等啪過去才聽得到
     rumble('flash');
@@ -2150,14 +2297,15 @@ export class PhotoMode {
     if (!this.active || this.result) return;
     if (!dry && this.waitingBulb()) return this.jammed();
     if (!dry && this.gear?.instant && !this.postcard && filmLeft() <= 0) return this.empty();   // 明信片是信差站印的，不用片盒
-    const fire = !dry && this.fires(), wasLong = dof.long;
+    const lampFire = !dry && this.lampFires(), fire = (!dry && this.fires()) || lampFire, wasLong = dof.long;
     const lit = fire || (!dry && !!this.studio?.light);   // 照相館拍下去那一張有燈
     // 拍到白獸了沒：趁鏡頭和畫布還是平常的樣子先算（下面畫大圖時都會換掉）
     const rare = dry || this.postcard ? null : this.rareShot(fire);
-    // 快門聲在畫大圖之前就發：手機畫一張要卡一下，放在後面會比按下去晚。閃光的聲音在 fired()
-    if (!dry && !fire) {
+    // 快門聲在畫大圖之前就發：手機畫一張要卡一下，放在後面會比按下去晚。燭火乙式閃光的聲音在 fired()，浮游燈的啪跟快門一起在這裡
+    if (!dry && (!fire || lampFire)) {
       if (this.gear) this.say('shutter', 0.5);
       else this.ambience.voice(this.studio ? 'oldshutter' : 'blink', 0.5);
+      if (lampFire) this.say('flash', 0.6);
       if (this.studio?.light) this.ambience.voice('flash', 0.35);
       rumble('shutter');
       if (!this.studio) this.onShot?.('s');
@@ -2191,7 +2339,7 @@ export class PhotoMode {
         cam.setViewOffset(W, H, fr.x, fr.y, fr.w, fr.h);
       }
       // 畫完馬上拷走，不然下一幀之前 WebGL 會把畫面清掉。
-      // 相機自己會洗的（日晷III 的 lab）：拍下就照配方洗好再蓋印記，取景的近似色調不再套
+      // 相機自己會洗的（獵魔III 的 lab）：拍下就照配方洗好再蓋印記，取景的近似色調不再套
       const src = lens.on ? r.domElement : this.renderStill(outW, outH);
       const lab = !lens.on && LABS[this.gear?.lab];
       let done = false;
@@ -2227,6 +2375,7 @@ export class PhotoMode {
     if (this.gear?.instant && !this.postcard) {
       useFilm();
       this.filmDots();
+      if (!filmLeft()) setTimeout(() => this.say('last', 0.35), 950);   // 最後一張吐完，蜂鳴片往下兩聲
     }
     this.deliver(out, rare);
   }
@@ -2259,12 +2408,14 @@ export class PhotoMode {
       this.postcardResult();
       return;
     }
+    if (!this.gear && !this.quick && !this.studio) this.moreTip();
     const cam = this.gear?.id || 'eye';
     // 拍立得：從這一區開始顯影（instant.js）
     // 紀念模式：記在照片上（瑕疵照它抽），限定照片當場就抽好，紙一吐出來就看得到金邊
     const g = this.gear, lucky = !!(g?.memo && this.memoOn && Math.random() < g.memo.rare);
     const pola = g?.instant ? { ...newRoute(), ...(this.memoOn && g.memo ? { memo: 1 } : {}), ...(lucky ? { rare: 1 } : {}) } : null;
-    if (lucky) setTimeout(() => this.ambience.voice('pickup', 0.35), 900);
+    // 抽中十周年：吐完片，小喇叭彈企業旋律，旁邊的人也聽得到
+    if (lucky) setTimeout(() => { this.say('rare', 0.42); this.onShot?.('r'); }, 900);
     out.toBlob((blob) => { if (blob) addPhoto(blob, { name: `煉金畫廊-${stamp()}.jpg`, cam, ...(rare && { rare }), ...(seen && { seen }), ...(pola && { pola }) }); }, 'image/jpeg', 0.92);
   }
 

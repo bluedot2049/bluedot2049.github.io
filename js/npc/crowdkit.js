@@ -4,7 +4,7 @@
 //   hash、wrap：幾個整數攪成 0 到 1 的數（連續的小整數也要打得很散）、角度收進 ±π
 //   CharacterPool：近處的人用完整的角色（Character），固定幾個輪著用；換外觀要重建網格，一幀最多換一個（呼叫的那邊管）
 //   FarFigures：遠處的人兩個簡單的形狀（身體、頭），各自一次畫完
-//   linkTrack：日晷III 的追焦鎖定跟著「這個人」走，不管他現在是完整的角色還是遠處的人形（photo.js 的 toggleTrack）
+//   linkTrack：獵魔III 的追焦鎖定跟著「這個人」走，不管他現在是完整的角色還是遠處的人形（photo.js 的 toggleTrack）
 //   dodgeFrom、easeOffset、turnHead、ghostStep：玩家靠近往旁邊讓的量、偏移慢慢追上去、轉頭慢慢跟過去、淡入淡出的格數
 // 誰在哪裡、走去哪（時間表）每種人自己算：路人照雜湊排行程，旅客照時刻表，海牛人照路線（timeline.js）；選角在 cast.js
 import * as THREE from 'three';
@@ -117,7 +117,7 @@ export class FarFigures {
   }
 }
 
-// 日晷III 的追焦鎖定：對到路人時跟著這個人走。近的是完整的角色、遠的是人形，走遠走近會換來換去，
+// 獵魔III 的追焦鎖定：對到路人時跟著這個人走。近的是完整的角色、遠的是人形，走遠走近會換來換去，
 // 所以鎖的是 key，每一幀先找完整的角色、再找人形；兩邊都沒有（走出這一區、被收掉）就回 null，鎖放開。
 // 在完整角色的整個身體、遠處人形的網格上掛 userData.track(hit) → 回傳每幀拿位置的函式（photo.js 用）
 export function linkTrack(pool, far) {

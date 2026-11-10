@@ -24,11 +24,12 @@ export const DONE = ['讚', '讚哈哈', '不錯喔'];
 // to：回答時轉身指哪個方向（mirror 鏡子、cameras 相機桌、exit 往裡面的門和兩邊的海報、sign 門邊的問號立牌），
 //     #開頭的是畫面上那顆按鈕，外圈亮金；key：泡泡底下那行寫哪個功能的鍵（keymap.js）和動詞。
 // need：做過那件事才問得到（progress.js 的 tour：mirror 照過鏡子、photo 拍過照、out 走出後門、haishi 去過海市、shy 被他拒拍過）。
-// carry：身上帶著相機時換成這一組回答；tease 是叫你拍他。env：說完打開門邊立牌那張卡（能在哪裡玩）
+// carry：身上帶著相機時換成這一組回答；tease 是叫你拍他。env：說完打開門邊立牌那張卡（能在哪裡玩）。
+// step：前廳那一步（NEXT 的 mirror、camera、out）還沒做時，這題排在題目卡最前面
 export const ASK = [
-  { id: 'here', q: '這裡是哪', a: '畫廊啊 往裡面走 後門出去有船', to: 'exit' },
-  { id: 'dress', q: '怎麼換衣服', a: '站到鏡子前面的毯子上', to: 'mirror', key: ['interact', '照鏡子'] },
-  { id: 'camera', q: '相機怎麼用', a: '桌上的拿一台 掛著走', to: 'cameras', key: ['interact', '挑相機'],
+  { id: 'here', q: '這裡是哪', a: '畫廊啊 往裡面走 後門出去有船', to: 'exit', step: 'out' },
+  { id: 'dress', q: '怎麼換衣服', a: '站到鏡子前面的毯子上', to: 'mirror', key: ['interact', '照鏡子'], step: 'mirror' },
+  { id: 'camera', q: '相機怎麼用', a: '桌上的拿一台 掛著走', to: 'cameras', key: ['interact', '挑相機'], step: 'camera',
     carry: { a: '拍我看看啊', to: '#photo-btn', key: ['raise', '舉相機'], tease: true } },
   { id: 'lost', q: '迷路怎麼辦', a: '叫黑眼 它記得路', to: '#eye-btn', key: ['eye', '黑眼'] },
   { id: 'photos', q: '照片去哪了', a: '都在行囊裡 要的自己存下來', to: '#pack-btn', key: ['pack', '行囊'], need: 'photo' },
@@ -38,7 +39,7 @@ export const ASK = [
   { id: 'film', q: '底片怎麼洗', a: '海市有暗房師傅 拿去給他', need: 'haishi' },
   { id: 'shy', q: '為什麼不給拍', a: '哈哈 秘密', need: 'shy' },
   { id: 'who', q: '你是誰', a: `我是${HOST_NAME} 這裡的管家哈哈` },
-  { id: 'env', q: '這裡能用什麼玩', a: '牌子上寫著 自己看哈哈', to: 'sign', env: true },
+  { id: 'env', q: '用什麼都能玩嗎', a: '牌子上寫著 自己看哈哈', to: 'sign', env: true },
 ];
 // 拍了他以後，照片收進去時補的那句
 export const AFTER_SHOT = '照片在行囊裡哈哈';

@@ -1682,6 +1682,12 @@ export class Player {
         tx *= f;
         tz *= f;
       }
+      // 區域照坡改步速（黑森林：下坡快、上坡慢）：world.pace 回傳倍數，沒有就照舊
+      if ((tx || tz) && this.world.pace) {
+        const f = this.world.pace(this.pos.x, this.pos.z, tx, tz);
+        tx *= f;
+        tz *= f;
+      }
     }
     // 身體先轉向要去的方向：起步、回身、照路線走。順著走的時候照實際走的方向（貼著牆滑時面向滑的方向）
     const cur = Math.hypot(mv.x, mv.z);
