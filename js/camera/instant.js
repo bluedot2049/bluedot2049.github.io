@@ -333,8 +333,10 @@ function bitmap(it) {
 // 行囊格子上的小圖：現在顯到哪就畫到哪
 export async function peek(it, S = 180) {
   const { p, look } = progress(it), fx = flaws(it);
-  let L = lenses.get(it.blob);
-  if (!L) lenses.set(it.blob, (L = lensImage(await bitmap(it), S, fx)));
+  // 行囊的小圖和看大圖各一份，照尺寸分開記
+  let m = lenses.get(it.blob), L = m?.get(S);
+  if (!m) lenses.set(it.blob, (m = new Map()));
+  if (!L) m.set(S, (L = lensImage(await bitmap(it), S, fx)));
   return card(L, S, p, look, fx).toDataURL('image/jpeg', 0.82);
 }
 

@@ -31,7 +31,7 @@ export const longTan = (mm) => 18 / mm;
 // zoom：變焦鏡的兩頭 [最廣, 最長]（mm），focal 是剛拿起來的焦距；motor 電動變焦從一頭跑到另一頭要幾秒（等速）。
 //   身上那台的抽管照焦段伸出來（cameraParts），別人也看得到
 // near：最近對焦距離（公尺），比這近的對不到，只能退開
-// grips：只能用哪幾種拿法（photo.js 的 GRIPS）；只有自拍和另一種時滾輪就在兩種之間換。selfie：自拍換的鏡頭 { mm 焦距, up 手舉高幾公尺, pitch 往下拍多少 }
+// grips：只能用哪幾種拿法（photo.js 的 GRIPS）；只有自拍和另一種時滾輪就在兩種之間換。selfie：自拍換的鏡頭 { mm 焦距, up 手舉高幾公尺, pitch 往下拍多少, arm 一隻手拿：右手臂的轉法（相機就在手上）, roll 畫面歪多少 }
 // eyepiece：舉起來是單眼貼著機背的小孔看（character.js aimPose）
 // sway：長焦手持會晃（sway.js），舉越久越穩、過一陣又晃，循環
 export const CAMERAS = {
@@ -69,8 +69,12 @@ export const CAMERAS = {
     make: { mark: '#', model: 3 }, shutter: 'silver',
     date: { knob: 'strip', ink: 'punch' },   // 不印日期，印「站多遠、幾 mm」：I 碼打孔＋點陣的數字和單位（INKS.punch）
     lab: 'gui',   // 拍下就照 darkroom.js 的 LABS.gui 洗：大法師科技機身裡的影像處理，鍍膜的紫綠
-    rattle: 'zoom',
-    voices: { shutter: 'eshutter', focus: 'focus', raise: 'raise', lower: 'lower', grip: 'hand', turn: 'swivel', zoom: 'zoom', zoomEnd: 'zoomstop', again: 'zoomstop', done: 'lower', dateOn: 'zoomstop', dateOff: 'zoomstop' },
+    rattle: 'grattle',
+    // 整套金屬聲，沒有一個跟燭火乙式共用（ambience-voices.js 的日晷III 段）；take、put 是前廳桌上帶走、放回
+    voices: {
+      shutter: 'eshutter', focus: 'gfocus', track: 'gtrack', untrack: 'guntrack', raise: 'graise', lower: 'glower', grip: 'ggrip', turn: 'gturn',
+      zoom: 'zoom', zoomEnd: 'zoomstop', dateOn: 'gstrip', dateOff: 'gstripoff', again: 'gagain', done: 'glower', take: 'gtake', put: 'gput',
+    },
     // 取景時只能套近似的（dof.js 的 toneOf 只認這幾種）；照片照 lab 洗，這行不再套
     develop: { filter: 'contrast(1.06) saturate(.95) brightness(1.01)', vig: 0.12, grain: 0.015, halo: 0 },
   },
@@ -80,12 +84,12 @@ export const CAMERAS = {
   // 沒有閃光、日期、落款；照片的樣子全在顯影，拍下來不上色調
   wang: {
     name: '拍立拿a500',
-    spec: ['月球廠十周年紀念限定款', '一盒三張，帶著走顯影', '泛焦'],
-    maker: '海牛族月球廠製造',
+    spec: ['月球廠十周年紀念限定款', '一盒三張照片，比其他品牌多出50%!', '泛焦'],
+    maker: '灰球朋友股份有限公司製造',
     focal: 40, prime: true, fstop: 11, bokeh: 1, focus: 'fixed', fixed: 3, aspect: 1, finder: 0.62,   // 一公尺外全清楚；玩具感靠顯影的鏡頭（instant.js），不靠景深
     instant: 3,
     // 拿法只有腰平（5，低頭看機頂的小窗）和自拍，滾輪上自拍、下腰平。自拍換超廣角 13mm，手舉高 up 公尺、往下拍 pitch：手和全身都進得來
-    grips: [5, 3], selfie: { mm: 13, up: 0.3, pitch: -0.3 },
+    grips: [5, 3], selfie: { mm: 13, up: 0.3, pitch: -0.3, arm: [-2.25, -0.2, 0.45], roll: 0.1 },
     shutter: 'pola',
     rattle: 'whir',
     voices: { shutter: 'polashut', raise: 'raise', lower: 'lower', grip: 'hand', jam: 'jam', prime: 'stop', again: 'whir', done: 'lower', memoOn: 'tink', memoOff: 'hand' },

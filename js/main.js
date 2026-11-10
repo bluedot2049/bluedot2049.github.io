@@ -676,10 +676,12 @@ async function start() {
     world.camTable.setCarried(next);
     mp?.setCamera(next);
     // 換一台：先把身上那台放回去，再扣上這台
+    // 帶走、放回的聲音每台各有一套（cameras.js voices 的 take、put），沒寫的用皮背帶那套
+    const take = (id) => CAMERAS[id]?.voices?.take || 'strap', put = (id) => CAMERAS[id]?.voices?.put || 'setdown';
     if (next && had) {
-      ambience.voice('setdown', 0.35);
-      setTimeout(() => ambience.voice('strap', 0.45), 380);
-    } else ambience.voice(next ? 'strap' : 'setdown', 0.45);
+      ambience.voice(put(had), 0.35);
+      setTimeout(() => ambience.voice(take(next), 0.45), 380);
+    } else ambience.voice(next ? take(next) : put(had), 0.45);
     // 怎麼拍照照現在的操作寫：手機按相機鈕，電腦、手把寫舉相機那顆（換過鍵寫換過的）
     const k = inputKind(), raise = k === 'touch' ? '按相機鈕拍照' : `${k === 'pad' ? padBtn(6) : key('raise')} 舉相機`;
     ui.hint(next ? `帶著${CAMERAS[next].name}。${raise}` : '已放回桌上。拍照改用畫廊的眼睛', 4000);

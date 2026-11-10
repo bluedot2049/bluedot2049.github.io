@@ -1446,12 +1446,17 @@ export class PhotoMode {
     const t = 1 - Math.exp(-dt * 12);
     this.yaw += (this.aimYaw - this.yaw) * t;
     this.pitch += (this.aimPitch - this.pitch) * t;
-    const selfie = this.grip === 3;
-    p.heading = selfie ? this.yaw : this.yaw + Math.PI;
+    const selfie = this.grip === 3, hand = selfie && this.gear.selfie?.arm && ch.handAt;
+    // 一隻手拿的自拍（selfie.arm）：身體側過去，讓伸出去的手正好落在鏡頭和自己的連線上
+    p.heading = hand ? this.yaw - Math.atan2(hand.x, hand.z) : selfie ? this.yaw : this.yaw + Math.PI;
     ch.group.rotation.y = p.heading;
     const hx = -Math.sin(this.yaw), hz = -Math.cos(this.yaw), d = ch.dims, y = p.sh.y;
-    // 自拍：手伸長在臉前；超廣角的相機（selfie.up）舉得更高、往下拍，手和全身都進得來
-    const want = selfie
+    // 自拍：手伸長在臉前；超廣角的相機（selfie.up）舉得更高、往下拍，手和全身都進得來。一隻手拿的鏡頭就在手上
+    let want;
+    if (hand) {
+      ch.body.updateWorldMatrix(true, false);
+      want = ch.body.localToWorld(_want.copy(hand));
+    } else want = selfie
       ? _want.set(p.pos.x - hx * 0.9, y + d.faceY + 0.12 + (this.gear.selfie?.up || 0), p.pos.z - hz * 0.9)
       : _want.set(p.pos.x + hx * 0.12, y + holdY(d, this.grip), p.pos.z + hz * 0.12);
     if (this.needAF || this.snapHand) this.pos.copy(want);
@@ -1460,6 +1465,7 @@ export class PhotoMode {
     if (this.gear.zoom) this.updateZoom(dt);
     cam.position.copy(this.pos);
     cam.lookAt(this.lookPoint());
+    if (selfie && this.gear.selfie?.roll) cam.rotateZ(this.gear.selfie.roll);   // 單手拿著，畫面微微歪
     _baseQ.copy(cam.quaternion);
     this.swaying = this.gear.sway && !selfie;
     // 長焦手持會晃：舉越久越穩、過一陣又晃起來（sway.js）。自拍是伸長手拿著，不算
@@ -1580,7 +1586,7 @@ export class PhotoMode {
     }
     this.track = { get };
     this.afCheck = 0;
-    this.say('focus', 0.35);
+    this.say('track', 0.35);
     this.$('#ph-af').classList.add('track');
     this.showZoom('追焦鎖定');
   }
@@ -1589,7 +1595,7 @@ export class PhotoMode {
     if (!this.track) return;
     this.track = null;
     this.$('#ph-af').classList.remove('track', 'edge');
-    this.say('zoomEnd', 0.16);
+    this.say('untrack', 0.25);
   }
 
   // 每幀：被鎖住的那一點投到畫面上，框跟過去；照他離鏡頭多遠對焦（隔一下量一次，差夠多才轉）。

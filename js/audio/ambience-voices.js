@@ -137,6 +137,17 @@ function blow(ctx, out, noise, t, d, pts, vib, peak = 0.9) {
   air(ctx, out, noise, t, [[0, pts[0][1] * 1.4]], 0.02, d, 0.05 * peak / 0.9, 2.5, 'bandpass');
 }
 
+// 金屬敲一下：幾個不成倍數的泛音一起響（打擊金屬片的比例），越高的散得越快。日晷III 的每個聲音都帶一點這個
+const PLATE = [[1, 1], [2.32, 0.5], [4.25, 0.26], [6.63, 0.12]];
+function metal(ctx, out, t, f, peak, dur) {
+  PLATE.forEach(([r, g], i) => { if (f * r < 15000) ring(ctx, out, t, f * r, peak * g, dur / (1 + i * 0.7)); });
+}
+// 金屬的小卡榫：極短一下窄頻的雜訊，加一絲叮
+function tick(ctx, out, noise, t, f, peak) {
+  hiss(ctx, out, noise, t, 0.005, 'bandpass', f, peak, 4);
+  metal(ctx, out, t, f * 0.62, peak * 0.1, 0.05);
+}
+
 export const VOICES = {
   // 相機（cameras.js）：葉片快門喀嚓兩下＝葉片張開一聲、闔上一聲。B 快門按住時兩聲分開，中間是開著的時間
   shutter(ctx, out, t, p, noise) {
@@ -152,26 +163,133 @@ export const VOICES = {
     hiss(ctx, out, noise, t, 0.025, 'bandpass', 2300 * p, 0.8, 2);
     return 0.035;
   },
-  // ---------- 日晷III（沙島的現代產品）：乾淨、細、有一點電子感 ----------
-  // 快門：反光鏡沒有，只有一片電子控制的快門簾，「嗒」一聲很短很實，尾巴一絲高頻
+  // ---------- 日晷III（沙島大法師科技的現代產品）：整台是金屬，每一下都帶金屬的泛音和尾巴 ----------
+  // 燭火乙式是皮殼、布背帶、木頭、紙、火苗，聲音悶、軟、有摩擦；這台反過來：鋁合金機身、鋼片、齒輪、彈簧卡榫，
+  // 聲音硬、準、短，敲到就會「叮」一點不成倍數的泛音（metal）。沒有一個動作跟燭火乙式共用
+  // 快門：電子控制的金屬簾，前簾「嗒」、後簾「嗒」貼得很近，機身跟著輕輕嗡一下
   eshutter(ctx, out, t, p, noise) {
-    hiss(ctx, out, noise, t, 0.012, 'bandpass', 4200 * p, 0.9, 2.5);
-    osc(ctx, 'sine', t + 0.004, 0.03, [[0, 520 * p], [0.03, 300 * p]]).connect(envelope(ctx, t + 0.004, 0.001, 0.03, 0.35)).connect(out);
-    hiss(ctx, out, noise, t + 0.04, 0.01, 'bandpass', 6000 * p, 0.35, 3);
-    return 0.06;
+    tick(ctx, out, noise, t, 5200 * p, 0.45);
+    hiss(ctx, out, noise, t, 0.022, 'bandpass', 2300 * p, 0.22, 1.6);
+    osc(ctx, 'sine', t + 0.004, 0.03, [[0, 520 * p], [0.03, 300 * p]]).connect(envelope(ctx, t + 0.004, 0.001, 0.03, 0.12)).connect(out);
+    tick(ctx, out, noise, t + 0.03, 4300 * p, 0.35);
+    metal(ctx, out, t + 0.03, 1870 * p, 0.035, 0.4);
+    return 0.45;
   },
-  // 變焦馬達：一小段細細的「嗚」，轉著的時候每一小段接著放，聽起來是連著的
+  // 變焦馬達：低的鋸齒是馬達，上面一條細的齒輪聲，齒一顆顆咬過去會抖（一秒 38 下）；轉著的時候每一小段接著放，聽起來是連著的
   zoom(ctx, out, t, p, noise) {
     const o = osc(ctx, 'sawtooth', t, 0.18, [[0, 300 * p], [0.18, 312 * p]]);
-    o.connect(biquad(ctx, 'bandpass', 2400 * p, 3)).connect(envelope(ctx, t, 0.03, 0.18, 0.05)).connect(out);
+    o.connect(biquad(ctx, 'bandpass', 2400 * p, 3)).connect(envelope(ctx, t, 0.03, 0.18, 0.045)).connect(out);
+    const w = osc(ctx, 'square', t, 0.18, [[0, 1180 * p], [0.18, 1205 * p]]), v = ctx.createGain();
+    v.gain.value = 0.6;
+    lfo(ctx, t, 0.18, 38, 0.4, v.gain);
+    w.connect(biquad(ctx, 'bandpass', 1190 * p, 9)).connect(envelope(ctx, t, 0.03, 0.18, 0.05)).connect(v).connect(out);
     hiss(ctx, out, noise, t, 0.18, 'bandpass', 5200 * p, 0.03, 1.5);
     return 0.2;
   },
-  // 變焦停下：齒輪咬住一下，輕輕「喀」
+  // 變焦停下：抽管咬到位，「喀」一下帶一點金屬的叮
   zoomstop(ctx, out, t, p, noise) {
-    hiss(ctx, out, noise, t, 0.008, 'bandpass', 3600 * p, 0.45, 3);
-    osc(ctx, 'sine', t, 0.025, [[0, 900 * p], [0.025, 620 * p]]).connect(envelope(ctx, t, 0.001, 0.025, 0.12)).connect(out);
-    return 0.04;
+    tick(ctx, out, noise, t, 3600 * p, 0.5);
+    osc(ctx, 'sine', t, 0.025, [[0, 900 * p], [0.025, 620 * p]]).connect(envelope(ctx, t, 0.001, 0.025, 0.1)).connect(out);
+    metal(ctx, out, t, 2350 * p, 0.05, 0.2);
+    return 0.22;
+  },
+  // 對到焦：鏡頭裡的小馬達「滋」一下推到位，鋼片「叮」一聲（燭火乙式是兩聲電子的嗶嗶）
+  gfocus(ctx, out, t, p, noise) {
+    osc(ctx, 'sawtooth', t, 0.04, [[0, 700 * p], [0.04, 1300 * p]]).connect(biquad(ctx, 'bandpass', 1800 * p, 4)).connect(envelope(ctx, t, 0.005, 0.04, 0.05)).connect(out);
+    tick(ctx, out, noise, t + 0.045, 6000 * p, 0.25);
+    metal(ctx, out, t + 0.045, 3150 * p, 0.13, 0.14);
+    return 0.2;
+  },
+  // 追焦鎖住：馬達推一下，兩聲往上的叮，第二聲高、長一點，卡榫扣上；放開是反過來往下、輕一點
+  gtrack(ctx, out, t, p, noise) {
+    osc(ctx, 'sawtooth', t, 0.05, [[0, 800 * p], [0.05, 1500 * p]]).connect(biquad(ctx, 'bandpass', 2000 * p, 4)).connect(envelope(ctx, t, 0.005, 0.05, 0.045)).connect(out);
+    metal(ctx, out, t + 0.04, 2400 * p, 0.1, 0.1);
+    metal(ctx, out, t + 0.11, 3200 * p, 0.12, 0.2);
+    tick(ctx, out, noise, t + 0.11, 5600 * p, 0.3);
+    return 0.33;
+  },
+  guntrack(ctx, out, t, p, noise) {
+    metal(ctx, out, t, 3000 * p, 0.08, 0.08);
+    metal(ctx, out, t + 0.07, 2100 * p, 0.07, 0.14);
+    tick(ctx, out, noise, t + 0.07, 3800 * p, 0.25);
+    return 0.22;
+  },
+  // 舉起來：鋁的機身在手裡滑上來一點亮的摩擦，背帶的鋼扣環晃兩下，機背的孔碰到眼眶，金屬「咚」一下
+  graise(ctx, out, t, p, noise) {
+    air(ctx, out, noise, t, [[0, 3000 * p], [0.12, 4600 * p]], 0.03, 0.13, 0.1, 1.4, 'bandpass');
+    for (const [dt, f] of [[0.03, 5200], [0.08, 6100]]) tick(ctx, out, noise, t + dt, f * p, 0.2);
+    osc(ctx, 'sine', t + 0.15, 0.06, [[0, 210 * p], [0.06, 150 * p]]).connect(envelope(ctx, t + 0.15, 0.002, 0.06, 0.3)).connect(out);
+    metal(ctx, out, t + 0.15, 660 * p, 0.12, 0.16);
+    return 0.32;
+  },
+  // 放下：扣環先晃，機身往下滑一點，貼到胸前的金屬「叩」比舉起輕
+  glower(ctx, out, t, p, noise) {
+    for (const [dt, f] of [[0, 5800], [0.05, 4900]]) tick(ctx, out, noise, t + dt, f * p, 0.18);
+    air(ctx, out, noise, t + 0.04, [[0, 4200 * p], [0.14, 2600 * p]], 0.03, 0.15, 0.08, 1.4, 'bandpass');
+    osc(ctx, 'sine', t + 0.19, 0.06, [[0, 170 * p], [0.06, 120 * p]]).connect(envelope(ctx, t + 0.19, 0.003, 0.06, 0.2)).connect(out);
+    metal(ctx, out, t + 0.19, 540 * p, 0.08, 0.14);
+    return 0.34;
+  },
+  // 換拿法、伸手自拍：手指滑過握把的滾花，細細一串「嗒嗒嗒嗒」，最後一點金屬的叮
+  ggrip(ctx, out, t, p, noise) {
+    for (let i = 0; i < 5; i++) hiss(ctx, out, noise, t + i * 0.021, 0.006, 'bandpass', (5600 - i * 180) * p, 0.9 - i * 0.1, 3);
+    metal(ctx, out, t + 0.1, 2700 * p, 0.1, 0.12);
+    return 0.22;
+  },
+  // 直拿、橫拿互換：機身轉九十度，裡面的定位珠滾過三格「喀、喀、喀」，到底一聲實的
+  gturn(ctx, out, t, p, noise) {
+    hiss(ctx, out, noise, t, 0.09, 'bandpass', 1500 * p, 0.12, 8);
+    for (const dt of [0.02, 0.05, 0.08]) tick(ctx, out, noise, t + dt, 4800 * p, 0.22);
+    tick(ctx, out, noise, t + 0.13, 3400 * p, 0.7);
+    metal(ctx, out, t + 0.13, 2800 * p, 0.1, 0.22);
+    return 0.36;
+  },
+  // 打孔條撥出來印距離：鋼片滑過去「刷」一聲到底卡住；收回去是同一片往回滑，音低一點
+  gstrip(ctx, out, t, p, noise) {
+    air(ctx, out, noise, t, [[0, 3500 * p], [0.07, 6200 * p]], 0.02, 0.08, 0.2, 3, 'bandpass');
+    tick(ctx, out, noise, t + 0.08, 4400 * p, 0.7);
+    metal(ctx, out, t + 0.08, 2600 * p, 0.11, 0.18);
+    return 0.28;
+  },
+  gstripoff(ctx, out, t, p, noise) {
+    air(ctx, out, noise, t, [[0, 5600 * p], [0.07, 3200 * p]], 0.02, 0.08, 0.17, 3, 'bandpass');
+    tick(ctx, out, noise, t + 0.08, 3600 * p, 0.65);
+    metal(ctx, out, t + 0.08, 2000 * p, 0.1, 0.16);
+    return 0.26;
+  },
+  // 拍照人說「再一張」：數位的不用捲片，馬達嗚一小段把鏡頭推回原位，喀一聲好了
+  gagain(ctx, out, t, p, noise) {
+    VOICES.zoom(ctx, out, t, p * 1.04, noise);
+    VOICES.zoomstop(ctx, out, t + 0.17, p, noise);
+    return 0.4;
+  },
+  // 前廳桌上（main.js 的帶走鈕）：帶走＝金屬機身離開木座，鋼扣環「喀、喀」扣上，背帶的鋼鍊跟著碎碎晃一陣
+  gtake(ctx, out, t, p, noise) {
+    osc(ctx, 'sine', t, 0.05, [[0, 260 * p], [0.05, 190 * p]]).connect(envelope(ctx, t, 0.002, 0.05, 0.18)).connect(out);
+    metal(ctx, out, t, 900 * p, 0.06, 0.18);
+    for (const [dt, f] of [[0.2, 3300], [0.29, 2900]]) {
+      tick(ctx, out, noise, t + dt, f * 1.5 * p, 0.6);
+      metal(ctx, out, t + dt, f * p, 0.08, 0.3);
+    }
+    for (let i = 0; i < 6; i++) tick(ctx, out, noise, t + 0.38 + i * 0.03 + Math.random() * 0.015, (5200 + Math.random() * 1600) * p, 0.14 - i * 0.015);
+    return 0.7;
+  },
+  // 放回桌上：鋼鍊滑下來碎碎一陣，扣環鬆開一聲，金屬機身坐回木座「叩」
+  gput(ctx, out, t, p, noise) {
+    for (let i = 0; i < 5; i++) tick(ctx, out, noise, t + i * 0.035 + Math.random() * 0.015, (5600 - i * 300) * p, 0.12);
+    tick(ctx, out, noise, t + 0.19, 3600 * p, 0.45);
+    metal(ctx, out, t + 0.19, 2600 * p, 0.05, 0.2);
+    osc(ctx, 'sine', t + 0.3, 0.08, [[0, 230 * p], [0.08, 150 * p]]).connect(envelope(ctx, t + 0.3, 0.002, 0.08, 0.2)).connect(out);
+    metal(ctx, out, t + 0.3, 760 * p, 0.1, 0.24);
+    return 0.6;
+  },
+  // 桌上浮起來：鏡頭自己伸出去一小截又縮回來，兩聲喀
+  grattle(ctx, out, t, p, noise) {
+    VOICES.zoom(ctx, out, t, p, noise);
+    VOICES.zoomstop(ctx, out, t + 0.16, p * 1.05, noise);
+    VOICES.zoom(ctx, out, t + 0.3, p * 0.96, noise);
+    VOICES.zoomstop(ctx, out, t + 0.46, p, noise);
+    return 0.7;
   },
   // ---------- 畫廊的眼睛（photo.js、鏡子前的 selfie.js）：偏機械的細小手感，像換彈匣，不做成生物的聲音 ----------
   // 眨一下：眼皮滑下來「嚓」，到底一記扎實的「喀」，彈回來再輕輕一扣；尾巴留一絲玻璃光

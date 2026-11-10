@@ -354,7 +354,7 @@ export class Pack {
       if (it.state === 'lab') return `<div class="ph-cell slip"><i class="ink lit"></i><span>取件單</span><small>${LABS[it.lab]?.name ?? ''}</small></div>`;
       const on = this.chosen.has(it) ? ' on' : '';
       // 拍立得顯影中：小圖由 paintPola 畫上去
-      if (developing(it)) return `<button class="ph-cell pola${on}" data-i="${i}"><img data-pola="${i}" alt=""><b>${it.pola.rare ? '紀念・' : ''}顯影中</b><i class="chk"></i></button>`;
+      if (developing(it)) return `<button class="ph-cell pola${on}" data-i="${i}"><img data-pola="${i}" alt=""><b>${it.pola.rare ? '紀念・' : ''}顯影中</b><i class="chk"></i><i class="zoom" title="看大圖"></i></button>`;
       if (!visible(it)) return `<button class="ph-cell film${on}" data-i="${i}"><span>${hourMark(it.t)}</span><i class="chk"></i></button>`;
       const label = it.state === 'back' && LABS[it.lab] ? LABS[it.lab].style
         : it.kind === 'video' ? `${KINDS.video} ${clock(it.dur)}` : it.pola?.rare ? '紀念' : KINDS[it.kind];
@@ -509,10 +509,15 @@ export class Pack {
   }
 
   // ───────── 看大圖 ─────────
-  // 蓋住全畫面，只翻看得到的照片：兩邊箭頭、左右鍵、左右滑換張，底下可以選、丟掉；點圖或旁邊暗處、Esc 收
+  // 蓋住全畫面，只翻看得到的照片和顯影中的拍立得（跟格子同一個順序）：兩邊箭頭、左右鍵、左右滑換張，底下可以選、丟掉；點圖或旁邊暗處、Esc 收
+
+  viewList() {
+    const list = album();
+    return [...list.filter(developing), ...list.filter((it) => visible(it) && !developing(it))];
+  }
 
   openView(it) {
-    if (!visible(it)) return;
+    if (!visible(it) && !developing(it)) return;
     if (!this.viewer) this.buildView();
     this.viewing = it;
     if (this.viewer.hidden) {
@@ -527,6 +532,7 @@ export class Pack {
     if (!this.viewer || this.viewer.hidden) return;
     thing('paper', 0.14, 0.85);   // 照片放回去
     this.viewer.hidden = true;
+    clearTimeout(this.devTimer);
     this.viewer.querySelector('video').pause();
     this.viewing = null;
     removeEventListener('keydown', this.viewKey, true);
@@ -574,18 +580,21 @@ export class Pack {
 
   // 第幾張、選了沒、到頭了箭頭就藏起來。看的這張不在相簿裡了（被收走、交給師傅）就收起來
   paintView() {
-    const v = this.viewer, list = album().filter(visible), it = this.viewing, i = list.indexOf(it);
+    const v = this.viewer, list = this.viewList(), it = this.viewing, i = list.indexOf(it);
     if (i < 0) return this.closeView();
     const img = v.querySelector('img'), vid = v.querySelector('video'), movie = it.kind === 'video', src = this.thumb(it.blob);
     img.hidden = movie;
     vid.hidden = !movie;
+    const dev = developing(it);
+    clearTimeout(this.devTimer);
     if (movie) { if (vid.getAttribute('src') !== src) vid.src = src; }
     else {
       vid.pause();
-      img.src = src;
+      if (dev) this.paintDev(it, img);
+      else img.src = src;
     }
     const L = it.state === 'back' && LABS[it.lab];
-    v.querySelector('.av-n').textContent = `${i + 1} / ${list.length}` + (L ? `・${L.style}` : '');
+    v.querySelector('.av-n').textContent = `${i + 1} / ${list.length}` + (L ? `・${L.style}` : dev ? `・${it.pola.rare ? '紀念・' : ''}顯影中` : '');
     v.querySelector('[data-step="-1"]').disabled = i === 0;
     v.querySelector('[data-step="1"]').disabled = i === list.length - 1;
     const pick = v.querySelector('.av-pick'), on = this.chosen.has(it);
@@ -594,8 +603,18 @@ export class Pack {
     if (movie ? vid.readyState >= 1 : img.complete) hugMedia(v, movie ? vid : img);   // 已經載好的不會再發 load
   }
 
+  // 看大圖看的是顯影中的拍立得：原圖不給看，畫現在顯到哪（instant.js 的 peek），看著就每幾秒重畫，顯好了換成成品
+  async paintDev(it, img) {
+    ripen();
+    const url = await peek(it, Math.min(1024, Math.round(Math.max(innerWidth, innerHeight) * Math.min(2, devicePixelRatio || 1)))).catch(() => null);
+    if (this.viewing !== it || this.viewer.hidden) return;
+    if (url) img.src = url;
+    clearTimeout(this.devTimer);
+    this.devTimer = setTimeout(() => this.viewing === it && !this.viewer.hidden && this.paintView(), 3000);
+  }
+
   step(d) {
-    const list = album().filter(visible), it = list[list.indexOf(this.viewing) + d];
+    const list = this.viewList(), it = list[list.indexOf(this.viewing) + d];
     if (!it) return;
     thing('paper', 0.14);
     this.viewing = it;
@@ -615,7 +634,7 @@ export class Pack {
 
   // 丟掉這張，接著看下一張（丟的是最後一張就看前一張），都沒了就收起來
   async dropViewing() {
-    const list = album().filter(visible), i = list.indexOf(this.viewing);
+    const list = this.viewList(), i = list.indexOf(this.viewing);
     if (i < 0 || this.busy || this.dropping) return;
     const it = list[i];
     this.viewing = list[i + 1] ?? list[i - 1] ?? null;

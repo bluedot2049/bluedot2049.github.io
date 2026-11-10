@@ -423,8 +423,11 @@ export function buildConcert(scene, { coarse }) {
       shadows.update(stage.sun.position, Math.min(0.85, 0.2 * cue.ring.a + 0.6 * cue.ring.fill * cue.ring.a + 0.8 * cue.strobe));
       // 台下的人：連續的拍數、大鼓、多熱、第幾句、人浪（大太鼓最重那一下之後幾秒）、玩家在哪、邊光吃主光的顏色
       const bpm = SHOW.band.bpm, taiko = band?.byRole.taiko?.notes ?? [];
+      // 一波人浪要三秒才傳到最後一排；這中間再來的重拍不重新起浪（不然跳到一半的人一幀被拉回地上，連打時整片抽搐）
+      // 起浪的條件只看自己前三秒有沒有別的重拍，跳到哪一秒算出來都一樣
       let wave = 99;
-      for (let i = lastAt(taiko, t); i >= 0 && t - taiko[i].t < 3; i--) if (taiko[i].vel > 0.95) { wave = t - taiko[i].t; break; }
+      const strongBefore = (j) => { for (let k = j - 1; k >= 0 && taiko[j].t - taiko[k].t < 3; k--) if (taiko[k].vel > 0.95) return true; return false; };
+      for (let i = lastAt(taiko, t); i >= 0 && t - taiko[i].t < 3; i--) if (taiko[i].vel > 0.95 && !strongBefore(i)) { wave = t - taiko[i].t; break; }
       crowd.update({
         beat: t / (60 / bpm), kick: rig.kickK ?? 0, heat: Math.max(rig.F ?? 0, (cue.crowd?.hands ?? 0) * 0.6),
         phrase: Math.floor(cue.gbar / 4), phraseT: ((cue.gbar % 4) + cue.beat / 4) / 4, wave, t, feet, rim: saturate(tmp.copy(key)).multiplyScalar(0.6),

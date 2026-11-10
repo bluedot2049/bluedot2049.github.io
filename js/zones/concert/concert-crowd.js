@@ -86,7 +86,7 @@ const VERT_HEAD = /* glsl */ `
   attribute vec3 aMe;   // 種子、離舞台多遠、面向（yaw）
   attribute vec3 aSkin, aRobe;   // 這個人的膚色、袍子色
   attribute vec3 aMe2;           // 在哪一區的個性（0 一般、1 虔誠、2 狂熱、3 燭光）、固定的樣子（-1 沒有）、拿不拿大燈
-  uniform float uBeat, uKick, uHeat, uPhrase, uPhraseT, uWave, uT, uSnuff, uRelight;
+  uniform float uBeat, uKick, uHeat, uHeatA, uHeatB, uPhrase, uPhraseT, uWave, uT, uSnuff, uRelight;
   uniform vec2 uPlayer;
   varying float vRim, vEmis, vFace, vZ;
   float h1(float s, float k) { return fract(sin(s * 127.1 + k * 311.7) * 43758.5453); }
@@ -95,7 +95,8 @@ const VERT_HEAD = /* glsl */ `
   mat3 rY(float a) { float c = cos(a), s = sin(a); return mat3(c, 0., -s, 0., 1., 0., s, 0., c); }
   // 一種樣子在第 b 拍：arms = 左手(抬, 往外)、右手(抬, 往外)；body = 點頭、左右晃、前傾、跳；candle 舉不舉蠟燭
   void pose(int st, float b, float seed, out vec4 arms, out vec4 body, out float candle) {
-    float f = fract(b), on = exp(-f * 6.0);
+    // on：拍點上那一下。先花一成拍彎下去再慢慢回來（原本是拍點那一幀直接跳到底，一千多人一起硬跳看了不舒服）
+    float f = fract(b + 0.1), on = f < 0.1 ? smoothstep(0.0, 0.1, f) : exp(-(f - 0.1) * 5.5);
     arms = vec4(0.0, 0.12, 0.0, 0.12); body = vec4(0.0); candle = 0.0;
     if (st == 0) { arms = vec4(-1.15, -0.42, -1.15, -0.42); body = vec4(0.38, 0.04 * sin(b * 0.8 + seed * 9.0), 0.12, 0.0); }        // 禱告：雙手合在胸前、低頭
     else if (st == 1) { body = vec4(0.05, 0.14 * sin(b * 1.5708 + seed * 6.0), 0.0, 0.0); arms = vec4(0.0, 0.2, 0.0, 0.2); }          // 慢慢晃
@@ -108,12 +109,13 @@ const VERT_HEAD = /* glsl */ `
   }
   // 這一句這個人是安靜的還是熱的、是哪一種
   // 區塊個性：狂熱區比較早熱、熱起來只跳和雙手高舉；虔誠區很難熱、安靜時有些在禱告；燭光區安靜時有些舉蠟燭；其他人安靜時晃或點頭；特別的人固定一種
-  int styleAt(float seed, float phrase) {
+  // heat 是這一句開頭定下來的熱度（uHeatA 上一句、uHeatB 這一句）：句子中間熱度怎麼變都不會有人突然換樣子，只在換句時慢慢換
+  int styleAt(float seed, float phrase, float heat) {
     float zone = aMe2.x;
     if (aMe2.y >= 0.0) return int(aMe2.y + 0.5);
     bool wild = zone > 1.5 && zone < 2.5, devout = zone > 0.5 && zone < 1.5, candles = zone > 2.5;
     float bias = wild ? 0.25 : devout ? -0.3 : candles ? -0.15 : 0.0;
-    bool hot = h1(seed, phrase + 10.0) < uHeat * 1.15 - 0.08 + bias;
+    bool hot = h1(seed, phrase + 10.0) < heat * 1.15 - 0.08 + bias;
     if (hot) { if (wild) return h1(seed, 2.0) < 0.5 ? 4 : 5; return 3 + int(floor(h1(seed, 2.0) * 5.0)); }
     // 安靜的時候多半只是晃、點頭（2026-11-10：禱告和蠟燭太多像法會，收成少數）
     float q = h1(seed, 1.0);
@@ -130,15 +132,16 @@ const VERT_BODY = /* glsl */ `
   if (h1(seed, 6.0) < 0.25) b *= 0.5;
   float amp = 0.55 + 0.9 * h1(seed, 7.0);
   vec4 a0, b0, a1, b1; float c0, c1;
-  pose(styleAt(seed, uPhrase - 1.0), b, seed, a0, b0, c0);
-  pose(styleAt(seed, uPhrase), b, seed, a1, b1, c1);
+  pose(styleAt(seed, uPhrase - 1.0, uHeatA), b, seed, a0, b0, c0);
+  pose(styleAt(seed, uPhrase, uHeatB), b, seed, a1, b1, c1);
   float d0 = h1(seed, 8.0) * 0.12;   // 換一句：有人馬上換、有人慢一兩拍才跟上
   float w = smoothstep(d0, d0 + 0.06, uPhraseT);
   vec4 arms = mix(a0, a1, w), body = mix(b0, b1, w) * vec4(amp, amp, mix(1.0, amp, 0.5), amp);
   float candle = mix(c0, c1, w);
   // 分心：每七秒抽一次，安靜的時候比較多人轉頭東張西望、跟旁邊的人說話（身體轉過去、拍子跟丟、手放下來）
   float wn = uT / 7.0 + seed * 13.0, wp = fract(wn);
-  float off = step(h1(seed, floor(wn) + 50.0), 0.14 - 0.1 * uHeat) * smoothstep(0.0, 0.25, wp) * smoothstep(1.0, 0.75, wp);
+  // 門檻用平滑過的熱度、而且是一段斜坡不是一刀切：熱起來時正在分心的人慢慢轉回來，不會一幀轉回去
+  float off = clamp((0.14 - 0.1 * uHeat - h1(seed, floor(wn) + 50.0)) / 0.03, 0.0, 1.0) * smoothstep(0.0, 0.25, wp) * smoothstep(1.0, 0.75, wp);
   float side = h1(seed, floor(wn) + 51.0) < 0.5 ? -1.0 : 1.0;
   body.xyw *= 1.0 - 0.8 * off;
   arms = mix(arms, vec4(0.0, 0.12, 0.0, 0.12), off * (1.0 - candle));
@@ -185,7 +188,7 @@ export class Crowd {
   constructor(scene, spots, { races = 12, seed = 7, maxTris = 450 } = {}) {
     const R = rng(seed);
     this.u = {
-      uBeat: { value: 0 }, uKick: { value: 0 }, uHeat: { value: 0 }, uPhrase: { value: 0 }, uPhraseT: { value: 0 }, uWave: { value: 99 }, uT: { value: 0 },
+      uBeat: { value: 0 }, uKick: { value: 0 }, uHeat: { value: 0 }, uHeatA: { value: 0 }, uHeatB: { value: 0 }, uPhrase: { value: 0 }, uPhraseT: { value: 0 }, uWave: { value: 99 }, uT: { value: 0 },
       uPlayer: { value: new THREE.Vector2(999, 999) }, uRim: { value: new THREE.Color() }, uCandle: { value: new THREE.Color(1, 0.65, 0.3) },
       uSnuff: { value: 0 }, uRelight: { value: -1 }, uDawn: { value: -99 }, uDawnA: { value: 0 }, uDawnCol: { value: new THREE.Color() },
     };
@@ -250,9 +253,23 @@ export class Crowd {
   // snuff 燭火全熄、relight 日出後第幾秒（-1 沒在點）、黎明線在哪（z）多亮什麼顏色
   update({ beat, kick, heat, phrase, phraseT, wave, t, feet, rim, snuff = 0, relight = -1, dawnZ = -99, dawnA = 0, dawnCol = null }) {
     const u = this.u;
+    // 人的身體不會跟燈一樣瞬間反應：熱度、大鼓先在這裡抹平。燈的熱度每句第一拍有一道尖峰、換段落直接跳，大鼓是瞬間打滿再衰減，
+    // 直接餵進去，一千多人會在同一幀一起抽一下（2026-11-10 被說硬抖動看了不舒服）。跳時間（dt 怪）就直接對上
+    const dt = this.lastT === undefined ? 1 : t - this.lastT;
+    this.lastT = t;
+    const jump = !(dt > 0 && dt < 0.5);
+    this.heat = jump ? heat : this.heat + (heat - this.heat) * (1 - Math.exp(-dt / 1.2));
+    this.kick = jump ? 0 : this.kick + (kick - this.kick) * (1 - Math.exp(-dt / (kick > this.kick ? 0.05 : 0.18)));
+    // 每一句開頭定下這一句的熱度，誰安靜誰熱整句不變；順著走到下一句，上一句的熱度原封不動交給 uHeatA，換樣子才接得起來
+    if (phrase !== this.phrase) {
+      this.heatA = phrase === this.phrase + 1 && !jump ? this.heatB : this.heat;
+      this.heatB = this.heat;
+      this.phrase = phrase;
+    }
+    u.uHeatA.value = this.heatA; u.uHeatB.value = this.heatB;
     u.uSnuff.value = snuff; u.uRelight.value = relight; u.uDawn.value = dawnZ; u.uDawnA.value = dawnA;
     if (dawnCol) u.uDawnCol.value.copy(dawnCol);
-    u.uBeat.value = beat; u.uKick.value = kick; u.uHeat.value = heat; u.uPhrase.value = phrase; u.uPhraseT.value = phraseT;
+    u.uBeat.value = beat; u.uKick.value = this.kick; u.uHeat.value = this.heat; u.uPhrase.value = phrase; u.uPhraseT.value = phraseT;
     u.uWave.value = wave; u.uT.value = t;
     if (feet) u.uPlayer.value.set(feet.x, feet.z);
     u.uRim.value.copy(rim);

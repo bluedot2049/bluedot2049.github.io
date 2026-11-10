@@ -31,6 +31,7 @@ const PET_TIME = 2.4;      // 摸動物摸多久
 // 長袍上窄下寬，手臂要從肩膀往外張開一點，手才會沿著袍子外側垂下，不會插進身體
 const ARM_OUT = 0.28;
 const _capeInv = new THREE.Matrix4();
+const _handM = new THREE.Matrix4(), _handQ = new THREE.Quaternion(), _handE = new THREE.Euler();
 const NECK = 0.8;          // 頭的原點（脖子）離腳底多高，身高另外整個縮放
 const SIT_TIME = 0.8;      // 坐下或站起來花幾秒
 const LIE_TIME = 0.9;      // 從坐著躺下去（或坐起來）花幾秒
@@ -1806,9 +1807,15 @@ export class Character {
     const to = new THREE.Vector3(0, face - 0.055 * CAM_S, front), lift = a.grip === 2;
     if (a.grip === 4) arms(-2.5, 0.2, -0.45, -2.5, -0.2, 0.45);
     else if (selfie) {
-      arms(L.x, L.y, L.z, -1.75, -0.15, 0.05);
+      // 一隻手拿（相機的 selfie.arm）：手臂舉到側上方，相機在手上轉回來對著臉；handAt 是舉好時手的位置，photo.js 把鏡頭擺在那裡
+      const hold = CAMERAS[this.camId]?.selfie?.arm, [rx, ry, rz] = hold || [-1.75, -0.15, 0.05];
+      arms(L.x, L.y, L.z, rx, ry, rz);
       this.armR.updateMatrix();
       to.set(0, -0.36, 0).applyMatrix4(this.armR.matrix);
+      if (hold) {
+        _handM.compose(this.armR.position, _handQ.setFromEuler(_handE.set(rx, ry, rz, 'YXZ')), this.armR.scale);
+        this.handAt = (this.handAt || new THREE.Vector3()).set(0, -0.38, 0).applyMatrix4(_handM);
+      } else this.handAt = null;
     } else if (lift) {
       arms(-2.85, 0.3, -0.05, -2.85, -0.3, 0.05);
       to.set(0, this.dims.crownY / this.S.H, front * 0.8);
@@ -1837,7 +1844,11 @@ export class Character {
     if (!this.camId) return;
     this.camG.position.lerpVectors(this.camHang, to, r);
     // 鏡頭跟著抬頭低頭；自拍時轉過來對著自己
-    this.camG.rotation.set(selfie ? 0.15 * r : -a.pitch * r, selfie ? Math.PI * r : 0, 0);
+    if (selfie && this.handAt) {
+      // 手上的相機對著臉
+      const dx = -to.x, dy = face - to.y, dz = 0.05 - to.z;
+      this.camG.rotation.set(Math.atan2(-dy, Math.hypot(dx, dz)) * r, Math.atan2(dx, dz) * r, 0, 'YXZ');
+    } else this.camG.rotation.set(selfie ? 0.15 * r : -a.pitch * r, selfie ? Math.PI * r : 0, 0, 'XYZ');
   }
 
   // 拍照人的口令：'again' 再一張、'done' 好了。舉著相機才有動作（aimPose）
