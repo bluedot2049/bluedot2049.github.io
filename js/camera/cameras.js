@@ -137,8 +137,8 @@ function blade(k, a, b, w0, w1, t, c, n) {
 export function cameraModel(k, id) {
   const [base, ext] = String(id).split('@');
   if (base === 'gui') return guiModel(k, +ext || 0);
+  if (base === 'wang') return wangCuteModel(k, ...(WANG_COLORS[+ext]?.c || []));
   if (id === 'bulb') bulbModel(k);
-  else if (id === 'wang') wangCuteModel(k);
   else if (id === 'wangbox') wangModel(k);
 }
 
@@ -339,14 +339,22 @@ function roundSlab(k, w, h, d, r, c, x, y, z, top = true, bot = true) {
     if (bot) k.cyl(r, r, d, c, x + s * (w / 2 - r), y - h / 2 + r, z, { rx: Math.PI / 2 }, 10);
   }
 }
-function wangCuteModel(k) {
+// a500 的配色款（月球相機店展示用，cameraModel(k, 'wang@1')）：c 是機身、握把、紅布條三色；第 0 款是桌上那台
+export const WANG_COLORS = [
+  { name: '奶油', c: [CREAM, CREAMSH, TAG] },
+  { name: '月面灰', c: ['#b9b3a7', '#a59f93', TAG] },
+  { name: '片盒紅', c: ['#b8432f', '#9c3727', CREAM] },
+  { name: '苔綠', c: ['#9aae93', '#879c80', TAG] },
+  { name: '墨黑', c: ['#3b3835', '#2f2c2a', TAG] },
+];
+function wangCuteModel(k, body = CREAM, shade = CREAMSH, tag = TAG) {
   const W = 0.12, H = 0.1, D = 0.08, r = 0.022, front = D / 2, back = -D / 2, face = { rx: Math.PI / 2 };
   const lx = 0.008, ly = 0.062, by = 0.021;
-  roundSlab(k, W, H, D, r, CREAM, 0, H / 2, 0);
+  roundSlab(k, W, H, D, r, body, 0, H / 2, 0);
   // 肚子上一圈霧銀腰帶，吐片縫開在上面，舌頭似的紅布條從縫裡垂出來
   k.box(W + 0.003, 0.014, D + 0.003, SILV, 0, by, 0);
   k.box(0.07, 0.003, 0.002, SILVDK, lx * 0.5, by - 0.002, front + 0.0025);
-  k.cyl(0.008, 0.008, 0.024, TAG, 0.012, by - 0.003, front + 0.013, { rx: Math.PI / 2 + 0.3, sz: 0.12 }, 8);
+  k.cyl(0.008, 0.008, 0.024, tag, 0.012, by - 0.003, front + 0.013, { rx: Math.PI / 2 + 0.3, sz: 0.12 }, 8);
   // 大眼睛：霧銀外圈、暗筒、玻璃
   k.cyl(0.037, 0.037, 0.004, SILV, lx, ly, front + 0.002, face, 16);
   k.cyl(0.031, 0.033, 0.016, RUBBER, lx, ly, front + 0.011, face, 16);
@@ -362,8 +370,8 @@ function wangCuteModel(k) {
   }
   // 握把：圓頭連指手套，頂上一顆圓圓的大快門
   const gx = -W / 2 - 0.013;
-  k.cyl(0.017, 0.018, 0.07, CREAMSH, gx, 0.045, 0.006, {}, 12);
-  k.cyl(0.011, 0.017, 0.01, CREAMSH, gx, 0.085, 0.006, {}, 12);
+  k.cyl(0.017, 0.018, 0.07, shade, gx, 0.045, 0.006, {}, 12);
+  k.cyl(0.011, 0.017, 0.01, shade, gx, 0.085, 0.006, {}, 12);
   k.cyl(0.019, 0.019, 0.012, SILV, gx, 0.008, 0.006, {}, 12);
   k.cyl(0.009, 0.0105, 0.005, SILVHI, gx, 0.0925, 0.006, {}, 12);
   // 左側面的轉盤

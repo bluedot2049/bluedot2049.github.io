@@ -33,6 +33,16 @@ export const LABS = {
       colorGrading: { shadows: { hue: 202, sat: 42, lum: -6 }, midtones: { hue: 221, sat: 31 }, highlights: { hue: 36, sat: 39, lum: 2 } },
     },
   },
+  // 月球相機店（zones/jinghai/jinghai-camshop.js）：大企業的沖印機，不是師傅。乾淨、偏冷的銀白，黑色浮一點（拍立得那種黑不深）。
+  // luck：每張交件時抽結果（漂亮、普通、色偏、疊影，camera/minilab.js），這裡是「普通」那一張的配方。用 darkroom_preview.html 複製配方時 luck 不會帶出來，貼回來記得補
+  jinghai: {
+    name: '拍立拿旗艦店', who: '店員', style: '月白', luck: true,
+    settings: {
+      exposure: 0.05, contrast: 8, highlights: -18, shadows: 12, whites: 4, blacks: 14, temperature: -14, tint: 3, vibrance: 6, saturation: -14, clarity: 4, grainAmount: 4, grainSize: 15,
+      curves: { rgb: [[0, 18], [64, 66], [192, 196], [255, 248]] },
+      colorGrading: { shadows: { hue: 210, sat: 14, lum: 0 }, highlights: { hue: 40, sat: 10, lum: 0 } },
+    },
+  },
   // 先拿掉（2026-11-10）：獵魔III 不在機身裡洗，也不出現在相簿的「交給…」。要恢復就把下面整段解開、cameras.js 的 lab: 'gui' 解開
   // 不是師傅，是獵魔III 機身裡的影像處理（cameras.js 的 lab）：拍下那一刻就洗好（developNow），不用交件。
   // 大法師科技的味道是鏡片鍍膜的紫綠：亮部一點淡紫、暗部一點青綠，中間調乾淨、偏冷、清楚，跟燭火乙式的暖舊反過來。

@@ -1119,6 +1119,9 @@ export class Party {
   }
 
   update(dt) {
+    // 沒組隊、也沒有人在邀請：沒有東西要擺，畫面範圍也不用量。讀 visualViewport 會逼瀏覽器當場排版，
+    // 一個人玩時每幀白花半毫秒（主迴圈整張表的三四成，__g.loop.slow() 量的）
+    if (!this.pending && !this.state) return;
     const now = performance.now();
     // 這一幀看得到的範圍：iPhone 鍵盤直接蓋在畫面上，Android 會把整頁變矮，兩種都照 visualViewport 算
     const vv = window.visualViewport;

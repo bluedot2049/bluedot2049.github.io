@@ -41,8 +41,8 @@ export const FIELDS = [
   { key: 'kaoFav', init: () => null, read: kaoFav, code: { tag: 'e', iris: false, enc: (v) => (v ? v.map((c) => c.toString(16).padStart(3, '0')).join('').replace(/(000)+$/, '') : ''), dec: (s) => (/^([0-9a-f]{3}){1,5}$/.test(s) ? kaoFav([...s.match(/.{3}/g).map((h) => parseInt(h, 16)), 0, 0, 0, 0].slice(0, 5)) : null) } },
   // 前廳胖頭的教學（zones/gallery/ask.js）：tour 是做過的事（mirror 照過鏡子、photo 拍過照、out 走出後門、各區的 zone 名字、shy 被他拒拍過），
   // asked 是問過他哪幾題（ASK 的 id）。跟著這個人走，但不進存檔碼：換了裝置只是題目又亮起來
-  // 拍立拿a500 的片盒（camera/instant.js）：left 還剩幾張（帶相機就附第一盒）、day 上次在月球換盒是哪天（一天一盒）。跟著人走、不進存檔碼
-  { key: 'instant', init: () => ({ left: 3, day: '' }), read: (v) => ({ left: Number.isInteger(v?.left) && v.left >= 0 && v.left <= 3 ? v.left : 3, day: typeof v?.day === 'string' ? v.day.slice(0, 10) : '' }) },
+  // 拍立拿a500 的片盒（camera/instant.js）：left 還剩幾張（帶相機就附第一盒）。在月球的相機店底片牆隨時補滿。跟著人走、不進存檔碼
+  { key: 'instant', init: () => ({ left: 3 }), read: (v) => ({ left: Number.isInteger(v?.left) && v.left >= 0 && v.left <= 3 ? v.left : 3 }) },
   { key: 'tour', init: () => [], read: words },
   { key: 'asked', init: () => [], read: words },
   // 舊存檔每套各畫一張臉，併成一張時丟掉了幾張不一樣的。換裝面板說一次就歸零（creator.js）

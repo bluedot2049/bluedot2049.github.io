@@ -128,6 +128,9 @@ export class Ask {
     document.activeElement?.blur?.();
   }
 
+  // 玩家一動（走、拖、點）題目卡就收（main.js 對每個 fixtures 叫 onInput）
+  onInput() { this.close(); }
+
   // 問一題：卡片收起來，自己頭上冒出問的話，隔一下他回。帶著相機問「相機怎麼用」換成 carry 那組
   ask(id) {
     const q = ASK.find((x) => x.id === id);

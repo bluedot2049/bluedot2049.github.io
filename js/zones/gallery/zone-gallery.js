@@ -101,24 +101,36 @@ export function residents({ scene, world, shadowTex }) {
   return { manatee, host };
 }
 
-// 前廳胖頭的教學（ask.js）：走近時說下一步、按「問」打開題目卡、轉身用魔杖指方向。main.js 建好黑眼以後叫這裡
-export function ask(ctx) {
-  return ctx.manatee ? new Ask(ctx) : null;
-}
-
-// 前廳的收音機（radio-card.js）：互動鍵「收音機」打開面板，聲音走 ambience.beds。main.js 建好角色、鏡頭以後叫這裡
-export function radio({ world, ambience, player, camera }) {
-  return world.radio ? new RadioCard({ world, ambience, player, camera }) : null;
-}
-
-// 原野的畫架（easel-card.js）：互動鍵「畫畫」打開面板，畫裡的人是自己的角色（look 回傳現在的造型）。main.js 建好角色、鏡頭以後叫這裡
-export function easel({ world, player, camera, look }) {
-  return world.outdoor?.easel ? new EaselCard({ world, player, camera, look }) : null;
-}
-
-// 地下室會說話的那幅畫（cellar-voice.js）：站到畫前互動鍵「聊天」。main.js 建好角色、鏡頭以後叫這裡
-export function cellarVoice({ world, player, camera }) {
-  return world.cellar?.paintings.some((p) => p.data.talks) ? new CellarVoice({ world, player, camera }) : null;
+// 這一區自己的裝置：走近有互動鍵、有的會開卡片。main.js 建好黑眼以後叫一次，照順序接上（target、update、onInput、isOpen），
+// 新增一個只要在這裡加一行，不用改 main.js（約定見 docs/新區域與改地圖.md 的 fixtures）
+// ask：前廳胖頭的教學（ask.js），走近時說下一步、按「問」打開題目卡、轉身用魔杖指方向
+// radio：前廳的收音機（radio-card.js），互動鍵「收音機」打開面板，聲音走 ambience.beds
+// easel：原野的畫架（easel-card.js），互動鍵「畫畫」打開面板，畫裡的人是自己的角色（look 回傳現在的造型）
+// voice：地下室會說話的那幅畫（cellar-voice.js），站到畫前互動鍵「聊天」
+// camTable：前廳的相機桌（camtable.js），正在看的那一格浮起來；卡片擺哪裡是介面的事，留在 main.js（placeCams）
+// tableHost：陽台長桌的主人（residents 建的 host），戶外那間看得到才動，看正在跟他說話的訪客；看不到時不說話
+export function fixtures(ctx) {
+  const { world, ambience, player, camera, look, host, visitors } = ctx;
+  const table = world.camTable;
+  return {
+    ask: ctx.manatee ? new Ask(ctx) : null,
+    radio: world.radio ? new RadioCard({ world, ambience, player, camera }) : null,
+    easel: world.outdoor?.easel ? new EaselCard({ world, player, camera, look }) : null,
+    voice: world.cellar?.paintings.some((p) => p.data.talks) ? new CellarVoice({ world, player, camera }) : null,
+    camTable: table ? {
+      update(dt) {
+        table.look(player.focus?.kind === 'cameras' ? player.focus.slot : -1);
+        table.update(dt);
+      },
+    } : null,
+    tableHost: host ? {
+      update(dt) {
+        host.group.visible = world.rooms[world.rooms.length - 1].group.visible;
+        if (host.group.visible) host.update(dt, player.pos.x, player.pos.z, camera, visitors.hostFocus());
+        else host.hush();
+      },
+    } : null,
+  };
 }
 
 // 動物和不定期搭船來看畫的冒險者

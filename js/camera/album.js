@@ -11,6 +11,7 @@
 // 拿回來的是新的（fresh）：格子上的印泥亮著，打開相簿看到了、收起行囊才熄成淡印（seen）。
 import { CAMERAS } from './cameras.js';
 import { LABS, develop } from './darkroom.js';
+import { roll, wash } from './minilab.js';
 export { LABS };
 
 const DB = 'gallery-photos', DIR = 'dir', WAIT = 'wait', STORE = 'album', KEY = 'photos';
@@ -211,7 +212,9 @@ export async function putBack(out) {
 }
 
 // 交給師傅：從相簿拿走，變成取件單
+// 寫了 luck 的那家（月球相機店的沖印機，minilab.js）交件當下就抽好每張的結果
 export async function toLab(list, lab) {
+  if (LABS[lab]?.luck) roll(list);
   for (const it of list) {
     it.state = 'lab';
     it.lab = lab;
@@ -223,8 +226,9 @@ export async function toLab(list, lab) {
 // 本人到了相館：把這位師傅手上的全部拿回來，套上他的風格。回傳拿到幾張
 export async function collect(lab) {
   const L = LABS[lab], got = items.filter((it) => it.state === 'lab' && it.lab === lab);
+  const orig = new Map(got.map((it) => [it.id, it.blob]));   // 疊影要拿同一批另一張還沒洗的原片
   for (const it of got) {
-    try { it.blob = await develop(it.blob, L); } catch {}
+    try { it.blob = await (it.luck ? wash(it, orig, L) : develop(it.blob, L)); } catch {}
     it.state = 'back';
     it.film = false;
     it.fresh = true;

@@ -25,6 +25,7 @@ import { BRAND, logoTexture, orderBoard } from './jinghai-ads.js';
 import { buildStalls, STALLS } from './jinghai-stalls.js';
 import { buildFloors } from './jinghai-floors.js';
 import { buildLift, LIFT } from './jinghai-lift.js';
+import { buildSpin, CAMSHOP } from './jinghai-camshop.js';
 import { buildLab } from './jinghai-lab.js';
 
 const deg = Math.PI / 180;
@@ -354,7 +355,9 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
     if (s < 0) m.rotation.y = Math.PI;
     pole.add(m);
   }
-  group.add(pole, burger.anim, back.blades, lift.car);
+  // 相機店的轉台：放大的 a500 慢慢轉（不投影，影子圖才不用每幀重畫）
+  const spin = buildSpin();
+  group.add(pole, burger.anim, back.blades, lift.car, spin);
   if (PL.fid) fader.units[PL.fid].objs.push(pole);
 
   // ---------- 天 ----------
@@ -502,6 +505,7 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
     atrium: { name: '大廳', subtitle: 'Atrium' },
     canteen: { name: '食堂', subtitle: 'Refectorium' },
     galleria: { name: '商店街', subtitle: 'Tabernae' },
+    camshop: { name: '拍立拿旗艦店', subtitle: 'Instantia' },
     control: { name: '控制室', subtitle: 'Specula' },
     burger: { name: BRAND.name, subtitle: BRAND.latin },
     greenhouse: { name: '海草溫室', subtitle: 'Viridarium' },
@@ -530,6 +534,7 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
     placeAt(x, z) {
       if (inBox(ATRIUM, x, z)) return PLACES.atrium;
       if (inBox(CANTEEN, x, z)) return PLACES.canteen;
+      if (inBox(CAMSHOP, x, z)) return PLACES.camshop;
       if (inBox(GALLERIA, x, z)) return PLACES.galleria;
       if (inBox(CONTROL, x, z)) return PLACES.control;
       if (inBox(BURGER, x, z)) return PLACES.burger;
@@ -572,6 +577,7 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
       uTime.value = t;
       sky.update(cam);
       pole.rotation.y = t * 0.35;
+      spin.rotation.y = t * 0.3;
       // 室內外：離房子的牆越近越往室內的光靠，走進門裡一兩公尺就全換過去
       if (target && hemi) {
         const goal = indoorness(target.x, target.z);

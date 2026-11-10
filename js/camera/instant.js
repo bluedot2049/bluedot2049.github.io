@@ -4,7 +4,7 @@
 // 照片上記一條路 pola.route = [[區, 到的時間], ...]；關掉遊戲那段記成 'pocket'（收在口袋裡，中性）。
 // 看的時候才照這條路算顯到哪、帶什麼色（不寫時間、百分比，看照片自己變）；顯完烤成一張帶白邊、下巴厚的成品，之後跟一般照片一樣存下。
 // 照片是玩具相機的樣子：四角輕微化開、邊上色差、重暗角、亮處暈開、乳白的白、偏青的黑、顆粒灰塵、下緣藥水痕；漏光、晃糊、顏色壞掉各三分之一（flaws）
-// 片盒記在存檔的 instant：left 還剩幾張、day 上次在月球換盒是哪一天（換盒在 zones/jinghai/jinghai-film.js）
+// 片盒記在存檔的 instant：left 還剩幾張（月球相機店的底片牆隨時補滿，在 zones/jinghai/jinghai-film.js）
 import { album, amend, loadAlbum } from './album.js';
 import { getSave, putSave } from '../save/progress.js';
 import { pref, setPref } from '../save/prefs.js';
@@ -37,11 +37,8 @@ export const filmLeft = () => pack().left;
 export function useFilm() {
   putSave({ instant: { ...pack(), left: Math.max(0, pack().left - 1) } });
 }
-// 今天（本機日期）：一天換一盒
-export const today = () => new Date().toLocaleDateString('sv');
-export const swappedToday = () => pack().day === today();
 export function refill() {
-  putSave({ instant: { left: PACK, day: today() } });
+  putSave({ instant: { left: PACK } });
 }
 
 // ───────── 顯影 ─────────

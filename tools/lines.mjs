@@ -26,6 +26,8 @@ const SOURCES = [
       HOST: '胖頭回話，照話題；story 是回熟客的連載', VOICES: '各種族自己的', ROLE_LINES: '各職業自己的', BOAT: '船上：arrive 靠岸前、leave 開走時，Solo 是一個人來的',
       REGULARS: '熟客：每隔一陣子來一次，每次講下一章', ORIGINS: '{o} 從哪裡來', EVENTS: '{e} 路上的事', NEXTS: '{n} 下一站',
     } },
+  { title: '靜海・相機店「拍立拿旗艦店」', file: 'js/zones/jinghai/jinghai-shop-lines.js', note: '商店街北排西頭（zones/jinghai/jinghai-camshop.js），按互動鍵冒提示（jinghai-film.js）',
+    keys: { CLERK: '沖印櫃台的店員：talk 按「聊天」輪著講；handover 領件時照這批最搶眼的那張說（疊影＞色偏＞漂亮＞普通，camera/minilab.js）', FILM: '底片牆', LOOKS: '展示品按「看看」' } },
   { title: '海市・攤販', file: 'js/npc/vendor-lines.js', note: '照攤位的 id（npc/vendors.js 的 VENDORS）：greet 走近、lines 按「聊天」輪著講、quiet 街上冷清時（晚上最冷清）；暗房 handover 交照片、報社 unsigned 退畫廊的眼睛拍的、printed 照版面（角落、半版、頭版、號外）',
     keys: { VENDOR_LINES: '' } },
   { title: '海市・一幕劇「漁火」', file: 'js/zones/haishi/haishi-act-lines.js', note: '碼頭魚桶裡的魚一路逃上星廟（zones/haishi/haishi-acts.js），魚販和沿路攤販看到牠時說的話',

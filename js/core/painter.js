@@ -9,15 +9,20 @@
 //   署名：B L U E D O T 字距拉開，放在沒有色塊的那頭，顏色只比底色亮一點
 //   自動 autoParams(seed)：一顆種子自動畫一張，守同一套規則；autoPick 再過品質關卡（judge），不合格換下一顆（整套邏輯寫在 docs/畫風邏輯.md）
 //   配色版本 9＝算出來的配色（genColors）：照種子挑主色相，原本的明暗結構不動，色相分兩群轉過去
+//   場景兩套：REF_KEYS 照原作的十六個，COSMOS_KEYS 原野畫架的宇宙畫；autoParams、autoPick 第三個參數挑哪一套
 //   人 who（avatar/silhouette.js 的剪影）：放進人的位置；主色跟背後太近就整個人推亮或壓暗（fitWho）
 // 畫法：先逐像素算色面，再過畫風層（painter-style.js：調色、油畫筆觸、光暈、顏料厚度、畫布），再畫硬線、人、畫框、署名。同一組參數永遠畫出同一張。
 
 import { clamp, hex, rotHue, rand, noise, dist, css } from './painter-kit.js';
-import { SCENES } from './painter-scenes.js';
+import { SCENES as REF } from './painter-scenes.js';
+import { COSMOS } from './painter-cosmos.js';
 import { styleFor, grade, oil, bloom, surface, toLab, fromLab } from './painter-style.js';
 
-export { SCENES };
+// 兩套場景：REF 是照原作構圖的十六個（試筆頁、以後的圖集），COSMOS 是原野畫架畫的宇宙畫（painter-cosmos.js）
+export const SCENES = { ...REF, ...COSMOS };
 export const SCENE_KEYS = Object.keys(SCENES);
+export const REF_KEYS = Object.keys(REF);
+export const COSMOS_KEYS = Object.keys(COSMOS);
 export const FRAMES = ['滿版', '圓框', '留白'];
 
 // 顏色先換成 [r, g, b]
@@ -55,7 +60,7 @@ export function compose(p, aspect, moving = null) {
   q.light.x = clamp(q.light.x, 0.04, 0.96);
   q.light.y = clamp(q.light.y, 0.04, 0.96);
   if (sc.center && Math.abs(q[sc.center].x - 0.5) < CENTER_R) { q[sc.center].x = 0.5; guides.push({ axis: 'x', at: 0.5 }); }
-  q.fig.x = clamp(q.fig.x, 0.07, 0.93);
+  q.fig.x = clamp(q.fig.x, ...(sc.figX || [0.07, 0.93]));   // 人大的場景（宇宙畫）身體不出畫
   q.fig.y = clamp(q.fig.y, 0.1, 0.96);
   // 光和人隔開（場景可以用 gap 改：光爆的光核大要隔遠一點，巨影的紅面具就在人頭上所以不隔）
   const a = [q.light.x * aspect, q.light.y], f = [q.fig.x * aspect, q.fig.y], GAP = sc.gap ?? MIN_GAP;
@@ -84,12 +89,13 @@ export function startParams(scene, seed = 1, aspect = 3 / 4) {
 //   對稱的場景（巨影、門、城谷、孤丘）主體固定在正中，巨影的光（面具）跟主體對齊
 //   分界只吸到離原作構圖不遠的位置（林的地平線吸到 1/3 會變成一大片地）
 //   人要留在原作那一邊（原野的火車晃到天上會變成一隻鳥、畫面只剩天）
-export function autoParams(seed, aspect = 3 / 4) {
+export function autoParams(seed, aspect = 3 / 4, keys = REF_KEYS) {
   const R = rand((seed ^ 0xa11ce) >>> 0);
-  const scene = SCENE_KEYS[Math.floor(R() * SCENE_KEYS.length)];
+  const scene = keys[Math.floor(R() * keys.length)];
   const sc = SCENES[scene], st = sc.start;
   const ver = R() < 0.35 ? GEN : Math.floor(R() * sc.versions.length);
-  const frame = R() < 0.7 ? 0 : R() < 0.5 ? 1 : 2;
+  let frame = R() < 0.7 ? 0 : R() < 0.5 ? 1 : 2;
+  if (sc.frames && !sc.frames.includes(frame)) frame = sc.frames[frame % sc.frames.length];   // 場景可以限定畫框（宇宙畫不挖圓框）
   const mirror = !sc.center && R() < 0.5;
   const mx = (v) => (mirror ? 1 - v : v);
   const jit = (v, amt) => v + (R() - 0.5) * amt;
@@ -126,7 +132,7 @@ export function fromCode(s) {
 
 // ---------- 算出來的配色 ----------
 // 人、硬東西、光這些不換（換了會認不出那是光、那是人），只換大色面。照原作的換色版本：明暗不動、色相整群轉
-const FIXED = new Set(['fig', 'person', 'visor', 'scarf', 'boat', 'rim', 'wake', 'train', 'win', 'square', 'fly', 'trail', 'beam', 'core', 'ray', 'bokeh', 'star', 'speck', 'sig', 'ring', 'disc', 'shadow']);
+const FIXED = new Set(['thread', 'fig', 'person', 'visor', 'scarf', 'boat', 'rim', 'wake', 'train', 'win', 'square', 'fly', 'trail', 'beam', 'core', 'ray', 'bokeh', 'star', 'speck', 'sig', 'ring', 'disc', 'shadow']);
 const angDiff = (a, b) => ((((a - b) % 360) + 540) % 360) - 180;
 export function genColors(sc, seed) {
   const R = rand((seed ^ 0x9e3779b9) >>> 0);
@@ -230,10 +236,10 @@ export function judge(p, aspect = 3 / 4) {
 }
 
 // 自動一張＋品質關卡：從 seed 開始試，過了就用；八次都不過，用分數最好的那張
-export function autoPick(seed, aspect = 3 / 4) {
+export function autoPick(seed, aspect = 3 / 4, keys = REF_KEYS) {
   let best = null;
   for (let i = 0; i < 8; i++) {
-    const p = autoParams(seed + i * 7919, aspect), j = judge(p, aspect);
+    const p = autoParams(seed + i * 7919, aspect, keys), j = judge(p, aspect);
     if (j.ok) return p;
     const b = j.base, score = Math.abs(j.m.calm - b.calm) + Math.abs(j.m.Lsd - b.Lsd) * 3 + Math.abs(j.m.chroma - b.chroma) * 3 + Math.abs(j.m.L - b.L);
     if (!best || score < best.score) best = { p, score };

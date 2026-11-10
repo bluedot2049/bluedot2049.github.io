@@ -7,8 +7,8 @@
 // 座標：x 往東、z 往南，大廳中心是原點，一樓地板是 0
 import * as THREE from 'three';
 import { Kit, rng } from '../../core/props.js';
-import { cameraModel } from '../../camera/cameras.js';
 import { foilWall, foilRing as ringFoil, crinkle } from './jinghai-foil.js';
+import { buildCamShop, CAMSHOP, DOOR as CAMDOOR, CLERKS, SPOTS as CAMSPOTS } from './jinghai-camshop.js';
 
 const WHITE = '#e9e6de', WHITE2 = '#dcd8ce', SILVER = '#b4bac1', SILVERDK = '#868d95', DARK = '#3a3d44', RUBBER = '#2c2e33',
   FLOOR = '#d9d3c6', INLAY = '#b0a894', STEEL = '#aeb4ba', GLASS = '#cfcbc2', NAVY = '#2c3248', BLUE = '#3d6fa8', RED = '#b8432f',
@@ -718,14 +718,20 @@ export function buildHQ({ coarse = false, fade = null } = {}) {
   for (const x of [29, 51]) chart('z-', G.z0 - 0.3, x, 8, 1, 0.5);
   // 店：南北各六家，一家寬七公尺。店名的地方先放顏色和圖案，字之後用模板字
   const SHOPS = [
-    ['film', '#ebe8e0'], ['snack', '#6e8f4e'], ['tailor', '#7a3b3b'], ['lens', '#4a4540'], ['toy', '#d9a03a'], ['record', '#b5603f'],
+    ['camshop', '#ebe8e0'], ['camshop', '#ebe8e0'], ['camshop', '#ebe8e0'], ['lens', '#4a4540'], ['toy', '#d9a03a'], ['record', '#b5603f'],
     ['flower', '#8fb38a'], ['book', '#c8b48a'], ['sweet', '#e2a3a8'], ['radio', '#b07a3e'], ['card', '#9b8fb8'], ['sofa', '#d7b98c'],
   ];
   const shopSpots = [];
   for (const s of [-1, 1]) {
     const zf = s * G.walk, zb = s * (G.z1 - 0.3);
-    // 店的天花板是二樓的地板，往走道伸出一截當二樓的走廊
-    const fk = deck(G.x0, 5.5, s > 0 ? 3.8 : -14, G.x1, 5.9, s > 0 ? 14 : -3.8);
+    // 店的天花板是二樓的地板，往走道伸出一截當二樓的走廊。北排西頭的相機店一二樓打通，那段只留門面外面的走廊
+    let fk;
+    if (s > 0) fk = deck(G.x0, 5.5, 3.8, G.x1, 5.9, 14);
+    else {
+      const C = CAMSHOP, boxes = [[G.x0, 5.5, -14, C.x0 + 0.15, 5.9, -3.8], [C.x0 + 0.15, 5.5, C.z1 + 0.15, C.x1 - 0.15, 5.9, -3.8], [C.x1 - 0.15, 5.5, -14, G.x1, 5.9, -3.8]];
+      fk = fadeKit(boxes);
+      for (const b of boxes) { B(fk, ...b, WHITE); solid(...b.slice(0, 4), b[4] + 0.05, b[5], true); }
+    }
     B(fk, G.x0, 5.38, s * 3.8 - 0.06, G.x1, 5.85, s * 3.8 + 0.06, SILVER);
     // 欄杆在盡頭那座橋讓開
     for (const [a, b] of [[G.x0, GBRIDGE.x0], [GBRIDGE.x1, G.x1]]) {
@@ -739,6 +745,11 @@ export function buildHQ({ coarse = false, fade = null } = {}) {
     wall('x', zf, G.x0, G.x0 + 2, 0, G.top, 0.3, WHITE);
     for (let i = 0; i < 6; i++) {
       const [type, col] = SHOPS[i + (s > 0 ? 6 : 0)], x0 = G.x0 + 2 + i * 7, x1 = x0 + 7;
+      // 北排西頭三間是相機店（jinghai-camshop.js）：一間蓋完整間，另外兩間跳過
+      if (s < 0 && i < 3) {
+        if (i === 0) camShop(x0, zf, zb);
+        continue;
+      }
       // 店與店之間的牆，樓下樓上一起
       wall('z', x0, Math.min(zf, zb), Math.max(zf, zb), 0, G.top, 0.3, WHITE);
       if (i === 5) wall('z', x1 - 0.15, Math.min(zf, zb), Math.max(zf, zb), 0, G.top, 0.3, WHITE);
@@ -993,36 +1004,47 @@ export function buildHQ({ coarse = false, fade = null } = {}) {
   const plan = makePlan({ seats, shopSpots, coarse, R });
   return { kit: k, glass: kg, foil: kf, foilIn: kfi, fadeKits, walls: faces.list, obstacles, solids, holes, plan, screens };
 
+  // 相機店（北排西頭三間打通，店裡在 jinghai-camshop.js）：西牆、門面、整間的店裡。
+  // 門面一樓兩扇大窗夾著沒有門的門口，上面一條奶油色招牌帶；二樓三張放大的拍立得——方的玻璃是照片、白框下巴厚，從二樓走廊看得進挑高的店裡
+  function camShop(x0, zf, zb) {
+    const C = CAMSHOP, BAND = '#ebe8e0', CREAM = '#f3f0e8', out = zf + 0.15, inn = zf - 0.15;
+    wall('z', x0, Math.min(zf, zb), Math.max(zf, zb), 0, G.top, 0.3, WHITE);
+    wall('x', zf, C.x0, C.x1, 0, 4.2, 0.3, WHITE, [
+      { a: C.x0 + 0.6, b: CAMDOOR.a - 0.4, lo: 0.35, hi: 3.7, glass: true, mull: 2 }, { a: CAMDOOR.a, b: CAMDOOR.b, lo: 0, hi: 3.5 },
+      { a: CAMDOOR.b + 0.4, b: C.x1 - 0.6, lo: 0.35, hi: 3.7, glass: true, mull: 2 }]);
+    wall('x', zf, C.x0, C.x1, 4.2, 5.5, 0.3, BAND);
+    const PH = [23.5, 30.5, 37.5], half = 1.85, side = 0.28;
+    wall('x', zf, C.x0, C.x1, 5.5, G.top, 0.3, WHITE, PH.map((u) => ({ a: u - half, b: u + half, lo: 6.95, hi: 10.65, glass: true })));
+    for (const x of [C.x0 + 0.2, C.x1 - 0.2]) B(k, x - 0.15, 0, out + 0.07, x + 0.15, 5.5, out + 0.17, SILVER);
+    // 拍立得的白框：外面一圈、店裡一圈
+    for (const [n, at] of [['z+', out], ['z-', inn]]) for (const u of PH) {
+      onFace(k, n, at, u - half - side, 5.9, u + half + side, 6.95, 0, 0.06, CREAM);
+      onFace(k, n, at, u - half - side, 10.65, u + half + side, 10.65 + side, 0, 0.06, CREAM);
+      for (const sg of [-1, 1]) onFace(k, n, at, sg < 0 ? u - half - side : u + half, 6.95, sg < 0 ? u - half : u + half + side, 10.65, 0, 0.06, CREAM);
+    }
+    // 招牌帶：底下一道片盒紅，中間一個拍立得的圖案，兩邊各三顆圓點（一盒三張）
+    onFace(k, 'z+', out, C.x0 + 0.35, 4.25, C.x1 - 0.35, 4.42, 0, 0.03, RED);
+    const cx = (CAMDOOR.a + CAMDOOR.b) / 2;
+    onFace(k, 'z+', out, cx - 0.5, 4.5, cx + 0.5, 5.4, 0, 0.08, CREAM);
+    onFace(k, 'z+', out, cx - 0.38, 4.8, cx + 0.38, 5.3, 0.08, 0.1, DARK);
+    onFace(k, 'z+', out, cx - 0.2, 4.58, cx + 0.2, 4.66, 0.08, 0.1, RED);
+    for (const sg of [-1, 1]) for (let i = 0; i < 3; i++) k.cyl(0.14, 0.14, 0.05, CREAM, cx + sg * (1.2 + i * 0.5), 4.95, out + 0.03, { rx: Math.PI / 2 }, 16);
+    buildCamShop({ k, kg, B, SB, block, pane, R });
+    // 海牛人逛街時在三扇窗前停一下（店員另外放，CLERKS）
+    for (const x of PH) shopSpots.push({ x, z: zf + 1.7, face: Math.PI, keeper: null });
+  }
   // 招牌上的小圖案：每家一個簡單的形狀，字之後再寫
   function sign(type, x, y, z, s) {
     const face = { ry: s > 0 ? Math.PI : 0 }, c = '#f6f3ea', g = '#d6b35f';
     const dz = -s * 0.03;
-    if (type === 'film') { k.box(0.5, 0.6, 0.04, c, x, y, z + dz, face); k.box(0.4, 0.1, 0.05, RED, x, y - 0.22, z + dz * 1.5, face); }
-    else if (type === 'snack') k.add(new THREE.IcosahedronGeometry(0.32, 0), c, x, y, z + dz, { sz: 0.15 });
-    else if (type === 'lens' || type === 'record' || type === 'radio') k.cyl(0.34, 0.34, 0.05, c, x, y, z + dz, { rx: Math.PI / 2 }, 16);
+    if (type === 'lens' || type === 'record' || type === 'radio') k.cyl(0.34, 0.34, 0.05, c, x, y, z + dz, { rx: Math.PI / 2 }, 16);
     else if (type === 'toy') k.cone(0.26, 0.7, c, x, y, z + dz, { sz: 0.2 });
     else k.box(0.8, 0.36, 0.04, type === 'card' || type === 'book' ? c : g, x, y, z + dz, face);
   }
   // 櫥窗裡擺的東西：x、z 是櫥窗裡面的中間，s 是店在哪一邊（-1 北、1 南）
   function display(type, x, z, s) {
     const T = (h) => B(k, x - 1.6, 0, z - 0.5, x + 1.6, h, z + 0.5, WHITE2);
-    if (type === 'film') {
-      // 望的店：櫥窗中間一台放大的相機，旁邊疊著一盒一盒的片盒
-      const cam = new Kit(null);
-      cameraModel(cam, 'wang');
-      const m = new THREE.Matrix4().compose(new THREE.Vector3(x - 0.3, 0.5, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, s > 0 ? Math.PI + 0.35 : -0.35, 0)), new THREE.Vector3(11, 11, 11));
-      for (const g of cam.lit) k.lit.push(g.applyMatrix4(m));
-      T(0.5);
-      for (let i = 0; i < 9; i++) k.box(0.32, 0.07, 0.38, ['#f2efe6', '#c9ced3', RED][i % 3], x + 1.05, 0.54 + i * 0.075, z + (R() - 0.5) * 0.08, { ry: (R() - 0.5) * 0.3 });
-    } else if (type === 'snack') {
-      T(0.6);
-      for (let i = 0; i < 5; i++) k.cyl(0.18, 0.18, 0.45, i % 2 ? '#6e8f4e' : '#a9bf7a', x - 1.2 + i * 0.6, 0.83, z, {}, 10);
-      for (let i = 0; i < 3; i++) k.cyl(0.25, 0.25, 0.12, '#d9a868', x - 0.6 + i * 0.6, 1.15, z, {}, 12);
-    } else if (type === 'tailor') {
-      B(k, x - 1.5, 2.6, z - 0.03, x + 1.5, 2.65, z + 0.03, SILVER);
-      for (let i = 0; i < 4; i++) B(k, x - 1.2 + i * 0.8 - 0.3, 1.2, z - 0.06, x - 1.2 + i * 0.8 + 0.3, 2.55, z + 0.06, ['#9fb4c8', '#eeede7', '#283454', '#efede6'][i]);
-      T(0.4);
-    } else if (type === 'lens') {
+    if (type === 'lens') {
       for (let i = 0; i < 3; i++) {
         const tx = x - 1.1 + i * 1.1;
         for (let j = 0; j < 3; j++) { const a = (j / 3) * Math.PI * 2; k.box(0.04, 1.2, 0.04, SILVERDK, tx + Math.sin(a) * 0.2, 0.6, z + Math.cos(a) * 0.2); }
@@ -1176,7 +1198,13 @@ function makePlan({ seats, shopSpots, coarse, R }) {
   // 觀星台上看地球的
   for (const x of [-8, 8]) still.push({ p: [x, 16, -11.75], face: N, outfit: 'jumpsuit', look: 0.08, act: 'gaze' });
   // 店員：站在店裡的櫃台後面；商店街的小亭子、百貨公司門口
-  shopSpots.forEach((sp, i) => still.push({ p: [sp.keeper[0], 0, sp.keeper[1]], face: sp.face === N ? S : N, outfits: ['vest', 'cardigan', 'usher'], look: 0.5, sway: 0.5, fine: i % 2 === 1, act: 'counter' }));
+  shopSpots.forEach((sp, i) => sp.keeper && still.push({ p: [sp.keeper[0], 0, sp.keeper[1]], face: sp.face === N ? S : N, outfits: ['vest', 'cardigan', 'usher'], look: 0.5, sway: 0.5, fine: i % 2 === 1, act: 'counter' }));
+  // 相機店（jinghai-camshop.js）：穿店裡制服的店員，和進去逛一圈的客人（轉台、底片牆、配色款、沖印櫃台）
+  for (const c of CLERKS) still.push({ ...c, outfit: 'pola', sway: 0.5 });
+  loops.push({ count: 3, outfits: [...CASUAL, 'office', 'engineer'], speed: 0.6, nodes: [
+    P(30.5, 0, -4.4), P(30.5, 0, -7.0, { wait: 3, face: N }), P(27.6, 0, -8.6), P(CAMSPOTS.film.x + 0.8, 0, -10.8, { wait: 4, face: N }),
+    P(26.4, 0, -8.1, { wait: 2, face: S }), P(28.6, 0, -7.2), P(34.6, 0, -7.4), P(CAMSPOTS.lab.x - 0.6, 0, -7.7, { wait: 4, face: N }),
+    P(35.0, 0, -6.8), P(31.4, 0, -6.4), P(31.4, 0, -4.4), P(36, 0, -3.4), P(24, 0, -3.4)] });
   still.push({ p: [33, 0, 0.6], face: S, outfit: 'cook', look: 0.8, act: 'counter' });
   still.push({ p: [60.4, 0, 3.4], face: W, outfit: 'usher', look: 0.3, act: 'guard' });
   for (const z of [-8, 8]) still.push({ p: [63.4, 0, z], face: W, outfits: ['office', 'cardigan'], look: 0.6, sway: 0.8, fine: true });

@@ -51,6 +51,7 @@ import { bindLessons, teach, taught, tickLessons, kind as inputKind, say } from 
 import { Beast } from './npc/beast.js';
 import { Happenings } from './core/happen.js';
 import { Acts } from './core/act.js';
+import { Loop } from './core/loop.js';
 import { Guide } from './scene/guide.js';
 import { pref, setPref, dropPref } from './save/prefs.js';
 
@@ -329,10 +330,7 @@ async function start() {
   let peek = null;    // 湊過來看隊友的照片（social/peek.js），有連線才有
   let guide = null;   // 黑眼帶路（scene/guide.js），攝影模式建好以後才建
   let acts = null;    // 一幕劇（core/act.js），黑眼建好以後才建
-  let ask = null;   // 前廳胖頭的教學（zones/gallery/ask.js），畫廊才有
-  let radio = null;   // 前廳的收音機（zones/gallery/radio-card.js），畫廊才有
-  let easel = null;   // 原野的畫架（zones/gallery/easel-card.js），畫廊才有
-  let voice = null;   // 地下室會說話的畫（zones/gallery/cellar-voice.js），畫廊有地下室才有
+  let fixtures = [];   // 這一區自己的裝置（zone 的 fixtures：畫廊的胖頭教學、收音機、畫架、會說話的畫），黑眼建好以後才建。每個是 [名字, 東西]
   let checkAway = null;   // 看自己是不是掛機中，有連線才有
   let studio = null;   // 海市信差站的照相館（studio.js），畫廊沒有
   let place = null;   // 戶外現在在哪裡：null 是陽台，否則是草原或棧橋盡頭的地名
@@ -426,7 +424,7 @@ async function start() {
       // 提示不跟著收：回饋、事件停到讀得完，教學等做了那件事才收（ui.js 的 hint、tip）
       ui.hideGuide();
       hollow.close();
-      ask?.close();
+      for (const [, f] of fixtures) f.onInput?.();
     },
     // 門邊的問號立牌：能在哪裡玩、支援什麼
     onGuide() {
@@ -713,7 +711,7 @@ async function start() {
   // easel：站在原野畫架的畫布前面，打開畫架的面板（zones/gallery/easel-card.js）
   const LABELS = { ask: '問', painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來', lens: '看鏡頭', follow: '跟著', peek: '看照片', radio: '收音機', easel: '畫畫' };
   // 手機的互動鍵是一顆小圓章，只放兩個字；沒列在這裡的取前兩個字
-  const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信', 看鏡頭: '看鏡', 不看了: '不看', 叫電梯: '叫梯', 上觀星台: '上樓', 回一樓: '下樓', 看照片: '照片', 收音機: '收音', 拿海草: '海草', 要冰淇淋: '甜筒', 要汽水: '汽水', 要熱茶: '熱茶', 取照片: '照片' };
+  const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信', 看鏡頭: '看鏡', 不看了: '不看', 叫電梯: '叫梯', 上觀星台: '上樓', 回一樓: '下樓', 看照片: '照片', 收音機: '收音', 拿海草: '海草', 要冰淇淋: '甜筒', 要汽水: '汽水', 要熱茶: '熱茶', 取照片: '照片', 拿底片: '底片' };
   // 剛走出範圍的那一下（走過攤位、動物走開）互動鍵先留著：手指可能已經在按的路上，按到了照原本的做（player.action 的 fallback）。
   // 以前一出範圍就收，手指落在收起來的鈕上會穿到畫面，角色往鈕底下走過去
   const ACTION_LINGER = 400;
@@ -740,7 +738,7 @@ async function start() {
     if (!t) return;
     // 新目標出現：角色先看它一眼（player.glance），玩家順著視線看到按鍵
     if (t.ax != null && !player.sitting) player.glance = { x: t.ax, y: player.pos.y + (t.kind === 'pet' ? 0.3 : t.kind === 'painting' ? 1.4 : 1.1), z: t.az, t: 1.2 };
-    actionLabel.textContent = (t.kind === 'talk' && t.p.actionLabel) || (t.kind === 'exit' && t.p.label) || (t.kind === 'lens' && t.on && '不看了') || LABELS[t.kind];
+    actionLabel.textContent = (t.kind === 'talk' && t.p.actionLabel) || (t.kind === 'exit' && t.p.label) || (t.kind === 'lens' && t.on && '不看了') || LABELS[t.kind] || t.label;
     actionShort.textContent = SHORT[actionLabel.textContent] || actionLabel.textContent.slice(0, 2);
     actionBtn.setAttribute('aria-label', actionLabel.textContent);
     // 第一次出現的動詞：光暈多擴幾圈（這台裝置記得，prefs.js 的 verbsSeen），不另外寫教學
@@ -758,10 +756,11 @@ async function start() {
   player.cursorWanted = () => {
     const b = document.body.classList;
     return b.contains('panel-open') || b.contains('chatting') || !document.getElementById('pack-card').hidden
-      || !!document.querySelector('#list.open, #kaopanel.open, #vol.open, #guide.show, #ask.show, #peek.show, #radio.show, #easel.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show') || !!document.activeElement?.closest?.('input, textarea');
+      || !!document.querySelector('#list.open, #kaopanel.open, #vol.open, #guide.show, #ask.show, #peek.show, #radio.show, #easel.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show') || fixtures.some(([, f]) => f.isOpen) || !!document.activeElement?.closest?.('input, textarea');
   };
   // 互動鍵打開的卡片：開著時互動鍵是確認，不按卡片後面的東西（player.js 的 keydown）
-  player.cardOpen = () => document.querySelector('#guide.show, #ask.show, #peek.show, #radio.show, #easel.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show, .studio-card:not([hidden])');
+  // 區域自己的裝置（fixtures）開著的卡片照 isOpen 和 el 算，新增的不用來這裡加選擇器
+  player.cardOpen = () => document.querySelector('#guide.show, #ask.show, #peek.show, #radio.show, #easel.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show, .studio-card:not([hidden])') || fixtures.find(([, f]) => f.isOpen && f.el)?.[1].el || null;
   // 鎖住滑鼠時提一下怎麼叫出游標、暫停（lessons.js 的 locked）
   document.addEventListener('pointerlockchange', () => { if (player.locked) teach('locked'); });
 
@@ -1153,19 +1152,14 @@ async function start() {
   happen.more.push(acts);
   acts.send = (m) => mp?.act(m);
   player.actionables.push((x, z) => acts.target(x, z));
-  // 前廳胖頭的教學（zones/gallery/ask.js）：走近說下一步，站在他旁邊互動鍵是「問」。泡泡底下那行小字照現在的操作方式寫鍵
+  // 這一區自己的裝置（zone 的 fixtures，約定見 docs/新區域與改地圖.md）：走近有互動鍵（target）、每幀 update、玩家一動要收的 onInput、開著的卡片 isOpen。
+  // 畫廊：前廳胖頭的教學（走近說下一步，互動鍵「問」，泡泡底下那行小字照現在的操作方式寫鍵，所以給 keyOf）、收音機、畫架、地下室會說話的畫
   const PAD_OF = { interact: -1, raise: 6, pack: 8, eye: 5, party: 14 };
-  ask = Z.ask?.({
-    manatee, world, player, camera, back: params.has('from'), openEnv: () => ui.guide(),
+  fixtures = Object.entries(Z.fixtures?.({
+    world, player, camera, ambience, params, manatee, host, visitors, look: () => look, back: params.has('from'), openEnv: () => ui.guide(),
     keyOf: (id) => { const k = inputKind(); return k === 'pad' ? padBtn(PAD_OF[id]) : k === 'touch' ? '' : key(id); },
-  }) ?? null;
-  if (ask) player.actionables.push((x, z) => ask.target(x, z));
-  radio = Z.radio?.({ world, ambience, player, camera }) ?? null;
-  if (radio) player.actionables.push((x, z) => radio.target(x, z));
-  easel = Z.easel?.({ world, player, camera, look: () => look }) ?? null;
-  if (easel) player.actionables.push((x, z) => easel.target(x, z));
-  voice = Z.cellarVoice?.({ world, player, camera }) ?? null;
-  if (voice) player.actionables.push((x, z) => voice.target(x, z));
+  }) ?? {}).filter(([, f]) => f);
+  for (const [, f] of fixtures) if (f.target) player.actionables.push((x, z) => f.target(x, z));
   // 做過的事（progress.js 的 tour）：來過哪一區、拍過照。前廳胖頭照這個決定說什麼、題目長出哪幾題
   markTour(zone);
   // 第一次拍到照片：說照片在行囊（lessons.js 的 pack）
@@ -1178,7 +1172,7 @@ async function start() {
     guide.isMate = (id) => !!party && [...party.mates.values()].some((o) => o.s === id);
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, happen, acts, guide, creator, cues, peek, radio, easel, kao };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, happen, acts, guide, creator, cues, peek, kao, ...Object.fromEntries(fixtures) };
   const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass, dofPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
@@ -1352,6 +1346,119 @@ async function start() {
   // 沒在動的時候降到約 30fps，省電
   const clock = new THREE.Clock();
   let frame = 0;
+  // 主迴圈的表（core/loop.js）：每幀要跑的系統一行，照階段、同階段照這裡的順序跑；最後一個參數是「忙不忙」，有一個忙就不算閒置。
+  // 新的系統在這裡加一行，不要直接寫進 tick（lint 的 loop-table 查）。先後有講究（鏡頭定案之後才擺頭上的東西），別隨便搬：
+  //   input   聲音從哪裡聽、手把
+  //   move    角色、攝影、自拍：這一幀人和鏡頭在哪
+  //   camera  鏡頭定案
+  //   world   世界裡會動的：白獸、事件、一幕劇、動物、訪客、攤販、路人、這一區的裝置，和跟著東西擺的卡片
+  //   people  別的玩家、隊伍、黑眼、歸門
+  //   ui      頭上的話、互動鍵
+  //   light   光線、地名、調色、場景自己的更新（牆淡掉、水、天）
+  // 一個系統出錯只記一次、其他照跑。?debug 時 __g.loop.time() 開始量，__g.loop.slow() 列最花時間的
+  const viewPos = () => (photo.active ? photo.pos : player.pos);   // 攝影模式時，光線、聲音、牆跟著鏡頭走
+  let othersMoving = false, fading = false, talking = false;
+  const loop = new Loop(['input', 'move', 'camera', 'world', 'people', 'ui', 'light']);
+  loop
+    .add('input', 'listen', () => ambience.listen(photo.active ? photo.pos : character.group.position, camera))
+    .add('input', 'pad', (dt) => pad.poll(dt))
+    .add('move', 'player', (dt) => player.update(dt), () => player.moving)
+    .add('move', 'entry', () => entry.tick())
+    .add('move', 'lessons', () => tickLessons())
+    .add('move', 'photo', (dt) => photo.update(dt), () => photo.active)
+    .add('move', 'selfie', (dt) => selfie.update(dt))
+    .add('move', 'selfGhost', (dt) => updateSelfGhost(dt))
+    // 鏡頭這一幀已經擺好：先算好矩陣，後面對話框、隊友記號照這一幀的鏡頭投影。
+    // 不然要等畫的時候才更新，所有頭上的東西都慢一幀，鏡頭一動就抖
+    .add('camera', 'matrix', () => camera.updateMatrixWorld())
+    .add('world', 'beast', (dt) => beast.update(dt, camera, player.pos), () => beast.busy)
+    .add('world', 'happen', (dt) => happen.update(dt), () => happen.busy)
+    .add('world', 'acts', (dt) => acts?.update(dt))
+    .add('world', 'animals', (dt) => animals?.update(dt))
+    .add('world', 'visitors', (dt) => visitors?.update(dt))
+    .add('world', 'vendors', (dt) => vendors?.update(dt, player, camera))
+    .add('world', 'walkers', (dt) => { for (const w of walkers) w.update(dt, player); })
+    .add('world', 'manatee', (dt) => manatee?.update(dt, player.pos.x, player.pos.z, camera))
+    .add('world', 'fixtures', (dt) => { for (const [, f] of fixtures) f.update?.(dt); })
+    .add('world', 'peek', () => peek?.update())
+    .add('world', 'hollow', (dt) => hollow.update(dt, clock.elapsedTime, player.pos, camera))
+    .add('world', 'flash', (dt) => flashFx.update(dt))
+    .add('world', 'cues', (dt) => cues?.update(dt))
+    .add('world', 'kao', () => kao.tick())
+    // 挑相機的卡片跟著桌上那一格擺（桌子自己每幀的事在畫廊的 fixtures）
+    .add('world', 'camsCard', () => { if (world.camTable && ui.panel === ui.cams && !ui.docked && player.focus?.kind === 'cameras') placeCams(); })
+    .add('world', 'ferryCard', () => { if (ui.panel === ui.ferry && !ui.docked && ferryBoat) placeFerry(); })
+    .add('people', 'mp', (dt) => { othersMoving = mp ? mp.update(dt, performance.now()) : false; }, () => othersMoving)
+    .add('people', 'mirrorFade', (dt) => { fading = updateMirrorFade(dt); }, () => fading)
+    .add('people', 'party', (dt) => party?.update(dt))
+    // 手上的燈籠、蠟燭照在腳邊（海市，haze.js 的 handLamps）：自己和在場的人
+    .add('people', 'handLamps', () => world.handLamps?.update(mp ? [character, ...[...mp.others.values()].map((o) => o.ch)] : [character]))
+    // 黑眼：飛到哪、帶路、別人的黑眼、畫面邊的記號（照這一幀擺好的鏡頭投影）
+    .add('people', 'guide', (dt) => guide.update(dt), () => guide.flying)
+    // 正走去渡口找別區的隊友：走到了就打開渡船卡；半路改走別處就算了
+    .add('people', 'ferryWalk', () => {
+      if (!ferryWalk || (player.goal === ferryWalk.goal && player.path.length)) return;
+      const { ex, to, goal } = ferryWalk;
+      ferryWalk = null;
+      if (player.goal === goal && Math.hypot(player.pos.x - ex.x, player.pos.z - ex.z) < ex.r + 0.8) player.events.onExit(ex, to);
+    })
+    // 正走去樹洞找在演唱會的隊友：走到了就打開接案卡（進場時帶著他那一場）
+    .add('people', 'hollowWalk', () => {
+      if (!hollowWalk || (player.goal === hollowWalk.goal && player.path.length)) return;
+      const { x, z, goal } = hollowWalk;
+      hollowWalk = null;
+      if (player.goal === goal && Math.hypot(player.pos.x - x, player.pos.z - z) < 2.5) hollow.open();
+    })
+    .add('people', 'home', (dt) => world.home?.update(dt, player.pos, mp ? mp.others.values() : [], camera.position), () => !!world.home?.busy)
+    .add('people', 'away', () => { if (frame % 30 === 0) checkAway?.(); })
+    .add('ui', 'bubbles', () => { talking = layoutBubbles() > 0; }, () => talking)
+    .add('ui', 'action', () => { if (frame % 6 === 0) updateAction(); })
+    // 照鏡子：鏡前光和暗一階的背景大約半秒換過去
+    .add('light', 'mirrorLight', (dt) => {
+      const mirrorWant = player.focus?.kind === 'mirror' ? 1 : 0;
+      if (mirrorK === mirrorWant) return;
+      mirrorK = Math.abs(mirrorWant - mirrorK) < 0.01 ? mirrorWant : mirrorK + (mirrorWant - mirrorK) * Math.min(1, dt * 6);
+      setMirrorLight(mirrorK);
+      world.mirrorView?.(mirrorK);
+    })
+    // 室內外的光線和地名：畫廊照走到後門外幾成混兩組光；其他區走進有名字的地方報一次
+    .add('light', 'place', () => {
+      const view = viewPos();
+      if (world.outdoor) {
+        const t = world.outdoor.outdoorness(view.z);
+        applyEnv(t, world.envDim?.(view.x, view.z) ?? 0, mirrorK);
+        ambience.setLevel(t);
+        const meadow = player.room === world.rooms.length - 1 && world.outdoor.inMeadow(player.pos.z);
+        // 地下室算前廳的一部分，走進方廳時報地下室，走回樓上報前廳
+        const spot = meadow ? world.outdoor.placeAt(player.pos.x, player.pos.z) : world.cellarAt?.(player.pos.x, player.pos.z) || null;
+        if (spot !== place && !photo.active) {
+          // 從棧橋盡頭走回草原時不再報一次「原野」
+          const back = place && spot === world.outdoor.meadow;
+          place = spot;
+          const r = spot || world.rooms[player.room].data;
+          if (!back) ui.toast(r.name, r.subtitle);
+        }
+      } else if (world.placeAt && !photo.active) {
+        // 海市的石階和各層街道各有名字，走進去時報一次
+        const spot = world.placeAt(player.pos.x, player.pos.z);
+        if (spot && spot !== place) {
+          place = spot;
+          ui.toast(spot.name, spot.subtitle);
+        }
+      }
+    })
+    // 同一張地圖分區調色（zone 的 grade.regions）：照角色站的地方混，攝影模式照鏡頭
+    .add('light', 'grade', (dt) => { const view = viewPos(); gradeAt(dt, view.x, view.z); })
+    .add('light', 'scene', () => {
+      if (photo.active) world.update(clock.elapsedTime, photo.pos, photo.fadeTarget(), camera, true);
+      else world.update(clock.elapsedTime, player.camPos, player.fadeTarget(), camera);
+    })
+    // 站進前廳的光池，那盞燈照在自己身上、地上的光池挖出自己的影子（見 vestibule-light.js 的 lightOn）
+    .add('light', 'stage', () => setStageLight(world.stage?.lightOn(player.pos, player.character.dims?.topY), camera))
+    // 牆上的色塊畫：視差跟著鏡頭，站在畫前不動才醒；拍照時醒的程度停著
+    .add('light', 'paintings', () => world.updatePaintings?.(camera.position, photo.active ? null : player.pos, player.focus?.kind === 'painting' ? player.focus.p : null));
+  if (window.__g) window.__g.loop = loop;
+
   // 某一幀出錯只記一次，迴圈照跑。不然 three.js 不會排下一幀，整個畫面停住、也不再送位置，別人會當你離開了
   let crashed = false;
   // 120Hz 的手機每秒畫 120 張，熱了就降頻、解析度被壓低。開場量 30 幀的間隔，100Hz 以上就限在 60（120 → 60）。
@@ -1376,108 +1483,9 @@ async function start() {
   });
   function tick() {
     const dt = Math.min(clock.getDelta(), 0.05);
-    ambience.listen(photo.active ? photo.pos : character.group.position, camera);
-    pad.poll(dt);
-    player.update(dt);
-    entry.tick();
-    tickLessons();
-    photo.update(dt);
-    selfie.update(dt);
-    updateSelfGhost(dt);
-    // 鏡頭這一幀已經擺好：先算好矩陣，後面對話框、隊友記號照這一幀的鏡頭投影。
-    // 不然要等畫的時候才更新，所有頭上的東西都慢一幀，鏡頭一動就抖
-    camera.updateMatrixWorld();
-    beast.update(dt, camera, player.pos);
-    happen.update(dt);
-    acts?.update(dt);
-    animals?.update(dt);
-    visitors?.update(dt);
-    vendors?.update(dt, player, camera);
-    for (const w of walkers) w.update(dt, player);
-    manatee?.update(dt, player.pos.x, player.pos.z, camera);
-    ask?.update();
-    peek?.update();
-    radio?.update();
-    easel?.update();
-    voice?.update();
-    hollow.update(dt, clock.elapsedTime, player.pos, camera);
-    flashFx.update(dt);
-    cues?.update(dt);
-    kao.tick();
-    if (world.camTable) {
-      world.camTable.look(player.focus?.kind === 'cameras' ? player.focus.slot : -1);
-      world.camTable.update(dt);
-      if (ui.panel === ui.cams && !ui.docked && player.focus?.kind === 'cameras') placeCams();
-    }
-    if (ui.panel === ui.ferry && !ui.docked && ferryBoat) placeFerry();
-    const othersMoving = mp ? mp.update(dt, performance.now()) : false;
-    const fading = updateMirrorFade(dt);
-    if (host) {
-      host.group.visible = world.rooms[world.rooms.length - 1].group.visible;
-      if (host.group.visible) host.update(dt, player.pos.x, player.pos.z, camera, visitors.hostFocus());
-      else host.hush();
-    }
-    party?.update(dt);
-    // 手上的燈籠、蠟燭照在腳邊（海市，haze.js 的 handLamps）：自己和在場的人
-    world.handLamps?.update(mp ? [character, ...[...mp.others.values()].map((o) => o.ch)] : [character]);
-    guide.update(dt);   // 黑眼：飛到哪、帶路、別人的黑眼、畫面邊的記號（照這一幀擺好的鏡頭投影）
-    // 正走去渡口找別區的隊友：走到了就打開渡船卡；半路改走別處就算了
-    if (ferryWalk && (player.goal !== ferryWalk.goal || !player.path.length)) {
-      const { ex, to, goal } = ferryWalk;
-      ferryWalk = null;
-      if (player.goal === goal && Math.hypot(player.pos.x - ex.x, player.pos.z - ex.z) < ex.r + 0.8) player.events.onExit(ex, to);
-    }
-    // 正走去樹洞找在演唱會的隊友：走到了就打開接案卡（進場時帶著他那一場）
-    if (hollowWalk && (player.goal !== hollowWalk.goal || !player.path.length)) {
-      const { x, z, goal } = hollowWalk;
-      hollowWalk = null;
-      if (player.goal === goal && Math.hypot(player.pos.x - x, player.pos.z - z) < 2.5) hollow.open();
-    }
-    world.home?.update(dt, player.pos, mp ? mp.others.values() : [], camera.position);
-    if (frame % 30 === 0) checkAway?.();
-    const talking = layoutBubbles() > 0;
-    if (frame % 6 === 0) updateAction();
-    // 照鏡子：鏡前光和暗一階的背景大約半秒換過去
-    const mirrorWant = player.focus?.kind === 'mirror' ? 1 : 0;
-    if (mirrorK !== mirrorWant) {
-      mirrorK = Math.abs(mirrorWant - mirrorK) < 0.01 ? mirrorWant : mirrorK + (mirrorWant - mirrorK) * Math.min(1, dt * 6);
-      setMirrorLight(mirrorK);
-      world.mirrorView?.(mirrorK);
-    }
-    // 攝影模式時，光線、聲音、牆跟著鏡頭走
-    const view = photo.active ? photo.pos : player.pos;
-    if (world.outdoor) {
-      const t = world.outdoor.outdoorness(view.z);
-      applyEnv(t, world.envDim?.(view.x, view.z) ?? 0, mirrorK);
-      ambience.setLevel(t);
-      const meadow = player.room === world.rooms.length - 1 && world.outdoor.inMeadow(player.pos.z);
-      // 地下室算前廳的一部分，走進方廳時報地下室，走回樓上報前廳
-      const spot = meadow ? world.outdoor.placeAt(player.pos.x, player.pos.z) : world.cellarAt?.(player.pos.x, player.pos.z) || null;
-      if (spot !== place && !photo.active) {
-        // 從棧橋盡頭走回草原時不再報一次「原野」
-        const back = place && spot === world.outdoor.meadow;
-        place = spot;
-        const r = spot || world.rooms[player.room].data;
-        if (!back) ui.toast(r.name, r.subtitle);
-      }
-    } else if (world.placeAt && !photo.active) {
-      // 海市的石階和各層街道各有名字，走進去時報一次
-      const spot = world.placeAt(player.pos.x, player.pos.z);
-      if (spot && spot !== place) {
-        place = spot;
-        ui.toast(spot.name, spot.subtitle);
-      }
-    }
-    // 同一張地圖分區調色（zone 的 grade.regions）：照角色站的地方混，攝影模式照鏡頭
-    gradeAt(dt, view.x, view.z);
-    if (photo.active) world.update(clock.elapsedTime, photo.pos, photo.fadeTarget(), camera, true);
-    else world.update(clock.elapsedTime, player.camPos, player.fadeTarget(), camera);
-    // 站進前廳的光池，那盞燈照在自己身上、地上的光池挖出自己的影子（見 vestibule-light.js 的 lightOn）
-    setStageLight(world.stage?.lightOn(player.pos, player.character.dims?.topY), camera);
-    // 牆上的色塊畫：視差跟著鏡頭，站在畫前不動才醒；拍照時醒的程度停著
-    world.updatePaintings?.(camera.position, photo.active ? null : player.pos, player.focus?.kind === 'painting' ? player.focus.p : null);
+    loop.run(dt);
     frame++;
-    const idle = !photo.active && !player.moving && !othersMoving && !fading && !talking && !world.home?.busy && !beast.busy && !happen.busy && !guide.flying && performance.now() - lastInput > 2000;
+    const idle = !loop.busy() && performance.now() - lastInput > 2000;
     if (idle && frame % 2) return;
     // 攝影模式裡不量：景深讓幀變慢，降解析度要重配畫布（取景時頓一下、變糊），電腦版第一步還是把後製關掉而且記住。
     // 一直 pause 著，收起來以後也多等一秒才開始量

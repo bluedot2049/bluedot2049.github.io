@@ -32,6 +32,7 @@ export function guide() {
     { id: 'atrium', name: '大廳', tag: '透明電梯', x: 0, z: ATRIUM.z1 - 6, place: '大廳' },
     { id: 'canteen', name: '食堂', ...mid(CANTEEN), place: '食堂' },
     { id: 'galleria', name: '商店街', tag: '冰淇淋', x: 24, z: 0, place: '商店街' },
+    { id: 'camshop', name: '拍立拿旗艦店', tag: '底片', x: 30.5, z: -7.6, place: '拍立拿旗艦店' },
     { id: 'store', name: '百貨公司', x: STORE.x0 - 2, z: 4, r: 8 },   // 百貨公司裡面進不去、商店街盡頭中間也擋著：站在門口南邊那條走道上
     { id: 'deck', name: '觀星台', tag: '熱茶', x: 9, y: LEVELS[2], z: -11.4, r: 5 },
     { id: 'burger', name: BRAND.name, ...mid(BURGER), place: BRAND.name },
@@ -47,13 +48,13 @@ export function env(world) {
 }
 
 // 海牛人：排隊打飯、逛街、搭手扶梯、坐在控制室、速食店點餐和煎肉排。室內有一點人聲，比海市小很多。偶爾有幾個搭船來逛的人（jinghai-guests.js）。?crowd=0 都不放
-// 點餐（點餐機、取餐口、溫室的海草）、總部裡的小攤（冰淇淋、汽水、熱茶）和片盒回收口（換片盒）當成攤販接上互動鍵，沒有海牛人也照樣能拿
+// 點餐（點餐機、取餐口、溫室的海草）、總部裡的小攤（冰淇淋、汽水、熱茶）和相機店（底片、沖印）當成攤販接上互動鍵，沒有海牛人也照樣能拿
 export function crowd({ scene, world, shadowTex, coarse, params, ambience, player, ui }) {
   const burger = burgerCounter({ shop: world.burger, harvest: world.harvest, player, ui, ambience, board: world.burger.orderBoard });
   const stalls = stallCounter({ player, ui, ambience });
   // 透明電梯：站進車廂按一下就走，另一站門口按「叫電梯」
   const lift = liftCounter({ lift: world.lift, player });
-  // 片盒工廠旁的回收口：拍立拿a500 用空盒加海草換新片盒
+  // 商店街的相機店：底片牆拿底片、沖印櫃台取照片、展示品看看
   const film = filmCounter({ player, ui, ambience });
   world.burger.hear = (kind, vol) => ambience?.voice(kind, vol);
   world.lift.hear = (kind, vol) => ambience?.voice(kind, vol);

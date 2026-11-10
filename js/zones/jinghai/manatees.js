@@ -160,6 +160,16 @@ const OUTFITS = {
     k.cyl(0.235, 0.25, 0.07, '#f6ecd6', 0, 1.25, 0, { sz: DEPTH * 1.1 }, 10);
     k.box(0.3, 0.016, 0.16, '#f6ecd6', 0, 1.22, 0.25 * DEPTH * 1.1 + 0.04);
   },
+  // 相機店「拍立拿旗艦店」的店員（jinghai-camshop.js）：奶油白上衣、胸前一道片盒紅、霧銀長褲、紅帶子的識別證
+  pola(k) {
+    bean(k, SKIN);
+    band(k, 0.15, 0.42, 0.012, '#8b939b');
+    band(k, 0.4, NECK, 0.02, '#f3f0e8');
+    band(k, 0.52, 0.57, 0.024, '#b8432f');
+    limbs(k, '#f3f0e8', '#8b939b');
+    collar(k, '#bcc3ca');
+    badge(k, '#b8432f', '#b8432f');
+  },
   // 便服：芥末黃毛背心配白襯衫
   vest(k) {
     bean(k, SKIN);
