@@ -5,7 +5,7 @@
 // Q 開關表情盤（kaopanel.js，開著時滑鼠放出來用點的，照樣能走），擺著時按住 Q 是撐；Esc 放開滑鼠時跳出暫停選單（沒鎖滑鼠、什麼都沒開著時按 Esc 也會跳）：
 // 繼續、滑鼠靈敏度和上下反轉、越肩的視野廣度和魚眼、介面大小、切走時繼續播聲音、按鍵一覽。Esc 也收換裝鏡子、作品資訊、看畫的大圖。
 // （V 越肩、E 互動、中鍵標記在 player.js；Z 攝影、Q 閃光、~ 日期、F 直橫、C 看鏡、X 收起介面在 photo.js；T 說話、G 標記、X 吹哨在 party.js；1–5 表情在 main.js；L 表情看鏡在這裡，交給 kaopanel.js）
-import { setUiSize, uiSize } from './ui.js';
+import { setUiSize, uiSize, setSkin, skin } from './ui.js';
 import { sfx, thing } from '../audio/ui-voices.js';
 import { emoteSVG } from '../social/emotes.js';
 import { setPref } from '../save/prefs.js';
@@ -141,6 +141,7 @@ export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote,
   const show = () => {
     if (!menu.classList.contains('show')) sfx('down');
     shownAt = performance.now();
+    menu.querySelector('.skin select').value = skin();
     menu.classList.add('show');
   };
   // 換鍵卡（keymap.js）：從暫停選單的「鍵盤滑鼠」進去，收起來回到暫停選單。要掛在下面那些 Esc 之前，它先吃掉自己的 Esc
@@ -221,6 +222,11 @@ export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote,
   showSize();
   size.addEventListener('input', showSize);
   size.addEventListener('change', () => setUiSize(+size.value));
+
+  // 介面樣式（試做）：原本、四色，選了馬上換，選單本身也跟著換
+  const skinSel = menu.querySelector('.skin select');
+  skinSel.value = skin();
+  skinSel.addEventListener('change', () => setSkin(skinSel.value));
 
   // 切到別的分頁、視窗被整個蓋住時聲音要不要繼續（ambience.js 的 background）
   const away = menu.querySelector('.away input');

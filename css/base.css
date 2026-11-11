@@ -41,7 +41,7 @@ body.desk :is(#top-btns, #action-btn, #hint, #toast, #wheel, #kaopanel, .snapsav
   #pack-card, #vol, #cams, #ferry, #eye-card, .studio-card, #chat, #pause, #padmap, #guide, #ask, #peek, #radio, #easel, #hollow, #sheet, #dress,
   #ph-bar, #ph-shoot, #ph-alt, #ph-exit, #ph-rec, #ph-zoom,
   #viewer-close, #album-view .av-close, #album-view .av-step, #album-view .av-bar,
-  #ph-result > :not(#ph-media), #press .press-card, #press .press-acts, #list) { zoom: var(--ui); }
+  #ph-result > :not(#ph-media), #press .press-card, #press .press-acts, #lot .lot-card, #shop, #list) { zoom: var(--ui); }
 
 /* manipulation：點兩下不會放大整頁（iOS 不理 viewport 的禁止縮放） */
 * { box-sizing: border-box; touch-action: manipulation; }

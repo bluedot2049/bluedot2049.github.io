@@ -9,7 +9,7 @@
 // 讀照片哪裡都能讀（鏡中的照片、海市的明信片）；存檔只有一個地方：鏡子前請眼睛拍一張。明信片只印衣服和配件，讀了穿在自己身上（更早寄給自己的那種照樣還原）。
 // 鈕右下的封蠟是魔法印泥：有照片交給師傅、還沒去拿，或拿回來還沒看過時亮著。
 // 存檔有沒有過期只寫在卡片裡，不亮、不催。上次存了什麼記在這台裝置上（packed），不放進存檔。
-import { decodeSave, decodeLook, tryOn, codeFrom, hasProgress, restoreSave, attachFaces } from './savecode.js';
+import { readCode, openFace, tryOn, codeFrom, hasProgress, restoreSave, attachOldFaces, oldOneFace } from './savecode.js';
 import { readPostcard, joinFace } from './postcard.js';
 import { readMirrorCard } from './mirrorcard.js';
 import { readEyePost } from './eyepost.js';
@@ -23,6 +23,7 @@ import { album, canPick, canShare, discard, folderName, hourMark, KINDS, LABS, l
 import { pref, setPref } from './prefs.js';
 import { developing, peek, ripen } from '../camera/instant.js';
 import { is } from '../controls/keymap.js';
+import { coins, MAX, UNIT, MEASURE, takeFresh, HUES } from './purse.js';
 
 const ICONS = {
   orb: '<circle cx="12" cy="12" r="7.5"/><path d="M7.5 12c2.5-3 6.5-3 9 0-2.5 3-6.5 3-9 0z"/><circle cx="12" cy="12" r="1.2"/><path d="M18 6.5c1.5-1 2.8-1 3.5-.3"/>',
@@ -42,6 +43,18 @@ function loadMark() {
 export function markPacked(k = savePrint(), t = Date.now()) {
   setPref('packed', { k, t });
   dispatchEvent(new Event('packed'));
+}
+
+// 錢袋（purse.js）：十顆小晶（雙尖寶石套金箍，顏色照位置輪 HUES），花掉的只剩淡淡的形。不寫數字。
+// 子夜剛補滿、還沒看過的那幾顆，打開時一顆接一顆亮起來（像潮水漲上來，.tide）。
+// 有隊友、身上有晶時變成鈕，點一下丟一顆在腳邊給隊友撿（scene/coins.js 的 dropMine）
+function purseRow(drop, fresh) {
+  const n = coins(), from = n - fresh;
+  const gems = Array.from({ length: MAX }, (_, i) => (i < n ? `<i class="on${i >= from ? ' tide' : ''}" style="--k:${i - from};--c:${HUES[i % HUES.length]}"></i>` : '<i></i>')).join('');
+  const label = `錢袋 ${n}／${MAX} ${MEASURE}${UNIT}`;
+  return drop
+    ? `<button type="button" class="purse" data-act="drop" aria-label="${label}　丟一${MEASURE}給隊友">${gems}<span>丟一${MEASURE}</span></button>`
+    : `<span class="purse" role="img" aria-label="${label}" title="${label}">${gems}</span>`;
 }
 
 const when = (t) => {
@@ -269,7 +282,10 @@ export class Pack {
       : !m ? '還沒存過' : this.stale ? `上次存檔 ${when(m.t)}・之後有變動` : `存好了・${when(m.t)}`;
     const NAMES = { album: '相簿', save: '存讀檔' };
     const tabs = `<nav class="pack-tabs">${this.pages.map((p) => `<button data-page="${p}" class="${page === p ? 'on' : ''}">${NAMES[p]}</button>`).join('')}</nav>`;
-    this.card.innerHTML = `<div class="pack-bar"><b class="seal-wax${this.ready ? ' lit' : ''}"></b><div><h3>行囊</h3><p class="pack-state">${state}</p></div>
+    // 子夜補進來還沒看過的：這一排亮起來，一顆一聲（scene/coins.js 聽 cointide，時間對 panels.css 的 purse-tide）
+    const fresh = this.card.hidden ? 0 : takeFresh();
+    if (fresh) dispatchEvent(new CustomEvent('cointide', { detail: { n: fresh } }));
+    this.card.innerHTML = `<div class="pack-bar"><b class="seal-wax${this.ready ? ' lit' : ''}"></b><div><h3>行囊${purseRow(!!this.events.canDrop?.(), fresh)}</h3><p class="pack-state">${state}</p></div>
         <button class="icon-btn round close" data-act="close" aria-label="收起"><svg><use href="#i-close"/></svg></button></div>`
       + tabs + (page === 'album' ? this.albumPage() : this.savePage(mirror))
       + '<i class="pack-grip" aria-hidden="true"></i>';
@@ -670,6 +686,7 @@ export class Pack {
     if (b.classList.contains('ph-cell')) return this.tapCell(b, e);
     switch (b.dataset.act) {
       case 'close': this.close(); return;
+      case 'drop': if (this.events.onDrop?.()) this.render(); return;
       case 'all': this.chooseAll(); return;
       case 'keep': this.keep(); return;
       case 'share': this.share(); return;
@@ -728,9 +745,9 @@ export class Pack {
       const face = (e) => (r.faces[e] ? encodeFace(r.faces[e]) : '');
       // 更早寄給自己的：幾條底片邊接起來是一張臉；再更早的一條一張（下緣身上那套，上、左、右衣櫃三套）
       const joined = async () => { const c = await joinFace(r.strips); return c ? encodeFace(c) : ''; };
-      const sv = code && decodeSave(code), L = code && !sv && decodeLook(code);
+      const got = code ? readCode(code) : null, sv = got?.save && (await openFace(got.save)), L = got?.look;
       if (sv) {
-        attachFaces(sv, sv.wears ? [await joined()] : ['bottom', 'top', 'left', 'right'].map(face));
+        attachOldFaces(sv, oldOneFace(sv) ? [await joined()] : ['bottom', 'top', 'left', 'right'].map(face));
         if (hasProgress() && !confirm('這台裝置已有存檔。用這張明信片覆蓋？')) return null;
         this.restore(sv, true);
         return 'save';

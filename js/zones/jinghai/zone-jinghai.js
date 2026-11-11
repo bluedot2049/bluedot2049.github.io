@@ -42,6 +42,11 @@ export function guide() {
   ];
 }
 
+// 事件（core/happen.js 排時間、評分）：東南邊天際港的火箭發射、貨船起降（jinghai-port.js），大家看到同一枚。main.js 在 crowd 之後呼叫
+export function happen({ world }) {
+  return world.port.events;
+}
+
 // 一組光線；太陽固定不動，走進室內時 world.update 自己把天光換暖
 export function env(world) {
   return [world.env];
@@ -58,6 +63,7 @@ export function crowd({ scene, world, shadowTex, coarse, params, ambience, playe
   const film = filmCounter({ player, ui, ambience });
   world.burger.hear = (kind, vol) => ambience?.voice(kind, vol);
   world.lift.hear = (kind, vol) => ambience?.voice(kind, vol);
+  world.lift.rider = player;   // 別人叫走電梯時，站在門檻上的被推到門裡或門外
   // 幾邊一起當一個攤販：離得近的那個
   const vendors = {
     list: [],

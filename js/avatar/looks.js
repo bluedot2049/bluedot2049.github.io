@@ -4,6 +4,7 @@
 // 存在瀏覽器裡，也透過在線名單傳給別人，所以讀進來的資料一律先過 sanitizeLook。
 // 清單只能往後加，不要改代號或調換顏色的順序，舊存檔和別人的畫面才對得上。
 import { getSave, putSave } from '../save/progress.js';
+import { WARES } from './wares.js';
 
 export const ROBES = [0x2f5d62, 0x7a3b2e, 0x3d5a2a, 0x5b3f78, 0x8a6a2f, 0x2a3f6b, 0x6b2a4a, 0x4a4a52];
 export const HAT_COLORS = [0x4a2f66, 0x2c3e50, 0x6b3a1f, 0x1f5a4a, 0x2b1f3d, 0x7a2a3a, 0x2f4a3a, 0x8a2a2a];
@@ -23,41 +24,57 @@ export const CLOTH = [
 const WHITE = 16, BOOT = 18;
 
 // 種族。head 是 heads.js 的造型；own 表示頭上本來就有五官，選了「原本」就不另外貼
-// ey 眼睛高度、ex 眼睛離中線多遠、fs 五官大小，都從脖子算；top 帽子戴多高、hs 帽子大小；skin 預設膚色
+// ey 眼睛高度、ex 眼睛離中線多遠、fs 五官大小，都從脖子算；md 嘴在眼睛下面多遠（沒寫 0.11，海牛的嘴在嘴邊肉底下）；top 帽子戴多高、hs 帽子大小；skin 預設膚色
 // hood: false 頭比連身裝的頭套大，不戴頭套；helmet: false 太空衣的玻璃罩罩不住
-// hair 有頭髮；beard 斑紋選「原本」或「大鬍子」時長矮人的大鬍子（頭髮的顏色）
+// hood: [中心高, 半徑] 頭套照這顆頭另外量（頭長、頭頂不在帽子戴的高度）；helmet: [中心高, 半徑, 往前多少] 玻璃罩另外量（耳朵、鼻子長）。沒寫就照 top、hs 算
+// knight: [中心高, 半徑, 往前多少] 騎士頭盔（全罩）另外量：嘴、角、方頭的角穿出來的、眼睛長在外面的（蘑菇傘下、錘頭兩端）。沒寫照 helmet，再沒有照 top、hs 算
+// tilt 帽子往後仰多少（弧度）、hz 帽子往前移多少：眼睛長在頭頂（青蛙）帽子往後戴才不會蓋住，頭的中心不在脖子正上方（錘頭）跟著移
+// flat: true 頭的底是平的、直接坐在肩上（紙箱、機器人、電視）：圍巾、毛巾改薄的一圈圍在底下，外套的帽兜垂到背上，不然會從箱子的面穿出來
+// hair 有頭髮（髮型照人的頭做；hx 頭比人寬幾倍，頭髮橫向跟著放寬）；beard 斑紋選「原本」或「大鬍子」時長矮人的大鬍子（頭髮的顏色）
 // body 體型的倍數（H 身高、W 胖瘦、hs 頭，乘在滑桿上；leg 腿長：屁股以下壓短，上半身不變，見 character.js 的 shorten）
 export const RACES = [
   { id: 'human', name: '人', head: 'human', ey: 0.2, ex: 0.07, top: 0.33, hs: 1, skin: 0, hair: true },
-  { id: 'cat', name: '貓', head: 'cat', own: true, ey: 0.23, ex: 0.08, top: 0.33, hs: 1, skin: 7 },
-  { id: 'dog', name: '狗', head: 'dog', own: true, ey: 0.25, ex: 0.075, top: 0.34, hs: 1, skin: 2 },
-  { id: 'bull', name: '牛', head: 'bull', own: true, ey: 0.26, ex: 0.11, top: 0.35, hs: 1.1, skin: 3, helmet: false },
+  { id: 'cat', name: '貓', head: 'cat', own: true, ey: 0.23, ex: 0.08, top: 0.33, hs: 1, skin: 7, hood: [0.225, 0.28] },
+  { id: 'dog', name: '狗', head: 'dog', own: true, ey: 0.25, ex: 0.075, top: 0.34, hs: 1, skin: 2, helmet: [0.21, 0.33, 0.03], knight: [0.21, 0.35, 0.07] },
+  { id: 'bull', name: '牛', head: 'bull', own: true, ey: 0.26, ex: 0.11, top: 0.35, hs: 1.1, skin: 3, helmet: false, knight: [0.23, 0.36, 0.06] },
   { id: 'goat', name: '羊', head: 'goat', own: true, ey: 0.24, ex: 0.075, top: 0.37, hs: 1, skin: 4 },
-  { id: 'fox', name: '狐狸', head: 'fox', own: true, ey: 0.25, ex: 0.075, top: 0.33, hs: 0.95, skin: 7 },
-  { id: 'bear', name: '熊', head: 'bear', own: true, ey: 0.26, ex: 0.075, top: 0.35, hs: 1.05, skin: 3 },
-  { id: 'rabbit', name: '兔子', head: 'rabbit', own: true, ey: 0.24, ex: 0.085, top: 0.33, hs: 0.95, skin: 4 },
-  { id: 'frog', name: '青蛙', head: 'frog', own: true, ey: 0.3, ex: 0.12, top: 0.26, hs: 1.15, skin: 9 },
-  { id: 'lizard', name: '蜥蜴', head: 'lizard', own: true, ey: 0.26, ex: 0.11, top: 0.31, hs: 0.95, skin: 10 },
-  { id: 'mushroom', name: '蘑菇', head: 'mushroom', own: true, ey: 0.18, ex: 0.055, top: 0.47, hs: 0.8, skin: 14, hood: false, helmet: false },
+  { id: 'fox', name: '狐狸', head: 'fox', own: true, ey: 0.25, ex: 0.075, top: 0.33, hs: 0.95, skin: 7, helmet: [0.26, 0.33] },
+  { id: 'bear', name: '熊', head: 'bear', own: true, ey: 0.26, ex: 0.075, top: 0.35, hs: 1.05, skin: 3, hood: [0.23, 0.295] },
+  { id: 'rabbit', name: '兔子', head: 'rabbit', own: true, ey: 0.24, ex: 0.085, top: 0.33, hs: 0.95, skin: 4, helmet: false },
+  { id: 'frog', name: '青蛙', head: 'frog', own: true, ey: 0.3, ex: 0.12, top: 0.29, hs: 1.15, skin: 9, tilt: 0.35, hz: -0.01, hood: [0.15, 0.3], helmet: [0.14, 0.357] },
+  { id: 'lizard', name: '蜥蜴', head: 'lizard', own: true, ey: 0.26, ex: 0.11, top: 0.31, hs: 0.95, skin: 10, helmet: [0.19, 0.31, 0.04] },
+  { id: 'mushroom', name: '蘑菇', head: 'mushroom', own: true, ey: 0.18, ex: 0.055, top: 0.47, hs: 0.8, skin: 14, hood: false, helmet: false, knight: [0.3, 0.46, 0] },
   { id: 'pigeon', name: '鴿子', head: 'pigeon', own: true, ey: 0.245, ex: 0.13, top: 0.32, hs: 0.95, skin: 5 },
-  { id: 'bigeye', name: '大眼睛', head: 'bigeye', own: true, ey: 0.24, ex: 0.1, top: 0.36, hs: 1, skin: 9 },
+  { id: 'bigeye', name: '大眼睛', head: 'bigeye', own: true, ey: 0.24, ex: 0.1, top: 0.36, hs: 1, skin: 9, hood: [0.24, 0.285] },
   { id: 'tails', name: '垂鬚', head: 'tails', own: true, ey: 0.22, ex: 0.075, top: 0.34, hs: 0.95, skin: 11 },
-  { id: 'hammer', name: '錘頭', head: 'hammer', own: true, ey: 0.37, ex: 0.24, top: 0.39, hs: 0.85, skin: 2, hood: false, helmet: false },
-  { id: 'squid', name: '鬚臉', head: 'squid', own: true, ey: 0.25, ex: 0.15, top: 0.4, hs: 1, skin: 12 },
+  { id: 'hammer', name: '錘頭', head: 'hammer', own: true, ey: 0.37, ex: 0.24, top: 0.43, hz: 0.05, hs: 0.85, skin: 2, hood: false, helmet: false, knight: [0.36, 0.44, 0.05] },
+  { id: 'squid', name: '鬚臉', head: 'squid', own: true, ey: 0.25, ex: 0.15, top: 0.4, hs: 1, skin: 12, hood: [0.24, 0.265] },
   { id: 'alien', name: '小灰人', head: 'alien', own: true, ey: 0.22, ex: 0.085, top: 0.44, hs: 1.05, skin: 5, odd: true },
-  { id: 'egg', name: '蛋頭', head: 'egg', ey: 0.29, ex: 0.07, top: 0.47, hs: 0.9, odd: true },
-  { id: 'toast', name: '吐司', head: 'toast', ey: 0.27, ex: 0.08, top: 0.44, hs: 1, odd: true, hood: false },
+  { id: 'egg', name: '蛋頭', head: 'egg', ey: 0.29, ex: 0.07, top: 0.47, hs: 0.9, odd: true, hood: [0.27, 0.27] },
+  { id: 'toast', name: '吐司', head: 'toast', ey: 0.27, ex: 0.08, top: 0.44, hs: 1, odd: true, hood: false, helmet: [0.24, 0.33] },
   { id: 'boba', name: '珍奶', head: 'boba', ey: 0.27, ex: 0.075, top: 0.44, hs: 1, odd: true },
-  { id: 'onigiri', name: '飯糰', head: 'onigiri', ey: 0.27, ex: 0.055, fs: 0.8, top: 0.38, hs: 0.8, odd: true, hood: false },
-  { id: 'potato', name: '馬鈴薯', head: 'potato', ey: 0.24, ex: 0.07, top: 0.38, hs: 1, odd: true },
-  { id: 'tv', name: '電視', head: 'tv', ey: 0.28, ex: 0.08, top: 0.42, hs: 1.15, ink: '#b8f0d8', odd: true, hood: false },
-  { id: 'box', name: '紙箱', head: 'box', ey: 0.25, ex: 0.09, top: 0.4, hs: 1.2, odd: true, hood: false, helmet: false },
-  { id: 'robot', name: '機器人', head: 'robot', ey: 0.23, ex: 0.08, top: 0.36, hs: 1.05, odd: true, hood: false },
-  { id: 'snowman', name: '雪人', head: 'snowman', ey: 0.25, ex: 0.07, top: 0.36, hs: 1, odd: true },
+  { id: 'onigiri', name: '飯糰', head: 'onigiri', ey: 0.27, ex: 0.055, fs: 0.8, top: 0.38, hs: 0.8, odd: true, hood: false, helmet: [0.2, 0.3] },
+  { id: 'potato', name: '馬鈴薯', head: 'potato', ey: 0.24, ex: 0.07, top: 0.38, hs: 1, odd: true, hood: [0.24, 0.265] },
+  { id: 'tv', name: '電視', head: 'tv', ey: 0.28, ex: 0.08, top: 0.42, hs: 1.15, ink: '#b8f0d8', odd: true, hood: false, helmet: false, flat: true, knight: [0.28, 0.4, 0] },
+  { id: 'box', name: '紙箱', head: 'box', ey: 0.25, ex: 0.09, top: 0.4, hs: 1.2, odd: true, hood: false, helmet: false, flat: true, knight: [0.26, 0.4, 0] },
+  { id: 'robot', name: '機器人', head: 'robot', ey: 0.23, ex: 0.08, top: 0.36, hs: 1.05, odd: true, hood: false, helmet: [0.24, 0.36], flat: true },
+  { id: 'snowman', name: '雪人', head: 'snowman', ey: 0.25, ex: 0.07, top: 0.36, hs: 1, odd: true, helmet: [0.24, 0.34, 0.06] },
   // 中古奇幻的兩族：矮人短腿、矮壯、頭大、大鬍子；精靈高瘦、頭小、尖耳朵
-  { id: 'dwarf', name: '矮人', head: 'dwarf', ey: 0.22, ex: 0.075, top: 0.33, hs: 1.08, skin: 1, hair: true, beard: true, helmet: false, body: { H: 0.92, W: 1.25, hs: 1.15, leg: 0.55 } },
+  { id: 'dwarf', name: '矮人', head: 'dwarf', ey: 0.22, ex: 0.075, top: 0.33, hs: 1.08, skin: 1, hair: true, hx: 1.1, beard: true, helmet: false, body: { H: 0.92, W: 1.25, hs: 1.15, leg: 0.55 } },
   { id: 'elf', name: '精靈', head: 'elf', ey: 0.215, ex: 0.065, top: 0.35, hs: 1, skin: 4, hair: true, helmet: false, body: { H: 1.1, W: 0.85, hs: 0.94 } },
+  // 2026-11-11 加的。home 寫了的是住在那一區的正經種族：路人不抽（crowdRaces），之後那一區的住民才用
+  { id: 'teaegg', name: '茶葉蛋', head: 'teaegg', ey: 0.29, ex: 0.07, top: 0.47, hs: 0.9, odd: true, hood: [0.27, 0.27] },
+  { id: 'pineapple', name: '鳳梨', head: 'pineapple', ey: 0.23, ex: 0.075, top: 0.42, hs: 1, odd: true, hood: [0.22, 0.27], helmet: false },
+  { id: 'xiaolongbao', name: '小籠包', head: 'xiaolongbao', ey: 0.19, ex: 0.075, md: 0.095, fs: 0.8, top: 0.34, hs: 1.05, odd: true, hood: [0.16, 0.26], helmet: [0.17, 0.31] },
+  { id: 'cactus', name: '仙人掌', head: 'cactus', ey: 0.22, ex: 0.06, fs: 0.8, top: 0.4, hs: 0.85, odd: true, hood: false, helmet: false },
+  { id: 'ricecooker', name: '電鍋', head: 'ricecooker', ey: 0.18, ex: 0.08, top: 0.33, hs: 1.15, odd: true, hood: false, helmet: false, flat: true },
+  { id: 'bulb', name: '燈泡', head: 'bulb', ey: 0.32, ex: 0.07, top: 0.5, hs: 0.9, odd: true, hood: false, helmet: false },
+  { id: 'owl', name: '貓頭鷹', head: 'owl', own: true, ey: 0.235, ex: 0.078, top: 0.34, hs: 1, skin: 2, hood: [0.22, 0.27], home: 'heilin' },
+  { id: 'moss', name: '苔人', head: 'moss', ey: 0.22, ex: 0.075, top: 0.4, hs: 1.05, skin: 5, hood: [0.22, 0.28], home: 'heilin' },
+  { id: 'manatee', name: '海牛', head: 'manatee', own: true, ey: 0.26, ex: 0.1, md: 0.19, top: 0.42, hs: 1.15, skin: 5, hood: [0.21, 0.3], helmet: [0.21, 0.36, 0.03], body: { W: 1.2 }, home: 'jinghai' },
 ];
+// 路人、旅人、演唱會的人群抽種族用的：住在某一區的正經種族不在外面亂逛
+export const crowdRaces = () => RACES.filter((r) => !r.home);
 const RACE_BY_ID = new Map(RACES.map((r) => [r.id, r]));
 export const raceOf = (L) => RACE_BY_ID.get(L.race) || RACES[0];
 
@@ -70,7 +87,7 @@ export const OPTIONS = {
   mark: [['base', '原本'], ['none', '沒有'], ['blush', '腮紅'], ['stache', '八字鬍'], ['beard', '大鬍子'], ['mole', '痣'], ['freckle', '雀斑'], ['bandaid', 'OK 繃']],
   glasses: [['none', '沒有'], ['round', '圓眼鏡'], ['shades', '墨鏡'], ['mono', '單片'], ['groucho', '搞笑眼鏡'], ['3d', '3D 眼鏡']],
   hair: [['short', '短髮'], ['bald', '光頭'], ['comb', '地中海'], ['afro', '爆炸頭'], ['spiky', '刺蝟'], ['long', '長髮'], ['buns', '包包頭']],
-  hat: [['wizard', '尖帽'], ['none', '不戴'], ['crown', '皇冠'], ['propeller', '竹蜻蜓'], ['chef', '廚師帽'], ['straw', '斗笠'], ['cone', '三角錐'], ['party', '派對帽'], ['sprout', '豆芽']],
+  hat: [['wizard', '尖帽'], ['none', '不戴'], ['crown', '皇冠'], ['propeller', '竹蜻蜓'], ['chef', '廚師帽'], ['straw', '斗笠'], ['cone', '三角錐'], ['party', '派對帽'], ['sprout', '豆芽'], ['knight', '騎士頭盔']],
   // 衣服分層：上衣、下身、外套、鞋子各選各的；連身裝穿上去會蓋掉上衣、下身和外套
   top: [['robe', '袍子'], ['shirt', '襯衫'], ['tee', 'T 恤'], ['hoodie', '帽 T'], ['sweater', '毛衣'], ['hawaii', '夏威夷衫'], ['tank', '吊嘎'], ['pe', '運動服'], ['armor', '盔甲'], ['smock', '畫家罩衫']],
   topPat: [['plain', '素面'], ['stripe', '條紋'], ['dot', '點點'], ['band', '一條線']],
@@ -80,7 +97,7 @@ export const OPTIONS = {
   shoes: [['boots', '靴子'], ['bare', '赤腳'], ['sneakers', '運動鞋'], ['slippers', '藍白拖'], ['rainboots', '雨鞋'], ['heels', '高跟鞋'], ['ballet', '芭蕾舞鞋'], ['clown', '小丑鞋'], ['geta', '木屐'], ['odd', '只有一隻']],
   one: [['none', '不穿'], ['dino', '恐龍裝'], ['panda', '熊貓裝'], ['banana', '香蕉裝'], ['astronaut', '太空衣'], ['yukata', '浴衣']],
   neck: [['scarf', '圍巾'], ['none', '沒有'], ['tie', '領帶'], ['bowtie', '領結'], ['necklace', '項鍊'], ['lei', '花環'], ['bell', '鈴鐺'], ['towel', '毛巾']],
-  back: [['pouch', '腰包'], ['none', '沒有'], ['backpack', '背包'], ['schoolbag', '書包'], ['satchel', '郵差包'], ['guitar', '吉他'], ['sword', '大劍'], ['quiver', '箭筒'], ['wingA', '天使翅膀'], ['wingB', '蝙蝠翅膀'], ['wingC', '蝴蝶翅膀'], ['tail', '尾巴'], ['shell', '龜殼'], ['shield', '圓盾'], ['kite', '騎士盾'], ['bowpack', '弓和箭筒']],
+  back: [['pouch', '腰包'], ['none', '沒有'], ['backpack', '背包'], ['schoolbag', '書包'], ['satchel', '郵差包'], ['guitar', '吉他'], ['sword', '大劍'], ['quiver', '箭筒'], ['wingA', '天使翅膀'], ['wingB', '蝙蝠翅膀'], ['wingC', '蝴蝶翅膀'], ['tail', '尾巴'], ['shell', '龜殼'], ['shield', '圓盾'], ['kite', '騎士盾'], ['bowpack', '弓和箭筒'], ['fishpouch', '魚皮袋'], ['gembox', '零錢盒'], ['katana', '武士刀']],
   // 右手拿的東西。左手留著拿點心，之後探索世界撿東西也用左手
   hand: [['none', '空手'], ['staff', '法杖'], ['umbrella', '雨傘'], ['balloon', '氣球'], ['book', '魔法書'], ['flower', '花'], ['boba', '珍奶'], ['chicken', '雞排'], ['selfie', '自拍棒'], ['spatula', '鍋鏟'],
     ['lantern', '燈籠'], ['candle', '蠟燭'], ['fish', '魚'], ['brush', '大畫筆'], ['flask', '燒瓶'], ['frame', '畫框'], ['scope', '望遠鏡'], ['baguette', '法國麵包'], ['teacup', '茶杯'], ['squid', '烤魷魚'],
@@ -93,33 +110,42 @@ const COUNTS = {
   topC: CLOTH.length, topC2: CLOTH.length, botC: CLOTH.length, botC2: CLOTH.length, outC: CLOTH.length, outC2: CLOTH.length,
   oneC: CLOTH.length, oneC2: CLOTH.length, shoeC: CLOTH.length, neckC: CLOTH.length, backC: CLOTH.length, handC: CLOTH.length,
 };
+// 存色號的欄位（save/ids.js 排存檔的欄位表用）
+export const COLOR_FIELDS = Object.keys(COUNTS);
 
-// ---------- 海市攤販送的東西 ----------
+// ---------- 海市攤販賣的東西（以前是送的，2026-11-11 起全部標價） ----------
 // 不在這張表裡的，鏡子裡一開始就有。表裡的要去海市跟那一攤聊天才拿得到，記在這台裝置的瀏覽器裡
-// 沒寫條件的，聊天就送；need：右手要拿著那樣東西來換；night：要在街上冷清的時候；again：第一次只記下來，隔天再來才送。ask 是還沒滿足時攤販講的話
+// line：買到（或換到）時攤販講的話，是賣出去的口氣、不寫「送你」「給你」。price：賣幾顆晶（save/purse.js）。常駐的東西都標價：日用配件 4、工藝配件 6、單件衣服 6–8、整套 10。聊天先報價（offer 是報價時叫它什麼），再按一次（互動鍵變「買」）才付。
+// need：右手拿著那樣東西來，就用換的、不用付（以物易物是另一種付法）；night：要在街上冷清的時候；again：第一次只記下來，隔天再來才賣。
+// ask 是時間條件還沒到、或拿東西換的提示時攤販講的話。沒寫 price 的（hint 那幾項）是任務、一幕劇給的，不賣
 // items 的第一格是 OPTIONS 的類別，或 'race'（種族，RACES 的 id）。
-// 不是海市攤販送的（任務、一幕劇演完、別區）也寫在這張表：寫 hint（衣櫃點上鎖那格時說去哪拿，例如「在月球，幫海牛修好望遠鏡」），
+// 不是海市攤販賣的（任務、一幕劇演完、別區）也寫在這張表：寫 hint（衣櫃點上鎖那格時說去哪拿，例如「在月球，幫海牛修好望遠鏡」），
 // 不算進衣櫃的海市印章；id 別跟攤販的 id 重複（vendors.js 照攤販 id 找）。做完那件事時呼叫 unlock(GIFTS.那一項.items)。
 // 存檔照這張表展開的順序一件一個位元：新的一項、一項裡多送的東西都只能加在最後面，加完跑 tools/save-order.mjs。
 // 原本就有的東西之後才上鎖也可以：身上、衣櫃裡已經用著的算拿到（progress.js 的 ownWorn），舊照片讀回來不會被脫掉
 export const GIFTS = {
-  tailor: { who: '裁縫', line: '這幾件你拿去穿穿看', items: [['one', 'yukata'], ['outer', 'haori'], ['bottom', 'hakama'], ['shoes', 'geta']] },
-  junk: { who: '舊貨攤', line: '嘰咕 這兩個送你 不能退喔', items: [['back', 'shell'], ['shoes', 'odd']] },
-  herbs: { who: '藥草攤', line: '呱 這件蓑衣給你 下雨穿', items: [['outer', 'mino']], need: ['hand', 'fish'], ask: '呱 手上拿條魚來 我跟你換' },
-  pigment: { who: '顏料攤', line: '這件沾到顏料了 送你啦', items: [['top', 'smock'], ['hand', 'brush']], need: ['hand', 'flask'], ask: '手上拿個玻璃瓶來 我拿顏料跟你換' },
-  lanterns: { who: '燈籠師傅', line: '拿一盞走 晚上比較好走', items: [['hand', 'lantern']], need: ['hand', 'candle'], ask: '手上拿根蠟燭來 我換你一盞' },
-  candle: { who: '蠟燭店', line: '這根送你 小心火', items: [['hand', 'candle']], need: ['hand', 'teacup'], ask: '手上有杯熱茶的話 我就換你一根' },
-  fish: { who: '魚販', line: '這隻送你 拿好 會滑', items: [['hand', 'fish']] },
-  glass: { who: '玻璃師傅', line: '吹歪的 拿去玩', items: [['hand', 'flask']], night: true, ask: '爐子現在不旺 晚上人少再來' },
-  frames: { who: '木工', line: '哞 這個框多做了一個', items: [['hand', 'frame']], need: ['hand', 'brush'], ask: '哞 拿支畫筆來 我就多做一個框' },
-  maps: { who: '航海圖店', line: '咕咕 望遠鏡借你 不用還', items: [['hand', 'scope']], again: true, ask: '咕咕 我找找看 改天再來' },
-  bakery: { who: '麵包師傅', line: '這條烤太長了 拿去', items: [['hand', 'baguette']] },
-  tea: { who: '茶攤', line: '杯子帶走沒關係', items: [['hand', 'teacup']] },
-  squid: { who: '烤魷魚', line: '這串請你', items: [['hand', 'squid']] },
+  tailor: { who: '裁縫', line: '穿穿看 不合身再拿來改', items: [['one', 'yukata'], ['outer', 'haori'], ['bottom', 'hakama'], ['shoes', 'geta']], price: 10, offer: '這一整套' },
+  junk: { who: '舊貨攤', line: '嘰咕 賣出去了 不能退喔', items: [['back', 'shell'], ['shoes', 'odd']], price: 8, offer: '嘰咕 龜殼加怪鞋' },
+  herbs: { who: '藥草攤', line: '呱 蓑衣收好 下雨穿', items: [['outer', 'mino']], need: ['hand', 'fish'], ask: '呱 手上拿條魚來 我跟你換', price: 7, offer: '呱 蓑衣' },
+  pigment: { who: '顏料攤', line: '罩衫沾過顏料 洗不掉的', items: [['top', 'smock'], ['hand', 'brush']], need: ['hand', 'flask'], ask: '手上拿個玻璃瓶來 我拿顏料跟你換', price: 8, offer: '罩衫連畫筆' },
+  lanterns: { who: '燈籠師傅', line: '提好 晚上比較好走', items: [['hand', 'lantern']], need: ['hand', 'candle'], ask: '手上拿根蠟燭來 我換你一盞', price: 6, offer: '一盞燈籠' },
+  candle: { who: '蠟燭店', line: '點的時候 小心火', items: [['hand', 'candle']], need: ['hand', 'teacup'], ask: '手上有杯熱茶的話 我就換你一根', price: 4, offer: '一根蠟燭' },
+  fish: { who: '魚販', line: '拿好 會滑', items: [['hand', 'fish']], price: 4, offer: '一條魚' },
+  glass: { who: '玻璃師傅', line: '吹歪了一點 一樣裝得了東西', items: [['hand', 'flask']], night: true, ask: '爐子現在不旺 晚上人少再來', price: 6, offer: '吹歪的瓶子' },
+  frames: { who: '木工', line: '哞 框收好 別壓到角', items: [['hand', 'frame']], need: ['hand', 'brush'], ask: '哞 拿支畫筆來 我就多做一個框', price: 6, offer: '哞 一個框' },
+  maps: { who: '航海圖店', line: '咕咕 望遠鏡收好 好好看', items: [['hand', 'scope']], again: true, ask: '咕咕 我找找看 改天再來', price: 6, offer: '咕咕 望遠鏡' },
+  bakery: { who: '麵包師傅', line: '烤得比較長 抱著走', items: [['hand', 'baguette']], price: 4, offer: '一條長麵包' },
+  tea: { who: '茶攤', line: '杯子帶走沒關係', items: [['hand', 'teacup']], price: 4, offer: '一杯連杯子' },
+  squid: { who: '烤魷魚', line: '烤好了 小心燙', items: [['hand', 'squid']], price: 4, offer: '一串' },
   dawn: { hint: '演唱會的後台　再往裡面走', items: [['hand', 'dawn']] },   // 地平線下最深處（concert-under.js）
+  // 背的配件，一幕劇、報社給的（以前想過當錢袋升級，2026-11-11 改成錢包固定十顆、子夜補滿，這兩個只是背在身上）
+  purse7: { hint: '海市　跟著漁火走到最後', items: [['back', 'fishpouch']] },         // 漁火演完（haishi-acts.js）
+  purse10: { hint: '自己拍的照片登上星潮報頭版', items: [['back', 'gembox']] },        // 頭版、號外（vendors.js 的編輯）
 };
+// 上鎖的東西：送禮表的照攤販 id 記，價目表（wares.js）的記 '@店'，接在送禮表後面
 const LOCKS = new Map();
 for (const [v, g] of Object.entries(GIFTS)) for (const [k, id] of g.items) LOCKS.set(k + ':' + id, v);
+for (const [k, id, , shop] of WARES) if (!LOCKS.has(k + ':' + id)) LOCKS.set(k + ':' + id, '@' + shop);
 export const lockedBy = (k, id) => LOCKS.get(k + ':' + id);
 // 要去拿的東西的完整清單（存檔碼照這個順序記，只能往後加）
 export const lockKeys = () => [...LOCKS.keys()];

@@ -25,6 +25,15 @@ export const WET = {
   damp: 0,                           // 常年潮濕：不下雨也有這麼濕（海邊的碼頭），0 不帶
   dampBox: new THREE.Vector4(0, 0, 0, 0),   // 潮濕的範圍：x0、z0、x1、z1，邊上一公尺漸變
   dampY: 0.5,                        // 只有這個高度以下的面潮濕（碼頭的地，不是屋頂）
+  // 燈照在地上的光（乾的時候也有，見 floorLight）：海市的 haze.js 把每一處的光點進一張從上往下的圖
+  pool: null,                        // 地上的光：RGB 是光的顏色（三個色版加起來是 3）乘亮度，A 是亮度乘那處地面的高度
+  poolBox: new THREE.Vector4(0, 0, 1, 1),   // 這張圖蓋住的範圍：x0、z0、1 ÷ 寬、1 ÷ 深
+  poolY: new THREE.Vector2(0, 1),    // 地面高度 = x + y × A ÷ 亮度
+  poolGain: 0,                       // 多亮（照在石頭本來的顏色上，亮的石頭亮、暗的暗），0 不帶（還沒畫好圖）
+  poolBase: 0.015,                   // 再加多少不看石頭顏色的光（線性），深色的石頭也暖得起來
+  hand: Array.from({ length: 4 }, () => new THREE.Vector4(0, -1e3, 0, 0)),   // 手上的燈照在腳邊：x、y、z、半徑（0 沒拿燈）
+  handColor: new THREE.Vector3(1, 1, 1),    // 手上的燈的光色（同上，三個色版加起來是 3）乘亮度
+  fire: new THREE.Vector4(0, 0, -1, 8),     // 火盆的火傳下山（scenery.js 的 LAMP_FIRE，haze.js 接上同一個）
 };
 
 // 石板的材質：跟鎮上的吃光材質一樣，多開 WET_STONE，頂點帶 aStone（石頭裡的座標、半寬、半深）、aSeed（這塊的脾氣）
@@ -58,7 +67,8 @@ export function wetRipple(x, z, k = 1) {
 
 // 結構、雜訊和「這一點多濕」：濕地反射（ssr.js）也拿這一段，濕的地方跟材質裡算的一樣
 export const WET_BASE_GLSL = `
-struct Wet { float amount; float q; vec4 box; sampler2D occ; sampler2D light; vec2 lightY; float darken; float sheen; float shine; float blur; float lamp; float now; vec4 rip[6]; float damp; vec4 dampBox; float dampY; };
+struct Wet { float amount; float q; vec4 box; sampler2D occ; sampler2D light; vec2 lightY; float darken; float sheen; float shine; float blur; float lamp; float now; vec4 rip[6]; float damp; vec4 dampBox; float dampY;
+	sampler2D pool; vec4 poolBox; vec2 poolY; float poolGain; float poolBase; vec4 hand[4]; vec3 handColor; vec4 fire; };
 uniform Wet uWet;
 float wetHash( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
 float wetNoise( vec2 p ) {
@@ -112,6 +122,55 @@ export const WET_GLSL = WET_BASE_GLSL + `
 	varying vec4 vStone;
 	varying float vSeed;
 #endif
+// ── 燈照在地上的光（乾的時候也有）──
+// 不疊一片一片的光圈：吃光的材質自己查一張從上往下的光圖（haze.js 的 poolMap），一個像素查一次。
+// 光照在石頭本來的顏色上，石板每塊吃光不一樣、縫邊那一圈多亮一點，跟雨天的石頭同一個樣子；一大片慢慢變的雜訊把圓圈打散。
+// 跟光圖上那處地面差太多高的照不到（上一層街、屋頂），往下一兩階、牆腳、人的腳邊照到一些。
+// 一處光從中心往外：中間一團、外面拖很長很淡的尾巴（u 是離中心幾個半徑），光圖和手上的燈都照這個
+float floorProfile( float u ) { return ( 0.65 * exp( - 2.0 * u * u ) + 0.35 / ( 1.0 + 5.0 * u * u ) ) * ( 1.0 - smoothstep( 1.5, 2.3, u ) ); }
+// 比那處地面高 dy 公尺的地方照到幾成
+float floorReach( float dy ) { return smoothstep( - 1.6, - 0.25, dy ) * ( 1.0 - smoothstep( 0.1, 1.1, dy ) ); }
+// 火盆的火傳下山：火種走到的那一帶先縮一下、再竄亮（同 scenery.js 的 fireWave，這裡讀 uWet.fire）
+float floorFire( vec2 xz ) {
+	vec4 f = uWet.fire;
+	if ( f.z < 0.0 ) return 1.0;
+	float a = f.z - length( xz - f.xy ) / f.w;
+	if ( a < 0.0 ) return 1.0;
+	float dip = 0.55 * exp( - pow( ( a - 0.15 ) / 0.12, 2.0 ) );
+	float flare = 0.4 * exp( - pow( ( a - 0.75 ) / 0.35, 2.0 ) );
+	return ( 1.0 + 0.5 * smoothstep( 0.3, 1.4, a ) ) * ( 1.0 - dip ) + flare;
+}
+vec3 floorLight( vec3 col, vec3 P ) {
+	vec3 E = vec3( 0.0 );
+	vec2 uv = ( P.xz - uWet.poolBox.xy ) * uWet.poolBox.zw;
+	if ( all( greaterThan( uv, vec2( 0.0 ) ) ) && all( lessThan( uv, vec2( 1.0 ) ) ) ) {
+		vec4 L = textureLod( uWet.pool, uv, 0.0 );
+		float g = ( L.r + L.g + L.b ) / 3.0;
+		if ( g > 1e-4 ) E = L.rgb * floorReach( P.y - uWet.poolY.x - uWet.poolY.y * L.a / g );
+	}
+	for ( int i = 0; i < 4; i++ ) {
+		vec4 h = uWet.hand[ i ];
+		if ( h.w > 0.0 ) E += uWet.handColor * floorProfile( distance( P.xz, h.xz ) / h.w ) * floorReach( P.y - h.y );
+	}
+	if ( E.r + E.g + E.b < 1e-4 ) return col;
+	vec3 N = normalize( cross( dFdx( P ), dFdy( P ) ) );
+	float far = smoothstep( 14.0, 40.0, distance( P, cameraPosition ) );
+	// 打散：一大片一大片的雜訊、每塊石頭吃光不一樣；遠的不分（細的遠看會閃）
+	float k = mix( 0.7 + 0.6 * wetNoise( P.xz * 0.55 + 3.7 ), 1.0, far ) * ( 0.5 + 0.5 * clamp( N.y, 0.0, 1.0 ) );
+	#ifdef WET_STONE
+		float seam, bias, calm, soak;
+		wetStone( vStone, vSeed, P, cameraPosition, seam, bias, calm, soak );
+		k *= mix( 0.8 + 0.4 * vSeed, 1.0, far ) * ( 1.0 + 0.3 * seam );
+	#endif
+	// 燭火：跟著燈籠輕輕晃，相位照位置慢慢變，一處光裡差不多一起亮暗
+	float t = uWet.now, ph = wetNoise( P.xz * 0.09 ) * 6.2832;
+	k *= ( 0.93 + 0.04 * sin( t * 9.1 + ph ) * sin( t * 5.3 + ph * 2.0 ) + 0.03 * sin( t * 13.7 + ph * 3.0 ) ) * floorFire( P.xz );
+	bool srgb = gradeSrgbOut();
+	vec3 c = srgb ? sRGBTransferEOTF( vec4( col, 1.0 ) ).rgb : col;
+	c += E * k * ( c * uWet.poolGain + uWet.poolBase );
+	return srgb ? sRGBTransferOETF( vec4( c, 1.0 ) ).rgb : c;
+}
+
 // col 是輸出空間的顏色，P 是世界座標。面朝哪用位置的導數算（平面著色，算出來剛好是那一面）
 vec3 wetSurface( vec3 col, vec3 P ) {
 	vec3 N = normalize( cross( dFdx( P ), dFdy( P ) ) );

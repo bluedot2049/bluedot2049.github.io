@@ -22,7 +22,7 @@
 <script type="module">
 import { makePostcard, qrStamp } from '../js/save/postcard.js';
 import { presetLook, randomLook, sanitizeLook, encodeFace } from '../js/avatar/looks.js';
-import { encodeLook, encodeSave } from '../js/save/savecode.js';
+import { wearCode, saveCode } from '../js/save/savecode.js';
 
 const ORIGIN = 'https://bluedot2049.github.io/';
 const out = [];
@@ -62,9 +62,9 @@ const saveHeavy = { look, closet: [0, 1, 2].map((i) => ({ ...randomLook(presetLo
 const P = new URLSearchParams(location.search), ECC = P.get('ecc') || 'L', SZ = +(P.get('size') || 1.5), PLAIN = P.has('plain'), TILT = +(P.get('tilt') ?? 0.04), N = +(P.get('n') || 6);
 const rl = (i) => sanitizeLook(randomLook(presetLook(i)));
 const mk = (i) => [
-  { name: '寄給朋友（造型）', kind: 'look', text: ORIGIN + '#look=' + encodeLook(rl(i), { face: false }) },
-  { name: '寄給自己（衣櫃一套）', kind: 'save', text: ORIGIN + '#save=' + encodeSave({ ...saveTypical, look: rl(i), closet: [rl(i + 1)] }, { face: false }) },
-  { name: '寄給自己（衣櫃三套）', kind: 'save', text: ORIGIN + '#save=' + encodeSave({ ...saveHeavy, look: rl(i), closet: [rl(i + 1), rl(i + 2), rl(i + 3)] }, { face: false }) },
+  { name: '寄給朋友（造型）', kind: 'look', text: ORIGIN + '#look=' + wearCode(rl(i)) },
+  { name: '寄給自己（衣櫃一套）', kind: 'save', text: ORIGIN + '#save=' + saveCode({ ...saveTypical, look: rl(i), outfits: [rl(i + 1)] }) },
+  { name: '寄給自己（衣櫃三套）', kind: 'save', text: ORIGIN + '#save=' + saveCode({ ...saveHeavy, look: rl(i), outfits: [rl(i + 1), rl(i + 2), rl(i + 3)] }) },
 ];
 const cases = mk(0);
 log(`容錯 ${ECC}、存檔郵票 ${SZ} 倍、${PLAIN ? '普通方塊' : '墨點'}、傾斜 ${TILT}、每種 ${N} 組`);

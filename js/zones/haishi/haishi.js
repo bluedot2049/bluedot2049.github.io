@@ -300,7 +300,6 @@ export function buildHaishi(scene, { coarse = false } = {}) {
   const eyes = [], eyeA = new THREE.Vector3(), eyeB = new THREE.Vector3(), eyeC = new THREE.Vector3(), fwd = new THREE.Vector3();
   // 手上的燈籠照在腳邊（haze.js 的 handLamps）：自己和在場的人，main.js 每幀餵角色進來
   const lamps = handLamps(4);
-  group.add(lamps.mesh);
   const passAt = new THREE.Vector3(1e4, 0, 1e4);   // 上一次告訴掛著的東西「有人走過」的位置
 
   const room = {
@@ -311,6 +310,8 @@ export function buildHaishi(scene, { coarse = false } = {}) {
 
   return {
     rooms: [room], paintings: [], mirror: null, outdoor: null, raycastTargets, env, shops, newsTop,
+    // 跟著鏡頭走的天空（星、月）：星廟抽到的星座畫在這裡（haishi-lots.js）
+    sky,
     // 鎮上每一盞燈（{ x, y, z, color, size }）：下雨時畫燈光圖用（rain.js）
     lamps: bucket.glows,
     rain: null,

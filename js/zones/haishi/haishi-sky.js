@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { rng } from '../../core/props.js';
 import { AIR, glowPoints, uTime } from '../../core/scenery.js';
-import { mist, pools, ripples, smoke } from './haze.js';
+import { mist, poolMap, ripples, smoke } from './haze.js';
 import { SHIP_PERIODS, brightStars, fishingFires, horizonShips, meteor, seaGlints, skyLanterns } from './distant.js';
 import { GRADE, GRADE_GLSL, HORIZON, TUNE, gradeCurvesOnly } from '../../core/grade.js';
 import { DOT_GLSL, trackPixelRatio } from '../../core/stardots.js';
@@ -336,7 +336,7 @@ export function buildSky(c) {
   const { group, bucket, coarse, shimmerMore, inArea } = c;
   // 推車、蒸籠、煙囪冒的煙；燈照在地上的光
   group.add(smoke(bucket.puffs, coarse));
-  group.add(pools(bucket.pools, 1.8, true));   // 燈下的地面要明顯暖起來，跟藍灰的夜色對比；跟著燈籠的燭火亮暗
+  poolMap(bucket.pools);   // 燈下的地面要明顯暖起來，跟藍灰的夜色對比；跟著燈籠的燭火亮暗（點成光圖，石板自己照它亮）
 
   // ---------- 霧：夾在層與層之間，鎮子兩側的山谷裡也有；街道上方也飄幾團，在屋頂之間 ----------
   const MR = rng('haishi-mist'), mists = [];

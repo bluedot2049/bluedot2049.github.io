@@ -65,7 +65,7 @@ export async function openBrowser({ port, dbg, window = '1920,2160', onEvent = n
   }).listen(port);
   const prof = edgeProfile('headless');
   // 多人頻道的 WebSocket 擋不掉（Network.setBlockedURLs 只管一般請求），直接讓 supabase.co 查不到網址，測試角色才不會出現在線上
-  const edge = spawn(EDGE, ['--headless=new', `--remote-debugging-port=${dbg}`, `--user-data-dir=${prof}`, '--host-resolver-rules=MAP *.supabase.co ~NOTFOUND', `--window-size=${window}`, 'about:blank']);
+  const edge = spawn(EDGE, ['--headless=new', '--mute-audio', `--remote-debugging-port=${dbg}`, `--user-data-dir=${prof}`, '--host-resolver-rules=MAP *.supabase.co ~NOTFOUND', `--window-size=${window}`, 'about:blank']);
   let ws;
   const quit = onEdgeExit(edge, prof, () => { ws?.close(); srv.close(); });
   let tgt;

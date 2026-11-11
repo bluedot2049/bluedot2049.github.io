@@ -35,7 +35,7 @@
     import { Character } from '../js/avatar/character.js';
     import { makeEyePost, readEyePost, INKS, info } from '../js/save/eyepost.js';
     import { makePostcard, loadQR } from '../js/save/postcard.js';
-    import { encodeLook } from '../js/save/savecode.js';
+    import { wearCode } from '../js/save/savecode.js';
     import { presetLook, randomLook, putSave, getSave, lockKeys, encodeFace, GIFTS, personOf, outfitOf, samePerson, sameOutfit, sanitizeLook, wearOnly } from '../js/avatar/looks.js';
 
     const out = document.getElementById('out');
@@ -68,7 +68,7 @@
 
     // 普通版：跟遊戲裡一樣，茜紅郵票只帶衣服
     await loadQR();
-    const qr = { kind: 'look', text: location.origin + '/#look=' + encodeLook(wearOnly(sanitizeLook(save.look)), { face: false }) };
+    const qr = { kind: 'look', text: location.origin + '/#look=' + wearCode(sanitizeLook(save.look)) };
     document.getElementById('plain').src = makePostcard(photo, new Date(2026, 10, 9), { qr }).toDataURL('image/jpeg', 0.9);
 
     // 樣式選單：選了記在網址上

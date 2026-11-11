@@ -7,8 +7,7 @@
 // 遊戲裡用 STYLE（2026-11-09 定：一圈、圓點、棕墨）；其他樣子留給 experiments/eyepost_preview.html 比。
 // 讀的時候先照圖的大小試（原圖、等比例縮小、多了黑邊），對不上就當截圖：找郵票上的虹膜，再拿紙邊的框線和墨點對齊（locate）
 import { codeBits, codeData, codeCapacity } from './filmcode.js';
-import { decodeSave } from './savecode.js';
-import { EYE, IRIS0, RING, IRIS, ECC_IRIS, ECC_BAND, capacity as mirrorCap, irisPayload, bandPayload, unpackBand, pupilGlass, sample, imageData, fits, irisSpots, corr, lerp } from './mirrorcard.js';
+import { EYE, IRIS0, RING, IRIS, ECC_IRIS, ECC_BAND, capacity as mirrorCap, irisPayload, bandPayload, unpackBand, readIris, pupilGlass, sample, imageData, fits, irisSpots, corr, lerp } from './mirrorcard.js';
 import { perforate, postmark } from './postcard.js';
 import { drawText } from '../core/glyphs.js';
 
@@ -319,11 +318,11 @@ export async function readEyePost(file, { layout = STYLE.layout } = {}) {
     if (CELL * f.s < 1.6) continue;
     const ib = sample(img, irisAt(L.eye), f, RING * K * 0.2);
     const bits = ib && codeData(ib, ECC_IRIS);
-    const save = bits && decodeSave(new TextDecoder().decode(bits));
+    const save = bits && readIris(bits);
     if (!save) continue;
     const bb = sample(img, L.cells, f, CELL * 0.18);
     const band = bb && codeData(bb, ECC_BAND);
-    const full = band && band[0] === 2 && (await unpackBand(band));
+    const full = band && (await unpackBand(band));
     if (full) return { save: full, full: true };
     core ||= save;
   }

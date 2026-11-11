@@ -45,6 +45,7 @@
   <div class="bar">
     <label><input type="checkbox" id="coarse"> 手機喇叭（整體壓 0.7）</label>
     <label>音量 ×<input type="range" id="gain" min="0.25" max="3" step="0.05" value="1"><b id="gainV">1.00</b></label>
+    <label id="v2box" style="display:none"><input type="checkbox" id="v2" checked> 獵魔III 第二版（現代獵具，試聽中）</label>
   </div>
 
   <h2>新舊對照</h2>
@@ -117,20 +118,28 @@
     ['raise', 0.2, '舉起', '右鍵、相機鈕'], ['lower', 0.25, '放下', '放開右鍵、收起'],
     ['shutter', 0.5, '快門', '不閃'], ['open', 0.5, '葉片開', 'B 快門按住'], ['close', 0.5, '葉片闔', 'B 快門放開、閃光後'],
     ['flash', 0.7, '閃光', '燈泡啪'], ['bulb', 0.45, '換燈泡', '閃完 0.45 秒'], ['jam', 0.2, '硬按', '換燈泡時'],
-    ['focus', 0.35, '對焦鎖定', '沒改'], ['flashOn', 0.28, '閃光開', '摺扇刷開'], ['flashOff', 0.28, '閃光關', '摺扇收攏'],
+    ['focus', 0.35, '對焦鎖定', '沒改'], ['afRun', 0.07, '對焦中', '轉焦時連著放，很小聲'], ['flashOn', 0.28, '閃光開', '摺扇刷開'], ['flashOff', 0.28, '閃光關', '摺扇收攏'],
     ['dateOn', 0.2, '日期印', '鐵蓋滑開＋火苗'], ['dateOff', 0.2, '日期不印', '鐵蓋到底'], ['burn', 0.16, '燭火', '印日期的快門後面'],
     ['grip', 0.2, '換拿法', '滾輪、自拍'], ['turn', 0.2, '直橫', 'F'], ['prime', 0.15, '想變焦', '鏡頭圈到頭'],
     ['zoom', 0.16, '變焦馬達', '一小段，連著放'], ['zoomEnd', 0.16, '變焦停', '抽管到位'],
-    ['track', 0.35, '追焦鎖住', 'Q'], ['untrack', 0.25, '追焦放開', '再按 Q'],
+    ['track', 0.35, '追焦鎖住', 'Q'], ['untrack', 0.25, '追焦放開', '再按 Q'], ['recycle', 0.3, '閃光充電', '浮游燈閃完'], ['lampOut', 0.3, '放燈', 'Q'], ['lampSide', 0.3, '燈換邊', '再按 Q'], ['lampIn', 0.3, '收燈', '再按 Q'],
     ['again', 0.45, '再一張', '拍照人口令'], ['done', 0.45, '好了', '拍照人口令'],
     ['take', 0.45, '帶走', '前廳桌上'], ['put', 0.45, '放回', '前廳桌上'],
     ['memoOn', 0.28, '紀念模式開', 'Q'], ['memoOff', 0.28, '紀念模式關', '再按 Q'], ['last', 0.35, '最後一張', '拍完片盒空了'], ['rare', 0.42, '十周年紀念', '抽中 1/12，吐完片'],
-  ].filter(([k]) => V[k]);
+  ].filter(([k]) => V[k] || (GUI && k === 'afRun'));
   const LEVEL = Object.fromEntries(ACTS.map(([k, v]) => [k, v]));
-  const say = (k, dt = 0, vol = LEVEL[k]) => setTimeout(() => amb.voice(V[k], vol), dt * 1000);
+  // 獵魔III 第二版（ambience-voices.js 的 h 開頭那幾個）：勾著就換掉 V 裡這幾個動作；遊戲裡還是第一版，聽過定了才換 cameras.js
+  const V1 = { ...V }, V2 = GUI ? { shutter: 'hshutter', focus: 'hfocus', afRun: 'hafrun', zoom: 'hzoom', zoomEnd: 'hzoomstop', track: 'htrack', untrack: 'huntrack', raise: 'hraise', lower: 'hlower', done: 'hlower', grip: 'hgrip', turn: 'hturn', dateOn: 'hstrip', dateOff: 'hstripoff', again: 'hagain', take: 'htake', put: 'hput', lampOut: 'hlampout', lampSide: 'hlampside', lampIn: 'hlampin', flash: 'hflash', recycle: 'hcharge' } : {};
+  const labels = [];
+  // 第一版沒有對焦中的聲音，沒勾第二版時那顆不響
+  const useV2 = () => { Object.assign(V, V1, $('v2').checked ? V2 : {}); labels.forEach((f) => f()); };
+  if (GUI) $('v2box').style.display = '';
+  const say = (k, dt = 0, vol = LEVEL[k]) => setTimeout(() => V[k] && amb.voice(V[k], vol), dt * 1000);
   for (const [k, vol, name, when] of ACTS) {
     const b = document.createElement('button');
-    b.innerHTML = `${name} <span class="w">${V[k]} · ${vol}</span><small>${when}</small>`;
+    const label = () => (b.innerHTML = `${name} <span class="w">${V[k]} · ${vol}</span><small>${when}</small>`);
+    labels.push(label);
+    label();
     b.onclick = () => { amb.start(); say(k); log(`${k} → ${V[k]}`); };
     $('kinds').appendChild(b);
   }
@@ -152,11 +161,22 @@
   };
   // 獵魔III：連著拉長的馬達（photo.js 每 0.14 秒送一段）
   const motor = (dt, sec) => { for (let x = 0; x < sec; x += 0.14) say('zoom', dt + x); say('zoomEnd', dt + sec); };
+  // 對焦中：photo.js 轉焦時每 0.11 秒送一段，轉完響鎖定
+  // 跟 photo.js 一樣：一下一下送，越接近對到越密（0.13→0.06 秒）、越高（1→1.3）
+  const pulses = (dt, sec, vol = LEVEL.afRun, S = V) => {
+    for (let x = 0; x < sec; ) { const u = x / sec; setTimeout(() => S.afRun && amb.voice(S.afRun, vol, 1 + 0.3 * u), (dt + x) * 1000); x += 0.13 - 0.07 * u; }
+  };
+  const hunt = (dt, sec) => { pulses(dt, sec); say('focus', dt + sec); };
   const GSEQ = {
-    '舉起 → 對焦 → 拍 → 放下': () => { say('raise'); say('focus', 0.3); say('shutter', 1.1); say('lower', 2.0); },
+    '舉起 → 對焦 → 拍 → 放下': () => { say('raise'); hunt(0, 0.32); say('shutter', 1.1); say('lower', 2.0); },
+    '對焦中 1.5 秒 → 鎖定': () => hunt(0, 1.5),
+    '跟著走的人一直微調（小聲）→ 鎖定': () => { pulses(0, 0.4, 0.045); pulses(0.7, 0.4, 0.045); pulses(1.4, 0.6, 0.045); say('focus', 2); },
+    '找焦 → 鎖定 → 追焦鎖住 → 放開': () => { hunt(0, 0.6); say('track', 1.3); say('untrack', 2.8); },
     '拉到最長 → 停': () => motor(0, 1),
     '撥桿一推一推': () => { motor(0, 0.3); motor(0.6, 0.3); motor(1.2, 0.3); },
     '鎖住 → 跟著拍兩張 → 放開': () => { say('track'); say('shutter', 0.9); say('shutter', 1.5); say('untrack', 2.4); },
+    '連拍三張': () => { say('shutter'); say('shutter', 0.42); say('shutter', 0.84); },
+    '打燈拍 → 充電 → 再拍': () => { say('flash'); say('shutter', 0.01, 0.5); say('recycle', 0.15); say('flash', 1.2); say('shutter', 1.21, 0.5); say('recycle', 1.35); },
     '打孔條撥出 → 拍 → 收回': () => { say('dateOn'); say('shutter', 0.8); say('dateOff', 1.6); },
     '換拿法兩格 → 直拿 → 自拍 → 回來': () => { say('grip'); say('grip', 0.4); say('turn', 1.0); say('grip', 1.8); say('grip', 2.6); },
     '桌上：帶走 → 放回': () => { say('take'); say('put', 1.4); },
@@ -181,7 +201,23 @@
   // 改之前：閃光拍只有啪，B 快門按下、放開各一整聲喀嚓
   // 獵魔III：同一個動作跟燭火乙式各響一次，聽差在哪
   const both = (k) => () => { amb.voice(B[k], LEVEL[k]); setTimeout(() => amb.voice(V[k], LEVEL[k]), 900); };
-  const GCMP = Object.fromEntries(['shutter', 'raise', 'lower', 'focus', 'grip', 'turn', 'dateOn', 'take', 'put'].map((k) => [`${ACTS.find((a) => a[0] === k)[2]} 燭火→獵魔`, both(k)]));
+  // 第一版 → 第二版：同一個動作先響舊的、再響新的
+  const twice = (k) => () => { amb.voice(V1[k], LEVEL[k]); setTimeout(() => amb.voice(V2[k], LEVEL[k]), 1000); };
+  // 對焦：第一版只有鎖定那一聲；第二版轉焦時有馬達、鎖定是訊號
+  const huntCmp = () => {
+    amb.voice(V1.focus, LEVEL.focus);
+    pulses(1, 0.32, LEVEL.afRun, V2);
+    setTimeout(() => amb.voice(V2.focus, LEVEL.focus), 1320);
+  };
+  const GCMP = !GUI ? {} : {
+    ...Object.fromEntries(['shutter', 'focus', 'track', 'untrack', 'raise', 'lower', 'grip', 'turn', 'dateOn', 'dateOff', 'again', 'lampOut', 'lampSide', 'lampIn', 'flash', 'recycle', 'zoomEnd', 'take', 'put'].map((k) => [`${ACTS.find((a) => a[0] === k)[2]} 第一版→第二版`, twice(k)])),
+    '舉起對焦 第一版→第二版': huntCmp,
+    '變焦拉到底 第一版→第二版': () => {
+      const run = (S, dt) => { for (let x = 0; x < 1; x += 0.14) setTimeout(() => amb.voice(S.zoom, LEVEL.zoom), (dt + x) * 1000); setTimeout(() => amb.voice(S.zoomEnd, LEVEL.zoomEnd), (dt + 1) * 1000); };
+      run(V1, 0); run(V2, 1.6);
+    },
+    ...Object.fromEntries(['shutter', 'raise', 'lower', 'focus', 'grip', 'turn', 'dateOn', 'take', 'put'].map((k) => [`${ACTS.find((a) => a[0] === k)[2]} 燭火→獵魔`, both(k)])),
+  };
   // 拍立拿a500：同一個動作三台各響一次
   const G = { take: 'strap', put: 'setdown', ...CAMERAS.gui.voices };
   const three = (k) => () => [B, G, V].forEach((S, i) => setTimeout(() => amb.voice(S[k], LEVEL[k]), i * 1100));
@@ -194,7 +230,7 @@
   };
   for (const [name, fn] of Object.entries(CMP)) {
     const b = document.createElement('button');
-    b.innerHTML = `${name}<small>${GUI ? '先燭火乙式、再獵魔III' : WANG ? '燭火乙式 → 獵魔III → 拍立拿a500' : name.endsWith('舊') ? '原本的' : '現在遊戲裡的'}</small>`;
+    b.innerHTML = `${name}<small>${GUI ? (name.includes('第二版') ? '先第一版、再第二版' : '先燭火乙式、再獵魔III（照上面勾的版本）') : WANG ? '燭火乙式 → 獵魔III → 拍立拿a500' : name.endsWith('舊') ? '原本的' : '現在遊戲裡的'}</small>`;
     b.onclick = () => { amb.start(); fn(); log(name); };
     $('cmp').appendChild(b);
   }
@@ -204,6 +240,7 @@
 
   const level = () => { amb.gain = +$('gain').value * ($('coarse').checked ? 0.7 : 1); $('gainV').textContent = (+$('gain').value).toFixed(2); };
   $('coarse').onchange = level;
+  if (GUI) { $('v2').onchange = useV2; useV2(); }
   $('gain').oninput = level;
 </script>
 </body>

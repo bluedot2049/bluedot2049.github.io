@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { Kit, mergeBucket } from '../../core/props.js';
 import { HEADS } from '../../avatar/heads.js';
-import { RACES, SKINS } from '../../avatar/looks.js';
+import { RACES, SKINS, crowdRaces } from '../../avatar/looks.js';
 import { RELIGHT_SPEED } from './concert-stage.js';
 
 const NECK = 0.8, SH = [0.19, 0.72];   // 頭和肩膀的關節（跟 Character 一樣的比例）
@@ -210,7 +210,7 @@ export class Crowd {
     // 前幾排：種族頭（挑幾個種族，一個種族一組）；後面：深色風帽一組
     // 只挑面數不高的頭（太細的頭乘上一百多人會太重）
     const tris = (r) => { const g = raceHead(r)(); const n = g.attributes.position.count / 3; g.dispose(); return n; };
-    const pool = RACES.filter((r) => HEADS[r.head] && tris(r) <= maxTris);
+    const pool = crowdRaces().filter((r) => HEADS[r.head] && tris(r) <= maxTris);
     const pick = [];
     for (let i = 0; i < Math.min(races, pool.length); i++) pick.push(pool.splice(Math.floor(R() * pool.length), 1)[0]);
     const groups = new Map();

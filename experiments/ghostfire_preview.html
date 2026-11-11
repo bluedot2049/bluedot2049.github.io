@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>鬼火工作桌預覽</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #1c1814; color: #e9e0cc; font-family: "Noto Serif TC", serif; overflow: hidden; }
+    canvas { display: block; touch-action: none; }
+    .bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px 14px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; background: linear-gradient(transparent, rgba(0,0,0,0.55)); }
+    .bar button { padding: 8px 12px; border: 1px solid #5a4e3e; border-radius: 6px; background: #2a241e; color: inherit; font: inherit; cursor: pointer; }
+    .bar button.on { border-color: #e8b86a; color: #e8b86a; }
+    .bar .sep { width: 1px; background: #5a4e3e; margin: 0 4px; }
+    .note { position: fixed; top: 12px; left: 16px; right: 16px; font-size: 13px; opacity: 0.65; line-height: 1.6; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "../vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+  <div class="note">前廳右上角的配件工作桌（js/zones/gallery/workbench.js，遊戲裡用同一份）。拖曳轉、滾輪縮放。「相機」放一台燭火乙式在相機座上比大小；「鬼火取景」是透過裝了鬼火的相機看出去的顏色（示意）。網址 view=corner|bench|board、cam=1、ghost=1</div>
+  <div class="bar">
+    <button data-view="corner">角落</button>
+    <button data-view="bench">桌面</button>
+    <button data-view="board">工具板</button>
+    <span class="sep"></span>
+    <button id="cam">相機</button>
+    <button id="ghost">鬼火取景</button>
+  </div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { Kit, newBucket } from '../js/core/props.js';
+    import { bucketObjects, uTime } from '../js/core/scenery.js';
+    import { cameraModel } from '../js/camera/cameras.js';
+    import { buildWorkbench, BENCH } from '../js/zones/gallery/workbench.js';
+
+    const params = new URLSearchParams(location.search);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.prepend(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1d1519);
+    // 前廳壓暗之後的天光（zone-gallery.js env 的「前廳」那組）
+    scene.add(new THREE.HemisphereLight(0xc8bce8, 0x3a2c40, 0.8));
+    const key = new THREE.DirectionalLight(0xffc890, 0.35);
+    key.position.set(-3, 4, 4);
+    scene.add(key);
+
+    // 前廳的角落：牆、護牆板、地板
+    const wallMat = new THREE.MeshLambertMaterial({ color: '#c9a291' });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 4.2), new THREE.MeshLambertMaterial({ color: '#6e4630' }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(-2.1, 0, 2.1);
+    scene.add(floor);
+    const wallA = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 3), wallMat);
+    wallA.position.set(-2.1, 1.5, 0);
+    scene.add(wallA);
+    const wallB = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 3), wallMat);
+    wallB.rotation.y = -Math.PI / 2;
+    wallB.position.set(0, 1.5, 2.1);
+    scene.add(wallB);
+    const k = new Kit(null);
+    k.box(4.2, 0.85, 0.02, '#4a2e1e', -2.1, 0.425, 0.01);
+    k.box(0.02, 0.85, 4.2, '#4a2e1e', -0.01, 0.425, 2.1);
+    const b = newBucket();
+    k.emit(b, 0, 0, 0);
+    for (const o of bucketObjects(b)) scene.add(o);
+
+    const wb = buildWorkbench();
+    scene.add(wb.group);
+    wb.locate();
+
+    // 相機座上放一台燭火乙式比大小
+    const cam = (() => {
+      const k = new Kit(null);
+      cameraModel(k, 'bulb');
+      const b = newBucket();
+      k.emit(b, 0, 0, 0);
+      const g = new THREE.Group();
+      for (const o of bucketObjects(b)) g.add(o);
+      g.position.set(-BENCH.depth / 2, BENCH.top + 0.155, 1.22);
+      g.rotation.y = -Math.PI / 2;
+      return g;
+    })();
+    scene.add(cam);
+    let camOn = params.get('cam') === '1';
+    const camBtn = document.getElementById('cam');
+    const setCam = (on) => { camOn = on; cam.visible = on; camBtn.classList.toggle('on', on); };
+    camBtn.onclick = () => setCam(!camOn);
+    setCam(camOn);
+
+    // ── 鬼火取景：暖的光被吃掉變冷灰，只有藍的（鬼火、之後的幽靈）留著飽和 ──
+    const rt = new THREE.WebGLRenderTarget(1, 1, { samples: 4 });
+    const post = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+      uniforms: { uTex: { value: rt.texture } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: `
+        uniform sampler2D uTex; varying vec2 vUv;
+        void main() {
+          vec3 c = texture2D(uTex, vUv).rgb;
+          float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+          float cy = smoothstep(0.08, 0.35, 0.5 * (c.g + c.b) - c.r);
+          float warm = clamp((c.r - c.b) / max(l, 0.02) * 0.6, 0.0, 1.0);
+          vec3 grey = vec3(l * (1.0 - 0.5 * warm)) * vec3(0.74, 0.84, 1.0);
+          vec3 o = mix(grey, c * 1.2, cy);
+          float v = smoothstep(1.15, 0.35, length(vUv - 0.5) * 1.6);
+          gl_FragColor = vec4(o * mix(0.55, 1.0, v), 1.0);
+          #include <colorspace_fragment>
+        }`,
+      depthTest: false, depthWrite: false,
+    }));
+    post.frustumCulled = false;
+    const postScene = new THREE.Scene(), postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    postScene.add(post);
+    let ghost = params.get('ghost') === '1';
+    const ghostBtn = document.getElementById('ghost');
+    ghostBtn.classList.toggle('on', ghost);
+    ghostBtn.onclick = () => { ghost = !ghost; ghostBtn.classList.toggle('on', ghost); };
+
+    // ── 鏡頭 ──
+    const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.02, 60);
+    const VIEWS = {
+      corner: { t: [-0.85, 1.1, 0.85], yaw: -0.78, pitch: 0.16, dist: 3.6 },
+      bench: { t: [-0.6, 1.05, 0.9], yaw: -0.95, pitch: 0.3, dist: 1.5 },
+      board: { t: [-1.0, 1.6, 0.2], yaw: -0.25, pitch: 0.05, dist: 1.8 },
+    };
+    const target = new THREE.Vector3();
+    let yaw = 0, pitch = 0, dist = 3;
+    function setView(id) {
+      const v = VIEWS[id] || VIEWS.corner;
+      target.set(...v.t); yaw = v.yaw; pitch = v.pitch; dist = v.dist;
+      for (const b of document.querySelectorAll('[data-view]')) b.classList.toggle('on', b.dataset.view === id);
+    }
+    function place() {
+      const c = Math.cos(pitch);
+      camera.position.set(target.x + Math.sin(yaw) * c * dist, target.y + Math.sin(pitch) * dist, target.z + Math.cos(yaw) * c * dist);
+      camera.lookAt(target);
+    }
+    let drag = null;
+    renderer.domElement.addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; });
+    addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      yaw -= (e.clientX - drag[0]) * 0.006;
+      pitch = Math.max(-0.3, Math.min(1.4, pitch + (e.clientY - drag[1]) * 0.006));
+      drag = [e.clientX, e.clientY];
+    });
+    addEventListener('pointerup', () => { drag = null; });
+    renderer.domElement.addEventListener('wheel', (e) => { dist = Math.max(0.3, Math.min(10, dist * (1 + e.deltaY * 0.001))); }, { passive: true });
+    for (const b of document.querySelectorAll('[data-view]')) b.onclick = () => setView(b.dataset.view);
+
+    function resize() {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      const pr = renderer.getPixelRatio();
+      rt.setSize(innerWidth * pr, innerHeight * pr);
+    }
+    addEventListener('resize', resize);
+    resize();
+    setView(params.get('view') || 'corner');
+
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      uTime.value = clock.getElapsedTime();
+      place();
+      if (ghost) {
+        renderer.setRenderTarget(rt);
+        renderer.render(scene, camera);
+        renderer.setRenderTarget(null);
+        renderer.render(postScene, postCam);
+      } else renderer.render(scene, camera);
+    });
+    window.__ready = true;
+  </script>
+</body>
+</html>

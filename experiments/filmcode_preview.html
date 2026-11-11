@@ -23,7 +23,7 @@
 import { makePostcard, readPostcard } from '../js/save/postcard.js';
 import { packFace } from '../js/save/filmcode.js';
 import { presetLook, randomLook, sanitizeLook } from '../js/avatar/looks.js';
-import { encodeLook, encodeSave } from '../js/save/savecode.js';
+import { wearCode, saveCode } from '../js/save/savecode.js';
 
 const P = new URLSearchParams(location.search), N = +(P.get('n') || 3);
 const out = [];
@@ -89,8 +89,8 @@ for (const mode of ['friend', 'self']) {
       const films = {};
       for (const e of mode === 'friend' ? ['bottom'] : EDGES) films[e] = cells[e] ? await packFace(cells[e]) : new Uint8Array(0);
       const text = mode === 'friend'
-        ? ORIGIN + '#look=' + encodeLook(rl(0), { face: false })
-        : ORIGIN + '#save=' + encodeSave({ look: rl(0), closet: [rl(1), null, rl(3)], unlocked: ['hand:fish'], visits: {} }, { face: false });
+        ? ORIGIN + '#look=' + wearCode(rl(0))
+        : ORIGIN + '#save=' + saveCode({ look: rl(0), outfits: [rl(1), null, rl(3)], unlocked: ['hand:fish'], visits: {} });
       const card = makePostcard(fakePhoto(pw, ph, i), new Date(2026, 10, 1), { films, qr: { text, kind: mode === 'friend' ? 'look' : 'save' } });
       if (i === +(P.get('show') ?? 0)) { const w = document.createElement('div'); w.className = 'card' + (ph > pw ? ' tall' : ''); w.append(card); document.getElementById('cards').append(w); }
       for (let j = 0; j < LEVELS.length; j++) {

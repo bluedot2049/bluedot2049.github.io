@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>操作介面概念</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@500;600;700&family=Noto+Sans+TC:wght@500;700&display=swap">
+<link rel="stylesheet" href="../css/alchemy-font.css">
+<style>
+  /* 操作介面的三個概念：位置照現在的拇指弧（css/hud.css），只換長相。底圖是 tools/shoot.mjs 拍的（tools/out 只在本機，沒有就是漸層） */
+  :root { --ink: #17120f; --paper: #f4ecd8; --red: #e23a28; --yel: #f5c21b; --blu: #2351d9; --sans: "Jost", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 90px; background: #100c0a; color: var(--paper); font-family: var(--sans); }
+  h1 { margin: 0 0 8px; font-size: 20px; font-weight: 700; letter-spacing: .3em; }
+  .note { margin: 0; max-width: 900px; font-size: 13px; line-height: 1.85; letter-spacing: .05em; color: #b5a892; }
+  section { margin-top: 48px; }
+  h2 { display: flex; align-items: center; gap: 14px; margin: 0 0 6px; font-size: 17px; font-weight: 700; letter-spacing: .28em; }
+  h2 i { display: flex; gap: 5px; } h2 i b { width: 14px; height: 14px; }
+  .row { display: flex; flex-wrap: wrap; gap: 26px 24px; align-items: flex-start; margin-top: 18px; }
+  .col { display: flex; flex-direction: column; gap: 22px; }
+  figure { margin: 0; } figcaption { margin-top: 9px; font-size: 12px; letter-spacing: .12em; color: #b5a892; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 12px; font-size: 12.5px; letter-spacing: .08em; color: #d8cdb6; }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; } .legend b { width: 14px; height: 14px; flex: none; }
+
+  /* 手機 390×844，縮到八成；電腦只切下方中間那一塊 */
+  .ph { position: relative; width: 390px; height: 844px; zoom: .8; overflow: hidden; border-radius: 34px; background: linear-gradient(#6a5a3c, #7c6a8c 55%, #4a3524) center / cover; }
+  .ph.walk { background-image: url(../tools/out/shoot/gallery-bg.png), linear-gradient(#6a5a3c, #7c6a8c 55%, #4a3524); }
+  .ph.shoot { background-image: url(../tools/out/shoot/haishi-bg.png), linear-gradient(#1c2c30, #26343a); }
+  .pc { position: relative; width: 640px; height: 250px; overflow: hidden; border-radius: 6px; background: url(../tools/out/shoot/gallery-bg-wide.png) center bottom / 1280px 800px, linear-gradient(#7c6a8c, #4a3524); }
+  .now img { display: block; border-radius: 27px; }
+  .now .crop { width: 640px; height: 250px; border-radius: 6px; background: url(../tools/out/shoot/gallery-hudnow-wide-ui.png) center bottom / 1280px 800px; }
+
+  .k { position: absolute; transform: translate(-50%, -50%); display: grid; place-items: center; padding: 0; border: 0; font-family: var(--sans); font-weight: 700; font-size: 13.5px; letter-spacing: .06em; white-space: nowrap; }
+  .k svg { width: 24px; height: 24px; display: block; }
+  .s64 { width: 64px; height: 64px; } .s56 { width: 56px; height: 56px; } .s52 { width: 52px; height: 52px; } .s48 { width: 48px; height: 48px; } .s40 { width: 40px; height: 40px; } .s28 { width: 28px; height: 28px; font-size: 12px; }
+  .o { border-radius: 50%; }
+  .zh { font-family: 'AlchemyGallery', var(--sans); font-weight: normal; font-size: 22px; letter-spacing: 0; } .s64 .zh { font-size: 28px; }
+  .ink { background: var(--ink); color: var(--paper); } .pap { background: var(--paper); color: var(--ink); }
+  .red { background: var(--red); color: var(--paper); } .yel { background: var(--yel); color: var(--ink); } .blu { background: var(--blu); color: var(--paper); }
+  .tri { width: 70px; height: 64px; padding-top: 30px; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+  .ring { border-radius: 50%; border: 2px solid var(--paper); width: 124px; height: 124px; }
+  .strip { position: absolute; display: flex; }
+  .strip > * { display: grid; place-items: center; height: 100%; white-space: nowrap; font-weight: 700; font-size: 13px; letter-spacing: .1em; }
+  .strip svg { width: 20px; height: 20px; display: block; }
+  .lbl { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font-weight: 700; font-size: 12.5px; letter-spacing: .1em; color: var(--paper); }
+  .rule { position: absolute; left: 311px; top: 500px; width: 2px; height: 146px; background: var(--paper); }
+  .slab { position: absolute; border-radius: 50%; transform: translate(-50%, -50%); }
+
+  /* 地名和提示 */
+  .place { position: absolute; }
+  .place h4 { margin: 0; font-family: 'AlchemyGallery', var(--sans); font-weight: normal; font-size: 44px; line-height: 1; letter-spacing: .3em; color: var(--paper); }
+  .place p { margin: 10px 0 0; font-size: 12px; font-weight: 600; letter-spacing: .42em; text-transform: uppercase; color: var(--paper); }
+  .hint { position: absolute; display: flex; align-items: center; height: 34px; white-space: nowrap; font-size: 13px; font-weight: 700; letter-spacing: .1em; }
+  .hint em { font-style: normal; margin-left: 12px; opacity: .7; }
+
+  /* 渡船卡 */
+  .card { position: relative; width: 300px; overflow: hidden; }
+  .card h4 { margin: 0; font-family: 'AlchemyGallery', var(--sans); font-weight: normal; line-height: 1; }
+  .card .lat { font-size: 11.5px; font-weight: 600; letter-spacing: .42em; text-transform: uppercase; }
+  .card .desc { margin: 0; font-size: 14px; font-weight: 500; letter-spacing: .08em; }
+  .card .tags { display: flex; gap: 6px; margin-top: 10px; font-size: 12px; font-weight: 700; letter-spacing: .1em; }
+  .card .pg { display: flex; gap: 6px; } .card .pg b { width: 8px; height: 8px; }
+  .card .go { display: flex; align-items: center; justify-content: space-between; height: 48px; padding: 0 18px; font-weight: 700; font-size: 15px; letter-spacing: .3em; }
+</style>
+</head>
+<body>
+  <h1>操作介面概念</h1>
+  <p class="note">包浩斯的三樣東西搬進來：基本形、平塗的高彩度色、形和色各有一個意思。每顆鈕的位置和大小照現在的拇指弧，沒有動；換的只有長相。字用煉金體（它本來就是幾何造字）配無襯線。三個方向由收到放。</p>
+
+  <section class="now">
+    <h2>現在</h2>
+    <div class="row">
+      <figure><img src="../tools/out/shoot/gallery-hudnow-ui.png" width="312" height="675" alt=""><figcaption>走動</figcaption></figure>
+      <figure><img src="../tools/out/shoot/haishi-photonow-ui.png" width="312" height="675" alt=""><figcaption>舉相機</figcaption></figure>
+      <figure><div class="crop"></div><figcaption>電腦下排</figcaption></figure>
+    </div>
+  </section>
+
+  <div id="out"></div>
+
+  <script type="module">
+    // 操作介面概念：同一組位置（P），三種長相。每個概念一列：手機走動、手機舉相機、電腦下排＋互動提示、渡船卡
+    const I = {
+      smile: '<circle cx="12" cy="12" r="9.5" fill="none" stroke-width="2.2"/><circle cx="8.6" cy="10" r="1.5"/><circle cx="15.4" cy="10" r="1.5"/><path d="M7.6 14a4.4 4.4 0 0 0 8.8 0" fill="none" stroke-width="2.2"/>',
+      lens: '<circle cx="12" cy="12" r="8.6" fill="none" stroke-width="3.2"/><circle cx="12" cy="12" r="3"/>',
+      bag: '<rect x="4" y="9" width="16" height="11"/><path d="M8 9a4 4 0 0 1 8 0" fill="none" stroke-width="2.2"/>',
+      eye: '<path fill-rule="evenodd" d="M1.5 12Q12 2.5 22.5 12Q12 21.5 1.5 12ZM12 8.4a3.6 3.6 0 1 0 0 7.2a3.6 3.6 0 1 0 0-7.2Z"/>',
+      people: '<circle cx="7.6" cy="8" r="3.2"/><circle cx="16.4" cy="8" r="3.2"/><path d="M1.6 20a6 6 0 0 1 12 0ZM10.4 20a6 6 0 0 1 12 0Z"/>',
+      party: '<circle cx="12" cy="6.6" r="3.6"/><path d="M4 21L12 11L20 21Z"/>',
+      sound: '<path d="M3 9h5l6-5v16l-6-5H3Z"/><path d="M17.5 8a5 5 0 0 1 0 8" fill="none" stroke-width="2.2"/>',
+      full: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke-width="2.6"/>',
+      more: '<rect x="3" y="10" width="4" height="4"/><rect x="10" y="10" width="4" height="4"/><rect x="17" y="10" width="4" height="4"/>',
+      talk: '<path d="M3 4h18v12H11l-5 5v-5H3Z"/>',
+      x: '<path d="M5.5 5.5L18.5 18.5M18.5 5.5L5.5 18.5" fill="none" stroke-width="3"/>',
+      up: '<path d="M12 6L19 18H5Z"/>', down: '<path d="M12 18L19 6H5Z"/>',
+      dot: '<circle cx="12" cy="12" r="6.5"/>',
+      shut: '<circle cx="12" cy="12" r="9.4" fill="none" stroke-width="2.6"/>',
+      walk: '<circle cx="12" cy="12" r="4"/><path d="M12 1.5L15 6H9ZM12 22.5L15 18H9ZM1.5 12L6 9v6ZM22.5 12L18 9v6Z"/>',
+    };
+    const svg = (n) => `<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="0">${I[n]}</svg>`;
+    // 位置：390×844 的手機直拿，照現在的畫面量的（圓心）
+    const P = { jump: [48, 797], sit: [128, 797], cam: [105, 741], emote: [48, 717], pack: [180, 743], talk: [103, 665], act: [227, 680], joy: [312, 765], swap: [223, 813], look: [190, 803], emote2: [48, 631] };
+    const TOP = ['people', 'party', 'sound', 'full', 'eye', 'more'], LENS = ['魚眼', '廣角', '標準', '望遠'], MODE = ['螢幕', '手動', '不拍'];
+    const k = (cls, [x, y], inner = '', css = '') => `<div class="k ${cls}" style="left:${x}px;top:${y}px;${css}">${inner}</div>`;
+    const zh = (t) => `<span class="zh">${t}</span>`;
+    const strip = (css, cells) => `<div class="strip" style="${css}">${cells.join('')}</div>`;
+    const cell = (cls, inner, w) => `<div class="${cls}" style="width:${w}px">${inner}</div>`;
+    const lbl = (t, x, y, css = '') => `<div class="lbl" style="left:${x}px;top:${y}px;${css}">${t}</div>`;
+    const place = (css, bar = '') => `<div class="place" style="${css}">${bar}<h4>原野</h4><p>Prima Materia</p></div>`;
+    // 高度尺：線、三個刻度的字、現在的高度、上下兩顆
+    const ruler = (knob, btn, shape = '') => `<div class="rule"></div>${lbl('俯瞰', 272, 543)}${lbl('眼高', 272, 589)}${lbl('貼地', 272, 636)}${lbl('8.5 m', 348, 542, 'font-size:14px')}${k(`s28 ${shape} ${btn}`, [312, 477], svg('up'))}${k(`s28 ${shape} ${btn}`, [312, 668], svg('down'))}<div class="k o ${knob}" style="left:312px;top:542px;width:20px;height:20px"></div>`;
+
+    const CONCEPT = [
+      {
+        id: 'A', name: '形與色', marks: ['blu o', 'red', 'yel tri'],
+        note: '最照包浩斯：一類功能一個形、一個色。沒有底板，形狀直接浮在畫面上。',
+        legend: [['blu o', '藍圓　身體：跳、坐、躺、起、看鏡、搖桿'], ['red', '紅方　相機和快門'], ['yel tri', '黃三角　互動鍵，唯一的那一顆'], ['pap', '紙色　帶著的東西和表情'], ['ink', '墨方　系統那一排']],
+        walk: () => place('left:24px;top:108px;padding-left:18px', '<div style="position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--red)"></div>')
+          + `<div class="hint pap" style="left:24px;top:214px;padding-right:14px"><span class="yel" style="display:grid;place-items:center;width:34px;height:34px;margin-right:12px">${svg('walk')}</span>推搖桿或點地面<em>走路</em></div>`
+          + strip('right:12px;top:14px;height:40px', TOP.map((n) => cell('ink', svg(n), 40)))
+          + k('s64 o blu', P.jump, zh('跳')) + k('s52 o blu', P.sit, zh('坐')) + k('s52 red', P.cam, svg('lens')) + k('s52 o pap', P.emote, svg('smile')) + k('s48 pap', P.pack, svg('bag')) + k('s48 pap', P.talk, svg('talk'))
+          + k('tri yel', P.act, '上船') + k('ring', P.joy) + k('s52 o blu', P.joy) + k('s28 o ink', P.swap, '⇄'),
+        shoot: () => strip('left:12px;top:14px;height:40px', MODE.map((t, i) => cell(i === 1 ? 'pap' : 'ink', t, 58)))
+          + `<div class="hint pap" style="left:24px;top:232px;padding:0 14px">拖曳<em style="margin:0 14px 0 8px">轉頭</em>雙指<em style="margin-left:8px">變焦</em></div>`
+          + ruler('yel', 'ink') + strip('left:17px;top:666px;height:36px', LENS.map((t, i) => cell(i === 2 ? 'yel' : 'ink', t, 54)))
+          + k('s64 red', P.jump, `<div class="o" style="width:40px;height:40px;border:4px solid var(--paper)"></div>`) + k('s52 o pap', P.sit, `<div class="o" style="width:18px;height:18px;background:var(--red)"></div>`) + k('s52 pap', P.cam, svg('x')) + k('s48 pap', P.pack, svg('bag'))
+          + k('s52 o pap', P.emote2, svg('smile')) + k('s52 o blu', P.look, '看鏡') + k('ring', P.joy) + k('s52 o blu', P.joy),
+        desk: () => k('s48 o pap', [208, 216], svg('smile')) + k('s48 red', [264, 216], svg('lens')) + k('s48 pap', [320, 216], svg('bag')) + strip('left:356px;top:194px;height:44px', TOP.slice(4).concat(TOP.slice(0, 4)).map((n) => cell('ink', svg(n), 44)))
+          + k('tri yel', [300, 96], 'E', 'width:52px;height:48px;padding-top:20px;font-size:15px') + `<div class="hint pap" style="left:332px;top:84px;padding:0 16px">上船</div>`,
+        card: () => `<div class="card" style="background:var(--paper);color:var(--ink)"><div style="position:relative;height:150px;background:var(--blu);overflow:hidden">
+            <div class="o" style="position:absolute;right:-40px;top:-50px;width:170px;height:170px;background:var(--yel)"></div><div style="position:absolute;right:86px;top:84px;width:44px;height:44px;background:var(--red)"></div>
+            <h4 style="position:absolute;left:18px;bottom:14px;font-size:58px;letter-spacing:.14em;color:var(--paper)">海市</h4></div>
+          <div style="padding:16px 18px 18px"><div class="lat">Fata Morgana</div><p class="desc" style="margin-top:12px">港區夜市。</p><div class="tags"><span>照相館</span><span>／</span><span>報社</span><span>／</span><span>沖洗底片</span></div>
+          <div class="pg" style="margin-top:18px">${[0, 1, 2, 3, 4, 5].map((i) => `<b style="background:${i === 1 ? 'var(--red)' : 'rgba(23,18,15,.25)'}"></b>`).join('')}</div></div><div class="go yel"><span>上船</span><span>→</span></div></div>`,
+      },
+      {
+        id: 'B', name: '四色', marks: ['ink o', 'pap o', 'yel o', 'red o'],
+        note: '最安靜：鈕全是平塗的墨圓，形狀不動。顏色只有煉金的四個階段，各管一件事，其他時候畫面上沒有彩色。',
+        legend: [['ink o', '黑　平常的鈕'], ['pap o', '白　主鍵、選著的那一格'], ['yel o', '黃　現在可以做的事（互動鍵、提示）'], ['red o', '紅　相機：舉相機、快門、錄影']],
+        walk: () => place('left:0;right:0;top:112px;text-align:center', '') .replace('<p>', '<div class="o" style="width:8px;height:8px;margin:14px auto 0;background:var(--yel)"></div><p style="margin-top:12px">')
+          + `<div class="hint ink" style="left:50%;top:236px;transform:translateX(-50%);padding:0 18px;border-radius:17px"><span class="o yel" style="width:8px;height:8px;margin-right:12px"></span>推搖桿或點地面<em>走路</em></div>`
+          + strip('right:12px;top:14px;height:40px;border-radius:20px;overflow:hidden', TOP.map((n) => cell('ink', svg(n), 41)))
+          + k('s64 o pap', P.jump, zh('跳')) + k('s52 o ink', P.sit, zh('坐')) + k('s52 o red', P.cam, svg('lens')) + k('s52 o ink', P.emote, svg('smile')) + k('s52 o ink', P.pack, svg('bag')) + k('s52 o ink', P.talk, svg('talk'))
+          + k('s56 o yel', P.act, '上船') + k('ring', P.joy, '', 'border-width:1.5px') + k('s52 o pap', P.joy, `<div class="o ink" style="width:8px;height:8px"></div>`) + k('s28 o ink', P.swap, '⇄'),
+        shoot: () => strip('left:12px;top:14px;height:38px;border-radius:19px;overflow:hidden', MODE.map((t, i) => cell(i === 1 ? 'pap' : 'ink', t, 58)))
+          + `<div class="hint ink" style="left:50%;top:232px;transform:translateX(-50%);padding:0 18px;border-radius:17px">拖曳<em style="margin:0 14px 0 8px">轉頭</em>雙指<em style="margin-left:8px">變焦</em></div>`
+          + ruler('yel', 'ink', 'o') + strip('left:17px;top:666px;height:36px;border-radius:18px;overflow:hidden', LENS.map((t, i) => cell(i === 2 ? 'pap' : 'ink', t, 54)))
+          + k('s64 o red', P.jump, `<div class="o" style="width:42px;height:42px;border:4px solid var(--paper)"></div>`) + k('s52 o ink', P.sit, `<div class="o" style="width:18px;height:18px;background:var(--red)"></div>`) + k('s52 o ink', P.cam, svg('x')) + k('s52 o ink', P.pack, svg('bag'))
+          + k('s52 o ink', P.emote2, svg('smile')) + k('s52 o ink', P.look, '看鏡') + k('ring', P.joy, '', 'border-width:1.5px') + k('s52 o pap', P.joy, `<div class="o ink" style="width:8px;height:8px"></div>`),
+        desk: () => strip('left:118px;top:194px;height:44px;border-radius:22px;overflow:hidden', ['smile', 'lens', 'bag', 'eye', 'people', 'party', 'sound', 'full', 'more'].map((n) => cell(n === 'lens' ? 'red' : 'ink', svg(n), 45)))
+          + `<div class="hint ink" style="left:50%;top:80px;transform:translateX(-50%);padding:0 18px 0 5px;border-radius:17px"><span class="o yel" style="display:grid;place-items:center;width:26px;height:26px;margin-right:10px;font-size:13px">E</span>上船</div>`,
+        card: () => `<div class="card ink" style="padding:20px 18px 18px"><h4 style="font-size:40px;letter-spacing:.3em">海市</h4><div class="o yel" style="width:8px;height:8px;margin:16px 0 12px"></div><div class="lat">Fata Morgana</div>
+          <p class="desc" style="margin-top:22px">港區夜市。</p><div class="tags" style="opacity:.6"><span>照相館</span><span>·</span><span>報社</span><span>·</span><span>沖洗底片</span></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:22px"><div class="pg">${[0, 1, 2, 3, 4, 5].map((i) => `<b class="o" style="background:${i === 1 ? 'var(--paper)' : 'rgba(244,236,216,.25)'}"></b>`).join('')}</div><div class="go yel" style="height:44px;border-radius:22px;padding:0 24px">上船</div></div></div>`,
+      },
+      {
+        id: 'C', name: '色面', marks: ['yel o', 'blu o', 'red'],
+        note: '最滿：拇指弧和搖桿各坐在一塊四分之一圓的色面上，介面的形狀就是圖。舉相機時左邊那塊整片換成紅，模式用色面說。',
+        legend: [['yel o', '黃色面　拇指那一邊：能按的都在上面'], ['blu o', '藍色面　搖桿那一邊'], ['red', '紅　相機；舉著的時候整塊色面變紅'], ['ink', '墨　上緣那一條：地名、系統鈕']],
+        walk: () => `<div class="slab yel" style="left:0;top:844px;width:468px;height:468px"></div><div class="slab blu" style="left:390px;top:844px;width:352px;height:352px"></div>`
+          + strip('left:0;right:0;top:0;height:52px', [cell('red', svg('eye'), 52), `<div class="ink" style="flex:1;justify-content:flex-start;padding-left:14px;gap:10px;display:flex;align-items:center"><span class="zh" style="font-size:20px;letter-spacing:.2em">原野</span><span style="font-size:9.5px;letter-spacing:.24em;opacity:.7">PRIMA MATERIA</span></div>`, ...TOP.filter((n) => n !== 'eye').slice(0, 4).map((n) => cell('ink', svg(n), 34)), cell('ink', svg('more'), 40)])
+          + `<div class="hint pap" style="left:0;top:52px;padding:0 16px">推搖桿或點地面<em>走路</em></div>`
+          + k('s64 o ink', P.jump, zh('跳')) + k('s52 o ink', P.sit, zh('坐')) + k('s52 o red', P.cam, svg('lens')) + k('s52 o ink', P.emote, svg('smile')) + k('s52 o ink', P.pack, svg('bag')) + k('s52 o ink', P.talk, svg('talk'))
+          + k('s56 o pap', P.act, '上船') + k('ring', P.joy, '', 'border-color:var(--ink)') + k('s52 o pap', P.joy) + k('s28 o pap', P.swap, '⇄'),
+        shoot: () => `<div class="slab red" style="left:0;top:844px;width:468px;height:468px"></div><div class="slab blu" style="left:390px;top:844px;width:352px;height:352px"></div>`
+          + strip('left:0;right:0;top:0;height:52px', [cell('red', svg('eye'), 52), ...MODE.map((t, i) => cell(i === 1 ? 'pap' : 'ink', t, 62)), `<div class="ink" style="flex:1"></div>`])
+          + `<div class="hint pap" style="left:0;top:52px;padding:0 16px">拖曳<em style="margin:0 14px 0 8px">轉頭</em>雙指<em style="margin-left:8px">變焦</em></div>`
+          + ruler('yel', 'ink') + strip('left:17px;top:666px;height:36px', LENS.map((t, i) => cell(i === 2 ? 'pap' : 'ink', t, 54)))
+          + k('s64 o pap', P.jump, `<div class="o" style="width:42px;height:42px;border:4px solid var(--ink)"></div>`) + k('s52 o ink', P.sit, `<div class="o pap" style="width:18px;height:18px"></div>`) + k('s52 o ink', P.cam, svg('x')) + k('s52 o ink', P.pack, svg('bag'))
+          + k('s52 o ink', P.emote2, svg('smile')) + k('s52 o ink', P.look, '看鏡') + k('ring', P.joy, '', 'border-color:var(--ink)') + k('s52 o pap', P.joy),
+        desk: () => strip('left:113px;top:192px;height:46px', ['smile', 'lens', 'bag', 'eye', 'people', 'party', 'sound', 'full', 'more'].map((n, i) => cell(['yel', 'red', 'pap'][i] || 'ink', svg(n), 46)))
+          + strip('left:270px;top:76px;height:36px', [cell('yel', 'E', 36), `<div class="ink" style="padding:0 18px">上船</div>`]),
+        card: () => `<div class="card pap" style="display:flex"><div class="red" style="flex:none;width:64px;padding:16px 0;display:flex;flex-direction:column;align-items:center;justify-content:space-between"><span class="zh" style="writing-mode:vertical-rl;font-size:20px;letter-spacing:.3em">渡船</span><span style="font-size:26px;font-weight:700">02</span></div>
+          <div style="flex:1;display:flex;flex-direction:column"><div style="padding:18px 16px 16px"><h4 style="font-size:46px;letter-spacing:.16em">海市</h4><div class="lat" style="margin-top:12px">Fata Morgana</div><p class="desc" style="margin-top:18px">港區夜市。</p><div class="tags"><span>照相館</span><span>／</span><span>報社</span><span>／</span><span>沖洗底片</span></div></div><div class="go ink" style="margin-top:auto"><span>上船</span><span>→</span></div></div></div>`,
+      },
+    ];
+
+    const mark = (m) => `<b class="${m}" style="${m.includes('tri') ? 'padding:0;width:16px;height:14px' : ''}"></b>`;
+    document.getElementById('out').innerHTML = CONCEPT.map((c) => `<section>
+      <h2><i>${c.marks.map(mark).join('')}</i>${c.id}　${c.name}</h2>
+      <p class="note">${c.note}</p>
+      <div class="legend">${c.legend.map(([m, t]) => `<span>${mark(m)}${t}</span>`).join('')}</div>
+      <div class="row">
+        <figure><div class="ph walk">${c.walk()}</div><figcaption>走動（渡口，船在旁邊）</figcaption></figure>
+        <figure><div class="ph shoot">${c.shoot()}</div><figcaption>舉相機</figcaption></figure>
+        <div class="col"><figure><div class="pc">${c.desk()}</div><figcaption>電腦下排和互動提示</figcaption></figure><figure>${c.card()}<figcaption>渡船卡</figcaption></figure></div>
+      </div></section>`).join('');
+  </script>
+</body>
+</html>

@@ -185,9 +185,9 @@ try {
   check(JSON.stringify(m.keys) === JSON.stringify([3, 1, 2, 0, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]), '按 B：跳和返回對調，記進存檔', JSON.stringify(m.keys));
   check(/「跳」換到 B/.test(s.hint), '提示說換到哪裡', s.hint);
   check(m.jumpName === 'B', '畫面上寫著那顆（data-pad-face="3"，攝影提示的「自拍」）跟著寫 B', m.jumpName);
-  const codes = await ev(`Promise.all([import('/js/save/savecode.js'), import('/js/save/progress.js')]).then(([c, p]) => { const all = c.encodeSave(), eye = c.encodeSave(p.getSave(), { closet: false, face: false, iris: true }); return { all, eye, back: c.decodeSave(all)?.padKeys }; })`);
-  check(/~p=3120456789abcdef/.test(codes.all) && JSON.stringify(codes.back) === JSON.stringify(m.keys), '存檔碼帶著按鍵、讀得回來', codes.all.slice(-30));
-  check(!/~p=/.test(codes.eye), '眼紋不帶按鍵');
+  const codes = await ev(`Promise.all([import('/js/save/savecode.js'), import('/js/save/progress.js')]).then(([c, p]) => ({ back: c.readCode(c.saveCode())?.save.padKeys, eye: 'padKeys' in c.readIris(c.irisBytes(p.getSave(), 71)) }))`);
+  check(JSON.stringify(codes.back) === JSON.stringify(m.keys), '存檔帶著按鍵、讀得回來', JSON.stringify(codes.back));
+  check(!codes.eye, '眼紋不帶按鍵');
   await press(0);
   await sleep(350);
   m = await map();

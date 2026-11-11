@@ -266,6 +266,8 @@ export class Multiplayer {
       .on('broadcast', { event: 'party' }, ({ payload }) => this.onParty(payload))
       .on('broadcast', { event: 'gate' }, ({ payload }) => this.onGate(payload))
       .on('broadcast', { event: 'act' }, ({ payload }) => this.onAct(payload))
+      .on('broadcast', { event: 'coin' }, ({ payload }) => this.onCoin(payload))
+      .on('broadcast', { event: 'share' }, ({ payload }) => this.onShare(payload))
       .on('presence', { event: 'sync' }, () => {
         const state = ch.presenceState();
         this.present = new Set(Object.keys(state));
@@ -645,6 +647,34 @@ export class Multiplayer {
     if (m.t === 'fire' && !(Number.isFinite(m.s) && m.s >= 0 && m.s <= 86400)) return;
     if (!['fire', 'ask'].includes(m.t)) return;
     this.events.onAct?.(m);
+  }
+
+  // 地上的硬幣（scene/coins.js）：pick 誰撿走了哪一枚（k 是「區:點:批」）、ask 剛進來的人問、state 回這一批被撿走的。回傳有沒有送出去
+  coin(msg) {
+    if (!this.active || !this.channel) return false;
+    this.channel.send({ type: 'broadcast', event: 'coin', payload: { id: this.id, ...msg } });
+    return true;
+  }
+
+  onCoin(m) {
+    const key = (k) => typeof k === 'string' && /^[a-z]{1,16}:\d{1,3}:\d{1,9}$/.test(k);
+    if (!m || !isId(m.id) || m.id === this.id || !['pick', 'ask', 'state'].includes(m.t)) return;
+    if (m.t === 'pick' && !key(m.k)) return;
+    if (m.t === 'state' && !(Array.isArray(m.k) && m.k.length <= 64 && m.k.every(key))) return;
+    this.events.onCoin?.(m);
+  }
+
+  // 區域裡大家共用的東西（world.shared，靜海的電梯）：k 是哪一樣、t 是哪種消息，其他欄位由那樣東西自己的 receive 檢查。回傳有沒有送出去
+  share(k, msg) {
+    if (!this.active || !this.channel) return false;
+    this.channel.send({ type: 'broadcast', event: 'share', payload: { ...msg, id: this.id, k } });
+    return true;
+  }
+
+  onShare(m) {
+    if (!m || !isId(m.id) || m.id === this.id || typeof m.k !== 'string' || !/^[a-z]{1,16}$/.test(m.k) || typeof m.t !== 'string' || !/^[a-z]{1,8}$/.test(m.t)) return;
+    if (Object.keys(m).length > 12) return;
+    this.events.onShare?.(m);
   }
 
   // ───────── 別人的鏡頭 ─────────

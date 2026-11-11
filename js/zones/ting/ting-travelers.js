@@ -7,7 +7,7 @@
 // 近處用完整的角色（手機 7 個、電腦 9 個），遠處兩個簡單的形狀。一半的人左手提一只小皮箱，停下來就放在腳邊；從靜海來的偶爾穿太空衣，從蜃樓來的多半披沙色的斗篷。
 // main.js 把它當成這一區走來走去的人（walkers），每幀呼叫 update(dt, player)。角色池、遠處的人形、讓路、轉頭在 npc/crowdkit.js
 import * as THREE from 'three';
-import { presetLook, sanitizeLook, RACES, SLIDERS, CLOTH, SKINS } from '../../avatar/looks.js';
+import { presetLook, sanitizeLook, crowdRaces, SLIDERS, CLOTH, SKINS } from '../../avatar/looks.js';
 import { rng } from '../../core/props.js';
 import { hash, wrap, CharacterPool, FarFigures, dodgeFrom, easeOffset, turnHead, ghostStep, linkTrack } from '../../npc/crowdkit.js';
 import { signOf } from '../../scene/places.js';
@@ -57,7 +57,7 @@ const SAND = [23, 28, 30];
 
 function travelerLook(R, from) {
   const pick = (a) => a[Math.floor(R() * a.length)];
-  const L = presetLook(0), race = pick(RACES);
+  const L = presetLook(0), race = pick(crowdRaces());
   for (const [k, v] of Object.entries(WEAR)) L[k] = pick(v);
   for (const [k, v] of Object.entries(FACE)) L[k] = pick(v);
   L.race = race.id;

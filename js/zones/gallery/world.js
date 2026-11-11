@@ -5,7 +5,7 @@
 // 牆分成一段一段（entry），擋住鏡頭和角色之間的那段會自動降成矮牆。
 import * as THREE from 'three';
 import * as TX from '../../core/textures.js';
-import { Kit, PROPS, SETS, newBucket, rng } from '../../core/props.js';
+import { SETS, rng } from '../../core/props.js';
 import { buildMirror, buildMirrorRug } from './mirror.js';
 import { TABLE_D, TABLE_W, buildCamTable } from './camtable.js';
 import { buildFrontDoor } from '../../scene/frontdoor.js';
@@ -13,6 +13,7 @@ import { buildGuideSign } from './guidesign.js';
 import { buildCellar } from './cellar.js';
 import { buildSunMoon } from './sunmoon.js';
 import { buildTravelPosters } from './travelposters.js';
+import { buildWorkbench } from './workbench.js';
 import { buildRadio } from './radio.js';
 import { buildVestibuleLight } from './vestibule-light.js';
 import { CLOCK_D, CLOCK_W, buildClock } from './clock.js';
@@ -25,14 +26,14 @@ import { makePathfinder } from '../../core/pathgrid.js';
 import { bucketObjects, glowPoints, tag, uTime } from '../../core/scenery.js';
 import { Fader, RoomFader, ease } from '../../core/fade.js';
 import { bakeOne, updateMagic } from './magicpaint.js';
-import { DEFAULTS, DOOR_NEAR, DOOR_W, MARGIN, ROOM_NEAR, ROOM_TYPES, SEA_SPAN, SHELL_SPAN, WALL_DOWN, WALL_H, WALL_HOLD, WALL_UP, boxSpan, buildBoundary, buildBoxShell, buildPainting, buildRotundaShell, dust, furnish, hitObstacle, propBox, propFader, setPropFader, shared, slotsFor } from './world-rooms.js';
+import { DEFAULTS, DOOR_NEAR, DOOR_W, MARGIN, ROOM_NEAR, ROOM_TYPES, SEA_SPAN, SHELL_SPAN, WALL_DOWN, WALL_H, WALL_HOLD, WALL_UP, boxSpan, buildBoundary, buildBoxShell, buildPainting, buildRotundaShell, dust, furnish, hitObstacle, propFader, setPropFader, shared, slotsFor } from './world-rooms.js';
 
 // ---------- 主程式 ----------
 
 // opts.lights：前廳放不放真的燈（電腦）；opts.motes：光柱裡的浮塵（vestibule-light.js）
 export function buildWorld(scene, gallery, opts = {}) {
   const rooms = [], paintings = [], entries = [], raycastTargets = [];
-  let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null, clock = null, mirrorTick = null, sunMoon = null, stage = null, radio = null, cellar = null;
+  let mirror = null, outdoor = null, camTable = null, frontDoor = null, guideSign = null, clock = null, mirrorTick = null, sunMoon = null, stage = null, radio = null, cellar = null, workbench = null;
   // 照鏡子幾成（main.js 每一幀給，0 到 1）；鏡子那面牆的牆段，照鏡子時整段藏起來
   let mirrorK = 0, mirrorWall = null;
   let z = 0;
@@ -165,9 +166,9 @@ export function buildWorld(scene, gallery, opts = {}) {
       mirror.rug = rug;   // 站上去亮了幾成，前廳的底聲要聽（vestibule-sound.js）
       mirrorWall = sp.entry;
 
-      // 右牆靠前是前門（frontdoor.js）：進來的那道門，門外是黃昏的光，不能開。靠出口那頭的牆角不擺雜物（旅遊海報那邊）
+      // 右牆靠前是前門（frontdoor.js）：進來的那道門，門外是黃昏的光，不能開。門以後到出口那頭的牆角都不擺雜物（配件工作桌那邊）
       const right = room.spans[1], sd = 2.0;
-      right.clear = [[sd - 1.3, sd + 2.0], [5.7, right.length]];
+      right.clear = [[sd - 1.3, right.length]];
       const dp = right.at(sd), drot = Math.atan2(dp.nx, dp.nz), dc = Math.cos(drot), ds = Math.sin(drot);
       const toWorld = (o) => ({ x: dp.x + o.x * dc + o.z * ds, z: dp.z - o.x * ds + o.z * dc });
       const door = buildFrontDoor();
@@ -235,11 +236,11 @@ export function buildWorld(scene, gallery, opts = {}) {
       // 互動鍵和聲音要用的：在哪、正面朝哪（n）、沿牆的方向（along）、半寬半深
       Object.assign(radio, { x: rx, z: rz, n: { x: rq.nx, z: rq.nz }, along: { x: rq.nz, z: -rq.nx }, hw: radio.w / 2, hd: radio.d / 2 });
 
-      // 出口那面牆：門兩邊各兩張旅遊海報（travelposters.js），照渡船卡的順序從左排到右。牆下原本的家具照樣做一次再丟
+      // 出口那面牆：門靠收音機那邊掛兩張旅遊海報（travelposters.js），月球靠收音機、汀靠門；門另一邊空著。牆下原本的家具照樣做一次再丟
       const back = boxSpan(room, 'back'), seg = back.length / 2 - DOOR_W / 2 - 0.22;
       back.clear = [[0, back.length]];
-      const posterAt = [seg / 2 - 0.46, seg / 2 + 0.46, back.length - seg / 2 - 0.46, back.length - seg / 2 + 0.46];
-      buildTravelPosters().forEach((p, i) => {
+      const posterAt = [seg / 2 - 0.46, seg / 2 + 0.46];
+      buildTravelPosters(['jinghai', 'ting']).forEach((p, i) => {
         const q = back.at(posterAt[i]);
         p.group.position.set(q.x + q.nx * 0.01, 0, q.z + q.nz * 0.01);
         p.group.rotation.y = Math.atan2(q.nx, q.nz);
@@ -254,16 +255,18 @@ export function buildWorld(scene, gallery, opts = {}) {
       room.window = { sp: front, s: 2.4, low: false, style: { glass: '#f3dfcc', glass2: '#e2ad98', curtain: '#5a4f6a' }, beam: 0.3 };
       front.clear = [[4.0, front.length]];
 
-      // 胖頭人身後、出口牆前面是一座畫架，上面一幅沒畫完的畫（props.js 的 easel），斜斜朝著前門那邊
-      const def = PROPS.easel, ex = 2.85, ez = -6.95, erot = 0.5;
-      const ek = new Kit(rng('前廳畫架')), eb = newBucket(), easel = new THREE.Group();
-      def.build(ek);
-      ek.emit(eb, ex, ez, erot);
-      easel.add(...bucketObjects(eb));
-      room.group.add(easel);
-      fadeByBoxes(easel, [propBox(ex, ez, erot, def)]);
-      room.obstacles.push({ x: ex, z: ez, hw: def.w / 2, hd: def.d / 2, rot: erot });
-      room.shadowSpots.push({ x: ex, z: ez, w: def.w, d: def.d, rot: erot });
+      // 出口牆門的另一邊和右牆那個角落：相機配件的工作桌（workbench.js），L 形桌子＋圓形工具板＋一瓶鬼火。原本的畫架和畫具搬到地下室（cellar.js）
+      const wb = buildWorkbench(), wc = back.at(back.length);
+      wb.group.position.set(wc.x, 0, wc.z);
+      room.group.add(wb.group);
+      wb.locate();
+      wb.board.traverse((m) => { if (m.isMesh) back.entry.tall.push(m); });
+      for (const g of [wb.bench, wb.wall]) g.traverse((m) => { if (m.isMesh) right.entry.tall.push(m); });
+      for (const o of wb.obstacles) {
+        room.obstacles.push({ x: wc.x + o.x, z: wc.z + o.z, hw: o.hw, hd: o.hd, rot: 0 });
+        room.shadowSpots.push({ x: wc.x + o.x, z: wc.z + o.z, w: o.hw * 2, d: o.hd * 2, rot: 0 });
+      }
+      workbench = wb;
     }
 
     const slots = slotsFor(room);
@@ -616,5 +619,5 @@ export function buildWorld(scene, gallery, opts = {}) {
   // 站在地下室的方廳裡：回傳地名（main.js 進去時報一次，party.js 說隊友在哪）
   const cellarAt = (x, zz) => (cellar?.inside(x, zz) ? cellar.place : null);
 
-  return { rooms, paintings, mirror, camTable, radio, stage, frontDoor, guideSign, sunMoon, clock, outdoor, cellar, cellarAt, exits, raycastTargets, roomIndexAt, envDim: (x, z) => stage?.dim(x, z) ?? 0, mirrorView: (k) => { mirrorK = k; }, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, updatePaintings, fadeVariants: (on) => roomFader.all(on), propVariants: (on) => propFader.turn(on) };
+  return { rooms, paintings, mirror, camTable, radio, workbench, stage, frontDoor, guideSign, sunMoon, clock, outdoor, cellar, cellarAt, exits, raycastTargets, roomIndexAt, envDim: (x, z) => stage?.dim(x, z) ?? 0, mirrorView: (k) => { mirrorK = k; }, walkable, findWalkable, findPath, groundY, camFloor, camClip, setCurrentRoom, update, updatePaintings, fadeVariants: (on) => roomFader.all(on), propVariants: (on) => propFader.turn(on) };
 }

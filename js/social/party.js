@@ -334,6 +334,7 @@ export class Party {
       .on('broadcast', { event: 'call' }, on(this.onCall))
       .on('broadcast', { event: 'peek' }, on((p) => this.peek?.onAsk(p)))
       .on('broadcast', { event: 'pix' }, on((p) => this.peek?.onPix(p)))
+      .on('broadcast', { event: 'coin' }, on(this.onCoin))
       .subscribe((status) => {
         if (ch !== this.ch) return;
         this.live = status === 'SUBSCRIBED';
@@ -341,6 +342,8 @@ export class Party {
           clearTimeout(this.retry);
           this.lastBeat = -Infinity;
           this.arrived();
+          // 隊友丟在這一區的硬幣（scene/coins.js）：接上就問一次
+          this.send('coin', { t: 'ask', zn: this.zone });
         } else if (status === 'CLOSED') this.rejoin(ch, REJOIN);
         else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') this.rejoin(ch, REJOIN_ERR);
       });
@@ -575,6 +578,31 @@ export class Party {
     o.bubble = this.speak(o.bubble, text, this.colorOf(o.m));
     this.addLog(o.m, text);
     if (o.s) this.onHeard?.(o.s);   // 隊友說話，轉頭看他（main.js 接到 attention.js，o.s 是他在 multiplayer 的代號）
+  }
+
+  // 丟給隊友的硬幣（scene/coins.js 管畫面和撿，這裡只收發）。this.coins 是 main.js 接上的 GroundCoins。
+  // drop 誰在哪一區哪裡丟了第 i 枚、take 有人撿走了（o 是丟的人）、ask 剛到的人問、list 丟的人回自己還沒被撿的
+  onCoin(p) {
+    // 隊伍頻道上只有隊友：剛換頁的人還沒聽到別人回報位置（mates 還沒有他），回來的清單照收
+    const c = this.coins;
+    if (!c || !p || !isId(p.m) || p.m === this.state.me || !['drop', 'take', 'ask', 'list'].includes(p.t)) return;
+    const o = this.mates.get(p.m);
+    const okI = (i) => Number.isInteger(i) && i > 0 && i < 1e6;
+    const okP = (x, y, z) => isNum(x, 500) && isNum(y, 500) && isNum(z, 500);
+    if (p.t === 'take') {
+      if (!okI(p.i) || !isId(p.o)) return;
+      c.mateTake(p.o === this.state.me ? 'me' : p.o, p.i);
+      return;
+    }
+    if (p.zn !== this.zone) return;
+    if (o) o.zn = p.zn;
+    if (p.t === 'drop' && okI(p.i) && okP(p.x, p.y, p.z)) c.mateDrop(p.m, p.i, p.x, p.y, p.z);
+    else if (p.t === 'ask') {
+      const l = c.mineList();
+      if (l.length) this.send('coin', { t: 'list', zn: this.zone, l });
+    } else if (p.t === 'list' && Array.isArray(p.l) && p.l.length <= 20) {
+      for (const [i, x, y, z] of p.l) if (okI(i) && okP(x, y, z)) c.mateDrop(p.m, i, x, y, z);
+    }
   }
 
   onMark(p) {

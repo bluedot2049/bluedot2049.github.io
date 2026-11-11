@@ -50,7 +50,7 @@ for (const { zone, shot } of picked) {
   await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: SCALE, mobile: false });
   // 當成從另一區搭船過來：不會停在第一次來的門口等人按「進入」；畫廊會在碼頭上岸，戶外才是打開的、光線和霧也是戶外那組
   const from = zone === 'gallery' ? 'haishi' : 'gallery';
-  await b.load(`z=${zone}&q=mid&debug&crowd=0&beast=0&happen=0&act=0&rain=0&dust=0.5&from=${from}`);
+  await b.load(`z=${zone}&q=mid&debug&crowd=0&beast=0&happen=0&act=0&rain=0&dust=0.5&mist=1&from=${from}`);
   // 鏡頭交給我們：角色那套跟拍、牆淡掉都停掉；自己和路人藏起來
   await ev(`(() => {
     const g = __g, cam = g.camera, s = ${JSON.stringify(shot)};

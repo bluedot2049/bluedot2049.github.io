@@ -20,6 +20,30 @@ sizePick = Math.min(SIZE_MAX, Math.max(SIZE_MIN, pref('uiSize') || 1));
 export const uiScale = () => scale;
 export const uiSize = () => sizePick;
 
+// 介面樣式（試做）：暫停選單的「介面樣式」，'' 是原本的金線、'four' 是四色（css/skin-four.css，只寫了電腦版）。
+// 換的只有 body 上的 class；四色用的無襯線字選了才去載，原本的樣式不多下載任何東西
+const SKINS = ['', 'four'];
+let skinPick = SKINS.includes(pref('skin')) ? pref('skin') : '';
+export const skin = () => skinPick;
+export function setSkin(v) {
+  skinPick = SKINS.includes(v) ? v : '';
+  setPref('skin', skinPick);
+  applySkin();
+}
+function applySkin() {
+  const body = typeof document === 'undefined' ? null : document.body;
+  if (!body?.classList) return;
+  for (const s of SKINS) if (s) body.classList.toggle(`skin-${s}`, s === skinPick);
+  if (skinPick === 'four' && !document.getElementById('skin-four-font')) {
+    const l = document.createElement('link');
+    l.id = 'skin-four-font';
+    l.rel = 'stylesheet';
+    l.href = 'https://fonts.googleapis.com/css2?family=Jost:wght@500;600;700&family=Noto+Sans+TC:wght@500;700&display=swap';
+    document.head.append(l);
+  }
+}
+applySkin();
+
 // 提示（#hint）停多久：照字數，一秒約六個字，再加轉過眼睛去看的一秒半；英文字母、數字、鍵名算小半個字
 export const readMs = (text) => Math.min(12000, 1500 + 170 * [...String(text).replace(/\s/g, '')].reduce((n, c) => n + (c < '\u0080' ? 0.4 : 1), 0));
 // 教學提示同一台裝置出現幾次就夠了（做過那件事的立刻不再出現）
@@ -383,6 +407,7 @@ export class UI {
     el.classList.remove('show', 'yield');
     void el.offsetWidth;
     el.classList.add('show');
+    this.ink?.watch();   // 字色跟著背後的畫面（toastink.js，main.js 接上）
     this.toastAt = performance.now();
     // 動畫播完把 show 拿掉：提示看 #toast.show 決定要不要讓位（hud.css）
     clearTimeout(this.toastTimer);

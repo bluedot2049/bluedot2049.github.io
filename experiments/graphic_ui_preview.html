@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>平面設計感試做</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&display=swap">
+<link rel="stylesheet" href="../css/alchemy-font.css">
+<style>
+  /* 色票照 css/base.css；這頁不載 base.css（它會鎖住捲動） */
+  :root {
+    --line: rgba(232, 184, 106, .32); --line-soft: rgba(232, 184, 106, .14);
+    --gold: #e8b86a; --gold-fill: #e2ad5f; --text: #f5e9d4; --muted: #b5a084;
+    --font: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+    --latin: "Cormorant Garamond", "Noto Serif TC", "Songti TC", serif;
+    --surface: rgba(34, 23, 16, .97);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 90px; background: #120c08; color: var(--text); font-family: var(--font); }
+  h1 { margin: 0 0 8px; font-size: 20px; font-weight: 600; letter-spacing: .35em; color: var(--gold); }
+  .note { margin: 0; max-width: 880px; font-size: 13px; line-height: 1.85; letter-spacing: .06em; color: var(--muted); }
+  section { margin-top: 46px; }
+  h2 { display: flex; align-items: baseline; gap: 12px; margin: 0 0 6px; font-size: 16px; font-weight: 600; letter-spacing: .3em; color: var(--gold); }
+  h2 small { font-family: var(--latin); font-style: italic; font-weight: 500; font-size: 15px; letter-spacing: .12em; color: var(--muted); }
+  .row { display: flex; flex-wrap: wrap; gap: 26px 22px; align-items: flex-start; margin-top: 18px; }
+  figure { margin: 0; }
+  figcaption { margin-top: 10px; font-size: 12px; letter-spacing: .12em; color: var(--muted); }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .bar button { min-height: 34px; padding: 0 16px; font: 13px var(--font); letter-spacing: .14em; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; }
+  .bar button.on { background: var(--gold-fill); color: #2a1a0c; border-color: transparent; font-weight: 600; }
+  /* 卡片底下墊一塊像場景的底：渡口的黃昏天和海 */
+  .scene { padding: 26px 24px; border-radius: 6px; background: linear-gradient(#d89a86, #efc09a 52%, #6c6a8c 52.5%, #45435f); }
+
+  /* ───── 渡船卡 ───── */
+  .fc { position: relative; width: 320px; border-radius: 4px; overflow: hidden; box-shadow: 0 14px 40px rgba(0, 0, 0, .5); }
+  .fc button { font-family: inherit; cursor: pointer; }
+  .fc canvas, .poster canvas, .phone canvas { display: block; width: 100%; height: 100%; }
+  .x { position: absolute; z-index: 2; top: 6px; right: 6px; width: 28px; height: 28px; padding: 0; border-radius: 50%; background: transparent; border: 1px solid; font-size: 12px; line-height: 1; }
+  .nm { margin: 0; font-family: 'AlchemyGallery', var(--font); font-weight: normal; font-size: 30px; line-height: 1.15; letter-spacing: .42em; margin-right: -.42em; }
+  .nm.long { font-size: 19px; letter-spacing: .14em; margin-right: -.14em; }
+  .nm.plain { font-family: var(--font); font-weight: 600; font-size: 26px; }   /* 煉金體沒造過的字，整句用一般字型 */
+  .lt { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 8px 0 0; font-family: var(--latin); font-style: italic; font-size: 15px; letter-spacing: .2em; }
+  .lt::before, .lt::after { content: ""; width: 22px; height: 1px; background: var(--acc); }
+  .desc { margin: 0 0 8px; font-size: 14px; line-height: 1.7; letter-spacing: .08em; }
+  .tags { margin: 0; font-size: 12px; letter-spacing: .16em; }
+  .tags b { margin: 0 .6em; font-weight: 400; }
+  .foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+  .dots { display: flex; gap: 9px; padding-left: 4px; }
+  .dots i { width: 6px; height: 6px; transform: rotate(45deg); background: var(--line); }
+  .dots i.on { background: var(--gold); }
+  .go { min-height: 44px; padding: 0 24px; font-size: 15px; font-weight: 600; letter-spacing: .25em; color: #2a1a0c; background: var(--gold-fill); border: 0; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(255, 244, 220, .5); }
+  .bw { position: relative; }
+  .st { position: absolute; top: 50%; width: 30px; height: 30px; margin-top: -15px; padding: 0 0 3px; border-radius: 50%; font: 22px/1 var(--latin); color: var(--gold); background: rgba(18, 12, 8, .78); border: 1px solid var(--line); }
+  .st.l { left: 8px; } .st.r { right: 8px; }
+
+  /* 現在的（照 css/panels.css 的 #ferry） */
+  .fc.now { overflow: visible; padding: 18px 16px 16px; background: var(--surface); border: 1px solid var(--line-soft); }
+  .hair::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--gold); opacity: .6; }
+  .hair::after { content: ""; position: absolute; left: 50%; top: -4px; width: 7px; height: 7px; margin-left: -3.5px; transform: rotate(45deg); background: var(--gold); }
+  .pick { display: flex; align-items: center; gap: 6px; margin: 0 -8px; }
+  .pick .step { flex: 0 0 auto; width: 34px; height: 64px; padding: 0; font: 28px/1 var(--latin); color: var(--gold); background: transparent; border: 0; }
+  .pick .info { flex: 1; min-width: 0; padding-right: 18px; }
+  .now h3 { margin: 0 0 10px; font-size: 20px; font-weight: 600; letter-spacing: .1em; }
+  .now .desc { margin-bottom: 12px; opacity: .85; }
+  .pills { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .pills li { font-size: 12px; letter-spacing: .12em; color: var(--muted); border: 1px solid var(--line-soft); border-radius: 999px; padding: 3px 10px; }
+  .now .x, .fc.a .x { color: var(--muted); border-color: var(--line-soft); }
+
+  /* A 書腰：現在的卡，頂上多一條紋樣帶，地名換煉金體、標籤拿掉框 */
+  .fc.a { background: var(--surface); }
+  .fc.a .bw { height: 46px; border-bottom: 3px solid var(--field); }
+  .fc.a .x { background: rgba(18, 12, 8, .78); }
+  .fc.a .in { padding: 14px 16px 16px; }
+  .fc.a .ttl { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; margin-bottom: 8px; color: var(--text); }
+  .fc.a .nm { font-size: 22px; letter-spacing: .3em; margin-right: 0; white-space: nowrap; }
+  .fc.a .nm.long { font-size: 17px; letter-spacing: .1em; }
+  .fc.a .nm.plain { font-size: 20px; }
+  .fc.a .ttl i { font-family: var(--latin); font-size: 15px; letter-spacing: .14em; color: var(--muted); white-space: nowrap; }
+  .fc.a .desc { opacity: .85; }
+  .fc.a .tags { color: var(--muted); } .fc.a .tags b { color: var(--gold); }
+
+  /* B 半封：上半是書封（色面、地名、紋樣帶），下半留暖墨、金線、膠囊鈕 */
+  .fc.b header, .fc.c header { display: flex; flex-direction: column; justify-content: center; min-height: 132px; padding: 22px 18px 15px; text-align: center; background: var(--field); color: var(--ink); }
+  .fc.b .bw, .fc.c .bw { height: 104px; }
+  .fc.b .x, .fc.c .x { color: var(--ink); opacity: .7; }
+  .fc.b .in { position: relative; padding: 16px 18px 16px; background: var(--surface); }
+  .fc.b .desc { opacity: .85; }
+  .fc.b .tags { color: var(--muted); } .fc.b .tags b { color: var(--gold); }
+
+  /* C 整封：整張都是那一區的色，按鈕和頁點也換成那一區的墨色 */
+  .fc.c { background: var(--field); color: var(--ink); }
+  .fc.c .in { padding: 15px 18px 16px; }
+  .fc.c .tags { opacity: .75; } .fc.c .tags b { color: var(--acc); opacity: 1; }
+  .fc.c .dots i { background: var(--ink); opacity: .25; } .fc.c .dots i.on { opacity: 1; }
+  .fc.c .go { color: var(--field); background: var(--ink); box-shadow: none; }
+
+  /* ───── 旅遊海報：前廳出口那面牆，細木框（travelposters.js 的比例 0.62 × 0.88） ───── */
+  .wall { padding: 34px 30px 30px; border-radius: 6px; background: linear-gradient(#3a2a26, #2c1f1c); }
+  .poster { width: 236px; height: 335px; display: flex; flex-direction: column; border: 8px solid #4a2e1e; background: var(--field); color: var(--ink); text-align: center; }
+  .poster .top { padding: 20px 8px 14px; }
+  .poster .nm { font-size: 34px; letter-spacing: .5em; margin-right: -.5em; }
+  .poster .nm.plain { font-size: 28px; letter-spacing: .4em; margin-right: -.4em; }
+  .poster .bw { flex: 1; min-height: 0; }
+  .poster .bot { padding: 11px 8px 13px; }
+  .poster .bot p { margin: 0; font-size: 11.5px; letter-spacing: .3em; margin-right: -.3em; opacity: .85; }
+  .poster .bot hr { width: 26px; height: 1px; margin: 8px auto 7px; border: 0; background: var(--acc); }
+  .poster .bot b { display: block; font-family: var(--latin); font-weight: 600; font-size: 13px; letter-spacing: .34em; margin-right: -.34em; text-transform: uppercase; }
+
+  /* ───── 手機：渡海的過場 ───── */
+  .phone { width: 262px; height: 548px; display: flex; flex-direction: column; border: 3px solid #2e2622; border-radius: 30px; overflow: hidden; background: var(--field); color: var(--ink); text-align: center; }
+  .phone .top { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 22px; }
+  .phone .top span { font-family: 'AlchemyGalleryText', var(--font); font-size: 15px; letter-spacing: .7em; margin-right: -.7em; opacity: .85; }
+  .phone .bw { height: 196px; }
+  .phone .bot { flex: 1.25; padding-top: 26px; }
+  .phone .nm { font-size: 42px; letter-spacing: .5em; margin-right: -.5em; }
+  .phone .nm.plain { font-size: 34px; letter-spacing: .4em; margin-right: -.4em; }
+  .phone .lt { margin-top: 12px; }
+  .phone .load { width: 96px; height: 2px; margin: 30px auto 0; background: color-mix(in srgb, var(--ink) 22%, transparent); }
+  .phone .load i { display: block; width: 58%; height: 100%; background: var(--acc); }
+</style>
+</head>
+<body>
+  <h1>平面設計感試做</h1>
+  <p class="note">書封的做法搬進來：一塊平塗的色面放字，一條滿版切出去的紋樣帶放圖，兩邊不疊。每一區的色面從風格板的主色來，紋樣用那一區本來就有的東西畫（canvas 現場畫，種子固定）。金線、菱形頁點、膠囊鈕、煉金體都照舊。</p>
+  <div class="bar"><button id="reseed">紋樣換一版</button></div>
+
+  <section>
+    <h2>渡船卡<small>Navis</small></h2>
+    <p class="note">同一張海市的卡，由左到右越放越多。墊的底是渡口的黃昏。</p>
+    <div class="row scene" id="steps"></div>
+  </section>
+
+  <section>
+    <h2>六個地方<small>Loca</small></h2>
+    <p class="note">同一個版型套到每一區，看色面和紋樣撐不撐得住。黑森林有煉金體還沒造的字（黑、森），照規則整句用一般字型。</p>
+    <div class="bar" id="pick"><button data-v="a">A 書腰</button><button data-v="b" class="on">B 半封</button><button data-v="c">C 整封</button></div>
+    <div class="row scene" id="six"></div>
+  </section>
+
+  <section>
+    <h2>旅遊海報<small>Tabulae</small></h2>
+    <p class="note">前廳出口牆上的海報現在是佔位。這裡跟渡船卡用同一個色面、同一條紋樣，牆上看過，卡片上就認得。</p>
+    <div class="row wall" id="posters"></div>
+  </section>
+
+  <section>
+    <h2>渡海<small>Transitus</small></h2>
+    <p class="note">過場之前拿掉了空拍照片，只剩墨色和字。這裡放的是紋樣不是照片，要不要用由你決定，先擺出來看。</p>
+    <div class="row" id="phones"></div>
+  </section>
+
+  <script type="module">
+    // 平面設計感試做：渡船卡三種份量、六區套版、旅遊海報、渡海過場。紋樣帶在這裡現場畫，世界裡的字直接叫各區那一套
+    import { PLACES } from '../js/scene/places.js';
+    import { drawGlyph } from '../js/core/glyphs.js';
+    import { slits } from '../js/core/icode.js';
+    import { drawText as manatee } from '../js/core/manatee-script.js';
+
+    // field 色面、ink 色面上的字、acc 細線和小記號。latin 是各區自己的副標（畫廊用渡口的 Ad Occidentem）
+    const ZONES = {
+      gallery: { latin: 'Ad Occidentem', field: '#f0b267', ink: '#2a1a10', acc: '#b9482f' },
+      haishi: { latin: 'Fata Morgana', field: '#18223c', ink: '#efe2c2', acc: '#f3a64e' },
+      jinghai: { latin: 'Tranquillitas', field: '#efe9dc', ink: '#2c5a96', acc: '#c0453a' },
+      shenlou: { latin: 'Sarab', field: '#d8a968', ink: '#43291a', acc: '#8a5530' },
+      ting: { latin: 'Vadum', field: '#cfc7e4', ink: '#544a6c', acc: '#e0895f' },
+      heilin: { latin: 'Silva Nigra', field: '#16201d', ink: '#bcb59e', acc: '#e8923f', plain: true },
+    };
+    const ORDER = Object.keys(ZONES);
+    const PLACE = Object.fromEntries(PLACES.map((p) => [p.to || p.dev, p]));
+    const SW = { coral: '#f0a080', peach: '#ffdcbc', pink: '#e88aa8', apricot: '#f4b870', green: '#5f8f45', lavender: '#b08ad8', slate: '#4c5a74', red: '#c8553d' };   // plantkit.js 的 SW
+    const MENU = ['#d9984a', '#6e8f4e', '#f3efe4', '#c0453a', '#e2c06e', '#8fb38a'];   // jinghai-hq.js 的 SWATCH
+
+    // ---------- 小工具 ----------
+    const TAU = Math.PI * 2;
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const clamp = (t) => Math.min(1, Math.max(0, t));
+    const hex = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+    const mix = (a, b, t) => { const A = hex(a), B = hex(b); return '#' + A.map((v, i) => Math.round(lerp(v, B[i], clamp(t))).toString(16).padStart(2, '0')).join(''); };
+    const ramp = (stops, t) => { const n = stops.length - 1, f = clamp(t) * n, i = Math.min(n - 1, Math.floor(f)); return mix(stops[i], stops[i + 1], f - i); };
+    const hash = (s) => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.codePointAt(0), 16777619); return h >>> 0; };
+    const rng = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+    const poly = (g, pts, fill) => { g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.fillStyle = fill; g.fill(); };
+    const disc = (g, x, y, r, fill) => { g.beginPath(); g.arc(x, y, r, 0, TAU); g.fillStyle = fill; g.fill(); };
+    const oval = (g, x, y, rx, ry, fill, rot = 0) => { g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, TAU); g.fillStyle = fill; g.fill(); };
+    const box = (g, x, y, w, h, fill) => { g.fillStyle = fill; g.fillRect(x, y, w, h); };
+    const diamond = (g, x, y, r, fill) => poly(g, [[x, y - r], [x + r * 0.7, y], [x, y + r], [x - r * 0.7, y]], fill);
+
+    // 劍葉：plantkit.js blade 的半寬。左右兩半一明一暗，根、腰、尖三段顏色。ang 0 是朝上，bend 往旁邊彎
+    const HALF = [0.03, 0.088, 0.106, 0.094, 0.056, 0];
+    function blade(g, x, y, len, ang, bend, wid, root, mid, tip) {
+      const N = 9, dx = Math.sin(ang), dy = -Math.cos(ang), px = Math.cos(ang), py = Math.sin(ang), S = [], A = [], B = [];
+      for (let i = 0; i <= N; i++) {
+        const s = i / N, sx = x + len * (s * dx + bend * s * s * px), sy = y + len * (s * dy + bend * s * s * py);
+        let tx = dx + 2 * bend * s * px, ty = dy + 2 * bend * s * py;
+        const tl = Math.hypot(tx, ty), f = s * (HALF.length - 1), k = Math.min(HALF.length - 2, Math.floor(f)), hw = lerp(HALF[k], HALF[k + 1], f - k) * len * wid;
+        tx /= tl; ty /= tl;
+        S.push([sx, sy]); A.push([sx + ty * hw, sy - tx * hw]); B.push([sx - ty * hw, sy + tx * hw]);
+      }
+      const grad = (d) => { const q = g.createLinearGradient(x, y, S[N][0], S[N][1]); [root, mid, tip].forEach((c, i) => q.addColorStop(i / 2, mix(c, '#140c10', d))); return q; };
+      poly(g, [...A, ...S.slice().reverse()], grad(0));
+      poly(g, [...B, ...S.slice().reverse()], grad(0.24));
+    }
+    // 扇葉：從葉柄張開，一褶明一褶暗，兩側的褶短一點
+    function fan(g, x, y, r, ang, open, n, root, tip) {
+      const grad = (d) => { const q = g.createRadialGradient(x, y, r * 0.08, x, y, r); q.addColorStop(0, mix(root, '#140c10', d)); q.addColorStop(1, mix(tip, '#140c10', d)); return q; };
+      const P = [];
+      for (let k = 0; k <= n; k++) { const a = ang - open / 2 + (open * k) / n, rr = r * (1 - 0.14 * ((k / n) * 2 - 1) ** 2); P.push([x + Math.sin(a) * rr, y - Math.cos(a) * rr]); }
+      for (let k = 0; k < n; k++) poly(g, [[x, y], P[k], P[k + 1]], grad(k % 2 ? 0.22 : 0));
+    }
+    // 一叢劍葉：外側的先畫、短一點、往外彎
+    function rosette(g, R, x, y, len, pick, spread = 1.2) {
+      const n = 7 + ((R() * 4) | 0), L = [];
+      for (let j = 0; j < n; j++) {
+        const a = lerp(-spread, spread, (j + 0.5) / n) + (R() - 0.5) * 0.16;
+        L.push({ a, len: len * (1 - (0.32 * Math.abs(a)) / spread) * (0.8 + R() * 0.4), bend: Math.sign(a) * (0.1 + R() * 0.28), wid: 1 + R() * 0.5 });
+      }
+      L.sort((p, q) => Math.abs(q.a) - Math.abs(p.a));
+      for (const b of L) blade(g, x, y, b.len, b.a, b.bend, b.wid, ...pick());
+    }
+
+    // ---------- 六條紋樣帶：w、h 是帶子的寬高，u（＝h）當單位，左右畫到切出去 ----------
+    const PAT = {
+      // 畫廊：前廳的日月花牆。劍葉長滿，葉尖從月亮那頭的冷走到太陽那頭的暖，太陽兩側的扇葉像光芒
+      gallery(g, w, h, R) {
+        const u = h, BG = '#35262e';
+        box(g, 0, 0, w, h, BG);
+        const tipAt = (t) => ramp([SW.lavender, SW.pink, SW.coral, SW.apricot], t), midAt = (t) => mix(SW.slate, SW.green, t * t * (3 - 2 * t));
+        disc(g, w * 0.12, h * 0.3, u * 0.2, '#cfc4e6');
+        disc(g, w * 0.12 + u * 0.1, h * 0.26, u * 0.18, BG);
+        const sx = w * 0.87, sy = h * 0.36;
+        for (let i = 0; i < 10; i++) fan(g, sx, sy, u * (0.5 + 0.1 * (i % 2)), (i / 10) * TAU + 0.2, 0.46, 3, '#7a3f2a', i % 2 ? SW.coral : SW.apricot);
+        disc(g, sx, sy, u * 0.21, BG);
+        disc(g, sx, sy, u * 0.17, '#f7cf94');
+        for (let i = 0, n = (w / u) * 9; i < n; i++) diamond(g, R() * w, R() * h * 0.8, u * (0.012 + R() * 0.012), [SW.red, SW.peach, '#e8b86a', SW.pink][(R() * 4) | 0]);
+        for (let x = -u * 0.2 + R() * u * 0.3; x < w + u * 0.4; x += u * (0.62 + R() * 0.3)) {
+          const t = x / w;
+          if (R() < 0.3) fan(g, x, h * (0.66 + R() * 0.1), u * (0.4 + R() * 0.14), (R() - 0.5) * 0.5, 2.3, 7, mix('#241a22', midAt(t), 0.5), mix(midAt(t), tipAt(t), 0.4));
+          else rosette(g, R, x, h * (0.66 + R() * 0.1), u * (0.62 + R() * 0.2), () => ['#1f1820', mix('#2c2a3a', midAt(t), 0.55), mix(midAt(t), tipAt(t), 0.3 + R() * 0.2)]);
+        }
+        // 花穗：一枝上幾顆菱形，少
+        for (let x = u * (0.5 + R() * 0.5); x < w; x += u * (1.1 + R() * 0.8)) {
+          const y0 = h * (0.3 + R() * 0.2), c = R() < 0.5 ? SW.red : SW.peach;
+          for (let i = 0; i < 5; i++) diamond(g, x + Math.sin(i * 1.7) * u * 0.012, y0 - i * u * 0.058, u * (0.04 - i * 0.005), mix(c, SW.peach, i / 6));
+        }
+        for (let x = -u * 0.1 + R() * u * 0.2; x < w + u * 0.4; x += u * (0.44 + R() * 0.22)) {
+          const t = x / w;
+          rosette(g, R, x, h * 1.1, u * (0.72 + R() * 0.26), () => ['#241b22', midAt(t), mix(tipAt(clamp(t + (R() - 0.5) * 0.3)), SW.peach, R() * 0.3)], 1.05);
+        }
+      },
+
+      // 海市：山坡上一層層的屋瓦，門窗不齊，只有燈和窗是亮的；直的招牌寫毛筆記號字，最底下是海
+      haishi(g, w, h, R) {
+        const u = h, BG = '#16203a';
+        box(g, 0, 0, w, h, BG);
+        for (let i = 0, n = (w / u) * 5; i < n; i++) disc(g, R() * w, R() * h * 0.28, u * 0.008, '#b4c8e6');
+        disc(g, w * 0.15, h * 0.15, u * 0.085, '#efe2c2');
+        disc(g, w * 0.15 + u * 0.04, h * 0.135, u * 0.075, BG);
+        const SIGN = '海湯酒燈茶魚飯宿信圖';
+        const WALL = [['#28324f', '#2e3856', '#2b304a'], ['#3a4566', '#45485f', '#4b4541'], ['#4a5576', '#585768', '#655846']], ROOF = ['#1b2440', '#1e2846', '#141c34'];
+        const house = (x, yb, bw, bh, k) => {
+          g.save();
+          g.translate(x + bw / 2, yb);
+          g.rotate((R() - 0.5) * 0.05);
+          const wl = -bw * 0.42, ww = bw * 0.84, rh = bh * 0.36, lit = '#f3a64e';
+          box(g, wl, -bh, ww, bh + u * 0.02, WALL[k][(R() * 3) | 0]);
+          box(g, wl, -bh, ww, bh * 0.2, 'rgba(10, 14, 28, .38)');
+          const n = bw > u * 0.3 ? 2 : 1;
+          for (let i = 0; i < n; i++) {
+            const ww2 = (ww * 0.5) / n, wx = wl + ww * ((i + 0.5) / n) - ww2 / 2 + (R() - 0.5) * ww2 * 0.3, wy = -bh * (0.62 + R() * 0.1), wh = bh * (0.26 + R() * 0.12), on = R() < 0.68;
+            box(g, wx, wy, ww2, wh, on ? lit : '#151c33');
+            if (on) { box(g, wx + ww2 * 0.46, wy, ww2 * 0.08, wh, '#3a2a22'); box(g, wx, wy + wh * 0.46, ww2, wh * 0.09, '#3a2a22'); }
+          }
+          const yE = -bh + rh * 0.25, yR = -bh - rh * 0.75, ov = bw * 0.1, xl = -bw / 2, xr = bw / 2;
+          g.beginPath();
+          g.moveTo(xl - ov, yE - rh * 0.2);
+          g.quadraticCurveTo(xl + bw * 0.1, yE - rh * 0.2, xl + bw * 0.24, yR);
+          g.lineTo(xr - bw * 0.24, yR);
+          g.quadraticCurveTo(xr - bw * 0.1, yE - rh * 0.2, xr + ov, yE - rh * 0.2);
+          g.lineTo(xr + ov * 0.8, yE);
+          g.lineTo(xl - ov * 0.8, yE);
+          g.closePath();
+          g.fillStyle = mix(ROOF[k], '#2d5a68', R() < 0.25 ? 0.35 : 0);
+          g.fill();
+          box(g, xl + bw * 0.22, yR - u * 0.008, bw * 0.56, u * 0.016, '#5a70a0');
+          if (R() < 0.55) {
+            const lx = (R() < 0.5 ? xl : xr) * 0.86, r = u * (0.022 + k * 0.007);
+            box(g, lx - u * 0.003, yE, u * 0.006, r * 1.2, '#0e1424');
+            oval(g, lx, yE + r * 2.1, r * 0.82, r, '#f0863a');
+            oval(g, lx, yE + r * 2.1, r * 0.4, r * 0.62, '#f8c070');
+            box(g, lx - r * 0.5, yE + r * 1.0, r, r * 0.26, '#2a1a16');
+          }
+          if (k > 0 && R() < 0.5) {
+            const sw = u * (0.06 + k * 0.012), sh = sw * 2.7, sx = (R() < 0.5 ? wl + sw * 0.2 : wl + ww - sw * 1.2), sy = -bh * 0.82, paper = R() < 0.6;
+            box(g, sx, sy, sw, sh, paper ? '#e6d8b6' : '#201620');
+            for (let i = 0; i < 2; i++) drawGlyph(g, SIGN[(R() * SIGN.length) | 0], sx + sw / 2, sy + sh * (0.28 + i * 0.44), sw * 0.9, paper ? '#1c1418' : '#f3a64e', { brush: 0.4 });
+          }
+          g.restore();
+        };
+        [[0.36, 0.2], [0.62, 0.27], [0.88, 0.34]].forEach(([y, s], k) => {
+          box(g, 0, h * y - u * 0.01, w, u * 0.05, ['#222b47', '#2a3350', '#333a52'][k]);
+          for (let x = -R() * s * u; x < w + s * u * 0.3;) {
+            const bw = s * u * (0.75 + R() * 0.85), bh = s * u * (0.6 + R() * 0.5);
+            house(x, h * y, bw, bh, k);
+            x += bw * (0.84 + R() * 0.3);
+          }
+        });
+        box(g, 0, h * 0.89, w, h * 0.11, '#0f1729');
+        for (let i = 0, n = (w / u) * 9; i < n; i++) box(g, R() * w, h * (0.905 + R() * 0.08), u * (0.03 + R() * 0.05), u * 0.011, R() < 0.75 ? '#d98a3e' : '#5a70a0');
+      },
+
+      // 月球：暖黑的天、地球、灰褐月面；胖豆子火箭、發射塔、配色牌、招牌上的海牛字
+      jinghai(g, w, h, R) {
+        const u = h, BG = '#1b1719', WHITE = '#f1ede2';
+        box(g, 0, 0, w, h, BG);
+        for (let i = 0, n = (w / u) * 10; i < n; i++) box(g, R() * w, R() * h * 0.7, u * 0.012, u * 0.012, '#d9d2c4');
+        const ex = w * 0.19, ey = h * 0.4, er = u * 0.27;
+        disc(g, ex, ey, er, '#4f7fb6');
+        g.save();
+        g.beginPath(); g.arc(ex, ey, er, 0, TAU); g.clip();
+        g.strokeStyle = '#e8ecee'; g.lineWidth = er * 0.14; g.lineCap = 'round';
+        for (const [a, b, c] of [[-0.6, 0.2, -0.2], [-0.1, 0.55, 0.25], [0.3, -0.4, 0.6]]) { g.beginPath(); g.arc(ex + a * er, ey + c * er, er * 0.5, b, b + 1.3); g.stroke(); }
+        disc(g, ex - er * 0.5, ey + er * 0.3, er * 1.05, 'rgba(27, 23, 25, .62)');
+        g.restore();
+        const gy = h * 0.8;
+        g.beginPath(); g.moveTo(0, gy + u * 0.05); g.quadraticCurveTo(w / 2, gy - u * 0.07, w, gy + u * 0.05); g.lineTo(w, h); g.lineTo(0, h); g.closePath();
+        g.fillStyle = '#8d8679'; g.fill();
+        for (let x = R() * u * 0.3; x < w; x += u * (0.3 + R() * 0.4)) oval(g, x, h * (0.87 + R() * 0.1), u * (0.05 + R() * 0.07), u * (0.018 + R() * 0.02), '#6a645b');
+        // 胖豆子：白漆、下身金箔、一排菜色環、圓窗眼睛、鼻頭紅條、兩片槳鰭
+        const bean = (x, y, s, ang, legs) => {
+          g.save();
+          g.translate(x, y); g.rotate(ang);
+          const bw = s * 0.44;
+          if (legs) for (const sx of [-1, 1]) poly(g, [[sx * bw * 0.3, -s * 0.1], [sx * bw * 0.8, s * 0.08], [sx * bw * 0.66, s * 0.08]], '#bdb6a8');
+          else for (const sx of [-1, 1]) oval(g, sx * bw * 0.52, -s * 0.1, bw * 0.16, s * 0.15, '#d8d2c4', sx * 0.5);
+          g.beginPath(); g.roundRect(-bw / 2, -s, bw, s, bw / 2); g.save(); g.clip();
+          box(g, -bw, -s, bw * 2, s, WHITE);
+          box(g, -bw, -s * 0.3, bw * 2, s * 0.17, '#d2ac55');
+          MENU.forEach((c, i) => box(g, -bw / 2 + (i * bw) / 6, -s * 0.4, bw / 6 + 0.5, s * 0.06, c));
+          box(g, -bw, -s * 0.9, bw * 2, s * 0.05, '#c0453a');
+          box(g, bw * 0.22, -s, bw, s, 'rgba(60, 50, 44, .14)');
+          g.restore();
+          disc(g, 0, -s * 0.66, bw * 0.24, '#d2ac55');
+          disc(g, 0, -s * 0.66, bw * 0.17, '#22344e');
+          g.restore();
+        };
+        // 發射塔：白色節段、頂上紅白天線
+        const tx = w * 0.57, th = u * 0.58;
+        for (let i = 0; i < 7; i++) box(g, tx - u * 0.03, gy - u * 0.02 - ((i + 1) * th) / 7, u * 0.06, th / 7 - u * 0.008, i % 2 ? '#d9d4c8' : WHITE);
+        for (let i = 0; i < 4; i++) box(g, tx - u * 0.008, gy - u * 0.02 - th - (i + 1) * u * 0.03, u * 0.016, u * 0.03, i % 2 ? WHITE : '#c0453a');
+        box(g, tx - u * 0.12, gy - th * 0.72, u * 0.12, u * 0.018, '#d9d4c8');
+        box(g, tx - u * 0.3, gy - u * 0.035, u * 0.42, u * 0.035, '#5d5850');
+        bean(tx - u * 0.16, gy - u * 0.035, u * 0.46, 0, false);
+        // 起飛的那一艘：硬邊兩層的火、幾團奶油白的煙
+        const fx = w * 0.86, fy = h * 0.5, fa = 0.3, fs = u * 0.36;
+        g.save(); g.translate(fx, fy); g.rotate(fa);
+        poly(g, [[-fs * 0.14, 0], [fs * 0.14, 0], [0, fs * 0.7]], '#e8923f');
+        poly(g, [[-fs * 0.07, 0], [fs * 0.07, 0], [0, fs * 0.4]], '#f6dba6');
+        g.restore();
+        bean(fx, fy, fs, fa, false);
+        for (const [dx, dy, r] of [[-0.3, 0.5, 0.09], [-0.2, 0.44, 0.07], [-0.4, 0.44, 0.06]]) disc(g, fx + dx * u, fy + dy * u * 0.6, r * u, '#e9e2cf');
+        bean(w * 0.31, gy + u * 0.02, u * 0.24, 0, true);
+        // 招牌：白底藍字的海牛字；配色牌：深底一排六格
+        const bx = w * 0.72, by = h * 0.1;
+        g.beginPath(); g.roundRect(bx - u * 0.02, by, u * 0.5, u * 0.15, u * 0.03); g.fillStyle = WHITE; g.fill();
+        manatee(g, '咬月漢堡', { x: bx + u * 0.23, y: by + u * 0.025, size: u * 0.1, color: '#2c5a96', align: 'center' });
+        const px = w * 0.33, py = h * 0.1;
+        g.beginPath(); g.roundRect(px, py, u * 0.5, u * 0.11, u * 0.02); g.fillStyle = '#2e2622'; g.fill();
+        MENU.forEach((c, i) => box(g, px + u * 0.03 + i * u * 0.075, py + u * 0.025, u * 0.06, u * 0.06, c));
+      },
+
+      // 沙島：影子之城。夯土的塊和三根柱（III），影子全部同一個方向；牆上的窗是 I 碼的縫，遠處半埋的銅環
+      shenlou(g, w, h, R) {
+        const u = h, DARK = '#4a2f1c', gy = h * 0.6;
+        box(g, 0, 0, w, h, '#f1dcae');
+        const sx = w * 0.74, sy = h * 0.44;
+        disc(g, sx, sy, u * 0.27, '#f6e6bd');
+        disc(g, sx, sy, u * 0.17, '#fdf4da');
+        g.lineWidth = u * 0.055; g.lineCap = 'butt';
+        g.strokeStyle = '#a97848'; g.beginPath(); g.arc(w * 0.17, gy + u * 0.06, u * 0.4, Math.PI, TAU); g.stroke();
+        g.strokeStyle = '#7fa391';
+        for (const a of [3.5, 4.3, 5.4]) { g.beginPath(); g.arc(w * 0.17, gy + u * 0.06, u * 0.4, a, a + 0.28); g.stroke(); }
+        box(g, 0, gy, w, h - gy, '#dcae70');
+        const B = [];
+        for (let x = -u * 0.3 + R() * u * 0.2; x < w + u * 0.2; x += u * (0.2 + R() * 0.34)) {
+          const near = R();
+          B.push({ x, yb: gy + u * (0.06 + near * 0.3), bw: u * (0.11 + R() * 0.15) * (0.75 + near * 0.5), bh: u * (0.16 + R() * 0.3) * (0.75 + near * 0.5), c: ['#b98f63', '#a67c55', '#c49b6c'][(R() * 3) | 0], word: 'SARAB'[(R() * 5) | 0] });
+        }
+        const mx = w * 0.44;
+        for (let i = 0; i < 3; i++) B.push({ x: mx + i * u * 0.13, yb: gy + u * 0.16, bw: u * 0.07, bh: u * 0.62, c: '#8c603a', pillar: true });
+        B.sort((a, b) => a.yb - b.yb);
+        for (const b of B) poly(g, [[b.x, b.yb], [b.x + b.bw, b.yb], [b.x + b.bw + b.bh * 1.15, b.yb + b.bh * 0.3], [b.x + b.bh * 1.15, b.yb + b.bh * 0.3]], '#bd8a55');
+        for (const b of B) {
+          box(g, b.x, b.yb - b.bh, b.bw, b.bh, b.c);
+          box(g, b.x + b.bw * 0.76, b.yb - b.bh, b.bw * 0.24, b.bh, mix(b.c, DARK, 0.3));
+          if (b.pillar) continue;
+          const { list, width } = slits(b.word, 1, 1, 2), k = (b.bw * 0.5) / width, sh = b.bh * 0.34, x0 = b.x + b.bw * 0.12, y0 = b.yb - b.bh * 0.82;
+          for (const s of list) box(g, x0 + s.x * k, y0 + s.top * sh, Math.max(1, s.w * k), (s.bottom - s.top) * sh, DARK);
+        }
+        g.beginPath(); g.moveTo(0, h * 0.93);
+        for (let x = 0; x <= w + u; x += u * 0.5) g.quadraticCurveTo(x + u * 0.25, h * (0.84 + ((x / u) % 1) * 0.06), x + u * 0.5, h * 0.93);
+        g.lineTo(w, h); g.lineTo(0, h); g.closePath();
+        g.fillStyle = '#c69257'; g.fill();
+      },
+
+      // 汀：天和淺水連成一片。一顆蜜桃色的圓和倒影、孤櫻（幾團大的）、花筏、蒲棒
+      ting(g, w, h, R) {
+        const u = h, hz = h * 0.56;
+        box(g, 0, 0, w, hz, '#d6ceea');
+        box(g, 0, hz, w, h - hz, '#e4dbee');
+        const px = w * 0.22, py = h * 0.27;
+        disc(g, px, py, u * 0.13, '#f4c6a6');
+        g.globalAlpha = 0.5; oval(g, px, hz * 2 - py, u * 0.13, u * 0.11, '#f4c6a6'); g.globalAlpha = 1;
+        box(g, 0, hz - u * 0.004, w, u * 0.008, 'rgba(250, 246, 250, .7)');
+        g.fillStyle = 'rgba(250, 246, 250, .75)';
+        for (let i = 0, n = (w / u) * 7; i < n; i++) { const y = hz + u * (0.04 + R() * 0.4), l = u * (0.08 + R() * 0.22); g.beginPath(); g.roundRect(R() * w - l / 2, y, l, u * 0.012, u * 0.006); g.fill(); }
+        const tx = w * 0.72, PINK = ['#eaa6b8', '#f2c0cb', '#e59aaf', '#f6d3da'];
+        const tree = (sy, a) => {
+          g.globalAlpha = a;
+          box(g, tx - u * 0.012, hz, u * 0.024, -sy * u * 0.2, '#6e6276');
+          [[0, 0.33, 0.17], [-0.17, 0.27, 0.13], [0.17, 0.28, 0.13], [-0.07, 0.42, 0.11], [0.1, 0.43, 0.1], [-0.27, 0.2, 0.08], [0.27, 0.21, 0.08]].forEach(([dx, dy, r], i) => disc(g, tx + dx * u, hz - sy * dy * u, r * u, PINK[i % 4]));
+          g.globalAlpha = 1;
+        };
+        tree(-1, 0.32);
+        oval(g, tx, hz, u * 0.2, u * 0.022, '#8c82a6');
+        tree(1, 1);
+        // 花筏：花瓣聚成幾團漂著
+        for (let x = R() * u * 0.4; x < w; x += u * (0.5 + R() * 0.5)) {
+          const cy = hz + u * (0.1 + R() * 0.3);
+          for (let i = 0, n = 6 + ((R() * 6) | 0); i < n; i++) oval(g, x + (R() - 0.5) * u * 0.22, cy + (R() - 0.5) * u * 0.05, u * 0.024, u * 0.011, PINK[(R() * 4) | 0], (R() - 0.5) * 0.6);
+        }
+        // 蒲棒：大多是淡紫灰，少數幾枝蜜桃
+        for (let x = -u * 0.05 + R() * u * 0.2; x < w; x += u * (0.14 + R() * 0.5)) {
+          const top = h * (0.3 + R() * 0.3), lean = (R() - 0.5) * u * 0.12, peach = R() < 0.22;
+          g.strokeStyle = '#9a90b8'; g.lineWidth = u * 0.012; g.beginPath(); g.moveTo(x, h * 1.02); g.quadraticCurveTo(x, h * 0.7, x + lean, top); g.stroke();
+          g.beginPath(); g.roundRect(x + lean - u * 0.02, top, u * 0.04, u * 0.15, u * 0.02); g.fillStyle = peach ? '#eeab86' : '#9d92ba'; g.fill();
+          if (R() < 0.5) blade(g, x + u * 0.02, h * 1.02, u * (0.3 + R() * 0.2), 0.3 + R() * 0.3, 0.2, 0.42, '#aaa2ca', '#bdb6d8', '#d8d2e8');
+        }
+      },
+
+      // 黑森林：高瘦的杉樹一層層退進霧裡，越近越黑；全區只有谷底那一團火是暖的
+      heilin(g, w, h, R) {
+        const u = h, FOG = '#5d6f74';
+        box(g, 0, 0, w, h, '#6a7d81');
+        g.beginPath(); g.moveTo(0, h * 0.42);
+        for (let x = 0; x <= w + u * 0.1; x += u * 0.07) g.lineTo(x, h * (0.3 + 0.1 * Math.sin(x / u * 1.7 + 1) + R() * 0.05));
+        g.lineTo(w, h); g.lineTo(0, h); g.closePath(); g.fillStyle = FOG; g.fill();
+        const fir = (x, yb, H, c) => {
+          box(g, x - H * 0.018, yb - H * 0.3, H * 0.036, H * 0.3, mix(c, '#000000', 0.3));
+          for (let i = 0; i < 3; i++) { const by = yb - H * (0.14 + i * 0.26), hw = H * (0.19 - i * 0.045); poly(g, [[x - hw, by], [x + hw, by], [x, by - H * (0.4 - i * 0.03)]], c); }
+        };
+        const fx = w * 0.6, fy = h * 0.88;
+        [[0.66, 0.5, '#465c5e', 0.13], [0.84, 0.72, '#2f4443', 0.2], [1.02, 1.0, '#1b2a28', 0.3]].forEach(([y, s, c, step]) => {
+          for (let x = -R() * u * step; x < w + u * 0.2; x += u * step * (0.6 + R() * 0.9)) fir(x, h * (y + R() * 0.06), u * s * (R() < 0.2 ? 1.35 : 0.75 + R() * 0.4), mix(c, ['#2c4a52', '#4a5236', '#101614'][(R() * 3) | 0], 0.18));
+          box(g, 0, h * (y - 0.07), w, h * 0.1, 'rgba(93, 111, 116, .3)');
+        });
+        disc(g, fx, fy, u * 0.16, 'rgba(232, 146, 63, .16)');
+        disc(g, fx, fy, u * 0.09, 'rgba(232, 146, 63, .3)');
+        poly(g, [[fx - u * 0.035, fy + u * 0.03], [fx + u * 0.035, fy + u * 0.03], [fx + u * 0.012, fy - u * 0.02], [fx, fy - u * 0.075], [fx - u * 0.018, fy - u * 0.015]], '#e8923f');
+        poly(g, [[fx - u * 0.016, fy + u * 0.03], [fx + u * 0.016, fy + u * 0.03], [fx, fy - u * 0.025]], '#f6dba6');
+        for (let x = -R() * u * 0.3; x < w + u * 0.3; x += u * (0.42 + R() * 0.5)) if (Math.abs(x - fx) > u * 0.42) fir(x, h * 1.28, u * (1.5 + R() * 0.5), '#0f1716');
+        for (let x = R() * u * 0.3; x < w; x += u * (0.3 + R() * 0.45)) if (Math.abs(x - fx) > u * 0.14) rosette(g, R, x, h * 1.04, u * (0.2 + R() * 0.1), () => ['#16241c', '#3c5a34', '#7f9a4a'], 1.3);
+      },
+    };
+
+    // ---------- 版型 ----------
+    const nm = (id, text = PLACE[id].name) => `<h3 class="nm${ZONES[id].plain ? ' plain' : ''}${text.length > 4 ? ' long' : ''}">${text}</h3>`;
+    const vars = (id) => { const z = ZONES[id]; return `--field:${z.field};--ink:${z.ink};--acc:${z.acc}`; };
+    const band = (id) => `<canvas data-z="${id}"></canvas>`;
+    const tags = (id) => PLACE[id].tags.join('<b>·</b>');
+    const dots = (id) => `<span class="dots">${ORDER.map((z) => `<i${z === id ? ' class="on"' : ''}></i>`).join('')}</span>`;
+    const foot = (id) => `<div class="foot">${dots(id)}<button class="go">上船</button></div>`;
+    const steps = '<button class="st l">‹</button><button class="st r">›</button>';
+    const CARD = {
+      now: (id) => `<div class="fc now hair"><button class="x">✕</button>
+        <div class="pick"><button class="step">‹</button><div class="info"><h3>${PLACE[id].name}</h3><p class="desc">${PLACE[id].desc}</p><ul class="pills">${PLACE[id].tags.map((t) => `<li>${t}</li>`).join('')}</ul></div><button class="step">›</button></div>${foot(id)}</div>`,
+      a: (id) => `<div class="fc a" style="${vars(id)}"><button class="x">✕</button><div class="bw">${band(id)}</div>
+        <div class="in"><div class="pick"><button class="step">‹</button><div class="info"><div class="ttl">${nm(id)}<i>${ZONES[id].latin}</i></div><p class="desc">${PLACE[id].desc}</p><p class="tags">${tags(id)}</p></div><button class="step">›</button></div>${foot(id)}</div></div>`,
+      b: (id) => `<div class="fc b" style="${vars(id)}"><button class="x">✕</button><header>${nm(id)}<p class="lt">${ZONES[id].latin}</p></header><div class="bw">${band(id)}${steps}</div>
+        <div class="in hair"><p class="desc">${PLACE[id].desc}</p><p class="tags">${tags(id)}</p>${foot(id)}</div></div>`,
+      c: (id) => `<div class="fc c" style="${vars(id)}"><button class="x">✕</button><header>${nm(id)}<p class="lt">${ZONES[id].latin}</p></header><div class="bw">${band(id)}${steps}</div>
+        <div class="in"><p class="desc">${PLACE[id].desc}</p><p class="tags">${tags(id)}</p>${foot(id)}</div></div>`,
+    };
+    const fig = (html, cap) => `<figure>${html}<figcaption>${cap}</figcaption></figure>`;
+    const short = (id) => PLACE[id].sign || PLACE[id].name;
+
+    // 每一區：最窄畫到多寬（寬 ÷ 高）、太窄時切左右哪裡（0 左 1 右）、太扁時切上下哪裡（0 上 1 下）
+    const FRAME = { gallery: [2.2, 1, 0.3], haishi: [0, 0, 0.55], jinghai: [2.6, 0.3, 0.5], shenlou: [2, 0.35, 0.5], ting: [1.7, 0.5, 0.3], heilin: [0, 0, 0.45] };
+    let seed = +(new URLSearchParams(location.search).get('seed') || 0);
+    function paint(root = document) {
+      const d = Math.min(3, window.devicePixelRatio || 1);
+      for (const c of root.querySelectorAll('canvas[data-z]')) {
+        const r = c.getBoundingClientRect();
+        if (!r.width) continue;
+        c.width = Math.round(r.width * d);
+        c.height = Math.round(r.height * d);
+        const g = c.getContext('2d'), z = c.dataset.z, [min, fx, fy] = FRAME[z];
+        g.scale(d, d);
+        // 太扁的（書腰）照 3.4:1 畫再切一條橫的；太窄的（海報、手機）照那一區最窄的比例畫再切一段直的
+        const H = r.width / r.height > 4.2 ? r.width / 3.4 : r.height, W = Math.max(r.width, min * H);
+        g.translate(-(W - r.width) * fx, -(H - r.height) * fy);
+        PAT[z](g, W, H, rng(hash(z) + seed * 7919));
+      }
+    }
+
+    const $ = (id) => document.getElementById(id);
+    $('steps').innerHTML = fig(CARD.now('haishi'), '現在') + fig(CARD.a('haishi'), 'A 書腰：多一條紋樣帶') + fig(CARD.b('haishi'), 'B 半封：上半書封，下半照舊') + fig(CARD.c('haishi'), 'C 整封：整張是那一區的色');
+    let variant = 'b';
+    const six = () => { $('six').innerHTML = ORDER.map((id) => fig(CARD[variant](id), PLACE[id].name)).join(''); paint($('six')); };
+    $('pick').onclick = (e) => {
+      const v = e.target.dataset.v;
+      if (!v) return;
+      variant = v;
+      for (const b of $('pick').children) b.classList.toggle('on', b.dataset.v === v);
+      six();
+    };
+    $('posters').innerHTML = ORDER.filter((id) => id !== 'gallery').map((id) => `<div class="poster" style="${vars(id)}"><div class="top">${nm(id, short(id))}</div><div class="bw">${band(id)}</div><div class="bot"><p>${PLACE[id].desc.replace('。', '')}</p><hr><b>${ZONES[id].latin}</b></div></div>`).join('');
+    $('phones').innerHTML = ['haishi', 'ting', 'jinghai', 'gallery'].map((id) => fig(`<div class="phone" style="${vars(id)}"><div class="top"><span>渡海</span></div><div class="bw">${band(id)}</div><div class="bot">${nm(id, short(id))}<p class="lt">${ZONES[id].latin}</p><div class="load"><i></i></div></div></div>`, PLACE[id].name)).join('');
+    $('reseed').onclick = () => { seed++; paint(); };
+    $('six').innerHTML = ORDER.map((id) => fig(CARD[variant](id), PLACE[id].name)).join('');
+    requestAnimationFrame(() => paint());
+  </script>
+</body>
+</html>

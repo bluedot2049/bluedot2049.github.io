@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>晶的音效試聽</title>
+  <!-- © 2026 bluedot2049《煉金畫廊》。程式、美術與文字受著作權保護，未經授權禁止重製、改作或用於 AI 訓練，詳見 LICENSE。 -->
+  <!-- 晶（錢）每種互動的聲音（ambience-voices.js 的 gem*，scene/coins.js 放）一顆一顆聽，音量照遊戲裡的值；上面一層清脆、底下一層悶聲 -->
+  <style>
+    html, body { margin: 0; background: #1c1814; color: #e9e0cc; font-family: "Noto Serif TC", serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 18px 16px 48px; }
+    h1 { margin: 0; font-size: 17px; font-weight: 600; color: #c9a86e; }
+    h2 { font-size: 14px; font-weight: 600; color: #c9a86e; margin: 26px 0 8px; }
+    .note { font-size: 13px; opacity: .65; margin-top: 4px; line-height: 1.6; }
+    .bar { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-top: 12px; font-size: 13px; }
+    .bar label { display: flex; gap: 6px; align-items: center; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+    button { padding: 9px 12px; border: 1px solid #5a4e3e; border-radius: 6px; background: #2a241e; color: inherit; font: inherit; font-size: 14px; cursor: pointer; text-align: left; }
+    button:active { background: #e8b86a; color: #1b1714; }
+    button small { display: block; font-size: 11px; opacity: .6; margin-top: 2px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>晶的音效試聽</h1>
+  <div class="note">第一下點畫面才建聲音。每次都會差一點高低大小（跟遊戲一樣），連按幾次聽。音量是遊戲裡的實際值，喇叭開到平常玩的大小。</div>
+  <div class="note" id="state">聲音：還沒開（點任何一顆）</div>
+  <div class="bar">
+    <label>音量 ×<input type="range" id="gain" min="0.25" max="3" step="0.05" value="1"><b id="gainV">1.00</b></label>
+  </div>
+  <h2>一顆一顆</h2>
+  <div class="grid" id="kinds"></div>
+  <h2>連著響的</h2>
+  <div class="grid" id="seqs"></div>
+  <h2>改之前</h2>
+  <div class="grid" id="old"></div>
+</main>
+<script type="module">
+  import { VOICES } from '../js/audio/ambience-voices.js';
+
+  const $ = (id) => document.getElementById(id);
+  const amb = {
+    ctx: null, noise: null, sfx: null, gain: 1,
+    start() {
+      if (this.ctx) return;
+      const ctx = this.ctx = new AudioContext();
+      this.sfx = ctx.createGain();
+      this.sfx.connect(ctx.destination);
+      // 跟 ambience.js 同一種偏粉紅的雜訊
+      const n = ctx.sampleRate * 8, buf = ctx.createBuffer(2, n, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch);
+        let b0 = 0, b1 = 0, b2 = 0;
+        for (let i = 0; i < n; i++) {
+          const w = Math.random() * 2 - 1;
+          b0 = 0.997 * b0 + w * 0.029591; b1 = 0.985 * b1 + w * 0.032534; b2 = 0.95 * b2 + w * 0.048056;
+          d[i] = (b0 + b1 + b2 + w * 0.05) * 0.9;
+        }
+      }
+      this.noise = buf;
+    },
+    voice(kind, vol, pitch = 1) {
+      const ctx = this.ctx, out = ctx.createGain();
+      out.gain.value = vol * this.gain * (0.8 + Math.random() * 0.2);
+      out.connect(this.sfx);
+      VOICES[kind](ctx, out, ctx.currentTime + 0.03, pitch * (0.94 + Math.random() * 0.12), this.noise);
+    },
+  };
+  document.addEventListener('pointerdown', () => amb.start(), { capture: true });
+  setInterval(() => {
+    const s = amb.ctx?.state;
+    $('state').textContent = !s ? '聲音：還沒開（點任何一顆）' : s === 'running' ? '聲音：開著' : `聲音：${s}（再點一下）`;
+    if (s && s !== 'running') amb.ctx.resume().catch(() => {});
+  }, 300);
+  $('gain').oninput = (e) => { amb.gain = +e.target.value; $('gainV').textContent = amb.gain.toFixed(2); };
+
+  // scene/coins.js 的音量（改那邊要一起改這裡）：[聲音, 音量, 名稱, 什麼時候]
+  const KINDS = [
+    ['gemget', 0.85, '收進袋', '撿起來、稿費、隊友的'], ['gempay', 0.8, '付出去', '買、小吃、片盒、香油錢、求籤'],
+    ['gemdrop', 0.7, '掉在地上', '丟給隊友、裝不下掉腳邊'], ['gemnear', 0.5, '走近', '六公尺內，一顆一次'],
+    ['gemfull', 0.65, '袋子滿了', '滿了還按撿'], ['gemtide', 0.5, '補進來一顆', '子夜補滿、打開行囊'],
+  ];
+  const btn = (box, name, sub, fn) => {
+    const b = document.createElement('button');
+    b.innerHTML = `${name}<small>${sub}</small>`;
+    b.onclick = () => setTimeout(fn, 20);
+    $(box).append(b);
+  };
+  for (const [k, v, name, when] of KINDS) btn('kinds', name, `${k} ${v}・${when}`, () => amb.voice(k, v));
+  btn('seqs', '子夜補滿十顆', '打開行囊一排亮起來', () => { for (let k = 0; k < 10; k++) setTimeout(() => amb.voice('gemtide', 0.5, 1 + k * 0.06), 550 + k * 120); });
+  btn('seqs', '稿費裝不下三顆', '掉在腳邊', () => { for (let i = 0; i < 3; i++) setTimeout(() => amb.voice('gemdrop', 0.65, 1 + i * 0.05), 200 + i * 140); });
+  btn('seqs', '走近然後撿', '叮一聲、走兩秒、撿', () => { amb.voice('gemnear', 0.5); setTimeout(() => amb.voice('gemget', 0.85), 2000); });
+  btn('seqs', '求籤三顆', '一次付三顆（一聲）', () => amb.voice('gempay', 0.8));
+  btn('old', '原本的晶', 'coin 0.4（撿、付都是它；換東西還在用 0.3）', () => amb.voice('coin', 0.4));
+  btn('old', '原本走近', 'coin 0.07 高一點', () => amb.voice('coin', 0.07, 1.3));
+</script>
+</body>
+</html>

@@ -10,6 +10,7 @@ import { carried } from '../../camera/cameras.js';
 import { HOST_NAME } from '../../npc/names.js';
 import { beckon } from '../../controls/lessons.js';
 import { NEXT, DONE, ASK, AFTER_SHOT } from '../../npc/manatee-lines.js';
+import { openShop } from '../../scene/shop.js';
 
 const NEAR = 2.2;        // 離他多近出現「問」
 const REPLY = 0.7;       // 問了以後隔幾秒他才回
@@ -152,6 +153,8 @@ export class Ask {
     this.point(r.to);
     if (r.tease) this.teaseUntil = this.m.time + TEASE;
     if (r.env) setTimeout(() => this.openEnv(), 1600);
+    // 問「有東西賣嗎」：回完打開前廳的店（scene/shop.js），卡片長在他旁邊
+    if (r.shop) setTimeout(() => openShop(r.shop, { at: () => this.m.group.position, line: r.a }), 900);
   }
 
   // 泡泡底下那行：鍵寫前面、動詞跟著。手機沒有鍵，要走近按的寫「走近點」，畫面上的按鈕靠它亮金

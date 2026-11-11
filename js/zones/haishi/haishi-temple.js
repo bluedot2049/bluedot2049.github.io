@@ -9,6 +9,11 @@ import { AREA, GRAY, PLASTER, shade } from './haishi-map.js';
 import { floorBelow } from './haishi-terrain.js';
 import { DOT_GLSL, trackPixelRatio } from '../../core/stardots.js';
 
+// 殿的正中（水鏡的圓心）和門口左手邊的籤台（求籤在 haishi-lots.js）。籤台跟門口右手邊那盞燈對稱，正面朝門
+const HALL = AREA.tHall;
+export const POOL = { x: (HALL.x0 + HALL.x1) / 2, z: (HALL.z0 + HALL.z1) / 2 + 0.3, y: HALL.y, r: 1.75 };
+export const LOT_TABLE = { x: POOL.x - 1.95, z: POOL.z + 2.35, y: HALL.y };
+
 export function buildTemple(c) {
   const { k, bucket, fader, group, signs, farLamps, obstacles, solid } = c;
   // ---------- 星廟：後山上一座不供神像的廟，拜的是天 ----------
@@ -126,6 +131,7 @@ export function buildTemple(c) {
     }
     tk.emit(bucket, 0, 0, 0);
     group.add(glowPoints(far, { far: true, gain: 7, dot: 4 }));
+    buildLotTable({ bucket, obstacles });
   }
 
   k.emit(bucket, 0, 0, 0);
@@ -199,4 +205,23 @@ function buildStarGate({ group, obstacles }) {
   group.add(night);
   // 回來的人站在門前，面向水鏡
   return { x, z: z + 0.8, heading: 0, exit: { x, z: z + 0.7, r: 1.3 } };
+}
+
+// 籤台：一塊方石台，台上一個銅籤筒插著一把籤，旁邊兩片半月形的星石（一片平面朝上刻著星）。
+// 用沒有亂數的 Kit，廟原本的樣子一點都不動
+function buildLotTable({ bucket, obstacles }) {
+  const k = new Kit(null), { x, z, y } = LOT_TABLE, BRONZE = '#8a7a58';
+  k.box(0.62, 0.78, 0.46, GRAY.mid, x, y + 0.39, z, { color2: GRAY.cap });
+  k.box(0.7, 0.06, 0.54, GRAY.cap, x, y + 0.81, z);
+  k.cyl(0.085, 0.075, 0.26, BRONZE, x - 0.1, y + 0.97, z - 0.04, {}, 10);
+  for (let i = 0; i < 9; i++) {
+    const a = i * 2.4, r = 0.035 * Math.sqrt(i / 9);
+    k.box(0.016, 0.3, 0.008, '#c9b48a', x - 0.1 + Math.cos(a) * r, y + 1.08 + (i % 3) * 0.02, z - 0.04 + Math.sin(a) * r, { rz: Math.cos(a) * 0.12, rx: Math.sin(a) * 0.12 });
+  }
+  const half = () => new THREE.CylinderGeometry(0.07, 0.07, 0.025, 12, 1, false, 0, Math.PI);
+  k.add(half(), '#4a4440', x + 0.15, y + 0.855, z + 0.06, { ry: 0.6 });
+  k.add(half(), '#5a524a', x + 0.2, y + 0.855, z - 0.1, { ry: -0.9 });
+  k.box(0.018, 0.004, 0.018, '#d8c08a', x + 0.15, y + 0.869, z + 0.08, { ry: 0.8 });
+  k.emit(bucket, 0, 0, 0);
+  obstacles.push({ x, z, hw: 0.36, hd: 0.28 });
 }

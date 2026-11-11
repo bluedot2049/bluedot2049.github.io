@@ -180,7 +180,8 @@ export function buildSky(group, { sunDir, earthDir, earthSize = 7.5 }) {
   sg.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
   sg.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
   const stars = new THREE.Points(sg, new THREE.ShaderMaterial({
-    vertexShader: STAR_VERT, fragmentShader: STAR_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+    // 不算透明的（transparent 關著，疊加照樣疊）：跟天空球一起最先畫，之後畫的東西都蓋在星星前面。算透明的話會排到最後畫，蓋到遠處的天際港
+    vertexShader: STAR_VERT, fragmentShader: STAR_FRAG, transparent: false, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
     uniforms: { uPr: { value: Math.min(window.devicePixelRatio, 2) } },
   }));
   stars.renderOrder = -1;
@@ -192,7 +193,8 @@ export function buildSky(group, { sunDir, earthDir, earthSize = 7.5 }) {
   const dist = DOME_R - 20, r = Math.tan((earthSize / 2) * (Math.PI / 180)) * dist;
   const uL = { value: new THREE.Vector3() };
   const earth = new THREE.Mesh(new THREE.SphereGeometry(r, 40, 20), new THREE.ShaderMaterial({
-    vertexShader: EARTH_VERT, fragmentShader: EARTH_FRAG, fog: false,
+    // 不寫深度：地球畫在 320 公尺，比它遠的東西（往地球飛的火箭）也要蓋在它前面
+    vertexShader: EARTH_VERT, fragmentShader: EARTH_FRAG, fog: false, depthWrite: false,
     uniforms: { uDay: { value: maps.day }, uNight: { value: maps.night }, uL },
   }));
   earth.position.copy(earthDir).multiplyScalar(dist);

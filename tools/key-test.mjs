@@ -109,10 +109,10 @@ try {
   check(e1 !== e0, '按側鍵：叫出黑眼', `${e0} → ${e1}`);
   if (/true$/.test(e1)) await tap('Escape');
 
-  // 存檔碼帶著、眼紋不帶
-  const codes = await ev(`Promise.all([import('/js/save/savecode.js'), import('/js/save/progress.js')]).then(([c, p]) => { const all = c.encodeSave(), eye = c.encodeSave(p.getSave(), { closet: false, face: false, iris: true }); return { all, eye, back: c.decodeSave(all)?.deskKeys, now: p.getSave().deskKeys }; })`);
-  check(/~k=[0-9a-f]+/.test(codes.all) && codes.back === codes.now, '存檔碼帶著按鍵、讀得回來', codes.now);
-  check(!/~k=/.test(codes.eye), '眼紋不帶按鍵');
+  // 存檔帶著、眼紋不帶
+  const codes = await ev(`Promise.all([import('/js/save/savecode.js'), import('/js/save/progress.js')]).then(([c, p]) => ({ back: c.readCode(c.saveCode())?.save.deskKeys, eye: 'deskKeys' in c.readIris(c.irisBytes(p.getSave(), 71)), now: p.getSave().deskKeys }))`);
+  check(!!codes.now && codes.back === codes.now, '存檔帶著按鍵、讀得回來', codes.now);
+  check(!codes.eye, '眼紋不帶按鍵');
 
   // 攝影模式：Z 進、空白鍵拍、Esc 出
   await ev(`window.__shots = 0; { const ph = __g.photo, f = ph.shoot.bind(ph); ph.shoot = (...a) => { window.__shots++; return f(...a); }; } 1`);

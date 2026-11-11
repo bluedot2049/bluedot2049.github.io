@@ -15,9 +15,11 @@ export const PLACES = [
   { to: 'jinghai', name: '月球企業觀光工廠', sign: '月球', desc: '食品研發中心。', tags: ['食堂', '商店街', '消費'] },
   { dev: 'shenlou', name: '沙島', desc: '影子之城。', tags: ['花園', '沙船'] },
   { to: 'ting', name: '汀', desc: '時間之外。', tags: ['捷運', '沼澤'] },
-  { to: 'heilin', wip: true, name: '黑森林', desc: '往下的路。', tags: ['工坊'] },
+  { to: 'heilin', name: '黑森林', desc: '往下的路。', tags: ['營火'] },
   { to: 'concert', boat: false, name: '演唱會', desc: '樹洞裡的一場。', tags: ['舞台'] },
   { dev: 'gorge', name: '深谷', desc: '谷底的一場。', tags: ['舞台'] },
+  { dev: 'duel', boat: false, name: '對影', desc: '兩個人互拍的場地。', tags: ['對拍'] },
+  { dev: 'gucheng', name: '古城', desc: '山頂的座堂。', tags: ['座堂', '墓園'] },
 ];
 
 // 站牌上的名字：to 是 ?z= 的名字

@@ -10,12 +10,13 @@ import { kaoLike, kaoFacing, kaoGrew, kaoFaceNew } from './avatar/kaomoji-parts.
 import { KaoPanel } from './controls/kaopanel.js';
 import { sanitizeLook, randomPreset } from './avatar/looks.js';
 import { getSave, putSave, markTour } from './save/progress.js';
-import { decodeLook, decodeSave, tryOn, hasProgress, restoreSave } from './save/savecode.js';
+import { readCode, openFace, tryOn, hasProgress, restoreSave } from './save/savecode.js';
 import { Creator } from './avatar/creator.js';
 import { Pack } from './save/pack.js';
 import { pack as packCarry, unpack as unpackCarry } from './save/carry.js';
 import { layoutBubbles } from './core/bubbles.js';
 import { UI, panelW, uiScale, WORKS_OPEN } from './controls/ui.js';
+import { ToastInk } from './controls/toastink.js';
 import { bindJoystick } from './controls/joystick.js';
 import { bindTouch } from './controls/touch.js';
 import { Multiplayer, EMOTES } from './social/multiplayer.js';
@@ -49,6 +50,9 @@ import { is, key, paint } from './controls/keymap.js';
 import { warmDemos } from './controls/demos.js';
 import { bindLessons, teach, taught, tickLessons, kind as inputKind, say } from './controls/lessons.js';
 import { Beast } from './npc/beast.js';
+import { GroundCoins } from './scene/coins.js';
+import { shop, configureShop } from './scene/shop.js';
+import { refillDaily, money } from './save/purse.js';
 import { Happenings } from './core/happen.js';
 import { Acts } from './core/act.js';
 import { Loop } from './core/loop.js';
@@ -68,6 +72,8 @@ const ZONES = {
   heilin: { load: () => import('./zones/heilin/zone-heilin.js') },   // 黑森林，還在蓋（places.js 的 dev）
   concert: { load: () => import('./zones/concert/zone-concert.js') },
   gorge: { load: () => import('./zones/gorge/zone-gorge.js') },   // 深谷：演唱會的第二個場地，灰模型（places.js 的 dev）   // 演唱會：從畫廊的樹洞進去，不搭船（places.js 的 boat: false）
+  duel: { load: () => import('./zones/duel/zone-duel.js') },   // 對影：拍照對戰的專用場地，灰模型（places.js 的 dev）
+  gucheng: { load: () => import('./zones/gucheng/zone-gucheng.js') },   // 古城（暫名）：獵魔教座堂，還在蓋（places.js 的 dev）
 };
 // 渡船能去的地方在 scene/places.js，每個渡口都照那個順序一張一張卡
 
@@ -109,14 +115,16 @@ function loadLook() {
   const m = /^#(save|look)=([\w.,:~=-]+)$/.exec(location.hash);
   if (m) {
     try { history.replaceState(null, '', location.pathname + location.search); } catch {}
+    const got = readCode(m[2]);
     if (m[1] === 'save') {
-      const sv = decodeSave(m[2]);
+      const sv = got?.save;
       if (!sv) alert('存檔碼打不開，可能缺字');
-      else if (!hasProgress() || confirm('這台裝置已有存檔。用存檔碼覆蓋？')) restoreSave(sv);
-    } else {
-      const L = decodeLook(m[2]);
-      if (L) return tryOn(L);
-    }
+      else if (!hasProgress() || confirm('這台裝置已有存檔。用存檔碼覆蓋？')) {
+        restoreSave(sv);
+        // 新的碼臉是壓著的，解開要等一下：其他的先還原，臉好了再存一次、重新整理
+        if (sv.faceBytes) openFace(sv).then(() => { restoreSave(sv); location.reload(); });
+      }
+    } else if (got?.look) return tryOn(got.look);
   }
   const raw = getSave().look;
   if (raw) return sanitizeLook(raw);
@@ -227,6 +235,8 @@ async function start() {
     window.errlog.info(`${renderer.capabilities.isWebGL2 ? 'webgl2' : 'webgl1'} maxTex ${renderer.capabilities.maxTextureSize} units ${renderer.capabilities.maxTextures} ${gl.getParameter(gl.RENDERER)} ${quality.level} dpr ${quality.dpr}`);
   }
   document.getElementById('stage').appendChild(renderer.domElement);
+  // 房名的字色跟著背後的畫面（淺字／墨字），畫完那一刻量（tick 裡 draw 後面）
+  const toastInk = ui.ink = new ToastInk(renderer.domElement, ui.toastEl);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x1c130d);
@@ -288,7 +298,8 @@ async function start() {
     sun.position.copy(a.dir).lerp(b.dir, t);
   }
 
-  const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 400);
+  // 看多遠：區域可以自己給（靜海的天際港在五六百公尺外，world.camFar）
+  const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, world.camFar ?? 400);
   camera.layers.enable(ANIMAL_LAYER);   // 動物只在圖層 1；海面反射的鏡頭只看 REFLECT_LAYER
   camera.layers.enable(GUIDE_LAYER);    // 標記、站位：畫面上看得到，拍照時關掉
   camera.layers.enable(TAG_LAYER);      // 頭上的表情、顏文字：一樣拍照時關掉
@@ -348,6 +359,12 @@ async function start() {
     frameMirror();
     lastInput = performance.now();
   };
+  // 店家小卡（scene/shop.js）：點一件只換畫面上自己的角色（試穿，不存、不同步），買了才真的穿上
+  configureShop({
+    camera, ui, ambience, get player() { return player; }, look: () => look,
+    preview: (L) => character.setLook(L ?? look),
+    wear: (L) => { dressSound(ambience, look, L); wear(L); },
+  });
   const creator = new Creator({
     // 換上去的那件東西出聲（wear-voices.js），再穿到身上
     onChange(L) {
@@ -419,8 +436,9 @@ async function start() {
       if (player.focus?.kind === 'cameras') player.exitFocus();
       ui.hideFerry();
       guide?.closeCard();
-      // 照鏡子時拖曳、縮放是在轉著看自己，面板留著
-      if (!(kind === 'drag' && player.focus?.kind === 'mirror')) ui.hideDress();
+      // 照鏡子時面板跟著鏡子：拖曳轉身、點到自己（小跳）、點到牆、按別的鍵都留著，真的離開鏡子才收（主迴圈表的 dress 那行）。
+      // 以前在這裡一律收，人還站在鏡子前、鏡頭還在鏡子裡，鏡子藏起來點不到，要走開再回來才叫得回面板
+      if (player.focus?.kind !== 'mirror') ui.hideDress();
       // 提示不跟著收：回饋、事件停到讀得完，教學等做了那件事才收（ui.js 的 hint、tip）
       ui.hideGuide();
       hollow.close();
@@ -543,6 +561,12 @@ async function start() {
   for (const src of Z.attention?.({ world, player }) ?? []) attention.add(src);
   // 白獸（beast.js）：很久才出現一次，同一區的人同時看到。拍到的照片快門當下評分，拿去海市星台的報社登報
   const beast = new Beast({ scene, world, zone, where: PLACES.find((d) => (d.to || d.dev) === zone)?.name ?? '', ambience, attention, spots: Z.beast?.spots, params });
+  // 地上的硬幣（scene/coins.js）：照伺服器時間在白獸的出現點附近掉幾枚，撿了進錢袋（save/purse.js）
+  const coins = new GroundCoins({ scene, world, zone, spots: beast.spots, player, ambience, ui });
+  player.actionables.push((x, z) => coins.target(x, z));
+  // 行囊裡點錢袋丟一枚給隊友（有隊友才是鈕）
+  pack.events.canDrop = () => coins.canDrop();
+  pack.events.onDrop = () => coins.dropMine();
   // 這一區的事件（core/happen.js，zone 匯出 happen）：過一陣子就發生一次、值得拍的事，同一區的人同時看到。拍到的記在相簿那一格
   const happen = new Happenings({ scene, zone, ambience, attention, params, list: Z.happen?.({ world, animals, scene }) ?? [] });
   // 動物叫了一聲：轉頭看牠
@@ -703,15 +727,22 @@ async function start() {
   actionBtn.addEventListener('click', () => player.action(nearT));
   const actionLabel = actionBtn.querySelector('.a1');
   const actionShort = actionBtn.querySelector('.a0');
+  // 要付錢的（點餐、小攤、底片、求籤、香油錢）：目標帶 cost，互動鍵角上標一顆晶和幾顆（hud.css 的 .a3），念出來接在動作後面
+  const actionCost = actionBtn.querySelector('.a3');
+  const setCost = (t, lab) => {
+    const n = (t?.kind === 'talk' ? t.p.cost : t?.cost) | 0;
+    if (actionCost.textContent !== (n ? String(n) : '')) actionCost.textContent = n ? String(n) : '';
+    actionBtn.setAttribute('aria-label', n ? `${lab}　${money(n)}` : lab);
+  };
   // lens：有鏡頭對著自己（attention.js），按了就一直看著它，再按一次放掉
   // follow：走到帶路中的黑眼（自己的或隊友的）旁邊，按了跟著它走（scene/guide.js），底下小字是要去哪
   // ask：站在前廳胖頭旁邊，按了打開題目卡（zones/gallery/ask.js）
   // peek：站在剛用燭火乙式拍完的隊友旁邊，按了看他最後一張（social/peek.js）
   // radio：站在前廳收音機前面，關著按就開機，再打開面板（zones/gallery/radio-card.js）
   // easel：站在原野畫架的畫布前面，打開畫架的面板（zones/gallery/easel-card.js）
-  const LABELS = { ask: '問', painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來', lens: '看鏡頭', follow: '跟著', peek: '看照片', radio: '收音機', easel: '畫畫' };
+  const LABELS = { coin: '撿', ask: '問', painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來', lens: '看鏡頭', follow: '跟著', peek: '看照片', radio: '收音機', easel: '畫畫' };
   // 手機的互動鍵是一顆小圓章，只放兩個字；沒列在這裡的取前兩個字
-  const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信', 看鏡頭: '看鏡', 不看了: '不看', 叫電梯: '叫梯', 上觀星台: '上樓', 回一樓: '下樓', 看照片: '照片', 收音機: '收音', 拿海草: '海草', 要冰淇淋: '甜筒', 要汽水: '汽水', 要熱茶: '熱茶', 取照片: '照片', 拿底片: '底片' };
+  const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信', 看鏡頭: '看鏡', 不看了: '不看', 叫電梯: '叫梯', 上觀星台: '上樓', 回一樓: '下樓', 看照片: '照片', 收音機: '收音', 拿海草: '海草', 放進水鏡: '放籤', 要冰淇淋: '甜筒', 要汽水: '汽水', 要熱茶: '熱茶', 取照片: '照片', 拿底片: '底片' };
   // 剛走出範圍的那一下（走過攤位、動物走開）互動鍵先留著：手指可能已經在按的路上，按到了照原本的做（player.action 的 fallback）。
   // 以前一出範圍就收，手指落在收起來的鈕上會穿到畫面，角色往鈕底下走過去
   const ACTION_LINGER = 400;
@@ -732,7 +763,16 @@ async function start() {
       sitBtn.textContent = seal;
       sitBtn.setAttribute('aria-label', seal === '躺' ? '躺下' : sitting ? '站起來' : '坐下');
     }
-    if (key === nearKey) return;
+    if (key === nearKey) {
+      // 同一個人、字變了（攤販報價後「聊天」變「買」）：只換字，不重新看一眼
+      const lab = t?.kind === 'talk' && t.p.actionLabel;
+      if (lab && actionLabel.textContent !== lab) {
+        actionLabel.textContent = lab;
+        actionShort.textContent = SHORT[lab] || lab.slice(0, 2);
+      }
+      if (t) setCost(t, actionLabel.textContent);
+      return;
+    }
     nearKey = key;
     actionBtn.classList.toggle('show', !!t);
     if (!t) return;
@@ -740,7 +780,8 @@ async function start() {
     if (t.ax != null && !player.sitting) player.glance = { x: t.ax, y: player.pos.y + (t.kind === 'pet' ? 0.3 : t.kind === 'painting' ? 1.4 : 1.1), z: t.az, t: 1.2 };
     actionLabel.textContent = (t.kind === 'talk' && t.p.actionLabel) || (t.kind === 'exit' && t.p.label) || (t.kind === 'lens' && t.on && '不看了') || LABELS[t.kind] || t.label;
     actionShort.textContent = SHORT[actionLabel.textContent] || actionLabel.textContent.slice(0, 2);
-    actionBtn.setAttribute('aria-label', actionLabel.textContent);
+    setCost(t, actionLabel.textContent);
+    actionBtn.dataset.kind = t.kind;   // hud.css 照這個在字前面放圖示（撿晶）
     // 第一次出現的動詞：光暈多擴幾圈（這台裝置記得，prefs.js 的 verbsSeen），不另外寫教學
     if (!seenVerbs.has(actionLabel.textContent)) {
       seenVerbs.add(actionLabel.textContent);
@@ -756,11 +797,11 @@ async function start() {
   player.cursorWanted = () => {
     const b = document.body.classList;
     return b.contains('panel-open') || b.contains('chatting') || !document.getElementById('pack-card').hidden
-      || !!document.querySelector('#list.open, #kaopanel.open, #vol.open, #guide.show, #ask.show, #peek.show, #radio.show, #easel.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show') || fixtures.some(([, f]) => f.isOpen) || !!document.activeElement?.closest?.('input, textarea');
+      || !!document.querySelector('#list.open, #kaopanel.open, #vol.open, #guide.show, #ask.show, #peek.show, #radio.show, #easel.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show, #shop.show') || fixtures.some(([, f]) => f.isOpen) || !!document.activeElement?.closest?.('input, textarea');
   };
   // 互動鍵打開的卡片：開著時互動鍵是確認，不按卡片後面的東西（player.js 的 keydown）
   // 區域自己的裝置（fixtures）開著的卡片照 isOpen 和 el 算，新增的不用來這裡加選擇器
-  player.cardOpen = () => document.querySelector('#guide.show, #ask.show, #peek.show, #radio.show, #easel.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show, .studio-card:not([hidden])') || fixtures.find(([, f]) => f.isOpen && f.el)?.[1].el || null;
+  player.cardOpen = () => document.querySelector('#guide.show, #ask.show, #peek.show, #radio.show, #easel.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show, #shop.show, .studio-card:not([hidden])') || fixtures.find(([, f]) => f.isOpen && f.el)?.[1].el || null;
   // 鎖住滑鼠時提一下怎麼叫出游標、暫停（lessons.js 的 locked）
   document.addEventListener('pointerlockchange', () => { if (player.locked) teach('locked'); });
 
@@ -883,6 +924,8 @@ async function start() {
       onParty: (m) => party?.onInvite(m),
       onGate: (m) => world.home?.receive(m),
       onAct: (m) => acts?.receive(m),
+      onCoin: (m) => coins.receive(m),
+      onShare: (m) => Object.hasOwn(world.shared ?? {}, m.k) && world.shared[m.k].receive(m),
       onFlash: (ch, lamp) => {
         flashFx.fire(ch, lamp);
         lookAtOther(otherOf(ch), 1.2);
@@ -913,6 +956,9 @@ async function start() {
       q.set('show', sh);
       location.replace(`${location.pathname}?${q}`);
     };
+    // 丟給隊友的硬幣（scene/coins.js 畫、party.js 收發）
+    party.coins = coins;
+    coins.party = party;
     party.onHeard = (id) => lookAtOther(id, 2 + Math.random());
     // 剛跟身邊的人同行：轉頭看他、揮手（跟點了別人的角色一樣，kaopanel.js 的 wave）。兩邊各自揮，照顏文字同步給對方看
     party.onMet = (id) => {
@@ -976,6 +1022,9 @@ async function start() {
       travel('gallery', {}, true);
     };
   }
+
+  // 區域裡大家共用的東西（world.shared：{ 名字: 東西 }，靜海的電梯）：東西的 send 送給同一區的人，收到的照名字交回它的 receive
+  for (const [k, s] of Object.entries(world.shared ?? {})) s.send = (m) => mp?.share(k, m) ?? false;
 
   // 後製和著色器預先編譯同時進行；載不到就照原本的畫法
   let fx = null;
@@ -1148,15 +1197,17 @@ async function start() {
   guide.onShip = (ex) => player.events.onExit(ex);
   player.actionables.push((x, z) => guide.target(x, z));
   // 一幕劇（core/act.js，zone 匯出 acts）：在地圖上一拍一拍演的戲，找到演員才往下，演到哪一拍黑眼清單多一行。演員跟事件一樣評分、讓人轉頭（happen.more）
-  acts = new Acts({ guide, player, params, list: Z.acts?.({ world, scene, vendors, ambience, attention, camera, player }) ?? [] });
+  acts = new Acts({ guide, player, params, list: Z.acts?.({ world, scene, vendors, ambience, attention, camera, player, ui }) ?? [] });
   happen.more.push(acts);
   acts.send = (m) => mp?.act(m);
+  // 地上的硬幣：撿了告訴同一區的人、剛進來問別人撿走了哪些（沒連線就不送）
+  if (mp) coins.send = (m) => mp.coin(m);
   player.actionables.push((x, z) => acts.target(x, z));
   // 這一區自己的裝置（zone 的 fixtures，約定見 docs/新區域與改地圖.md）：走近有互動鍵（target）、每幀 update、玩家一動要收的 onInput、開著的卡片 isOpen。
   // 畫廊：前廳胖頭的教學（走近說下一步，互動鍵「問」，泡泡底下那行小字照現在的操作方式寫鍵，所以給 keyOf）、收音機、畫架、地下室會說話的畫
   const PAD_OF = { interact: -1, raise: 6, pack: 8, eye: 5, party: 14 };
   fixtures = Object.entries(Z.fixtures?.({
-    world, player, camera, ambience, params, manatee, host, visitors, look: () => look, back: params.has('from'), openEnv: () => ui.guide(),
+    world, player, camera, ambience, params, manatee, host, visitors, ui, look: () => look, back: params.has('from'), openEnv: () => ui.guide(),
     keyOf: (id) => { const k = inputKind(); return k === 'pad' ? padBtn(PAD_OF[id]) : k === 'touch' ? '' : key(id); },
   }) ?? {}).filter(([, f]) => f);
   for (const [, f] of fixtures) if (f.target) player.actionables.push((x, z) => f.target(x, z));
@@ -1172,7 +1223,7 @@ async function start() {
     guide.isMate = (id) => !!party && [...party.mates.values()].some((o) => o.s === id);
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, happen, acts, guide, creator, cues, peek, kao, ...Object.fromEntries(fixtures) };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, coins, happen, acts, guide, creator, cues, peek, kao, ...Object.fromEntries(fixtures) };
   const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass, dofPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
@@ -1372,6 +1423,10 @@ async function start() {
     // 不然要等畫的時候才更新，所有頭上的東西都慢一幀，鏡頭一動就抖
     .add('camera', 'matrix', () => camera.updateMatrixWorld())
     .add('world', 'beast', (dt) => beast.update(dt, camera, player.pos), () => beast.busy)
+    .add('world', 'coins', (dt) => coins.update(dt))
+    .add('ui', 'shop', () => shop.update())
+    // 錢袋子夜補滿（save/purse.js）：第一幀看一次，之後隔五秒看有沒有換天
+    .add('world', 'purse', ((t = 5) => (dt) => { if ((t += dt) >= 5) { t = 0; refillDaily(); } })())
     .add('world', 'happen', (dt) => happen.update(dt), () => happen.busy)
     .add('world', 'acts', (dt) => acts?.update(dt))
     .add('world', 'animals', (dt) => animals?.update(dt))
@@ -1413,6 +1468,8 @@ async function start() {
     .add('people', 'away', () => { if (frame % 30 === 0) checkAway?.(); })
     .add('ui', 'bubbles', () => { talking = layoutBubbles() > 0; }, () => talking)
     .add('ui', 'action', () => { if (frame % 6 === 0) updateAction(); })
+    // 換裝面板只在鏡子前開著：走開（鍵盤、搖桿是下一幀才離開）、點地面、被別的東西帶走了就收
+    .add('ui', 'dress', () => { if (player.focus?.kind !== 'mirror') ui.hideDress(); })
     // 照鏡子：鏡前光和暗一階的背景大約半秒換過去
     .add('light', 'mirrorLight', (dt) => {
       const mirrorWant = player.focus?.kind === 'mirror' ? 1 : 0;
@@ -1495,6 +1552,7 @@ async function start() {
     lensBoost();
     draw(dt);
     photo.afterRender();
+    toastInk.afterDraw();
     stats?.(dt);
   }
 }

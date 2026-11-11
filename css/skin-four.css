@@ -1,0 +1,98 @@
+/* © 2026 bluedot2049《煉金畫廊》。未經授權禁止重製、改作或用於 AI 訓練，詳見 LICENSE。 */
+/* 介面樣式「四色」（試做，只有電腦）：Esc 選單的「介面樣式」選了才套（body.skin-four，ui.js 的 setSkin），預設是原本的金線。 */
+/* 包浩斯式的平塗：鈕全是墨，形狀不動；彩色只有煉金的四個階段，各管一件事。
+     墨（--k-ink）平常的鈕和卡　白（--k-pap）主鍵、選著的那一格　黃（--k-yel）現在能做的事：互動鍵、提示、可以按的主要按鈕　紅（--k-red）相機
+   不用金線、漸層、紋飾、陰影；字換無襯線（Jost、Noto Sans TC，選了才載，見 setSkin），地名照舊煉金體。
+   帶著實體相機時，那台相機自己的鈕（.photo-gear、#ph-shutter.gear）不換：相機的長相屬於相機。
+   概念頁 experiments/hud_concept_preview.html 的 B。 */
+
+body.desk.skin-four {
+  --k-ink: #17120f; --k-ink2: #2a221d; --k-pap: #f4ecd8; --k-yel: #f5c21b; --k-red: #e23a28; --k-mute: rgba(244, 236, 216, .55);
+  --font: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+  --latin: "Jost", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  --text: var(--k-pap); --muted: var(--k-mute);
+  --gold: var(--k-yel); --gold-hi: var(--k-yel); --gold-fill: var(--k-yel);
+  --line: rgba(244, 236, 216, .22); --line-soft: rgba(244, 236, 216, .12); --hair: transparent;
+  --panel: var(--k-ink); --surface: var(--k-ink);
+  font-family: var(--font);
+}
+body.desk.skin-four :is(button, input, select) { font-family: var(--font); }
+
+/* ───────── 下方那排：一整條墨色膠囊，鈕本身沒有底；相機是裡面一顆紅圓 ───────── */
+body.desk.skin-four #top-btns { gap: 0; padding: 4px; background: var(--k-ink); border-radius: 999px; }
+body.desk.skin-four #top-btns .icon-btn { background: transparent; border: 0; box-shadow: none; color: var(--k-pap); }
+body.desk.skin-four .icon-btn svg { stroke-width: 2; }
+body.desk.skin-four #top-btns .icon-btn[aria-pressed="true"], body.desk.skin-four #top-btns .icon-btn.on { background: var(--k-pap); color: var(--k-ink); }
+@media (hover: hover) {
+  body.desk.skin-four #top-btns .icon-btn:hover { background: var(--k-ink2); color: var(--k-pap); }
+  body.desk.skin-four #top-btns .icon-btn:is([aria-pressed="true"], .on):hover { background: var(--k-pap); color: var(--k-ink); }
+}
+body.desk.skin-four:not(.photo-gear) #photo-btn { margin: 0 4px; background: var(--k-red); color: var(--k-pap); border: 0; box-shadow: none; }
+body.desk.skin-four:not(.photo-gear) #photo-btn svg { filter: none; stroke-width: 2; }
+@media (hover: hover) { body.desk.skin-four:not(.photo-gear) #photo-btn:hover { background: var(--k-red); color: var(--k-pap); filter: brightness(1.08); } }
+body.desk.skin-four #online { color: var(--k-pap); }
+
+/* ───────── 互動鍵：黃，墨字；鍵帽是左邊一顆墨圓寫黃字 ───────── */
+body.desk.skin-four #action-btn { color: var(--k-ink); background: var(--k-yel); box-shadow: none; }
+body.desk.skin-four #action-btn::before { border-color: var(--k-yel); }
+body.desk.skin-four #action-btn .a1 { font-weight: 700; letter-spacing: .24em; padding-left: .24em; }
+body.desk.skin-four #action-btn .a2 { opacity: .7; }
+body.desk.skin-four:not(.pad) #action-btn::after {
+  min-width: 28px; height: 28px; margin-top: -14px; padding: 0 8px;
+  font: 700 13px/1 var(--latin); color: var(--k-yel); background: var(--k-ink); border: 0; border-radius: 999px; box-shadow: none;
+}
+body.desk.skin-four #action-btn .a3 { font-family: var(--latin); font-weight: 700; color: var(--k-pap); background: var(--k-ink); border: 0; }
+
+/* ───────── 提示：墨色膠囊，前面一顆黃點 ───────── */
+body.desk.skin-four #hint { background: var(--k-ink); border: 0; color: var(--k-pap); font-weight: 500; letter-spacing: .08em; }
+body.desk.skin-four #hint::before { width: 7px; height: 7px; border-radius: 50%; transform: none; background: var(--k-yel); opacity: 1; }
+body.desk.skin-four #hint::after { display: none; }
+body.desk.skin-four #hint kbd { font-family: var(--latin); font-weight: 700; color: var(--k-yel); }
+body.desk.skin-four .dm-ln { stroke: var(--k-yel); }
+
+/* ───────── 地名：兩側紋飾拿掉，中間一顆黃點，拉丁名大寫拉開 ───────── */
+body.desk.skin-four #toast .t1::before, body.desk.skin-four #toast .t1::after { display: none; }
+body.desk.skin-four #toast .t2 {
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  font-family: var(--latin); font-style: normal; font-weight: 600; font-size: 14px; letter-spacing: .42em; text-transform: uppercase;
+}
+body.desk.skin-four #toast .t2::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--k-yel); }
+
+/* ───────── 按鈕：沒有框，淡淡一層底；主要的是黃，墨字 ───────── */
+body.desk.skin-four .btn { border: 0; background: rgba(244, 236, 216, .09); color: var(--k-pap); font-weight: 600; letter-spacing: .2em; }
+body.desk.skin-four .btn.primary { background: var(--k-yel); color: var(--k-ink); box-shadow: none; font-weight: 700; }
+body.desk.skin-four .btn.disabled { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+@media (hover: hover) {
+  body.desk.skin-four .btn:not(.disabled):not(.primary):hover { background: rgba(244, 236, 216, .18); }
+}
+
+/* ───────── 卡片和側欄：整塊墨，頂上的金線和菱形拿掉 ───────── */
+body.desk.skin-four .panel { background: var(--k-ink); }
+body.desk.skin-four .panel::before, body.desk.skin-four .panel::after { display: none; }
+body.desk.skin-four :is(#cams, #ferry, #eye-card).panel { border: 0; border-radius: 6px; box-shadow: none; }
+body.desk.skin-four .panel .close { border: 0; background: rgba(244, 236, 216, .09); }
+body.desk.skin-four :is(#dress h2, .list-title) { color: var(--k-pap); font-weight: 700; letter-spacing: .3em; }
+body.desk.skin-four :is(#dress h2, .list-title) small { font-style: normal; font-weight: 600; font-size: 12px; letter-spacing: .36em; text-transform: uppercase; }
+body.desk.skin-four :is(#cams-name, #ferry-name) { font-size: 26px; font-weight: 700; letter-spacing: .16em; }
+body.desk.skin-four :is(#cams-spec, #ferry-tags) li { border: 0; padding: 0; font-weight: 500; }
+body.desk.skin-four :is(#cams-spec, #ferry-tags) li + li::before { content: "·"; margin-right: 6px; color: var(--k-yel); }
+body.desk.skin-four .cams-step { color: var(--k-pap); }
+body.desk.skin-four :is(#cams-dots, #ferry-dots) i { width: 7px; height: 7px; border-radius: 50%; transform: none; background: rgba(244, 236, 216, .22); }
+body.desk.skin-four :is(#cams-dots, #ferry-dots) i.on { background: var(--k-pap); }
+
+/* ───────── Esc 選單、操作說明這種告示卡 ───────── */
+body.desk.skin-four .notice { background: var(--k-ink); border: 0; border-radius: 6px; }
+body.desk.skin-four .notice .lead { font-weight: 700; letter-spacing: .3em; }
+body.desk.skin-four :is(#pause, #padmap, #keymap) { background: var(--k-ink); }
+body.desk.skin-four #pause .set { font-weight: 500; }
+body.desk.skin-four #pause .set :is(input[type=range], input[type=checkbox]) { accent-color: var(--k-yel); }
+body.desk.skin-four #pause .set select { background: var(--k-ink2); border: 0; border-radius: 999px; padding: 3px 10px; }
+body.desk.skin-four :is(#pause, #keymap, #padmap) kbd { font-family: var(--latin); font-weight: 600; border: 0; background: rgba(244, 236, 216, .09); border-radius: 4px; }
+
+/* ───────── 攝影模式：選項是墨色膠囊、選著的白。快門不換：畫廊的眼睛、實體相機的快門都是那台相機自己的長相 ───────── */
+body.desk.skin-four .ph-chip { background: var(--k-ink); border: 0; font-weight: 500; }
+body.desk.skin-four .ph-chip b { color: var(--k-yel); font-weight: 700; }
+body.desk.skin-four #ph-lens { background: var(--k-ink); border: 0; }
+body.desk.skin-four #ph-lens button { color: var(--k-mute); font-weight: 600; }
+body.desk.skin-four #ph-lens button.on { color: var(--k-ink); background: var(--k-pap); }
+body.desk.skin-four :is(#ph-zoom, #ph-rec) { background: var(--k-ink); border: 0; font-family: var(--latin); color: var(--k-pap); }

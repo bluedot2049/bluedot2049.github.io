@@ -14,6 +14,7 @@ import { buildBugs } from './ting-bugs.js';
 import { buildTree } from './ting-tree.js';
 import { buildStation, stationD, stationY } from './ting-station.js';
 import { buildLines } from './ting-lines.js';
+import { buildMist, mistDepth } from './ting-mist.js';
 import { mirrorUniforms, waterMirror } from './ting-mirror.js';
 import { HQ } from '../../core/hq.js';
 import { CAUSTICS } from '../../core/caustics.js';
@@ -252,6 +253,9 @@ export function buildTing(scene, { renderer = null, coarse = false } = {}) {
   const inWater = (x, z) => groundY(x, z) < WATER_Y - 0.03;
   const bugs = buildBugs(group, marsh.clumps, { waterY: WATER_Y, pxScale, isWater: inWater });
 
+  // ---------- 霧：照伺服器時間在開闊的水面之間聚散，霧中商人跟著它（ting-mist.js、ting-merchant.js） ----------
+  const mist = buildMist(group, WATER_Y);
+
   // ---------- 渡船：擱在水底，船夫不下船 ----------
   const ferry = makeSkiff(bucketObjects), boat = ferry.boat;
   boat.position.set(2.4, WATER_Y + 0.3, 3);
@@ -298,7 +302,7 @@ export function buildTing(scene, { renderer = null, coarse = false } = {}) {
   })();
   scene.add(group);
   // 電腦版加料：水面倒影（ting-mirror.js）、水把光反到船身、樹幹、柱子和人的小腿上（caustics.js）
-  const waterRefl = renderer && HQ.on ? waterMirror({ water, skip: [water, dome, dustPts], y: WATER_Y, uniforms: refl }) : null;
+  const waterRefl = renderer && HQ.on ? waterMirror({ water, skip: [water, dome, dustPts, ...mist.groups], y: WATER_Y, uniforms: refl }) : null;
   CAUSTICS.pools = HQ.on ? [{ y: WATER_Y, h: 1.1, k: 0.7, size: 0.65 }] : [];
 
   // ---------- 碰撞、高度、尋路 ----------
@@ -357,7 +361,7 @@ export function buildTing(scene, { renderer = null, coarse = false } = {}) {
     last.t = t;
   }
 
-  const PLACES = { boat: { name: '擱淺的船', subtitle: 'Navis' }, tree: { name: '孤櫻', subtitle: 'Arbor' }, station: { name: '汀站', subtitle: 'Statio' }, water: { name: '汀', subtitle: 'Vadum' } };
+  const PLACES = { boat: { name: '擱淺的船', subtitle: 'Navis' }, tree: { name: '孤櫻', subtitle: 'Arbor' }, station: { name: '汀站', subtitle: 'Statio' }, mist: { name: '霧', subtitle: 'Nebula' }, water: { name: '汀', subtitle: 'Vadum' } };
   let lastT = null;
 
   return {
@@ -369,6 +373,7 @@ export function buildTing(scene, { renderer = null, coarse = false } = {}) {
     placeAt(x, z) {
       if (Math.hypot(x - 2.4, z - 3) < 7) return PLACES.boat;
       if (stationD(x, z) < 2.5) return PLACES.station;
+      if (mistDepth(x, z) > 0.45) return PLACES.mist;
       return Math.hypot(x - TREE.x, z - TREE.z) < 8 ? PLACES.tree : PLACES.water;
     },
     walkable, findWalkable, findPath, groundY, camFloor: groundY, camClip,
@@ -390,6 +395,7 @@ export function buildTing(scene, { renderer = null, coarse = false } = {}) {
       // 點的大小照畫面實際有幾個像素高算（視角 50 度），手機高解析度時才不會變得更小
       if (renderer) pxScale.value = renderer.domElement.height / (2 * Math.tan((25 * Math.PI) / 180));
       tree.update(t);
+      mist.update(t);
     },
   };
 }

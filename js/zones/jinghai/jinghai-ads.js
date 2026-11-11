@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { uTime } from '../../core/scenery.js';
 import { script } from '../../core/manatee-script.js';
+import { cost, HUES } from '../../save/purse.js';
 
 // 咬月的顏色：深可可底、奶油字、番茄紅、芥末黃。不用紅配黃的大色塊
 export const BRAND = { name: '咬月', latin: 'Popina', COCOA: '#2e1f1a', COCOA2: '#4a3027', CREAM: '#f6ecd6', TOMATO: '#d8452b', MUSTARD: '#e8b13a', KRAFT: '#c9a46e' };
@@ -137,7 +138,7 @@ function bag(g, cx, cy, s) {
   logo(g, cx, cy + s * 0.08, s * 0.17, COCOA);
   g.restore();
 }
-// 一束海草（價錢的單位）
+// 一束海草（控制室的螢幕畫配方用，jinghai-lab.js）
 export function seaweed(g, x, y, s) {
   g.save();
   g.lineCap = 'round';
@@ -190,9 +191,25 @@ function earth(g, cx, cy, r) {
   g.beginPath(); g.arc(cx + r * 0.55, cy + r * 0.1, r * 1.05, 0, Math.PI * 2); g.fill();
   g.restore();
 }
-// 價錢那一列：一束海草 × 數字
+// 一顆晶（價錢的單位，save/purse.js）：雙尖的長寶石、腰上一圈細金箍，跟地上那顆、行囊那排同一個形。
+// 紅寶（purse.js 的 HUES）配深一點的金箍：芥末黃、奶油、可可三種底上都看得清楚
+export function gem(g, x, y, s, hue = HUES[2], band = '#b8801f') {
+  const w = s * 0.3, h = s * 0.5;
+  g.save();
+  g.fillStyle = hue;
+  g.beginPath(); g.moveTo(x, y - h); g.lineTo(x + w, y - h * 0.08); g.lineTo(x, y + h); g.lineTo(x - w, y - h * 0.08); g.closePath(); g.fill();
+  // 左上那一面亮一點、右下暗一點，看得出是切面
+  g.fillStyle = 'rgba(255,255,255,0.32)';
+  g.beginPath(); g.moveTo(x, y - h); g.lineTo(x, y + h); g.lineTo(x - w, y - h * 0.08); g.closePath(); g.fill();
+  g.fillStyle = 'rgba(0,0,0,0.18)';
+  g.beginPath(); g.moveTo(x, y - h * 0.08); g.lineTo(x + w, y - h * 0.08); g.lineTo(x, y + h); g.closePath(); g.fill();
+  g.fillStyle = band;
+  rrect(g, x - w * 1.08, y - h * 0.16, w * 2.16, h * 0.16, h * 0.08); g.fill();
+  g.restore();
+}
+// 價錢那一列：一顆晶 × 數字（點一份付幾顆照 purse.js 的 WAYS.meal）
 function price(g, x, y, s, n, color) {
-  seaweed(g, x + s * 0.4, y + s * 0.5, s * 0.9);
+  gem(g, x + s * 0.4, y + s * 0.5, s * 0.9);
   return script(g, `×${n}`, x + s * 0.95, y, s, color) + s;
 }
 function steam(g, cx, cy, s) {
@@ -224,7 +241,7 @@ const BILL = [
     steam(g, w * 0.64, h * 0.3, h * 0.3);
     burger(g, w * 0.64, h * 0.6, h * 0.36, 'kelp');
     script(g, '海草堡', w * 0.07, h * 0.3, h * 0.15, CREAM);
-    price(g, w * 0.07, h * 0.56, h * 0.11, 1, MUSTARD);
+    price(g, w * 0.07, h * 0.56, h * 0.11, cost('meal'), MUSTARD);
     script(g, '430 kcal', w * 0.07, h * 0.74, h * 0.06, 'rgba(246,236,214,0.6)');
     logo(g, w * 0.09, h * 0.14, h * 0.06);
   },
@@ -235,7 +252,7 @@ const BILL = [
     script(g, '牛肉堡', w * 0.93, h * 0.3, h * 0.15, CREAM, 'right');
     script(g, '起司', w * 0.93, h * 0.48, h * 0.08, MUSTARD, 'right');
     const pw = h * 0.11 * 3.2;
-    price(g, w * 0.93 - pw, h * 0.62, h * 0.11, 1, CREAM);
+    price(g, w * 0.93 - pw, h * 0.62, h * 0.11, cost('meal'), CREAM);
     logo(g, w * 0.91, h * 0.14, h * 0.06);
   },
   (g, w, h) => {
@@ -247,7 +264,7 @@ const BILL = [
     rrect(g, w * 0.07, h * 0.12, h * 0.26, h * 0.11, h * 0.04); g.fill();
     script(g, '新', w * 0.07 + h * 0.13, h * 0.125, h * 0.09, CREAM, 'center');
     script(g, '高麗菜堡', w * 0.07, h * 0.32, h * 0.13, CREAM);
-    price(g, w * 0.07, h * 0.56, h * 0.11, 1, MUSTARD);
+    price(g, w * 0.07, h * 0.56, h * 0.11, cost('meal'), MUSTARD);
     script(g, '380 kcal', w * 0.07, h * 0.74, h * 0.06, 'rgba(246,236,214,0.6)');
   },
   (g, w, h) => {
@@ -261,7 +278,7 @@ const BILL = [
     }
     fries(g, w * 0.5, h * 0.55, h * 0.62);
     script(g, '薯條', w * 0.08, h * 0.1, h * 0.14, COCOA);
-    price(g, w * 0.75, h * 0.74, h * 0.1, 1, COCOA);
+    price(g, w * 0.75, h * 0.74, h * 0.1, cost('meal'), COCOA);
   },
   (g, w, h) => {
     backdrop(g, w, h, '#4a3027', '#140d0a', 0.5, 0.45);
@@ -288,7 +305,7 @@ const MENUP = [
     ['S', 'M', 'L'].forEach((s, i) => {
       const y = h * (0.68 + i * 0.09);
       script(g, s, w * 0.12, y, w * 0.1, COCOA);
-      price(g, w * 0.55, y, w * 0.09, 1, COCOA);
+      price(g, w * 0.55, y, w * 0.09, cost('meal'), COCOA);
     });
   },
   (g, w, h) => {
@@ -298,14 +315,14 @@ const MENUP = [
     script(g, '新', w * 0.23, h * 0.055, w * 0.1, CREAM, 'center');
     burger(g, w * 0.5, h * 0.4, w * 0.36, 'cabbage');
     script(g, '高麗菜堡', w * 0.5, h * 0.62, w * 0.13, CREAM, 'center');
-    price(g, w * 0.3, h * 0.78, w * 0.12, 1, MUSTARD);
+    price(g, w * 0.3, h * 0.78, w * 0.12, cost('meal'), MUSTARD);
   },
   (g, w, h) => {
-    // 怎麼點：一束海草 → 點餐機 → 號碼 → 漢堡
+    // 怎麼點：一顆晶 → 點餐機 → 號碼 → 漢堡
     g.fillStyle = COCOA; g.fillRect(0, 0, w, h);
     logo(g, w * 0.5, h * 0.1, w * 0.1);
     const steps = [
-      (y) => seaweed(g, w * 0.5, y, w * 0.2),
+      (y) => gem(g, w * 0.5, y, w * 0.2),
       (y) => { g.fillStyle = CREAM; rrect(g, w * 0.4, y - w * 0.14, w * 0.2, w * 0.28, w * 0.03); g.fill(); g.fillStyle = TOMATO; rrect(g, w * 0.43, y - w * 0.1, w * 0.14, w * 0.12, w * 0.02); g.fill(); },
       (y) => { script(g, '147', w * 0.5, y - w * 0.09, w * 0.16, MUSTARD, 'center'); },
       (y) => burger(g, w * 0.5, y, w * 0.13, 'kelp'),
@@ -325,10 +342,10 @@ const MENUP = [
     else burger(g, w * 0.5, h * 0.36, w * 0.32, m.id);
     script(g, m.name, w * 0.5, h * 0.55, w * 0.13, COCOA, 'center');
     script(g, `${m.kcal} kcal`, w * 0.5, h * 0.66, w * 0.06, 'rgba(46,31,26,0.55)', 'center');
-    price(g, w * 0.32, h * 0.72, w * 0.11, 1, COCOA);
+    price(g, w * 0.32, h * 0.72, w * 0.11, cost('meal'), COCOA);
     g.fillStyle = TOMATO;
     rrect(g, w * 0.14, h * 0.84, w * 0.72, h * 0.1, h * 0.05); g.fill();
-    script(g, '放海草', w * 0.5, h * 0.865, h * 0.05, CREAM, 'center');
+    script(g, '放晶', w * 0.5, h * 0.865, h * 0.05, CREAM, 'center');
   }),
 ];
 function menuList(g, w, h, title, items) {
@@ -340,7 +357,7 @@ function menuList(g, w, h, title, items) {
     rrect(g, w * 0.04, y - h * 0.01, w * 0.92, h * 0.25, w * 0.04); g.fill();
     burger(g, w * 0.5, y + h * 0.08, w * 0.22, m.id);
     script(g, m.name, w * 0.08, y + h * 0.165, w * 0.09, CREAM);
-    price(g, w * 0.62, y + h * 0.165, w * 0.08, 1, MUSTARD);
+    price(g, w * 0.62, y + h * 0.165, w * 0.08, cost('meal'), MUSTARD);
   });
 }
 // 畫一張圖集：cols × rows 格，每格 cw × ch

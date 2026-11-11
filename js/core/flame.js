@@ -9,7 +9,8 @@ import * as THREE from 'three';
 export const SHAPE = { tongue: 0, cluster: 1, curl: 2, streak: 3, fan: 4, ember: 5, crown: 6 };
 const ROOT = 0.05;   // 格子裡根部在哪（由下往上）
 let atlas = null;
-const map = () => (atlas ??= new THREE.TextureLoader().load('assets/fx/flames.png'));
+// 路徑照這個模組自己的位置找（experiments/ 底下的預覽頁也載得到）
+const map = () => (atlas ??= new THREE.TextureLoader().load(new URL('../../assets/fx/flames.png', import.meta.url).href));
 
 // 漁火的紅：海市燈籠紙那個紅（haishi-map.js 的 LAMP）當主色，尖端偏深紅，根部帶一點熱
 export const RED = { base: '#ff4a2a', tip: '#c81a10', hot: '#ffb070' };

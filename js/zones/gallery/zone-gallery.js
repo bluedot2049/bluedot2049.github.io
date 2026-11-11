@@ -91,7 +91,8 @@ export function env() {
 
 // 角色出來之前先站好的：前廳的胖頭頭人擋住一小塊地面，玩家靠近時會轉過來面對；陽台長桌的主人也是一隻胖頭頭人
 export function residents({ scene, world, shadowTex }) {
-  const spot = world.findWalkable(2.0, -5.6, 0, -2) || { x: 2.0, z: -5.6 };
+  // 站在配件工作桌（workbench.js）B 段桌尾旁邊、貼著右牆，不擋相機座前面
+  const spot = world.findWalkable(3.2, -5.35, 0, -2) || { x: 3.2, z: -5.35 };
   const manatee = new Manatee(shadowTex, spot.x, spot.z);
   scene.add(manatee.group);
   world.stage?.follow(manatee);

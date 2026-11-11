@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { Kit, mergeBucket } from '../core/props.js';
 import { rod } from './heads.js';
-import { CLOTH, HOODED } from './looks.js';
+import { CLOTH, HOODED, raceOf } from './looks.js';
 
 export const HIP = 0.42;
 const WHITE = '#f4f2ec', BLACK = '#1e1c1e', DARK = '#3a2414', GOLD = '#d4a54a', METAL = '#a0a6ae', WOOD = '#7a5432', LEATHER = '#5a3a24';
@@ -53,6 +53,16 @@ export function shell(L, W) {
     for (const [y0, y1, r0, r1] of segs) if (y >= y0 && y <= y1) r = Math.max(r, lerp(r0, r1, (y - y0) / (y1 - y0)) * W);
     return r;
   };
+}
+
+// 胸前最外面在高度 y 離中軸多遠，連脖子上厚的東西（圍巾、毛巾、花環）一起算。
+// 頭上垂到胸前的鬚（heads.js 的鬚臉）照它讓開，才不會穿進圍巾、斗篷裡
+export function frontOf(L, W) {
+  const sh = shell(L, W), nr = 0.15 * (0.8 + 0.2 * W) + sh(0.8) - chest(0.8, W);
+  // 圍巾那一圈的截面是圓的：[中心高, 圈的半徑, 管的半徑]
+  const ring = { scarf: [0.8, nr, 0.06], towel: [0.8, nr, 0.045], lei: [0.765, nr + 0.02, 0.04] }[L.neck];
+  const hang = L.neck === 'towel' ? (y) => (y > 0.6 && y < 0.8 ? sh(y) + 0.04 : 0) : () => 0;
+  return (y) => Math.max(sh(y), hang(y), ring && Math.abs(y - ring[0]) < ring[2] ? ring[1] + Math.sqrt(ring[2] ** 2 - (y - ring[0]) ** 2) : 0);
 }
 
 // ---------- 帶子 ----------
@@ -173,7 +183,9 @@ function top(k, L, W, P) {
       break;
     case 'hoodie':
       body();
-      k.ball(0.13, c, 0, 0.82, -0.12 * W, { sx: 1.3, sy: 0.7, sz: 0.8 });
+      // 平底的頭（紙箱、機器人、電視）帽兜垂到背上，不然會從箱子背面穿出來
+      if (raceOf(L).flat) k.ball(0.13, c, 0, 0.715, -0.17 * W, { sx: 1.3, sy: 0.7, sz: 0.8 });
+      else k.ball(0.13, c, 0, 0.82, -0.12 * W, { sx: 1.3, sy: 0.7, sz: 0.8 });
       k.box(0.17 * W, 0.08, 0.015, mix(c, '#000000', 0.15), 0, 0.52, front(0.52, 0.006), { rx: -th });
       for (const s of [-1, 1]) rod(k, [s * 0.03, 0.78, front(0.78, 0.01)], [s * 0.035, 0.68, front(0.68, 0.012)], 0.005, WHITE, { seg: 3 });
       break;
@@ -266,7 +278,7 @@ function bottom(k, L, W, P) {
 const OUTER_SLEEVE = { blazer: 'long', raincoat: 'long', haori: 'wide' };
 
 function outer(k, L, W, P) {
-  const c = P.out, c2 = P.out2, nr = 0.15 * (0.8 + 0.2 * W);
+  const c = P.out, c2 = P.out2, nr = 0.15 * (0.8 + 0.2 * W), flat = raceOf(L).flat;
   // 從 y0 到 y1、粗細 r0 到 r1 的外套，回傳某個高度前面的表面在哪、斜度多少
   const coat = (y0, y1, r0, r1, seg = 8) => {
     tube(k, y0, y1, r0, r1, c, c2, 'plain', seg);
@@ -280,7 +292,7 @@ function outer(k, L, W, P) {
       break;
     case 'cloak': {
       const [[y0, y1, r0, r1]] = COAT.cloak, f = coat(y0, y1, r0 * W, r1 * W, 10);
-      k.ball(0.15, c, 0, 0.84, -0.14 * W, { sx: 1.3, sy: 0.75 });
+      k.ball(0.15, c, 0, flat ? 0.69 : 0.84, (flat ? -0.2 : -0.14) * W, { sx: 1.3, sy: 0.75 });
       k.rock(0.025, GOLD, 0, 0.79, f.z(0.79) + 0.01);
       break;
     }
@@ -300,7 +312,7 @@ function outer(k, L, W, P) {
     }
     case 'raincoat': {
       const [[y0, y1, r0, r1]] = COAT.raincoat, f = coat(y0, y1, r0 * W, r1 * W, 10);
-      k.ball(0.14, c, 0, 0.86, -0.13 * W, { sx: 1.3, sy: 0.75 });
+      k.ball(0.14, c, 0, flat ? 0.695 : 0.86, (flat ? -0.19 : -0.13) * W, { sx: 1.3, sy: 0.75 });
       for (const y of [0.35, 0.5, 0.65]) k.box(0.04, 0.012, 0.012, c2, 0, y, f.z(y) + 0.006);
       break;
     }
@@ -400,7 +412,7 @@ function onepiece(k, L, W, P) {
 // 頭比頭套大的種族（looks.js 的 hood: false）不戴，頭套掛在背後看不到
 export function hood(k, L, race) {
   if (!['dino', 'panda', 'banana'].includes(L.one) || race.hood === false) return;
-  const R = 0.24 * race.hs, cy = race.top - 0.12;
+  const [cy, R] = Array.isArray(race.hood) ? race.hood : [race.top - 0.12, 0.24 * race.hs];
   const c = L.one === 'dino' ? col(L.oneC) : L.one === 'panda' ? WHITE : BANANA;
   k.add(new THREE.SphereGeometry(R, 12, 8, Math.PI * 0.75, Math.PI * 1.5, 0, Math.PI * 0.82), c, 0, cy, -0.02);
   k.torus(R * 0.7, 0.025, Math.PI * 2, c, 0, cy, R * 0.68);
@@ -436,8 +448,10 @@ function neck(k, L, W, P) {
   const c = P.neck, sh = shell(L, W), nr = 0.15 * (0.8 + 0.2 * W) + sh(0.8) - chest(0.8, W), th = slope(W);
   // 領帶、毛巾要蓋在外套前面
   const fz = (y) => sh(y) + 0.026;
+  // 平底的頭（紙箱、機器人、電視）直接坐在肩上，沒有下巴底下那個空位：圍巾、毛巾改成薄的一圈圍在肩上，不然會從箱子正面穿出來
+  const flat = raceOf(L).flat, low = (t) => k.torus(sh(0.8 - t) + 0.005, t, Math.PI * 2, c, 0, 0.8 - t, 0, { rx: Math.PI / 2 });
   switch (L.neck) {
-    case 'scarf': k.torus(nr, 0.06, Math.PI * 2, c, 0, 0.8, 0, { rx: Math.PI / 2 }); break;
+    case 'scarf': flat ? low(0.036) : k.torus(nr, 0.06, Math.PI * 2, c, 0, 0.8, 0, { rx: Math.PI / 2 }); break;
     case 'tie':
       k.box(0.04, 0.2, 0.012, c, 0, 0.66, fz(0.66), { rx: -th });
       k.rock(0.022, c, 0, 0.77, fz(0.77));
@@ -465,7 +479,7 @@ function neck(k, L, W, P) {
       k.box(0.03, 0.004, 0.01, '#5a3a14', 0, 0.735, nr + 0.062);
       break;
     case 'towel':
-      k.torus(nr, 0.045, Math.PI * 2, c, 0, 0.8, 0, { rx: Math.PI / 2 });
+      flat ? low(0.03) : k.torus(nr, 0.045, Math.PI * 2, c, 0, 0.8, 0, { rx: Math.PI / 2 });
       for (const s of [-1, 1]) k.box(0.07, 0.2, 0.02, c, s * 0.09, 0.7, fz(0.7), { rx: -th });
       break;
   }
@@ -474,7 +488,7 @@ function neck(k, L, W, P) {
 // ---------- 背上 ----------
 // 翅膀和尾巴會動，另外做；這裡是背著不動的東西
 
-function back(k, L, W, P, cape = null) {
+function back(k, L, W, P, cape = null, head = null) {
   // 背的東西貼著最外層：穿了斗篷、蓑衣，包包背在外面；披了披風背在披風外面（cape 是披風外緣，方位 0 是正後方）
   // 披風往下越來越開：背的東西照它往下 20 公分內最寬的地方擺，下緣才不會陷進披風
   const capeB = cape && ((y) => Math.max(...[0, 0.05, 0.1, 0.15, 0.2].map((d) => cape(y - d, 0))));
@@ -482,11 +496,46 @@ function back(k, L, W, P, cape = null) {
   // 背帶：背後貼著 bs、前面貼著 sh；披風時肩上那段走在披風頂上、離脖子遠一點（領口和頭）
   const lane = (x) => (cape ? Math.sign(x) * Math.max(Math.abs(x), 0.19) : x), topB = cape ? 0.85 : 0.8;
   const strap = (backPath, frontPath, w, col) => band(k, overShoulder(bs, sh, backPath, frontPath, topB, 0.8), w, col);
+  // 高過肩膀的東西（琴頸、劍柄、箭筒、弓）：頭大、頭髮蓬的時候會插進後腦。head(y) 是後腦在那個高度離中軸多遠（character.js 量的），
+  // 從第 n 個零件起整件以最低點為軸往後仰，仰到碰不到（背帶先做、不跟著動）。人頭原本的大小碰不到、位置不變；頭大、頭寬、耳朵長、頭髮蓬的才仰
+  const lean = (n = 0) => {
+    if (!head) return;
+    const ps = k.lit.slice(n).map((g) => g.attributes.position);
+    let y0 = Infinity, s = 0;
+    for (const p of ps) for (let i = 0; i < p.count; i++) y0 = Math.min(y0, p.getY(i));
+    for (const p of ps) for (let i = 0; i < p.count; i++) {
+      const y = p.getY(i), R = y > 0.8 ? head(y) : 0;
+      if (!R) continue;
+      const need = -Math.sqrt(Math.max(0, (R + 0.02) ** 2 - p.getX(i) ** 2));
+      if (p.getZ(i) > need) s = Math.max(s, (p.getZ(i) - need) / (y - y0));
+    }
+    s = Math.min(s, 0.45);
+    if (s > 0) for (const p of ps) for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) - s * (p.getY(i) - y0));
+  };
+  const n0 = k.lit.length;
   switch (L.back) {
     case 'pouch': {
       // 掛在右後腰，避開垂下來的右手
       const r = cape ? cape(0.42, 0.73) + 0.06 : 0.255 * W + sh(0.42) - chest(0.42, W);
       k.box(0.16, 0.16, 0.08, c, -r * Math.sin(0.73), 0.42, -r * Math.cos(0.73), { rx: 0.15, ry: 0.7, rz: 0.1 });
+      break;
+    }
+    case 'fishpouch': {
+      // 魚皮袋（漁火演完拿到的）：掛在右後腰，圓鼓鼓的袋身，袋口一圈束繩、一撮流蘇。顏色照選的，底下帶一點魚鱗的銀
+      const r = cape ? cape(0.42, 0.73) + 0.07 : 0.255 * W + sh(0.42) - chest(0.42, W) + 0.01;
+      const x = -r * Math.sin(0.73), z = -r * Math.cos(0.73);
+      k.ball(0.09, c, x, 0.4, z, { sx: 1, sy: 1.15, sz: 0.7, color2: mix(c, '#c8d0d4', 0.35) });
+      k.cyl(0.045, 0.06, 0.035, mix(c, '#000000', 0.25), x, 0.5, z, { ry: 0.7 });
+      k.box(0.012, 0.07, 0.012, '#a8243a', x + 0.04, 0.46, z - 0.02, { rz: 0.3 });
+      break;
+    }
+    case 'gembox': {
+      // 零錢盒（照片登上頭版拿到的）：右後腰一個扁扁的小盒，蓋子上嵌一顆晶（黃轉紅）
+      const r = cape ? cape(0.42, 0.73) + 0.06 : 0.255 * W + sh(0.42) - chest(0.42, W);
+      const x = -r * Math.sin(0.73), z = -r * Math.cos(0.73);
+      k.box(0.15, 0.11, 0.07, c, x, 0.42, z, { rx: 0.1, ry: 0.7 });
+      k.box(0.155, 0.025, 0.075, mix(c, '#000000', 0.3), x, 0.48, z, { rx: 0.1, ry: 0.7 });
+      k.add(new THREE.OctahedronGeometry(0.022, 0), '#e8963c', x - 0.035 * Math.sin(0.73), 0.43, z - 0.035 * Math.cos(0.73), { color2: '#b62c3c', sy: 1.3 });
       break;
     }
     case 'backpack':
@@ -518,14 +567,16 @@ function back(k, L, W, P, cape = null) {
     }
     case 'guitar': {
       const z = bz(0.55) - 0.06;
-      k.ball(0.13, c, 0.05, 0.42, z, { sz: 0.35 });
-      k.ball(0.1, c, -0.02, 0.58, z, { sz: 0.35 });
-      k.cyl(0.035, 0.035, 0.01, BLACK, 0.03, 0.47, z - 0.046, { rx: Math.PI / 2 }, 10);
-      rod(k, [-0.03, 0.62, z], [-0.2, 1.05, z], 0.02, WOOD, { flat: 0.015 });
       // 背帶：琴頸那頭從右肩上來，斜過胸前到左邊腰側，繞到背後接琴身的尾巴。披了披風就收在腰側披風前緣裡面，不繞出去
       const t = lane(0.15 * W), sx = -sh(0.38) - 0.01;
       strap([[-0.03, 0.62], [t, 0.72]], [[t, 0.72], [sx, 0.38]], 0.022, BLACK);
       if (!cape) band(k, along(bs, -1, [[sx, 0.38], [0.02, 0.33]]), 0.022, BLACK);
+      const n = k.lit.length;
+      k.ball(0.13, c, 0.05, 0.42, z, { sz: 0.35 });
+      k.ball(0.1, c, -0.02, 0.58, z, { sz: 0.35 });
+      k.cyl(0.035, 0.035, 0.01, BLACK, 0.03, 0.47, z - 0.046, { rx: Math.PI / 2 }, 10);
+      rod(k, [-0.03, 0.62, z], [-0.2, 1.05, z], 0.02, WOOD, { flat: 0.015 });
+      lean(n);
       break;
     }
     case 'sword': {
@@ -533,6 +584,7 @@ function back(k, L, W, P, cape = null) {
       rod(k, a, b, 0.045, METAL, { flat: 0.02 });
       rod(k, [b[0] - 0.12, b[1] - 0.06, z], [b[0] + 0.12, b[1] + 0.06, z], 0.02, GOLD, { flat: 0.04 });
       rod(k, b, [b[0] + 0.07, b[1] + 0.16, z], 0.022, DARK);
+      lean(n0);
       break;
     }
     case 'quiver': {
@@ -543,6 +595,7 @@ function back(k, L, W, P, cape = null) {
         rod(k, [x - 0.02, y - 0.1, zz], [x + 0.02, y + 0.06, zz], 0.007, WOOD, { seg: 3 });
         k.box(0.04, 0.06, 0.006, '#f0ece0', x + 0.02, y + 0.04, zz, { rz: -0.4 });
       }
+      lean(n0);
       break;
     }
     case 'shield': {
@@ -576,6 +629,7 @@ function back(k, L, W, P, cape = null) {
       k.torus(r, 0.016, arc, WOOD, cx, cy, z - 0.07, { rz: rz + a0 });
       const end = (t) => [cx + Math.cos(rz + a0 + t) * r, cy + Math.sin(rz + a0 + t) * r, z - 0.07];
       rod(k, end(0), end(arc), 0.004, '#e8e0d0', { seg: 3 });
+      lean(n0);
       break;
     }
     case 'shell': {
@@ -591,7 +645,8 @@ function back(k, L, W, P, cape = null) {
 }
 
 // cape：披了披風時，披風外緣在 (y, 方位) 多遠（capeGeo 的 envelope）；背的東西改背在披風外面
-export function bodyGeo(L, W, cape = null) {
+// head：後腦在高度 y 離中軸多遠（頭大時背上高過肩膀的東西往後仰，見 back 的 lean），沒給就不仰
+export function bodyGeo(L, W, cape = null, head = null) {
   const P = palette(L);
   return build((k) => {
     if (L.one !== 'none') onepiece(k, L, W, P);
@@ -601,7 +656,7 @@ export function bodyGeo(L, W, cape = null) {
       outer(k, L, W, P);
     }
     neck(k, L, W, P);
-    back(k, L, W, P, cape);
+    back(k, L, W, P, cape, head);
   });
 }
 
@@ -871,6 +926,53 @@ export function tailGeo(L, skin) {
     rod(k, [0, -0.06, -0.2], [0, 0.1, -0.34], 0.022, skin, { r2: 0.035 });
     k.ball(0.03, skin, 0, 0.1, -0.34);
   });
+}
+
+// ---------- 武士刀 ----------
+// 裝飾的武士刀，照使用者另一個遊戲的斗笠浪人（F:\遊戲專案 ronin_model.gd）：插在左腰，刀柄朝前、鞘尾往左後方伸出去，
+// 背影看得到一截像尾巴。不拔。左手（armR）扣在刀柄上，手臂擺成 KATANA_ARM（character.js 套），刀照那隻手擺。
+// 網格原點在鍔，鞘往 -z、刀柄往 +z，刃朝上；鞘往下彎（反り，刀背那側在下），鞘照背上的顏色，其他是固定的鐵、柄卷、角
+export const KATANA_ARM = [-0.6, -0.3];
+const KAT = { sheath: 0.6, hilt: 0.2, r: 0.033, sori: 0.04, pitch: 0.06 };
+export function katanaGeo(L) {
+  if (L.back !== 'katana') return null;
+  const c = col(L.backC), horn = '#6e6a66', iron = '#3a3438', grip = '#2c2628', ito = '#e4ddcc';
+  return build((k) => {
+    const S = KAT.sheath, at = (t) => [0, -KAT.sori * t * t, -0.012 - (S - 0.012) * t];
+    const pts = [0, 0.35, 0.7, 1].map(at);
+    for (let i = 0; i < 3; i++) rod(k, pts[i], pts[i + 1], KAT.r * (1 - 0.04 * i), c, { r2: KAT.r * (1 - 0.04 * (i + 1)) });
+    // 鯉口（鞘口的角圈）、鐺（鞘尾的套）
+    k.cyl(KAT.r + 0.004, KAT.r + 0.004, 0.022, horn, 0, 0, -0.024, { rx: Math.PI / 2 }, 6);
+    rod(k, at(0.94), at(1.02), KAT.r * 0.9 + 0.003, horn);
+    // 鍔、刀柄、柄卷兩側一排菱形（白色鮫皮露出來的地方）、柄頭
+    k.cyl(0.056, 0.056, 0.014, iron, 0, 0, 0, { rx: Math.PI / 2, sx: 1, sz: 0.82 }, 8);
+    k.cyl(0.025, 0.024, KAT.hilt, grip, 0, 0, 0.008 + KAT.hilt / 2, { rx: Math.PI / 2 }, 6);
+    for (let i = 0; i < 4; i++) for (const s of [-1, 1]) k.box(0.006, 0.017, 0.017, ito, s * 0.022, 0, 0.04 + 0.042 * i, { rx: Math.PI / 4 });
+    k.ball(0.029, iron, 0, 0, 0.012 + KAT.hilt, { sy: 0.85, sz: 0.55 });
+  });
+}
+
+// 刀擺在哪、往外轉多少。hand 是扣刀柄那隻手的手心（身體座標，character.js 照 KATANA_ARM 算），手搭在鍔前面一點的刀柄上。
+// 鞘從往外 0.45 開始，碰到身上最外層（斗篷、蓑衣）或披風（cape，同 back() 的 cape）就再往外轉，最多轉到快正側面。
+// 回傳 at（鍔的位置）、yaw、pitch：網格 rotation 'YXZ' 照這兩個轉
+export function katanaFit(L, W, hand, cape = null) {
+  const sh = shell(L, W), e = new THREE.Euler(0, 0, 0, 'YXZ'), v = new THREE.Vector3();
+  const dir = (yaw, z) => v.set(0, 0, z).applyEuler(e.set(KAT.pitch, yaw, 0, 'YXZ'));
+  let yaw = -0.45, at = null;
+  for (; ; yaw -= 0.05) {
+    const h = dir(yaw, 1).clone();
+    at = [hand[0] - h.x * 0.05, hand[1] - 0.04 - h.y * 0.05, hand[2] - h.z * 0.05];
+    let ok = true;
+    for (let i = 1; i <= 6 && ok; i++) {
+      const t = i / 6, p = dir(yaw, -KAT.sheath * t);
+      const x = at[0] + p.x, y = at[1] + p.y - KAT.sori * t * t, z = at[2] + p.z;
+      if (z > 0.05) continue;
+      const need = Math.max(sh(y), cape ? cape(y, Math.atan2(-x, -z)) : 0) + KAT.r + 0.015;
+      ok = Math.hypot(x, z) >= need;
+    }
+    if (ok || yaw < -1.2) break;
+  }
+  return { at, yaw, pitch: KAT.pitch };
 }
 
 // ---------- 右手 ----------

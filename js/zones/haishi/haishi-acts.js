@@ -6,6 +6,8 @@
 // 你走近、面對著牠才會飛走；跟太遠牠停下來回頭等。台詞在 haishi-act-lines.js。可以重複演，演完魚桶裡又有一條
 import * as THREE from 'three';
 import { rng } from '../../core/props.js';
+import { gainGift, cost, UNIT, AGAIN } from '../../save/purse.js';
+import { getSave, putSave } from '../../save/progress.js';
 import { V, bell, ramp } from '../../core/happen.js';
 import { piece, halo } from './haishi-happen.js';
 import { SEA, WOOD, DARK } from './haishi-map.js';
@@ -46,7 +48,7 @@ function spots(world) {
   ];
 }
 
-function fishAct({ world, vendors, ambience, attention, camera, player }) {
+function fishAct({ world, vendors, ambience, attention, camera, player, ui }) {
   const room = world.rooms[0].group, R = rng('haishi:act:fish');
   const S = spots(world);
   // 魚桶：魚攤櫃台左前方一個木桶，水面暗暗的
@@ -236,7 +238,11 @@ function fishAct({ world, vendors, ambience, attention, camera, player }) {
     target(x, z) {
       if (phase !== 'bucket') return null;
       const d = Math.hypot(x - BUCKET.x, z - BUCKET.z);
-      return d < 2.2 ? { kind: 'talk', p: who, d, ax: BUCKET.x, az: BUCKET.z } : null;
+      if (d < 2.2) return { kind: 'talk', p: who, d, ax: BUCKET.x, az: BUCKET.z };
+      // 香油錢：戲沒在演的時候，站在火盆旁邊（save/purse.js 的 WAYS.offering）
+      const db = Math.hypot(x - BRAZIER.x, z - BRAZIER.z);
+      if (db < 2 && Math.abs(player.pos.y - BRAZIER.y) < 1.5) return { kind: 'offer', label: '投晶', cost: cost('offering'), p: { act: offer }, d: db, ax: BRAZIER.x, az: BRAZIER.z };
+      return null;
     },
     update(dt, cue) {
       t += dt;
@@ -387,6 +393,8 @@ function fishAct({ world, vendors, ambience, attention, camera, player }) {
           }
           if (t > 8.6) {
             cue.finish();
+            // 演完第一次：火盆邊留下一個魚皮袋（背的配件，looks.js 的 GIFTS.purse7）
+            if (gainGift('purse7')) ui?.toast('拿到魚皮袋', '到畫廊鏡前背上');
             gone = 1;
             act.init(0);
             return;
@@ -428,6 +436,19 @@ function fishAct({ world, vendors, ambience, attention, camera, player }) {
       ev.seen = phase === 'leap' || phase === 'pop' || phase === 'fly' || phase === 'finale' ? pos : null;
     },
   };
+  // 香油錢：一個人一天一次（台灣日期，progress.js 的 offered）。投了火盆點著、燈河亮下山，跟漁火演完一樣傳給同一區的人
+  function offer() {
+    const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+    if (getSave().offered === today) return ui?.hint('今天投過了　明天再來', 3000);
+    if (!brazier.offer()) return ui?.hint(`身上沒有${UNIT}了　${AGAIN}`, 2500);
+    putSave({ offered: today });
+    lastFire = clock;
+    act.send?.({ t: 'fire', s: 0 });
+    sound('coin', 0.5, brazier.pos);
+    sound('ignite', 0.7, brazier.pos, 0.9);
+    sound('swell', 0.35, brazier.pos, 0.8);
+  }
+
   // 同一區別人的消息（core/act.js 轉過來）：fire 那邊火盆燒了 s 秒；ask 晚到的人問，燒著的晚一點回，別人先回了就不回
   act.receive = (m) => {
     if (m.t === 'fire') {

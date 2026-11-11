@@ -9,7 +9,7 @@ import { CONTACT, footShadow } from '../core/footshadow.js';
 import { HEADS, rod } from './heads.js';
 import { HAT_COLORS, HAIR_COLORS, SKINS, CLOTH, FACE, FACE_INK, raceOf, sizes, sanitizeLook, lookKey, decodeFace } from './looks.js';
 import { CAMERAS, GUI_EYE, cameraModel, cameraPart, cameraParts, chromeMat, isChrome } from '../camera/cameras.js';
-import { HIP, HOODED, shell, itemOf, bodyGeo, armGeo, legGeo, capeGeo, CAPE_BEND, capeT, camStrap, wingGeo, wingAt, hasWings, tailGeo, tailAt, hood } from './clothes.js';
+import { HIP, HOODED, shell, itemOf, bodyGeo, armGeo, legGeo, capeGeo, CAPE_BEND, capeT, camStrap, wingGeo, wingAt, hasWings, tailGeo, tailAt, katanaGeo, katanaFit, KATANA_ARM, hood, frontOf } from './clothes.js';
 import { HandClear, shapeOf, reachAt, shapePoints } from './handclear.js';
 import { FACES, HANDS, BODIES, kaoCode, kaoParts } from './kaomoji-parts.js';
 import { BREEZE } from '../core/weather.js';
@@ -245,11 +245,11 @@ const FACE_GLSL_MAP = `
 `;
 
 // 戴帽子時讓開頭髮：lift 帽子往上抬多少、grow 放大幾倍；top 是頭髮頂多高（鏡子取景用）。沒寫的照原本的帽子
-const HAIR_FIT = { afro: { lift: 0.17, grow: 1.4, top: 0.6 }, buns: { lift: 0.03, grow: 1.12, top: 0.46 }, spiky: { top: 0.52 } };
+const HAIR_FIT = { afro: { lift: 0.17, grow: 1.4, top: 0.6 }, buns: { top: 0.46 }, spiky: { top: 0.52 } };
 // 戴頭套、頭盔時頭髮收進去，大頭髮只留貼著頭的那一層
 export const TUCKED = { afro: 'short', spiky: 'short', long: 'short', buns: 'short' };
 
-// 頭髮：只有人有。原點在脖子，頭的中心在 0.2。hat：戴著帽子，刺蝟頭只留最下面一圈，免得刺穿帽子
+// 頭髮：只有人有。原點在脖子，頭的中心在 0.2。hat：戴著帽子（豆芽不算），刺蝟頭只留最下面一圈、包包頭改成後腦低處一顆，免得穿出帽子
 function hair(k, style, c, hat = false) {
   const top = () => k.ball(0.21, c, 0, 0.23, -0.04, { sy: 0.9, sz: 0.95 });
   switch (style) {
@@ -285,7 +285,8 @@ function hair(k, style, c, hat = false) {
       break;
     case 'buns':
       top();
-      for (const s of [-1, 1]) k.ball(0.085, c, s * 0.15, 0.37, -0.05);
+      if (hat) k.ball(0.085, c, 0, 0.15, -0.25, { sz: 0.85 });
+      else for (const s of [-1, 1]) k.ball(0.085, c, s * 0.15, 0.37, -0.05);
       break;
   }
 }
@@ -295,7 +296,7 @@ function hair(k, style, c, hat = false) {
 // 脖子以下那段貼在身上最外層前面（clothes.js 的 shell；頭的座標要換成身體的：加脖子高度、乘頭的縮放），
 // 鬍子前緣離脖子這條軸比胸口遠，頭左右轉也不會埋進去
 function beard(k, L, race, S, m, c) {
-  const fs = race.fs ?? 1, my = race.ey + S.fy - 0.11 * fs, out = shell(L, S.W);
+  const fs = race.fs ?? 1, my = race.ey + S.fy - (race.md ?? 0.11) * fs, out = shell(L, S.W);
   // 頭很小、身體很胖時胸口在頭的座標裡很遠，最多推到 0.3（寧可埋一點，也不要鬍子飄在臉前面）
   const front = (x, y) => Math.max(surf(m, x, y) + 0.02, Math.min(0.3, out(NECK + y * S.hs) / S.hs + 0.035));
   if (L.glasses !== 'groucho') {
@@ -371,7 +372,7 @@ function features(k, ke, kp, L, race, S, m, skin, km = null, spots = []) {
     case 'long': k.cone(0.025 * fs, 0.2, base, 0, ny, zAt(0, ny, 0.1), { rx: Math.PI / 2 }); break;
   }
 
-  const my = ey - 0.11 * fs, lip = '#5a2a22', mk = km || k;
+  const my = ey - (race.md ?? 0.11) * fs, lip = '#5a2a22', mk = km || k;
   const mput = (r, c, x, y, lift = 0, o) => mk.ball(r, c, x, y, surf(m, x, y) + lift, o);
   const smile = (x = 0, rz = Math.PI) => mk.torus(0.04 * fs, 0.008 * fs, Math.PI, lip, x, my + 0.025 * fs, zAt(x, my + 0.01, 0.004), { rz });
   switch (L.mouth) {
@@ -435,20 +436,26 @@ function glasses(k, L, race, S, m) {
       k.torus(gr, 0.007, Math.PI * 2, GOLD, ex, ey, zAt(ex));
       rod(k, [ex, ey - gr, zAt(ex)], [ex + gr + 0.04, ey - 0.22, zAt(ex) - 0.08], 0.003, GOLD, { seg: 3 });
       break;
-    case 'groucho':
+    case 'groucho': {
+      // 假鼻子、假鬍子貼著它們自己那個高度的臉：嘴往前凸的（狗、牛、狐狸）、頭扁的（青蛙），照眼睛的深度放會埋進嘴裡。人臉算出來跟原本一樣
+      const ny = ey - 0.06 * fs, my = ey - 0.13 * fs;
       for (const s of [-1, 1]) {
         k.torus(gr, 0.013, Math.PI * 2, '#141012', s * ex, ey, zAt(s * ex));
         k.box(gr * 2.2, 0.03 * fs, 0.025, '#141012', s * ex, ey + gr + 0.02 * fs, zAt(s * ex), { rz: -s * 0.15 });
-        k.ball(0.04 * fs, '#141012', s * 0.035 * fs, ey - 0.13 * fs, zAt(0) + 0.02, { sx: 1.4, sy: 0.6, sz: 0.6, rz: s * 0.2 });
+        k.ball(0.04 * fs, '#141012', s * 0.035 * fs, my, Math.max(zAt(0) + 0.02, surf(m, s * 0.035 * fs, my) + 0.012), { sx: 1.4, sy: 0.6, sz: 0.6, rz: s * 0.2 });
       }
       bridge('#141012', 0.013);
-      k.ball(0.05 * fs, '#e8a888', 0, ey - 0.06 * fs, zAt(0) + 0.03);
+      k.ball(0.05 * fs, '#e8a888', 0, ny, Math.max(zAt(0) + 0.03, surf(m, 0, ny) + 0.03));
       break;
-    case '3d':
-      k.box(2 * ex + 2.4 * gr, gr * 1.5, 0.01, '#f4f2ec', 0, ey, zAt(0));
-      k.box(gr * 1.8, gr * 1.1, 0.012, '#d83a3a', -ex, ey, zAt(0) + 0.004);
-      k.box(gr * 1.8, gr * 1.1, 0.012, '#3a7ad8', ex, ey, zAt(0) + 0.004);
+    }
+    case '3d': {
+      // 整片照最凸的地方放：眼睛鼓在兩邊的（青蛙）照中間的深度放會埋在眼睛後面
+      const z = Math.max(zAt(0), zAt(ex), zAt(-ex));
+      k.box(2 * ex + 2.4 * gr, gr * 1.5, 0.01, '#f4f2ec', 0, ey, z);
+      k.box(gr * 1.8, gr * 1.1, 0.012, '#d83a3a', -ex, ey, z + 0.004);
+      k.box(gr * 1.8, gr * 1.1, 0.012, '#3a7ad8', ex, ey, z + 0.004);
       break;
+    }
   }
 }
 
@@ -519,12 +526,34 @@ function headGeo(L, race, S, skin, split = false) {
   const f = { eye: ownEye ? recordEyes(ke, spots) : junk, mouth: ownMouth ? km : junk };
   let mouthAt = null;
   const head = build((k) => {
-    HEADS[race.head](k, skin, mix(skin, '#f8f0e4', 0.55), f);
     const hooded = HOODED.includes(L.one);
-    if (race.hair) hair(k, hooded ? TUCKED[L.hair] ?? L.hair : L.hair, hex(HAIR_COLORS[L.hairC]), !hooded && L.hat !== 'none');
+    // 頭的造型要讓開的：hat 戴著哪頂帽子（紙箱把蓋子蓋上、耳朵收低；豆芽只是一根莖不算；連身裝的頭套是 'hood'）；front 胸前最外層（連圍巾）在頭的高度 y 離中軸多遠，
+    // 垂到胸前的鬚照它擺（身體的座標換成頭的：扣掉脖子高度、除以頭的縮放）
+    const out = frontOf(L, S.W), cowl = hooded && L.one !== 'astronaut' && race.hood !== false;
+    const o = { hat: cowl ? 'hood' : !hooded && L.hat !== 'none' && L.hat !== 'sprout' ? L.hat : null, front: (y) => out(NECK + y * S.hs) / S.hs };
+    // 背後最外層：真的把身體（連外套的帽兜、背的東西）拼一次來量，垂鬚的頭才會問，問了才拼。披風自己會繞開頭和鬚，不用讓；
+    // 斜背的長東西（會照頭的形狀往後仰，見 TALL_BACK）和掛在腰側的腰包不算，鬚照樣垂在它們旁邊
+    let bsh = null;
+    if (!(L.one === 'none' && L.outer === 'cape')) {
+      o.back = (y, a) => {
+        if (!bsh) {
+          const g = bodyGeo(TALL_BACK.includes(L.back) || HIP_BACK.includes(L.back) ? { ...L, back: 'none' } : L, S.W);
+          bsh = shapeOf([{ geo: g }]);
+          g.dispose();
+        }
+        return reachAt(bsh, NECK + y * S.hs, a, 0) / S.hs;
+      };
+    }
+    HEADS[race.head](k, skin, mix(skin, '#f8f0e4', 0.55), f, o);
+    if (race.hair) {
+      const n = k.lit.length;
+      const tuck = hooded || L.hat === 'knight';   // 全罩的頭盔跟頭套一樣，大頭髮收進去
+      hair(k, tuck ? TUCKED[L.hair] ?? L.hair : L.hair, hex(HAIR_COLORS[L.hairC]), !!o.hat && !tuck);   // 豆芽只是一根莖，刺蝟頭、包包頭照沒戴帽子的樣子
+      if (race.hx) for (const g of k.lit.slice(n)) g.scale(race.hx, 1, 1);   // 矮人頭寬：頭髮照人頭做的，橫向放寬才蓋得住兩側
+    }
     if (race.beard && (L.mark === 'base' || L.mark === 'beard')) beard(k, L, race, S, m, hex(HAIR_COLORS[L.hairC]));
     if (!drawn) mouthAt = features(k, ke, kp, L, race, S, m, skin, km, spots);
-    glasses(k, L, race, S, m);
+    if (L.hat !== 'knight') glasses(k, L, race, S, m);   // 全罩的頭盔裡戴不了眼鏡
     hood(k, L, race);
   });
   let mouth = km ? mergeBucket(km.lit, false) : null, smile = null;
@@ -548,11 +577,55 @@ function headGeo(L, race, S, skin, split = false) {
   return { head, eyes: mergeBucket(ke.lit, false), pupils: mergeBucket(kp.lit, false), mouth, mouthAt, arcs, tears, smile, eyeY, eyeWide };
 }
 
+// 背上會高過肩膀的東西：頭大時要往後仰讓開後腦（clothes.js 的 back）
+const TALL_BACK = ['guitar', 'sword', 'quiver', 'bowpack'];
+// 掛在腰側的（腰包、魚皮袋、零錢盒）：不算背後最外層
+const HIP_BACK = ['pouch', 'fishpouch', 'gembox'];
+
 // 每種帽子從帽緣往上多高，照鏡子取景用
-const HAT_H = { wizard: 0.5, none: 0.08, crown: 0.2, propeller: 0.26, chef: 0.36, straw: 0.18, cone: 0.52, party: 0.4, sprout: 0.24 };
+const HAT_H = { wizard: 0.5, none: 0.08, crown: 0.2, propeller: 0.26, chef: 0.36, straw: 0.18, cone: 0.52, party: 0.4, sprout: 0.24, knight: 0.18 };
+
+// 騎士頭盔：整個是鋼的桶盔，罩住整顆頭，正面一道視縫，看不到眼睛；視縫底下開口露出嘴（說話、吃東西看得到），兩側和後面垂到脖子。
+// 大小照太空衣玻璃罩量的那顆球（looks.js 的 helmet，或另外量的 knight），罩不住的種族照帽子高度和大小算；耳朵、角、鬍子讓它從盔外冒出來。
+// 視縫、開口照眼睛和嘴的高度（自己畫的五官跟著五官高低滑桿，種族原本的眼睛不跟）。先用頭的座標（原點在脖子）做，最後換成帽子的（原點在帽緣、乘過 race.hs）
+function greatHelm(race, L) {
+  const [cy, gr, gz = 0.02] = race.knight ?? (Array.isArray(race.helmet) ? race.helmet : [race.top - 0.12, 0.31 * race.hs]);
+  const own = race.own && L.eyes === 'base' && !(L.face && !L.keep), fs = race.fs ?? 1;
+  const ey = race.ey + (own ? 0 : sizes(L).fy), cut = ey - (race.md ?? 0.11) * fs * 0.5;   // cut：開口的上緣，在眼睛和嘴中間
+  const r = gr * 0.8, y0 = cy - gr * 0.66, y1 = cy + gr * 0.5, P = 1.12;   // P：前後拉長，正面收成船頭
+  const A = Math.PI * 0.4;   // 開口左右各兩個切面寬（桶身十面，開口剛好落在稜上）。窄了頭一轉，側面就把嘴擋住
+  const rAt = (y) => r - r * 0.08 * (y - y0) / (y1 - y0);   // 桶身上窄下寬：這個高度的半徑
+  const steel = '#9aa0a8', hi = '#ccd2d8', dark = '#5a6068', slit = '#0e0f12';
+  const geo = build((k) => {
+    // 上半截一整圈，十面切面，正前方剛好是一條稜；頂是往上收的尖圓頂，不是平的
+    k.add(new THREE.CylinderGeometry(rAt(y1), rAt(cut), y1 - cut, 10), steel, 0, (cut + y1) / 2, gz, { color2: hi, sz: P });
+    k.add(new THREE.SphereGeometry(rAt(y1), 10, 4, 0, Math.PI * 2, 0, Math.PI / 2), hi, 0, y1, gz, { sy: 0.62, sz: P, color2: '#e4e8ec' });
+    // 下半截：兩側和後面垂到脖子，正面空出來。裡面再一層翻過來朝內的，從開口看進去是暗的鋼
+    const skirt = (dr, col, o) => k.add(new THREE.CylinderGeometry(rAt(cut) + dr, r + dr, cut - y0, 6, 1, true, A, Math.PI * 2 - 2 * A), col, 0, (y0 + cut) / 2, gz, { sz: P, ...o });
+    skirt(0, steel);
+    skirt(-0.008, dark, { sx: -1 });
+    // 開口上緣、下緣各一道加厚的邊，下緣一排鉚釘
+    k.add(new THREE.CylinderGeometry(rAt(cut) + 0.008, rAt(cut) + 0.01, 0.03, 4, 1, true, -A, 2 * A), dark, 0, cut + 0.012, gz, { sz: P });
+    k.add(new THREE.CylinderGeometry(r + 0.01, r + 0.016, 0.04, 6, 1, true, A, Math.PI * 2 - 2 * A), dark, 0, y0 + 0.02, gz, { sz: P });
+    for (let i = 0; i <= 6; i++) {
+      const a = A + (i / 6) * (Math.PI * 2 - 2 * A);
+      k.ball(0.011, hi, Math.sin(a) * (r + 0.016), y0 + 0.02, gz + Math.cos(a) * (r + 0.016) * P);
+    }
+    // 視縫：左右兩道往外斜上，像皺著眉；正中的鼻脊從頂下來把它切開，尖端往下護住鼻子
+    for (const s of [-1, 1]) {
+      k.add(new THREE.CylinderGeometry(rAt(ey) + 0.012, rAt(ey) + 0.012, 0.034, 10, 1, true, s > 0 ? 0 : -0.7, 0.7), slit, 0, ey, gz, { sz: P, rz: s * 0.16 });
+    }
+    const zf = gz + rAt(cut) * 0.96 * P;
+    k.box(0.03, y1 - cut, 0.035, hi, 0, (cut + y1) / 2, zf, { rx: -0.04 });
+    k.add(new THREE.ConeGeometry(0.024, 0.06, 4), hi, 0, cut - 0.028, zf, { rx: Math.PI, ry: Math.PI / 4, sz: 0.7 });
+    k.ball(rAt(y1) + 0.012, hi, 0, y1, gz, { sx: 0.07, sy: 0.64, sz: P });   // 冠脊：接著鼻脊順著圓頂翻到後腦
+  });
+  return geo.translate(0, -race.top, -(race.hz ?? 0)).scale(1 / race.hs, 1 / race.hs, 1 / race.hs);
+}
 
 // 帽子：原點在帽緣中心。螺旋槳另外一個網格，才能轉
 function hatGeo(L) {
+  if (L.hat === 'knight') return { main: greatHelm(raceOf(L), L), prop: null };
   const c = hex(HAT_COLORS[L.hatC]);
   const main = build((k) => {
     switch (L.hat) {
@@ -736,6 +809,10 @@ export class Character {
     this.capeX = this.capeZ = 0;
     this.wings = [-1, 1].map(() => joint(body));
     [this.tail, this.tailMesh] = joint(body);
+    // 腰上的武士刀：關節在鍔，網格自己照 katanaFit 轉好方向，關節留給坐下抬鞘尾、躺下順著身體放
+    [this.kat, this.katMesh] = joint(body);
+    this.katMesh.rotation.order = 'YXZ';
+    this.katana = false;
 
     const head = new THREE.Group();
     head.position.y = NECK;
@@ -793,6 +870,7 @@ export class Character {
 
     this.hat = new THREE.Group();
     this.hat.rotation.z = -0.12;
+    this.hatLoose = 1;
     head.add(this.hat);
     this.hatMesh = mesh(this.hat);
     this.prop = mesh(this.hat);
@@ -925,7 +1003,20 @@ export class Character {
     this.capeK = L.back !== 'none' ? 0.4 : 1;   // 背了東西在披風外面，披風彎少一點
     // 背的東西在壓短腿之前的座標裡擺，屁股以下的高度換過去再問披風
     const envPre = env && ((y, th) => env(y < HIP ? HIP - (HIP - y) * S.leg : y, th));
-    swap(this.torso, shorten(bodyGeo(L, W, envPre), S.leg));
+    // 頭盔罩不住的頭（錘頭、蘑菇傘、紙箱、牛角）就不戴玻璃罩。玻璃罩預設照帽子的高度和大小，耳朵、鼻子長的另外量（looks.js 的 helmet）
+    const helmet = L.one === 'astronaut' && race.helmet !== false;
+    const [gy, gr, gz = 0.02] = Array.isArray(race.helmet) ? race.helmet : [race.top - 0.12, 0.31 * race.hs];
+    // 背上高過肩膀的東西（琴頸、劍柄、箭筒、弓）要讓開後腦：量頭（連頭髮、頭套、玻璃罩）在每個高度往後、往斜後最遠到哪，
+    // 頭左右轉（跟披風量頭同一個範圍，clothes.js 的 capeGeo）也碰不到
+    let headBack = null;
+    if (TALL_BACK.includes(L.back)) {
+      const hsh = shapeOf([{ geo: hg.head }]);
+      headBack = (y) => {
+        const hy = (y - NECK) / S.hs, ball = helmet && Math.abs(hy - gy) < gr ? Math.sqrt(gr * gr - (hy - gy) ** 2) + Math.abs(gz) : 0;
+        return Math.max(ball, ...[-1.2, -0.6, 0, 0.6, 1.2].map((a) => reachAt(hsh, hy, Math.PI + a))) * S.hs;
+      };
+    }
+    swap(this.torso, shorten(bodyGeo(L, W, envPre, headBack), S.leg));
     swap(this.headMesh, hg.head);
     swap(this.mouthMesh, hg.mouth);
     if (hg.mouthAt) this.mouth.position.set(...hg.mouthAt);
@@ -948,14 +1039,17 @@ export class Character {
     const hat = hooded ? { main: null, prop: null } : hatGeo(L);
     swap(this.hatMesh, hat.main);
     swap(this.prop, hat.prop);
-    // 頭盔罩不住的頭（錘頭、蘑菇傘、紙箱、牛角）就不戴玻璃罩
-    this.glass.visible = L.one === 'astronaut' && race.helmet !== false;
-    this.glass.position.set(0, race.top - 0.12, 0.02);
-    this.glass.scale.setScalar(0.31 * race.hs);
+    this.glass.visible = helmet;
+    this.glass.position.set(0, gy, gz);
+    this.glass.scale.setScalar(gr);
     // 頭髮大的，帽子往上抬、放大，戴在頭髮上
-    const fit = race.hair && !hooded ? HAIR_FIT[L.hair] : null, grow = fit?.grow ?? 1;
+    const fit = race.hair && !hooded && L.hat !== 'knight' ? HAIR_FIT[L.hair] : null, grow = fit?.grow ?? 1;   // 頭盔照頭的大小做，頭髮收在裡面
     this.hatY = race.top + (fit?.lift ?? 0);
     this.hat.position.y = this.hatY;
+    this.hat.position.z = race.hz ?? 0;
+    this.hatRx = -(race.tilt ?? 0) * (L.hat === 'straw' ? 0.5 : L.hat === 'knight' ? 0 : 1);   // 帽子往後仰（眼睛長在頭頂的青蛙），update 裡風吹的晃疊在這上面。斗笠大，仰一半就露得出眼睛
+    this.hat.rotation.x = this.hatRx;
+    this.hatLoose = L.hat === 'knight' ? 0 : 1;   // 頭盔是扣緊的：不歪戴、風吹不動、不用伸手壓、轉圈不會甩歪
     this.hat.scale.setScalar(race.hs * grow);
 
     const [aL, aR, fL, fR] = this.limbs, sh = 0.07 + 0.17 * W;
@@ -980,6 +1074,16 @@ export class Character {
     this.flaps = hasWings(L);
     swap(this.tailMesh, tailGeo(L, skin));
     this.tail.position.set(...tailAt(W, HIP - (HIP - 0.32) * S.leg, env));
+    // 武士刀擺在左手（armR 照 KATANA_ARM 扣著）底下：手心 = 肩膀的關節 + 手臂往下 0.33 照那個姿勢轉
+    const kat = katanaGeo(L);
+    swap(this.katMesh, kat);
+    this.katana = !!kat;
+    if (kat) {
+      const hand = new THREE.Vector3(0, -0.33, 0).applyEuler(new THREE.Euler(KATANA_ARM[0], KATANA_ARM[1], ARM_OUT, 'YXZ'));
+      const fit = katanaFit(L, W, [sh + hand.x, 0.72 + hand.y, hand.z], envPre);
+      this.kat.position.set(...fit.at);
+      this.katMesh.rotation.set(fit.pitch, fit.yaw, 0);
+    }
     swap(this.handMesh, this.clear.setLook(L));
     const item = itemOf(L.hand);
     this.handPose = item.pose || null;
@@ -1279,7 +1383,7 @@ export class Character {
     const breath = Math.sin(this.time * 2.2) * (1 - w);
     const H = this.S.H;
     this.body.scale.set(H, H * (1 + breath * 0.015), H);
-    this.hat.rotation.z = -0.12 + Math.sin(this.time * 1.7) * 0.04 * (1 - w) + s * 0.06 * w;
+    this.hat.rotation.z = (-0.12 + Math.sin(this.time * 1.7) * 0.04 * (1 - w) + s * 0.06 * w) * this.hatLoose;
     this.scarfTail.rotation.x = 0.2 + w * 0.5 + Math.sin(this.time * 6) * 0.08 * w;
     // 竹蜻蜓一直轉，走路時轉更快
     if (this.prop.visible) this.prop.rotation.y += dt * (5 + w * 12);
@@ -1300,6 +1404,11 @@ export class Character {
     this.armL.rotation.y = this.armR.rotation.y = 0;
     this.armL.position.z = this.armR.position.z = 0;
     this.footL.position.y = this.footR.position.y = HIP;
+    // 佩著武士刀：左手扣在刀柄上不甩，走路只跟著晃一點（後面跳、坐、拿點心、壓帽子、表情那幾層照樣蓋過去）
+    if (this.katana) {
+      this.armR.rotation.x = KATANA_ARM[0] + s * 0.05 * w;
+      this.armR.rotation.y = KATANA_ARM[1];
+    }
 
     // 起跳前先蹲一下（膝蓋一沉、身體前傾、手往後甩），蹲完才離地；升空時手舉起來，過了最高點慢慢放下；
     // 落地再沉一下，手微微張開。沉的量疊在走路的身體上，後面坐下、拿東西那幾層照樣蓋得過
@@ -1316,7 +1425,7 @@ export class Character {
       this.body.scale.y *= 1 - dip * 0.6;
       this.body.rotation.x += crouch * 0.12 + land * 0.1;
       this.armL.rotation.x += crouch * 0.6;
-      this.armR.rotation.x += crouch * 0.6;
+      if (!this.katana) this.armR.rotation.x += crouch * 0.6;   // 扣著刀柄的手不往後甩，甩下去會穿過刀鞘
       this.armL.rotation.z -= land * 0.3;
       this.armR.rotation.z += land * 0.3;
       this.hat.position.y -= dip * 0.3;
@@ -1334,14 +1443,14 @@ export class Character {
     this.windK += (wind - this.windK) * Math.min(1, dt * 3);
     const wk = this.windK;
     // 壓帽子只在陣風最高點（大雨、風沙時一陣一陣的），平常的風只是吹得晃；門檻進出不同，陣風邊緣不會抖
-    const canHold = wk > 0.01 && !this.food && !this.act && !this.aim && this.aimP <= 0 && this.biteT <= 0 && this.sitP <= 0 && !this.asleep && this.hatMesh.visible;
+    const canHold = wk > 0.01 && !this.food && !this.act && !this.aim && this.aimP <= 0 && this.biteT <= 0 && this.sitP <= 0 && !this.asleep && this.hatMesh.visible && this.hatLoose > 0;
     const wantHat = canHold && wk > (this.hatK > 0.5 ? 0.45 : 0.6) ? 1 : 0;
     this.hatK += (wantHat - this.hatK) * Math.min(1, dt / (wantHat ? 0.25 : 0.16));
     if (wk > 0.005) {
       const c = Math.cos(yaw), sn = Math.sin(yaw), lx = Bz.x * c - Bz.z * sn, lz = Bz.x * sn + Bz.z * c;   // 風在身體座標往哪吹
       const t = this.time, ph = (this.swayPh ??= Math.random() * 100);
       const fl = Math.sin(t * 7.3 + ph) * 0.5 + Math.sin(t * 11.1 + ph * 1.7) * 0.3;   // 抖
-      const upright = 1 - this.sitP, loose = 1 - this.hatK;
+      const upright = 1 - this.sitP, loose = (1 - this.hatK) * this.hatLoose;
       this.body.rotation.x -= lz * 0.1 * wk * upright;
       this.body.rotation.z += lx * 0.08 * wk * upright;
       this.capeX += (Math.max(0, -lz) * 0.9 + 0.15 + fl * 0.12) * wk;
@@ -1349,9 +1458,12 @@ export class Character {
       this.scarfTail.rotation.x += (Math.max(0, -lz) * 0.8 + fl * 0.15) * wk;
       this.scarfTail.rotation.z = (lx * 0.6 + fl * 0.1) * wk;
       this.hat.rotation.z += (lx * 0.25 + fl * 0.12) * wk * loose;
-      this.hat.rotation.x = -lz * 0.2 * wk * loose;
+      this.hat.rotation.x = this.hatRx - lz * 0.2 * wk * loose;
       this.hat.position.y += Math.max(0, fl) * 0.03 * wk * loose * Bz.gust;
-    } else this.scarfTail.rotation.z = this.hat.rotation.x = 0;
+    } else {
+      this.scarfTail.rotation.z = 0;
+      this.hat.rotation.x = this.hatRx;
+    }
     if (this.hatK > 0.001) {
       const R = this.armR.rotation, hk = smooth(this.hatK);
       R.x += (HAT_ARM[0] - R.x) * hk;
@@ -1397,6 +1509,13 @@ export class Character {
       for (const f of [this.footL, this.footR]) f.rotation.x += (-0.12 - f.rotation.x) * lie;
       L.x += (0.2 - L.x) * lie; L.y += (0 - L.y) * lie; L.z += (-0.6 - L.z) * lie;
       R.x += (0.2 - R.x) * lie; R.y += (0 - R.y) * lie; R.z += (0.6 - R.z) * lie;
+    }
+    // 武士刀：走路時鞘尾跟著步子輕輕擺；坐下鞘尾抬起來（不戳進地上、長椅），躺下以鍔為軸轉到順著身體、鞘尾朝腳
+    if (this.katana) {
+      this.kat.rotation.x = 0.3 * sk * (1 - lie) - 1.4 * lie;
+      this.kat.rotation.y = s * 0.04 * w * (1 - sk);
+      // 坐著時左手放到腿上（坐下那段只轉 x、z），往內收的那一點也放掉
+      this.armR.rotation.y *= 1 - Math.max(sk, lie);
     }
 
     // 右手拿著東西：垂著的照樣小幅擺動，拿在胸前的手往前抬，雨傘這種舉過頭，夾在腋下的手臂張開幾乎不擺
@@ -1728,7 +1847,7 @@ export class Character {
       this.kaoSpinT += dt;
       const p = Math.min(1, this.kaoSpinT / spin);
       B.y += smooth(p) * Math.PI * 2 * still;
-      this.hat.rotation.z -= Math.sin(p * Math.PI) * 0.3 * still;
+      this.hat.rotation.z -= Math.sin(p * Math.PI) * 0.3 * still * this.hatLoose;
     }
     this.itemTilt += (tilt - this.itemTilt) * Math.min(1, dt * 8);
 
@@ -1908,7 +2027,7 @@ export class Character {
         arms(-0.3, -2.4, -0.3, 2.4);
         // 原地轉一圈，像施法
         B.y = smooth(Math.min(1, t / 0.8)) * Math.PI * 2 * (1 - walk);
-        this.hat.rotation.z -= Math.sin(Math.min(1, t / 0.8) * Math.PI) * 0.3 * kb;
+        this.hat.rotation.z -= Math.sin(Math.min(1, t / 0.8) * Math.PI) * 0.3 * kb * this.hatLoose;
         break;
       case '😮':
         front(-2.38, 0.875, 0.28);

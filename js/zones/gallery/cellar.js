@@ -6,7 +6,7 @@
 // 編號上算前廳的一部分（roomIndexAt 照樣回 0），牆的升降跟畫廊的牆同一套（entries）。
 import * as THREE from 'three';
 import * as TX from '../../core/textures.js';
-import { Kit, newBucket, rng } from '../../core/props.js';
+import { Kit, PROPS, newBucket, rng } from '../../core/props.js';
 import { bucketObjects, tag } from '../../core/scenery.js';
 import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
 import { DOOR_H, DOOR_W, MARGIN, PAINT_SCALE, STUB_H, WALL_H, flatWall, makeEntry, setUV, shared, stubAndCap, wallBox } from './world-rooms.js';
@@ -269,6 +269,27 @@ export function buildCellar(data, doorX, front) {
   }
   const meshes = [...perWall.values()].map((P) => P.mesh);
 
+  // 畫具（原本在前廳右牆那張工作桌和畫架，前廳那個角落讓給配件工作桌）：堆在進方廳左手邊（+x 那面牆）靠前的角落，隨便擺、歪一點，不擋樓梯到後牆那條路
+  const clutter = [];
+  {
+    const R = Math.PI / 2, b = newBucket();
+    for (const [id, x, z, rot] of [
+      ['worktable', x1 - 0.45, z0 + 2.3, -R + 0.06],
+      ['canvasStack', x1 - 0.3, z0 + 0.75, -R + 0.22],
+      ['easel', x1 - 1.7, z0 + 3.5, -R - 0.55],
+      ['stool', x1 - 1.95, z0 + 2.5, 0.4],
+      ['crate', x1 - 0.42, z0 + 3.85, -R - 0.12],
+    ]) {
+      const def = PROPS[id], one = new Kit(rng(`cellar-studio:${id}`));
+      def.build(one);
+      one.emit(b, x, z, rot);
+      // 轉了角度就用對角線的一半當半徑，寧可多讓一點
+      clutter.push({ x, z, r: Math.hypot(def.w, def.d) / 2 });
+    }
+    for (const o of bucketObjects(b)) low.add(o);
+  }
+  const blocked = (x, z) => clutter.some((c) => Math.hypot(x - c.x, z - c.z) < c.r + MARGIN);
+
   // 0 到 1：地下室要看得到幾成。踏進門口一公尺內開始淡進來，下了樓梯就全亮
   function want(x, z) {
     if (z >= 0) return 1;
@@ -287,7 +308,7 @@ export function buildCellar(data, doorX, front) {
     claims: (x, z) => z > 0 || (z > -0.6 && Math.abs(x - doorX) < DOOR_W / 2),
     walkable(x, z) {
       if (z <= RUN + 0.3) return Math.abs(x - doorX) < DOOR_W / 2 - MARGIN;
-      return x > x0 + MARGIN && x < x1 - MARGIN && z < z1 - MARGIN;
+      return x > x0 + MARGIN && x < x1 - MARGIN && z < z1 - MARGIN && !blocked(x, z);
     },
     // 站在方廳裡（不算樓梯）
     inside: (x, z) => z > z0 && z < z1 && x > x0 && x < x1,

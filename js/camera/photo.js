@@ -19,10 +19,10 @@
 import * as THREE from 'three';
 import { lens, fitSource, unbend, COVER } from '../core/lens.js';
 import { makePostcard, loadQR } from '../save/postcard.js';
-import { sanitizeLook, wearOnly } from '../avatar/looks.js';
+import { sanitizeLook } from '../avatar/looks.js';
 import { getSave, savePrint } from '../save/progress.js';
 import { makeEyePost } from '../save/eyepost.js';
-import { encodeLook } from '../save/savecode.js';
+import { wearCode } from '../save/savecode.js';
 import { CAMERAS, LEVER_R, carried, dateKnob, drawDate, eyeShutter, flashKnob, longTan, shutterKnob } from './cameras.js';
 import { SWAY, sway } from './sway.js';
 import { FloatLamp } from './drone.js';
@@ -38,7 +38,7 @@ import { onFreshTouch } from '../controls/touch.js';
 import { readMs } from '../controls/ui.js';
 import { rumble, padKey, padPair, padBtn } from '../controls/gamepad.js';
 import { is, key } from '../controls/keymap.js';
-import { kind, say } from '../controls/lessons.js';
+import { kind, say, teach, taught } from '../controls/lessons.js';
 
 const ASPECTS = [
   { label: '螢幕', r: 0 },
@@ -475,6 +475,9 @@ export class PhotoMode {
     }
     // 畫廊的眼睛：一打開說怎麼飛、轉、變焦，拍了第一張再說靠近、收起按鈕（moreTip）
     else this.ui.tip(`photo:eye-${this.inputKind()}`, this.padHint() ?? (this.coarse ? say(['拖曳', '轉頭'], ['雙指', '變焦']) : say([wasd(), '移動'], [`${key('up')} ${key('down')}`, '升降'], ['拖曳', '轉頭'], ['滾輪', '變焦'])), 6000);
+    // 能追焦的相機（獵魔III）：等上面那行說完、還沒鎖過東西，再教追焦
+    clearTimeout(this.trackTeach);
+    if (this.gear?.track && !studio) this.trackTeach = setTimeout(() => { if (this.active && this.gear?.track && !this.track && !this.result) teach('track'); }, 6500);
   }
 
   exit() {
@@ -1570,6 +1573,11 @@ export class PhotoMode {
       af.t = Math.min(1, af.t + dt / (this.gear.af?.time ?? 0.3));
       const u = 1 - Math.pow(1 - af.t, 3) + Math.sin(af.t * Math.PI) * (this.gear.af?.hunt ?? 0.18), p0 = 1 / af.from, p1 = 1 / af.to;
       this.focusD = 1 / Math.max(1e-3, p0 + (p1 - p0) * u);
+      // 找焦的聲音（cameras.js 的 voices 有 afRun 才響）：一下一下送，越接近對到越密、越高，像一步步逼近；跟著小晃動的更小聲
+      if ((this.afRunT = (this.afRunT || 0) - dt) <= 0) {
+        this.afRunT = 0.13 - 0.07 * af.t;
+        this.say('afRun', af.big ? 0.07 : 0.045, 0, 1 + 0.3 * af.t);
+      }
       if (af.t >= 1) {
         this.focusD = af.to;
         this.af = null;
@@ -1612,10 +1620,12 @@ export class PhotoMode {
     this.afTo(this.depthAt((x / window.innerWidth) * 2 - 1, 1 - (y / window.innerHeight) * 2), x, y, true);
   }
 
-  // 重新對焦（R；手把按下右搖桿或 R）：對準心再對一次，完整攝影模式是點過的那一點。lock 的相機換焦點靠這個
+  // 重新對焦（R；手把按下右搖桿或 R）：對準心再對一次，完整攝影模式是點過的那一點。lock 的相機換焦點靠這個。
+  // 能追焦的（獵魔III）順便鎖住那裡底下的東西，之後對焦跟著它走；再按換鎖準心底下的，對著空的（天空、太遠）放開
   refocus() {
     if (!this.active || !canFocus(this.gear) || this.result) return;
     const W = window.innerWidth, H = window.innerHeight, p = (!this.quick && this.afPoint) || { x: W / 2, y: H / 2 };
+    if (this.gear.track && !this.lockTrack(p.x, p.y)) this.dropTrack(true);
     this.afCheck = AF_EVERY;
     this.afTo(this.depthAt((p.x / W) * 2 - 1, 1 - (p.y / H) * 2), p.x, p.y, true);
   }
@@ -1652,13 +1662,19 @@ export class PhotoMode {
     if (this.track && !tap) return this.dropTrack();
     const px = tap ? x : W / 2, py = tap ? y : H / 2, fr = this.frame;
     if (tap && (px < fr.x || px > fr.x + fr.w || py < fr.y || py > fr.y + fr.h)) return;
+    if (!this.lockTrack(px, py, live) && !live) this.dropTrack();
+  }
+
+  // 鎖住畫面上 (px, py) 底下的東西（換掉原本鎖的）；底下沒東西或太遠回 false。live 只鎖人
+  lockTrack(px, py, live = false) {
+    const W = window.innerWidth, H = window.innerHeight;
     this.camera.updateMatrixWorld();
     const h = this.pickAt((px / W) * 2 - 1, 1 - (py / H) * 2);
-    if (!h || h.distance > 150) return live ? null : this.dropTrack();
+    if (!h || h.distance > 150) return false;
     let o = h.object, fn = null, person = false;
     while (o && !fn) { fn = o.userData?.track; person ||= !!o.userData?.character; o = o.parent; }
     while (o && !person) { person = !!o.userData?.character; o = o.parent; }
-    if (live && !fn && !person) return;
+    if (live && !fn && !person) return false;
     let get = fn?.(h) ?? null;
     if (!get) {
       // 一般的東西：記下點到的那一點在那個模型上的位置，模型走到哪跟到哪（一個網格畫很多個的，就當它不動）
@@ -1668,9 +1684,11 @@ export class PhotoMode {
     this.track = { get };
     this.afCheck = 0;
     this.$('#ph-af').classList.add('track');
-    if (live) return;
+    if (live) return true;
+    taught('track');
     this.say('track', 0.35);
     this.showZoom('追焦鎖定');
+    return true;
   }
 
   dropTrack(quiet = false) {
@@ -1896,11 +1914,11 @@ export class PhotoMode {
 
   // 帶著的相機發出的聲音：cameras.js 的 voices 把動作對到 VOICES，那台沒寫的動作不出聲。
   // gap：這麼多毫秒內只響一聲（右鍵連按舉起放下、滾輪一滑送很多次）
-  say(k, vol, gap = 0) {
+  say(k, vol, gap = 0, pitch = 1) {
     const v = this.gear?.voices?.[k], now = performance.now();
     if (!v || (gap && now - (this.saidAt || 0) < gap)) return;
     if (gap) this.saidAt = now;
-    this.ambience.voice(v, vol);
+    this.ambience.voice(v, vol, 0, pitch);
   }
 
   // 快門旁的閃光開關：點一下就切，每台相機各自記得
@@ -2588,7 +2606,7 @@ export class PhotoMode {
   // ───────── 拍好之後 ─────────
 
   // 明信片兩版，拍好後上面兩個鈕切換，記得上次選哪個（prefs 的 postcardSoul）：
-  //   普通版：只印身上的衣服和配件（不帶存檔、種族、臉）：茜紅郵票是造型碼（looks.js 的 wearOnly），沒有底片邊。
+  //   普通版：只印身上的衣服和配件（不帶存檔、種族、臉）：茜紅郵票是一身衣服的碼（savecode.js 的 wearCode），沒有底片邊。
   //           讀回來是試穿，穿在讀的人自己身上：寄給朋友，或自己留著當衣櫃外的一套
   //   靈魂版：黑眼在郵票上蓋眼印、紙邊印整份存檔（eyepost.js），跟鏡中照片一樣能整份還原；照片裁成 4:5。相簿裡的存檔只留最新一張
   // 更早的明信片（帶臉、寄給自己）照樣讀得回來
@@ -2601,7 +2619,7 @@ export class PhotoMode {
       more = { kind: 'postcard-save', k: savePrint() };
     } else {
       await loadQR();
-      const qr = { kind: 'look', text: location.origin + location.pathname + '#look=' + encodeLook(wearOnly(sanitizeLook(getSave().look)), { face: false }) };
+      const qr = { kind: 'look', text: location.origin + location.pathname + '#look=' + wearCode(sanitizeLook(getSave().look)) };
       canvas = makePostcard(sh, new Date(), { qr });
       more = { kind: 'postcard' };
     }

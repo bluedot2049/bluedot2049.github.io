@@ -183,6 +183,22 @@
 .pack-bar { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
 .pack-bar .close { position: static; width: 34px; min-width: 34px; height: 34px; background: transparent; border-color: var(--line-soft); }
 .pack-bar .close svg { width: 16px; height: 16px; stroke: var(--muted); }
+/* 錢袋（save/purse.js）：行囊兩個字後面一排小晶，袋子裝得下幾顆就幾個。一顆＝雙尖寶石（::before，顏色 --c 每顆不同、上亮下暗）套一圈細金箍（::after）；
+   花掉的只剩淡淡的形。跟地上的晶（scene/coins.js）同一個剪影 */
+.pack-bar .purse { display: inline-flex; gap: 4px; margin-left: 10px; vertical-align: middle; }
+.pack-bar .purse i { position: relative; width: 9px; height: 15px; }
+.pack-bar .purse i::before { content: ""; position: absolute; inset: 0 1px; clip-path: polygon(50% 0, 100% 46%, 50% 100%, 0 46%); background: rgba(232, 184, 106, .18); }
+.pack-bar .purse i::after { content: ""; position: absolute; left: -1px; right: -1px; top: calc(46% - 1px); height: 2px; border-radius: 1px; background: rgba(232, 184, 106, .22); }
+.pack-bar .purse i.on::before { background: linear-gradient(180deg, color-mix(in srgb, var(--c) 55%, #fff4e0) 0%, var(--c) 46%, color-mix(in srgb, var(--c) 60%, #1a1020) 100%); }
+.pack-bar .purse i.on::after { background: #e0b24f; }
+.pack-bar .purse i.tide { animation: purse-tide .5s cubic-bezier(.3, .7, .4, 1) calc(.25s + var(--k, 0) * .12s) both; }
+@keyframes purse-tide { from { opacity: .25; transform: translateY(3px); } 60% { filter: brightness(1.6); } }
+@media (prefers-reduced-motion: reduce) { .pack-bar .purse i.tide { animation: none; } }
+/* 有隊友時錢袋是鈕：小晶後面一行「丟一顆」，沒有框，按下去暗一下 */
+.pack-bar button.purse { align-items: center; padding: 4px 6px; margin: -4px 0 -4px 4px; min-height: 0; border: 0; background: none; border-radius: 999px; font: inherit; color: var(--muted); cursor: pointer; }
+.pack-bar button.purse span { margin-left: 5px; font-size: 12px; font-weight: normal; }
+.pack-bar button.purse:hover span, .pack-bar button.purse:focus-visible span { color: var(--gold); }
+.pack-bar button.purse:active { opacity: .6; }
 body.desk #pack-card { width: 460px; max-height: calc((100vh - 16px) / var(--ui, 1)); padding: 18px 20px 20px; gap: 14px; }
 body.desk .pack-bar { cursor: grab; user-select: none; }
 body.desk #pack-card.dragging .pack-bar { cursor: grabbing; }
@@ -798,3 +814,79 @@ body.flat #list-close, body.flat #top-btns { display: none; }
 #press.fresh .press-sheet img { animation: press-out .9s cubic-bezier(.2, .8, .3, 1) both; }
 @keyframes press-out { from { transform: translateY(60%) rotate(-3deg); } to { transform: none; } }
 .press-tip { margin: 0; font-size: 13px; color: #b5a084; }
+
+/* ───────── 星廟求籤（zones/haishi/haishi-lots.js）：停下來看，畫面正中、z-index 26 ─────────
+   問天那張是暗墨底金線（跟樹洞一樣）；抽到的籤是一張紙，籤詩直排，潮名是一顆章，四等潮各一個顏色 */
+#lot {
+  position: fixed; left: 50%; top: calc(50% - 30px); z-index: 26; display: none; transform: translate(-50%, -50%);
+  width: 340px; max-width: calc(100% - 32px); max-height: calc(100% - 140px); cursor: var(--cur-default);
+}
+#lot.show { display: block; animation: hollow-in .35s ease-out both; }
+#lot .lot-card { display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 140px); }
+#lot .lot-acts { display: flex; gap: 10px; justify-content: center; }
+#lot .lot-acts button {
+  flex: 1; max-width: 150px; height: 44px; padding: 0 14px; font: 600 16px var(--font); cursor: var(--cur-pointer);
+  color: var(--text); background: rgba(16, 11, 9, .94); border: 1px solid var(--line); border-radius: 999px;
+}
+#lot .lot-acts button.go { border-color: var(--gold-lo); color: var(--gold-hi); }
+#lot .lot-acts button:active { transform: scale(.96); }
+
+/* 問天：兩片星石，擲了翻一下落定 */
+#lot .lot-ask { position: relative; padding: 22px 20px 18px; text-align: center; background: rgba(16, 11, 9, .94); border-radius: 10px; box-shadow: var(--shadow); }
+#lot .lot-ask::before { content: ''; position: absolute; inset: 5px; border: 1px solid var(--line); border-radius: 7px; pointer-events: none; }
+#lot .lot-ask h3 { margin: 0; font-size: 22px; letter-spacing: .4em; color: var(--gold); }
+#lot .lot-sub { margin: 4px 0 0; font-size: 13px; color: var(--muted); letter-spacing: .1em; }
+#lot .lot-say { margin: 0; min-height: 1.4em; color: var(--text); letter-spacing: .15em; }
+#lot .lot-stones { display: flex; justify-content: center; gap: 22px; height: 52px; align-items: flex-end; margin: 16px 0 10px; }
+#lot .lot-stones i { position: relative; width: 44px; height: 22px; border-radius: 22px 22px 3px 3px; background: #5a524a; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .25); }
+/* 刻星那面朝上：平面在上、一顆淡金的四角星；空白那面朝上：弧面在上 */
+#lot .lot-stones i.star { border-radius: 3px 3px 22px 22px; background: #4a4440; }
+#lot .lot-stones i.star::after { content: '✦'; position: absolute; left: 0; right: 0; top: -1px; font-size: 14px; line-height: 1; color: #d8c08a; }
+#lot .lot-stones i.blank { border-radius: 22px 22px 3px 3px; }
+#lot .lot-stones.threw i { animation: lot-throw .55s cubic-bezier(.3, .6, .4, 1) both; }
+#lot .lot-stones.threw i + i { animation-delay: .08s; }
+@keyframes lot-throw { 0% { transform: translateY(-34px) rotateX(540deg); } 70% { transform: translateY(0) rotateX(0); } 85% { transform: translateY(-4px); } 100% { transform: none; } }
+
+/* 籤紙 */
+#lot .lot-paper {
+  --seal: #a8342a; position: relative; overflow-y: auto; padding: 16px 18px 14px; color: #2e2a3a;
+  background: #ebe0c8; border-radius: 2px; box-shadow: 0 10px 40px rgba(0, 0, 0, .55);
+}
+#lot .lot-paper::before { content: ''; position: absolute; inset: 6px; border: 1px solid rgba(46, 42, 58, .35); pointer-events: none; }
+#lot .lot-paper.t1 { --seal: #3c4f86; }
+#lot .lot-paper.t2 { --seal: #3f6b6a; }
+#lot .lot-paper.t3 { --seal: #8a6438; }
+#lot .lot-paper.fresh { animation: lot-paper .6s cubic-bezier(.2, .8, .3, 1) both; }
+@keyframes lot-paper { from { transform: translateY(18px) scale(.96); opacity: 0; } }
+#lot .lot-paper header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px double rgba(46, 42, 58, .6); padding-bottom: 8px; }
+#lot .lot-no { font-size: 20px; letter-spacing: .25em; }
+#lot .lot-tide { display: flex; flex-direction: column; align-items: center; padding: 3px 8px; color: #f3e8d2; background: var(--seal); border-radius: 3px; font-weight: 700; letter-spacing: .2em; line-height: 1.2; }
+#lot .lot-tide small { font-size: 11px; font-weight: 400; letter-spacing: .1em; opacity: .85; }
+#lot .lot-body { display: flex; gap: 12px; align-items: center; justify-content: center; margin: 12px 0 6px; }
+/* 星盤（haishi-lots.js 的 mapSvg）：墨色細線的圓盤，章色只在連線、這座那一格、主星外圈 */
+#lot .lot-map { flex: none; width: 116px; height: 116px; }
+#lot .lot-map * { fill: none; stroke: none; }
+#lot .lot-map .disc { fill: rgba(46, 42, 58, .05); }
+#lot .lot-map .band { stroke: var(--seal); stroke-width: 15; opacity: .08; stroke-linecap: round; }
+#lot .lot-map .band-edge { stroke: #2e2a3a; stroke-width: .5; stroke-dasharray: 1.2 2.4; opacity: .3; }
+#lot .lot-map .grid { stroke: #2e2a3a; stroke-width: .4; opacity: .22; }
+#lot .lot-map .field { fill: #2e2a3a; opacity: .4; }
+#lot .lot-map .mark { fill: var(--seal); opacity: .85; }
+#lot .lot-map .tick { stroke: #2e2a3a; stroke-width: .6; opacity: .55; }
+#lot .lot-map .rim { stroke: #2e2a3a; stroke-width: .7; opacity: .6; }
+#lot .lot-map .rim.out { stroke-width: 1.1; opacity: .75; }
+#lot .lot-map .ln { stroke: var(--seal); stroke-width: 1.1; stroke-linecap: round; opacity: .85; }
+#lot .lot-map .st { fill: #2e2a3a; }
+#lot .lot-map .ring { stroke: var(--seal); stroke-width: .7; }
+#lot .lot-poem { margin: 0; writing-mode: vertical-rl; font-size: 19px; letter-spacing: .18em; line-height: 1.3; }
+#lot .lot-poem span { display: block; white-space: nowrap; margin-left: .5em; }
+#lot .lot-poem span:last-child { margin-left: 0; }
+#lot .lot-star { margin: 2px 0 8px; text-align: center; font-size: 13px; letter-spacing: .2em; color: rgba(46, 42, 58, .72); }
+#lot .lot-items { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin: 0; padding-top: 8px; border-top: 1px solid rgba(46, 42, 58, .3); }
+#lot .lot-items div { display: flex; gap: 6px; align-items: baseline; }
+#lot .lot-items dt { flex: none; padding: 0 3px; font-size: 11px; color: #f3e8d2; background: rgba(46, 42, 58, .78); border-radius: 2px; }
+#lot .lot-items dd { margin: 0; font-size: 13px; letter-spacing: .04em; }
+#lot .lot-note { margin: 10px 0 0; text-align: center; font-size: 12px; color: var(--seal); letter-spacing: .12em; }
+@media (prefers-reduced-motion: reduce) { #lot.show, #lot .lot-paper.fresh, #lot .lot-stones.threw i { animation: none; } }
+/* 手機橫拿：矮，籤紙可以捲 */
+@media (max-height: 520px) { #lot { top: 50%; max-height: calc(100% - 24px); } #lot .lot-card { max-height: calc(100vh - 24px); } #lot .lot-poem { font-size: 16px; } #lot .lot-map { width: 96px; height: 96px; } }

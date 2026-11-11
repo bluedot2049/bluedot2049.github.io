@@ -5,13 +5,13 @@
 // 拱上那 7 道刻痕原來是整圈符文露出來的幾道；外面繞著前廳掛布（camtable.js）的兩道細金線，下襬收成掛布的尖角，日期寫在尖角裡。
 // 存檔印在兩個地方，都只給這個遊戲讀（不是 QR，手機相機掃不到）：
 //   眼紋：虹膜一圈圈切成亮暗的弧，放最要緊的「身上這套 + 拿到的東西」，格子大，最好讀
-//   鏡框符文：拱形鏡框邊上刻滿短痕，放完整存檔（含衣櫃、各攤日子）和畫的臉（一個人一張；更早的照片每套各一張，照樣讀）
+//   鏡框符文：拱形鏡框邊上刻滿短痕，放完整存檔（含衣櫃、各攤日子）和畫的臉
+// 印的是什麼位元組在 savecode.js（irisBytes、bandBytes；格式 wire.js，更早的照片 legacy.js 照樣讀），這裡只管畫上去、讀回來。
 // 鏡框讀壞了，眼紋還能救回身上這套和拿到的東西。錯誤更正和亂數打散用 filmcode.js 的 codeBits / codeData。
 // 讀的時候先照圖的大小反推版面（原圖、等比例縮小、上下或左右多了黑邊）；對不上就當截圖，在圖裡找虹膜、對鏡框的邊（locate）。
 // 卡片本身被裁掉一塊就讀不到
-import { codeBits, codeData, codeCapacity, packFace, unpackFace } from './filmcode.js';
-import { encodeSave, decodeSave, attachFaces } from './savecode.js';
-import { decodeFace, encodeFace } from '../avatar/looks.js';
+import { codeBits, codeData, codeCapacity } from './filmcode.js';
+import { irisBytes, bandBytes, readIris, readBand } from './savecode.js';
 
 export const CARD_W = 1500, CARD_H = 2000;
 // 鏡面（照片）：左右兩邊、拱的圓心和半徑、下緣
@@ -69,32 +69,12 @@ export const IRIS = irisCells(), BANDC = bandCells(FRAME);
 export const capacity = { iris: codeCapacity(IRIS.length, ECC_IRIS), band: codeCapacity(BANDC.length, ECC_BAND) };
 
 // ---------- 要印的資料 ----------
-const enc = new TextEncoder(), dec = new TextDecoder();
-const OLD_FACES = 4;   // 第 1 版的鏡框：身上那套、衣櫃三套各一張
-
-// 眼紋：身上這套和拿到的東西（不含各攤日子，日子可能很長；也不含手把按鍵這種只放鏡框的）
-export const irisPayload = (save) => enc.encode(encodeSave({ ...save, visits: {} }, { closet: false, face: false, iris: true }));
-
-// 存檔文字裡有很多重複的日子和代號，壓過再印
-const pipe = async (bytes, stream) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
-const deflate = (bytes) => pipe(bytes, new CompressionStream('deflate-raw'));
-const inflate = (bytes) => pipe(bytes, new DecompressionStream('deflate-raw')).catch(() => null);
-
-// 鏡框：[2][存檔長度 2][壓過的完整存檔][臉的長度 2][壓過的臉]。臉放不下就不印，lost 是 true。
-// 第 1 版是 [1][存檔][4 張臉各自長度 + 格子]，讀的時候還認得
-export async function bandPayload(save, cap = capacity.band) {
-  const text = await deflate(enc.encode(encodeSave(save, { face: false })));
-  const c = decodeFace(save.face);
-  let face = c ? await packFace(c) : new Uint8Array(0);
-  const build = () => Uint8Array.from([2, text.length >> 8, text.length & 255, ...text, face.length >> 8, face.length & 255, ...face]);
-  let data = build(), lost = false;
-  if (data.length > cap && face.length) {
-    face = new Uint8Array(0);
-    lost = true;
-    data = build();
-  }
-  return { data, lost };
-}
+// 眼紋：身上這套和拿到的東西這些最要緊的；鏡框：完整存檔和畫的臉，臉放不下就不印（lost 是 true）。
+// 靈魂明信片（eyepost.js）、畫卡（paintcard.js）印的是同一份，只是版面的容量不一樣
+export const irisPayload = (save) => irisBytes(save, capacity.iris);
+export const bandPayload = (save, cap = capacity.band) => bandBytes(save, cap);
+// 讀回來的位元組 → 存檔（讀不懂是 null）
+export { readIris, readBand as unpackBand };
 
 // ---------- 畫 ----------
 
@@ -799,7 +779,7 @@ export async function readMirrorCard(file) {
     if (OLD_FRAME.CELL * f.s < 2.2) continue;
     const ib = sample(img, IRIS, f, RING * 0.2);
     const core = ib && codeData(ib, ECC_IRIS);
-    const save = core && decodeSave(dec.decode(core));
+    const save = core && readIris(core);
     if (!save) continue;
     // 鏡框：截圖對齊時知道是哪一種，不然新的先試、再試舊的
     let full = null;
@@ -807,32 +787,11 @@ export async function readMirrorCard(file) {
       if (F.CELL * f.s < 2.2) continue;
       const bb = sample(img, F.cells, f, F.CELL * 0.18);
       const band = bb && codeData(bb, ECC_BAND);
-      full = band && (band[0] === 1 || band[0] === 2) && (await unpackBand(band));
+      full = band && (await readBand(band));
       if (full) break;
     }
     if (!full) return { save, full: false };
     return { save: full, full: true };
   }
   return null;
-}
-
-// 鏡框解開：存檔，後面第 2 版一張臉、第 1 版四張
-export async function unpackBand(b) {
-  let at = 1;
-  const n = (b[at] << 8) | b[at + 1];
-  at += 2;
-  const text = await inflate(b.slice(at, at + n));
-  const save = text && decodeSave(dec.decode(text));
-  if (!save) return null;
-  at += n;
-  const faces = [];
-  for (let i = 0; i < (b[0] === 1 ? OLD_FACES : 1); i++) {
-    const m = (b[at] << 8) | b[at + 1];
-    at += 2;
-    const cells = m ? await unpackFace(b.slice(at, at + m)) : null;
-    faces.push(cells ? encodeFace(cells) : '');
-    at += m;
-  }
-  attachFaces(save, faces);
-  return save;
 }

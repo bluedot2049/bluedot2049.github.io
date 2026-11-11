@@ -6,6 +6,7 @@
 // 寫鍵一律用 say：一件事「鍵　動詞」，好幾件「鍵 動詞　鍵 動詞」。手機要按的鈕讓它亮金（btn），字寫「亮的那顆」
 import { key } from './keymap.js';
 import { padBtn } from './gamepad.js';
+import { UNIT, MAX, money } from '../save/purse.js';
 
 // 現在用哪一種操作：手把 pad（body.pad，gamepad.js）、電腦 desk（body.desk，ui.js）、其他是手機 touch
 export function kind() {
@@ -60,6 +61,9 @@ const L = {
   locked: { acts: ['cursor'], ms: 5000, text: (k) => (k === 'desk' ? say([`按住 ${key('cursor')}`, '游標'], ['Esc', '暫停選單']) : null) },
   // 第一次拍到照片（不是存檔、隊友傳來的）
   pack: { acts: ['pack'], ms: 4000, btn: '#pack-btn', text: (k) => (k === 'touch' ? '照片在行囊裡，亮的那顆' : `${say([btn(k, 'pack', 8), '行囊'])}　照片在裡面`) },
+  // 舉起獵魔III、還沒鎖過東西（photo.js 的 enter）：R 或點畫面鎖住準心底下的，對焦一直跟著它
+  track: { acts: ['refocus'], ms: 4500,
+    text: (k) => (k === 'touch' ? say(['點畫面', '追焦鎖定']) : say([btn(k, 'refocus', 5), '追焦鎖定'])) },
   // 第一次照完鏡子走開
   save: { acts: ['save'], ms: 4500, btn: '#pack-btn', text: (k) => (k === 'desk' ? `${say([key('save'), '存讀檔'])}　換裝置帶著走` : '行囊裡能存讀檔，換裝置帶著走') },
   // ── 有空再說（照這個順序，一次一則）──
@@ -73,6 +77,9 @@ const L = {
     text: (k) => (k === 'pad' ? null : k === 'touch' ? say(['亮的那顆', '越肩視角']) : say([key('view'), '越肩視角'])) },
   eye: { calm: true, acts: ['eye'], btn: '#eye-btn', need: () => shown('#eye-btn'),
     text: (k) => (k === 'touch' ? say(['亮的那顆', '黑眼帶路']) : say([btn(k, 'eye', 5), '黑眼帶路'])) },
+  // 晶是什麼：第一次撿到（scene/coins.js）、第一次打開店家小卡（scene/shop.js）說；都沒碰過的，有空時也說
+  gem: { calm: true, acts: [], ms: 5500, btn: '#pack-btn', need: () => shown('#pack-btn'),
+    text: (k) => `${UNIT}是錢　每天子夜補滿${money(MAX)}　${k === 'touch' ? '亮的那顆看剩幾顆' : say([btn(k, 'pack', 8), '行囊看剩幾顆'])}` },
   party: { calm: true, acts: ['party'], btn: '#party-btn', need: (c) => c.near() && shown('#party-btn'),
     text: (k) => (k === 'touch' ? '亮的那顆　邀旁邊的人同行' : `${say([btn(k, 'party', 14), '同行'])}　邀旁邊的人一起走`) },
   together: { calm: true, acts: ['mark', 'whistle'], btn: '#party-btn', need: (c) => c.together(),

@@ -27,6 +27,7 @@ import { buildFloors } from './jinghai-floors.js';
 import { buildLift, LIFT } from './jinghai-lift.js';
 import { CAMSHOP } from './jinghai-camshop.js';
 import { buildLab } from './jinghai-lab.js';
+import { buildPort } from './jinghai-port.js';
 
 const deg = Math.PI / 180;
 // 碗的內面（碟形天線、傘形天線）：鏡射一份再把法線反過來。平滑著色看的是法線，只寫 sx: -1 的話內面的明暗會是反的
@@ -360,6 +361,9 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
 
   // ---------- 天 ----------
   const sky = buildSky(group, { sunDir: SUN, earthDir: EARTH });
+  // 東南邊地平線上的天際港（jinghai-port.js）：火箭、貨船、天上的飛船，照伺服器時間走
+  const port = buildPort({ center: WALK_C, bend: BEND, planet: PLANET, earthDir: EARTH, renderer, coarse });
+  group.add(port.group);
 
   // ---------- 渡船：停在降落坪上，船夫不下船 ----------
   const ferry = makeSkiff(bucketObjects), boat = ferry.boat;
@@ -522,6 +526,9 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
   return {
     rooms: [room], paintings: [], mirror: null, outdoor: null, raycastTargets: meshes, env, shops: [],
     camDistMax: 34,
+    // 鏡頭看多遠（main.js）：天際港在五六百公尺外、火箭飛到兩千多公尺（再遠的照比例縮小拉近）
+    camFar: 3200,
+    port,
     // 鏡頭不抬、不壓、不推，照玩家拖的（player.js 的 desiredCamera）；擋住的東西藏起來
     camFree: true,
     spawn: { x: -1.4, z: 57.4, heading: Math.PI },
@@ -552,6 +559,8 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
     drift: floors.drift,
     // 透明電梯（jinghai-lift.js）：zone-jinghai.js 把互動鍵接上
     lift,
+    // 同一區的人共用的東西：main.js 接上多人（multiplayer.js 的 share），誰按了電梯大家的車廂一起走
+    shared: { lift },
     crowdSpots: null,
     setCurrentRoom() {},
     debug: { terrain, obstacles, solids, fader },
@@ -574,6 +583,7 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
       fader.update(dt, cam, eyes, still || !target);
       uTime.value = t;
       sky.update(cam);
+      port.update(cam);
       pole.rotation.y = t * 0.35;
       // 室內外：離房子的牆越近越往室內的光靠，走進門裡一兩公尺就全換過去
       if (target && hemi) {

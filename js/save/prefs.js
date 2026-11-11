@@ -15,6 +15,7 @@ export const PREFS = {
   view: { kind: 'json' },                        // player.js：越肩的廣度和魚眼 { fov, fish }
   tidy: { kind: 'flag', init: false },           // ui.js：收起上排的按鈕
   uiSize: { kind: 'num', init: 1 },              // ui.js：介面大小
+  skin: { kind: 'text', init: '' },              // ui.js：介面樣式，'' 原本、'four' 四色（試做，只有電腦，css/skin-four.css）
   entered: { kind: 'flag', init: false },        // ui.js：推過前門了
   joySide: { kind: 'text' },                     // main.js：搖桿在哪一邊 'L'／'R'，按過換邊鈕才記
   joySwap: { kind: 'flag', init: false },        // main.js：舊的搖桿換邊（照直橫反過來），讀一次換成 joySide 就清掉
@@ -37,7 +38,8 @@ export const PREFS = {
   kaoTagPhoto: { kind: 'flag', init: false },    // photo.js：畫廊的眼睛拍得進頭上的顏文字（攝影模式的「頭上字」）
   postcardSoul: { kind: 'flag', init: false },   // photo.js：海市明信片上次選靈魂版（帶存檔），不然是普通版
   polaAlive: { kind: 'num', init: 0 },          // instant.js：還有拍立得在顯影時，遊戲上次還開著是什麼時候（中間關掉的那段算放口袋）
-  radioAt: { kind: 'json' },                     // radio-card.js：收音機面板拖到哪 { desk|land|port: { dx, dy } }，左上角離畫面中心多遠
+  coinsPicked: { kind: 'json' },                 // coins.js：這一批地上的硬幣撿過哪幾枚 ['區:點:批']，換批就清掉舊的
+  radioAt: { kind: 'json' },                   // radio-card.js：收音機面板拖到哪 { desk|land|port: { dx, dy } }，左上角離畫面中心多遠
 };
 
 export function pref(key) {

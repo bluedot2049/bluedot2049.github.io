@@ -73,7 +73,7 @@ export function happenSight(out, x, z) {
 //   sight(t)：別人的頭要看的那一點（Vector3）或 null；look：多遠以內的頭會轉（預設 14）
 //   moment()：現在是不是高點（0–1，評分用）
 //   subject()：{ groups: [[網格]], samples: [Vector3], center: Vector3, hide: [物件] } 或 null（現在沒東西可拍）
-//   size：[小, 夠大]（佔畫面的比例，預設 [0.0015, 0.015]）；glow：自己會發光的，閃光沖淡扣分
+//   size：[小, 夠大]（佔畫面的比例，預設 [0.0015, 0.015]）；glow：自己會發光的，閃光沖淡扣分；air: false 不扣遠處的霧（月球沒有空氣）
 export class Happenings {
   constructor({ scene, ambience, attention, zone, params, list = [] }) {
     Object.assign(this, { scene, ambience, attention, zone });
@@ -189,7 +189,7 @@ function judgeOne(ev, scene, renderer, camera, aspect, shot, zone) {
   const f = frameFactors(m, camera, S.center, shot), [s0, s1] = ev.size ?? [0.0015, 0.015];
   const peak = ev.moment?.() ?? 0;
   const flashed = !!ev.glow && shot.fire && f.d < 12;
-  const core = f.unblocked ** 0.8 * m.framed ** 1.3 * smooth(s0, s1, f.size) * f.focusK * f.fogK * f.compK * (flashed ? 0.8 : 1);
+  const core = f.unblocked ** 0.8 * m.framed ** 1.3 * smooth(s0, s1, f.size) * f.focusK * (ev.air === false ? 1 : f.fogK) * f.compK * (flashed ? 0.8 : 1);
   const score = core + (0.3 * peak + (f.self ? 0.06 : 0)) * smooth(0.15, 0.45, core);
   const grade = score >= 0.75 && peak > 0.7 && !flashed ? 3 : score >= 0.5 ? 2 : score >= 0.25 ? 1 : 0;
   return { kind: ev.id, grade, score: Math.round(score * 100) / 100, peak: peak > 0.7, place: ev.place, zone, self: f.self };

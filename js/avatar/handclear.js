@@ -96,13 +96,14 @@ export function depth(sh, x, y, z, m) {
 }
 
 // 形狀在高度 y、方位 a（atan2(x, z)，0 是正前方）最遠到哪：上下各多看一格、左右各多看一個方位（披風量身體用，見 clothes.js 的 capeGeo）
-export function reachAt(sh, y, a) {
+// spread 0 只看那一個方位（垂鬚搭在背上，不要被正中間的恐龍背棘頂出去）
+export function reachAt(sh, y, a, spread = 1) {
   if (!sh) return 0;
   const i = Math.floor((y - sh.y0) / BIN);
   if (i < -1 || i > sh.nb) return 0;
   const s = Math.floor((a / (Math.PI * 2) + 1) * NS + 0.5);
   let R = 0;
-  for (let j = Math.max(0, i - 1); j <= Math.min(sh.nb - 1, i + 1); j++) for (let d = -1; d <= 1; d++) R = Math.max(R, sh.r[j * NS + ((s + d) % NS + NS) % NS]);
+  for (let j = Math.max(0, i - 1); j <= Math.min(sh.nb - 1, i + 1); j++) for (let d = -spread; d <= spread; d++) R = Math.max(R, sh.r[j * NS + ((s + d) % NS + NS) % NS]);
   return R;
 }
 

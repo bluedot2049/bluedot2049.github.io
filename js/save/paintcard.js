@@ -7,8 +7,7 @@
 // 讀的時候先照圖的大小試（原圖、等比例縮小、多了黑邊），對不上就當截圖：找黑眼的虹膜，再拿方格外的兩道刻線對齊（align）
 // 畫框（frameAround）也給面板（easel-card.js）預覽用。日期的數字是煉金體（tools/font_engine/digits.py），兩旁太陽和月亮
 import { codeBits, codeData, codeCapacity } from './filmcode.js';
-import { decodeSave } from './savecode.js';
-import { EYE, RING, IRIS, ECC_IRIS, ECC_BAND, capacity as mirrorCap, irisPayload, bandPayload, unpackBand, sample, imageData, fits, irisSpots, corr, lerp } from './mirrorcard.js';
+import { EYE, RING, IRIS, ECC_IRIS, ECC_BAND, capacity as mirrorCap, irisPayload, bandPayload, unpackBand, readIris, sample, imageData, fits, irisSpots, corr, lerp } from './mirrorcard.js';
 import { iris, irisAt, K } from './eyepost.js';
 
 export const CARD_W = 1500, CARD_H = 2000;
@@ -394,12 +393,12 @@ export async function readPaintCard(file) {
     if (CELL * f.s < 1.6) return null;
     const ib = sample(img, IRIS_P, f, RING * K * 0.2);
     const bits = ib && codeData(ib, ECC_IRIS);
-    return bits && decodeSave(new TextDecoder().decode(bits));
+    return bits && readIris(bits);
   };
   const bandAt = async (f) => {
     const bb = sample(img, CELLS, f, CELL * 0.18);
     const band = bb && codeData(bb, ECC_BAND);
-    return band && band[0] === 2 && (await unpackBand(band));
+    return band && (await unpackBand(band));
   };
   let core = null;
   for (const f of fits(img.width, img.height)) {

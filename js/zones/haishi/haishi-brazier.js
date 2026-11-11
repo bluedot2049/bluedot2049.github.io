@@ -4,6 +4,7 @@
 // 像鮭魚洄游：火魚是從這盆火來的，順著燈河逆流上山，回到這裡把海上帶來的火還給山，燈河再把火送回海上，海上多一盞漁火，起網又網到一條。
 // 火是卡片火（core/flame.js，跟火魚同一種紅）。放在廟埕東半邊，讓開上山石階到殿前那條直線。燒起來以後一直燒到離開海市；同一區有人燒著，晚到的人問得到（多人在 haishi-acts.js）
 import * as THREE from 'three';
+import { pay } from '../../save/purse.js';
 import { rng } from '../../core/props.js';
 import { uTime, LAMP_FIRE } from '../../core/scenery.js';
 import { bell, ramp, V } from '../../core/happen.js';
@@ -83,6 +84,13 @@ export function buildBrazier(room, world) {
     // 點著；a：已經燒了幾秒（別台傳來的）。燒著時又點一次（又演完一齣、別人那邊點的），火種重新傳一遍
     ignite(a = 0) {
       if (age < 0 || a < age) age = a;
+    },
+    // 香油錢（save/purse.js 的 WAYS.offering）：付得起就點著、燈河從這裡亮下山，回傳有沒有付。
+    // 互動鍵、一天一次、傳給同一區的人在 haishi-acts.js 的 offer
+    offer() {
+      if (!pay('offering')) return false;
+      this.ignite(0);
+      return true;
     },
     update(dt) {
       clock += dt;

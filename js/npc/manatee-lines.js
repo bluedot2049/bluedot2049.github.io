@@ -38,6 +38,7 @@ export const ASK = [
   { id: 'ferry', q: '船會去哪', a: '那面牆上的海報 都是船會到的地方', to: 'exit', need: 'out' },
   { id: 'film', q: '底片怎麼洗', a: '海市有暗房師傅 拿去給他', need: 'haishi' },
   { id: 'shy', q: '為什麼不給拍', a: '哈哈 秘密', need: 'shy' },
+  { id: 'shop', q: '有東西賣嗎', a: '出門用得到的都在這 挑挑看', shop: 'vestibule' },
   { id: 'who', q: '你是誰', a: `我是${HOST_NAME} 這裡的管家哈哈` },
   { id: 'env', q: '用什麼都能玩嗎', a: '牌子上寫著 自己看哈哈', to: 'sign', env: true },
 ];
