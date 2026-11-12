@@ -48,6 +48,7 @@ import { bindVolume } from './controls/volume.js';
 import { bindGamepad, rumble, padBtn } from './controls/gamepad.js';
 import { is, key, paint } from './controls/keymap.js';
 import { warmDemos } from './controls/demos.js';
+import { warmThumbs } from './avatar/thumbs.js';
 import { bindLessons, teach, taught, tickLessons, kind as inputKind, say } from './controls/lessons.js';
 import { Beast } from './npc/beast.js';
 import { GroundCoins } from './scene/coins.js';
@@ -140,7 +141,10 @@ function saveLook(L) {
 // world.fadeVariants：房間淡進淡出時用的那一組著色器（見 fade.js 的 RoomFader），打開再編一次。
 // toTexture：編畫進貼圖的那一份（越肩的廣角、景深、後製都先畫進貼圖，輸出的色彩空間不同，是另一組著色器）。
 // 藏起來的東西打開、換變體都在同一段同步的程式裡做完再還原，遊戲開始以後再編也不會被畫出來
-async function precompile(renderer, scene, camera, world, toTexture = false) {
+// extras：叫出來才放進場景的東西（黑眼），這時候還不在場景裡就借放一下，不然第一次叫出來才編（2026-11-12 巡檢的 hitch 事件劇本量到）
+async function precompile(renderer, scene, camera, world, toTexture = false, extras = []) {
+  const lent = extras.filter((o) => o && !o.parent);
+  for (const o of lent) scene.add(o);
   const hidden = [];
   scene.traverse((o) => { if (!o.visible) { hidden.push(o); o.visible = true; } });
   const rt = toTexture ? new THREE.WebGLRenderTarget(1, 1) : null;
@@ -182,10 +186,37 @@ async function precompile(renderer, scene, camera, world, toTexture = false) {
   } finally {
     renderer.setRenderTarget(null);
     for (const o of hidden) o.visible = false;
+    for (const o of lent) scene.remove(o);
   }
   await Promise.all(jobs).catch(() => {});
   rt?.dispose();
   mirrorRT?.dispose();
+}
+
+// 平常藏著、時間到了或叫了才出現的東西（白獸、黑眼）真的畫一次。光編著色器不夠：網格和貼圖是第一次畫才送進顯示卡，
+// Windows 的著色器也要第一次真的畫才算編完（介面原則「七、檢查」）；白獸現身那一幀量到一百毫秒、多兩張貼圖（2026-11-12 巡檢的 hitch 事件劇本）。
+// 照現在的鏡頭多畫一幀，只是把這幾樣打開、不管在不在鏡頭裡都畫；場景其他東西照原樣（藏掉的話燈數會變，變成另一組著色器）。
+// 畫在一個像素上：toTexture 畫進貼圖（有後製的那條路），不然直接上螢幕、只開左下角一格。things 要是直接放在場景底下的
+function warmDraw(renderer, scene, camera, things, toTexture) {
+  const rt = toTexture ? new THREE.WebGLRenderTarget(1, 1) : null;
+  const lent = things.filter((o) => o && !o.parent), was = [];
+  for (const o of lent) scene.add(o);
+  for (const t of things) t?.traverse((o) => { was.push([o, o.visible, o.frustumCulled]); o.visible = true; o.frustumCulled = false; });
+  const cut = renderer.getScissorTest(), box = renderer.getScissor(new THREE.Vector4());
+  try {
+    renderer.setRenderTarget(rt);
+    if (!rt) { renderer.setScissor(0, 0, 1, 1); renderer.setScissorTest(true); }
+    renderer.render(scene, camera);
+  } catch (e) {
+    console.warn('預先畫一次失敗：', e);
+  } finally {
+    renderer.setRenderTarget(null);
+    renderer.setScissor(box);
+    renderer.setScissorTest(cut);
+    for (const [o, v, f] of was) { o.visible = v; o.frustumCulled = f; }
+    for (const o of lent) scene.remove(o);
+    rt?.dispose();
+  }
 }
 
 async function start() {
@@ -1238,7 +1269,13 @@ async function start() {
   // Windows 的瀏覽器編得特別慢，畫面會凍住一兩秒。
   // 藏起來的房間、戶外、海面先全部打開。畫進貼圖的那一份（海面倒影、越肩、景深）跟這份一樣多，收掉讀取畫面時才編，見下面 entered
   await window.loadbar?.mark('built');
-  await precompile(renderer, scene, camera, world);
+  // 小圖（表情盤的姿勢、鏡子面板、店家）是另一個畫布、另一個 WebGL，這裡編過的它用不到：同時開始編，底下等它（thumbs.js）
+  const thumbsJob = warmThumbs(character.look);
+  await precompile(renderer, scene, camera, world, false, [guide.eye.group]);
+  // 時間到了、叫了才出現的：白獸（身體、光池、光點、光柱、腳印）和黑眼。沒有後製的直接畫在螢幕上（讀取畫面蓋著）；有後製的等畫進貼圖那一份編好再畫，見下面
+  // 區域自己的（海市的雨絲）寫在 world.lazy，要是直接放在場景底下的
+  const lazy = [beast.root, beast.pool, beast.motes, beast.pillar, beast.prints, guide.eye.group, ...(world.lazy ?? [])];
+  if (!quality.post) warmDraw(renderer, scene, camera, lazy, false);
   if (fxJob) {
     fx = await fxJob;
     fx?.render(0);   // 後製的著色器也趁載入畫面先編好
@@ -1257,6 +1294,9 @@ async function start() {
   }
   await photo.warmUI();   // 攝影介面也趁讀取畫面蓋著先畫一次（見 photo.js）
   await warmDemos();      // 教學的示範圖也是（demos.js）
+  await pack.warm();      // 行囊也是（pack.js）
+  await kao.warm();       // 表情盤和姿勢那排的小圖也是（kaopanel.js）
+  await thumbsJob;
   if (!fx && carried()) dofPass.prepare(renderer);   // 沒有後製時景深自己畫進一張全螢幕的圖：帶著相機的先配好，第一次舉起來不用等
   window.loadbar?.mark('compiled');
   const stats =params.has('debug') ? debugStats(renderer, quality) : null;
@@ -1301,7 +1341,7 @@ async function start() {
   // 搭船回來、直接開海市的，還是底下那行操作提示。不能 await，下面還要開始畫
   // 畫進貼圖的那一份著色器：讀取條滿了才編，讀取畫面少等一半。第一次來的人正在看門邊的告示；來過的人門正在打開、光蓋著畫面，
   // 這時候主執行緒卡一下看不出來（門的動畫交給合成器）
-  setTimeout(() => precompile(renderer, scene, camera, world, true), 0);
+  setTimeout(() => precompile(renderer, scene, camera, world, true, [guide.eye.group]).then(() => { if (quality.post) warmDraw(renderer, scene, camera, lazy, true); }), 0);
   entered.then(() => {
     guide.ready = true;   // 上次沒收起來的黑眼：進門、上岸以後才蹦出來
     // 從歸門回來的（from=door）也是從前門進來，只是不再跳操作提示；第一次進門的等門關上、房名跳完才出提示
@@ -1515,6 +1555,32 @@ async function start() {
     // 牆上的色塊畫：視差跟著鏡頭，站在畫前不動才醒；拍照時醒的程度停著
     .add('light', 'paintings', () => world.updatePaintings?.(camera.position, photo.active ? null : player.pos, player.focus?.kind === 'painting' ? player.focus.p : null));
   if (window.__g) window.__g.loop = loop;
+  // ?hitch：實機上記每一次卡（dev/hitchlog.js），玩一圈後點左上角的數字把記錄複製出來。?hitch=80 改門檻（毫秒）。
+  // probes 的值變了會記一筆，卡的時候看前一秒半變過什麼
+  let hitches = null;
+  if (params.has('hitch')) {
+    import('./dev/hitchlog.js').then(({ hitchLog }) => {
+      hitches = hitchLog({
+        renderer, scene, loop, zone, quality, limit: params.get('hitch') || 50,
+        where: () => `${player.pos.x.toFixed(0)},${player.pos.z.toFixed(0)}${document.getElementById('loading')?.classList.contains('done') ? '' : ' 讀取畫面還蓋著'}`,
+        probes: [
+          ['攝影', () => (photo.active ? '開' : null)],
+          ['自拍', () => (selfie.active ? '開' : null)],
+          ['鏡頭', () => (lens.on ? '廣角' : dof.on ? '景深' : null)],
+          ['對著', () => player.focus?.kind ?? null],
+          ['房間', () => player.room],
+          ['事件', () => (happen.busy ? '有' : null)],
+          ['白獸', () => (beast.busy ? '有' : null)],
+          ['一幕劇', () => (acts?.busy ? '有' : null)],
+          ['在場', () => mp?.others.size ?? 0],
+          ['畫質', () => `${quality.level} ${quality.dpr}x`],
+          ['雨', () => { const w = world.rain?.weather; return w ? (w.rain > 0.02 ? '下' : w.wet > 0.05 ? '濕' : '乾') : null; }],
+          ['塵', () => { const L = world.dust?.weather?.level; return L == null ? null : L > 0.75 ? '風沙' : L < 0.2 ? '沙停' : '平常'; }],
+          ['畫布', () => `${window.innerWidth}×${window.innerHeight}`],
+        ],
+      });
+    });
+  }
 
   // 某一幀出錯只記一次，迴圈照跑。不然 three.js 不會排下一幀，整個畫面停住、也不再送位置，別人會當你離開了
   let crashed = false;
@@ -1539,11 +1605,13 @@ async function start() {
     }
   });
   function tick() {
+    hitches?.begin();
     const dt = Math.min(clock.getDelta(), 0.05);
     loop.run(dt);
     frame++;
     const idle = !loop.busy() && performance.now() - lastInput > 2000;
     if (idle && frame % 2) return;
+    hitches?.mid();
     // 攝影模式裡不量：景深讓幀變慢，降解析度要重配畫布（取景時頓一下、變糊），電腦版第一步還是把後製關掉而且記住。
     // 一直 pause 著，收起來以後也多等一秒才開始量
     if (photo.active) quality.pause(1000);
@@ -1553,6 +1621,7 @@ async function start() {
     draw(dt);
     photo.afterRender();
     toastInk.afterDraw();
+    hitches?.end();
     stats?.(dt);
   }
 }

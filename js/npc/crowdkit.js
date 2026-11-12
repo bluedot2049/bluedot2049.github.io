@@ -74,6 +74,9 @@ export class FarFigures {
     this.heads = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.17, 0).translate(0, 1.04, 0), mat, max);
     for (const m of [this.bodies, this.heads]) {
       m.count = 0;
+      // 顏色欄位一開始就開好。等第一個人出現才 setColorAt 的話，載入時編的是沒有每人顏色的著色器，
+      // 第一個遠處的人出現那一幀要重編一支（2026-11-12 巡檢的 hitch、?hitch 量到）
+      m.setColorAt(0, new THREE.Color());
       m.frustumCulled = false;
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       scene.add(m);

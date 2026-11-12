@@ -32,6 +32,7 @@ export class Loop {
       }
       if (ms) {
         const d = performance.now() - t0, m = (ms[s.name] ??= { sum: 0, max: 0, n: 0 });
+        s.last = d;
         m.sum += d; m.n++;
         if (d > m.max) m.max = d;
       }
@@ -45,6 +46,18 @@ export class Loop {
 
   // 開始量（重新歸零）、關掉
   time(on = true) { this.ms = on ? {} : null; }
+
+  // 剛跑完的這一幀：全部加起來幾毫秒、最花時間的幾個 [名字, 毫秒]（要先 time()；長幀記錄 dev/hitchlog.js 用）
+  lastFrame(n = 3) {
+    let sum = 0;
+    const top = [];
+    for (const s of this.list) {
+      const d = s.last || 0;
+      sum += d;
+      if (d >= 0.3) top.push([s.name, d]);
+    }
+    return { sum, top: top.sort((a, b) => b[1] - a[1]).slice(0, n) };
+  }
 
   // 量到現在最花時間的幾個：['player 平均 0.42 最久 3.1（毫秒）', …]
   slow(n = 8) {

@@ -5,7 +5,7 @@
 // 手機是貼底的抽屜（橫拿是側欄），開著時鈕收起來，按抽屜上的 ✕ 收。
 // 相簿（album.js）：拍的照片、錄影、信物（鏡中的照片、明信片）都在這裡。點一下選、點兩下看大圖（大圖裡左右換張，也能選、丟掉）。
 // 選好的可以存下、丟掉、交給沖洗師傅（只有照片），Android 還能分享：
-// 存下的拿出相簿，沒選的留著；丟掉不先問，底下那行按「復原」就放回來。電腦上 Delete 丟掉選的。
+// 存下的拿出相簿（iPhone 等人按底下那行的「拿出」），沒選的留著；丟掉不先問，底下那行按「復原」就放回來。電腦上 Delete 丟掉選的。
 // 讀照片哪裡都能讀（鏡中的照片、海市的明信片）；存檔只有一個地方：鏡子前請眼睛拍一張。明信片只印衣服和配件，讀了穿在自己身上（更早寄給自己的那種照樣還原）。
 // 鈕右下的封蠟是魔法印泥：有照片交給師傅、還沒去拿，或拿回來還沒看過時亮著。
 // 存檔有沒有過期只寫在卡片裡，不亮、不催。上次存了什麼記在這台裝置上（packed），不放進存檔。
@@ -19,7 +19,7 @@ import { getSave, savePrint } from './progress.js';
 import { dockR, hugMedia, panelW, uiScale } from '../controls/ui.js';
 import { set as padFocus } from '../controls/padnav.js';
 import { sfx, thing } from '../audio/ui-voices.js';
-import { album, canPick, canShare, discard, folderName, hourMark, KINDS, LABS, labOk, loadAlbum, pickFolder, putBack, saveChosen, saveTip, seen, shareChosen, toLab, visible } from '../camera/album.js';
+import { album, canPick, canShare, discard, folderName, hourMark, KINDS, LABS, labOk, loadAlbum, pickFolder, putBack, saveChosen, saveTip, seen, shareChosen, takeOut, toLab, visible } from '../camera/album.js';
 import { pref, setPref } from './prefs.js';
 import { developing, peek, ripen } from '../camera/instant.js';
 import { is } from '../controls/keymap.js';
@@ -162,6 +162,23 @@ export class Pack {
       const m = this.events.canSelfie();
       if (m !== this.atMirror) { this.atMirror = m; this.render(); }
     }, 400);
+  }
+
+  // 讀取畫面還蓋著時先擺出來兩幀再收掉（main.js 叫，跟 photo.js 的 warmUI 同一個道理）：行囊第一次顯示，
+  // 瀏覽器要現編畫它用的著色器，不先畫過第一次開會頓一下。不出聲、不動鏡頭；還藏著時先畫好內容，子夜補的晶、新照片都不算看過
+  async warm() {
+    if (!this.card.hidden) return;
+    this.render();
+    this.card.hidden = false;
+    this.place();
+    for (let i = 0; i < 2; i++) await new Promise((r) => requestAnimationFrame(r));
+    this.card.hidden = true;
+    clearTimeout(this.polaTimer);
+    this.looking?.disconnect();
+    this.looking = null;
+    this.shown = null;
+    for (const u of this.urls.values()) URL.revokeObjectURL(u);
+    this.urls.clear();
   }
 
   close() {
@@ -421,6 +438,7 @@ export class Pack {
     this.noted = text ? { text, act, label } : null;
     if (act !== 'undo') this.undo = null;
     if (act !== 'rest') this.rest = null;
+    if (act !== 'out') this.taken = null;
     this.paintNote();
   }
 
@@ -448,10 +466,29 @@ export class Pack {
     this.busy = false;
     if (where == null) return this.albumFoot();
     this.chosen.clear();
+    // iPhone：選單關了不知道點了哪一項，照片還在相簿，存進照片了自己按拿出來
+    if (where === '') {
+      this.note('存進照片了，就從相簿拿出來', 'out', `拿出 ${keep.length} 張`);
+      this.taken = keep;
+      return this.albumFoot();
+    }
+    this.kept(keep.length, where);
+  }
+
+  // 存好了的那一行；還剩照片的話，行尾可以把剩下的一起丟掉
+  kept(n, where = '') {
     sfx('seal');
     this.rest = album().filter(visible);
-    const n = this.rest.length;
-    this.note(where ? `已存 ${keep.length} 張到「${where}」` : `已存 ${keep.length} 張`, n ? 'rest' : '', `丟掉其餘 ${n} 張`);
+    const r = this.rest.length;
+    this.note(where ? `已存 ${n} 張到「${where}」` : `已存 ${n} 張`, r ? 'rest' : '', `丟掉其餘 ${r} 張`);
+  }
+
+  async takeOut() {
+    const list = (this.taken || []).filter((it) => album().includes(it));
+    if (!list.length || this.busy) return this.note('');
+    list.forEach((it) => this.chosen.delete(it));
+    await takeOut(list);
+    this.kept(list.length);
   }
 
   // Android 的分享：分享出去的照樣留在相簿、照樣選著
@@ -692,6 +729,7 @@ export class Pack {
       case 'share': this.share(); return;
       case 'drop': this.drop([...this.chosen]); return;
       case 'undo': this.undrop(); return;
+      case 'out': this.takeOut(); return;
       case 'rest': this.drop((this.rest || []).filter((it) => album().includes(it))); return;
       case 'lab': this.send(b.dataset.lab); return;
       case 'dir': pickFolder().then(() => this.albumFoot()); return;

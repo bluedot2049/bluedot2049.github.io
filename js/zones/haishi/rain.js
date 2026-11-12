@@ -296,6 +296,7 @@ export function buildRain({ scene, world, renderer, quality, coarse, params }) {
 
   const rain = {
     weather,
+    mesh,           // 雨絲：下雨才打開，載入時先畫一次（zone-haishi.js 的 world.lazy）
     player: null,   // 自己（player.js）：撐著傘時傘底下不落雨，zone-haishi.js 接上
     topAt,
     // 站在 (x, y, z) 頭上還有幾公尺的東西（屋簷、屋頂），0 是露天

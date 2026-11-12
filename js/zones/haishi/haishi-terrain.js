@@ -82,7 +82,14 @@ export function heightIn(a, x, z) {
   // 碰撞上是斜坡，但每一階的前緣才往上抬，走起來是一階一階踩上去
   return i >= a.n ? a.hi : a.lo + RISE * (i + smooth(0, 0.35, u - i));
 }
-export const areaAt = (x, z) => AREAS.find((a) => x >= a.x0 && x <= a.x1 && z >= a.z0 && z <= a.z1);
+// 走路、路人、鏡頭每幀問幾百次：寫成迴圈，不用 find(() => …)（每叫一次配一個箭頭函式，一幀二十幾 KB，2026-11-12 量）
+export function areaAt(x, z) {
+  for (let i = 0; i < AREAS.length; i++) {
+    const a = AREAS[i];
+    if (x >= a.x0 && x <= a.x1 && z >= a.z0 && z <= a.z1) return a;
+  }
+  return undefined;
+}
 // 環境光遮蔽量的是離腳下那層地面多高：附近一圈路面裡，不高過這一點的最高那塊；都不在附近就是山坡。
 // 門面往後退一點的房子、石階兩邊的矮牆也算站在路邊，牆腳才會暗下來
 export function floorBelow(x, y, z) {

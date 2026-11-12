@@ -975,7 +975,8 @@ function gradeSections(G, { zone, renderer, scene, world, bar, section, onOpen, 
     histo = H;
     drawCurves();
   };
-  setInterval(() => { if (histOn && !isShut() && S3.d.open) due = true; }, 300);
+  // window.__noHist：量卡頓時不讀（tools/patrol/hitch.mjs 載入前設）。讀畫面要等顯示卡把手上的事做完，那一幀會被算成卡
+  setInterval(() => { if (histOn && !window.__noHist && !isShut() && S3.d.open) due = true; }, 300);
 
   // ── 數值 ──
   const resetKey = (k) => {

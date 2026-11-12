@@ -561,9 +561,10 @@ export class PhotoMode {
   // 只動介面，鏡頭、角色、景深、暈光都照原樣；main.js 在讀取條滿之前呼叫
   async warmUI() {
     const frame = () => new Promise((r) => requestAnimationFrame(r));
-    const body = document.body, ph = this.$('#photo'), sh = this.$('#ph-shutter'), id = Object.keys(CAMERAS)[0];
+    const body = document.body, ph = this.$('#photo'), sh = this.$('#ph-shutter');
     const keep = { pitch: this.pitch, aimPitch: this.aimPitch };
-    for (const gear of [id, null]) {
+    // 每台相機都擺一次：取景框、旋鈕各台不同，只擺第一台的話別台第一次舉起來還是會頓（2026-11-12 巡檢的 hitch 事件劇本量到）
+    for (const gear of [...Object.keys(CAMERAS), null]) {
       if (gear) this.holdGear(gear);
       else sh.innerHTML = eyeShutter();
       sh.classList.toggle('eye', !gear);

@@ -237,6 +237,21 @@ export class KaoPanel {
     else this.show();
   }
 
+  // 讀取畫面還蓋著時先擺出來幾幀再收掉（main.js 叫，跟 photo.js 的 warmUI 同一個道理），不出聲、不動鏡頭。
+  // 姿勢那排的小圖也趁這時拍好：拍完要把圖讀回來（thumbs.js 的 toDataURL），那一下要等顯示卡把手上的事做完，
+  // 盤第一次顯示時瀏覽器又正在編畫它用的著色器，第一次開盤量到停幾十到九百毫秒（2026-11-12 巡檢的 hitch 事件劇本）
+  async warm() {
+    if (this.open) return;
+    this.open = true;
+    this.render();
+    this.el.classList.add('open');
+    this.place();
+    for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(r));   // 小圖一幀拍三張
+    this.el.classList.remove('open');
+    this.open = false;
+    this.asked = null;   // 還沒拍完的，真的打開時再要一次
+  }
+
   show() {
     if (this.open || this.blocked()) return;
     this.open = true;

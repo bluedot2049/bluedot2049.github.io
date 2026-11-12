@@ -53,7 +53,7 @@ function cross(p, q, b) {
       continue;
     }
     let u = (b[i] - p[a]) / d, v = (b[i + 3] - p[a]) / d;
-    if (u > v) [u, v] = [v, u];
+    if (u > v) { const w = u; u = v; v = w; }   // 不寫 [u, v] = [v, u]：每次多配一個陣列，這裡一幀跑上千次
     t0 = Math.max(t0, u);
     t1 = Math.min(t1, v);
     if (t0 > t1) return false;
@@ -63,6 +63,25 @@ function cross(p, q, b) {
 function inside(p, b, pad) {
   if (b.rot) p = local(p, b.rot, _p);
   return p.x > b[0] - pad && p.x < b[3] + pad && p.y > b[1] - pad && p.y < b[4] + pad && p.z > b[2] - pad && p.z < b[5] + pad;
+}
+// 這一組盒子有沒有一個包住 p、有沒有一個被 p→q 穿過。每個單位每幀都問，寫成迴圈不用 some(() => …)：
+// 箭頭函式每叫一次配一個，海市幾百個單位一幀配掉四十幾 KB，回收就來得勤（2026-11-12 量）
+function anyInside(boxes, p, pad) {
+  for (let i = 0; i < boxes.length; i++) if (inside(p, boxes[i], pad)) return true;
+  return false;
+}
+function anyCross(boxes, p, q) {
+  for (let i = 0; i < boxes.length; i++) if (cross(p, q, boxes[i])) return true;
+  return false;
+}
+// predict 的一半：p 這一點的速度（平滑過）和 lead 秒以後的位置
+function leadOf(p, last, v, o, dt, k, lead) {
+  const dx = p.x - last.x, dy = p.y - last.y, dz = p.z - last.z, jump = dx * dx + dy * dy + dz * dz > 9 || dt <= 0;
+  v.x = jump ? 0 : v.x + (Math.max(-12, Math.min(12, dx / dt)) - v.x) * k;
+  v.y = jump ? 0 : v.y + (Math.max(-12, Math.min(12, dy / dt)) - v.y) * k;
+  v.z = jump ? 0 : v.z + (Math.max(-12, Math.min(12, dz / dt)) - v.z) * k;
+  last.x = p.x; last.y = p.y; last.z = p.z;
+  o.x = p.x + v.x * lead; o.y = p.y + v.y * lead; o.z = p.z + v.z * lead;
 }
 
 export class Fader {
@@ -187,8 +206,12 @@ export class Fader {
         continue;
       }
       let want = 1;
-      if (u.boxes.some((b) => inside(cam, b, u.near))) want = 0;
-      else if (eyes.some((e) => u.boxes.some((b) => cross(e, cam, b))) || (ahead && u.boxes.some((b) => cross(ahead.eye, ahead.cam, b)))) want = u.faded;
+      if (anyInside(u.boxes, cam, u.near)) want = 0;
+      else {
+        let hit = false;
+        for (let k = 0; k < eyes.length && !hit; k++) hit = anyCross(u.boxes, eyes[k], cam);
+        if (hit || (ahead && anyCross(u.boxes, ahead.eye, ahead.cam))) want = u.faded;
+      }
       if (want < 1) { u.want = want; u.hold = HOLD; }
       else if ((u.hold -= dt) <= 0) u.want = 1;
       if (u.a === u.want) continue;
@@ -197,21 +220,19 @@ export class Fader {
       this.show(i, u);
     }
     if (dirty) this.tex.needsUpdate = true;
-    if (this.gate) this.turn(this.units.some((u) => u && u.a < 1));
+    if (this.gate) {
+      let any = false;
+      for (let i = 0; i < this.units.length && !any; i++) any = !!this.units[i] && this.units[i].a < 1;
+      this.turn(any);
+    }
   }
 
   // 角色（第一個看的點）和鏡頭的速度，平滑過；一下跳太遠（傳送、換場）就從零算起。回傳 lead 秒以後兩個的位置
   predict(dt, cam, eye) {
     const t = this.track ??= { cam: { x: cam.x, y: cam.y, z: cam.z }, eye: { x: eye.x, y: eye.y, z: eye.z }, vc: { x: 0, y: 0, z: 0 }, ve: { x: 0, y: 0, z: 0 }, out: { cam: { x: 0, y: 0, z: 0 }, eye: { x: 0, y: 0, z: 0 } } };
     const k = Math.min(1, dt * 10);
-    for (const [p, last, v, o] of [[cam, t.cam, t.vc, t.out.cam], [eye, t.eye, t.ve, t.out.eye]]) {
-      const dx = p.x - last.x, dy = p.y - last.y, dz = p.z - last.z, jump = dx * dx + dy * dy + dz * dz > 9 || dt <= 0;
-      for (const [a, d] of [['x', dx], ['y', dy], ['z', dz]]) {
-        v[a] = jump ? 0 : v[a] + (Math.max(-12, Math.min(12, d / dt)) - v[a]) * k;
-        last[a] = p[a];
-        o[a] = p[a] + v[a] * this.lead;
-      }
-    }
+    leadOf(cam, t.cam, t.vc, t.out.cam, dt, k, this.lead);
+    leadOf(eye, t.eye, t.ve, t.out.eye, dt, k, this.lead);
     return t.out;
   }
 

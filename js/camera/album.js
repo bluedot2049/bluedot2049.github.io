@@ -4,7 +4,7 @@
 // 信物（鏡中的照片、海市的明信片）會先跳一張卡給人看，按「好了」也一樣留在相簿。存檔的信物（鏡中照片、靈魂明信片）只留最新一張，舊的已經過時了；畫架的畫卡最多留三張（KEEP_MAX）。
 // 存下（pack.js 的相簿、信物卡）只照裝置走，跟哪台相機無關：iPhone 叫分享選單，點「儲存影像」進照片 App；
 // Android 一張一個檔下載；電腦 Chrome、Edge 寫進挑好的資料夾，其他瀏覽器一張下載、多張打包成 zip。
-// 存下的就從相簿拿出來，沒選的留著；不要的自己丟掉，丟掉的放得回來。Android 另外可以分享，分享出去的照樣留在相簿。
+// 存下的就從相簿拿出來（iPhone 看不到選單裡點了哪一項，等人按「拿出」才拿），沒選的留著；不要的自己丟掉，丟掉的放得回來。Android 另外可以分享，分享出去的照樣留在相簿。
 // 選幾張交給沖洗師傅（LABS）：當下就洗好，可是要本人走到那間相館找師傅（vendors.js 的 lab）才拿得回來，拿回來的套上師傅固定的色彩風格（配方和洗的引擎在 darkroom.js）。
 // 只有照片能交給師傅；信物不行，濾鏡會蓋到存檔碼。底片機（cameras.js 的 film）拍的在相簿只看得到拍攝時辰，一定要交給師傅才看得到。
 // 拍立得（pola，instant.js）不用師傅，也不能交給師傅：顯影中也是 film，行囊看得到它在變，顯好了才存得下
@@ -58,6 +58,8 @@ function idb(store, mode, fn) {
       try { req = fn(tx.objectStore(store)); } catch (e) { open.result.close(); return rej(e); }
       tx.oncomplete = () => { res(req?.result); open.result.close(); };
       tx.onerror = () => { rej(tx.error); open.result.close(); };
+      // 空間不夠多半不是 onerror，是整筆交易被中止（QuotaExceededError 掛在 tx.error）；不接的話這個 Promise 也永遠等不到
+      tx.onabort = () => { rej(tx.error || new DOMException('aborted', 'AbortError')); open.result.close(); };
     };
   });
 }
@@ -86,18 +88,23 @@ export const atLab = (lab) => items.filter((it) => it.state === 'lab' && it.lab 
 
 // 拍好一張：收進相簿，右上角閃一下。底片機的不給看，只閃時辰。
 // more：kind（見 KINDS）、poster（錄影的縮圖）、dur（錄影秒數）、k（存檔的信物當時的存檔指紋，pack.js 的 savePrint）。
-// 信物自己有一張卡給人看，quiet 不閃。回傳收進去的那一筆
+// 信物自己有一張卡給人看，quiet 不閃。回傳收進去的那一筆。
+// 寫不進這台瀏覽器（空間不夠、不給存）：不放進相簿（放了重新整理就不見，看起來像存好了），閃一句說沒收進去；
+// 照樣回傳那一筆（沒有 id），信物卡的存下、重拍拿它照常走，只是相簿裡沒有
 export async function addPhoto(blob, { name, cam, quiet = false, ...more }) {
   await loadAlbum();
   // 同一秒拍兩張：檔名後面加 -2、-3，存進資料夾才不會蓋掉
   const dot = name.lastIndexOf('.'), base = name.slice(0, dot), ext = name.slice(dot);
   for (let k = 2; items.some((x) => x.name === name); k++) name = `${base}-${k}${ext}`;
   const it = { blob, name, t: Date.now(), cam, film: !more.kind && (!!CAMERAS[cam]?.film || !!more.pola), state: 'shot', ...more };
-  // 存檔只留最新一張，鏡中照片和靈魂明信片算同一種
+  try { it.id = await idb(STORE, 'readwrite', (s) => s.add(it)); } catch (e) {
+    flash(null, e?.name === 'QuotaExceededError' ? '沒收進相簿・空間不夠' : '沒收進相簿・這個瀏覽器存不了');
+    return it;
+  }
+  // 新的寫好了才清舊的：存檔只留最新一張（鏡中照片和靈魂明信片算同一種）、畫卡最多 KEEP_MAX 張
   if (LATEST.has(it.kind)) await drop(items.filter((x) => LATEST.has(x.kind)));
   const max = KEEP_MAX[it.kind];
   if (max) { const same = items.filter((x) => x.kind === it.kind).sort((a, b) => a.t - b.t); if (same.length >= max) await drop(same.slice(0, same.length - max + 1)); }
-  try { it.id = await idb(STORE, 'readwrite', (s) => s.add(it)); } catch {}
   items.push(it);
   if (!persisted) {
     persisted = true;
@@ -273,14 +280,22 @@ const asFiles = (list) => list.map((it) => new File([it.blob], it.name, { type: 
 const out = (list) => dispatchEvent(new CustomEvent('albumout', { detail: list }));
 
 // 存下選的：寫好了才把存下的那幾張從相簿拿出來，沒選的照樣留著。要在點按的當下呼叫（iPhone 的分享選單前面不能先等別的事）。
-// 回傳存到哪裡（iPhone 不知道點了哪一項，回傳空字串）；取消或失敗回傳 null，相簿不動
+// 回傳存到哪裡；取消或失敗回傳 null，相簿不動。
+// iPhone 回傳空字串：分享選單關了，不知道點的是「儲存影像」還是別的，照片先留在相簿，人說存好了再 takeOut
 export async function saveChosen(chosen) {
   const where = await writeOut(chosen);
   if (where == null) return null;
+  out(chosen);
+  if (where === '') return where;
   await drop(chosen);
   changed();
-  out(chosen);
   return where;
+}
+
+// 確定存好了：從相簿拿出來（iPhone 存下之後，pack.js 底下那行的「拿出 N 張」）
+export async function takeOut(list) {
+  await drop(list);
+  changed();
 }
 
 // 存一個不在相簿裡的檔（報紙）：跟存下同一條路，只是沒有東西要從相簿拿出來

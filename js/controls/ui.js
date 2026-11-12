@@ -20,7 +20,7 @@ sizePick = Math.min(SIZE_MAX, Math.max(SIZE_MIN, pref('uiSize') || 1));
 export const uiScale = () => scale;
 export const uiSize = () => sizePick;
 
-// 介面樣式（試做）：暫停選單的「介面樣式」，'' 是原本的金線、'four' 是四色（css/skin-four.css，只寫了電腦版）。
+// 介面樣式：暫停選單的「介面樣式」，'' 是燭金（原本的金線）、'four' 是四階（css/skin-four.css，試做，只寫了電腦版）。兩套的規則在 docs/介面語言.md。
 // 換的只有 body 上的 class；四色用的無襯線字選了才去載，原本的樣式不多下載任何東西
 const SKINS = ['', 'four'];
 let skinPick = SKINS.includes(pref('skin')) ? pref('skin') : '';

@@ -15,7 +15,7 @@ export const PREFS = {
   view: { kind: 'json' },                        // player.js：越肩的廣度和魚眼 { fov, fish }
   tidy: { kind: 'flag', init: false },           // ui.js：收起上排的按鈕
   uiSize: { kind: 'num', init: 1 },              // ui.js：介面大小
-  skin: { kind: 'text', init: '' },              // ui.js：介面樣式，'' 原本、'four' 四色（試做，只有電腦，css/skin-four.css）
+  skin: { kind: 'text', init: '' },              // ui.js：介面樣式，'' 燭金（原本）、'four' 四階（試做，只有電腦，css/skin-four.css）
   entered: { kind: 'flag', init: false },        // ui.js：推過前門了
   joySide: { kind: 'text' },                     // main.js：搖桿在哪一邊 'L'／'R'，按過換邊鈕才記
   joySwap: { kind: 'flag', init: false },        // main.js：舊的搖桿換邊（照直橫反過來），讀一次換成 joySide 就清掉

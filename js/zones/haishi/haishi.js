@@ -217,7 +217,13 @@ export function buildHaishi(scene, { coarse = false } = {}) {
 
   // ---------- 碰撞、高度、尋路 ----------
   const inAny = (x, z) => !!areaAt(x, z);
-  const hits = (x, z, pad) => obstacles.some((o) => Math.abs(x - o.x) < o.hw + pad && Math.abs(z - o.z) < o.hd + pad);
+  const hits = (x, z, pad) => {
+    for (let i = 0; i < obstacles.length; i++) {
+      const o = obstacles[i];
+      if (Math.abs(x - o.x) < o.hw + pad && Math.abs(z - o.z) < o.hd + pad) return true;
+    }
+    return false;
+  };
   // 角色四周各退一個半徑都還在走得到的範圍裡，才算站得住
   function walkable(x, z) {
     if (!inAny(x, z) || !inAny(x + MARGIN, z) || !inAny(x - MARGIN, z) || !inAny(x, z + MARGIN) || !inAny(x, z - MARGIN)) return false;

@@ -94,6 +94,22 @@ function settle(kao) {
   }
 }
 
+// 讀取畫面還蓋著時先把小圖要用的著色器編好（main.js 叫）。這個畫布是另一個 WebGL，主畫面編過的用不到，
+// 不先編的話第一次開表情盤、鏡子面板，第一張小圖要等一百多毫秒到一秒（2026-11-12 巡檢的 hitch 事件劇本量到）。
+// 照現在的樣子編：別的衣服用到沒編過的組合，還是拍到那一張才編
+export async function warmThumbs(look) {
+  try {
+    if (!gl) setup();
+    model.setLook(look);
+    model.group.position.set(0, 0, 0);
+    model.update(1, 0);
+    await gl.compileAsync(scene, camera);
+    gl.render(scene, camera);   // Windows 要真的畫一次才算編完（介面原則「七、檢查」）
+  } catch (e) {
+    console.warn('小圖的著色器預先編譯失敗：', e);
+  }
+}
+
 const keyOf = (look, frame, kao = 0) => frame + (kao ? ':' + kao : '') + '|' + lookKey(look);
 
 // 大頭照（報紙上的臉，press.js）：同一個看不見的角色，畫布暫時放大拍一張，回傳畫布

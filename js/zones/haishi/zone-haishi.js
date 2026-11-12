@@ -95,6 +95,8 @@ export function guide(world) {
 export function build(scene, { coarse, params, renderer, quality }) {
   const world = buildHaishi(scene, { coarse });
   world.rain = buildRain({ scene, world, renderer, quality, coarse, params });
+  // 平常藏著、時候到了才出現的：讀取畫面蓋著時先畫一次（main.js 的 warmDraw），開始下雨那一幀不用等雨絲送進顯示卡
+  world.lazy = [world.rain.mesh];
   // 腳印（core/footprints.js）：下過雨的石板上才留，十幾秒乾掉
   world.prints = new Footprints(scene, { color: '#141008', alpha: 0.45, life: 18, ok: (x, z, y) => world.rain.wetAt(x, y, z) > 0.3 });
   return world;
