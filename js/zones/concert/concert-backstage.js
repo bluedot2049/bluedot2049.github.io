@@ -6,7 +6,7 @@ import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
 import { STAGE, BACKSTAGE as B, BACK_HOLES } from './concert-stage.js';
 import { HALL } from './concert-hall.js';
 import { Fader } from '../../core/fade.js';
-import { UNDER } from './concert-under.js';
+import { PIT } from './concert-pit.js';
 
 const S = B.stair, F = B.fly, H = B.hall, G = B.green, D = B.door, WG = B.wing, C = B.cat;
 const Y0 = STAGE.y, W = B.wall, BW = HALL.back;                 // 房間的前牆、大廳的背牆（薄的一面）
@@ -196,7 +196,7 @@ export function buildBackstage(scene) {
   }
 
   // ---------- 房間：地板、三面牆、天花板，靠大廳那面挖門洞；lower 給了就是下半段換一種（休息室的木牆） ----------
-  // hole：北牆上挖一個門洞 [x0, x1, 高]（休息室那面碎掉的穿衣鏡，地平線下的入口：concert-under.js）
+  // hole：北牆上挖一個門洞 [x0, x1, 高]（休息室那面碎掉的穿衣鏡，台底下的入口：concert-pit.js）
   const room = (x0, x1, z0, top, wall, floorHex, lower, hole) => {
     box(x0 - 0.2, x1 + 0.2, -0.3, Y0, z0 - 0.2, W, floorHex, 'floor');
     const piece = (a, b, ya, yb, c, d) => {
@@ -218,7 +218,7 @@ export function buildBackstage(scene) {
     }
   };
   room(H.x0, H.x1, H.z0, H.top, STONE, FLOOR);
-  room(G.x0, G.x1, G.z0, G.top, BLUEWALL, GFLOOR, WOOD, [UNDER.door.x0, UNDER.door.x1, UNDER.door.h]);
+  room(G.x0, G.x1, G.z0, G.top, BLUEWALL, GFLOOR, WOOD, [PIT.door.x0, PIT.door.x1, PIT.door.h]);
 
   // ---------- 後台的樓梯：石頭的兩段，踏步邊一條條藍色指示燈，銅扶手 ----------
   const n = 28, run = S.len / n, rA = (S.mid - Y0) / n, rB = (S.top - S.mid) / n;
@@ -486,8 +486,8 @@ export function buildBackstage(scene) {
     if (!broke) lit(new THREE.BoxGeometry(1, 1.2, 0.03).translate(cx, Y0 + 1.7, gz + 0.02), 0xa8a4a0);
     // 碎掉的那面是一面落地的穿衣鏡：鏡面沒了，框裡是一個洞（往下的縫），燈泡只剩左邊一排和頂上兩顆
     if (broke) {
-      for (let i = 0; i < 11; i++) bulb(UNDER.door.x0 - 0.08, Y0 + 0.15 + i * 0.24, gz + 0.06);
-      for (let i = 0; i < 2; i++) bulb(UNDER.door.x0 + 0.1 + i * 0.25, Y0 + UNDER.door.h + 0.08, gz + 0.06);
+      for (let i = 0; i < 11; i++) bulb(PIT.door.x0 - 0.08, Y0 + 0.15 + i * 0.24, gz + 0.06);
+      for (let i = 0; i < 2; i++) bulb(PIT.door.x0 + 0.1 + i * 0.25, Y0 + PIT.door.h + 0.08, gz + 0.06);
       continue;
     }
     for (let i = 0; i < 6; i++) for (const sd of [-1, 1]) bulb(cx + sd * 0.6, Y0 + 1.1 + i * 0.24, gz + 0.06);

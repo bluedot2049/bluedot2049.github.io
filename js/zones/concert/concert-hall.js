@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { STAGE, mergeStatic, RELIGHT_SPEED, doorWall } from './concert-stage.js';
 import { flameCard, SHAPE } from '../../core/flame.js';
 import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
+import { Glows } from './concert-glow.js';
 import { ROBES } from './concert-crowd.js';
 
 
@@ -237,6 +238,9 @@ export class Hall {
     // ---------- 火：柱上的火把、台口兩邊火盆、巨像的火盆 ----------
     this.uTime = { value: 0 };
     this.torches = [];
+    // 光暈、牆上和巨像身上的火光、地上的光池：各合成一組一次畫完（concert-glow.js），寫法照舊
+    this.glows = [new Glows(tex), new Glows(tex, { face: false }), new Glows(tex, { geo: new THREE.CircleGeometry(1, 20).rotateX(-Math.PI / 2), face: false })];
+    const [haloSet, wallSet, floorSet] = this.glows;
     const fire = (x, y, z, k, n, at) => {
       const flames = [];
       for (let j = 0; j < n; j++) {
@@ -245,10 +249,9 @@ export class Hall {
         g.add(f);
         flames.push(f);
       }
-      const halo = new THREE.Sprite(add(new THREE.SpriteMaterial({ map: tex, color: 0xff5a26, opacity: 0 })));
+      const halo = haloSet.add({ color: 0xff5a26 });
       halo.position.set(x, y + 0.35 * k, z);
       halo.scale.setScalar(2.2 * k);
-      g.add(halo);
       const tr = { halo, flames, ph: R() * 10, k, at, d: Math.max(0, z - STAGE.front) };   // d：離台口多遠（日出重新點火的波照它）
       this.torches.push(tr);
       return tr;
@@ -262,16 +265,16 @@ export class Hall {
       const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.06, 0.25, 6), IRON);
       cup.position.set(x, y - 0.12, z);
       g.add(arm, cup);
-      const pool = new THREE.Mesh(new THREE.PlaneGeometry(5, 7), add(new THREE.MeshBasicMaterial({ map: tex, color: 0xff5420, opacity: 0 })));
+      const pool = wallSet.add({ color: 0xff5420 });
       pool.position.set(s * (INNER - 0.01), y, z);
       pool.rotation.y = -s * Math.PI / 2;
-      g.add(pool);
+      pool.scale.set(5, 7, 1);
       const tr = fire(x, y, z, 1.5, 1, when(z) + (s > 0 ? 0.12 : 0));
       tr.pool = pool;
       // 地上的光池：火把底下的地板一圈火光
-      const fp = new THREE.Mesh(new THREE.CircleGeometry(3.2, 20).rotateX(-Math.PI / 2), add(new THREE.MeshBasicMaterial({ map: tex, color: 0xff5420, opacity: 0 })));
+      const fp = floorSet.add({ color: 0xff5420 });
       fp.position.set(s * (INNER - 1.6), 0.02, z);
-      g.add(fp);
+      fp.scale.setScalar(3.2);
       tr.floor = fp;
     }
     for (const s of [-1, 1]) {
@@ -284,12 +287,13 @@ export class Hall {
       const tr = fire(f.x, f.y, f.z, 4.2, 4, IGNITE.giant);
       tr.giant = true;
       // 火光往下照在巨像身上（兜帽、肩、袍子前面）：一片加亮的暖光貼在雕像前面
-      const lit = new THREE.Mesh(new THREE.PlaneGeometry(7, 13), add(new THREE.MeshBasicMaterial({ map: tex, color: 0xff5420, opacity: 0 })));
+      const lit = wallSet.add({ color: 0xff5420 });
       lit.position.set(f.x, 12.5, GIANT.z + 2.5);
-      g.add(lit);
+      lit.scale.set(7, 13, 1);
       tr.pool = lit;
       tr.poolK = 0.55;
     }
+    for (const gs of this.glows) gs.build(g);
     mergeStatic(g);   // 石柱、拱肋、看台、座位、巨像……合成幾塊一次畫完
     this.born = performance.now() / 1000;   // 這一場（進來）的起點：點火照它算
     this.lit = 0;
@@ -297,7 +301,7 @@ export class Hall {
 
   // 每一幀：點火（進來後一支支點起來，點到的那一下爆亮）、火把閃、巨像的眼睛跟著瘋。
   // 靜默那一拍火把壓成餘燼，日出時從台口往後一支支重新爆亮（c.snuff、c.relight，跟燭火同一個波）
-  update(t, c) {
+  update(t, c, camera) {
     this.uTime.value = t;
     const since = performance.now() / 1000 - this.born, fr = c.frenzy ?? 0;
     for (const tr of this.torches) {
@@ -314,6 +318,7 @@ export class Hall {
     const giantLit = smooth((since - IGNITE.giant) / 0.5);
     this.lit = smooth((since - IGNITE.t0) / (IGNITE.giant - IGNITE.t0 + 0.5));   // 火點了幾成：點完整個大廳多一層暖的底光
     for (const e of this.eyes) e.material.opacity = (0.25 + 0.75 * Math.max(fr, 0.15 * Math.sin(t * 0.8) + 0.15)) * giantLit;
+    for (const gs of this.glows) gs.update(camera);
   }
 
   // 大空間的牆：柱子內面、後牆、屋頂、台後的背牆。從頭 a 拉到鏡頭 b，碰到就停在前面一點；回傳可以退到幾成（自己的鏡頭只躲這些，concert.js 的 camWalls）

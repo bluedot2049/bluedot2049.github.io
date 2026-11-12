@@ -8,10 +8,13 @@ const EDGE = 8;      // 離螢幕左右邊至少留幾像素
 const HOLD = 36;     // 兩個頭頂高低差在這以內就不換先後，免得鏡頭一動兩個對話框上下互換、一直跳
 
 // 回傳畫面上有幾個對話框，主迴圈有對話框時不降幀，不然字跟著半速的畫面一頓一頓
+// 即時的集合：每一幀不用重新查整份 DOM
+const SPEECH = document.getElementsByClassName('speech');
+
 export function layoutBubbles() {
   const list = [];
-  for (const el of document.querySelectorAll('.speech.show')) {
-    if (el.style.visibility === 'hidden') continue;
+  for (const el of SPEECH) {
+    if (!el.classList.contains('show') || el.style.visibility === 'hidden') continue;
     const w = el.offsetWidth, ax = parseFloat(el.style.left);
     const x = Math.min(Math.max(ax, EDGE + w / 2), window.innerWidth - EDGE - w / 2);
     const y = parseFloat(el.style.top);

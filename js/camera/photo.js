@@ -465,16 +465,16 @@ export class PhotoMode {
     // 操作那行是教學：每種拿法、每種操作這台裝置說兩次就夠了（ui.js 的 tip）。走路、轉身進門時教過了，只說這台相機自己的
     else if (gear) {
       // 每台相機的操作不一樣，各自說兩次（燭火乙式沿用原本的名字，說過的不再說）
-      const g = this.gear, id = g.id === 'bulb' ? 'gear' : g.id, af = canFocus(g) ? '點一下對焦　' : '';
+      const g = this.gear, id = g.id === 'bulb' ? 'gear' : g.id, af = canFocus(g) ? '點擊畫面 對焦　' : '';
       // 方形的照片直橫一樣，不提
       const turn = g.aspect === 1 ? '' : `　${key('turn')} 直橫`;
       const text = this.padHint() ?? (this.coarse
-        ? `${af}` + (g.zoom ? '推快門外圈變焦' : g.hold ? '按住快門慢慢曝光' : g.instant ? '一盒三張' : '')
-        : `${af}${key('shutter', 1)} 拍照` + (g.hold ? '，按住慢慢曝光' : '') + (g.zoom ? '　滾輪 變焦' : g.grips?.length === 2 && g.grips.includes(3) ? '　滾輪 自拍／腰平' : '') + (g.flash ? `　${key('flash')} 閃光` : '') + (g.lamp ? `　${key('flash')} 打燈` : '') + turn);
+        ? `${af}` + (g.zoom ? '推動快門外圈 變焦' : g.hold ? '按住快門 長時間曝光' : g.instant ? '每盒三張' : '')
+        : `${af}${key('shutter', 1)} 拍照` + (g.hold ? '，按住長時間曝光' : '') + (g.zoom ? '　滾輪 變焦' : g.grips?.length === 2 && g.grips.includes(3) ? '　滾輪 自拍／腰平' : '') + (g.flash ? `　${key('flash')} 閃光` : '') + (g.lamp ? `　${key('flash')} 打燈` : '') + turn);
       if (text.replace(/　+$/, '')) this.ui.tip(`photo:${id}-${this.inputKind()}`, text.replace(/　+$/, ''), 6000);
     }
     // 畫廊的眼睛：一打開說怎麼飛、轉、變焦，拍了第一張再說靠近、收起按鈕（moreTip）
-    else this.ui.tip(`photo:eye-${this.inputKind()}`, this.padHint() ?? (this.coarse ? say(['拖曳', '轉頭'], ['雙指', '變焦']) : say([wasd(), '移動'], [`${key('up')} ${key('down')}`, '升降'], ['拖曳', '轉頭'], ['滾輪', '變焦'])), 6000);
+    else this.ui.tip(`photo:eye-${this.inputKind()}`, this.padHint() ?? (this.coarse ? say(['拖曳', '轉動鏡頭'], ['雙指', '變焦']) : say([wasd(), '移動'], [`${key('up')} ${key('down')}`, '升降'], ['拖曳', '轉動鏡頭'], ['滾輪', '變焦'])), 6000);
     // 能追焦的相機（獵魔III）：等上面那行說完、還沒鎖過東西，再教追焦
     clearTimeout(this.trackTeach);
     if (this.gear?.track && !studio) this.trackTeach = setTimeout(() => { if (this.active && this.gear?.track && !this.track && !this.result) teach('track'); }, 6500);
@@ -779,14 +779,14 @@ export class PhotoMode {
   // 畫廊的眼睛拍了第一張：剩下的兩件（手把的在 padHint 一次說完）
   moreTip() {
     const k = kind();
-    if (k !== 'pad') this.ui.tip(`photo:more-${k}`, say(['點兩下', '靠近'], [k === 'touch' ? '點一下' : key('bare'), '收起按鈕']), 4000);
+    if (k !== 'pad') this.ui.tip(`photo:more-${k}`, say(['點兩下', '拉近'], [k === 'touch' ? '點一下' : key('bare'), '收合按鈕']), 4000);
   }
 
   padHint() {
     if (!document.body.classList.contains('pad')) return null;
     const lb = document.body.dataset.padLabels || null;
-    if (this.gear) return `${padKey(7, lb)} 拍照` + (this.gear.hold ? '，按住慢慢曝光' : '') + (this.gear.zoom ? `　${padPair(12, 13, lb)} 變焦` : '') + (this.gear.flash ? `　${padKey(2, lb)} 閃光` : '') + (this.gear.lamp ? `　${padKey(2, lb)} 打燈` : '') + (this.gear.aspect === 1 ? '' : `　${padKey(15, lb)} 直橫`) + `　${padBtn(-2)} 離開`;
-    return `左搖桿飛　${padPair(12, 13, lb)}升降　${padPair(14, 15, lb)}變焦　${padKey(7, lb)} 拍照　${padBtn(-2)} 離開`;
+    if (this.gear) return `${padKey(7, lb)} 拍照` + (this.gear.hold ? '，按住長時間曝光' : '') + (this.gear.zoom ? `　${padPair(12, 13, lb)} 變焦` : '') + (this.gear.flash ? `　${padKey(2, lb)} 閃光` : '') + (this.gear.lamp ? `　${padKey(2, lb)} 打燈` : '') + (this.gear.aspect === 1 ? '' : `　${padKey(15, lb)} 直橫`) + `　${padBtn(-2)} 離開`;
+    return `左搖桿 飛行　${padPair(12, 13, lb)} 升降　${padPair(14, 15, lb)} 變焦　${padKey(7, lb)} 拍照　${padBtn(-2)} 離開`;
   }
 
   // 帶著相機時，拿相機拍和畫廊的眼睛（相機照樣掛在身上，拍得到自己帶著它）在攝影模式裡直接換，不用先退出
@@ -1242,7 +1242,7 @@ export class PhotoMode {
     if (!was && this.pushing() && !this.pushHinted) {
       this.pushHinted = true;
       const k = this.inputKind(), lb = document.body.dataset.padLabels || null;
-      this.ui.tip(`photo:push-${k}`, `廣角、魚眼：${k === 'pad' ? padPair(14, 15, lb) : k === 'touch' ? '雙指' : '滾輪'}前後移動`, 3500);
+      this.ui.tip(`photo:push-${k}`, `廣角、魚眼鏡頭：${k === 'pad' ? padPair(14, 15, lb) : k === 'touch' ? '雙指' : '滾輪'} 前後移動`, 3500);
     }
   }
 
@@ -1821,7 +1821,7 @@ export class PhotoMode {
     this.showZoom(`${this.gear.focal}mm 定焦`);
     if (this.primeHinted) return;
     this.primeHinted = true;
-    this.ui.tip('photo:prime', '定焦：走近放大，後退拍進更多', 3500);
+    this.ui.tip('photo:prime', '定焦鏡頭：靠近放大，後退擴大取景', 3500);
   }
 
   // 牆要不要降下來：自己入鏡時跟走路一樣顧著角色，不入鏡就只看鏡頭在哪；手持時鏡頭本來就在角色身上

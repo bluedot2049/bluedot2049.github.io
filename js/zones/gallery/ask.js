@@ -15,7 +15,7 @@ import { openShop } from '../../scene/shop.js';
 const NEAR = 2.2;        // 離他多近出現「問」
 const REPLY = 0.7;       // 問了以後隔幾秒他才回
 const TEASE = 40;        // 叫你拍他以後，幾秒內收進去的照片算數
-const GLOW = 4.5;        // 毯子、按鈕亮幾秒
+const GLOW = 4.5;        // 毯子亮幾秒
 const NEXT_TIMES = 2;    // 同一步的提醒，一次來最多說幾回，之後照原本的招呼
 const SEE = 7;           // 做完一步時離他多近，他才看得到、說一聲
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -150,7 +150,7 @@ export class Ask {
 
   reply(r) {
     this.m.say(r.a, this.note(r.key));
-    this.point(r.to);
+    this.point(r.to, r.key?.[0]);
     if (r.tease) this.teaseUntil = this.m.time + TEASE;
     if (r.env) setTimeout(() => this.openEnv(), 1600);
     // 問「有東西賣嗎」：回完打開前廳的店（scene/shop.js），卡片長在他旁邊
@@ -164,13 +164,13 @@ export class Ask {
     return key ? `${key} ${verb}` : id === 'interact' ? `走近點 ${verb}` : '';
   }
 
-  // 轉身指過去。#開頭的是畫面上的按鈕：他原地舉一下魔杖，那顆外圈亮金（收著、看不到的就不亮）
-  point(to) {
+  // 轉身指過去。#開頭的是畫面上的按鈕：他原地舉一下魔杖，那顆慢慢閃到用過（act 是按哪個鍵算用過；收著、看不到的就不亮）
+  point(to, act) {
     if (!to) return;
     const m = this.m, w = this.world;
     if (to[0] === '#') {
       m.point(null);
-      beckon(to, GLOW);
+      beckon(to, act ? [act] : []);
       return;
     }
     // 指概略的方向就好：往裡面的門那面牆指下一間的中間

@@ -35,8 +35,9 @@ export const LABS = {
   },
   // 月球相機店（zones/jinghai/jinghai-camshop.js）：大企業的沖印機，不是師傅。乾淨、偏冷的銀白，黑色浮一點（拍立得那種黑不深）。
   // luck：每張交件時抽結果（漂亮、普通、色偏、疊影，camera/minilab.js），這裡是「普通」那一張的配方。用 darkroom_preview.html 複製配方時 luck 不會帶出來，貼回來記得補
+  // pola：顯影中的拍立得也收，不抽、不套這份配方，領件時機器把剩下的顯完（instant.js 的 rush）。別家都不收
   jinghai: {
-    name: '灰球朋友旗艦店', who: '店員', style: '月白', luck: true,
+    name: '灰球朋友旗艦店', who: '店員', style: '月白', luck: true, pola: true,
     settings: {
       exposure: 0.05, contrast: 8, highlights: -18, shadows: 12, whites: 4, blacks: 14, temperature: -14, tint: 3, vibrance: 6, saturation: -14, clarity: 4, grainAmount: 4, grainSize: 15,
       curves: { rgb: [[0, 18], [64, 66], [192, 196], [255, 248]] },

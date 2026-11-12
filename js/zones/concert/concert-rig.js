@@ -8,7 +8,7 @@ import { lastAt, nextAfter, hitK } from './concert-band.js';
 import { where, bloodMix } from './concert-show.js';
 import { pref } from '../../save/prefs.js';
 import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
-const RED_FLOOR = 0.5;   // 血紅段（cue.blood＝1）全場紅最少幾成（主光、天光、霧、雷射、光圈裡的天都照 rig.red 推）
+// 全場紅（rig.red：主光、天光、霧、雷射、光圈裡的天都照它推）只跟著 cue.blood：高潮那一句才有（2026-11-13，以前靜止段、光幕的抽籤紅句也紅）
 
 
 const smooth = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
@@ -52,13 +52,13 @@ export class LightRig {
     const tex = beamTex(), METAL = new THREE.MeshLambertMaterial({ color: 0x2b2d33, flatShading: true });
     // 十二格顏色：這一團的四色照五度圈排一圈，中間漸變（音近色也近）
     const P = band.palette.map((h) => new THREE.Color(h));
-    // 十二格照五度圈排，挑過的：金、琥珀、朱紅、深紅、血紅、燭光、暖白，藍只有黎明藍一格；不在兩色之間漸變（紅漸到藍中間會變粉紫）
-    // 安靜段（N）和強段（R，全是紅只差深淺）兩套，照 cue.blood 推（update 開頭）
-    this.fifthsN = ['#f0b860', '#e8902a', '#d8452e', '#b0201c', '#f6ecdc', '#ffcf8a', '#c8341a', '#8a1418', '#f0b860', '#33468f', '#e8902a', '#ffd9a0'].map((h) => new THREE.Color(h));
+    // 十二格照五度圈排，挑過的：金、琥珀、燭光、暖白、黎明藍、月藍，沒有紅（紅留給高潮）；不在兩色之間漸變（藍漸到金中間會變灰綠）
+    // 平常（N）和高潮（R，全是紅只差深淺）兩套，照 cue.blood 推（update 開頭）
+    this.fifthsN = ['#f0b860', '#e8902a', '#5a72c4', '#3a4c9a', '#f6ecdc', '#ffcf8a', '#e8902a', '#33468f', '#f0b860', '#33468f', '#e8902a', '#ffd9a0'].map((h) => new THREE.Color(h));
     this.fifthsR = ['#e01e14', '#ff3418', '#b0101a', '#8a0a12', '#ff2a10', '#c81410', '#a00818', '#6a060c', '#e01e14', '#5a0410', '#ff3418', '#d0180e'].map((h) => new THREE.Color(h));
     this.fifths = this.fifthsN.map((c) => c.clone());
     this.crimson = new THREE.Color('#a8141c');
-    this.goldN = new THREE.Color('#ffd590'); this.goldR = new THREE.Color('#ff2a14'); this.gold = this.goldN.clone();   // 日出放射的搖頭燈：安靜是金、血紅段是紅
+    this.goldN = new THREE.Color('#ffd590'); this.goldR = new THREE.Color('#ff2a14'); this.gold = this.goldN.clone();   // 日出放射的搖頭燈：平常是金、高潮是紅
     // 追光：前桁架上每人一盞，打在那個人身上（他走開了光也跟著），地上一圈。七道一組、七圈一組
     this.spotBeams = cones(7, 1, 0.04, 0.55, tex);
     this.spotPools = new THREE.InstancedMesh(new THREE.CircleGeometry(0.75, 24).rotateX(-Math.PI / 2), add(new THREE.MeshBasicMaterial({ color: 0xffffff })), 7);
@@ -109,16 +109,9 @@ export class LightRig {
     this.fifths.forEach((f, i) => bloodMix(f, this.fifthsN[i], this.fifthsR[i], bl));
     bloodMix(this.gold, this.goldN, this.goldR, bl);
     const hue = this.harmony(t, R.synth, R.drums).clone();
-    // 全場宗教紅：靜止段整段紅；光幕每四小節照種子抽一次「紅句」。開關在一拍裡淡進淡出
-    {
-      const phrase = Math.floor(w.gbar / 4), inP = ((w.gbar % 4) + w.beat / 4) * 4;   // 這一句走到第幾拍
-      let red = 0;
-      if (w.sec.id === 'still') red = smooth((w.bar * 4 + w.beat) / 1);
-      else if (w.sec.id === 'veil' && hash(this.seed, phrase, 30) < 0.4) red = smooth(inP / 1) * smooth((16 - inP) / 1);
-      // 血紅的段落（cue.blood）平常就推一半進紅，靜止段、紅句推滿；安靜段不推
-      this.red = red = Math.max(red, RED_FLOOR * bl);
-      if (red > 0) hue.lerp(this.crimson, red);
-    }
+    // 全場宗教紅：只在高潮（cue.blood），跟著推滿
+    this.red = bl;
+    if (bl > 0) hue.lerp(this.crimson, bl);
     const kicks = R.drums?.notes ?? [], ik = lastAt(kicks, t, ['kick']), kickK = ik >= 0 ? hitK(t - kicks[ik].t, 0.12) * kicks[ik].vel : 0;
     this.kickK = kickK;
     // ---------- 追光：誰出聲誰亮 ----------
@@ -211,8 +204,8 @@ export class LightRig {
     const lift = (k) => Math.min(1, k / 0.6);
     const flash = Math.max(lift(big) * smooth((F - 0.55) / 0.35), lift(small) * smooth((F - 0.92) / 0.08) * 0.6);
     c.strobe = Math.max(c.strobe, Math.min(0.9, flash * (0.35 + 0.5 * F)));   // 閃的比例收一點
-    // 閃白換顏色：最高潮時一下白、一下這一團的紅
-    if (F > 0.9 && s16 % 2) c.strobeCol = P[0];
+    // 閃白換顏色：高潮（全場紅了）時一下白、一下這一團的紅；其他段落只閃白
+    if (F > 0.9 && s16 % 2 && this.red > 0.5) c.strobeCol = P[0];
     // 2. 直光：中段跑馬燈（一個十六分音符跑一格），最高潮每一格亂亮亂暗
     st.pillars.forEach((p, i) => {
       let on;

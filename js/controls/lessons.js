@@ -3,8 +3,8 @@
 // 教學表：每個按鍵功能誰教、什麼時候教、觸控／電腦／手把各怎麼說。說幾次、做了收掉是 ui.js 的 tip；示範圖是 demos.js。
 // 全都要講到：keymap.js 的每個功能，不在這張表的 acts 裡，就要寫在 SHOWN（畫面上哪裡寫著那個鍵），lint 的 teach-all 會查。
 // 兩種時機：有事的時候說（teach('名字')，在那件事發生的地方呼叫），和 calm 的「有空再說」：沒在做事、沒有別的提示、隔一陣子說一則（tickLessons）。
-// 寫鍵一律用 say：一件事「鍵　動詞」，好幾件「鍵 動詞　鍵 動詞」。手機要按的鈕讓它亮金（btn），字寫「亮的那顆」
-import { key } from './keymap.js';
+// 寫鍵一律用 say：一件事「鍵　動詞」，好幾件「鍵 動詞　鍵 動詞」。說到的鈕慢慢閃（btn，beckon），用過才停；手機字寫「點擊發光按鈕」
+import { key, is } from './keymap.js';
 import { padBtn } from './gamepad.js';
 import { UNIT, MAX, money } from '../save/purse.js';
 
@@ -21,22 +21,28 @@ export function say(...items) {
   return a.map(([k, v]) => (k ? `${k} ${v}` : v)).join('　');
 }
 
-// 畫面上那顆外圈亮金幾秒（胖頭指按鈕、教學說「亮的那顆」都用這個）。收著、看不到的不亮，回傳 false
-export function beckon(sel, s = 4.5) {
+// 畫面上那顆慢慢閃（hud.css 的 .beckon；教學說到的鈕、胖頭指的鈕都用這個），用過才停：點了那顆、按了 acts 的鍵
+// （手把也是送 keydown，keymap.js 的 fire）、taught。收著、看不到的不亮，回傳 false
+const lit = new Map();   // 按鈕 → 按哪些功能算用過
+export function beckon(sel, acts = []) {
   const b = typeof sel === 'string' ? document.querySelector(sel) : sel;
   if (!b || b.hidden || !b.getClientRects().length) return false;
-  b.classList.remove('beckon');
-  void b.offsetWidth;   // 重新開始亮
   b.classList.add('beckon');
-  clearTimeout(b._beckon);
-  b._beckon = setTimeout(() => b.classList.remove('beckon'), s * 1000);
+  lit.set(b, [...(lit.get(b) ?? []), ...acts]);
+  b.addEventListener('click', () => unbeckon(b), { once: true });
   return true;
+}
+const unbeckon = (b) => { b.classList.remove('beckon'); lit.delete(b); };
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', (e) => {
+    for (const [b, acts] of lit) if (acts.some((a) => is(e, a))) unbeckon(b);
+  }, true);
 }
 
 const shown = (sel) => { const b = document.querySelector(sel); return !!b && !b.hidden && b.getClientRects().length > 0; };
 const wasd = () => ['fwd', 'left', 'back', 'right'].map((id) => key(id)).join('');
 // 怎麼走（走路、起身共用）。越肩點不到地面
-const how = (k, c) => (k === 'pad' ? '左搖桿' : k === 'touch' ? (c.player.shoulder ? '推搖桿' : '推搖桿或點地面') : c.player.shoulder ? wasd() : `點地面或 ${wasd()}`);
+const how = (k, c) => (k === 'pad' ? '左搖桿' : k === 'touch' ? (c.player.shoulder ? '搖桿' : '搖桿或點擊地面') : c.player.shoulder ? wasd() : `點擊地面或 ${wasd()}`);
 // 同一個功能在電腦、手把各按哪顆（手把是 gamepad.js 換鍵卡的那一列，-1 是確認）
 const btn = (k, desk, pad) => (k === 'pad' ? padBtn(pad) : key(desk));
 
@@ -45,49 +51,49 @@ const btn = (k, desk, pad) => (k === 'pad' ? padBtn(pad) : key(desk));
 // calm 有空再說（照表上的順序）；need(c) 這時候說得上（按鈕看得到、有人在旁邊…）；ms 至少停多久
 const L = {
   // ── 進門（main.js 的 entry 量走了多遠）──
-  move: { acts: ['fwd', 'back', 'left', 'right'], ms: 6000, demo: 'walk', on: '#joy', text: (k, c) => say([how(k, c), '走路']) },
+  move: { acts: ['fwd', 'back', 'left', 'right'], ms: 6000, demo: 'walk', on: '#joy', text: (k, c) => say([how(k, c), '移動']) },
   look: { acts: ['jump', 'sit'], ms: 6000, demo: 'look', on: 'open',
     // 手機的跳、坐是畫面上寫著字的鈕，不用說
-    text: (k, c) => (k === 'touch' ? say(['拖曳', '轉視角']) : say([k === 'pad' ? '右搖桿' : c.player.locked ? '移動滑鼠' : '拖曳', '轉視角'],
-      [btn(k, 'jump', 3), '跳'], [btn(k, 'sit', 2), '坐'], c.art() && [btn(k, 'interact', -1), '看畫'])) },
+    text: (k, c) => (k === 'touch' ? say(['拖曳', '轉動視角']) : say([k === 'pad' ? '右搖桿' : c.player.locked ? '滑鼠' : '拖曳', '轉動視角'],
+      [btn(k, 'jump', 3), '跳躍'], [btn(k, 'sit', 2), '坐下'], c.art() && [btn(k, 'interact', -1), '觀看畫作'])) },
   // ── 有事的時候 ──
   stand: { acts: [], ms: 4000, demo: 'walk', on: '#joy', text: (k, c) => say([how(k, c), '起身']) },
   // 觸控和滑鼠都是拖曳，記同一個；手把是右搖桿，另外記
   mirror: { acts: [], ms: 3500, demo: 'look', id: (k) => (k === 'pad' ? 'mirror-turn-pad' : 'mirror-turn'), text: (k) => say([k === 'pad' ? '右搖桿' : '拖曳', '轉身']) },
-  camSwipe: { acts: [], ms: 3500, id: () => 'cam-swipe', text: (k) => (k === 'touch' ? say(['左右滑', '換相機']) : null) },
-  artSwipe: { acts: [], ms: 4000, id: () => 'art-swipe', text: (k) => (k === 'touch' ? say(['左右滑', '換作品']) : null) },
-  eyeFollow: { acts: [], ms: 5000, id: (k) => `eye-follow-${k}`, text: (k) => `走近黑眼　${k === 'touch' ? '按「跟著」' : say([btn(k, 'interact', -1), '跟著'])}` },
+  camSwipe: { acts: [], ms: 3500, id: () => 'cam-swipe', text: (k) => (k === 'touch' ? say(['左右滑動', '切換相機']) : null) },
+  artSwipe: { acts: [], ms: 4000, id: () => 'art-swipe', text: (k) => (k === 'touch' ? say(['左右滑動', '切換作品']) : null) },
+  eyeFollow: { acts: [], ms: 5000, id: (k) => `eye-follow-${k}`, text: (k) => `靠近黑眼　${k === 'touch' ? '點擊「跟著」' : say([btn(k, 'interact', -1), '跟隨'])}` },
   // 電腦越肩第一次鎖住滑鼠
-  locked: { acts: ['cursor'], ms: 5000, text: (k) => (k === 'desk' ? say([`按住 ${key('cursor')}`, '游標'], ['Esc', '暫停選單']) : null) },
+  locked: { acts: ['cursor'], ms: 5000, text: (k) => (k === 'desk' ? say([`按住 ${key('cursor')}`, '顯示游標'], ['Esc', '暫停選單']) : null) },
   // 第一次拍到照片（不是存檔、隊友傳來的）
-  pack: { acts: ['pack'], ms: 4000, btn: '#pack-btn', text: (k) => (k === 'touch' ? '照片在行囊裡，亮的那顆' : `${say([btn(k, 'pack', 8), '行囊'])}　照片在裡面`) },
+  pack: { acts: ['pack'], ms: 4000, btn: '#pack-btn', text: (k) => say([k === 'touch' ? '點擊發光按鈕' : btn(k, 'pack', 8), '開啟行囊查看照片']) },
   // 舉起獵魔III、還沒鎖過東西（photo.js 的 enter）：R 或點畫面鎖住準心底下的，對焦一直跟著它
   track: { acts: ['refocus'], ms: 4500,
-    text: (k) => (k === 'touch' ? say(['點畫面', '追焦鎖定']) : say([btn(k, 'refocus', 5), '追焦鎖定'])) },
+    text: (k) => (k === 'touch' ? say(['點擊畫面', '鎖定追焦']) : say([btn(k, 'refocus', 5), '鎖定追焦'])) },
   // 第一次照完鏡子走開
-  save: { acts: ['save'], ms: 4500, btn: '#pack-btn', text: (k) => (k === 'desk' ? `${say([key('save'), '存讀檔'])}　換裝置帶著走` : '行囊裡能存讀檔，換裝置帶著走') },
+  save: { acts: ['save'], ms: 4500, btn: '#pack-btn', text: (k) => (k === 'desk' ? `${say([key('save'), '存檔／讀檔'])}　可換裝置繼續遊玩` : '行囊中可存檔／讀檔　可換裝置繼續遊玩') },
   // ── 有空再說（照這個順序，一次一則）──
   wheel: { calm: true, acts: ['wheel'], btn: '#emote-btn', need: () => shown('#emote-btn'),
-    text: (k) => (k === 'touch' ? say(['亮的那顆', '表情']) : say([btn(k, 'wheel', 4), '表情'])) },
+    text: (k) => (k === 'touch' ? say(['點擊發光按鈕', '開啟表情盤']) : say([btn(k, 'wheel', 4), '開啟表情盤'])) },
   photo: { calm: true, acts: ['photo'], btn: '#photo-btn', need: () => shown('#photo-btn'),
     // 手把的那顆是舉相機（沒帶相機時放畫廊的眼睛）
-    text: (k) => (k === 'touch' ? say(['亮的那顆', '攝影模式']) : k === 'pad' ? say([padBtn(6), '舉相機']) : say([key('photo'), '攝影模式'])) },
+    text: (k) => (k === 'touch' ? say(['點擊發光按鈕', '進入攝影模式']) : k === 'pad' ? say([padBtn(6), '舉起相機']) : say([key('photo'), '進入攝影模式'])) },
   view: { calm: true, acts: ['view'], btn: '#shoulder-btn', need: (c) => !c.player.shoulder && shown('#shoulder-btn'),
     // 手把一律越肩
-    text: (k) => (k === 'pad' ? null : k === 'touch' ? say(['亮的那顆', '越肩視角']) : say([key('view'), '越肩視角'])) },
+    text: (k) => (k === 'pad' ? null : k === 'touch' ? say(['點擊發光按鈕', '切換越肩視角']) : say([key('view'), '切換越肩視角'])) },
   eye: { calm: true, acts: ['eye'], btn: '#eye-btn', need: () => shown('#eye-btn'),
-    text: (k) => (k === 'touch' ? say(['亮的那顆', '黑眼帶路']) : say([btn(k, 'eye', 5), '黑眼帶路'])) },
+    text: (k) => (k === 'touch' ? say(['點擊發光按鈕', '呼叫黑眼帶路']) : say([btn(k, 'eye', 5), '呼叫黑眼帶路'])) },
   // 晶是什麼：第一次撿到（scene/coins.js）、第一次打開店家小卡（scene/shop.js）說；都沒碰過的，有空時也說
-  gem: { calm: true, acts: [], ms: 5500, btn: '#pack-btn', need: () => shown('#pack-btn'),
-    text: (k) => `${UNIT}是錢　每天子夜補滿${money(MAX)}　${k === 'touch' ? '亮的那顆看剩幾顆' : say([btn(k, 'pack', 8), '行囊看剩幾顆'])}` },
+  gem: { calm: true, acts: ['pack'], ms: 5500, btn: '#pack-btn', need: () => shown('#pack-btn'),
+    text: (k) => `${UNIT}是貨幣　每日午夜補滿${money(MAX)}　${say([k === 'touch' ? '點擊發光按鈕' : btn(k, 'pack', 8), '查看餘額'])}` },
   party: { calm: true, acts: ['party'], btn: '#party-btn', need: (c) => c.near() && shown('#party-btn'),
-    text: (k) => (k === 'touch' ? '亮的那顆　邀旁邊的人同行' : `${say([btn(k, 'party', 14), '同行'])}　邀旁邊的人一起走`) },
+    text: (k) => say([k === 'touch' ? '點擊發光按鈕' : btn(k, 'party', 14), '邀請附近玩家同行']) },
   together: { calm: true, acts: ['mark', 'whistle'], btn: '#party-btn', need: (c) => c.together(),
-    text: (k) => (k === 'touch' ? '同行那顆裡　吹哨、標記' : k === 'pad' ? say([padBtn(11), '標記']) : say([key('mark'), '標記'], [key('whistle'), '吹哨叫人'])) },
+    text: (k) => (k === 'touch' ? '同行選單中可標記地點、吹哨集合' : k === 'pad' ? say([padBtn(11), '標記地點']) : say([key('mark'), '標記地點'], [key('whistle'), '吹哨集合'])) },
   list: { calm: true, acts: ['list'], btn: '#list-btn', need: () => shown('#list-btn'),
-    text: (k) => (k === 'pad' ? null : k === 'touch' ? say(['亮的那顆', '作品清單']) : say([key('list'), '作品清單'])) },
+    text: (k) => (k === 'pad' ? null : k === 'touch' ? say(['點擊發光按鈕', '開啟作品清單']) : say([key('list'), '開啟作品清單'])) },
   tidy: { calm: true, acts: ['tidy'], btn: '#more-btn', need: () => shown('#more-btn') && !document.body.classList.contains('tidy'),
-    text: (k) => (k === 'pad' ? null : k === 'touch' ? say(['亮的那顆', '收起按鈕']) : say([key('tidy'), '收起按鈕'])) },
+    text: (k) => (k === 'pad' ? null : k === 'touch' ? say(['點擊發光按鈕', '收合按鈕']) : say([key('tidy'), '收合按鈕'])) },
 };
 
 // 不在上面教、但畫面上用到的地方寫著鍵的功能：寫在哪裡（lint 的 teach-all 對這張和 keymap.js 的 ACTIONS）
@@ -125,13 +131,15 @@ export function teach(name) {
   const text = l.text(k, c);
   if (!text) return false;
   const ok = c.ui.tip(idOf(name, k), text, l.ms ?? 4000, l.demo ? { demo: l.demo, plat: k, on: l.on, lock: c.player.locked } : null);
-  if (ok && l.btn) beckon(l.btn, Math.max(4.5, (l.ms ?? 4000) / 1000));
+  if (ok && l.btn) beckon(l.btn, l.acts);
   return ok;
 }
 
 // 做過那件事了：這種操作的那一則收掉，以後不說
 export function taught(name) {
-  if (L[name] && c) c.ui.learned(idOf(name, kind()));
+  if (!L[name] || !c) return;
+  c.ui.learned(idOf(name, kind()));
+  if (L[name].btn) { const b = document.querySelector(L[name].btn); if (b) unbeckon(b); }
 }
 
 // 有空再說：每秒看一次，沒在做事、上一則教學過了 GAP 秒，照順序說下一則還沒說夠的

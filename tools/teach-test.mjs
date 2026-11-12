@@ -1,6 +1,6 @@
 // 教學測試：無頭 Edge 開畫廊，電腦、橫拿的觸控各從前門進來一次，看教學表（js/controls/lessons.js）照時機說、照操作寫、做了收掉。
 //   node tools/teach-test.mjs
-// 看的是：進門教走（帶示範圖）→ 走過 8 公尺教轉 → 照完鏡子走開教存讀檔 → 第一次拍到照片教行囊、行囊鈕亮 →「有空再說」照順序一則一則（__lessons.next 不等時間）、說到的鈕亮金
+// 看的是：進門教走（帶示範圖）→ 走過 8 公尺教轉 → 照完鏡子走開教存讀檔 → 第一次拍到照片教行囊、行囊鈕亮 →「有空再說」照順序一則一則（__lessons.next 不等時間）、說到的鈕閃到用過
 import { openBrowser, sleep } from './headless.mjs';
 
 let failed = 0;
@@ -34,9 +34,9 @@ async function run(touch) {
     await ev(`document.documentElement.classList.add('no-dev'); 1`);
 
     // 進門：門關上、房名跳完才教走
-    let h = await waitHint(/走路/, 40);
+    let h = await waitHint(/移動/, 40);
     const demo = await ev(`!!document.querySelector('#hint .demo')`);
-    check(/走路/.test(h) && demo, `${name}：進門教走，前面有示範圖`, h);
+    check(/移動/.test(h) && demo, `${name}：進門教走，前面有示範圖`, h);
     if (touch) check(await ev(`!!document.querySelector('.demo-on.show')`), '觸控：示範疊在搖桿上');
     else check(/WASD/.test(h), '電腦：寫 WASD', h);
 
@@ -49,15 +49,15 @@ async function run(touch) {
     seen = JSON.parse(await ev(`localStorage.getItem('tipsSeen')`) || '{}');
     check(seen[`move-${touch ? 'touch' : 'desk'}`] === 'done', `${name}：走過就記成學會了`, JSON.stringify(seen));
     await ev(`__g.player.exitFocus(); 1`);
-    h = await waitHint(/存讀檔/, 20);
-    check(/存讀檔/.test(h), `${name}：照完鏡子走開教存讀檔`, h);
+    h = await waitHint(/存檔／讀檔/, 20);
+    check(/存檔／讀檔/.test(h), `${name}：照完鏡子走開教存讀檔`, h);
     await sleep(300);
     if (touch) check(/#pack-btn/.test(await lit()), '觸控：行囊鈕亮金');
 
     // 再走去下一間的中間：從進門算過了 8 公尺還沒轉過視角，教轉
     await ev(`__g.ui.hideHint(); (() => { const c = __g.world.rooms[1].center; __g.player.walkTo(c.x, c.z); return 1; })()`);
-    h = await waitHint(/轉視角/, 60);
-    check(/轉視角/.test(h), `${name}：走過 8 公尺教轉視角`, h + '　' + await ev(`__g.player.pos.x.toFixed(1) + ',' + __g.player.pos.z.toFixed(1)`));
+    h = await waitHint(/轉動視角/, 60);
+    check(/轉動視角/.test(h), `${name}：走過 8 公尺教轉視角`, h + '　' + await ev(`__g.player.pos.x.toFixed(1) + ',' + __g.player.pos.z.toFixed(1)`));
     if (!touch) check(/跳/.test(h) && /坐/.test(h), '電腦：轉視角那句帶跳、坐的鍵', h);
 
     // 第一次拍到照片：照片在行囊
@@ -77,6 +77,18 @@ async function run(touch) {
     console.log(`  ${name}有空再說：\n    ` + said.join('\n    '));
     check(said.length >= 3, `${name}：有空再說說了 ${said.length} 則`);
     check(said.every((s) => !/［—］/.test(s) || !touch), `${name}：手機每則都有一顆亮著`);
+    // 亮的鈕一直閃到用過：等 6 秒還亮著；按了那個功能的鍵（手把也走這條，keymap.js 的 fire）、或點了那顆才停
+    const L = `import('/js/controls/lessons.js')`, K = `import('/js/controls/keymap.js')`;
+    await ev(`${L}.then((m) => m.beckon('#more-btn', ['tidy']))`);
+    await sleep(6000);
+    check(/#more-btn/.test(await lit()), `${name}：沒用過一直閃`);
+    await ev(`${K}.then((m) => { m.fire('tidy'); m.fire('tidy'); return 1; })`);
+    await sleep(200);
+    check(!/#more-btn/.test(await lit()), `${name}：按了鍵就不閃`);
+    await ev(`${L}.then((m) => m.beckon('#emote-btn'))`);
+    await ev(`document.querySelector('#emote-btn').click(); 1`);
+    await sleep(200);
+    check(!/#emote-btn/.test(await lit()), `${name}：點了就不閃`);
     check(!problems.length, `${name}：沒有頁面錯誤`, problems.slice(0, 3).join(' | '));
   } finally {
     await b.close();

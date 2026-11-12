@@ -79,7 +79,7 @@ export function buildLore({ group, sky, h, Z, heightAt, SUN_DIR, REFLECT_LAYER }
   const home = WISPS.map(([x, rel]) => ({ x, y: heightAt(x, Z(rel)) + 1.8, z: Z(rel) }));
   group.add(wisp);
 
-  const mz = Z(22.5), birdMat = new THREE.MeshBasicMaterial({ color: '#3e3246', fog: false, side: THREE.DoubleSide, transparent: true });
+  const mz = Z(22.5), birdMat = new THREE.MeshBasicMaterial({ color: '#3e3246', fog: false, side: THREE.DoubleSide, transparent: true, forceSinglePass: true });   // 平的剪影：畫一次就好
   const birds = [bird(birdMat), bird(birdMat)];
   for (const b of birds) group.add(b.g);
 

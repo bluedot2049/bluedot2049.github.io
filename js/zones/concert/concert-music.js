@@ -120,7 +120,6 @@ export class ConcertSong extends Song {
     peak.gain.value = 5;
     this.door = this.filter('lowpass', 6000, 0.7);
     this.amp.connect(this.filter('highpass', 90)).connect(peak).connect(this.door).connect(this.L.gtr);
-    this.sung = 0;   // 獨唱上一個音（滑音從那裡滑過來）
     this.lastVowel = null;
     this.t0 = c.currentTime + 0.08 - this.from * 16 * this.step;
     this.n = this.from * 16;
@@ -227,10 +226,10 @@ export class ConcertSong extends Song {
     if (has('voice') && s % 2 === 0) for (const [at, l, h] of b.hook) if (at === e8) this.voice(t, h, l * st * 2);
   }
 
-  // 八弦吉他：左右兩把各自破音（差一點點音高、晚三毫秒），悶切是撥下去低通很快關上
+  // 八弦吉他：左右兩把各自破音（晚三毫秒；音高一樣，不跑調），悶切是撥下去低通很快關上
   guitar(t, midi, dur, muted, v, power) {
     const hz = mtof(midi);
-    for (const [pan, det, dt] of [[-0.7, -7, 0], [0.7, 6, 0.003]]) {
+    for (const [pan, det, dt] of [[-0.7, 0, 0], [0.7, 0, 0.003]]) {
       const tt = t + dt, stop = tt + dur + 0.1;
       const pre = this.filter('lowpass', 2600, 0.7);
       if (muted) {
@@ -336,13 +335,14 @@ export class ConcertSong extends Song {
     });
     return ins;
   }
-  // 一個人的聲帶：兩支鋸齒波差一點點，慢慢起顫音
-  cords(dest, t, hz, stop, vib = 0.006, spread = 5) {
+  // 一個人的聲帶：兩支鋸齒波差一點點；vib 顫音（演唱會不要跑調，預設 0）
+  cords(dest, t, hz, stop, vib = 0, spread = 3) {
     const os = [-spread, spread].map((d) => {
       const o = this.osc('sawtooth', hz, t, stop, dest);
       o.detune.value = d;
       return o;
     });
+    if (!vib) return os;
     const lfo = this.ctx.createOscillator(), lg = this.gain(0);
     lfo.frequency.value = 4.6 + (hz % 7) * 0.12;
     lg.gain.setValueAtTime(0, t);
@@ -366,18 +366,13 @@ export class ConcertSong extends Song {
     const ins = this.formants(dest, t, vowel, dur, prev && vowel !== this.lastVowel ? prev : null);
     this.lastVowel = vowel;
     const stop = t + dur + 4;
-    for (const m of notes) this.cords(ins, t, mtof(m), stop, 0.005, 9);
+    for (const m of notes) this.cords(ins, t, mtof(m), stop, 0, 4);
   }
-  // 獨唱：唱主旋律，從上一個音滑過來，張口 a
+  // 獨唱：唱主旋律，張口 a；一個音直接唱在音上（不滑、不顫）
   voice(t, midi, dur) {
     const hz = mtof(midi), stop = t + dur + 2;
     const env = this.hold(this.L.voice, t, 1, 0.05, dur - 0.05, 0.18);
-    const os = this.cords(this.formants(env, t, 'a'), t, hz, stop, 0.012, 3);
-    if (this.sung) for (const o of os) {
-      o.frequency.setValueAtTime(this.sung, t);
-      o.frequency.setTargetAtTime(hz, t, 0.035);
-    }
-    this.sung = hz;
+    this.cords(this.formants(env, t, 'a'), t, hz, stop, 0, 2);
   }
   // 頌缽：敲一下，泛音各自慢慢散，兩支之間拍出「哇哇」
   bowl(t, midi, v) {
@@ -416,13 +411,11 @@ export class ConcertSong extends Song {
     ins.connect(this.filter('bandpass', 2400, 0.8)).connect(this.gain(0.06)).connect(g);
     this.shot(ins, t, dur + 0.05);
   }
-  // 大鑼：低的先響，高的慢慢開出來，整個音高往下潛（像吉他搖桿壓下去）
+  // 大鑼：低的先響，高的慢慢開出來（音高不動）
   gong(t, v) {
     GONG.forEach((k, i) => {
       const a = 0.01 + i * 0.05, tau = 4.5 / (1 + i * 0.4), stop = t + a + tau * 6, hz = 92 * k * (1 + 0.004 * i);
-      const o = this.osc('sine', hz, t, stop, this.env(this.L.gong, t, (v * 0.5) / (1 + i * 0.35), a, tau));
-      o.frequency.setValueAtTime(hz * 1.012, t);
-      o.frequency.exponentialRampToValueAtTime(hz * 0.62, t + 2.5);
+      this.osc('sine', hz, t, stop, this.env(this.L.gong, t, (v * 0.5) / (1 + i * 0.35), a, tau));
     });
     this.hit(this.L.gong, t, 0.35 * v, 0.9, this.filter('bandpass', 1800, 0.7));
   }

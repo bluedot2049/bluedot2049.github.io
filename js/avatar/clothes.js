@@ -1015,7 +1015,7 @@ export const ITEMS = {
   bow: { pose: 'hang', kind: 'long', swing: 0.25, sit: true },
   wand: { pose: 'hold', kind: 'long', swing: 0.15 },
   root: { pose: 'hang', kind: 'long', swing: 0.35, sit: true, ground: true },
-  dawn: { pose: 'hold', kind: 'long', swing: 0.2 },   // 還沒升起的太陽（演唱會地平線下最深處拿的）
+  dawn: { pose: 'hold', kind: 'long', swing: 0.2 },   // 還沒升起的太陽（演唱會台底下升降台上拿的）
 };
 const NO_ITEM = {};
 export const itemOf = (id) => ITEMS[id] || NO_ITEM;

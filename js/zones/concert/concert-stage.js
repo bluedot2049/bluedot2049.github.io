@@ -8,6 +8,7 @@ export const STAGE = { y: 1.2, front: 3.0, back: -8.6, w: 20 };   // 台面高�
 export const RELIGHT_SPEED = 10;                                   // 日出重新點火的波一秒往後走幾公尺（火把、台下和看台的燭火，concert-obscura.js 的 candleGate）
 export const STAIRS = { x0: 6.9, x1: 8.1, len: 1.5, steps: 5 };   // 台口兩角上台的樓梯（左右對稱，x 是離中線多遠）：從攝影溝往台裡爬，len 是從台口往外伸多長
 export const RAIL = 2.4, RAIL_W = 9;                               // 攝影溝多深（台口到圍欄）、圍欄左右到哪（兩邊留走道）
+export const LIFT = { x0: -2, x1: 0, z0: -5, z1: -3, y0: -3 };   // 台上的升降台（concert-pit.js）：台面上的活門、底下的井；y0 是台底下的地多低。洞對齊地板的一公尺格子（Stage 挖地板照格子挖）
 // 台後面和上面（工作人員的地方，蓋和走在 concert-backstage.js）：台兩側黑幕後面是側台，黑幕開一個口；背牆兩邊各一扇門，東邊後台的兩段樓梯
 // 上到背牆高處的門，沿東邊側天橋往前，接貓道橫過台口後面的上空（黑幕矮到 mask，貓道從上面過）。西邊的門是休息室。x 寫離中線多遠，休息室寫負的
 export const BACKSTAGE = {
@@ -146,7 +147,18 @@ export class Stage {
     floorM.map = slabTex();
     floorM.map.wrapS = floorM.map.wrapT = THREE.RepeatWrapping;
     floorM.map.repeat.set(16, 16);
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80).rotateX(-Math.PI / 2), floorM);
+    // 台子底下那塊地板挖掉（台底下是空的，concert-pit.js；台子本身蓋著，從大廳看不到洞）
+    const floorGeo = new THREE.PlaneGeometry(80, 80, 80, 80).rotateX(-Math.PI / 2);
+    {
+      const idx = floorGeo.index.array, P = floorGeo.attributes.position, keep = [];
+      for (let i = 0; i < idx.length; i += 3) {
+        const cx = (P.getX(idx[i]) + P.getX(idx[i + 1]) + P.getX(idx[i + 2])) / 3, cz = (P.getZ(idx[i]) + P.getZ(idx[i + 1]) + P.getZ(idx[i + 2])) / 3 + 8;
+        if (Math.abs(cx) < STAGE.w / 2 && cz > -8 && cz < STAGE.front) continue;
+        keep.push(idx[i], idx[i + 1], idx[i + 2]);
+      }
+      floorGeo.setIndex(keep);
+    }
+    const floor = new THREE.Mesh(floorGeo, floorM);
     floor.position.z = 8;
     floor.userData.kind = 'floor';
     this.floor = floor;
@@ -154,8 +166,11 @@ export class Stage {
     const add = (geo, m, x, y, z, ry = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.y = ry; g.add(o); return o; };
     const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
     const DECK = lam(0x2a2226), BLACK = lam(0x16121a), CAB = lam(0x1c1a1d), GRILL = lam(0x29272b), METAL = lam(0x2b2d33), GOLD = lam(0x3a1614);
-    const D = STAGE.front - STAGE.back;
-    add(B(STAGE.w, STAGE.y, D), DECK, 0, STAGE.y / 2, (STAGE.front + STAGE.back) / 2);
+    // 台子：中間偏後挖一個洞（升降台的井，活門和升降台在 concert-pit.js），四塊拼起來
+    {
+      const L = LIFT, xa = -STAGE.w / 2, xb = STAGE.w / 2, za = STAGE.back, zb = STAGE.front;
+      for (const [x0, x1, z0, z1] of [[xa, xb, za, L.z0], [xa, xb, L.z1, zb], [xa, L.x0, L.z0, L.z1], [L.x1, xb, L.z0, L.z1]]) add(B(x1 - x0, STAGE.y, z1 - z0), DECK, (x0 + x1) / 2, STAGE.y / 2, (z0 + z1) / 2);
+    }
     // 舞台正面一層一層：最上面金色的台口、下面一條會跟著燈亮的光帶、凹進去的黑裙板，裙板裡嵌一排低音喇叭，最下面一條踢腳
     add(B(STAGE.w + 0.1, 0.07, 0.14), GOLD, 0, STAGE.y - 0.035, STAGE.front + 0.02);
     this.strip = add(B(STAGE.w - 0.2, 0.05, 0.02), glow(0xffffff, 0), 0, STAGE.y - 0.13, STAGE.front + 0.03);

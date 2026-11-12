@@ -480,7 +480,7 @@ export function buildStation(group) {
       g.translate(S.x, S.top + 0.47, S.z + k * 1.87);
       parts.push(g);
     }
-    const mat = new THREE.MeshLambertMaterial({ color: '#e9e2f4', transparent: true, opacity: 0.34, side: THREE.DoubleSide, depthWrite: false });
+    const mat = new THREE.MeshLambertMaterial({ color: '#e9e2f4', transparent: true, opacity: 0.34, side: THREE.DoubleSide, depthWrite: false, forceSinglePass: true });   // 平的玻璃片只看得到一面：畫一次就好（雙面透明 three 預設每幀畫兩次）
     mat.onBeforeCompile = (sh) => {
       sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `
         float fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 1.5);

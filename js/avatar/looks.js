@@ -137,7 +137,7 @@ export const GIFTS = {
   bakery: { who: '麵包師傅', line: '烤得比較長 抱著走', items: [['hand', 'baguette']], price: 4, offer: '一條長麵包' },
   tea: { who: '茶攤', line: '杯子帶走沒關係', items: [['hand', 'teacup']], price: 4, offer: '一杯連杯子' },
   squid: { who: '烤魷魚', line: '烤好了 小心燙', items: [['hand', 'squid']], price: 4, offer: '一串' },
-  dawn: { hint: '演唱會的後台　再往裡面走', items: [['hand', 'dawn']] },   // 地平線下最深處（concert-under.js）
+  dawn: { hint: '演唱會的後台　再往裡面走', items: [['hand', 'dawn']] },   // 台底下升降台上（concert-pit.js）
   // 背的配件，一幕劇、報社給的（以前想過當錢袋升級，2026-11-11 改成錢包固定十顆、子夜補滿，這兩個只是背在身上）
   purse7: { hint: '海市　跟著漁火走到最後', items: [['back', 'fishpouch']] },         // 漁火演完（haishi-acts.js）
   purse10: { hint: '自己拍的照片登上星潮報頭版', items: [['back', 'gembox']] },        // 頭版、號外（vendors.js 的編輯）

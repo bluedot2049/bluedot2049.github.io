@@ -9,6 +9,8 @@ import * as TX from '../../core/textures.js';
 import { Kit, PROPS, newBucket, rng } from '../../core/props.js';
 import { bucketObjects, tag } from '../../core/scenery.js';
 import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
+import { buildCellarBot, BOT_R } from './cellar-bot.js';
+import { BOARD_FOOT, BOARD_W, buildNoticeBoard } from './noticeboard.js';
 import { DOOR_H, DOOR_W, MARGIN, PAINT_SCALE, STUB_H, WALL_H, flatWall, makeEntry, setUV, shared, stubAndCap, wallBox } from './world-rooms.js';
 
 const DEPTH = 2.8;      // 地下室的地板比前廳低多少
@@ -30,31 +32,135 @@ function size(p, max) {
   return [w * k, h * k];
 }
 
-// 還沒有縮圖時畫的佔位：每幅幾塊顏色，種子是第幾幅，每次都一樣
+// 還沒有縮圖時畫的佔位：暗的抽象畫。近黑的底上兩三塊邊緣糊開的色層、乾筆刮過的痕、色層之間一道快熄的暖光，
+// 再撒一層顆粒。種子是第幾幅，每次都一樣。邊緣用一層層抖過的半透明橫筆疊出來，不用 ctx.filter（舊 Safari 沒有）
+const DARK = [
+  { ground: [19, 13, 12], fields: [[60, 18, 20], [32, 18, 20], [11, 8, 9]], ember: [176, 74, 34] },     // 暗紅
+  { ground: [16, 14, 11], fields: [[46, 38, 25], [25, 22, 18], [64, 30, 18]], ember: [184, 124, 54] },   // 土褐
+  { ground: [11, 12, 17], fields: [[24, 28, 46], [15, 15, 21], [46, 22, 30]], ember: [160, 100, 72] },   // 靛黑
+  { ground: [16, 15, 15], fields: [[37, 34, 33], [72, 32, 22], [13, 12, 13]], ember: [196, 88, 40] },    // 炭灰鏽
+];
+const rgba = (c, a, k = 0) => `rgba(${Math.round(c[0] + k)},${Math.round(c[1] + k)},${Math.round(c[2] + k * 0.8)},${a})`;
+
+// 一塊色層：每一遍往內縮一點、兩端各自抖，疊起來中間實、邊上糊；每遍是一條條橫筆，所以邊是毛的
+function field(g, R, c, x, y, w, h, soft, a) {
+  const passes = 14, band = Math.max(2, h / 11), alpha = (a * 2.2) / passes;
+  for (let p = 0; p < passes; p++) {
+    const e = soft * (1 - p / passes);
+    for (let by = y - e; by < y + h + e; by += band) {
+      g.fillStyle = rgba(c, alpha, (R() - 0.5) * 9);
+      const l = x - e + (R() - 0.5) * soft, r = x + w + e + (R() - 0.5) * soft;
+      g.fillRect(l, by + (R() - 0.5) * band * 0.4, r - l, band * (0.8 + R() * 0.6));
+    }
+  }
+}
+
+// 乾筆：長長的細痕，略彎，比底下那塊亮一點點
+function scrape(g, R, c, x, y, w, h, n) {
+  g.lineCap = 'round';
+  for (let i = 0; i < n; i++) {
+    const sx = x + R() * w * 0.4, ex = sx + w * (0.3 + R() * 0.6), sy = y + R() * h, dy = (R() - 0.5) * h * 0.15;
+    g.strokeStyle = rgba(c, 0.04 + R() * 0.09, 14 + R() * 16);
+    g.lineWidth = 0.6 + R() * 2.2;
+    g.beginPath();
+    g.moveTo(sx, sy);
+    g.quadraticCurveTo((sx + ex) / 2, sy + dy * 2, ex, sy + dy);
+    g.stroke();
+  }
+}
+
+// 快熄的暖光：貼著色層的邊一道細縫，上下淡出、兩頭淡掉，再幾筆斷斷續續的亮痕，越靠中間越亮
+function ember(g, R, c, x, y, w, t) {
+  const grad = g.createLinearGradient(x, 0, x + w, 0);
+  const a = 0.12 + R() * 0.08;
+  grad.addColorStop(0, rgba(c, 0));
+  grad.addColorStop(0.3 + R() * 0.2, rgba(c, a));
+  grad.addColorStop(1, rgba(c, 0));
+  g.fillStyle = grad;
+  for (let i = 0; i < 6; i++) g.fillRect(x + (R() - 0.5) * w * 0.1, y - t * (1 + R() * 3), w, t * (2 + R() * 6));
+  for (let i = 0; i < 16; i++) {
+    const u = R(), l = x + u * w * 0.9, len = w * (0.02 + R() * 0.12), mid = 1 - Math.abs(u - 0.45) * 1.8;
+    g.fillStyle = rgba(c, Math.max(0, mid) * (0.12 + R() * 0.3), 20 * R());
+    g.fillRect(l, y + (R() - 0.5) * t * 2.5, Math.min(len, x + w - l), Math.max(0.8, t * (0.2 + R() * 0.6)));
+  }
+}
+
+// 抹痕：幾道很寬、很淡的暗筆橫過去，讓色層裡面不平均
+function smudge(g, R, x, y, w, h, n, s) {
+  g.lineCap = 'round';
+  for (let i = 0; i < n; i++) {
+    const sy = y + R() * h, dy = (R() - 0.5) * h * 0.2;
+    g.strokeStyle = `rgba(4,3,3,${0.05 + R() * 0.08})`;
+    g.lineWidth = s * (0.04 + R() * 0.1);
+    g.beginPath();
+    g.moveTo(x + R() * w * 0.3, sy);
+    g.quadraticCurveTo(x + w * (0.3 + R() * 0.4), sy + dy * 2, x + w * (0.7 + R() * 0.3), sy + dy);
+    g.stroke();
+  }
+}
+
+function darkPainting(g, R, x, y, w, h) {
+  const pal = DARK[Math.floor(R() * DARK.length)], s = Math.min(w, h);
+  const bg = g.createLinearGradient(0, y, 0, y + h);
+  bg.addColorStop(0, rgba(pal.ground, 1, -4));
+  bg.addColorStop(1, rgba(pal.ground, 1, 6));
+  g.fillStyle = bg;
+  g.fillRect(x, y, w, h);
+  scrape(g, R, pal.ground, x, y, w, h, 40);
+  // 色層：多半上下疊兩三塊，偶爾左右兩塊
+  const cols = R() < 0.25, n = cols ? 2 : 2 + (R() < 0.6 ? 1 : 0);
+  const m = s * (0.07 + R() * 0.04), gap = s * (0.035 + R() * 0.04), soft = s * (0.04 + R() * 0.03);
+  const span = (cols ? w : h) - m * 2 - gap * (n - 1), wt = Array.from({ length: n }, () => 0.6 + R());
+  const sum = wt.reduce((a, b) => a + b, 0), order = [0, 1, 2].sort(() => R() - 0.5);
+  const rects = [];
+  let at = (cols ? x : y) + m;
+  wt.forEach((v, i) => {
+    const len = (span * v) / sum;
+    rects.push(cols ? [at, y + m, len, h - m * 2] : [x + m, at, w - m * 2, len]);
+    at += len + gap;
+    const [fx, fy, fw, fh] = rects[i], c = pal.fields[order[i]];
+    field(g, R, c, fx, fy, fw, fh, soft, 0.85 + R() * 0.15);
+    scrape(g, R, c, fx, fy, fw, fh, 14 + R() * 14);
+  });
+  smudge(g, R, x, y, w, h, 6 + R() * 5, s);
+  // 暖光挑一道縫：上下疊的是兩塊中間，左右排的是一塊的上緣
+  const k = Math.floor(R() * (rects.length - 1)), [ex, ey, ew, eh] = rects[k];
+  if (cols) ember(g, R, pal.ember, ex + ew * 0.1, ey + eh * (0.15 + R() * 0.2), ew * 0.8, s * 0.006);
+  else ember(g, R, pal.ember, ex + ew * (0.05 + R() * 0.1), ey + eh + gap / 2, ew * (0.7 + R() * 0.2), s * 0.006);
+  // 四邊壓暗
+  const v = g.createRadialGradient(x + w / 2, y + h / 2, s * 0.25, x + w / 2, y + h / 2, Math.hypot(w, h) * 0.6);
+  v.addColorStop(0, 'rgba(0,0,0,0)');
+  v.addColorStop(1, 'rgba(6,4,4,0.55)');
+  g.fillStyle = v;
+  g.fillRect(x, y, w, h);
+}
+
+// 只有幾幅的時候一格畫大一點（掛得大、站得近），多了就小格
 function placeholderAtlas(items) {
-  const cell = 64, cols = 8, rows = Math.ceil(items.length / cols) || 1;
+  const n = items.length || 1, cell = n <= 2 ? 512 : n <= 8 ? 256 : 128, cols = Math.min(8, n), rows = Math.ceil(n / cols);
   const c = document.createElement('canvas');
-  c.width = cell * cols;
+  c.width = THREE.MathUtils.ceilPowerOfTwo(cell * cols);
   c.height = THREE.MathUtils.ceilPowerOfTwo(cell * rows);
   const g = c.getContext('2d');
-  const tones = ['#c8553d', '#e0a458', '#588b8b', '#8e5572', '#3d5a80', '#d8c3a5', '#6b705c', '#2b2d42', '#f2cc8f', '#81b29a'];
   items.forEach((it, i) => {
     const R = rng(`cellar${i}`), x0 = (i % cols) * cell, y0 = Math.floor(i / cols) * cell;
     const s = (cell - 4) / Math.max(it.w, it.h), w = Math.round(it.w * s), h = Math.round(it.h * s);
     const x = x0 + 2, y = y0 + 2;
-    g.fillStyle = tones[Math.floor(R() * tones.length)];
-    g.fillRect(x, y, w, h);
-    for (let k = 0; k < 3 + R() * 3; k++) {
-      g.fillStyle = tones[Math.floor(R() * tones.length)];
-      const bw = w * (0.2 + R() * 0.5), bh = h * (0.15 + R() * 0.5);
-      if (R() < 0.4) {
-        g.beginPath();
-        g.arc(x + R() * w, y + R() * h, Math.min(bw, bh) / 2, 0, Math.PI * 2);
-        g.fill();
-      } else g.fillRect(x + R() * (w - bw), y + R() * (h - bh), bw, bh);
-    }
+    g.save();
+    g.beginPath();
+    g.rect(x, y, w, h);
+    g.clip();
+    darkPainting(g, R, x, y, w, h);
+    g.restore();
     it.rect = [x, y, w, h];
   });
+  // 顆粒：整張一起撒，亂數另一條，不影響每幅的構圖
+  const img = g.getImageData(0, 0, c.width, c.height), d = img.data, G = rng('cellar-grain');
+  for (let p = 0; p < d.length; p += 4) {
+    const k = (G() - 0.5) * 9;
+    d[p] += k; d[p + 1] += k; d[p + 2] += k;
+  }
+  g.putImageData(img, 0, 0);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return { tex, W: c.width, H: c.height };
@@ -287,6 +393,38 @@ export function buildCellar(data, doorX, front) {
       clutter.push({ x, z, r: Math.hypot(def.w, def.d) / 2 });
     }
     for (const o of bucketObjects(b)) low.add(o);
+  }
+  // 收起來的東西（跟畫具對面，進方廳右手邊 -x 那面牆靠前）：牆角疊幾個木箱和一疊書；
+  // 前廳拆下來的佈告欄靠牆立著，藤扯斷了，花苞闔著；再往裡一台停機的煉金工程機器人（cellar-bot.js）坐著低頭，布滑下來一半
+  {
+    const R = Math.PI / 2, b = newBucket();
+    for (const [id, x, z, rot] of [
+      ['crate', x0 + 0.48, z0 + 0.5, R + 0.08],
+      ['crate', x0 + 1.25, z0 + 0.42, -0.2],
+      ['booksPile', x0 + 1.05, z0 + 1.15, 0.7],
+      ['crate', x0 + 0.66, z0 + 2.8, R - 0.12],
+    ]) {
+      const def = PROPS[id], one = new Kit(rng(`cellar-store:${id}:${z}`));
+      def.build(one);
+      one.emit(b, x, z, rot);
+      clutter.push({ x, z, r: Math.hypot(def.w, def.d) / 2 });
+    }
+    const bx = x0 + 0.95, bz = z0 + 4.6;
+    buildCellarBot(rng('cellar-bot')).emit(b, bx, bz, R + 0.4);
+    clutter.push({ x: bx, z: bz, r: BOT_R });
+    for (const o of bucketObjects(b)) low.add(o);
+
+    // 佈告欄：底貼地、往後靠牆，頂離牆一點點
+    const nb = buildNoticeBoard(3.1, { cut: true }), lean = new THREE.Group(), stand = new THREE.Group(), bzc = z0 + 2.05;
+    nb.group.position.y = -BOARD_FOOT;
+    lean.rotation.x = -0.12;
+    lean.add(nb.group);
+    stand.position.set(x0 + 0.2, 0, bzc);
+    stand.rotation.y = R;
+    stand.add(lean);
+    nb.update(0);
+    low.add(stand);
+    for (const t of [-0.35, 0, 0.35]) clutter.push({ x: x0 + 0.3, z: bzc + t * BOARD_W, r: 0.2 });
   }
   const blocked = (x, z) => clutter.some((c) => Math.hypot(x - c.x, z - c.z) < c.r + MARGIN);
 

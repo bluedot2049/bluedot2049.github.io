@@ -8,6 +8,7 @@ import { presetLook, sanitizeLook } from '../../avatar/looks.js';
 import { kaoCode } from '../../avatar/kaomoji-parts.js';
 import { barSec, where, secAtBar, songSec, songBars } from './concert-show.js';
 import { STAGE } from './concert-stage.js';
+import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
 
 const ARM_OUT = 0.28;
 const ink = (c) => new THREE.MeshLambertMaterial({ color: c, flatShading: true });
@@ -185,6 +186,26 @@ function instrument(role, ch) {
   }
   return g;
 }
+// 樂器不會動的零件照材質併成一塊（一種材質一個 draw call；以前一個零件一個，七件樂器將近三十個）。
+// 會動的（userData 的 ride、china 會晃，drum 會鼓起來）和它底下的留著；併好的放回 root，座標照 root 自己的
+function bake(root) {
+  const keep = new Set(Object.values(root.userData).filter((o) => o?.isObject3D && o !== root.userData.kick && o !== root.userData.gong));
+  const moving = (o) => { for (let p = o; p && p !== root; p = p.parent) if (keep.has(p)) return true; return false; };
+  root.updateMatrixWorld(true);
+  const inv = root.matrixWorld.clone().invert(), m4 = new THREE.Matrix4(), by = new Map(), done = [];
+  root.traverse((o) => {
+    if (!o.isMesh || o === root || moving(o)) return;
+    const g = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()).applyMatrix4(m4.multiplyMatrices(inv, o.matrixWorld));
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+    if (!by.has(o.material)) by.set(o.material, []);
+    by.get(o.material).push(g);
+    done.push(o);
+  });
+  for (const o of done) o.parent.remove(o);
+  // 拿掉零件以後空掉的小組（鑼架）留著沒關係，裡面沒有東西就不畫
+  for (const [m, list] of by) root.add(new THREE.Mesh(list.length > 1 ? mergeGeometries(list, false) : list[0], m));
+  return root;
+}
 // 手上拿的棒子：鼓棒、太鼓的撥、鑼槌（掛在手臂的手的位置）
 function stick(arm, len, r, m) {
   const s = cyl(r, r * 0.8, len, m, 6);
@@ -293,6 +314,7 @@ class Member {
     g.position.set(m.at[0], stageY + (m.y || 0), m.at[1]);
     this.base = g.position.clone();
     this.gear = instrument(m.role, this.ch);
+    bake(this.gear.children.length === 1 && this.gear.children[0].isGroup ? this.gear.children[0] : this.gear);   // 吉他、低音包了一層 holder，併裡面那層
     if (this.gear.parent !== this.ch.body) { this.gear.position.add(g.position); }
     this.notes = notesFor(m, band.midi, band.bpm);
     this.band = band;

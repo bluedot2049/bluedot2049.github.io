@@ -21,7 +21,7 @@ import { set as padFocus } from '../controls/padnav.js';
 import { sfx, thing } from '../audio/ui-voices.js';
 import { album, canPick, canShare, discard, folderName, hourMark, KINDS, LABS, labOk, loadAlbum, pickFolder, putBack, saveChosen, saveTip, seen, shareChosen, takeOut, toLab, visible } from '../camera/album.js';
 import { pref, setPref } from './prefs.js';
-import { developing, peek, ripen } from '../camera/instant.js';
+import { developing, peek, PLACES, ripen, segments } from '../camera/instant.js';
 import { is } from '../controls/keymap.js';
 import { coins, MAX, UNIT, MEASURE, takeFresh, HUES } from './purse.js';
 
@@ -53,7 +53,7 @@ function purseRow(drop, fresh) {
   const gems = Array.from({ length: MAX }, (_, i) => (i < n ? `<i class="on${i >= from ? ' tide' : ''}" style="--k:${i - from};--c:${HUES[i % HUES.length]}"></i>` : '<i></i>')).join('');
   const label = `錢袋 ${n}／${MAX} ${MEASURE}${UNIT}`;
   return drop
-    ? `<button type="button" class="purse" data-act="drop" aria-label="${label}　丟一${MEASURE}給隊友">${gems}<span>丟一${MEASURE}</span></button>`
+    ? `<button type="button" class="purse" data-act="coin" aria-label="${label}　丟一${MEASURE}給隊友">${gems}<span>丟一${MEASURE}</span></button>`
     : `<span class="purse" role="img" aria-label="${label}" title="${label}">${gems}</span>`;
 }
 
@@ -390,7 +390,8 @@ export class Pack {
       // 拍立得顯影中：小圖由 paintPola 畫上去
       if (developing(it)) return `<button class="ph-cell pola${on}" data-i="${i}"><img data-pola="${i}" alt=""><b>${it.pola.rare ? '紀念・' : ''}顯影中</b><i class="chk"></i><i class="zoom" title="看大圖"></i></button>`;
       if (!visible(it)) return `<button class="ph-cell film${on}" data-i="${i}"><span>${hourMark(it.t)}</span><i class="chk"></i></button>`;
-      const label = it.state === 'back' && LABS[it.lab] ? LABS[it.lab].style
+      // 機器顯好的拍立得沒套師傅的風格，照拍立得寫
+      const label = it.state === 'back' && LABS[it.lab] && !it.pola ? LABS[it.lab].style
         : it.kind === 'video' ? `${KINDS.video} ${clock(it.dur)}` : it.pola?.rare ? '紀念' : KINDS[it.kind];
       const tag = label ? `<b>${label}</b>` : '';
       // 等過的（師傅那裡拿回來的）左上角一顆印：新的亮著，看過剩淡印
@@ -416,12 +417,12 @@ export class Pack {
     const n = this.card.querySelector('.album-n');
     if (!n) return;
     const all = album().filter((it) => it.state !== 'lab'), c = [...this.chosen];
-    const keep = c.filter(visible), send = c.filter(labOk), dev = c.filter(developing).length, film = c.length - keep.length - dev;
+    const keep = c.filter(visible), dev = c.filter(developing).length, film = c.length - keep.length - dev;
     n.textContent = c.length ? `選了 ${c.length} 張` + (film ? `，其中 ${film} 張底片要先沖` : '') + (dev ? `，${dev} 張還在顯影` : '') : all.length ? '點選，點兩下看大圖' : '';
     const a = this.card.querySelector('[data-act="all"]');
     a.hidden = !all.length;
     a.textContent = all.length && all.every((it) => this.chosen.has(it)) ? '全不選' : '全選';
-    for (const b of this.card.querySelectorAll('[data-act="lab"]')) b.disabled = !send.length || this.busy;
+    for (const b of this.card.querySelectorAll('[data-act="lab"]')) b.disabled = !c.some((it) => labOk(it, b.dataset.lab)) || this.busy;
     this.card.querySelector('[data-act="drop"]').disabled = !c.length || this.busy;
     const k = this.card.querySelector('[data-act="keep"]');
     k.disabled = !keep.length || this.busy;
@@ -501,12 +502,12 @@ export class Pack {
   }
 
   async send(lab) {
-    const send = [...this.chosen].filter(labOk);
+    const send = [...this.chosen].filter((it) => labOk(it, lab));
     if (!send.length || this.busy) return;
     send.forEach((it) => this.chosen.delete(it));
     await toLab(send, lab);
     sfx('confirm');
-    this.note(`已交給${LABS[lab].who}洗好，到${LABS[lab].name}取件`);
+    this.note(`已交給${LABS[lab].who}${send.every((it) => it.pola) ? '' : '洗好'}，到${LABS[lab].name}取件`);
   }
 
   // 丟掉：不先問，丟完底下那行可以復原。接連丟的算同一批，按一次復原全部放回來
@@ -604,7 +605,7 @@ export class Pack {
       <button class="av-step" data-step="-1" aria-label="上一張" title="上一張（←）">${arrow('M14.5 5.5 8 12l6.5 6.5')}</button>
       <button class="av-step next" data-step="1" aria-label="下一張" title="下一張（→）">${arrow('M9.5 5.5 16 12l-6.5 6.5')}</button>
       <button class="icon-btn round av-close" aria-label="收起" title="收起（Esc）"><svg><use href="#i-close"/></svg></button>
-      <div class="av-bar"><span class="av-n"></span><button class="av-pick" data-v="pick" title="選（空白鍵）"><i class="chk"></i>選</button><button class="av-drop" data-v="drop" title="丟掉（Delete）">丟掉</button></div>`;
+      <div class="av-bar"><span class="av-route" hidden></span><span class="av-n"></span><button class="av-pick" data-v="pick" title="選（空白鍵）"><i class="chk"></i>選</button><button class="av-drop" data-v="drop" title="丟掉（Delete）">丟掉</button></div>`;
     // 電腦版的箭頭、收起鈕貼著圖：圖載好、換張、拉視窗時量一次
     const hug = () => { if (!v.hidden) hugMedia(v, v.querySelector(this.viewing?.kind === 'video' ? 'video' : 'img')); };
     v.querySelector('img').addEventListener('load', hug);
@@ -647,7 +648,8 @@ export class Pack {
       if (dev) this.paintDev(it, img);
       else img.src = src;
     }
-    const L = it.state === 'back' && LABS[it.lab];
+    const L = it.state === 'back' && LABS[it.lab] && !it.pola;
+    this.paintRoute(it);
     v.querySelector('.av-n').textContent = `${i + 1} / ${list.length}` + (L ? `・${L.style}` : dev ? `・${it.pola.rare ? '紀念・' : ''}顯影中` : '');
     v.querySelector('[data-step="-1"]').disabled = i === 0;
     v.querySelector('[data-step="1"]').disabled = i === list.length - 1;
@@ -655,6 +657,16 @@ export class Pack {
     pick.classList.toggle('on', on);
     pick.setAttribute('aria-pressed', on);
     if (movie ? vid.readyState >= 1 : img.complete) hugMedia(v, movie ? vid : img);   // 已經載好的不會再發 load
+  }
+
+  // 拍立得的路線色帶：每段是那一區染的顏色、長度是在那裡顯了多少（instant.js 的 segments），還沒顯的空著。不寫字、不寫時間
+  paintRoute(it) {
+    const bar = this.viewer.querySelector('.av-route'), parts = it.pola ? segments(it) : [];
+    bar.hidden = !it.pola;
+    if (!it.pola) return;
+    const rest = Math.max(0, 1 - parts.reduce((a, [, f]) => a + f, 0));
+    bar.innerHTML = parts.map(([z, f]) => `<i style="flex-grow:${f.toFixed(4)};background:${PLACES[z].tint}"></i>`).join('')
+      + (rest > 0.001 ? `<i class="rest" style="flex-grow:${rest.toFixed(4)}"></i>` : '');
   }
 
   // 看大圖看的是顯影中的拍立得：原圖不給看，畫現在顯到哪（instant.js 的 peek），看著就每幾秒重畫，顯好了換成成品
@@ -723,7 +735,7 @@ export class Pack {
     if (b.classList.contains('ph-cell')) return this.tapCell(b, e);
     switch (b.dataset.act) {
       case 'close': this.close(); return;
-      case 'drop': if (this.events.onDrop?.()) this.render(); return;
+      case 'coin': if (this.events.onDrop?.()) this.render(); return;
       case 'all': this.chooseAll(); return;
       case 'keep': this.keep(); return;
       case 'share': this.share(); return;

@@ -4,6 +4,8 @@
 import * as THREE from 'three';
 import { STAGE } from './concert-stage.js';
 import { trackPixelRatio } from '../../core/stardots.js';
+import { Glows } from './concert-glow.js';
+import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
 
 const add = (m) => { m.transparent = true; m.blending = THREE.AdditiveBlending; m.depthWrite = false; m.fog = false; return m; };
 // 有種子的亂數（每次建出來一樣）
@@ -68,26 +70,23 @@ export class StageFX {
     scene.add(g);
     const soft = softTex(), METAL = new THREE.MeshLambertMaterial({ color: 0x2b2d33, flatShading: true });
     // ---------- 燈具：後面一排吊在直光正上方（直光從它們打下來），前面桁架一排對著台上 ----------
-    const can = () => new THREE.CylinderGeometry(0.16, 0.22, 0.42, 10);
+    // 燈具的鐵殼不會動，全部合成一塊；燈具的光暈合成一組（concert-glow.js），一次畫完
+    const shells = [], e3 = new THREE.Euler();
+    const can = (x, y, z, rx = 0) => shells.push(new THREE.CylinderGeometry(0.16, 0.22, 0.42, 10).toNonIndexed().applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(e3.set(rx, 0, 0)).setPosition(x, y, z)));
     const backY = STAGE.y + 11, frontY = 11.5 - 0.35;
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(STAGE.w, 0.3, 0.3), METAL);
-    bar.position.set(0, backY + 0.35, -4.4);
-    g.add(bar);
-    const halo = (size) => { const s = new THREE.Sprite(add(new THREE.SpriteMaterial({ map: soft, color: 0xffffff, opacity: 0 }))); s.scale.setScalar(size); g.add(s); return s; };
+    shells.push(new THREE.BoxGeometry(STAGE.w, 0.3, 0.3).toNonIndexed().translate(0, backY + 0.35, -4.4));
+    this.glow = new Glows(soft);
+    const halo = (size) => { const s = this.glow.add(); s.scale.setScalar(size); return s; };
     this.back = stage.pillars.map((p) => {
-      const f = new THREE.Mesh(can(), METAL);
-      f.position.set(p.position.x, backY, -4.4);
-      g.add(f);
+      can(p.position.x, backY, -4.4);
       const h = halo(1.6);
       h.position.set(p.position.x, backY - 0.3, -4.4);
       return h;
     });
     this.front = [];
     for (let i = 0; i < 8; i++) {
-      const x = -STAGE.w / 2 + 1.5 + (i / 7) * (STAGE.w - 3), f = new THREE.Mesh(can(), METAL);
-      f.position.set(x, frontY, STAGE.front - 0.6);
-      f.rotation.x = 0.6;   // 斜斜朝台上
-      g.add(f);
+      const x = -STAGE.w / 2 + 1.5 + (i / 7) * (STAGE.w - 3);
+      can(x, frontY, STAGE.front - 0.6, 0.6);   // 斜斜朝台上
       const h = halo(1.1);
       h.position.set(x, frontY - 0.25, STAGE.front - 0.45);
       this.front.push(h);
@@ -96,6 +95,8 @@ export class StageFX {
     this.topHalo = halo(1.4);
     // 太陽外面再一圈大的軟暈（像鏡頭吃到強光）
     this.sunGlow = halo(14);
+    this.glow.build(g);
+    g.add(new THREE.Mesh(mergeGeometries(shells, false), METAL));
     // ---------- 霧：台上低低的一層、人群頭上一層，慢慢飄；顏色吃當下的燈 ----------
     const R = rng(11);
     this.haze = [];
@@ -138,7 +139,7 @@ export class StageFX {
   }
 
   // c：cueAt 那一份；key：主光現在的顏色（concert.js 算的）；lead：主旋律 { pos, hand, magic }
-  update(c, t, key, lead) {
+  update(c, t, key, lead, camera) {
     const st = this.stage, P = st.P, col = this.col;
     // 燈具的光暈：後排照直光亮、前排照主光亮，閃白時全亮
     st.pillars.forEach((p, i) => {
@@ -160,6 +161,7 @@ export class StageFX {
     this.sunGlow.position.set(0, st.sun.position.y, st.sun.position.z + 0.3);
     this.sunGlow.material.color.copy(st.sun.material.color);
     this.sunGlow.material.opacity = st.sun.material.opacity * 0.35 + c.strobe * 0.2;
+    this.glow.update(camera);
     // 霧：慢慢飄，吃當下的燈；煙越濃越亮
     const smoke = 0.35 + 0.65 * Math.max(c.haze.a, c.smoke * 0.6);
     for (const s of this.haze) {

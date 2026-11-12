@@ -4,10 +4,10 @@
 import * as THREE from 'three';
 import { makePathfinder } from '../../core/pathgrid.js';
 import { serverNow, syncTime } from '../../core/servertime.js';
-import { BANDS, cueAt, songSec, bloodMix, where } from './concert-show.js';
+import { BANDS, cueAt, songSec, bloodMix } from './concert-show.js';
 import { ConcertSong } from './concert-music.js';
 import { readMidi, bandFromMidi } from './concert-midi.js';
-import { Stage, STAGE, RAIL, RAIL_W, STAIRS, BACKSTAGE } from './concert-stage.js';
+import { Stage, STAGE, RAIL, RAIL_W, STAIRS, BACKSTAGE, LIFT } from './concert-stage.js';
 import { StageFX } from './concert-fx.js';
 import { LightRig } from './concert-rig.js';
 import { Hall, HALL, INNER, SEATS, groundAt, seatTop } from './concert-hall.js';
@@ -19,7 +19,7 @@ import { StageSymbols } from './concert-symbols.js';
 import { lastAt } from './concert-band.js';
 import { Obscura, candleGate, CANDLE, IRIS } from './concert-obscura.js';
 import { buildBackstage, inBack, inBackArea, backY, onCatwalk, CAT_Y, backClip } from './concert-backstage.js';
-import { buildUnder, inUnder, underY, underRegion, underCamFloor } from './concert-under.js';
+import { buildPit, inPit, pitY, pitShared } from './concert-pit.js';
 
 // 這一團的曲子：做好的一首（tools/concert/concert-make.mjs --mix 算好複製過來）＋ MIDI（燈和人照它）。讀不到就用合成版
 const SONG = { mix: 'assets/concert/morning.m4a', midi: 'assets/concert/morning.mid' };
@@ -98,6 +98,13 @@ const NUDGE = 0.02;   // 差一點點時用速度追：最多快慢 2%（保留�
 export class ConcertBgm {
   constructor(ctx, out) {
     this.ctx = SHOW.ctx = ctx;
+    // 台底下聽到的是隔著台面的悶聲（concert-pit.js、world.update 照人多深調 SHOW.lp）
+    const lp = (this.lp = SHOW.lp = ctx.createBiquadFilter());
+    lp.type = 'lowpass';
+    lp.frequency.value = 20000;
+    lp.Q.value = 0.8;
+    lp.connect(out);
+    out = lp;
     this.out = out;
     this.want = false;
     SHOW.ready.then(async ({ mix, blob }) => {
@@ -166,7 +173,7 @@ function saturate(c) { c.getHSL(HSL); return c.setHSL(HSL.h, Math.min(1, HSL.s *
 const P0 = new THREE.Color();
 
 export function buildConcert(scene, { coarse }) {
-  const before = new Set(scene.children);   // 這一區蓋的東西（人在地平線下時整座藏起來）
+  const before = new Set(scene.children);   // 這一區蓋的東西（人在台底下時整座藏起來）
   const hall = new Hall(scene, { coarse });
   const back = buildBackstage(scene);   // 側台、後台、休息室、側天橋、貓道
   const stage = new Stage(scene, SHOW.band, { crowd: 0 });
@@ -210,10 +217,10 @@ export function buildConcert(scene, { coarse }) {
   const rig = new LightRig(scene, stage, SHOW.band, SHOW.seed);
   const lasers = new Lasers(scene, { x: INNER - 0.1, y: HALL.wall + 6, z0: HALL.back + 0.1, z1: HALL.rear - 0.1 });
   const symbols = new StageSymbols(scene, stage);
-  // 雷射：安靜段金、紅、暖白，血紅段只有紅（照 cue.blood 推）
-  const LASER_N = ['#f0b860', '#d8452e', '#fff0d8'].map((h) => P0.clone().set(h)), LASER_R = ['#ff2410', '#b00c14', '#ff4a30'].map((h) => P0.clone().set(h));
+  // 雷射：平常金、黎明藍、暖白，高潮只有紅（照 cue.blood 推）
+  const LASER_N = ['#f0b860', '#6a86e0', '#fff0d8'].map((h) => P0.clone().set(h)), LASER_R = ['#ff2410', '#b00c14', '#ff4a30'].map((h) => P0.clone().set(h));
   const LASER = Object.assign(LASER_N.map((c) => c.clone()), { red: P0.clone().set('#c8141c') });
-  // 這一團的四色：台、燈、暗箱、主光共用同一份（stage.P），每一幀照 cue.blood 從安靜色推到血紅
+  // 這一團的四色：台、燈、暗箱、主光共用同一份（stage.P），每一幀照 cue.blood 從平常的顏色推到血紅（只有高潮）
   const PAL_N = SHOW.band.palette.map((h) => new THREE.Color(h)), PAL_R = (SHOW.band.blood ?? SHOW.band.palette).map((h) => new THREE.Color(h));
   obscura.P = stage.P;
   const paint = (k) => {
@@ -251,19 +258,32 @@ export function buildConcert(scene, { coarse }) {
   for (const sx of [-1, 1]) deckSolids.push([sx * 7.2, -0.4, 1.3], [sx * (STAGE.w / 2 - 0.8), STAGE.front - 1.6, 0.75], [sx * (STAGE.w / 2 - 1.2), STAGE.front - 0.5, 0.4]);
   const onDeck = (x, z) => Math.abs(x) < DECK.x && z > DECK.z0 && z < DECK.z1 &&
     !deckSolids.some((o) => (o.length === 3 ? Math.hypot(x - o[0], z - o[1]) < o[2] : x > o[0] && x < o[2] && z > o[1] && z < o[3]));
+  // 升降台的井：台上走不過去（只有搭升降台上來的人站得上去，pit.plateY）
+  deckSolids.push([LIFT.x0 - 0.1, LIFT.z0 - 0.1, LIFT.x1 + 0.1, LIFT.z1 + 0.1]);
   // 台後面和上面（concert-backstage.js）也算。貓道架在台的上空，照 y 看站在哪一層；有給 y（玩家每一幀）就不給一步跨上跨下太高
-  const walk2D = (x, z) => inBack(x, z) || inUnder(x, z) || onStairs(x, z) || onDeck(x, z) || (floorOK(x, z) && !besideStairs(x, z));
+  // 台底下（concert-pit.js）整塊在台子正下方，同一個 x、z 有兩層：有給 y 照 y 分，沒給（尋路、點地）照人現在在不在底下（down）
+  let down = false;
+  const pit = { plateY: () => null, walk: inPit, camFloor: () => 0 };   // buildPit 之後換成真的
+  const under = (x, z, y) => inPit(x, z) && (!pitShared(x, z) || (y !== undefined ? y < STAGE.y - 0.6 : down));
+  const walkSurf = (x, z) => inBack(x, z) || (inPit(x, z) && !pitShared(x, z)) || onStairs(x, z) || onDeck(x, z) || (floorOK(x, z) && !besideStairs(x, z));
   const onCat = (x, z, y) => (y !== undefined && onCatwalk(x, z) && y > CAT_Y - 1.5 ? CAT_Y : null);
-  const walkable = (x, z, y) => onCat(x, z, y) !== null || (walk2D(x, z) && (y === undefined || Math.abs(baseY(x, z) - y) < 0.9));
+  const walkable = (x, z, y) => {
+    if (y !== undefined && pit.plateY(x, z, y) !== null) return true;
+    if (onCat(x, z, y) !== null) return true;
+    if (under(x, z, y)) return pit.walk(x, z) && (y === undefined || Math.abs(pitY(x, z) - y) < 0.9);
+    return walkSurf(x, z) && (y === undefined || Math.abs(baseY(x, z) - y) < 0.9);
+  };
   function findWalkable(x, z) {
-    if (inBack(x, z) || inUnder(x, z)) return { x, z };
+    if (down || inBack(x, z) || (inPit(x, z) && !pitShared(x, z))) return { x, z };
     x = Math.max(X0 + 0.05, Math.min(X1 - 0.05, x)); z = Math.max(DECK.z0 + 0.05, Math.min(Z1 - 0.05, z));
     if (walkable(x, z)) return { x, z };
     if (z < STAGE.front && Math.abs(x) < STAGE.w / 2) return { x, z: STAGE.front - 0.7 };   // 點在台上的東西上：落到台口那一條
     z = z < RZ + 0.35 ? RZ - 0.3 : RZ + 1;   // 點在圍欄上：落到靠近的那一邊
     return { x, z };
   }
-  const { findPath } = makePathfinder(walkable, X0 - 1, -84, X1 + 1, Z1 + 1);   // 北到地平線下最深處
+  // 尋路兩份：地上（含鏡子後面的樓梯、地道）、台底下（人在底下時用）
+  const surfPF = makePathfinder(walkSurf, X0 - 1, -24, X1 + 1, Z1 + 1), downPF = makePathfinder(inPit, -16, -21, 11, 4);
+  const findPath = (...a) => (down ? downPF : surfPF).findPath(...a);
   // 點台上要點得到台面（看不見的一片，跟地板一樣給點地走路用）
   const deckTop = new THREE.Mesh(new THREE.PlaneGeometry(STAGE.w, STAGE.front - DECK.z0 + 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }));   // 不能 visible: false（點地只認看得見的）
   deckTop.position.set(0, STAGE.y, (STAGE.front + DECK.z0 - 1) / 2);
@@ -273,16 +293,22 @@ export function buildConcert(scene, { coarse }) {
   // 地多高：中間的走道是從大門下來的斜坡；樓梯一路斜上去；台上是台面
   function baseY(x, z) {
     if (inBackArea(x, z)) return backY(x, z);
-    if (inUnder(x, z)) return underY(x, z);
+    if (inPit(x, z) && !pitShared(x, z)) return pitY(x, z);
     if (inStairs(x, z)) return STAGE.y * Math.max(0, Math.min(1, (SZ1 - z) / STAIRS.len));
     if (z < STAGE.front && Math.abs(x) < STAGE.w / 2) return STAGE.y;
     return groundAt(x, z);
   }
-  const groundY = (x, z, y) => onCat(x, z, y) ?? baseY(x, z);
+  const groundY = (x, z, y) => {
+    const py = pit.plateY(x, z, y);
+    if (py !== null) return py;
+    if (under(x, z, y)) return pitY(x, z);
+    return onCat(x, z, y) ?? baseY(x, z);
+  };
   // 自己的鏡頭只躲大空間的牆（大廳的柱子內面、後牆、屋頂、台後的背牆，hall.walls），其他東西都不推鏡頭；台、階梯座位是地（camFloor 把鏡頭抬上去）。
   // 人在後台房間裡就什麼都不躲：房間小，擋在中間的牆淡掉（concert-backstage.js），大廳那面背牆和背幕藏起來（update）
-  const camWalls = (a, b) => (a.z < HALL.back ? 1 : hall.walls(a, b));
-  const camFloor = (x, z, y) => (underRegion(x, z) ? underCamFloor(x, z) : Math.max(groundY(x, z, y), seatTop(x, z)));
+  // 人在台底下：牆不推鏡頭（殼是從外面看得穿的），鏡頭的地是台底下的地
+  const camWalls = (a, b) => (down || a.z < HALL.back ? 1 : hall.walls(a, b));
+  const camFloor = (x, z, y) => (down ? pit.camFloor(x, z) : Math.max(groundY(x, z, y), seatTop(x, z)));
   // 看不看得到（attention.js：被拍時別人的鏡頭看不看得到自己）：大廳的東西、台、背牆、後台都擋
   function camClip(a, b) {
     let k = Math.min(hall.clip(a, b), backClip(a, b));   // 柱子內面、後牆、屋頂；背牆、後台的牆、貓道
@@ -335,30 +361,34 @@ export function buildConcert(scene, { coarse }) {
     // 霧：遠的地方淡進黑紅
     if (scene.fog) scene.fog.color.copy(P[c.haze.col ?? 0]).multiplyScalar(0.05 + c.haze.a * 0.12).lerp(COOL, 0.55).lerp(tmp.setRGB(0.07, 0.004, 0.004), red * 0.8);
     if (scene.background?.isColor) scene.background.copy(P[c.haze.col ?? 0]).multiplyScalar(0.03 + c.haze.a * 0.06 + c.strobe * 0.3);
-    // 地平線下：霧和天換成迷幻的顏色（concert-under.js 的 api.fog）、光變成中性的（台上的燈照不到這裡）
+    // 台底下：霧和天是暗的，光換成工作燈的暖（台上的燈只從縫裡漏下來，concert-pit.js 自己畫）
     if (belowK > 0) {
       const k = belowK;
-      scene.fog?.color.lerp(under.api.fog, k);
-      if (scene.background?.isColor) scene.background.lerp(under.api.fog, k);
-      hemi.color.lerp(tmp.setRGB(0.3, 0.3, 0.3), k);
-      hemi.groundColor.lerp(tmp.setRGB(0.11, 0.11, 0.11), k);
-      sun.color.lerp(tmp.setRGB(0.33, 0.33, 0.33), k);
+      scene.fog?.color.lerp(pitB.fog, k);
+      if (scene.background?.isColor) scene.background.lerp(pitB.fog, k);
+      hemi.color.lerp(tmp.setRGB(0.26, 0.2, 0.15), k);
+      hemi.groundColor.lerp(tmp.setRGB(0.09, 0.07, 0.06), k);
+      sun.color.lerp(tmp.setRGB(0.22, 0.17, 0.13), k);
     }
   }
 
   // 出口：最上面的大門、兩側牆上的側門（橫走道兩頭，從台前走幾步就到，看到一半想走不用穿過整個大廳），都回畫廊的樹洞（門光換頁，不渡海）；
-  // 地平線下最深處的拿太陽、順著光上去（回大門）走到才掛上（concert-under.js）
+  // 台底下升降台上的「拿」站上去才掛上（concert-pit.js）
   const exits = [
     { x: 0, z: HALL.rear - 2, r: 1.8, to: 'gallery', gate: true, title: '大門', label: '出去' },
     ...[-1, 1].map((s) => ({ x: s * (X1 - 0.4), z: hall.sideDoor.z, r: 2.2, to: 'gallery', gate: true, title: '側門', label: '出去' })),
   ];
-  // 地平線下：倒過來的大廳（大廳、台照負片翻一份）。人走進去時，這一區原本蓋的東西整座收進 hallBox 藏起來
+  // 台底下：人在底下、活門關著的時候，這一區原本蓋的東西整座收進 hallBox 藏起來（後台留著：鏡子在休息室）
   const mid = new Set(scene.children);
-  const under = buildUnder(scene, { hallRoots: [hall.group, stage.group], spots, exits });
+  const pitB = buildPit(scene, { exits });
+  pit.plateY = pitB.plateY;
+  pit.walk = pitB.walk;
+  pit.camFloor = pitB.camFloor;
+  if (window.__show) window.__show.pit = pitB;   // ?debug：升降台的狀態（state）
   const hallBox = new THREE.Group();
   scene.add(hallBox);
   for (const o of mid) if (!before.has(o) && o !== back.group) hallBox.add(o);
-  let belowK = 0, below = false;
+  let belowK = 0, below = false, hidden = false;
 
   const room = {
     index: 0, id: 'concert', data: { name: '演唱會', subtitle: 'Concert', paintings: [] },
@@ -373,7 +403,7 @@ export function buildConcert(scene, { coarse }) {
     band?.setBand(b);
   });
   return {
-    rooms: [room], paintings: [], mirror: null, outdoor: null, raycastTargets: [stage.floor, deckTop, back.floor, under.floor], env, shops: [],
+    rooms: [room], paintings: [], mirror: null, outdoor: null, raycastTargets: [stage.floor, deckTop, back.floor, pitB.floor], env, shops: [],
     camDistMax: 24, camLift: 0.9,   // 大廳 56×18 公尺，拉遠看得到整個台和人群；碰到牆先繞著頭往上抬（最多約 50 度），抬不過才往前推
     spawn: { x: 0, z: HALL.rear - 4.8, heading: Math.PI },   // 大門進來的斜坡上段：站得比全場高，整個大廳在腳下   // 從最後面的大門進來，站在階梯座位中間的走道，整個大廳在眼前；攝影溝要穿過人群走過去
     // 出口：最上面的大門、兩側牆上的側門（橫走道兩頭，從台前走幾步就到，看到一半想走不用穿過整個大廳），都回畫廊的樹洞（門光換頁，不渡海）
@@ -385,7 +415,8 @@ export function buildConcert(scene, { coarse }) {
       lightOn(at, top = 1.35) {
         silDir.set(-at.x, IRIS.y - (at.y ?? 0) - top * 0.6, IRIS.z - at.z).normalize();
         silCol.copy(key);
-        return { color: silCol, k: on ? 0.55 : 0, rim: on ? 0.9 : 0, sil: on ? 1 : 0, dir: silDir };
+        const lit = on && !below;   // 台底下看不到光圈，不打成剪影
+        return { color: silCol, k: lit ? 0.55 : 0, rim: lit ? 0.9 : 0, sil: lit ? 1 : 0, dir: silDir };
       },
     },
     roomIndexAt: () => 0,
@@ -395,27 +426,16 @@ export function buildConcert(scene, { coarse }) {
     setCurrentRoom() {},
     get cue() { return cue; },
     setBandView(b) { band = b; },
-    setUI(ui) { under.api.ui = ui; },
-    update(time, cam, feet) {
+    setUI(ui) { pitB.api.ui = ui; },
+    update(time, cam, feet, camera) {
       stage.fenceFor(cam, feet);
       // 後台：擋住的牆淡掉；人在背牆後面、鏡頭在大廳這邊時，大廳的背牆和台的背幕（朝大廳的薄面）藏起來
       const dt = Math.min(0.1, Math.max(0, time - (lastT ?? time)));
       lastT = time;
       const eye = feet ? eyeP.set(feet.x, (feet.y ?? 0) + 1.1, feet.z) : null;
       back.update(dt, cam, eye, time);
-      // 地平線下：走進縫裡大廳整座藏起來（樂手也是），越往下霧越淡
-      // 地平線下跟著上面那首歌的拍子跳：每一拍打一下往後衰減（一小節的第一拍最大）、顏色往下換一格；減少閃爍時一小節才換、打得小
-      let k;
-      {
-        const w = where(SHOW.band, showTime()), bi = Math.floor(w.beat), hit = Math.exp(-(w.beat - bi) * 5) * (bi === 0 ? 1 : 0.6);
-        k = rig.calm ? under.update(time, eye, hit * 0.3, w.gbar) : under.update(time, eye, hit, w.gbar * 4 + bi);
-      }
-      belowK = Math.min(1, k * 1.6);
-      if ((k > 0) !== below) {
-        below = k > 0;
-        hallBox.visible = !below;
-        if (band) { band.group.visible = !below; for (const m of band.members) m.ch.group.visible = !below; }
-      }
+      // 台底下：人在不在底下（尋路、點地、鏡頭照這個分）
+      down = !!feet && inPit(feet.x, feet.z) && (feet.y ?? 0) < STAGE.y - 0.3;
       const behind = !!eye && eye.z < HALL.back && cam.z > HALL.back - 0.05;
       hall.backWall.visible = stage.backdrop.visible = !behind;
       // 放的聲音離伺服器時間太遠（卡過、分頁切走回來、隊友那邊開的場）：一秒看一次，怎麼拉回來照 engine.sync（差一點用速度追，差多才跳）
@@ -440,10 +460,25 @@ export function buildConcert(scene, { coarse }) {
       light(cue);
       on = true;
       obscura.update(cue, t, key);
-      fx.update(cue, t, key, lead);
-      hall.update(t, cue);
+      fx.update(cue, t, key, lead, camera);
+      hall.update(t, cue, camera);
       lasers.update(t, cue, rig.F ?? 0, SHOW.seed, LASER, rig.red ?? 0, stage.sun.position, cue.rays.rot, rig.kickK ?? 0);
       symbols.update(cue, t, fx.arp, fx.arpCol);
+      // 台底下：鏡頭在台面底下時大廳整座藏起來（樂手也是）；聲音照人多深變悶，升上去時一路打開
+      {
+        const k = pitB.update(dt, t, SHOW.band, feet, { key, strobe: cue.strobe, sun: cue.ring.fill * cue.ring.a, kick: rig.kickK ?? 0 });
+        belowK = Math.min(1, k * 1.6);
+        below = k > 0;
+        // 鏡頭還在台面底下就藏著（活門開著也一樣：大廳的霧、光暈是朝鏡頭的大片貼圖，會穿進台底下蓋在牆上）
+        const hide = below && cam.y < -0.1;
+        if (hide !== hidden) {
+          hidden = hide;
+          hallBox.visible = !hide;
+          if (band) { band.group.visible = !hide; for (const m of band.members) m.ch.group.visible = !hide; }
+        }
+        const lp = SHOW.lp;
+        if (lp) lp.frequency.setTargetAtTime(20000 * Math.pow(360 / 20000, k), lp.context.currentTime, 0.12);
+      }
       // 長影子：光是台上的太陽（光環升到哪就從哪打），太陽填滿、閃白時最濃
       shadows.update(stage.sun.position, Math.min(0.85, 0.2 * cue.ring.a + 0.6 * cue.ring.fill * cue.ring.a + 0.8 * cue.strobe));
       // 台下的人：連續的拍數、大鼓、多熱、第幾句、人浪（大太鼓最重那一下之後幾秒）、玩家在哪、邊光吃主光的顏色

@@ -39,13 +39,13 @@ export function filmCounter({ player, ui, ambience }) {
     ambience?.voice('plswap', 0.4);
     ui.hint(FILM.got, 3000);
   }
-  // 領件：先看這批抽到什麼（minilab.js），店員照最搶眼的那張說
+  // 領件：先看這批抽到什麼（minilab.js），店員照最搶眼的那張說；整批都是拍立得的（機器幫它顯完，不抽）另有一句
   function hand() {
-    const batch = album().filter((it) => it.state === 'lab' && it.lab === LAB);
-    const loud = LOUD.find((k) => batch.some((it) => (it.luck?.k || 'plain') === k)) || 'plain';
+    const batch = album().filter((it) => it.state === 'lab' && it.lab === LAB), prints = batch.filter((it) => !it.pola);
+    const loud = !prints.length ? 'pola' : LOUD.find((k) => prints.some((it) => (it.luck?.k || 'plain') === k)) || 'plain';
+    ui.hint(pick(CLERK.handover[loud]), 4000);
     collect(LAB).then((n) => {
-      ui.hint(pick(CLERK.handover[loud]), 4000);
-      if (n) ui.toast(`拿到 ${n} 張照片・${LABS[LAB].style}`, '在行囊的相簿');
+      if (prints.length) ui.toast(`拿到 ${n} 張照片・${LABS[LAB].style}`, '在行囊的相簿');
     });
   }
   // 紀念品（scene/shop.js、avatar/wares.js 的 souvenir）：卡片長在店員旁邊

@@ -278,7 +278,7 @@ export class Obscura {
       const u = m.material.uniforms;
       u.uT.value = t; u.uSun.value = ir.sun; u.uWarp.value = ir.warp; u.uSpin.value = ir.spin; u.uPin.value = ir.pin;
       u.uA.value = ir.sky * k; u.uSoft.value = Math.min(1, a);
-      u.uC0.value.copy(P[0]); u.uC1.value.copy(P[1]); u.uC2.value.copy(P[2]); u.uC3.value.copy(P[3]);
+      u.uC0.value.copy(P[0]).lerp(P[1], 0.6 * (1 - (c.blood ?? 0))); u.uC1.value.copy(P[1]);   // 天的下緣和色帶的「紅」平常退成琥珀，高潮才是紅 u.uC2.value.copy(P[2]); u.uC3.value.copy(P[3]);
       if (c.red) u.uC0.value.lerp(this.crimson, c.red), u.uC1.value.lerp(this.crimson, c.red * 0.7), u.uC2.value.lerp(this.crimson, c.red * 0.8), u.uC3.value.lerp(this.tmp.setRGB(0.05, 0.004, 0.006), c.red);   // 紅句：暖白、黎明藍也推進紅裡，不然紅加白、紅加藍會疊成粉紫
     }
     this.sky.visible = a > 0.005 || ir.pin > 0.01;
@@ -288,7 +288,7 @@ export class Obscura {
     hu.uOpen.value = r;
     hu.uRot.value = bu.uRot.value;
     hu.uA.value = Math.min(1.2, ir.sky * (0.12 + 0.5 * Math.min(1, a * 1.5)) + 0.25 * (c.strobe ?? 0) + 0.25 * ir.pin * (1 - a));
-    hu.uCol.value.copy(P[1]).lerp(P[0], 0.25);
+    hu.uCol.value.copy(P[1]).lerp(P[2], 0.2);
     hu.uCore.value.copy(P[2]).multiplyScalar(0.35);
     if (c.red) hu.uCol.value.lerp(this.crimson, c.red), hu.uCore.value.lerp(this.crimson, c.red);
     this.halo.visible = hu.uA.value > 0.005;
@@ -309,15 +309,15 @@ export class Obscura {
       const z = zAt(i);
       let l = 0;
       if (sec === 'rise') { l = 0.6 * smooth((dawnZ - z) / 5); col.copy(P[3]).lerp(P[1], smooth(sp * 1.3)); }
-      else if (sec === 'still') { l = c.snuff ? 0 : 0.4; col.copy(this.crimson); }
+      else if (sec === 'still') { l = c.snuff ? 0 : 0.4; col.copy(P[2]); }   // 靜止：冷白
       else if (sec === 'sun' || sec === 'veil') {
         // 每一拍一道光從台前往後跑過整座殿；光幕段每小節換方向
         const ph = beat % 1, back = sec === 'veil' && c.bar % 2 === 1, zp = -10 + (back ? 1 - ph : ph) * (HALL.rear + 14);
         l = (sec === 'sun' ? 0.4 : 0.3) + 0.55 * Math.exp(-Math.abs(z - zp) / 5);
         if (sec === 'sun' && c.bar === 0) l += 0.8 * Math.exp(-beat * 1.5);
-        if (sec === 'veil') col.copy((i + c.bar) % 2 ? P[1] : P[0]); else col.copy(P[1]).lerp(P[2], 0.25);
+        if (sec === 'veil') col.copy((i + c.bar) % 2 ? P[1] : P[3]); else col.copy(P[1]).lerp(P[2], 0.25);
         if (c.red) col.lerp(this.crimson, c.red);
-      } else if (sec === 'end') { l = 0.3 * (1 - smooth(sp * 1.5 + (i / n) * 0.6)); col.copy(P[0]); }
+      } else if (sec === 'end') { l = 0.3 * (1 - smooth(sp * 1.5 + (i / n) * 0.6)); col.copy(P[1]); }
       L[i] = l;
       for (let k = 0; k < 2; k++) this.up.setColorAt(i * 2 + k, this.tmp.copy(col).multiplyScalar(l * 0.55));
       this.lines.setColorAt(i, this.tmp.copy(col).multiplyScalar(Math.min(1, l * 1.2)));
@@ -330,7 +330,7 @@ export class Obscura {
     this.dawnZ = dawnZ;
     this.dawnA = dA;
     this.dawn.position.z = dawnZ;
-    this.dawn.material.color.copy(P[1]).lerp(P[0], 0.3);
+    this.dawn.material.color.copy(P[1]).lerp(P[0], 0.12);
     this.dawn.material.opacity = dA;
     this.dawn.visible = dA > 0.01;
   }

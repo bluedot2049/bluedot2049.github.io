@@ -138,6 +138,15 @@ function saveLook(L) {
   putSave({ look: L });
 }
 
+// three 碰到「透明＋雙面」的材質，每一幀拆成背面、正面畫兩次，每次都把材質標成要更新、重算一次著色器參數（多一個 draw call 加一次查表）。
+// 加法混色的光先畫哪一面結果都一樣，蓋好場景時全部改成畫一次。一般半透明的不動：彎的玻璃（靜海的走廊）要先畫背面才不會被前面擋掉；
+// 平的、確定只看得到一面的在自己的檔案寫 forceSinglePass。之後才放進場景的光自己寫
+function singlePassGlows(...roots) {
+  for (const root of roots) root?.traverse((o) => {
+    for (const m of [].concat(o.material ?? [])) if (m && m.transparent && m.side === THREE.DoubleSide && m.blending === THREE.AdditiveBlending) m.forceSinglePass = true;
+  });
+}
+
 // world.fadeVariants：房間淡進淡出時用的那一組著色器（見 fade.js 的 RoomFader），打開再編一次。
 // toTexture：編畫進貼圖的那一份（越肩的廣角、景深、後製都先畫進貼圖，輸出的色彩空間不同，是另一組著色器）。
 // 藏起來的東西打開、換變體都在同一段同步的程式裡做完再還原，遊戲開始以後再編也不會被畫出來
@@ -621,7 +630,7 @@ async function start() {
     if (traveling) return;
     traveling = true;
     const q = new URLSearchParams(location.search);
-    for (const k of ['z', 'from', 'go', 'via', ...(to === zone ? [] : ['show'])]) q.delete(k);   // 同一區換頁（演唱會地平線下順著光回大門）留在同一場
+    for (const k of ['z', 'from', 'go', 'via', ...(to === zone ? [] : ['show'])]) q.delete(k);   // 同一區換頁留在同一場（演唱會）
     if (to !== 'gallery') q.set('z', to);
     q.set('from', zone);
     for (const [k, v] of Object.entries(extra)) q.set(k, v);
@@ -1271,6 +1280,7 @@ async function start() {
   await window.loadbar?.mark('built');
   // 小圖（表情盤的姿勢、鏡子面板、店家）是另一個畫布、另一個 WebGL，這裡編過的它用不到：同時開始編，底下等它（thumbs.js）
   const thumbsJob = warmThumbs(character.look);
+  singlePassGlows(scene, guide.eye.group);
   await precompile(renderer, scene, camera, world, false, [guide.eye.group]);
   // 時間到了、叫了才出現的：白獸（身體、光池、光點、光柱、腳印）和黑眼。沒有後製的直接畫在螢幕上（讀取畫面蓋著）；有後製的等畫進貼圖那一份編好再畫，見下面
   // 區域自己的（海市的雨絲）寫在 world.lazy，要是直接放在場景底下的
@@ -1472,7 +1482,8 @@ async function start() {
     .add('world', 'animals', (dt) => animals?.update(dt))
     .add('world', 'visitors', (dt) => visitors?.update(dt))
     .add('world', 'vendors', (dt) => vendors?.update(dt, player, camera))
-    .add('world', 'walkers', (dt) => { for (const w of walkers) w.update(dt, player); })
+    // 住民寫 performing: true：一直在演的（演唱會台上那團）不算閒置，站著看也照全速畫（不叫 busy：海市路人的 busy 是別的意思）
+    .add('world', 'walkers', (dt) => { for (const w of walkers) w.update(dt, player); }, () => walkers.some((w) => w.performing === true))
     .add('world', 'manatee', (dt) => manatee?.update(dt, player.pos.x, player.pos.z, camera))
     .add('world', 'fixtures', (dt) => { for (const [, f] of fixtures) f.update?.(dt); })
     .add('world', 'peek', () => peek?.update())

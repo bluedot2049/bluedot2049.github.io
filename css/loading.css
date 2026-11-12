@@ -9,6 +9,8 @@
 }
 /* 淡出後整個藏起來，霧和水波不在玩的時候一直重畫 */
 #loading.done { opacity: 0; pointer-events: none; visibility: hidden; transition: opacity .8s, visibility 0s .8s; }
+/* 收掉以後裡面的動畫（渡海過場的顆粒每 0.5 秒換一格、無限循環；讀取條）停住：藏起來的元素照樣每一幀重算樣式 */
+#loading.done, #loading.done * { animation-play-state: paused !important; }
 .sigil { width: 112px; height: 112px; overflow: visible; }
 .sigil * { fill: none; stroke: var(--gold); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .sigil g { transform-origin: 60px 60px; }

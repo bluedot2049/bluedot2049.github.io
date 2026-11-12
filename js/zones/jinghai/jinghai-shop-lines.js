@@ -4,7 +4,7 @@
 import { WANG_COLORS } from '../../camera/cameras.js';
 import { cost, money } from '../../save/purse.js';
 
-// 沖印的店員：talk 按「聊天」輪著講；handover 領件時照這批最搶眼的那張說（minilab.js 的 LOUD）
+// 沖印的店員：talk 按「聊天」輪著講；handover 領件時照這批最搶眼的那張說（minilab.js 的 LOUD），整批都是拍立得的說 pola
 export const CLERK = {
   talk: [
     '底片在那三台機器 按一下就掉出來',
@@ -12,6 +12,7 @@ export const CLERK = {
     '出了月球就沒地方補了喔',
     '一盒三張 比別家多一半',
     '別家相機拍的也收 用我們的機器洗',
+    '還在顯的拍立得交給我們 機器一下就顯好',
     '機器洗的 每張不太一樣',
     '有時候洗得特別漂亮 有時候嘛 就那樣',
   ],
@@ -20,6 +21,7 @@ export const CLERK = {
     plain: ['洗好了 拿去', '照片在這 收好'],
     cast: ['藥水好像有點怪 顏色跑掉了', '有幾張顏色歪了 機器的問題'],
     double: ['機器一次吃了兩張 疊在一起了', '有幾張疊到了 抱歉喔'],
+    pola: ['顯好了 月球冷 自己顯要等很久', '機器熱一下就出來了'],
   },
 };
 

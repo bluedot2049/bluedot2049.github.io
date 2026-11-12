@@ -1398,7 +1398,8 @@ export class Player {
     }
     if (this.shoulder) return this.shoulderCamera(outPos, outLook);
     // 注視點放在角色前方一點，直式螢幕上角色才會落在畫面下方，前方留出空間
-    const ahead = window.innerWidth < window.innerHeight ? 1.8 : 0.8;
+    // 直不直看鏡頭的長寬比：每一幀讀 window.innerWidth 會逼瀏覽器先把這一幀改過的介面排好版（手機上很貴）
+    const ahead = this.camera.aspect < 1 ? 1.8 : 0.8;
     outLook.set(this.pos.x - Math.sin(this.camYaw) * ahead, this.pos.y + 0.9, this.pos.z - Math.cos(this.camYaw) * ahead);
     const pitch = Math.max(this.camPitch, PITCH_LOW), c = Math.cos(pitch), dist = this.camDist;
     outPos.set(

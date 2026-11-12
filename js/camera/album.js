@@ -7,8 +7,8 @@
 // 存下的就從相簿拿出來（iPhone 看不到選單裡點了哪一項，等人按「拿出」才拿），沒選的留著；不要的自己丟掉，丟掉的放得回來。Android 另外可以分享，分享出去的照樣留在相簿。
 // 選幾張交給沖洗師傅（LABS）：當下就洗好，可是要本人走到那間相館找師傅（vendors.js 的 lab）才拿得回來，拿回來的套上師傅固定的色彩風格（配方和洗的引擎在 darkroom.js）。
 // 只有照片能交給師傅；信物不行，濾鏡會蓋到存檔碼。底片機（cameras.js 的 film）拍的在相簿只看得到拍攝時辰，一定要交給師傅才看得到。
-// 拍立得（pola，instant.js）不用師傅，也不能交給師傅：顯影中也是 film，行囊看得到它在變，顯好了才存得下
-// 拿回來的是新的（fresh）：格子上的印泥亮著，打開相簿看到了、收起行囊才熄成淡印（seen）。
+// 拍立得（pola，instant.js）不用師傅：顯影中也是 film，行囊看得到它在變，顯好了才存得下。顯影中的只有灰球朋友收（LABS 寫了 pola 的），領件時機器一口氣顯完；別家不收，顯好的也不收
+// 拿回來的、拍立得顯好的是新的（fresh）：格子上的印泥亮著，打開相簿看到了、收起行囊才熄（師傅那裡拿回來的熄成淡印，seen）。
 import { CAMERAS } from './cameras.js';
 import { LABS, develop } from './darkroom.js';
 import { roll, wash } from './minilab.js';
@@ -30,7 +30,8 @@ export const KINDS = { video: '錄影', mirror: '鏡中', 'mirror-save': '存檔
 const LATEST = new Set(['mirror-save', 'postcard-save']);
 // 最多留幾張，超過從最舊的刪：畫卡（原野畫架，easel-card.js 的面板上寫著）
 export const KEEP_MAX = { 'painting-save': 3 };
-export const labOk = (it) => it.state === 'shot' && !it.kind && !it.pola;
+// 交不交得給這位師傅：照片才收；拍立得只有顯影中的、只有寫了 pola 的那家收
+export const labOk = (it, lab) => it.state === 'shot' && !it.kind && (!it.pola || (!it.pola.done && !!LABS[lab]?.pola));
 // 奇物：拍到白獸這類東西，快門當下算好的結果記在照片上（rare：{ kind, grade, zone, where, place }，見 beast.js 的 judge）。
 // 拍到這一區正在發生的事（core/happen.js）記在 seen：[{ kind 事件 id, grade 0–3, score, peak 是不是高點, place, zone, self }]，之後的照片委託只讀這一格。
 // 報社（pressdesk.js）只收這種，同一張只登一次（pressed 是登出來那份報紙的 id）；畫廊的眼睛拍的沒有相機的落款，不收
@@ -125,6 +126,7 @@ const polaSVG = (paper) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmln
 const POLA = polaSVG('#f3f0e8'), POLA_GOLD = polaSVG('#e2bb64');   // 十周年紀念：金邊
 
 // 停三秒多再淡掉。電腦放在取景框的右上角裡面：照拍的當下量框在哪（CSS 照 --fr、--ft 擺），攝影模式收了就是螢幕右上角
+// 回傳縮圖的 img（拍立得領件時 collect 一格一格換掉它的 src）
 function flash(blob, text) {
   const el = document.createElement('div');
   el.className = 'snapsave';
@@ -134,8 +136,10 @@ function flash(blob, text) {
     el.style.setProperty('--fr', `${Math.round(innerWidth - r.right)}px`);
     el.style.setProperty('--ft', `${Math.round(r.top)}px`);
   }
+  let img = null;
   if (blob) {
-    const img = new Image(), url = typeof blob === 'string' ? blob : URL.createObjectURL(blob);
+    img = new Image();
+    const url = typeof blob === 'string' ? blob : URL.createObjectURL(blob);
     img.src = url;
     img.alt = '';
     if (url !== blob) img.onload = () => URL.revokeObjectURL(url);
@@ -146,6 +150,7 @@ function flash(blob, text) {
   el.append(t);
   document.body.appendChild(el);
   setTimeout(() => stow(el), 3300);
+  return img;
 }
 
 // 收進行囊：字先淡掉，照片稍微被拎起來，再沿一道往下掉的弧縮進行囊鈕，鈕接住時沉一下。
@@ -225,7 +230,12 @@ export async function putBack(out) {
 // 交給師傅：從相簿拿走，變成取件單
 // 寫了 luck 的那家（月球相機店的沖印機，minilab.js）交件當下就抽好每張的結果
 export async function toLab(list, lab) {
-  if (LABS[lab]?.luck) roll(list);
+  if (LABS[lab]?.luck) roll(list.filter((it) => !it.pola));   // 拍立得不抽，機器只是幫它顯完
+  const polas = list.filter((it) => it.pola);
+  if (polas.length) {
+    const { shelve } = await import('./instant.js');   // instant.js 也讀這個檔，用到才載免得互相等
+    polas.forEach(shelve);
+  }
   for (const it of list) {
     it.state = 'lab';
     it.lab = lab;
@@ -235,11 +245,19 @@ export async function toLab(list, lab) {
 }
 
 // 本人到了相館：把這位師傅手上的全部拿回來，套上他的風格。回傳拿到幾張
+// 拍立得不套風格，機器把剩下的顯完（instant.js 的 rush）：第一張在右上角的縮圖快轉顯影給人看
 export async function collect(lab) {
   const L = LABS[lab], got = items.filter((it) => it.state === 'lab' && it.lab === lab);
   const orig = new Map(got.map((it) => [it.id, it.blob]));   // 疊影要拿同一批另一張還沒洗的原片
+  const polas = got.filter((it) => it.pola);
+  if (polas.length) {
+    const { rush } = await import('./instant.js');
+    let img = null;
+    const show = (url) => { if (img) img.src = url; else img = flash(url, polas.length > 1 ? `顯好了・拍立得 ${polas.length} 張` : '顯好了・收進行囊'); };
+    for (const [i, it] of polas.entries()) await rush(it, i ? null : show);
+  }
   for (const it of got) {
-    try { it.blob = await (it.luck ? wash(it, orig, L) : develop(it.blob, L)); } catch {}
+    if (!it.pola) try { it.blob = await (it.luck ? wash(it, orig, L) : develop(it.blob, L)); } catch {}
     it.state = 'back';
     it.film = false;
     it.fresh = true;

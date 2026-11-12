@@ -3,6 +3,8 @@
 // 拍立拿a500（月球的拍立得）：片盒還剩幾張、照片在行囊裡顯影。剛拍好是一片藍綠，帶著走慢慢顯出來，在哪裡顯影就染上那裡的顏色。
 // 照片上記一條路 pola.route = [[區, 到的時間], ...]；關掉遊戲那段記成 'pocket'（收在口袋裡，中性）。
 // 看的時候才照這條路算顯到哪、帶什麼色（不寫時間、百分比，看照片自己變）；顯完烤成一張帶白邊、下巴厚的成品，之後跟一般照片一樣存下。
+// 顯好那一刻記成新的（fresh），行囊鈕和格子上的印泥亮起來。看大圖底下一條路線色帶（pack.js，segments）：每段那一區的顏色、長度是在那裡顯了多少，沒顯的空著。
+// 顯影中可以交給灰球朋友（darkroom.js 的 LABS 寫了 pola 的那家）：交件時停在櫃台上不再顯（shelve），領件時沖印機一口氣顯完剩下的（rush），那一段染機器的冷白。
 // 照片是玩具相機的樣子：四角輕微化開、邊上色差、重暗角、亮處暈開、乳白的白、偏青的黑、顆粒灰塵、下緣藥水痕；漏光、晃糊、顏色壞掉各三分之一（flaws）
 // 片盒記在存檔的 instant：left 還剩幾張（月球相機店的底片牆隨時補滿，在 zones/jinghai/jinghai-film.js）
 import { album, amend, loadAlbum } from './album.js';
@@ -28,6 +30,8 @@ export const PLACES = {
   concert: { rate: 1.4, tint: '#d0302a', amt: 0.32, con: 1.12, sat: 1.1, lift: 0.03 },    // 演唱會：血紅
   gorge: { rate: 1.4, tint: '#d0302a', amt: 0.32, con: 1.12, sat: 1.1, lift: 0.03 },
   pocket: { rate: 1, tint: '#b9aa92', amt: 0.08, con: 1, sat: 1, lift: 0.06 },            // 口袋：中性
+  shelf: { rate: 0, tint: '#b9aa92', amt: 0, con: 1, sat: 1, lift: 0.06 },                // 交給灰球朋友了，放在櫃台上等人來拿：不顯
+  minilab: { rate: Infinity, tint: '#a9bad2', amt: 0.12, con: 1.04, sat: 0.92, lift: 0.07 }, // 灰球朋友的沖印機：一下就顯完，乾淨偏冷（跟店裡的月白同方向，輕很多）
 };
 
 // ───────── 片盒 ─────────
@@ -51,15 +55,28 @@ export function newRoute() {
   return { route: [[zoneNow(), Date.now()]] };
 }
 
-// 照這條路算到 now 顯到哪（0–1）、顏色是各段照顯了多少混出來的
+// 照這條路一段一段算到 now 各顯了多少：[[地方, 顯了多少], ...]，連著同一個地方的併成一段，沒顯的段不列。加起來是顯到哪（0–1）
+export function segments(it, now = Date.now()) {
+  const r = it.pola?.route, out = [];
+  if (!r?.length) return out;
+  let p = 0;
+  for (let i = 0; i < r.length && p < 1; i++) {
+    const z = PLACES[r[i][0]] ? r[i][0] : 'pocket', t1 = i + 1 < r.length ? r[i + 1][1] : now, rate = PLACES[z].rate;
+    const dp = rate === Infinity ? 1 - p : Math.min(1 - p, (Math.max(0, t1 - r[i][1]) / 1000) * rate / DEV);
+    if (dp <= 0) continue;
+    p += dp;
+    if (out.length && out[out.length - 1][0] === z) out[out.length - 1][1] += dp;
+    else out.push([z, dp]);
+  }
+  return out;
+}
+
+// 顯到哪（0–1）、顏色是各段照顯了多少混出來的
 export function progress(it, now = Date.now()) {
-  const r = it.pola?.route;
-  if (!r?.length) return { p: 1, look: PLACES.pocket };
+  if (!it.pola?.route?.length) return { p: 1, look: PLACES.pocket };
   let p = 0;
   const w = {};
-  for (let i = 0; i < r.length && p < 1; i++) {
-    const z = PLACES[r[i][0]] ? r[i][0] : 'pocket', t1 = i + 1 < r.length ? r[i + 1][1] : now;
-    const dp = Math.min(1 - p, (Math.max(0, t1 - r[i][1]) / 1000) * PLACES[z].rate / DEV);
+  for (const [z, dp] of segments(it, now)) {
     p += dp;
     w[z] = (w[z] || 0) + dp;
   }
@@ -69,7 +86,7 @@ export function progress(it, now = Date.now()) {
 const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 function mix(w) {
   const keys = Object.keys(w), sum = keys.reduce((a, k) => a + w[k], 0);
-  if (!sum) return PLACES[keys[0]] || PLACES.pocket;
+  if (!sum) return PLACES.pocket;
   const out = { amt: 0, con: 0, sat: 0, lift: 0 }, c = [0, 0, 0];
   for (const k of keys) {
     const P = PLACES[k], f = w[k] / sum;
@@ -337,22 +354,46 @@ export async function peek(it, S = 180) {
   return card(L, S, p, look, fx).toDataURL('image/jpeg', 0.82);
 }
 
-// 顯好了：烤成成品換掉原圖，之後就是一般的照片（存得下、看得到大圖）
-const baking = new Set();
-async function bake(it) {
-  if (baking.has(it)) return;
-  baking.add(it);
+// 顯好了：烤成成品換掉原圖，之後就是一般的照片（存得下、看得到大圖）。記成新的，印泥亮著等人看（交給店員的由 album.js 的 collect 拿回來時才記）。
+// 同一張烤到一半又叫的，等同一輪
+const baking = new Map();
+function bake(it) {
+  if (!baking.has(it)) baking.set(it, cook(it).finally(() => baking.delete(it)));
+  return baking.get(it);
+}
+async function cook(it) {
   try {
     const img = await bitmap(it), { look } = progress(it), fx = flaws(it), S = Math.min(BAKE, img.width);
     const c = card(lensImage(img, S, fx), S, 1, look, fx);
     const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.92));
     if (!blob) return;
-    await amend(it, { blob, film: false, pola: { ...it.pola, done: true } });
+    await amend(it, { blob, film: false, pola: { ...it.pola, done: true }, ...(it.state === 'lab' ? {} : { fresh: true }) });
   } catch (e) {
     console.warn('拍立得烤不出來：', e);
-  } finally {
-    baking.delete(it);
   }
+}
+
+// 交給灰球朋友（album.js 的 toLab）：從這刻起放在櫃台上，不再顯
+export function shelve(it) {
+  it.pola = { ...it.pola, route: [...it.pola.route, ['shelf', Date.now()]] };
+}
+
+// 領件（album.js 的 collect）：沖印機把剩下的一口氣顯完。show 收到一格一格快轉的小圖（從交件時顯到的樣子到顯好），給領件那一下的縮圖用
+export async function rush(it, show) {
+  if (!developing(it)) return;
+  const p0 = progress(it).p;
+  await amend(it, { pola: { ...it.pola, route: [...it.pola.route, ['minilab', Date.now()]] } });
+  if (show) {
+    try {
+      const S = 180, { look } = progress(it), fx = flaws(it), lens = lensImage(await bitmap(it), S, fx), N = 12;
+      for (let k = 0; k <= N; k++) {
+        const t = k / N;
+        show(card(lens, S, p0 + (1 - p0) * t * t * (3 - 2 * t), look, fx).toDataURL('image/jpeg', 0.82));
+        if (k < N) await new Promise((r) => setTimeout(r, 110));
+      }
+    } catch {}
+  }
+  await bake(it);
 }
 
 // 看一遍：顯好的烤掉。行囊打開時、心跳時都叫
@@ -366,7 +407,7 @@ async function arrive() {
   await loadAlbum();
   const now = Date.now(), alive = +pref('polaAlive') || 0, z = zoneNow();
   for (const it of album()) {
-    if (!developing(it)) continue;
+    if (!developing(it) || it.state === 'lab') continue;   // 交給店員的放在櫃台上，不跟著人走
     const r = [...it.pola.route], last = r[r.length - 1];
     if (alive > last[1] && now - alive > GAP) r.push(['pocket', alive]);
     if (r[r.length - 1][0] !== z) r.push([z, now]);

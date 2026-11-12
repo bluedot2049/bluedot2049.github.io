@@ -122,6 +122,8 @@ body.desk #toast .t2 { font-size: 22px; margin-top: 12px; }
           animation-delay: calc(var(--T) * (var(--ph, 0) + var(--o, 0)) * -1); }
 @media (prefers-reduced-motion: reduce) { .demo * { animation-play-state: paused !important; } }
 #hint .demo { width: 28px; height: 28px; margin: -6px 0; }
+/* 提示收起來以後示範圖還留在 #hint 裡（下一句才換掉）：動畫停住，不然看不見的 SVG 每一幀都要重算樣式、重排版面（手機上很貴） */
+#hint:not(.show) .demo * { animation-play-state: paused; }
 .demo-on { position: fixed; z-index: 21; pointer-events: none; opacity: 0; transition: opacity .5s; }
 .demo-on.show { opacity: 1; }
 .demo-on .demo { width: 100%; height: 100%; }
@@ -511,12 +513,15 @@ body.desk #easel .board { --bh: min(420px, calc(100vh / var(--ui, 1) - 240px)); 
 body.desk #easel.show { animation-name: guide-up; }
 @media (prefers-reduced-motion: reduce) { #easel.show { animation: none; } }
 
-/* 胖頭指著畫面上的按鈕（ask.js 的 beckon）：外圈一道金光往外擴，跟互動鍵的光暈同一種，亮幾下就停 */
+/* 教學說到、胖頭指著的按鈕（lessons.js 的 beckon）：外圈金光慢慢一明一暗，用過才停。閃的是 ::before，不碰按鈕自己的動畫 */
 .beckon { position: relative; border-color: var(--gold) !important; color: var(--gold-hi) !important; }
 .beckon::before {
-  content: ""; position: absolute; inset: -1px; border-radius: inherit; border: 1px solid var(--gold);
-  pointer-events: none; animation: halo 1.2s ease-out 4;
+  content: ""; position: absolute; inset: -2px; border-radius: inherit; border: 2px solid var(--gold-hi);
+  box-shadow: 0 0 14px 2px rgba(232, 184, 106, .7), inset 0 0 8px rgba(232, 184, 106, .35);
+  pointer-events: none; animation: beckon 2s ease-in-out infinite;
 }
+@keyframes beckon { 0%, 100% { opacity: .15; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .beckon::before { animation: none; opacity: .8; } }
 /* 對話框底下那行小字：鍵和動詞（胖頭嘴裡不說按鍵，鍵只寫在這裡） */
 .speech .note {
   display: block; margin-top: 3px; font-size: 11.5px; font-weight: 600; letter-spacing: .1em; color: #7a5a30;
