@@ -36,7 +36,6 @@ export function fixtures({ world, player, camera }) {
 
 // 抵達：斜坡頂（剛從洞口走下來），面向往下的坡
 export function arrive({ player, world }) {
-  player.camDist = 5;
   player.camPitch = 0.22;
   player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
 }

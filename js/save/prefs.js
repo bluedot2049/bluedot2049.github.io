@@ -12,6 +12,7 @@ export const PREFS = {
   mouse: { kind: 'json' },                       // player.js、deskkeys.js：滑鼠 { sens, invert }
   pad: { kind: 'json' },                         // gamepad.js：手把 { sens, invert, labels }，labels 是按鍵上印的字 'nintendo'／'xbox'／'ps'
   shoulder: { kind: 'flag', init: false },       // player.js：越肩
+  camDist: { kind: 'num' },                      // player.js：視野的遠近（自由視角和越肩共用），只有玩家自己縮放會改
   view: { kind: 'json' },                        // player.js：越肩的廣度和魚眼 { fov, fish }
   tidy: { kind: 'flag', init: false },           // ui.js：收起上排的按鈕
   uiSize: { kind: 'num', init: 1 },              // ui.js：介面大小

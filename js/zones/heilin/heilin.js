@@ -23,6 +23,35 @@ const WOOD = '#6a5340', CARVED = '#7d654b', WATER = '#1c2a2f';
 const FIRE_I = 9;   // 營火點光多亮（每幀照這個抖）
 const SLICK = '#58723f', AMANITA = '#8a2f28', CAP_DOT = '#d9d2c0', RIDGE = ['#25332f', '#33433f', '#46565a'];
 
+// 樹不擋視線（2026-11-13）：鏡頭到角色那條線穿過哪棵樹，那棵就淡成網點（跟 fade.js 一樣丟像素、不用半透明）。
+// 每棵樹在頂點著色器裡自己算（實例矩陣是樹腳的位置、寬、高），視線那個高度的樹冠多寬照三層錐的形狀估；樹腳那段只有樹幹，不淡
+const SEE = { eye: { value: new THREE.Vector3(0, -999, 0) }, at: { value: new THREE.Vector3(0, -999, 0) } };
+function seeThrough(mat) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uSeeEye = SEE.eye;
+    sh.uniforms.uSeeAt = SEE.at;
+    sh.vertexShader = 'uniform vec3 uSeeEye; uniform vec3 uSeeAt; varying float vSee;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      vSee = 0.0;
+      #ifdef USE_INSTANCING
+      vec3 tb = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+      float tw = length(instanceMatrix[0].xyz), th = length(instanceMatrix[1].xyz);
+      vec2 ab = uSeeAt.xz - uSeeEye.xz;
+      float t = dot(tb.xz - uSeeEye.xz, ab) / max(dot(ab, ab), 1e-4);
+      float tc = clamp(t, 0.0, 1.0);
+      float hf = (mix(uSeeEye.y, uSeeAt.y, tc) - tb.y) / th;
+      float rad = hf < 0.15 ? tw * 0.06 : tw * 0.34 * (1.0 - clamp((hf - 0.15) / 0.85, 0.0, 1.0) * 0.75);
+      float d = distance(tb.xz, uSeeEye.xz + ab * tc);
+      float inside = step(0.0, hf) * step(hf, 1.0);
+      // 在鏡頭和角色之間（角色身後的不算），或鏡頭鑽進樹冠裡
+      float between = smoothstep(-0.08, 0.02, t) * (1.0 - smoothstep(0.9, 1.0, t));
+      vSee = inside * between * (1.0 - smoothstep(rad + 0.2, rad + 1.4, d));
+      #endif`);
+    sh.fragmentShader = 'varying float vSee;\n' + sh.fragmentShader.replace('void main() {', `void main() {
+      if (vSee > 0.01 && fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) < vSee * 0.8) discard;`);
+  };
+  mat.customProgramCacheKey = () => 'heilin-fir-see';
+}
+
 export function buildHeilin(scene, { coarse = false } = {}) {
   const P = buildPath(), T = P.terrain;
   const group = new THREE.Group(), obstacles = [], meshes = [];
@@ -131,7 +160,8 @@ export function buildHeilin(scene, { coarse = false } = {}) {
   {
     // 棧橋：幾塊木板加兩排木樁，木樁插進海床
     const k = new Kit(rng('heilin:pier')), a = Math.atan2(ux, uz);
-    k.box(1.6, 0.12, SEA.pier + 0.5, WOOD, 0, S0.y - 0.06, SEA.pier / 2 - 0.25, { color2: '#5a4434' });
+    // 板面比路面、底下的地形高 6 公分，也不往岸上伸進路面底下：同一個高度的面疊在一起會閃（2026-11-13）
+    k.box(1.6, 0.12, SEA.pier - 0.25, WOOD, 0, S0.y, SEA.pier / 2 + 0.125, { color2: '#5a4434' });
     for (let t = 0.6; t <= SEA.pier; t += 1.4) for (const sx of [-0.72, 0.72]) k.cyl(0.07, 0.08, 2.6, BARK, sx, S0.y - 1.3, t, {}, 5);
     k.emit(bucketPier, S0.x, S0.z, a);
   }
@@ -380,6 +410,7 @@ export function buildHeilin(scene, { coarse = false } = {}) {
     }
     trees.push(...extraTrees);
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+    seeThrough(mat);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color();
     // 哪一棵用哪種形狀照位置雜湊決定，不多抽亂數（多抽一次後面的樹全會換位置）
     // 每棵樹的色偏照位置雜湊挑：偏藍綠、偏橄欖、偏暗，都很輕，整片林子不會是同一個綠
@@ -443,6 +474,14 @@ export function buildHeilin(scene, { coarse = false } = {}) {
     return Math.abs(dx * c - dz * s) < o.hw + pad && Math.abs(dx * s + dz * c) < o.hd + pad;
   });
   const walkable = (x, z) => onWay(P, x, z, open) && !hits(x, z, 0.3);
+  // 牆的法線（player.js tryMove）：撞到路邊、石頭時往哪邊推。繞一圈 12 個方向看哪些走不到，加起來就是朝牆的方向
+  const RING = Array.from({ length: 12 }, (_, i) => [Math.cos((i / 12) * Math.PI * 2), Math.sin((i / 12) * Math.PI * 2)]);
+  function wallNormal(x, z) {
+    let nx = 0, nz = 0;
+    for (const [cx, cz] of RING) if (!walkable(x + cx * 0.35, z + cz * 0.35)) { nx += cx; nz += cz; }
+    const l = Math.hypot(nx, nz);
+    return l > 1e-3 ? { x: nx / l, z: nz / l } : null;
+  }
   const groundY = (x, z) => groundAt(P, x, z);
   // 下去很容易、上來很麻煩：照腳下往要走的方向的坡改步速。下坡最多快五成，上坡越陡越慢（player.js 乘在目標速度上）
   // 上岸到鞍口那段是唯一往上的，不罰（剛下船不該走得吃力）
@@ -518,11 +557,13 @@ export function buildHeilin(scene, { coarse = false } = {}) {
       if (Math.hypot(x - S0.x, z - S0.z) < 9) return PLACES.edge;
       return Math.hypot(x - C.x, z - C.z) < C.r + 3 || (Math.abs(x - P.cave.x) < 5 && z > P.cave.z - 2 && z < P.cave.z + P.cave.len + 2) ? PLACES.cave : PLACES.path;
     },
-    walkable, findWalkable, findPath, groundY, camFloor: groundY, camClip, pace, drift,
+    walkable, wallNormal, findWalkable, findPath, groundY, camFloor: groundY, camClip, pace, drift,
     crowdSpots: null,
     setCurrentRoom() {},
     update(t, cam, me, camera, inPhoto) {
       uTime.value = t;
+      // 樹不擋視線：鏡頭和角色胸口那條線
+      if (me && cam) { SEE.eye.value.copy(cam); SEE.at.value.set(me.x, groundY(me.x, me.z) + 1.1, me.z); } else SEE.eye.value.y = SEE.at.value.y = -999;
       // 霧團從海那邊（北）慢慢飄進盆地：每秒 0.5 公尺，風向稍微偏東
       if (lastT != null) GRADE.driftOff.addScaledVector(WIND, -0.5 * Math.min(0.1, t - lastT));
       lastT = t;

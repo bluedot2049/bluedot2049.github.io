@@ -1329,7 +1329,7 @@ async function start() {
   // 測試用，每一區都通：?view=x,z,面向(度),鏡頭距離,俯角(度)，直接站到那裡看
   const view = params.get('view')?.split(',').map(Number);
   if (view?.length >= 2 && view.every(Number.isFinite)) {
-    player.camDist = view[3] ?? player.camDist;
+    if (Number.isFinite(view[3])) { player.camDist = view[3]; player.saveDist = false; }
     player.camPitch = ((view[4] ?? 20) * Math.PI) / 180;
     player.place(view[0], view[1], ((view[2] ?? 180) * Math.PI) / 180);
   }

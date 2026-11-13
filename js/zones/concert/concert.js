@@ -108,10 +108,8 @@ SHOW.ready = (async () => {
 // 背景音樂（ambience.js 的 bgm：new 出來，有 paused、play()、pause()）。做好的一首用 <audio> 邊下載邊放；沒有就現場合成
 // 聲音離伺服器時間多遠（正的＝聲音落後），繞圈取近的那邊
 const offBy = (target, now) => { const T = songSec(SHOW.band); let d = (((target - now) % T) + T) % T; if (d > T / 2) d -= T; return d; };
-const NUDGE = 0.02;   // 差一點點時用速度追：最多快慢 2%（保留音高，聽不出來）
-// 速度什麼時候動：差超過 START 才開始追，追到差不到 STOP 才回 1。以前門檻只有 0.04 秒，聲音的鐘和牆上的鐘本來就差這麼多，
-// 結果每一秒都在 1.000 和 1.003 之間換（手機換一次速度可能頓一下）。現在一次追完、回 1，中間不改
-const START = 0.15, STOP = 0.03;
+// 不用改速度追（2026-11-13）：以前差 0.15 秒就把 playbackRate 推到 0.98–1.02，瀏覽器的變速保音高在破音吉他、長和聲上聽得出音在飄，
+// 有的瀏覽器接進 WebAudio 後根本不保音高（2% ≈ 三分之一個半音）。差一秒以內畫面本來就照聲音走（showTime），只有差一秒以上才跳
 
 export class ConcertBgm {
   constructor(ctx, out) {
@@ -173,13 +171,11 @@ export class ConcertBgm {
         const e = this.engine = { a, get paused() { return a.paused; }, get live() { return !a.paused && !a.seeking && a.readyState >= 3; },
           now: () => Math.max(0, a.currentTime - lat()),
           play: (t) => { seeked = jumped = true; rate(1); a.currentTime = (t + lead) % songSec(SHOW.band); return a.play(); }, pause: () => a.pause(),
-          // 對伺服器時間（world.update 每秒一次）：差一點點用速度慢慢追，差一秒以上才跳；要跳的地方還沒下載就不跳（跳了又要等），照樣用速度追
+          // 對伺服器時間（world.update 每秒一次）：速度永遠是 1，差一秒以上才跳；要跳的地方還沒下載就先不跳（跳了又要等），差到八秒才硬跳
           sync: (target) => {
-            const d = offBy(target, e.now()), chasing = a.playbackRate !== 1;
-            if (Math.abs(d) < (chasing ? STOP : START) || (chasing && Math.sign(d) !== Math.sign(a.playbackRate - 1))) { rate(1); return; }   // 追過頭也回 1
-            if (Math.abs(d) >= 1 && (has((target + lead) % songSec(SHOW.band)) || Math.abs(d) > 8)) { hear(`差 ${d.toFixed(2)} 秒，跳到第 ${target.toFixed(1)} 秒`); e.play(target); return; }
-            // 開始追時定一個速度，追的途中不改（差多少都一樣，到了就回 1）
-            if (!chasing) rate(1 + Math.max(-NUDGE, Math.min(NUDGE, d * 0.08)));
+            if (a.playbackRate !== 1) rate(1);
+            const d = offBy(target, e.now());
+            if (Math.abs(d) >= 1 && (has((target + lead) % songSec(SHOW.band)) || Math.abs(d) > 8)) { hear(`差 ${d.toFixed(2)} 秒，跳到第 ${target.toFixed(1)} 秒`); e.play(target); }
           } };
         // ?hitch：每十秒一行。鐘少走＝AudioContext 的鐘比牆上的鐘慢（停過、掉拍，聽起來是斷）；曲子少走＝<audio> 停下來等（下載、解碼）；
         // 差伺服器＝聲音離該在的那一秒多遠（正的＝落後）。Chrome 有 playbackStats 的話加上掉拍次數
@@ -502,7 +498,7 @@ export function buildConcert(scene, { coarse }) {
       down = !!feet && inPit(feet.x, feet.z) && (feet.y ?? 0) < STAGE.y - 0.3;
       const behind = !!eye && eye.z < HALL.back && cam.z > HALL.back - 0.05;
       hall.backWall.visible = stage.backdrop.visible = !behind;
-      // 放的聲音離伺服器時間太遠（卡過、分頁切走回來、隊友那邊開的場）：一秒看一次，怎麼拉回來照 engine.sync（差一點用速度追，差多才跳）
+      // 放的聲音離伺服器時間太遠（卡過、分頁切走回來、隊友那邊開的場）：一秒看一次，怎麼拉回來照 engine.sync（不變速，差一秒以上才跳）
       const e = SHOW.engine, now = performance.now();
       if (e && !e.paused && e.live && now - driftAt > 1000) {   // 還在下載、跳轉中不拉（拉了又要等，會一直追不上）
         driftAt = now;

@@ -18,7 +18,8 @@ import { kaoFacing } from '../avatar/kaomoji-parts.js';
 const SPEED = 2.6;
 const EDGE_LIFT = 0.3;   // 坐在邊上垂腳：屁股就在地面的高度（跟 character.js 的 SEAT_BUTT 一樣），腿垂到邊外
 const DRAG_THRESHOLD = 8;
-const DIST_MIN = 4, DIST_MAX = 20;
+// 遠近：自由視角和越肩共用一個值，範圍也一樣。DIST_MAX 是區域沒寫 camDistMax 時能拉多遠；DIST_KEEP 是記得住的最遠（比哪一區都遠）
+const DIST_MIN = 1.4, DIST_MAX = 20, DIST_KEEP = 80;
 // 俯角往下拉到 PITCH_LOW 時鏡頭已經貼近地面，再往下拉就改成抬頭往上看，一路看到天頂
 const PITCH_MIN = -1.55, PITCH_LOW = -0.08, PITCH_MAX = 1.25, PITCH_DEFAULT = 0.62;
 const ZENITH = 1.52;
@@ -38,11 +39,11 @@ const MIRROR_FOV = 30, MIRROR_STAND = 1.75;
 const ORB_EASE = 7, ORB_COAST = 0.22;
 const ORB_TILT = 0.06, ORB_TILT_K = 0.3, ORB_TILT_HOLD = 400;   // 照鏡子滑鼠、手把上下：只微微抬、壓（弧度上限、跟手的比例），放手或停手這麼多毫秒就彈回去
 
-const defaultDist = () => (window.innerWidth < window.innerHeight ? 12 : 9.5);
+// 沒調過遠近時的起點：照一開始是哪種視角
+const defaultDist = (shoulder) => (window.innerWidth < window.innerHeight ? (shoulder ? 2.9 : 12) : shoulder ? 2.4 : 9.5);
 
 // 越肩：肩膀高度、遠近範圍、俯仰（往下拉過 SH_LOW 鏡頭不再降，改成抬頭）、倒退走的速度
-// 遠近最遠跟自由視角一樣（this.distMax），這裡只管最近
-const SH_UP = 1.15, SH_DIST_MIN = 1.4, SH_PITCH = [-1.3, 1.2], SH_PITCH_DEFAULT = 0.12, SH_LOW = -0.2;
+const SH_UP = 1.15, SH_PITCH = [-1.3, 1.2], SH_PITCH_DEFAULT = 0.12, SH_LOW = -0.2;
 const SH_BACK = 0.55;
 const HELD_SIDE = 0.8;   // 舉著相機橫移是往前的幾成（倒退照 SH_BACK）
 // 舉著相機起步、停下比平常慢，像端穩了推軌，畫面不會一頓一頓（越肩 0.14／0.11、一般 0.06／0.05）
@@ -80,7 +81,6 @@ const SH_GAZE = 1.2, GAZE_UP = 0.55, GAZE_DOWN = 0.4, GAZE_BACK = 2.05, GAZE_FRO
 // 擺表情站著時頭一直看鏡頭：鏡頭繞到偏離身體超過 POSE_REACH（弧度），身體慢慢轉過來，轉到只差 POSE_EASE（頭看得舒服、還看得到側臉）。
 // 回眸、側身那幾種（BODIES 的 turn）照它要的角度對著鏡頭，差超過 POSE_SLACK 才轉。POSE_TURN 是每秒轉多快的係數
 const POSE_REACH = 1.05, POSE_EASE = 0.55, POSE_SLACK = 0.35, POSE_TURN = 4;
-const shDefaultDist = () => (window.innerWidth < window.innerHeight ? 2.9 : 2.4);
 // 越肩的視野（暫停選單裡調，記在 localStorage view；手機、平板沒調過時另外收小，見 constructor）：
 // fov 是 16:9 的畫面左右看得到幾度，別的比例上下照同一個角度；fish 是魚眼，0 是一般廣角（直線不彎），1 是等距魚眼（k 見 lens.js）
 // 魚眼時左右兩邊的角度照 fov 不變，中間放大、越往邊緣收得越緊；SH_COVER 以外是鏡頭邊緣的暗角
@@ -128,9 +128,8 @@ export class Player {
     this.focus = null;              // 正在看的畫或鏡子
     this.camYaw = 0;
     this.camPitch = PITCH_DEFAULT;
-    this.camDist = defaultDist();
-    this.distMax = world.camDistMax ?? DIST_MAX;   // 海市可以拉得比較遠，看得到整座山城
-    this.shoulder = false;          // 越肩；遠近和俯仰跟一般跟拍分開記
+    this.distMax = world.camDistMax ?? DIST_MAX;   // 海市可以拉得比較遠，看得到整座山城；只在這一區夾，不改玩家要的遠近（wantDist）
+    this.shoulder = false;          // 越肩；俯仰跟一般跟拍分開記，遠近共用
     this.coarse = matchMedia('(pointer: coarse)').matches;
     // 手機、平板橫拿才有越肩（直拿只剩一根拇指），接著手把時不管直橫都有（padLink）。看裝置轉向，不看畫面比例：Android 直拿叫出鍵盤時畫面會變扁
     this.land = () => (screen.orientation?.type ? screen.orientation.type.startsWith('landscape') : innerWidth > innerHeight);
@@ -141,7 +140,6 @@ export class Player {
     this.padOn = false;             // 手把在用：直接控制視角（準心、PAD_LOOK_T），不鎖滑鼠
     this.padForced = false;         // 越肩是接上手把才開的（手機拔掉手把要關回去）
     document.body.classList.toggle('shoulder', this.shoulder);
-    this.shDist = shDefaultDist();
     this.shPitch = SH_PITCH_DEFAULT;
     this.lookHold = 0;              // 越肩照路線走時鏡頭會轉到角色背後；剛拖過就先別轉
     this.freeLook = false;          // 越肩時右鍵拖曳：只轉鏡頭，身體不跟；一走路或按左右鍵就轉回視線方向
@@ -177,15 +175,14 @@ export class Player {
     this.bodyRel = 0;               // 越肩平移、倒退時身體要轉離視線多少
     this.easeT = 0;                 // 剛切換越肩，鏡頭慢慢滑過去
     this.onShoulder = null;         // 主程式更新按鈕
-    // 過圖是整頁重新載入：遠近記在這個分頁裡，下一張圖接著用（各區域能拉多遠不一樣，照這裡的範圍再夾一次）
-    try {
-      const v = JSON.parse(sessionStorage.getItem('camDist') || 'null');
-      if (Number.isFinite(v?.free)) this.camDist = THREE.MathUtils.clamp(v.free, DIST_MIN, this.distMax);
-      if (Number.isFinite(v?.sh)) this.shDist = THREE.MathUtils.clamp(v.sh, SH_DIST_MIN, this.distMax);
-    } catch {}
-    addEventListener('pagehide', () => {
-      try { sessionStorage.setItem('camDist', JSON.stringify({ free: this.camDist, sh: this.shDist })); } catch {}
-    });
+    // 遠近只有玩家自己縮放會改：進區域、換視角、看畫照鏡子、舉相機都不動它（介面原則「視野的遠近」）。
+    // 記在這台裝置（prefs camDist），過圖、換分頁、隔天都接著用；區域拉不了那麼遠時只是這一區用得比較近，出去就回來
+    const saved = pref('camDist');
+    this.wantDist = Number.isFinite(saved) ? THREE.MathUtils.clamp(saved, DIST_MIN, DIST_KEEP) : defaultDist(this.shoulder);
+    this.saveDist = true;           // ?view 測試站位設的遠近不記
+    const keep = () => { if (this.saveDist) setPref('camDist', Math.round(this.wantDist * 100) / 100); };
+    addEventListener('pagehide', keep);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) keep(); });
     this.fov = this.baseFov();      // 一般鏡頭的視角；越肩再加上鏡頭變形 bendK（1 是不彎），切換時兩個一起慢慢換過去
     this.bendK = this.wantK();
     this.applyLens();
@@ -621,18 +618,26 @@ export class Player {
     o.vSpin = 0;
   }
 
+  // 實際用的遠近：玩家要的，這一區拉不了那麼遠就先用最遠。自由視角和越肩是同一個
+  get camDist() { return Math.min(this.wantDist, this.distMax); }
+  set camDist(d) { this.wantDist = THREE.MathUtils.clamp(d, DIST_MIN, DIST_KEEP); }
+  get shDist() { return this.camDist; }
+
   // 縮放的距離：照鏡子時縮的是鏡子的取景
   get zoomDist() {
     if (this.focus?.orb) return this.focus.orb.tZoom;
-    return this.shoulder ? this.shDist : this.camDist;
+    return this.camDist;
   }
 
   set zoomDist(d) {
     if (this.focus?.orb) {
       this.focus.orb.tZoom = THREE.MathUtils.clamp(d, (this.focus.zf ?? 1) * ORB_CLOSE, ORB_ZOOM_FAR);
       this.focus.orb.touched = true;
-    } else if (this.shoulder) this.shDist = THREE.MathUtils.clamp(d, SH_DIST_MIN, this.distMax);
-    else this.camDist = THREE.MathUtils.clamp(d, DIST_MIN, this.distMax);
+    } else {
+      // 已經頂在這一區的最遠還往外拉：不動，別把在別區拉得更遠的記憶縮回來
+      const c = THREE.MathUtils.clamp(d, DIST_MIN, this.distMax);
+      if (!(c >= this.distMax && this.wantDist >= this.distMax)) this.wantDist = c;
+    }
   }
 
   pick(cx, cy) {
@@ -1399,7 +1404,8 @@ export class Player {
     if (this.shoulder) return this.shoulderCamera(outPos, outLook);
     // 注視點放在角色前方一點，直式螢幕上角色才會落在畫面下方，前方留出空間
     // 直不直看鏡頭的長寬比：每一幀讀 window.innerWidth 會逼瀏覽器先把這一幀改過的介面排好版（手機上很貴）
-    const ahead = this.camera.aspect < 1 ? 1.8 : 0.8;
+    // 拉得很近時跟著收，鏡頭才不會跑到角色前面
+    const ahead = (this.camera.aspect < 1 ? 1.8 : 0.8) * Math.min(1, this.camDist / 4);
     outLook.set(this.pos.x - Math.sin(this.camYaw) * ahead, this.pos.y + 0.9, this.pos.z - Math.cos(this.camYaw) * ahead);
     const pitch = Math.max(this.camPitch, PITCH_LOW), c = Math.cos(pitch), dist = this.camDist;
     outPos.set(
@@ -1592,6 +1598,15 @@ export class Player {
       return false;
     };
     if (go(ox + vx, oz + vz)) return true;
+    // 區域給了牆的法線（world.wallNormal，朝走不到的那邊）：去掉往牆裡的那一份，順著邊滑過去，斜的邊、彎道不會一頓一頓
+    const n = !stuck && w.wallNormal?.(ox + vx, oz + vz, y);
+    if (n) {
+      const d = vx * n.x + vz * n.z;
+      if (d > 0) {
+        const sx = vx - d * n.x, sz = vz - d * n.z;
+        if (Math.hypot(sx, sz) > 1e-5 && (go(ox + sx, oz + sz) || go(ox + sx * 0.5, oz + sz * 0.5))) return true;
+      }
+    }
     if (Math.abs(vx) > 1e-5 && go(ox + vx, oz)) return true;
     if (Math.abs(vz) > 1e-5 && go(ox, oz + vz)) return true;
     if (!deflect) return false;

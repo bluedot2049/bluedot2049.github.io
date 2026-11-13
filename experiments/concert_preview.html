@@ -142,7 +142,7 @@ const GROUPS = [['鼓', ['kick', 'snare', 'ride', 'china']], ['吉他', ['gtr', 
 const status = (t) => ($('status').textContent = t);
 function mergeMix(j) {
   const d = defaultMix();
-  return { master: j.master ?? d.master, hall: { ...d.hall, ...j.hall }, echo: { ...d.echo, ...j.echo }, stems: { ...j.stems } };
+  return { master: j.master ?? d.master, hall: { ...d.hall, ...j.hall }, echo: { ...d.echo, ...j.echo }, stems: { ...j.stems }, scenes: { ...j.scenes } };
 }
 async function loadMix() {
   try {

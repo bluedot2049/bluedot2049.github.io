@@ -10,5 +10,14 @@
     "主旋律": { "gain": 0.7, "pan": 0, "width": 1, "orbit": 0, "rate": 8, "hall": 0.55, "echo": 0.4, "low": 20, "high": 20000, "mute": false, "solo": false },
     "法器": { "gain": 1, "pan": 0, "width": 1.4, "orbit": 0.4, "rate": 32, "hall": 0.7, "echo": 0, "low": 20, "high": 20000, "mute": false, "solo": false },
     "氛圍": { "gain": 1, "pan": 0, "width": 1.8, "orbit": 0.6, "rate": 8, "hall": 0.6, "echo": 0.2, "low": 20, "high": 20000, "mute": false, "solo": false }
+  },
+  "scenes": {
+    "night": { "hall": 1.25 },
+    "horizon": { "hall": 1.1 },
+    "rise": { "hall": 1 },
+    "still": { "hall": 1.35, "echo": 1.2 },
+    "sun": { "hall": 0.8, "stems": { "主旋律": { "hall": 0.55, "echo": 0.6 } } },
+    "veil": { "hall": 0.95, "stems": { "主旋律": { "hall": 0.65, "echo": 0.75 } } },
+    "end": { "hall": 1.4 }
   }
 }

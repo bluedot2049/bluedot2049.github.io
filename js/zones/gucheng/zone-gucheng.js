@@ -48,7 +48,6 @@ export function guide(world) {
 
 // 抵達：棧橋上，背對船，面向城門
 export function arrive({ player, world }) {
-  player.camDist = 7;
   player.camPitch = 0.16;
   player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
 }

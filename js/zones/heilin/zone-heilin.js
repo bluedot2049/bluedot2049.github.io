@@ -44,7 +44,6 @@ export function guide(world) {
 export function arrive({ player, world, params }) {
   if (params?.get('from') === 'dong') {
     player.place(world.camp.x, world.camp.z - 2.3, 0);
-    player.camDist = 5;
     player.camPitch = 0.25;
     player.snapCamera?.();
     return;

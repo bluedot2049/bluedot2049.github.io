@@ -71,6 +71,8 @@ export function buildTerrace(c) {
   group.add(
     h.tag(face(stoneMat, fw, YB, 0, -(TW - fw / 2), Z(TD), Math.PI, 2, 0, sv(0)), 'wall'),
     h.tag(face(stoneMat, fw, YB, 0, TW - fw / 2, Z(TD), Math.PI, 2, 0, sv(0)), 'wall'),
+    // 石階口：最上一階比陽台低一截，這條不封的話從原野往上看得到陽台底下
+    h.tag(face(stoneMat, (TW - fw) * 2, YB, 0, 0, Z(TD), Math.PI, 2, 0, sv(0)), 'wall'),
     h.tag(face(stoneMat, TD, YB, 0, TW, Z(TD / 2), Math.PI / 2, 2, 0, sv(0)), 'wall'),
     h.tag(face(stoneMat, TD, YB, 0, -TW, Z(TD / 2), -Math.PI / 2, 2, 0, sv(0)), 'wall'),
     h.tag(face(stoneMat, TW - BW, YB, 0, (TW + BW) / 2, z0, 0, 2, 0, sv(0)), 'wall'),

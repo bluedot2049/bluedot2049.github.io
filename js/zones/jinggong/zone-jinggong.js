@@ -27,9 +27,8 @@ export function crowd() {
   return {};
 }
 
-// 抵達：站在門裡一點，面向大廳。鏡頭放低、拉近，從背後平平地看出去（天花板不高，平常的高俯角會撞上去）
+// 抵達：站在門裡一點，面向大廳。鏡頭放低，從背後平平地看出去（天花板不高，平常的高俯角會撞上去）
 export function arrive({ player, world, params }) {
-  player.camDist = 4;
   player.camPitch = 0.12;
   player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
 }

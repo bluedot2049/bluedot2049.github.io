@@ -159,7 +159,6 @@ export function arrive({ player, world, params }) {
   // 鏡頭在水鏡那一頭往回看：人剛跨出星門，門在背後
   if (gate) {
     player.camYaw = at.heading + 0.35;
-    player.camDist = 7;
     player.camPitch = 0.3;
     player.snapCamera();
   }

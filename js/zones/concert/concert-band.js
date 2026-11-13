@@ -33,16 +33,34 @@ function notesFor(m, midi, bpm) {
   return out.sort((a, b) => a.t - b.t);
 }
 // 第 t 秒之前最後一個（只看 parts 裡的），找不到回 -1
-export function lastAt(ns, t, parts) {
+// 指定哪幾部時，先把那幾部的音挑出來排一份（記著原本第幾個），之後一樣二分找；以前是找到再一個個往回掃，少的那部要掃很遠
+const byParts = new WeakMap();
+function subset(ns, parts) {
+  let m = byParts.get(ns);
+  if (!m) byParts.set(ns, (m = new Map()));
+  const key = parts.join('|');
+  let s = m.get(key);
+  if (!s) {
+    s = { ns: [], at: [] };
+    ns.forEach((n, i) => { if (parts.includes(n.part)) { s.ns.push(n); s.at.push(i); } });
+    m.set(key, s);
+  }
+  return s;
+}
+function bisect(ns, t) {
   let lo = 0, hi = ns.length - 1, i = -1;
   while (lo <= hi) { const mid = (lo + hi) >> 1; if (ns[mid].t <= t) { i = mid; lo = mid + 1; } else hi = mid - 1; }
-  if (parts) while (i >= 0 && !parts.includes(ns[i].part)) i--;
   return i;
 }
+export function lastAt(ns, t, parts) {
+  if (!parts) return bisect(ns, t);
+  const s = subset(ns, parts), i = bisect(s.ns, t);
+  return i < 0 ? -1 : s.at[i];
+}
 export function nextAfter(ns, t, parts) {
-  let i = lastAt(ns, t) + 1;
-  if (parts) while (i < ns.length && !parts.includes(ns[i].part)) i++;
-  return i < ns.length ? i : -1;
+  if (!parts) { const i = bisect(ns, t) + 1; return i < ns.length ? i : -1; }
+  const s = subset(ns, parts), i = bisect(s.ns, t) + 1;
+  return i < s.ns.length ? s.at[i] : -1;
 }
 // 打擊的力道曲線：打下去那一下最大，之後很快掉
 export const hitK = (since, tau = 0.12) => (since < 0 ? 0 : Math.exp(-since / tau));

@@ -90,7 +90,6 @@ export function crowd({ scene, world, shadowTex, coarse, params, ambience, playe
 // 抵達：站在降落坪上、渡船旁邊，面向北邊的總部和天上的地球
 export function arrive({ player, world, params }) {
   // 鏡頭放低一點，一下船就看得到整棟總部
-  player.camDist = 10;
   player.camPitch = (9 * Math.PI) / 180;
   player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
 }

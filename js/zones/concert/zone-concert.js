@@ -72,7 +72,5 @@ export function crowd({ scene, world, shadowTex }) {
 // 抵達：從最後面的大門進來（火把從後面一支支點到舞台），面向舞台；攝影溝要穿過人群走過去
 export function arrive({ player, world, ui }) {
   world.setUI?.(ui);   // 台底下站上升降台、拿到太陽時說一句（concert-pit.js）
-  player.camDist = 5.5;
-  player.camPitch = 0.04;   // 一進門：站在高處、鏡頭放平，整個大廳和五十公尺外的舞台在眼前   // 鏡頭在台面以上，台子的正面才不會擋掉半個畫面
   player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
 }

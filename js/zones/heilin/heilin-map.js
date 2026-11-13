@@ -294,7 +294,7 @@ export function onPier(P, x, z) {
 }
 // 腳下多高：路上照路面（平順），凹口、空地、棧橋是平的，捷徑是直的斜坡，其他照地形
 export function groundAt(P, x, z) {
-  if (onPier(P, x, z)) return P.Y[0];
+  if (onPier(P, x, z)) { const s = P.sea, t = (x - P.X[0]) * s.ux + (z - P.Z[0]) * s.uz; return P.Y[0] + (t > 0.25 ? 0.06 : 0); }   // 板面高 6 公分（heilin.js 棧橋）
   const tt = inTrench(P, x, z, 0.4);
   if (tt != null) return trenchY(P, tt);
   const dc = Math.hypot(x - P.clearing.x, z - P.clearing.z);
@@ -320,7 +320,7 @@ export function onWay(P, x, z, chutes = false) {
   for (const o of P.nooks) if (Math.hypot(x - o.x, z - o.z) < o.r - 0.3) return true;
   if (onPier(P, x, z) && Math.hypot(x - P.X[0], z - P.Z[0]) < P.sea.pier - 0.3) return true;
   const q = P.nearest(x, z);
-  if (q && q.d < HALF) return true;
+  if (q && q.d < HALF + 0.25) return true;   // 比 HALF 寬一點：碎石路面畫到 1.5 上下，邊上踩得到才不會覺得被空氣擋住（2026-11-13）
   if (!chutes) return false;
   const c = chuteAt(P, x, z);
   return !!c && c.d < c.half;

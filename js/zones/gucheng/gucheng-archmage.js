@@ -23,14 +23,14 @@ export const CLERK = {
   },
 };
 
-// B：gucheng.js 的工具（solid、bucket、emitAt、fadeOnly）。回傳店員的位子、招牌那台銀相機的網格、浮游燈的光束
+// B：gucheng.js 的工具（solid、bucket、emitAt）。回傳店員的位子、招牌那台銀相機的網格、浮游燈的光束
 export function buildArchmage(B) {
-  const { solid, emitAt, fadeOnly } = B;
+  const { solid, emitAt } = B;
   const { x: cx, z: cz, ry } = KIOSK;
   const cs = Math.cos(ry), sn = Math.sin(ry);
   const W = (x, y, z) => new THREE.Vector3(cx + x * cs + z * sn, TOP + y, cz - x * sn + z * cs);
   const k = new Kit(rng('gucheng:archmage'));
-  k.fid = fadeOnly('kiosk', [cx - 1.9, TOP, cz - 1.9, cx + 1.9, TOP + 6.6, cz + 1.9]);
+  // 亭子不淡（2026-11-13 使用者：相機店不用淡掉），擋在鏡頭前就擋著
 
   // ---------- 亭子 ----------
   const R = 1.5, ap = R * Math.cos(Math.PI / 8), pw = 2 * R * Math.sin(Math.PI / 8);

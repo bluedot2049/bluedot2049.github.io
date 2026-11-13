@@ -19,6 +19,10 @@ import { SCALE } from './dong-rooms.js';
 // 門口：三個人站在門線外面等你（矮人在前），開打時走進去到各自的位置（dong-table.js 的 home）
 const STAGE = { dwarf: [0, -1.4 * SCALE], elf: [-1.1 * SCALE, -2.6 * SCALE], mage: [1.1 * SCALE, -2.6 * SCALE] };
 const TALK = 2.2, SAY_TIME = 3200, WALK_IN = 1.4, FADE = 0.55;
+// 留時間拍：走到位以後先對峙 STANDOFF 秒才開打（找位置、舉相機）；打的時候照時間表播，播放速度：
+// 舉著相機 aim 倍、好拍的瞬間前 before 秒到後 after 秒再乘 slow 倍（照瞬間大小：2 中、3 大），速度換過去花 1/ease 秒左右。只改播放快慢，時間表、輸贏不變
+const STANDOFF = 2.4;
+const TEMPO = { aim: 0.55, slow: { 2: 0.75, 3: 0.45 }, before: 0.9, after: 0.7, ease: 4 };
 // 光的高度：火把在手上（舉高也只比頭高一點）、光球掛在頭上、插地和油火貼地；吊燈照它掛多高
 const LIGHT_Y = { high: 2.6, mid: 1.5, low: 0.45, 火把: 1.55 };
 // 看得到火苗的光（薩滿的綠火是杖頭那一團、龍喉嚨的火在脖子裡，模型自己有）
@@ -257,8 +261,10 @@ export class Party {
     this.spansOf = Object.fromEntries(MERC_IDS.map((id) => [id, this.spans.filter((s) => s.who === id)]));   // 每幀只查自己的
     this.fx = this.buildFx(this.plan);
     this.downs = MERC_IDS.flatMap((id) => this.plan.byId[id].hist.filter((h) => h.state === 'down').map((h) => h.t)).sort((a, b) => a - b);
+    this.slowAt = this.plan.moments.filter((m) => TEMPO.slow[m.size] && !m.tell).map((m) => [m.t, TEMPO.slow[m.size]]);
+    this.rate = 1;
     this.phase = 'walk';
-    this.t = -WALK_IN;
+    this.t = -WALK_IN - STANDOFF;
     this.logI = 0;
     this.from = Object.fromEntries(this.mercs.map((m) => [m.id, [m.pos.x, m.pos.z]]));
   }
@@ -328,7 +334,7 @@ export class Party {
     } else if (this.phase === 'walk') {
       // 走進去：從門口走到各自的位置，臉朝裡
       this.t += dt;
-      const k = Math.min(1, (this.t + WALK_IN) / WALK_IN);
+      const k = Math.min(1, (this.t + WALK_IN + STANDOFF) / WALK_IN);
       for (const m of this.mercs) {
         const [x0, z0] = this.from[m.id], [hx, hz] = this.W(...MERCS[m.id].home);
         const sp = m.moveTo(x0 + (hx - x0) * k, this.Y0, z0 + (hz - z0) * k, 0, dt);
@@ -339,9 +345,16 @@ export class Party {
       this.setLights(stateAt(this.plan, 0).lights);
       if (this.t >= 0) { this.t = 0; this.phase = 'fight'; }
     } else {
-      if (this.phase === 'fight' && this.t + dt >= this.plan.dur) this.phase = 'after';
-      this.t += dt;   // 打完以後時間照走（勝利姿勢、還能拍的那幾秒、短休），stateAt 停在最後
-      this.play(dt);
+      // 播放速度（TEMPO）：動作、走路、打光都照放慢後的 dt，腳步不會滑
+      const t = this.t, aim = document.body.classList.contains('photo');
+      let slow = 1;
+      for (const [b, k] of this.slowAt) if (t > b - TEMPO.before && t < b + TEMPO.after && k < slow) slow = k;
+      const want = (aim ? TEMPO.aim : 1) * slow;
+      this.rate += (want - this.rate) * Math.min(1, dt * TEMPO.ease);
+      const pdt = dt * this.rate;
+      if (this.phase === 'fight' && this.t + pdt >= this.plan.dur) this.phase = 'after';
+      this.t += pdt;   // 打完以後時間照走（勝利姿勢、還能拍的那幾秒、短休），stateAt 停在最後
+      this.play(pdt);
     }
     if (this.camera) for (const m of this.mercs) m.placeBubble(this.camera);
   }

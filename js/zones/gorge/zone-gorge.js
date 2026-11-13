@@ -24,7 +24,6 @@ export function crowd() {
 
 // 抵達：最高一層南端的隧道口，面向北邊谷底的台
 export function arrive({ player, world }) {
-  player.camDist = 6;
   player.camPitch = 0.12;
   player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
 }

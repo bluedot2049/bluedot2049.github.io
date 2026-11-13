@@ -33,7 +33,9 @@ export const STEM = {
   high: { label: '高切', min: 500, max: 20000, step: 10, def: 20000 },
 };
 const defs = (t) => Object.fromEntries(Object.entries(t).map(([k, v]) => [k, v.def]));
-export const defaultMix = () => ({ master: 0.8, hall: defs(HALL), echo: defs(ECHO), stems: {} });
+// scenes：照段落變的倍數 { 段落 id: { hall, echo, stems: { 分軌名: { hall, echo } } } }，乘在殘響、回聲送的量上，換段時一秒內滑過去
+export const defaultMix = () => ({ master: 0.8, hall: defs(HALL), echo: defs(ECHO), stems: {}, scenes: {} });
+const MONO_LOW = 120;   // 這以下收成單聲道（低音、大鼓的重量站在正中間，手機喇叭、單邊耳機都不會少一塊）
 export const stemDefaults = () => ({ ...defs(STEM), mute: false, solo: false });
 
 const ramp = (param, v, c) => param.setTargetAtTime(v, c.currentTime, 0.02);
@@ -58,7 +60,10 @@ export class ConcertStems {
     lim.release.value = 0.1;
     this.master = g(mix.master);
     this.bus = g(1);
-    this.bus.connect(lim).connect(this.master).connect(out);
+    this.bus.connect(lim);
+    this.monoLow(lim, this.master);
+    this.master.connect(out);
+    this.hallScene = g(1); this.echoScene = g(1);
     // 殘響：預延遲 → 卷積 → 低切 → 寬度 → 音量
     this.hallIn = g(1);
     this.pre = c.createDelay(1);
@@ -68,7 +73,7 @@ export class ConcertStems {
     this.hallW = this.widener();
     this.hallOut = g(1);
     this.hallIn.connect(this.pre).connect(this.verb).connect(this.hallLow).connect(this.hallW.input);
-    this.hallW.output.connect(this.hallOut).connect(this.bus);
+    this.hallW.output.connect(this.hallOut).connect(this.hallScene).connect(this.bus);
     // 回聲：左右兩條延遲交叉回授（左右彈）；pingpong 0 時兩邊一樣
     this.echoIn = g(1);
     const dl = c.createDelay(8), dr = c.createDelay(8), tl = c.createBiquadFilter(), tr = c.createBiquadFilter();
@@ -83,10 +88,44 @@ export class ConcertStems {
     tr.connect(this.xR[0]).connect(mg, 0, 0); tr.connect(this.xR[1]).connect(mg, 0, 1);
     this.echoOut = g(1);
     this.echoHall = g(0);
-    mg.connect(this.echoOut).connect(this.bus);
+    mg.connect(this.echoOut).connect(this.echoScene).connect(this.bus);
     this.echoOut.connect(this.echoHall).connect(this.hallIn);
     Object.assign(this, { dl, dr, tl, tr });
     this.applyAll();
+  }
+
+  // 低頻收成單聲道：拆成中間（L+R）和兩邊的差（L-R），差的那條切掉 MONO_LOW 以下再合回去；中間那條不過濾，相位不動
+  monoLow(from, to) {
+    const c = this.ctx, sp = c.createChannelSplitter(2), mg = c.createChannelMerger(2);
+    const one = (v) => { const n = this.g(v); n.channelCount = 1; n.channelCountMode = 'explicit'; return n; };
+    const mid = one(1), side = one(1), hp = c.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = MONO_LOW; hp.Q.value = Math.SQRT1_2;
+    from.connect(sp);
+    sp.connect(one(0.5), 0).connect(mid); sp.connect(one(0.5), 1).connect(mid);
+    sp.connect(one(0.5), 0).connect(side); sp.connect(one(-0.5), 1).connect(side);
+    side.connect(hp);
+    mid.connect(mg, 0, 0); hp.connect(mg, 0, 0);
+    mid.connect(mg, 0, 1); hp.connect(one(-1)).connect(mg, 0, 1);
+    mg.connect(to);
+  }
+  // 照段落排殘響、回聲的倍數：從 from 秒那一段開始，往後排 passes 輪（循環放的時候接得上）
+  scheduleScenes(from, passes) {
+    const sc = this.mix.scenes ?? {}, c = this.ctx, T = songSec(this.band), bs = barSec(this.band);
+    const marks = [];
+    let at = 0;
+    for (const sec of this.band.sections ?? []) { marks.push([at * bs, sc[sec.id] ?? {}]); at += sec.bars; }
+    const params = [[this.hallScene.gain, (s) => s.hall], [this.echoScene.gain, (s) => s.echo]];
+    for (const st of this.list) params.push([st.ch.hallS.gain, (s) => s.stems?.[st.name]?.hall], [st.ch.echoS.gain, (s) => s.stems?.[st.name]?.echo]);
+    const base = from - (from % T);
+    for (const [param, pick] of params) {
+      param.cancelScheduledValues(0);
+      const now = marks.filter(([t]) => t <= from % T).pop();
+      param.setValueAtTime(pick(now?.[1] ?? {}) ?? 1, c.currentTime);
+      for (let k = 0; k < passes; k++) for (const [t, s] of marks) {
+        const tt = base + k * T + t;
+        if (tt > from) param.setTargetAtTime(pick(s) ?? 1, this.t0 + tt, 0.3);
+      }
+    }
   }
 
   // 立體寬度：0 變單聲道、1 原樣、2 加寬（左右的差放大）。單聲道的檔先攤成兩聲道
@@ -130,12 +169,12 @@ export class ConcertStems {
     const lo = c.createBiquadFilter(), hi = c.createBiquadFilter();
     lo.type = 'highpass';
     hi.type = 'lowpass';
-    const w = this.widener(), pan = c.createStereoPanner(), out = this.g(1), hall = this.g(0), echo = this.g(0);
+    const w = this.widener(), pan = c.createStereoPanner(), out = this.g(1), hall = this.g(0), echo = this.g(0), hallS = this.g(1), echoS = this.g(1);
     lo.connect(hi).connect(w.input);
     w.output.connect(pan).connect(out).connect(this.bus);
-    out.connect(hall).connect(this.hallIn);
-    out.connect(echo).connect(this.echoIn);
-    return { input: lo, lo, hi, w, pan, out, hall, echo };
+    out.connect(hall).connect(hallS).connect(this.hallIn);
+    out.connect(echo).connect(echoS).connect(this.echoIn);
+    return { input: lo, lo, hi, w, pan, out, hall, echo, hallS, echoS };
   }
 
   // 改一個值：path 像 'hall.size'、'echo.beats'、'stems.鼓.hall'、'master'
@@ -208,6 +247,7 @@ export class ConcertStems {
     if (gen !== this.gen) return;
     const T = songSec(this.band);
     this.t0 = c.currentTime + lead - from;
+    this.scheduleScenes(from, loop ? 4 : 1);
     for (const s of this.list) {
       const src = c.createBufferSource();
       src.buffer = s.buffer;
