@@ -34,32 +34,56 @@ const IRIS_P = irisAt(EYE_P);
 
 // ---------- 畫框 ----------
 // 四種：金框（巴洛克葉飾）、舊金（剝落、發黑的金）、黑檀（荷蘭波紋框，裡面一道細金線）、胡桃（木雕葉飾）
+// 材質：每圈框條照剖面（凸、凹、多陡）算一道道法線，光從左上來，漫射＋一點鏡面（spec 多亮、shine 多尖、sc 反光的顏色）；
+// 金的貼箔方格、舊金露出的紅土和積垢、木頭的木紋和 45° 斜接縫、整圈很淡的斑駁，都在框畫一次的時候一起畫進去。
+// 框只畫一次就存起來（CACHE），面板拖蠟燭重畫時只貼這張，框畫得再細也不拖慢拖曳。
 export const FRAME_STYLES = [
-  { name: '金框', base: '#c69a4c', hi: '#f4d892', lo: '#6a4818', orn: 'leaf', fillet: null },
-  { name: '舊金', base: '#9a7c46', hi: '#d2b47c', lo: '#3a2a16', orn: 'leaf', fillet: null, worn: true },
-  { name: '黑檀', base: '#221a16', hi: '#5a4a40', lo: '#080605', orn: 'ripple', fillet: '#c69a4c' },
-  { name: '胡桃', base: '#6a442a', hi: '#a8744a', lo: '#2a180e', orn: 'leaf', fillet: '#8a6a3a' },
+  { name: '金框', base: '#c69a4c', hi: '#f4d892', lo: '#6a4818', orn: 'leaf', fillet: null, gilt: true, spec: 0.7, shine: 160, sc: '#ffe6a0' },
+  { name: '舊金', base: '#9a7c46', hi: '#d2b47c', lo: '#3a2a16', orn: 'leaf', fillet: null, gilt: true, worn: true, spec: 0.35, shine: 80, sc: '#e6cc8e' },
+  { name: '黑檀', base: '#221a16', hi: '#5a4a40', lo: '#080605', orn: 'ripple', fillet: '#c69a4c', wood: 'ebony', spec: 0.6, shine: 90, sc: '#b8aea4' },
+  { name: '胡桃', base: '#6a442a', hi: '#a8744a', lo: '#2a180e', orn: 'leaf', fillet: '#8a6a3a', wood: 'walnut', spec: 0.18, shine: 20, sc: '#d8b088' },
 ];
 
 const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-const mix = (a, b, t) => { const A = hex(a), B = hex(b); return `rgb(${A.map((v, i) => Math.round(v + (B[i] - v) * t)).join(',')})`; };
-// 固定的亂數（舊金的剝落每張都一樣）
+const lerp3 = (A, B, t) => A.map((v, i) => v + (B[i] - v) * t);
+const css = (A) => `rgb(${A.map((v) => Math.round(Math.max(0, Math.min(255, v)))).join(',')})`;
+// 固定的亂數（舊金的剝落、木紋每張都一樣）
 const rnd = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
 
-// 一圈框條：外緣 o（x0,y0,x1,y1）往內 w。四邊各一個梯形，光從左上來：上、左亮，右、下暗（凹的反過來）
-function ring(g, o, w, st, k, concave = false) {
+// 光：畫面座標（x 右、y 下、z 朝看的人），從左上前方來；HALF 是光和視線的中間（鏡面反光）
+const unit = (v) => { const l = Math.hypot(...v); return v.map((x) => x / l); };
+const LIGHT = unit([-0.42, -0.52, 0.74]);
+const HALF = unit([LIGHT[0], LIGHT[1], LIGHT[2] + 1]);
+
+// 一個法線看起來的顏色：比平面亮往 hi、暗往 lo，再加鏡面
+function shade(st, nx, ny, nz) {
+  const rel = nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2] - LIGHT[2];
+  const B = hex(st.base);
+  const c = rel >= 0 ? lerp3(B, hex(st.hi), Math.min(1, rel * 3.2)) : lerp3(B, hex(st.lo), Math.min(1, -rel * 1.4));
+  const s = Math.pow(Math.max(0, nx * HALF[0] + ny * HALF[1] + nz * HALF[2]), st.shine) * st.spec;
+  return css(lerp3(c, hex(st.sc), Math.min(1, s)));
+}
+
+// 一圈框條：外緣 o（x0,y0,x1,y1）往內 w。四邊各一個梯形，從外緣到內緣一道漸層：
+// 凸的剖面法線從朝外轉到朝內（amp 是最斜多少弧度），凹的反過來，所以上、左邊的凸條外側亮、內側暗
+const IN = [[0, 1], [1, 0], [-1, 0], [0, -1]];   // 上、左、右、下各往內的方向
+function ring(g, o, w, st, amp, concave = false) {
   const i = { x0: o.x0 + w, y0: o.y0 + w, x1: o.x1 - w, y1: o.y1 - w };
   const sides = [
-    [[o.x0, o.y0], [o.x1, o.y0], [i.x1, i.y0], [i.x0, i.y0], 1],
-    [[o.x0, o.y0], [i.x0, i.y0], [i.x0, i.y1], [o.x0, o.y1], 0.6],
-    [[o.x1, o.y0], [o.x1, o.y1], [i.x1, i.y1], [i.x1, i.y0], -0.4],
-    [[o.x0, o.y1], [i.x0, i.y1], [i.x1, i.y1], [o.x1, o.y1], -0.9],
+    [[o.x0, o.y0], [o.x1, o.y0], [i.x1, i.y0], [i.x0, i.y0], [o.x0, o.y0, o.x0, i.y0]],
+    [[o.x0, o.y0], [i.x0, i.y0], [i.x0, i.y1], [o.x0, o.y1], [o.x0, o.y0, i.x0, o.y0]],
+    [[o.x1, o.y0], [o.x1, o.y1], [i.x1, i.y1], [i.x1, i.y0], [o.x1, o.y0, i.x1, o.y0]],
+    [[o.x0, o.y1], [i.x0, i.y1], [i.x1, i.y1], [o.x1, o.y1], [o.x0, o.y1, o.x0, i.y1]],
   ];
-  for (const [a, b, c, d, lit] of sides) {
-    const l = (concave ? -lit : lit) * k;
-    g.fillStyle = l >= 0 ? mix(st.base, st.hi, l) : mix(st.base, st.lo, -l);
+  sides.forEach(([a, b, c, d, G], k) => {
+    const [ix, iy] = IN[k], gr = g.createLinearGradient(...G);
+    for (let n = 0; n <= 8; n++) {
+      const t = n / 8, s = (concave ? -1 : 1) * amp * (1 - 2 * t);
+      gr.addColorStop(t, shade(st, -ix * Math.sin(s), -iy * Math.sin(s), Math.cos(s)));
+    }
+    g.fillStyle = gr;
     g.beginPath(); g.moveTo(...a); g.lineTo(...b); g.lineTo(...c); g.lineTo(...d); g.closePath(); g.fill();
-  }
+  });
   return i;
 }
 
@@ -75,27 +99,182 @@ function alongSides(g, o, w, each) {
   }
 }
 
-// 雕出來的一片葉子：先畫暗的（往右下偏）、亮的（往左上偏），再蓋本色，看起來是凸的
-function carve(g, st, path, s) {
-  for (const [dx, dy, c] of [[s * 0.06, s * 0.06, st.lo], [-s * 0.04, -s * 0.04, st.hi], [0, 0, st.base]]) {
-    g.save(); g.translate(dx, dy); g.fillStyle = c; g.beginPath(); path(); g.fill(); g.restore();
+// 光的方向換到現在轉過的座標裡（沿邊畫的時候每一邊轉的角度不同，影子還是要往右下）
+function lightHere(g) {
+  const m = g.getTransform(), det = m.a * m.d - m.b * m.c, vx = LIGHT[0], vy = LIGHT[1];
+  return unit([(m.d * vx - m.c * vy) / det, (-m.b * vx + m.a * vy) / det]);
+}
+
+// 雕出來的一片葉子（或珠子）：先畫往右下偏的影子、往左上偏的亮邊，再蓋本體。
+// c（中心 x、y、半徑 r）有給的話本體照圓鼓鼓的面上色：朝光那側亮、背光那側暗，金的會有一點反光
+function carve(g, st, path, s, c = null) {
+  const [lx, ly] = lightHere(g);
+  for (const [k, col] of [[-0.085, st.lo], [0.057, st.hi]]) {
+    g.save(); g.translate(lx * s * k, ly * s * k); g.fillStyle = col; g.beginPath(); path(); g.fill(); g.restore();
+  }
+  if (c) {
+    const gr = g.createLinearGradient(c.x + lx * c.r, c.y + ly * c.r, c.x - lx * c.r, c.y - ly * c.r);
+    const L = unit([LIGHT[0], LIGHT[1]]);
+    for (const [t, tilt] of [[0, 0.75], [0.3, 0.3], [0.6, -0.2], [1, -0.7]]) gr.addColorStop(t, shade(st, L[0] * Math.sin(tilt), L[1] * Math.sin(tilt), Math.cos(tilt)));
+    g.fillStyle = gr;
+  } else g.fillStyle = st.base;
+  g.beginPath(); path(); g.fill();
+}
+
+// 只畫在框上（畫心挖掉）
+function frameClip(g, o, pic) {
+  g.beginPath();
+  g.rect(o.x0, o.y0, o.x1 - o.x0, o.y1 - o.y0);
+  g.rect(pic.x0, pic.y0, pic.x1 - pic.x0, pic.y1 - pic.y0);
+  g.clip('evenodd');
+}
+
+// 金箔：一張張方形的箔貼上去，每張顏色差一點，張和張的接縫淡淡一道
+function giltLeaf(g, o, pic, u, R) {
+  const s = 26 * u, seams = new Path2D();
+  for (let y = o.y0; y < o.y1; y += s) for (let x = o.x0; x < o.x1; x += s) {
+    if (x > pic.x0 && x + s < pic.x1 && y > pic.y0 && y + s < pic.y1) continue;
+    const v = R();
+    if (v < 0.55) { g.fillStyle = v < 0.25 ? 'rgba(255,214,120,.07)' : 'rgba(90,50,10,.08)'; g.fillRect(x, y, s, s); }
+    if (R() < 0.7) { seams.moveTo(x, y); seams.lineTo(x + s, y); }
+    if (R() < 0.7) { seams.moveTo(x, y); seams.lineTo(x, y + s); }
+  }
+  g.strokeStyle = 'rgba(80,50,16,.08)';
+  g.lineWidth = 0.9 * u;
+  g.stroke(seams);
+}
+
+// 一塊不規則的斑：沿著那一邊拉長（along：橫的邊）
+function blob(g, x, y, r, along, R) {
+  g.beginPath();
+  for (let k = 0; k < 9; k++) {
+    const a = (k / 9) * Math.PI * 2, rr = r * (0.55 + R() * 0.7), ax = Math.cos(a) * rr * 1.9, ay = Math.sin(a) * rr;
+    const px = x + (along ? ax : ay), py = y + (along ? ay : ax);
+    k ? g.lineTo(px, py) : g.moveTo(px, py);
+  }
+  g.closePath();
+  g.fill();
+}
+
+// 每一邊上的一點：side 0 上 1 右 2 下 3 左，t 沿邊 0–1，d 從外緣往內多深
+function onSide(o, side, t, d) {
+  if (side === 0) return [o.x0 + t * (o.x1 - o.x0), o.y0 + d];
+  if (side === 1) return [o.x1 - d, o.y0 + t * (o.y1 - o.y0)];
+  if (side === 2) return [o.x0 + t * (o.x1 - o.x0), o.y1 - d];
+  return [o.x0 + d, o.y0 + t * (o.y1 - o.y0)];
+}
+
+// 舊金：常被摸到的高處（外唇、珠串）金掉了露出底下的紅土，凹槽裡積著灰
+function wear(g, o, u, R) {
+  for (let i = 0; i < 70; i++) {
+    const side = (R() * 4) | 0, d = R() < 0.6 ? R() * 11 * u : (71 + R() * 10) * u;
+    const [x, y] = onSide(o, side, R(), d);
+    g.fillStyle = R() < 0.75 ? 'rgba(124,54,30,.6)' : 'rgba(34,22,12,.5)';
+    blob(g, x, y, (2 + R() * 5) * u, side % 2 === 0, R);
+  }
+  for (let i = 0; i < 50; i++) {
+    const side = (R() * 4) | 0, [x, y] = onSide(o, side, R(), (12 + R() * 18) * u);
+    g.fillStyle = 'rgba(40,26,10,.16)';
+    blob(g, x, y, (2.5 + R() * 5) * u, side % 2 === 0, R);
   }
 }
 
-// 畫框：圍住畫心 pic（x0,y0,x1,y1），框寬 F（上下可另給 Fy）
-export function frameAround(g, styleIndex, pic, F, Fy = F) {
-  const st = FRAME_STYLES[styleIndex] || FRAME_STYLES[0];
-  const o = { x0: pic.x0 - F, y0: pic.y0 - Fy, x1: pic.x1 + F, y1: pic.y1 + Fy };
+// 木頭：每一邊是一根木條，木紋沿著木條跑，四個角 45° 斜接（接縫一道暗一道亮）
+function woodGrain(g, o, pic, st, u, R) {
+  const F = pic.x0 - o.x0, Fy = pic.y0 - o.y0, W = o.x1 - o.x0, H = o.y1 - o.y0;
+  const walnut = st.wood === 'walnut';
+  // 起點、轉角、長、這一邊多寬、轉角那一頭隔壁多寬
+  for (const [x, y, a, len, w, wa] of [[o.x0, o.y0, 0, W, Fy, F], [o.x1, o.y0, Math.PI / 2, H, F, Fy], [o.x1, o.y1, Math.PI, W, Fy, F], [o.x0, o.y1, -Math.PI / 2, H, F, Fy]]) {
+    g.save();
+    g.translate(x, y);
+    g.rotate(a);
+    g.beginPath(); g.moveTo(0, 0); g.lineTo(len, 0); g.lineTo(len - wa, w); g.lineTo(wa, w); g.closePath();
+    g.save();
+    g.clip();
+    const n = Math.round(w / ((walnut ? 3.4 : 5) * u));
+    for (let j = 0; j < n; j++) {
+      const y0 = ((j + R()) / n) * w, amp = (0.5 + R() * 2.2) * u, f = (0.002 + R() * 0.005) / u, ph = R() * 9, ph2 = R() * 9;
+      const light = j % 4 === 0;
+      g.strokeStyle = walnut ? (light ? 'rgba(210,160,110,.09)' : `rgba(30,14,6,${0.1 + R() * 0.22})`) : `rgba(130,110,96,${0.03 + R() * 0.05})`;
+      g.lineWidth = (0.5 + R() * 1.6) * u;
+      g.beginPath();
+      const xs = -R() * len * 0.2, step = 8 * u;
+      for (let px = xs; px <= len + step; px += step) {
+        const py = y0 + Math.sin(px * f + ph) * amp * 3 + Math.sin(px * f * 3.1 + ph2) * amp;
+        px === xs ? g.moveTo(px, py) : g.lineTo(px, py);
+      }
+      g.stroke();
+    }
+    g.restore();
+    // 起點這一角的斜接縫
+    g.lineWidth = 1.3 * u;
+    g.strokeStyle = 'rgba(0,0,0,.5)';
+    g.beginPath(); g.moveTo(0, 0); g.lineTo(wa, w); g.stroke();
+    g.lineWidth = 0.8 * u;
+    g.strokeStyle = 'rgba(255,230,200,.1)';
+    g.beginPath(); g.moveTo(1.2 * u, 0); g.lineTo(wa + 1.2 * u, w); g.stroke();
+    g.restore();
+  }
+}
+
+// 很淡的斑駁：一張灰色雜訊用 overlay 疊兩層（大塊的、細的），讓表面不像電腦填色
+let NOISE = null;
+function noise() {
+  if (NOISE) return NOISE;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const x = c.getContext('2d'), d = x.createImageData(128, 128), R = rnd(23);
+  for (let k = 0; k < d.data.length; k += 4) {
+    const v = 92 + R() * 72;
+    d.data[k] = d.data[k + 1] = d.data[k + 2] = v;
+    d.data[k + 3] = 255;
+  }
+  x.putImageData(d, 0, 0);
+  return (NOISE = c);
+}
+function mottle(g, o, u) {
+  g.globalCompositeOperation = 'overlay';
+  g.imageSmoothingEnabled = true;
+  for (const [s, a] of [[6 * u, 0.28], [1.5 * u, 0.14]]) {
+    const p = g.createPattern(noise(), 'repeat');
+    p.setTransform(new DOMMatrix().translate(o.x0, o.y0).scale(s));
+    g.fillStyle = p;
+    g.globalAlpha = a;
+    g.fillRect(o.x0, o.y0, o.x1 - o.x0, o.y1 - o.y0);
+  }
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+}
+
+// 框投在畫上的影子：光從左上來，上、左兩邊深，右、下只有一線
+function inset(g, pic, F) {
+  const { x0, y0, x1, y1 } = pic, W = x1 - x0, H = y1 - y0;
+  for (const [ax, ay, bx, by, a, rx, ry, rw, rh] of [
+    [0, y0, 0, y0 + F * 0.16, 0.55, x0, y0, W, F * 0.16],
+    [x0, 0, x0 + F * 0.12, 0, 0.45, x0, y0, F * 0.12, H],
+    [x1, 0, x1 - F * 0.05, 0, 0.22, x1 - F * 0.05, y0, F * 0.05, H],
+    [0, y1, 0, y1 - F * 0.04, 0.18, x0, y1 - F * 0.04, W, F * 0.04],
+  ]) {
+    const gr = g.createLinearGradient(ax, ay, bx, by);
+    gr.addColorStop(0, `rgba(0,0,0,${a})`);
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr;
+    g.fillRect(rx, ry, rw, rh);
+  }
+}
+
+// 畫一次框（存進 CACHE 前）
+function drawFrame(g, st, pic, o, F) {
   const u = F / 100;   // 框寬當 100 來排
-  g.save();
+  const R = rnd(7);
   // 外唇、凹槽、葉飾帶、珠串（或金線）、內斜面
-  let r = ring(g, o, 10 * u, st, 0.55);
-  r = ring(g, r, 22 * u, st, 0.45, true);
+  let r = ring(g, o, 10 * u, st, 1.1);
+  r = ring(g, r, 22 * u, st, 0.9, true);
   const ornO = r;
-  r = ring(g, r, 38 * u, st, 0.25);
+  r = ring(g, r, 38 * u, st, 0.35);
   const bead = r;
-  r = ring(g, r, 12 * u, st, 0.5);
-  ring(g, r, 18 * u, st, 0.35, true);
+  r = ring(g, r, 12 * u, st, 1.0);
+  ring(g, r, 18 * u, st, 0.6, true);
   // 葉飾帶：一片片往同一個方向倒的葉子（茛苕葉），轉角各一叢扇形
   const band = 38 * u;
   if (st.orn === 'leaf') {
@@ -108,7 +287,7 @@ export function frameAround(g, styleIndex, pic, F, Fy = F) {
           g.moveTo(x - step * 0.45, cy + w * 0.28);
           g.bezierCurveTo(x - step * 0.4, cy - w * 0.32, x + step * 0.2, cy - w * 0.42, x + step * 0.55, cy - w * 0.05);
           g.bezierCurveTo(x + step * 0.1, cy - w * 0.05, x - step * 0.05, cy + w * 0.1, x - step * 0.45, cy + w * 0.28);
-        }, w);
+        }, w, { x: x + step * 0.05, y: cy - w * 0.08, r: step * 0.5 });
       }
     });
     // 轉角的扇形：五片葉往外張
@@ -124,9 +303,9 @@ export function frameAround(g, styleIndex, pic, F, Fy = F) {
           g.quadraticCurveTo(L * 0.6, -band * 0.22, L, 0);
           g.quadraticCurveTo(L * 0.6, band * 0.22, band * 0.15, 0);
           g.restore();
-        }, band);
+        }, band, { x: Math.cos(t) * L * 0.55, y: Math.sin(t) * L * 0.55, r: L * 0.45 });
       }
-      carve(g, st, () => g.ellipse(band * 0.5, band * 0.5, band * 0.2, band * 0.2, 0, 0, Math.PI * 2), band);
+      carve(g, st, () => g.ellipse(band * 0.5, band * 0.5, band * 0.2, band * 0.2, 0, 0, Math.PI * 2), band, { x: band * 0.5, y: band * 0.5, r: band * 0.2 });
       g.restore();
     }
   } else {
@@ -145,32 +324,56 @@ export function frameAround(g, styleIndex, pic, F, Fy = F) {
       g.globalAlpha = 1;
     });
   }
-  // 珠串或細金線
+  // 珠串，或細金線（圓的一條：往左上偏一道亮、往右下偏一道暗，上半都亮）
   if (st.fillet) {
+    const fx = bead.x0 + 6 * u, fy = bead.y0 + 6 * u, fw = bead.x1 - bead.x0 - 12 * u, fh = bead.y1 - bead.y0 - 12 * u;
     g.strokeStyle = st.fillet;
     g.lineWidth = 4 * u;
-    g.strokeRect(bead.x0 + 6 * u, bead.y0 + 6 * u, bead.x1 - bead.x0 - 12 * u, bead.y1 - bead.y0 - 12 * u);
+    g.strokeRect(fx, fy, fw, fh);
+    g.lineWidth = 1.3 * u;
+    g.strokeStyle = 'rgba(40,24,8,.6)';
+    g.strokeRect(fx + 1 * u, fy + 1 * u, fw, fh);
+    g.strokeStyle = 'rgba(255,240,200,.75)';
+    g.strokeRect(fx - 0.9 * u, fy - 0.9 * u, fw, fh);
   } else {
     alongSides(g, bead, 12 * u, (len, w) => {
-      for (let x = w; x < len - w * 0.5; x += w * 1.1) carve(g, st, () => g.ellipse(x, w * 0.5, w * 0.42, w * 0.36, 0, 0, Math.PI * 2), w);
+      for (let x = w; x < len - w * 0.5; x += w * 1.1) carve(g, st, () => g.ellipse(x, w * 0.5, w * 0.42, w * 0.36, 0, 0, Math.PI * 2), w, { x, y: w * 0.5, r: w * 0.42 });
     });
   }
-  // 舊金：金掉了的地方露出底下的紅土和黑
-  if (st.worn) {
-    const R = rnd(7);
-    for (let i = 0; i < 70; i++) {
-      const side = (R() * 4) | 0, t = R(), d = R() * 70 * u;
-      const x = side === 0 ? o.x0 + t * (o.x1 - o.x0) : side === 1 ? o.x1 - d : side === 2 ? o.x0 + t * (o.x1 - o.x0) : o.x0 + d;
-      const y = side === 0 ? o.y0 + d : side === 1 ? o.y0 + t * (o.y1 - o.y0) : side === 2 ? o.y1 - d : o.y0 + t * (o.y1 - o.y0);
-      g.fillStyle = R() < 0.5 ? 'rgba(110,52,30,.55)' : 'rgba(20,14,8,.45)';
-      g.beginPath(); g.ellipse(x, y, (4 + R() * 12) * u, (2 + R() * 6) * u, R() * 3, 0, Math.PI * 2); g.fill();
-    }
-  }
+  // 材質
+  g.save();
+  frameClip(g, o, pic);
+  if (st.gilt) giltLeaf(g, o, pic, u, R);
+  if (st.worn) wear(g, o, u, R);
+  if (st.wood) woodGrain(g, o, pic, st, u, R);
+  mottle(g, o, u);
+  g.restore();
+  inset(g, pic, F);
   // 畫心邊一道暗縫
   g.strokeStyle = 'rgba(0,0,0,.55)';
   g.lineWidth = 2.5 * u;
   g.strokeRect(pic.x0, pic.y0, pic.x1 - pic.x0, pic.y1 - pic.y0);
-  g.restore();
+}
+
+// 畫框：圍住畫心 pic（x0,y0,x1,y1），框寬 F（上下可另給 Fy）。同樣大小、同一種框只畫一次，之後貼存起來的
+const CACHE = new Map();
+export function frameAround(g, styleIndex, pic, F, Fy = F) {
+  const st = FRAME_STYLES[styleIndex] || FRAME_STYLES[0];
+  const o = { x0: pic.x0 - F, y0: pic.y0 - Fy, x1: pic.x1 + F, y1: pic.y1 + Fy };
+  const ox = Math.floor(o.x0), oy = Math.floor(o.y0), w = Math.ceil(o.x1) - ox, h = Math.ceil(o.y1) - oy;
+  const key = [st.name, w, h, F, Fy, o.x0 - ox, o.y0 - oy].join('|');
+  let c = CACHE.get(key);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const x = c.getContext('2d');
+    x.translate(-ox, -oy);
+    drawFrame(x, st, pic, o, F);
+    if (CACHE.size >= 4) CACHE.delete(CACHE.keys().next().value);
+    CACHE.set(key, c);
+  }
+  g.drawImage(c, ox, oy);
   return o;
 }
 

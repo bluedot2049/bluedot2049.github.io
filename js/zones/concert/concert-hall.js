@@ -7,7 +7,7 @@ import { STAGE, mergeStatic, RELIGHT_SPEED, doorWall } from './concert-stage.js'
 import { flameCard, SHAPE } from '../../core/flame.js';
 import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
 import { Glows } from './concert-glow.js';
-import { ROBES } from './concert-crowd.js';
+import { ROBES, CHEER } from './concert-crowd.js';
 
 
 export const HALL = { x: 28, back: STAGE.back - 0.5, rear: 44, wall: 18, apex: 31 };   // 側牆、背牆、後牆、牆高、屋脊
@@ -94,6 +94,22 @@ function silhouettes(spots, mat, candleMat) {
   return [crowd, cand];
 }
 
+// 歡呼時看台、座位上的剪影站起來（拉高一截），四成的人跟著跳；各自慢一點、各自坐回去（跟台下同一組 CHEER，concert-crowd.js）
+function cheerUp(mat) {
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, CHEER);
+    sh.vertexShader = 'uniform float uCheer, uCheerK, uCheerH;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      vec3 cw = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+      float cs = fract(sin(dot(cw.xz, vec2(12.9898, 78.233))) * 43758.5453), cs2 = fract(cs * 91.7);
+      float ca = uCheer - 0.3 - 0.9 * cs - max(cw.z, 0.0) * 0.012, hold = uCheerH * (1.5 + 4.0 * cs2);
+      float up = cs2 < uCheerK ? smoothstep(0.0, 0.5, ca) * (1.0 - smoothstep(hold, hold + 2.0, ca)) : 0.0;
+      transformed.y *= 1.0 + 0.16 * up;
+      if (cs < 0.4) transformed.y += 0.12 * up * abs(sin(ca * 6.0 + cs * 9.0));`);
+  };
+  mat.customProgramCacheKey = () => 'concert-hall-cheer';
+  return mat;
+}
+
 export class Hall {
   constructor(scene, { coarse = false } = {}) {
     const g = (this.group = new THREE.Group());
@@ -159,7 +175,7 @@ export class Hall {
     }
     const rampTop = SEATS.steps * SEATS.rise, L = HALL.rear - SEATS.z0, ramp = mesh(new THREE.BoxGeometry(SEATS.aisle * 2, 0.3, Math.hypot(L, rampTop)), DARK, 0, rampTop / 2 - 0.15, SEATS.z0 + L / 2);
     ramp.rotation.x = -Math.atan2(rampTop, L);   // 門口那頭（+z）高、地面那頭低
-    const [sil, cand] = silhouettes(spots, lam(0xffffff), new THREE.MeshBasicMaterial({ color: 0xff7034 }));
+    const [sil, cand] = silhouettes(spots, cheerUp(lam(0xffffff)), new THREE.MeshBasicMaterial({ color: 0xff7034 }));
     g.add(sil, cand);
     this.cand = cand;   // 看台、座位上的蠟燭（靜默那一拍熄掉，concert.js 接 candleGate）
     // ---------- 台口的尖拱門（框住整個舞台）----------

@@ -532,8 +532,8 @@ class Member {
         break;
       }
       case 'ritual': {
-        // 跪坐：敲缽是右手往前下敲；鑼是右手往右後大大揮過去；喉音的時候頭往上抬、閉眼
-        const b = last(['bowl', 'bell']), gg = last(['gong']), nb = next(['bowl', 'bell', 'gong']), dr = last(['drone']);
+        // 跪坐：敲缽是右手往前下敲；鑼是右手往右後大大揮過去；喉音、帶合唱的時候頭往上抬、閉眼
+        const b = last(['bowl', 'bell']), gg = last(['gong']), nb = next(['bowl', 'bell', 'gong']), dr = last(['drone', 'chant']);
         const singing = dr && t < dr.end, kb = b ? hitK(t - b.t, 0.15) : 0, kg = gg ? hitK(t - gg.t, 0.35) : 0, pre = nb ? raiseK(nb.t - t, 0.35) : 0;
         const gong = nb?.part === 'gong';
         arm('L', [-0.35, -0.2, OUT + 0.05]);

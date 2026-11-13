@@ -36,7 +36,7 @@ export const BANDS = [
         look: { race: 'lizard', top: 'hoodie', bottom: 'track', outer: 'none', hat: 'none', glasses: 'shades', neck: 'none', back: 'none', topC: 12, botC: 12 } },
       { id: 'synth', name: '合成器', role: 'synth', at: [-5.8, -2.8], y: 2.6, tracks: ['pad', 'arp'],
         look: { race: 'tv', top: 'shirt', bottom: 'pants', outer: 'blazer', hat: 'none', neck: 'tie', back: 'none', outC: 12, botC: 12 } },
-      { id: 'ritual', name: '法器', role: 'ritual', at: [6.0, -2.6], y: 1.7, tracks: ['bowl', 'gong', 'bell', 'drone'],
+      { id: 'ritual', name: '法器', role: 'ritual', at: [6.0, -2.6], y: 1.7, tracks: ['bowl', 'gong', 'bell', 'drone', 'chant'],
         look: { race: 'frog', top: 'robe', bottom: 'robe', outer: 'mino', hat: 'straw', neck: 'bell', back: 'none', topC: 6, botC: 6 } },
       { id: 'drums', name: '鼓', role: 'drums', at: [2.4, -3.6], y: 0.9, tracks: ['kick', 'snare', 'hat', 'ride', 'china', 'tom', 'shime', 'kane', 'glitch'],
         look: { race: 'robot', top: 'tee', bottom: 'shorts', outer: 'none', hat: 'none', neck: 'towel', back: 'none', topC: 12, botC: 12 } },
@@ -101,6 +101,27 @@ const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const smooth = (x) => { x = clamp01(x); return x * x * (3 - 2 * x); };
 const pulse = (x, k = 6) => (x < 0 ? 0 : Math.exp(-x * k));   // 打在拍點上那一下，往後衰減
 
+// 台下歡呼：哪一段第幾小節第幾拍、多大聲（k 0 到 1，也是多少人跟著喊）、撐多久（hold 倍數）。畫面（concert-crowd.js 的 uCheer）和聲音（concert-cheer.js）都讀 cheerAt
+export const CHEERS = [
+  { sec: 'rise', bar: 0, beat: 0, k: 0.45, hold: 0.7 },    // 八弦吉他的咒文隔著門進來
+  { sec: 'sun', bar: 0, beat: 0, k: 1, hold: 1 },          // 日出
+  { sec: 'veil', bar: 0, beat: 0, k: 0.6, hold: 0.8 },     // 光幕打下來
+  { sec: 'end', bar: 1, beat: 2.5, k: 1, hold: 1.6 },      // 曲終（拖到下一輪開頭）
+];
+// 第 t 秒離最近一次歡呼開始幾秒：{ age, k, hold, i }；沒有在歡呼時 age 是 99。上一輪的曲終跨過開頭也算得到
+export function cheerAt(b, t) {
+  const T = songSec(b), bs = barSec(b), tt = ((t % T) + T) % T;
+  let best = { age: 99, k: 0, hold: 1, i: -1 };
+  CHEERS.forEach((ch, i) => {
+    let start = 0;
+    for (const s of b.sections) { if (s.id === ch.sec) break; start += s.bars; }
+    if (start >= songBars(b)) return;   // 這一團沒有這一段
+    const at = (start + ch.bar + ch.beat / 4) * bs;
+    for (const age of [tt - at, tt + T - at]) if (age >= 0 && age < best.age && age < 14) best = { age, k: ch.k, hold: ch.hold, i };
+  });
+  return best;
+}
+
 // 第 t 秒舞台的樣子。顏色都是 palette 的第幾個，a 是亮度 0 到 1。
 // ring 光環（draw 畫到幾成、y 升起幾成、fill 填成太陽幾成）、horizon 地平線、pillars 頂上七道直光、rays 從光環放射的光、
 // sheet 雷射光幕（y 0 在頭頂高處、1 壓到人群裡）、top 打在鋼琴手上那一束、haze 煙裡的底色、strobe 全場閃白、smoke 煙多濃、
@@ -125,7 +146,7 @@ export function cueAt(b, t) {
     piano: { strike: 0, up: 0 },
     crowd: { hands: 0, jump: 0, lights: 0 }, moment: null,
     iris: { a: 0, spin: 0, sun: 0, sky: 0, warp: 0, pin: 0 }, arch: 0.2, snuff: 0, relight: -1,
-    blood: 0,
+    blood: 0, cheer: cheerAt(b, t),
   };
   const moment = (id, q) => { if (q > 0.04 && (!c.moment || q > c.moment.q)) c.moment = { id, name: MOMENTS[id], q }; };
   const strike = pulse((beat * 2) % 1, 5);   // 鋼琴一個八分音符一下

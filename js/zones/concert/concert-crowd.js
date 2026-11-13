@@ -15,6 +15,8 @@ const NECK = 0.8, SH = [0.19, 0.72];   // 頭和肩膀的關節（跟 Character 
 const SKIN_K = '#ff00ff', MUZZLE_K = '#00ff00', ROBE_K = '#0000ff';
 // 袍子的配色：教團的暗色，墨黑、深酒紅最多，暗鏽、灰紫、深青灰其次，暗金棕最少（點綴）。[顏色, 權重]
 export const ROBES = [['#2a2428', 5], ['#4a1a22', 4], ['#4a3022', 2], ['#2f2838', 2], ['#22302e', 2], ['#4a3c20', 1]];
+// 歡呼：開始了幾秒、多少人跟著喊、撐多久。台下的人和看台的剪影（concert-hall.js）共用這三個
+export const CHEER = { uCheer: { value: 99 }, uCheerK: { value: 0 }, uCheerH: { value: 1 } };
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 function rng(s) { return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; }
 
@@ -85,8 +87,9 @@ const VERT_HEAD = /* glsl */ `
   attribute float aPart, aMat;
   attribute vec3 aMe;   // 種子、離舞台多遠、面向（yaw）
   attribute vec3 aSkin, aRobe;   // 這個人的膚色、袍子色
+  attribute vec3 aCh;            // 歡呼：反應慢多少、跟不跟著喊、哪一種（JS 抽好放在 spot.ch，concert-cheer.js 照同一組讓身邊的人出聲）
   attribute vec3 aMe2;           // 在哪一區的個性（0 一般、1 虔誠、2 狂熱、3 燭光）、固定的樣子（-1 沒有）、拿不拿大燈
-  uniform float uBeat, uKick, uHeat, uHeatA, uHeatB, uPhrase, uPhraseT, uWave, uT, uSnuff, uRelight;
+  uniform float uBeat, uKick, uHeat, uHeatA, uHeatB, uPhrase, uPhraseT, uWave, uT, uSnuff, uRelight, uCheer, uCheerK, uCheerH;
   uniform vec2 uPlayer;
   varying float vRim, vEmis, vFace, vZ;
   float h1(float s, float k) { return fract(sin(s * 127.1 + k * 311.7) * 43758.5453); }
@@ -148,6 +151,30 @@ const VERT_BODY = /* glsl */ `
   float turn = side * 0.45 * off + 0.05 * sin(uT * 0.37 + seed * 17.0);   // 身體平常也一點點來回轉
   float look = side * (0.5 + 0.5 * h1(seed, 9.0)) * off + 0.3 * sin(uT * (0.15 + 0.1 * h1(seed, 10.0)) + seed * 23.0) * (1.0 - 0.6 * uHeat);
   body.y += 0.025 * sin(uT * 0.45 + seed * 7.0);   // 重心換腳
+  // 歡呼（concert-show.js 的 CHEERS）：不是人浪那種一條線，各自慢 0.1～0.7 秒反應、各自喊多久，一下衝上去再一個個放下來。
+  // 抽一種：雙手直衝上去手腕抖、連跳一下比一下低、單手握拳往上頂、圍著嘴仰頭喊、頭上快拍手、轉身跟旁邊的人；虔誠區多半不喊、只抬頭
+  float cAge = uCheer - (0.12 + 0.55 * aCh.x + dist * 0.01), cEnv = 0.0;
+  if (cAge > 0.0 && cAge < 14.0) {
+    bool devoutC = aMe2.x > 0.5 && aMe2.x < 1.5;
+    float join = uCheerK * (devoutC ? 0.4 : 1.0) * (aMe2.y >= 0.0 ? 0.5 : 1.0);
+    float hold = uCheerH * (1.2 + 4.5 * h1(seed, 61.0));
+    cEnv = smoothstep(0.0, 0.22, cAge) * (1.0 - smoothstep(hold, hold + 1.6, cAge));
+    if (aCh.y < join) {
+      int rt = int(floor(aCh.z * 5.999));
+      float shake = 0.13 * sin(uT * 23.0 + seed * 9.0), cTurn = 0.0;
+      vec4 cA = arms, cB = body;
+      if (rt == 0) { cA = vec4(-2.6 + shake, 0.35 + 0.5 * shake, -2.6 - shake, 0.35 - 0.5 * shake); cB = vec4(-0.35, body.y, -0.08, 0.0); }
+      else if (rt == 1) { float j = abs(sin(cAge * 6.5)) * exp(-cAge * 0.45); cB = vec4(-0.1, body.y, 0.0, 0.3 * j); cA = vec4(-2.2 - 0.3 * j, 0.4, -2.2 - 0.3 * j, 0.4); }
+      else if (rt == 2) { float pm = pow(abs(sin(cAge * 5.0)), 3.0); cA = vec4(-0.2, 0.15, -2.1 - 0.5 * pm, 0.1); cB = vec4(-0.2 + 0.25 * pm, body.y, 0.05, 0.0); }
+      else if (rt == 3) { cA = vec4(-1.75, -0.62, -1.75, -0.62); cB = vec4(-0.5, body.y, -0.12, 0.0); }
+      else if (rt == 4) { float cl = pow(abs(cos(cAge * 13.0)), 8.0); cA = vec4(-2.35, -0.3 - 0.22 * cl, -2.35, -0.3 - 0.22 * cl); cB = vec4(-0.2, body.y, 0.0, 0.0); }
+      else { cA = vec4(-0.3, 0.2, -1.9 + shake, 0.25); cB = vec4(0.1, body.y, 0.05, 0.0); cTurn = h1(seed, 64.0) < 0.5 ? -0.75 : 0.75; }
+      arms = mix(arms, cA, cEnv);
+      body = mix(body, cB, cEnv);
+      turn = mix(turn, cTurn, cEnv);
+      look = mix(look, cTurn * 0.6, cEnv);
+    } else if (devoutC) body.x = mix(body.x, -0.3, cEnv);
+  }
   // 人浪：大太鼓最重那一下，從台前往後一路跳起來、手舉起來
   float wt = uWave - dist / 13.0;
   if (wt > 0.0 && wt < 0.75) { float k = sin(3.14159 * wt / 0.75); body.w += 0.32 * k; arms = mix(arms, vec4(-2.6, 0.4, -2.6, 0.4), k); }
@@ -177,7 +204,7 @@ const VERT_BODY = /* glsl */ `
   // 朝舞台、朝上的那面吃燈色（背光的邊）；火苗自己亮
   vRim = 0.4 * pow(max(0.0, dot(normalize(n), normalize(vec3(0.0, 0.55, 1.0)))), 3.0);   // 只留邊上一道
   vFace = dot(normalize((modelMatrix * instanceMatrix * vec4(n, 0.0)).xyz), vec3(0.0, 0.25, -1.0));   // 這一面朝舞台多少（舞台在 -z）
-  vEmis = part == 5 ? 1.0 : 0.0;
+  vEmis = part == 5 ? 1.0 + 1.3 * cEnv : 0.0;   // 歡呼時手上的火旺一下
 `;
 
 const ROBE_SUM = ROBES.reduce((n, [, w]) => n + w, 0);
@@ -186,11 +213,11 @@ function robeOf(u) { let x = u * ROBE_SUM; for (const [c, w] of ROBES) { if ((x 
 export class Crowd {
   // spots：[{ x, z, dist, front }]（front 前幾排用種族頭）；races 用哪些種族
   constructor(scene, spots, { races = 12, seed = 7, maxTris = 450 } = {}) {
-    const R = rng(seed);
+    const R = rng(seed), RC = rng((seed % 2147483000) + 17);   // RC 只抽歡呼（另一條，不動到原本每個人的長相）
     this.u = {
       uBeat: { value: 0 }, uKick: { value: 0 }, uHeat: { value: 0 }, uHeatA: { value: 0 }, uHeatB: { value: 0 }, uPhrase: { value: 0 }, uPhraseT: { value: 0 }, uWave: { value: 99 }, uT: { value: 0 },
       uPlayer: { value: new THREE.Vector2(999, 999) }, uRim: { value: new THREE.Color() }, uCandle: { value: new THREE.Color(1, 0.65, 0.3) },
-      uSnuff: { value: 0 }, uRelight: { value: -1 }, uDawn: { value: -99 }, uDawnA: { value: 0 }, uDawnCol: { value: new THREE.Color() },
+      ...CHEER, uSnuff: { value: 0 }, uRelight: { value: -1 }, uDawn: { value: -99 }, uDawnA: { value: 0 }, uDawnCol: { value: new THREE.Color() },
     };
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
     mat.onBeforeCompile = (sh) => {
@@ -204,7 +231,7 @@ export class Crowd {
       // 台上的燈照在布上：邊光乘布自己的顏色（酒紅照亮還是酒紅，不會整片洗成米白）；背對舞台的那面壓到一成（從後面看是一片剪影），
       // 外緣一圈輪廓光（看的方向跟表面越平行越亮），就是演唱會照片裡台下剪影的樣子。只是幾行運算，不加燈
       sh.fragmentShader = 'uniform vec3 uRim, uCandle, uDawnCol; uniform float uT, uDawn, uDawnA; varying float vRim, vEmis, vFace, vZ;\n' + sh.fragmentShader
-        .replace('#include <opaque_fragment>', 'float front = smoothstep(-0.2, 0.6, vFace);\n outgoingLight *= mix(0.03, 1.0, front);\n float fres = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 4.0);\n outgoingLight += uRim * vRim * diffuseColor.rgb * 2.2 + uRim * fres * fres * (0.25 + 2.2 * diffuseColor.rgb) * mix(0.6, 1.0, front);\n outgoingLight += uDawnCol * uDawnA * (exp(-abs(vZ - uDawn) * 0.9) * 0.8 + 0.05 * step(vZ, uDawn)) * (0.15 + diffuseColor.rgb);\n if (vEmis > 0.5) outgoingLight = uCandle * (0.85 + 0.15 * sin(uT * 23.0 + gl_FragCoord.x));\n#include <opaque_fragment>');
+        .replace('#include <opaque_fragment>', 'float front = smoothstep(-0.2, 0.6, vFace);\n outgoingLight *= mix(0.03, 1.0, front);\n float fres = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 4.0);\n outgoingLight += uRim * vRim * diffuseColor.rgb * 2.2 + uRim * fres * fres * (0.25 + 2.2 * diffuseColor.rgb) * mix(0.6, 1.0, front);\n outgoingLight += uDawnCol * uDawnA * (exp(-abs(vZ - uDawn) * 0.9) * 0.8 + 0.05 * step(vZ, uDawn)) * (0.15 + diffuseColor.rgb);\n if (vEmis > 0.5) outgoingLight = uCandle * (0.85 + 0.15 * sin(uT * 23.0 + gl_FragCoord.x)) * vEmis;\n#include <opaque_fragment>');
     };
     mat.customProgramCacheKey = () => 'concert-crowd';
     // 前幾排：種族頭（挑幾個種族，一個種族一組）；後面：深色風帽一組
@@ -226,7 +253,7 @@ export class Crowd {
     for (const [key, list] of groups) {
       const race = pick.find((r) => r.id === key);
       const geo = figure(race ? raceHead(race) : hoodHead);
-      const me = new Float32Array(list.length * 3), me2 = new Float32Array(list.length * 3), skin = new Float32Array(list.length * 3), robe = new Float32Array(list.length * 3);
+      const ch = new Float32Array(list.length * 3), me = new Float32Array(list.length * 3), me2 = new Float32Array(list.length * 3), skin = new Float32Array(list.length * 3), robe = new Float32Array(list.length * 3);
       const mesh = new THREE.InstancedMesh(geo, mat, list.length);
       list.forEach((s, i) => {
         const yaw = s.yaw ?? Math.PI + (R() - 0.5) * 0.5, h = 0.92 + R() * 0.18;   // 面向舞台（三五成群的面對面）、高矮胖瘦各不同
@@ -238,11 +265,14 @@ export class Crowd {
         col.set(SKINS[Math.floor(R() * SKINS.length)]).multiplyScalar(0.8 + R() * 0.2);   // 在暗處，皮膚也壓暗一點
         skin[i * 3] = col.r; skin[i * 3 + 1] = col.g; skin[i * 3 + 2] = col.b;
         me[i * 3] = R(); me[i * 3 + 1] = s.dist; me[i * 3 + 2] = yaw;
+        s.ch = [RC(), RC(), RC()];
+        ch.set(s.ch, i * 3);
         me2[i * 3] = s.zone ?? 0; me2[i * 3 + 1] = s.force ?? -1; me2[i * 3 + 2] = s.prop ?? 0;
       });
       geo.setAttribute('aMe', new THREE.InstancedBufferAttribute(me, 3));
       geo.setAttribute('aSkin', new THREE.InstancedBufferAttribute(skin, 3));
       geo.setAttribute('aRobe', new THREE.InstancedBufferAttribute(robe, 3));
+      geo.setAttribute('aCh', new THREE.InstancedBufferAttribute(ch, 3));
       geo.setAttribute('aMe2', new THREE.InstancedBufferAttribute(me2, 3));
       mesh.frustumCulled = false;
       scene.add(mesh);
@@ -251,7 +281,7 @@ export class Crowd {
   }
   // 每一幀：拍子（連續的拍數）、大鼓、多熱、第幾句和句子裡走到哪、人浪開始了幾秒、玩家在哪、邊光的顏色
   // snuff 燭火全熄、relight 日出後第幾秒（-1 沒在點）、黎明線在哪（z）多亮什麼顏色
-  update({ beat, kick, heat, phrase, phraseT, wave, t, feet, rim, snuff = 0, relight = -1, dawnZ = -99, dawnA = 0, dawnCol = null }) {
+  update({ beat, kick, heat, phrase, phraseT, wave, t, feet, rim, cheer = null, snuff = 0, relight = -1, dawnZ = -99, dawnA = 0, dawnCol = null }) {
     const u = this.u;
     // 人的身體不會跟燈一樣瞬間反應：熱度、大鼓先在這裡抹平。燈的熱度每句第一拍有一道尖峰、換段落直接跳，大鼓是瞬間打滿再衰減，
     // 直接餵進去，一千多人會在同一幀一起抽一下（2026-11-10 被說硬抖動看了不舒服）。跳時間（dt 怪）就直接對上
@@ -271,6 +301,7 @@ export class Crowd {
     if (dawnCol) u.uDawnCol.value.copy(dawnCol);
     u.uBeat.value = beat; u.uKick.value = this.kick; u.uHeat.value = this.heat; u.uPhrase.value = phrase; u.uPhraseT.value = phraseT;
     u.uWave.value = wave; u.uT.value = t;
+    if (cheer) { CHEER.uCheer.value = cheer.age; CHEER.uCheerK.value = cheer.k; CHEER.uCheerH.value = cheer.hold; }
     if (feet) u.uPlayer.value.set(feet.x, feet.z);
     u.uRim.value.copy(rim);
   }

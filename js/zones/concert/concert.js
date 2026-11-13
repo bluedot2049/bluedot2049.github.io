@@ -6,6 +6,7 @@ import { makePathfinder } from '../../core/pathgrid.js';
 import { serverNow, syncTime } from '../../core/servertime.js';
 import { BANDS, cueAt, songSec, bloodMix } from './concert-show.js';
 import { ConcertSong } from './concert-music.js';
+import { CheerSound } from './concert-cheer.js';
 import { readMidi, bandFromMidi } from './concert-midi.js';
 import { Stage, STAGE, RAIL, RAIL_W, STAIRS, BACKSTAGE, LIFT } from './concert-stage.js';
 import { StageFX } from './concert-fx.js';
@@ -123,6 +124,7 @@ export class ConcertBgm {
     out = lp;
     this.out = out;
     this.want = false;
+    SHOW.cheer = new CheerSound(ctx, out, () => SHOW.engine);   // 台下的歡呼聲（不在曲子裡，照 CHEERS 另外放）
     SHOW.ready.then(async ({ mix, blob }) => {
       if (mix) {
         let timer;
@@ -551,9 +553,10 @@ export function buildConcert(scene, { coarse }) {
       for (let i = lastAt(taiko, t); i >= 0 && t - taiko[i].t < 3; i--) if (taiko[i].vel > 0.95 && !strongBefore(i)) { wave = t - taiko[i].t; break; }
       crowd.update({
         beat: t / (60 / bpm), kick: rig.kickK ?? 0, heat: Math.max(rig.F ?? 0, (cue.crowd?.hands ?? 0) * 0.6),
-        phrase: Math.floor(cue.gbar / 4), phraseT: ((cue.gbar % 4) + cue.beat / 4) / 4, wave, t, feet, rim: saturate(tmp.copy(key)).multiplyScalar(0.6),
+        phrase: Math.floor(cue.gbar / 4), phraseT: ((cue.gbar % 4) + cue.beat / 4) / 4, wave, t, feet, rim: saturate(tmp.copy(key)).multiplyScalar(0.6), cheer: cue.cheer,
         snuff: cue.snuff, relight: cue.relight, dawnZ: obscura.dawnZ, dawnA: obscura.dawnA, dawnCol: obscura.dawn.material.color,
       });
+      SHOW.cheer?.update(cue.cheer, feet, camera, spots);
     },
   };
 }

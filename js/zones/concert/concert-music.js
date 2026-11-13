@@ -165,9 +165,7 @@ export class ConcertSong extends Song {
 
     if (s === 0) {
       if (sec.id === 'night') this.crowd(t, BAR, 0.45);
-      if (bar === 0 && sec.id === 'sun') this.crowd(t, BAR * 2, 1, true);
-      if (bar === 0 && sec.id === 'veil') this.crowd(t, BAR * 2, 0.5, true);
-      if (bar === 1 && sec.id === 'end') this.crowd(t + BEAT * 2.5, BAR * 2, 1, true);   // 曲終
+      // 歡呼不在這裡：照 concert-show.js 的 CHEERS 由 concert-cheer.js 放（做好的那首和合成版都一樣）
       // 升起：riff 像隔著一扇門，一路打開
       this.door.frequency.setTargetAtTime(sec.id === 'rise' ? 300 * 18 ** sp : 6000, t, 0.25);
       if (has('choir')) {
