@@ -19,7 +19,7 @@ export const PLACES = [
   { to: 'concert', boat: false, name: '演唱會', desc: '樹洞裡的一場。', tags: ['舞台'] },
   { dev: 'gorge', name: '深谷', desc: '谷底的一場。', tags: ['舞台'] },
   { dev: 'duel', boat: false, name: '對影', desc: '兩個人互拍的場地。', tags: ['對拍'] },
-  { dev: 'gucheng', name: '古城', desc: '山頂的座堂。', tags: ['座堂', '墓園'] },
+  { to: 'gucheng', wip: true, name: '古城', desc: '山頂的座堂。', tags: ['座堂', '墓園'] },
 ];
 
 // 站牌上的名字：to 是 ?z= 的名字

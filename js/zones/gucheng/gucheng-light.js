@@ -325,6 +325,57 @@ export class Light {
   }
 }
 
+// 巷子裡的送光鏡（gucheng-tales.js）：牆上一面黃銅鏡把太陽折下來，打到巷底一處。一束是一截沒有底的圓錐（鏡子那頭細、地上那頭粗），
+// 正對著看濃、邊上淡、靠地那頭淡掉；淡金色（color 可換：大法師科技的浮游燈是冷白），慢慢有一點閃。全部合成一個網格、一種材質，不是燈
+export function sunBeams(list, coarse) {
+  if (!list.length) return null;
+  const geos = [], Y = new THREE.Vector3(0, 1, 0), d = new THREE.Vector3(), q = new THREE.Quaternion(), m = new THREE.Matrix4();
+  const col = new THREE.Color();
+  list.forEach(({ a, b, r0, r1, color = '#ffdb99' }, i) => {
+    d.subVectors(a, b);
+    const L = d.length();
+    // 圓柱的 +y 那頭放在鏡子：aT 0 在鏡子、1 在地上
+    const g = new THREE.CylinderGeometry(r0, r1, L, 10, 1, true).toNonIndexed();
+    const pos = g.attributes.position, T = new Float32Array(pos.count), S = new Float32Array(pos.count).fill(i * 1.7);
+    for (let v = 0; v < pos.count; v++) T[v] = 0.5 - pos.getY(v) / L;
+    g.setAttribute('aT', new THREE.BufferAttribute(T, 1));
+    g.setAttribute('aS', new THREE.BufferAttribute(S, 1));
+    col.set(color);
+    g.setAttribute('aC', new THREE.BufferAttribute(new Float32Array(pos.count * 3).map((_, j) => [col.r, col.g, col.b][j % 3]), 3));
+    q.setFromUnitVectors(Y, d.normalize());
+    g.applyMatrix4(m.compose(new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), q, new THREE.Vector3(1, 1, 1)));
+    g.deleteAttribute('uv');
+    g.deleteAttribute('normal');
+    geos.push(g);
+  });
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uK: { value: coarse ? 0.16 : 0.2 }, uTime, ...gradeUniforms() },
+    vertexShader: GRADE_VERT + `
+      attribute float aT; attribute float aS; attribute vec3 aC;
+      varying float vT; varying float vS; varying vec3 vW; varying float vF; varying vec3 vC;
+      void main() {
+        vT = aT; vS = aS; vW = position; vC = aC;
+        vF = gradeLight(gradeFog(position));
+        gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform float uK; uniform float uTime;
+      varying float vT; varying float vS; varying vec3 vW; varying float vF; varying vec3 vC;
+      void main() {
+        vec3 n = normalize(cross(dFdx(vW), dFdy(vW)));
+        float face = abs(dot(n, normalize(cameraPosition - vW)));
+        float wob = 0.86 + 0.14 * sin(uTime * 0.9 + vS) * sin(uTime * 1.7 + vS * 2.3);
+        float a = pow(face, 2.2) * pow(1.0 - vT, 0.7) * smoothstep(0.0, 0.06, vT) * smoothstep(1.0, 0.8, vT) * wob;
+        gl_FragColor = vec4(vC * a * uK * vF, 1.0);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(mergeGeometries(geos, false), mat);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 3;
+  return mesh;
+}
+
 // 地上的光圈：燭火、燈、火盆照在地上（Kit 的 pool：x、y、z、半徑、顏色、亮度），一個圓一圈往外淡
 export function groundPools(list) {
   if (!list.length) return null;

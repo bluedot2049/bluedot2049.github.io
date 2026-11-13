@@ -16,11 +16,14 @@ import { buildHomeCircle } from '../../scene/homedoor.js';
 import { bucketObjects } from '../../core/scenery.js';
 import { stoneMat } from './gucheng-stone.js';
 import { buildCathedral, snowRoof, pointed, witchHat, STONE, STONE_DK, SNOW, WOOD, IRON, BRASS, CLOTH_R, CLOTH_B, SLATE } from './gucheng-church.js';
-import { Light, groundPools } from './gucheng-light.js';
+import { Light, groundPools, sunBeams } from './gucheng-light.js';
+import { buildTales, ring } from './gucheng-tales.js';
+import { buildArchmage } from './gucheng-archmage.js';
+import { buildIce } from './gucheng-ice.js';
 import { SEA, TOP, GROUND, RAMPS, JETTY, BOAT, FILL, CITYWALL, HOUSES, BRIDGE_HOUSE, CATH, inside, inPoly } from './gucheng-map.js';
 
 const STEP = 0.9, HEAD = 1.8, PAD = 0.28, CELL = 2;
-const BOUNDS = { x0: -92, x1: 86, z0: -44, z1: 82 };
+const BOUNDS = { x0: -92, x1: 86, z0: -44, z1: 106 };
 const WALK_TOP = new Set(['ground', 'floor', 'deck', 'ramp']);
 const PUSH = new Set(['ground', 'wall', 'ceil']);
 // 舊城的顏色：灰泥牆一棟一個褪了色的顏色（舊赭、牛血紅、灰綠、石板藍、骨白），骨白的線腳，百葉和門是深色；城牆、門樓是暗的老磚
@@ -29,6 +32,7 @@ const PASTEL = ['#a8957a', '#8e5a4c', '#7d8576', '#6e7884', '#b0a690', '#8a6a52'
 const TRIM = '#cfc4ae', SHUTTERS = ['#2f3d48', '#5a2a2a', '#33433a', '#4a3a2e'], DOORS = ['#3a2a22', '#2c3440', '#4a1e1e', '#2a3a32'];
 const GLOW = '#ffb45e', CANDLE = '#ffa040';
 const hh = (a, b, c = 0) => { const v = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453; return v - Math.floor(v); };
+
 
 export function buildGucheng(scene, { coarse = false } = {}) {
   const R = rng('gucheng');
@@ -39,6 +43,8 @@ export function buildGucheng(scene, { coarse = false } = {}) {
   const unitBoxes = new Map();
   const fader = new Fader(false, { lead: 0.3 });
   const light = new Light({ coarse, fader });
+  // 陰天的冬日午後：天和霧是冷的鋼青灰，天光淡，地面回來的光是暖的暗褐；太陽很低、隔著雲，淡金色斜斜擦過西立面（送光鏡也照這個方向折）
+  const env = { bg: 0x6a7f88, near: 40, far: 260, sky: 0x9fb6bc, ground: 0x3a3430, hi: 0.95, sun: 0xffb878, si: 1.2, dir: new THREE.Vector3(-40, 20, 35) };
 
   // ---------- 建造用的小工具 ----------
   const paint = (geo, hex, hex2) => {
@@ -87,7 +93,7 @@ export function buildGucheng(scene, { coarse = false } = {}) {
     for (const l of bucket.glows.slice(n2)) l.y += y;
     for (const l of bucket.pools.slice(n3)) l.y += y;
   };
-  const B = { put, paint, solid, ramp, unit, fadeOnly, bucket, win: (pts, place, h, u) => light.win(pts, place, h, u, inside) };
+  const B = { put, paint, solid, ramp, unit, fadeOnly, bucket, emitAt, lantern, obstacles, win: (pts, place, h, u) => light.win(pts, place, h, u, inside) };
 
   // ---------- 碰撞表的查法 ----------
   let grid = null, cols = 0, rows = 0;
@@ -206,14 +212,14 @@ export function buildGucheng(scene, { coarse = false } = {}) {
     k.add(new THREE.CylinderGeometry(0.92, 0.52, 4.6, 6, 1, false, 0, Math.PI), SNOW, -38, 0.56, 64, { rz: Math.PI / 2, ry: 0.3, sy: 0.4 });
     for (const x of [-72, -60]) lantern(k, x, 0, 70.8, true);
     k.emit(bucket, 0, 0, 0);
-    // 渡船（同款黑袍小渡船）靠在棧橋盡頭
+    // 渡船（同款黑袍小渡船）停在冰的邊緣
     const ferry = makeSkiff(bucketObjects);
-    ferry.boat.position.set(BOAT.x, SEA + 0.12, BOAT.z);
+    ferry.boat.position.set(BOAT.x, SEA + 0.36, BOAT.z);   // 跟海市一樣浮高一點，不沉在水裡
     ferry.boat.rotation.y = Math.PI / 2;
     group.add(ferry.boat);
     const berth = skiffBerth(BOAT.x, BOAT.z, Math.PI / 2);
     obstacles.push(...berth.block);
-    B.exits = [{ x: (JETTY.x0 + JETTY.x1) / 2, z: JETTY.z1 - 0.4, r: 1.6, hull: berth.hull, to: 'gallery', label: '搭船', title: '渡船', boat: ferry }];
+    B.exits = [{ x: BOAT.x, z: BOAT.z - 1.7, r: 1.6, hull: berth.hull, to: 'gallery', label: '搭船', title: '渡船', boat: ferry }];
     // 海：一大片冷灰藍，對岸幾座積雪的矮山
     const water = new THREE.Mesh(new THREE.PlaneGeometry(700, 420).rotateX(-Math.PI / 2).translate(0, SEA, 260), new THREE.MeshLambertMaterial({ color: 0x55636e }));
     water.userData.kind = 'floor';
@@ -316,6 +322,8 @@ export function buildGucheng(scene, { coarse = false } = {}) {
         k.box(ww + 0.12, 0.05, 0.16, SNOW, x, y - wh / 2 + 0.03, z + 0.05, { ao: false });
         if (hh(i, f * 9 + j + 60) > 0.5) for (const s of [-1, 1]) k.box(ww * 0.5, wh * 0.96, 0.05, shut, x + s * (ww * 0.75 + 0.04), y, z + 0.02);
         if (lit) k.light(x, y, z + 0.3, GLOW, 1.2);
+        // 暗的窗有的在窗台點一根蠟燭（點著燈的家，沒被請的進不來）
+        else if (f < 2 && hh(i * 5 + f, j + 70) > 0.62) { k.cyl(0.035, 0.035, 0.16, '#efe6d2', x, y - wh / 2 + 0.12, z + 0.06, {}, 5); k.light(x, y - wh / 2 + 0.25, z + 0.08, CANDLE, 0.55); }
       }
     }
     // 山牆上一扇圓窗（一半的房子）
@@ -326,8 +334,8 @@ export function buildGucheng(scene, { coarse = false } = {}) {
     k.cyl(0.6, 0.6, 0.1, dc, 0, gy + 2.0, 0.05, { rx: Math.PI / 2 }, 12);
     k.box(1.6, 0.22, 0.55, '#6a6560', 0, gy + 0.11, 0.27);
     // 傳說：門邊一串大蒜（吸血鬼不進門）、一面小圓鏡（照不出牠）、有的門上掛燈
-    if (hh(i, 16) > 0.4) for (let b = 0; b < 4; b++) k.ball(0.12, '#f4ecdc', 0.9 + (b % 2) * 0.06, gy + 2.3 - b * 0.19, 0.13);
-    if (hh(i, 17) > 0.55) { k.cyl(0.22, 0.22, 0.03, '#d7e2ee', -1.0, gy + 1.95, 0.08, { rx: Math.PI / 2 }, 12); k.torus(0.23, 0.04, Math.PI * 2, BRASS, -1.0, gy + 1.95, 0.09); }
+    if (hh(i, 16) > 0.4) for (let b = 0; b < 4; b++) k.rock(0.12, '#f4ecdc', 0.9 + (b % 2) * 0.06, gy + 2.3 - b * 0.19, 0.13);
+    if (hh(i, 17) > 0.55) { k.cyl(0.22, 0.22, 0.03, '#d7e2ee', -1.0, gy + 1.95, 0.08, { rx: Math.PI / 2 }, 12); ring(k, 0.23, 0.04, Math.PI * 2, BRASS, -1.0, gy + 1.95, 0.09); }
     if (i % 3 === 0) lantern(k, 1.0, gy + 2.7, 0.45, true, true);
     // 牆腳一道積雪（門口掃開了）
     for (const side of [-1, 1]) k.box(w / 2 - 0.9, 0.24, 0.5, SNOW, side * (w / 4 + 0.45), gy + 0.08, 0.24, { rx: 0.35, ao: false });
@@ -337,7 +345,7 @@ export function buildGucheng(scene, { coarse = false } = {}) {
       k.box(0.03, 0.4, 0.03, IRON, sx, sy + 0.3, 0.95);
       k.box(0.06, 0.55, 0.75, shut, sx, sy - 0.05, 0.8);
       const icon = i % 16;
-      if (icon < 4) { k.torus(0.11, 0.03, Math.PI * 2, BRASS, sx + 0.05, sy + 0.05, 0.65, { ry: Math.PI / 2 }); k.box(0.03, 0.05, 0.3, BRASS, sx + 0.05, sy + 0.05, 0.88); }
+      if (icon < 4) { ring(k, 0.11, 0.03, Math.PI * 2, BRASS, sx + 0.05, sy + 0.05, 0.65, { ry: Math.PI / 2 }); k.box(0.03, 0.05, 0.3, BRASS, sx + 0.05, sy + 0.05, 0.88); }
       else if (icon < 8) k.cyl(0.08, 0.11, 0.34, '#3c6a5a', sx + 0.05, sy - 0.05, 0.8, {}, 6);
       else if (icon < 12) k.add(new THREE.ConeGeometry(0.07, 0.42, 4), '#e8d2a0', sx + 0.05, sy - 0.05, 0.8, { rx: Math.PI });
       else k.box(0.06, 0.24, 0.18, GLOW, sx + 0.05, sy - 0.05, 0.8, { glow: true });
@@ -510,16 +518,25 @@ export function buildGucheng(scene, { coarse = false } = {}) {
       if (kind === 1) k.add(new THREE.ConeGeometry(0.4, 0.45, 4), c, x, TOP + h + 0.18, z, { ry: Math.PI / 4 + ry, sz: 0.28 });
       k.box(0.72, 0.07, 0.18, SNOW, x, TOP + h + (kind === 0 ? 0.33 : kind === 1 ? 0.02 : 0.03), z, { rz, ry });
       solid({ x0: x - 0.4, x1: x + 0.4, z0: z - 0.15, z1: z + 0.15, y0: TOP, y1: TOP + h, tag: 'prop' });
+      // 防活埋的鈴：墳邊一根木柱，橫木吊一口小鈴，一條線從鈴垂進土裡（醒過來拉得到）；有的墳前一圈大蒜當花圈
+      if (hh(x, z, 6) > 0.5) {
+        const px = x + 0.48, pz = z + 0.42;
+        k.box(0.05, 1.3, 0.05, '#4e382a', px, TOP + 0.65, pz);
+        k.box(0.3, 0.04, 0.04, '#4e382a', px - 0.13, TOP + 1.3, pz);
+        k.cone(0.06, 0.1, hh(x, z, 8) > 0.5 ? BRASS : IRON, px - 0.26, TOP + 1.2, pz);
+        k.box(0.01, 1.15, 0.01, '#8a7a5a', px - 0.26, TOP + 0.58, pz, { ao: false });
+      }
+      if (hh(x, z, 7) > 0.72) ring(k, 0.17, 0.05, Math.PI * 2, '#ece4d0', x, TOP + 0.05, z + 0.4, { rx: Math.PI / 2 });
     }
     // 正中一口石棺，上面纏著鐵鍊、扣一把大鎖（傳說裡最老的那一隻；沒人打開過）
     const cx = (Y.x0 + Y.x1) / 2, cz = (Y.z0 + Y.z1) / 2;
     k.box(2.8, 0.9, 1.3, '#8a8784', cx, TOP + 0.45, cz, { color2: '#9a9794' });
     k.box(3.0, 0.22, 1.5, '#7a7774', cx, TOP + 1.0, cz);
     k.box(3.02, 0.1, 1.52, SNOW, cx, TOP + 1.16, cz);
-    for (const dx of [-0.8, 0.8]) for (let j = 0; j < 7; j++) k.torus(0.09, 0.025, Math.PI * 2, IRON, cx + dx, TOP + 0.15 + j * 0.15, cz + 0.68, { ry: j % 2 ? Math.PI / 2 : 0 });
+    for (const dx of [-0.8, 0.8]) for (let j = 0; j < 7; j++) ring(k, 0.09, 0.025, Math.PI * 2, IRON, cx + dx, TOP + 0.15 + j * 0.15, cz + 0.68, { ry: j % 2 ? Math.PI / 2 : 0 });
     for (const dx of [-0.8, 0.8]) k.box(0.05, 0.05, 1.56, IRON, cx + dx, TOP + 1.13, cz);
     k.box(0.32, 0.36, 0.14, '#4a4038', cx, TOP + 0.62, cz + 0.72);
-    k.torus(0.1, 0.03, Math.PI, IRON, cx, TOP + 0.84, cz + 0.72);
+    ring(k, 0.1, 0.03, Math.PI, IRON, cx, TOP + 0.84, cz + 0.72);
     solid({ x0: cx - 1.5, x1: cx + 1.5, z0: cz - 0.75, z1: cz + 0.75, y0: TOP, y1: TOP + 1.2, tag: 'prop' });
     bareTree(k, Y.x0 + 3.5, TOP, Y.z1 - 3, 8, 3);
     bareTree(k, Y.x1 - 6, TOP, Y.z0 + 3, 6, 4);
@@ -547,7 +564,7 @@ export function buildGucheng(scene, { coarse = false } = {}) {
       for (let j = 0; j < 6; j++) s.box(0.55, 0.06, 1.7, j % 2 ? '#e8e0cc' : cc, -1.4 + j * 0.56, 2.55 - 0.1, 0.2, { rx: -0.2 });
       s.box(3.4, 0.08, 1.75, SNOW, 0, 2.62, 0.2, { rx: -0.2 });
       // 一串串的大蒜掛在篷下、桌上幾捆木樁和一排提燈
-      for (let j = 0; j < 5; j++) for (let b = 0; b < 3; b++) s.ball(0.1, '#ebe3cf', -1.2 + j * 0.6, 2.1 - b * 0.18, 0.62);
+      for (let j = 0; j < 5; j++) for (let b = 0; b < 3; b++) s.rock(0.1, '#ebe3cf', -1.2 + j * 0.6, 2.1 - b * 0.18, 0.62);
       for (let j = 0; j < 4; j++) s.box(0.05, 0.05, 0.6, '#8a6a48', -1.0 + j * 0.08, 0.95, -0.1, { rz: 0.1 });
       for (let j = 0; j < 3; j++) { s.box(0.2, 0.3, 0.2, IRON, 0.5 + j * 0.35, 1.05, 0.1); s.box(0.14, 0.18, 0.14, j === 1 ? GLOW : '#c8b48a', 0.5 + j * 0.35, 1.05, 0.1, { glow: j === 1 }); }
       s.light(0.85, 1.05, 0.2, GLOW, 0.9);
@@ -643,7 +660,7 @@ export function buildGucheng(scene, { coarse = false } = {}) {
     // 長明燈：聖壇前上方一盞紅玻璃的油燈，一條長鍊吊到拱頂，從不熄
     k.box(0.03, 15, 0.03, IRON, ax - 2.2, 25.5, 0);
     k.cyl(0.22, 0.12, 0.38, '#b0242a', ax - 2.2, 17.8, 0, { glow: true }, 8);
-    k.torus(0.24, 0.03, Math.PI * 2, BRASS, ax - 2.2, 18.0, 0, { rx: Math.PI / 2 });
+    ring(k, 0.24, 0.03, Math.PI * 2, BRASS, ax - 2.2, 18.0, 0, { rx: Math.PI / 2 });
     k.light(ax - 2.2, 17.8, 0, '#ff4a3a', 2.4);
     solid({ x0: ax - 0.7, x1: ax + 1.4, z0: -1.7, z1: 1.7, y0: P, y1: P + 1.1, tag: 'prop' });
     // 吊燈：中殿每一間一圈鐵環，上面一圈蠟燭，四條鍊子吊到拱頂
@@ -725,6 +742,12 @@ export function buildGucheng(scene, { coarse = false } = {}) {
     k.emit(bucket, 0, 0, 0);
   }
 
+  // ================= 講故事的擺設（gucheng-tales.js）：港口、巷子、墓園、廣場、座堂裡 =================
+  const tales = buildTales(B, env.dir);
+  // 廣場上大法師科技的直營亭（gucheng-archmage.js）
+  const archmage = buildArchmage(B);
+  const ice = buildIce(B, env.dir);
+
   // ================= 收尾：碰撞表、淡掉的組、合併 =================
   index();
   // 塔裡的樓梯、門洞的地：一階一階畫出來
@@ -781,24 +804,35 @@ export function buildGucheng(scene, { coarse = false } = {}) {
     vc: fader.patch(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })),
     glow: fader.patch(new THREE.MeshBasicMaterial({ vertexColors: true })),
   };
+  // 一種材質合成一個網格；最大的兩包（擺設、房子的磚）再照區域切成四塊（港口、巷子、廣場、山頂），背對的那幾塊整塊不畫
+  const CHUNKED = new Set(['vc', 'brick']), _c = new THREE.Vector3();
+  const region = (g) => { g.computeBoundingBox(); g.boundingBox.getCenter(_c); return _c.z > 56 ? 0 : _c.x < -34 ? 1 : _c.x < 0 ? 2 : 3; };
   const meshes = [];
   for (const [kind, list] of Object.entries(geos)) {
     if (!list.length) continue;
     for (const g of list) { if (g.attributes.uv) g.deleteAttribute('uv'); bake(g, kind); fidOf(g); }
     fader.tag(list);
-    const merged = mergeGeometries(list.map((g) => (g.index ? g.toNonIndexed() : g)), false);
-    if (!merged) { console.warn('gucheng: 合併失敗', kind); continue; }
-    const m = new THREE.Mesh(merged, mats[kind]);
-    m.userData.kind = 'floor';
-    group.add(m);
-    meshes.push(m);
+    const parts = CHUNKED.has(kind) ? [[], [], [], []] : [list];
+    if (CHUNKED.has(kind)) for (const g of list) parts[region(g)].push(g);
+    for (const part of parts) {
+      if (!part.length) continue;
+      const merged = mergeGeometries(part.map((g) => (g.index ? g.toNonIndexed() : g)), false);
+      if (!merged) { console.warn('gucheng: 合併失敗', kind); continue; }
+      merged.computeBoundingSphere();
+      const m = new THREE.Mesh(merged, mats[kind]);
+      m.userData.kind = 'floor';
+      group.add(m);
+      meshes.push(m);
+    }
   }
   for (const w of light.wins) fidOf(w.geo);
   fader.build();
   // 花窗、光柱、光斑（fader.build 之後：花窗的材質要拿到淡掉的貼圖）
-  // 陰天的冬日午後：天和霧是冷的鋼青灰，天光淡，地面回來的光是暖的暗褐；太陽很低、隔著雲，淡金色斜斜擦過西立面
-  const env = { bg: 0x6a7f88, near: 40, far: 260, sky: 0x9fb6bc, ground: 0x3a3430, hi: 0.95, sun: 0xffb878, si: 1.2, dir: new THREE.Vector3(-40, 20, 35) };
   group.add(light.build(env, (x, z) => groundAt(x, z, TOP + 0.5)));
+  const beams = sunBeams([...tales.beams, ...ice.beams, archmage.beam], coarse);
+  group.add(archmage.sign);
+  if (beams) group.add(beams);
+  if (tales.bell) group.add(tales.bell);
   const glows = groundPools(bucket.pools);
   if (glows) group.add(glows);
   if (bucket.glows.length) group.add(glowPoints(bucket.glows));
@@ -835,7 +869,7 @@ export function buildGucheng(scene, { coarse = false } = {}) {
   }
   // 尋路的格子第一次點地走才建（整區一百七十公尺見方，一開始就建要多等一秒）
   let pf = null;
-  const findPath = (...a) => (pf ??= makePathfinder(walkable, -70, -38, 80, 82)).findPath(...a);
+  const findPath = (...a) => (pf ??= makePathfinder(walkable, BOUNDS.x0, BOUNDS.z0, BOUNDS.x1, BOUNDS.z1)).findPath(...a);
 
   const PLACES = {
     port: { name: '港口', subtitle: 'Portus' }, town: { name: '古城', subtitle: 'Urbs Vetus' }, square: { name: '廣場', subtitle: 'Forum' },
@@ -851,13 +885,14 @@ export function buildGucheng(scene, { coarse = false } = {}) {
     return PLACES.town;
   };
   const room = { index: 0, id: 'gucheng', data: PLACES.town, group, obstacles, paintings: [], center: new THREE.Vector3(0, TOP, 0) };
-  const spawn = { x: (JETTY.x0 + JETTY.x1) / 2, z: JETTY.z1 - 1.6, heading: Math.PI };
+  const spawn = { x: BOAT.x, z: BOAT.z - 3.6, heading: Math.PI };   // 下船先站在送光鏡打下來的那塊光裡
   const eyeP = new THREE.Vector3();
   let lastT = null;
   return {
     rooms: [room], paintings: [], mirror: null, outdoor: null, raycastTargets: meshes, env, shops: [],
     camDistMax: 22,
     spawn, exits: B.exits, home, homeAt,
+    hunters: tales.hunters, archmage: archmage.spot,
     light,
     roomIndexAt: () => 0,
     placeAt,
@@ -869,6 +904,7 @@ export function buildGucheng(scene, { coarse = false } = {}) {
       const dt = Math.min(0.1, Math.max(0, t - (lastT ?? t)));
       lastT = t;
       light.update(dt);
+      tales.update();
       GRADE.sunDir.copy(light.sun);
       fader.update(dt, cam, feet ? [eyeP.set(feet.x, (feet.y ?? 0) + 1.1, feet.z)] : [], !feet);
     },

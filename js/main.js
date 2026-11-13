@@ -74,7 +74,7 @@ const ZONES = {
   concert: { load: () => import('./zones/concert/zone-concert.js') },
   gorge: { load: () => import('./zones/gorge/zone-gorge.js') },   // 深谷：演唱會的第二個場地，灰模型（places.js 的 dev）   // 演唱會：從畫廊的樹洞進去，不搭船（places.js 的 boat: false）
   duel: { load: () => import('./zones/duel/zone-duel.js') },   // 對影：拍照對戰的專用場地，灰模型（places.js 的 dev）
-  gucheng: { load: () => import('./zones/gucheng/zone-gucheng.js') },   // 古城（暫名）：獵魔教座堂，還在蓋（places.js 的 dev）
+  gucheng: { load: () => import('./zones/gucheng/zone-gucheng.js') },   // 古城（暫名）：獵魔教座堂，開了但還在蓋（places.js 的 wip）
 };
 // 渡船能去的地方在 scene/places.js，每個渡口都照那個順序一張一張卡
 
@@ -1239,6 +1239,7 @@ async function start() {
   // 一幕劇（core/act.js，zone 匯出 acts）：在地圖上一拍一拍演的戲，找到演員才往下，演到哪一拍黑眼清單多一行。演員跟事件一樣評分、讓人轉頭（happen.more）
   acts = new Acts({ guide, player, params, list: Z.acts?.({ world, scene, vendors, ambience, attention, camera, player, ui }) ?? [] });
   happen.more.push(acts);
+
   acts.send = (m) => mp?.act(m);
   // 地上的硬幣：撿了告訴同一區的人、剛進來問別人撿走了哪些（沒連線就不送）
   if (mp) coins.send = (m) => mp.coin(m);

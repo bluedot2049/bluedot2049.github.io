@@ -6,7 +6,7 @@
 // 海市攤販原本送的（looks.js 的 GIFTS，也有價錢）和任務給的不在這張表。
 // 存檔照這張表的順序一件一個位元（接在 GIFTS 後面）：只能往後加，加完跑 tools/save-order.mjs
 
-// 店：where 在哪、who 誰在賣（鏡子裡上鎖那格這樣寫）
+// 店：where 在哪、who 誰在賣（鏡子裡上鎖那格這樣寫）。一家店一種文化，古城的大法師科技賣獵魔相機系列
 export const SHOPS = {
   vestibule: { where: '畫廊前廳', who: '胖頭' },
   tailor: { where: '海市', who: '裁縫' },
@@ -18,6 +18,7 @@ export const SHOPS = {
   souvenir: { where: '月球', who: '相機店的店員' },
   camp: { where: '黑森林', who: '矮人戰士' },
   mist: { where: '汀', who: '霧裡的商人' },
+  archmage: { where: '古城', who: '大法師科技的店員' },   // 獵魔相機系列的直營亭；還沒有上架的東西（之後的獵魔外掛配件放這家），沒貨時互動鍵是「聊天」
 };
 
 // [類別, 代號, 幾顆, 哪一家]

@@ -3,8 +3,11 @@
 // 古城（暫名）這一區：冬天上午的中世紀古城，港口上岸、窄巷爬上山頂的廣場，獵魔教座堂在最高處，迴廊中庭是歸門。還在蓋（places.js 的 dev，?z=gucheng）
 import { buildGucheng } from './gucheng.js';
 import { CathedralOrgan } from './gucheng-music.js';
+import { hunters } from './gucheng-hunters.js';
+import { archmageClerk } from './gucheng-archmage.js';
+import { together } from '../../npc/firecircle.js';
 
-// 背景音樂：座堂的管風琴（現場合成），花窗跟著它變。還沒有住民（獵人修士之後做）
+// 背景音樂：座堂的管風琴（現場合成），花窗跟著它變
 export const bgm = { src: CathedralOrgan, from: 'gucheng' };
 
 // 調色：吸血鬼獵人電影的配色。陰天冷的鋼青灰、降飽和、對比拉高、暗部壓成青黑（不偏紫）；
@@ -30,8 +33,9 @@ export function env(world) {
   return [world.env];
 }
 
-export function crowd() {
-  return {};
+// 座堂門口火盆邊的三個獵人（gucheng-hunters.js）、廣場上大法師科技的店員（gucheng-archmage.js）：介面跟黑森林營火一樣，合成一個 vendors 交出去，聊天鍵、擋鏡頭變淡主程式照接
+export function crowd({ scene, world, shadowTex }) {
+  return { vendors: together(hunters({ scene, shadowTex, spot: world.hunters }), archmageClerk({ scene, shadowTex, spot: world.archmage })) };
 }
 
 // 黑眼（scene/guide.js）帶得到的地方，去過才列，渡船 guide.js 自己加在第一個

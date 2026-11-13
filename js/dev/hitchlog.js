@@ -12,6 +12,7 @@ const KEEP = 80;          // 一區最多留幾筆，再多只算次數
 const ZONES_KEPT = 12;    // 最多留幾段（換一次區一段）
 const RECENT = 1500;      // 卡的那一幀往前看多久的事（毫秒）
 const JOIN = 250;         // 上一筆結束後這麼快又卡，算同一筆
+const SOUND_KEEP = 200;   // 聲音那一段一區最多留幾行（舊的丟掉）
 
 function load() {
   try {
@@ -33,7 +34,8 @@ function nameOf(el) {
 export function hitchLog({ renderer, scene, loop, zone, quality, probes = [], where = null, limit = 50 }) {
   const LIMIT = Number.isFinite(+limit) && +limit >= 20 ? +limit : 50;
   const store = load();
-  const me = { zone, q: '', sec: 0, frames: 0, hist: EDGES.map(() => 0).concat(0), hits: [], more: 0, worst: 0 };
+  const me = { zone, q: '', sec: 0, frames: 0, hist: EDGES.map(() => 0).concat(0), hits: [], more: 0, worst: 0, sound: [] };
+  const born = performance.now();
   store.zones.push(me);
   while (store.zones.length > ZONES_KEPT) store.zones.shift();
   store.dev = {
@@ -168,6 +170,12 @@ export function hitchLog({ renderer, scene, loop, zone, quality, probes = [], wh
 
   const api = {
     mark,
+    // 聲音的事（演唱會：下載、跳轉、停下來等、聲音的鐘掉拍）：跟卡分開一段，時間跟卡的那幾筆同一把尺。t 是 performance.now()，記錄還沒載進來時排著的照原本的時刻
+    sound(s, t = performance.now()) {
+      if (me.sound.length >= SOUND_KEEP) me.sound.shift();
+      me.sound.push(`${((t - (t0 || born)) / 1000).toFixed(1)}s　${s}`);
+      dirty = true;
+    },
     begin() {
       const now = performance.now();
       scan(now);   // 上一幀裡變了什麼，先記，才算得進上一幀
@@ -191,7 +199,7 @@ export function hitchLog({ renderer, scene, loop, zone, quality, probes = [], wh
     end() { tEnd = performance.now(); },
     text,
     store,
-    clear() { store.zones.length = 0; me.hits.length = 0; me.more = me.worst = me.frames = me.sec = 0; me.hist.fill(0); store.zones.push(me); last = null; t0 = 0; save(); flash(); },
+    clear() { store.zones.length = 0; me.hits.length = 0; me.sound.length = 0; me.more = me.worst = me.frames = me.sec = 0; me.hist.fill(0); store.zones.push(me); last = null; t0 = 0; save(); flash(); },
   };
 
   // ---------- 整份文字 ----------
@@ -212,6 +220,10 @@ export function hitchLog({ renderer, scene, loop, zone, quality, probes = [], wh
         for (const m of h.marks) L.push('    ' + m);
       }
       if (z.more) L.push(`（另外 ${z.more} 處沒記）`);
+      if (z.sound?.length) {
+        L.push('-- 聲音');
+        for (const s of z.sound) L.push('  ' + s);
+      }
     }
     return L.join('\n');
   }

@@ -73,19 +73,34 @@ function hold(t) {
 // 跳到還沒下載的地方又要重新等，整場斷斷續續。進區域的載入畫面時就開始抓。抓太久（STREAM_AFTER 秒）才退回邊下載邊放
 const STREAM_AFTER = 15;
 const songCtl = new AbortController();
+const songAt = performance.now();
 const songRes = fetch(SONG.mix, { signal: songCtl.signal }).catch(() => null);
+
+// ?hitch：聲音的事記進卡頓記錄的「聲音」那段（dev/hitchlog.js 的 sound）。記錄比曲子晚載進來，先排著，下一次有事時一起交
+const HEAR = new URLSearchParams(location.search).has('hitch');
+const heard = [];
+function hear(s) {
+  if (!HEAR) return;
+  heard.push([s, performance.now()]);
+  const h = window.__hitchlog;
+  if (h?.sound) for (const [x, t] of heard.splice(0)) h.sound(x, t);
+}
 
 // 先把 MIDI 讀進來（段落、速度、每個人的音）；有 mix.m4a 就記著，blob 是抓完的本機網址（抓失敗是 null）
 SHOW.ready = (async () => {
   try {
     // 沒有做好的一首就整套退回合成版（燈、人、聲音都照合成版那一份），不混著用：MIDI 和合成版的速度、段落不一樣
     const res = await songRes;
-    if (!res?.ok) return { band: BANDS[0], mix: null };
-    const blob = res.blob().then((b) => URL.createObjectURL(b), () => null);
+    if (!res?.ok) { hear(`曲子抓不到（${res?.status ?? '連不上'}），改合成版`); return { band: BANDS[0], mix: null }; }
+    const blob = res.blob().then((b) => {
+      hear(`曲子整首抓好　${Math.round(b.size / 1024)}KB　${((performance.now() - songAt) / 1000).toFixed(1)} 秒`);
+      return URL.createObjectURL(b);
+    }, () => null);
     const mid = readMidi(await (await fetch(SONG.midi)).arrayBuffer());
     const { band } = bandFromMidi(BANDS[0], mid);
     return { band, mix: SONG.mix, blob };
-  } catch {
+  } catch (err) {
+    hear(`讀曲子出錯，改合成版　${err?.message ?? err}`);
     return { band: BANDS[0], mix: null };
   }
 })();
@@ -113,6 +128,7 @@ export class ConcertBgm {
         const local = await Promise.race([blob, new Promise((r) => (timer = setTimeout(r, STREAM_AFTER * 1000, null)))]);
         clearTimeout(timer);
         if (!local) songCtl.abort();   // 抓太久或抓失敗：不等了，改邊下載邊放
+        hear(local ? '整首在本機放' : `抓超過 ${STREAM_AFTER} 秒或抓失敗，改邊下載邊放`);
         const a = new Audio();
         a.crossOrigin = 'anonymous';
         a.loop = true;
@@ -124,23 +140,67 @@ export class ConcertBgm {
         const has = (t) => { for (let i = 0; i < a.buffered.length; i++) if (t >= a.buffered.start(i) && t <= a.buffered.end(i) - 0.5) return true; return false; };
         // 跳轉要等下載：跳過去那一秒，伺服器時間已經往前走了。記下上次跳完開始出聲時落後多少（lead），下次往前多跳那麼多，一兩次就對上，不會一直追
         let lead = 0, seeked = false;
+        // ?hitch 記的：速度改了幾次、範圍，速度乘時間的總和（算曲子該走多少）；停下來等資料的那一刻；這十秒有沒有跳過
+        let rateN = 0, rLo = 1, rHi = 1, rArea = 0, rAt = performance.now(), waitAt = 0, jumped = false;
+        const rate = (r) => {
+          if (HEAR && r !== a.playbackRate) {
+            const now = performance.now();
+            rArea += a.playbackRate * (now - rAt) / 1000;
+            rAt = now;
+            rateN++; rLo = Math.min(rLo, r); rHi = Math.max(rHi, r);
+          }
+          a.playbackRate = r;
+        };
         a.addEventListener('playing', () => {
+          if (waitAt) { hear(`等了 ${((performance.now() - waitAt) / 1000).toFixed(1)} 秒才出聲`); waitAt = 0; }
           if (!seeked) return;
           seeked = false;
           const T = songSec(SHOW.band), d = ((showClock() - (a.currentTime - lat())) % T + T) % T, miss = d > T / 2 ? d - T : d;
           if (miss > 0.15) lead = Math.min(4, lead + miss);
           else if (miss < -0.3) lead = Math.max(0, lead + miss);
+          hear(`跳完出聲　還差 ${miss.toFixed(2)} 秒　lead ${lead.toFixed(2)}`);
         });
+        if (HEAR) {
+          for (const ev of ['waiting', 'stalled', 'pause', 'error', 'emptied']) a.addEventListener(ev, () => {
+            if (ev === 'waiting' && !waitAt) waitAt = performance.now();
+            hear(`聲音 ${ev}　第 ${a.currentTime.toFixed(1)} 秒　ready ${a.readyState}${ev === 'error' ? '　' + (a.error?.message || a.error?.code) : ''}`);
+          });
+          ctx.addEventListener('statechange', () => hear(`AudioContext ${ctx.state}`));
+        }
         const e = this.engine = { a, get paused() { return a.paused; }, get live() { return !a.paused && !a.seeking && a.readyState >= 3; },
           now: () => Math.max(0, a.currentTime - lat()),
-          play: (t) => { seeked = true; a.playbackRate = 1; a.currentTime = (t + lead) % songSec(SHOW.band); return a.play(); }, pause: () => a.pause(),
+          play: (t) => { seeked = jumped = true; rate(1); a.currentTime = (t + lead) % songSec(SHOW.band); return a.play(); }, pause: () => a.pause(),
           // 對伺服器時間（world.update 每秒一次）：差一點點用速度慢慢追，差一秒以上才跳；要跳的地方還沒下載就不跳（跳了又要等），照樣用速度追
           sync: (target) => {
             const d = offBy(target, e.now());
-            if (Math.abs(d) < 0.04) { a.playbackRate = 1; return; }
-            if (Math.abs(d) >= 1 && (has((target + lead) % songSec(SHOW.band)) || Math.abs(d) > 8)) { e.play(target); return; }
-            a.playbackRate = 1 + Math.max(-NUDGE, Math.min(NUDGE, d * 0.05));
+            if (Math.abs(d) < 0.04) { rate(1); return; }
+            if (Math.abs(d) >= 1 && (has((target + lead) % songSec(SHOW.band)) || Math.abs(d) > 8)) { hear(`差 ${d.toFixed(2)} 秒，跳到第 ${target.toFixed(1)} 秒`); e.play(target); return; }
+            rate(1 + Math.max(-NUDGE, Math.min(NUDGE, d * 0.05)));
           } };
+        // ?hitch：每十秒一行。鐘少走＝AudioContext 的鐘比牆上的鐘慢（停過、掉拍，聽起來是斷）；曲子少走＝<audio> 停下來等（下載、解碼）；
+        // 差伺服器＝聲音離該在的那一秒多遠（正的＝落後）。Chrome 有 playbackStats 的話加上掉拍次數
+        if (HEAR) {
+          let w0 = performance.now(), c0 = ctx.currentTime, m0 = a.currentTime;
+          const stats0 = () => ({ n: ctx.playbackStats?.underrunEvents, d: ctx.playbackStats?.underrunDuration });
+          let u0 = stats0();
+          setInterval(() => {
+            const w = performance.now(), c = ctx.currentTime, m = a.currentTime, dw = (w - w0) / 1000;
+            rArea += a.playbackRate * (w - rAt) / 1000;
+            rAt = w;
+            const T = Number.isFinite(a.duration) ? a.duration : songSec(SHOW.band);
+            const moved = m - m0 + (m < m0 - 1 ? T : 0);
+            const u = stats0(), L = [];
+            L.push(`每十秒　差伺服器 ${offBy(showClock(), e.now()).toFixed(2)}`);
+            L.push(`鐘少走 ${Math.round((dw - (c - c0)) * 1000)}ms`);
+            L.push(jumped ? '曲子跳過' : a.paused ? '曲子停著' : `曲子少走 ${Math.round((rArea - moved) * 1000)}ms`);
+            L.push(`改速度 ${rateN} 次${rateN ? ` ${rLo.toFixed(3)}–${rHi.toFixed(3)}` : ''}`);
+            if (u.n != null) L.push(`掉拍 ${u.n - (u0.n ?? 0)} 次 ${Math.round(((u.d ?? 0) - (u0.d ?? 0)) * 1000)}ms`);
+            L.push(`延遲 ${Math.round((ctx.outputLatency || 0) * 1000)}/${Math.round((ctx.baseLatency || 0) * 1000)}ms　ready ${a.readyState}　${ctx.state}${document.hidden ? '　分頁藏著' : ''}`);
+            hear(L.join('　'));
+            w0 = w; c0 = c; m0 = m; u0 = u;
+            rArea = 0; rateN = 0; rLo = rHi = a.playbackRate; jumped = false;
+          }, 10000);
+        }
       } else {
         const song = new ConcertSong(ctx, out, SHOW.band);
         const lat = () => ctx.outputLatency || ctx.baseLatency || 0;
