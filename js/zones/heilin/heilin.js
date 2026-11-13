@@ -147,6 +147,8 @@ export function buildHeilin(scene, { coarse = false } = {}) {
   // ---------- 谷底空地：南邊岩壁上的洞口（heilin-cave.js）、歸門 ----------
   const C = P.clearing, bucket = newBucket();
   const cave = buildCave({ P, T, group, bucket, obstacles });
+  // 洞口以裡走到底：往下到洞裡那一區（?z=dong），帶這一趟的種子（每一趟全新，房間、敵人照它抽）
+  exits.push({ x: cave.inside.x, z: cave.inside.z, r: 1.3, to: 'dong', gate: true, title: '洞裡', label: '往下', extra: () => ({ seed: Date.now().toString(36) }) });
   const home = buildHomeCircle({ x: C.x - 3.6, y: C.y, z: C.z - 0.6, R: rng('heilin:reditus'), obstacles, exits });
   group.add(home.group);
 

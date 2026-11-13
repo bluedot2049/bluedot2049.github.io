@@ -57,11 +57,11 @@ try {
   const saved = await ev(`localStorage.getItem('pad')`);
   check(/nintendo/.test(saved || ''), '按右邊那顆：記成任天堂字', saved);
   check(/右邊/.test(s.hint), '回一句 A 在右邊', s.hint);
-  // 第一次接上的教學照進門的走：左搖桿　走路，字前面有示範圖（main.js 的 teach、demos.js）
+  // 第一次接上的教學照進門的走：左搖桿　移動，字前面有示範圖（main.js 的 teach、demos.js）
   // 「已記住」那句是回饋，比教學優先，收了教學才出來：最多等六秒
   let tell = [];
-  for (let t = 0; t < 30 && !/走路/.test(tell[0]); t++) { await sleep(200); tell = await ev(`[document.getElementById('hint').textContent, !!document.querySelector('#hint .demo')]`); }
-  check(/左搖桿　走路/.test(tell[0]) && tell[1], '接著教走：左搖桿，前面有示範圖', tell[0]);
+  for (let t = 0; t < 30 && !/移動/.test(tell[0]); t++) { await sleep(200); tell = await ev(`[document.getElementById('hint').textContent, !!document.querySelector('#hint .demo')]`); }
+  check(/左搖桿　移動/.test(tell[0]) && tell[1], '接著教走：左搖桿，前面有示範圖', tell[0]);
 
   // 左搖桿往前推一秒：角色往前走
   const p0 = await st();
@@ -98,7 +98,9 @@ try {
   await press(2);
   await sleep(600);
   check((await st()).sitting, 'Y：坐下');
-  const up = await ev(`document.getElementById('hint').textContent`);
+  // 叫醒後約六秒會說一次「點畫面或按鍵開啟聲音」（gamepad.js 的 soundHint），起身那句排在它後面：最多等六秒
+  let up = '';
+  for (let t = 0; t < 30 && !/起身/.test(up); t++) { if (t) await sleep(200); up = await ev(`document.getElementById('hint').textContent`); }
   check(/左搖桿　起身/.test(up), '坐下教起身：寫左搖桿', up);
   await press(0);
   await sleep(600);

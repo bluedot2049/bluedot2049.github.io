@@ -639,8 +639,9 @@ body.desk:has(#hollow.show) #action-btn { visibility: hidden; }
 #hollow.kb .plate, #hollow.kb .words { display: none; }
 /* 手機橫拿：矮，排成兩欄。左邊銘牌和作者的話，右邊那張畫，按鈕在右下（拇指弧那一邊）。
    留話時寫字的框換掉那張畫；叫出鍵盤時左欄收起，只剩右欄。
-   卡片寬，一定疊到搖桿、拇指弧和上排，開著時那些先退掉（跟側欄開著一樣），不從卡片邊上露半顆；點畫面照樣收卡片 */
-@media (orientation: landscape) and (max-height: 560px) {
+   卡片寬，一定疊到搖桿、拇指弧和上排，開著時那些先退掉（跟側欄開著一樣），不從卡片邊上露半顆；點畫面照樣收卡片。
+   矮的電腦螢幕（筆電 800 高以下）也用兩欄：一欄排下來約 670 高，按鈕會被擠出畫面底下 */
+@media (orientation: landscape) and (max-height: 820px) {
   #hollow {
     top: 50%; width: min(640px, calc(100% - 2 * max(16px, env(safe-area-inset-left), env(safe-area-inset-right))));
     max-height: calc(100% - 32px); padding: 14px 18px 12px;
@@ -648,6 +649,8 @@ body.desk:has(#hollow.show) #action-btn { visibility: hidden; }
     gap: 8px 20px;
   }
   #hollow.show { display: grid; }
+  /* 電腦：底下那排按鈕的高度照樣讓出來 */
+  body.desk #hollow { top: calc(50% - 36px); max-height: calc(100% - 160px); }
   body:not(.desk):has(#hollow.show) :is(#joy, #swap-btn, #top-btns, #jump-btn, #sit-btn, #photo-btn, #emote, #emote-btn, #say-btn, #pack-btn, #action-btn) {
     opacity: 0; pointer-events: none;
   }

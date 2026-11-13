@@ -32,6 +32,8 @@ const SOURCES = [
     keys: { CAMP_LINES: 'greet 走近營火時三人挑一個講、lines 按「聊天」輪著講', CAMP_BANTER: '按「聊天」偶爾整段插嘴，一人一句隔兩秒多' } },
   { title: '古城・座堂門口火盆邊的獵人、大法師科技的店員', file: 'js/zones/gucheng/gucheng-lines.js', note: '西門南邊火盆旁坐著的會吹的獵人、老獵人、見習修士（zones/gucheng/gucheng-hunters.js，坐法共用 npc/firecircle.js）',
     keys: { HUNTER_LINES: 'greet 走近火盆時三人挑一個講、lines 按「聊天」輪著講', HUNTER_BANTER: '按「聊天」偶爾整段插嘴，一人一句隔兩秒多', ARCHMAGE_LINES: '廣場上大法師科技直營亭的店員（zones/gucheng/gucheng-archmage.js）：greet 走近、lines 按「聊天」輪著講；有貨以後按「看貨」開店家小卡' } },
+  { title: '黑森林・洞裡的三個傭兵', file: 'js/zones/dong/dong-lines.js', note: '雇營火那三個人進洞（zones/dong/dong-fight.js 照種子排每一場；試做頁 experiments/cave_preview.html）',
+    keys: { LIGHT_SAY: '門口換這一場的打光時回的話（noLamp、noBarrel 是那一間沒有那樣道具）', TELLS: '大招前喊的預兆；括號的是敵人的起手，不說話', WARN: '伏擊前精靈先聽到', OOPS: '失手（自己說）：矮人絆倒、精靈射偏、法師冒煙', BANTER: '打到一半互相吐槽，一段兩三句照順序：count 矮人精靈數誰打倒得多（{me}{you} 是數字）、guard 被擋的人、slip／miss／fizzle 失手後別人插嘴、flash 一閃、big 第一次看到大隻的、stone／ash／reform／wake、hurt 傷重（self 自己、other 另一個）', AFTER: 'win 打完誰先開口（照人分）、rest 短休、ask 往下還是回去、down／back 回答、fallen 有人倒下、retreat 撤退、grab 龍那層抓一個就跑' } },
   { title: '汀・霧中商人', file: 'js/zones/ting/ting-mist-lines.js', note: '跟著霧走的羊（zones/ting/ting-merchant.js），霧在 ting-mist.js：走進霧裡看清楚他才招呼',
     keys: { MERCHANT_LINES: 'greet 走進霧裡看清楚他時、lines 看貨時卡片上那句、done 買齊了以後按「聊天」' } },
   { title: '海市・攤販', file: 'js/npc/vendor-lines.js', note: '照攤位的 id（npc/vendors.js 的 VENDORS）：greet 走近、lines 按「聊天」輪著講、quiet 街上冷清時（晚上最冷清）；暗房 handover 交照片、報社 unsigned 退畫廊的眼睛拍的、printed 照版面（角落、半版、頭版、號外）',

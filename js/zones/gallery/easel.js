@@ -76,8 +76,10 @@ export function buildEasel({ G, bucket, group, x, z, rot }) {
   const tex = new THREE.CanvasTexture(blank());
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  const face = new THREE.Mesh(new THREE.PlaneGeometry(CANVAS.w - 0.03, CANVAS.h - 0.03), new THREE.MeshLambertMaterial({ map: tex }));
-  face.position.set(0, cy, cz + 0.016);
+  // 離木框正面 5 公釐（沿著畫布的法線），再加 polygonOffset：只差 1 公釐的時候遠一點看會跟木框搶著畫、一閃一閃
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(CANVAS.w - 0.03, CANVAS.h - 0.03), new THREE.MeshLambertMaterial({ map: tex, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 }));
+  const lift = 0.015 + 0.005;
+  face.position.set(0, cy + Math.sin(t) * lift, cz + Math.cos(t) * lift);
   face.rotation.x = -t;
   const holder = new THREE.Group();
   holder.position.set(x, 0, z);

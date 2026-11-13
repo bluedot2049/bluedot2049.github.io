@@ -40,8 +40,8 @@ export const NOOKS = [
 export const CLEARING = { ahead: 9, r: 10 };   // 谷底空地：路尾往前 ahead 公尺是中心
 // 洞口（2026-11-11，取代鐘錶匠的工坊）：空地南邊圍一圈岩壁（hill 公尺高，像半個碗），一條破爛的入口溝從空地南緣往南切進岩壁，
 // 越走越深（地面往下 drop 公尺、兩邊的壁越來越高），盡頭是洞口。off 是溝口離空地中心多遠（x, z），len 是溝多長，half 是走得到的半寬。
-// 洞裡之後再做：現在走到洞口就停
-export const CAVE = { off: [1, 9], len: 9, half: 1.25, drop: 1.4, hill: 7.5 };
+// 洞口以裡還能往下走 IN 公尺（越走越低），走到底按「往下」換到洞裡那一區（?z=dong，js/zones/dong/）
+export const CAVE = { off: [1, 9], len: 9, half: 1.25, drop: 1.4, hill: 7.5, in: 3.4 };
 // 海：海面高 level（盆地谷底比海低 26 公尺）。shore 是水邊那條線（圖上由西到東），往北 5 公尺以外是海床；
 // ridge 是海崖的稜線（第三個數是高度），擋在海灘和盆地中間，路在第一個鉤翻過去（那裡路面比稜線低，是鞍口）。
 // boat 是渡船停的位置，起點往那裡伸一段棧橋
@@ -257,7 +257,7 @@ function buildTerrain(P) {
 // 洞口以裡地面往下掉（之後洞裡從這裡接），從外面看進去是往下的黑
 export function trenchY(P, t) {
   const c = P.cave;
-  return c.y - c.drop * smooth(Math.min(1, Math.max(0, t / c.len))) - Math.max(0, t - c.len) * 0.9;
+  return c.y - c.drop * smooth(Math.min(1, Math.max(0, t / c.len))) - Math.max(0, t - c.len) * 0.5;
 }
 function caveHill(P, x, z) {
   const C = P.clearing, c = P.cave, dc = Math.hypot(x - C.x, z - C.z), south = smooth(Math.min(1, Math.max(0, (z - C.z - 1) / 6)));
@@ -273,7 +273,7 @@ function caveHill(P, x, z) {
 // 在不在入口溝裡：t 是從溝口往裡走了幾公尺，lat 是離中線多遠
 export function inTrench(P, x, z, pad = 0) {
   const c = P.cave, t = z - c.z;
-  return t > -1.5 && t < c.len - 0.6 && Math.abs(x - c.x) < c.half + pad ? t : null;
+  return t > -1.5 && t < c.len + c.in && Math.abs(x - c.x) < c.half + pad ? t : null;
 }
 
 // 在不在捷徑上：投影到那條直線上，回傳離中線多遠和那裡的高度

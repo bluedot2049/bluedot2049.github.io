@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>洞裡平面圖</title>
+  <!-- 黑森林洞裡的地形：五層疊在一起的剖面，和第一層三版平面圖（A 儲藏間、B 岔路、C 吊籠走道）並排挑。
+       形狀資料在 js/zones/dong/dong-rooms.js；每張圖下面可以直接到試做頁在那個地形上演一場 -->
+  <style>
+    html, body { margin: 0; background: #1c1814; color: #e9e0cc; font-family: "Noto Serif TC", serif; }
+    main { max-width: 1240px; margin: 0 auto; padding: 18px 16px 48px; }
+    h1 { margin: 0; font-size: 17px; font-weight: 600; color: #c9a86e; }
+    h2 { font-size: 15px; font-weight: 600; margin: 26px 0 6px; color: #c9a86e; }
+    .note { font-size: 13px; opacity: .75; margin-top: 4px; line-height: 1.7; }
+    canvas { display: block; width: 100%; border-radius: 8px; background: #120e0c; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; margin-top: 12px; }
+    .card { background: #221d18; border: 1px solid #3a3229; border-radius: 10px; padding: 10px; }
+    .card h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+    .card h3 span { color: #e8b86a; margin-right: 6px; }
+    .card p { font-size: 13px; line-height: 1.65; margin: 8px 0 6px; opacity: .85; }
+    .card ul { margin: 4px 0 8px; padding-left: 18px; font-size: 12.5px; line-height: 1.6; color: #cfc2ae; }
+    .card a { display: inline-block; margin-top: 4px; padding: 6px 12px; border: 1px solid #e8b86a; border-radius: 6px; color: #f5e9d4; text-decoration: none; font-size: 13px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12.5px; margin-top: 10px; color: #cfc2ae; }
+    .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 5px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>黑森林・洞裡的地形</h1>
+  <div class="note">五層照真的深度疊在一起往下，從上一層看得到下一層的光。每一間同一副骨架：門口（三個人等你換打光）→ 中間平的戰場（打鬥只在這裡）→ 至少三種拍攝位 → 打完才開、只能往下的出口。<br>
+    五層都蓋了（一到四層各三間、種子三選一；第五層只有龍的寶庫）。卡片下面可以到試做頁演一場，或直接走進 3D（?z=dong&floor=3 從第三層開始）。</div>
+
+  <h2>剖面</h2>
+  <canvas id="section" width="1240" height="560"></canvas>
+
+  <h2>每一層</h2>
+  <div class="legend">
+    <span><i style="background:#3d362f"></i>地面</span>
+    <span><i style="background:#0a0708;border:1px solid #333"></i>深溝</span>
+    <span><i style="background:rgba(232,184,106,.18);border:1px dashed #e8b86a"></i>戰場</span>
+    <span><i style="background:#6a5a49"></i>高台（數字是幾公尺）</span>
+    <span><i style="background:#7a6450"></i>掩體</span>
+    <span><i style="background:#ffc77a;border-radius:50%"></i>吊燈插座</span>
+    <span><i style="background:#8a5a2c;border-radius:50%"></i>油桶插座</span>
+    <span><i style="background:#c4543f;border-radius:50%"></i>敵人出生（橘的是伏擊）</span>
+    <span><i style="background:#f5e9d4;border-radius:50%"></i>拍攝位</span>
+    <span><i style="background:#7fa8c9"></i>出口（往下）</span>
+  </div>
+  <div id="cards"></div>
+</main>
+
+<script type="module">
+import { ROOM_SHAPES, DEPTH, ARRIVE } from '../js/zones/dong/dong-rooms.js';
+import { MERCS, FLOORS } from '../js/zones/dong/dong-table.js';
+
+const COL = { dwarf: '#d79a55', elf: '#8fc070', mage: '#9fb2ee' };
+const VCOL = { 高處: '#f5e9d4', 低處: '#f5e9d4', 掩體: '#f5e9d4', 側面: '#f5e9d4', 敵後: '#f5e9d4', 門口: '#a8987e' };
+
+// ── 剖面：x 是往裡（每層錯開一點），y 是深度 ──
+{
+  const cv = document.getElementById('section'), g = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  const top = 8, bottom = -66, Y = (y) => 40 + (top - y) / (top - bottom) * (H - 70);
+  const sx = 13;
+  // 岩層
+  g.fillStyle = '#1a1512'; g.fillRect(0, Y(4), W, H);
+  // 地表：谷底空地和洞口
+  g.fillStyle = '#2c3a2e'; g.fillRect(0, Y(4) - 6, 260, 6);
+  g.fillStyle = '#a8987e'; g.font = '13px "Noto Serif TC", serif';
+  g.fillText('谷底空地（營火）　地面 +4', 16, Y(4) - 14);
+  // 樓層：寬度大概照房間大小，往右錯開
+  const floors = [
+    { x: 300, w: 22, name: '一　哥布林的地盤', via: '滑槽、隧道、繩子', mat: '冷灰岩＋爛木頭' },
+    { x: 470, w: 20, name: '二　墓（短休）', via: '塌掉的地板', mat: '灰藍切石、石柱、骨頭' },
+    { x: 560, w: 34, name: '三　戰團', via: '隧道、寨門', mat: '紅褐大裂谷、木寨、營火' },
+    { x: 760, w: 26, name: '四　巨魔的巢', via: '隧道', mat: '濕黑岩、地下河、瀑布、骨頭灘' },
+    { x: 840, w: 30, name: '五　寶庫', via: '', mat: '古代大廳、石像、金幣（古道回營火）' },
+  ];
+  // 洞口斜坡
+  g.strokeStyle = '#6b5f52'; g.lineWidth = 3;
+  g.beginPath(); g.moveTo(230, Y(4)); g.lineTo(floors[0].x, Y(DEPTH[0])); g.stroke();
+  g.fillStyle = '#cfc2ae'; g.fillText('洞口的斜坡（黑森林那一區）　走到底換區', 150, Y(-1.5));
+  floors.forEach((f, i) => {
+    const y = Y(DEPTH[i]), x0 = f.x, x1 = f.x + f.w * sx, hh = (i === 4 ? 16 : i === 2 ? 12 : 7) * (H - 70) / (top - bottom);
+    // 空間（沒有天花板，頭上黑）
+    const gr = g.createLinearGradient(0, y - hh, 0, y);
+    gr.addColorStop(0, 'rgba(8,6,6,0)'); gr.addColorStop(1, i === 0 ? 'rgba(232,184,106,.16)' : 'rgba(120,110,100,.10)');
+    g.fillStyle = gr; g.fillRect(x0, y - hh, x1 - x0, hh);
+    g.fillStyle = i === 0 ? '#e8b86a' : '#6b5f52';
+    g.fillRect(x0, y, x1 - x0, 5);
+    g.fillStyle = i === 0 ? '#f5e9d4' : '#a8987e';
+    g.font = `${i === 0 ? 600 : 400} 14px "Noto Serif TC", serif`;
+    g.fillText(`${f.name}　${DEPTH[i]} 公尺${f.note ? '　← ' + f.note : ''}`, x0, y + 22);
+    g.font = '12px "Noto Serif TC", serif'; g.fillStyle = '#8a7d6a';
+    g.fillText(f.mat, x0, y + 39);
+    // 往下：出口到下一層
+    if (i < 4) {
+      const n = floors[i + 1], ny = Y(DEPTH[i + 1]);
+      g.strokeStyle = '#7fa8c9'; g.lineWidth = 2; g.setLineDash([6, 5]);
+      g.beginPath(); g.moveTo(x1 - 10, y); g.lineTo(Math.max(n.x + 20, x1 - 10), ny); g.stroke(); g.setLineDash([]);
+      g.fillStyle = '#7fa8c9'; g.fillText('↓ ' + f.via, Math.min(x1 + 6, W - 200), (y + ny) / 2);
+      // 從這一層看得到下一層的光
+      g.strokeStyle = 'rgba(232,184,106,.35)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(x1 - 30, y - 4); g.lineTo(n.x + n.w * sx * 0.5, ny - 4); g.stroke();
+    }
+  });
+  g.fillStyle = 'rgba(232,184,106,.7)'; g.font = '12px "Noto Serif TC", serif';
+  g.fillText('細金線＝從上一層往下看得到下一層的光', W - 300, H - 14);
+  g.fillStyle = '#8a7d6a'; g.fillText('「回去」和撤退：墨色過場回營火', 16, H - 14);
+}
+
+// ── 平面 ──
+for (const F of FLOORS) {
+  const ids = F.rooms.map((r) => r.id).filter((id) => ROOM_SHAPES[id]);
+  if (!ids.length) continue;
+  const h = document.createElement('h2');
+  h.textContent = `第 ${F.n} 層　${F.name}`;
+  const box = document.createElement('div');
+  box.className = 'cards';
+  document.getElementById('cards').append(h, box);
+for (const id of ids) {
+  const S = ROOM_SHAPES[id];
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h3><span>${S.ver}</span>${S.name}</h3><canvas width="680" height="760"></canvas><p>${S.note}</p>
+    <ul><li>戰場 ${+S.arena.w.toFixed(1)}×${+S.arena.d.toFixed(1)} 公尺</li>${S.vantage.filter((v) => v.kind !== '門口').map((v) => `<li>${v.kind}：${v.name}${v.h ? `（${v.h} 公尺）` : ''}</li>`).join('')}<li>出口：${S.exit.kind}</li></ul>
+    <a href="cave_preview.html?f=${F.n}&room=${id}">在這個地形演一場</a> <a href="../?z=dong&${F.n === 1 ? 'room' : 'room' + F.n}=${id}&floor=${F.n}">走進 3D 灰模型</a>`;
+  box.appendChild(card);
+  drawPlan(card.querySelector('canvas'), S);
+}
+}
+
+function drawPlan(cv, S) {
+  const g = cv.getContext('2d');
+  const pts = [...S.walls, [ARRIVE.x, ARRIVE.z], S.exit.to];
+  const xs = pts.map((p) => p[0]), zs = pts.map((p) => p[1]);
+  const minX = Math.min(...xs) - 1.5, maxX = Math.max(...xs) + 1.5, minZ = Math.min(...zs) - 1.5, maxZ = Math.max(...zs) + 1.5;
+  const s = Math.min(cv.width / (maxX - minX), cv.height / (maxZ - minZ));
+  const ox = (cv.width - (maxX - minX) * s) / 2, oy = (cv.height - (maxZ - minZ) * s) / 2;
+  const X = (x) => ox + (x - minX) * s, Y = (z) => cv.height - oy - (z - minZ) * s;
+  const poly = (p) => { g.beginPath(); p.forEach(([x, z], i) => i ? g.lineTo(X(x), Y(z)) : g.moveTo(X(x), Y(z))); g.closePath(); };
+  const text = (t, x, z, c = '#cfc2ae', size = 12, align = 'center') => { g.fillStyle = c; g.font = `${size}px "Noto Serif TC", serif`; g.textAlign = align; g.fillText(t, X(x), Y(z)); };
+  g.fillStyle = '#120e0c'; g.fillRect(0, 0, cv.width, cv.height);
+  // 地面
+  poly(S.walls); g.fillStyle = '#3d362f'; g.fill();
+  // 格子
+  g.save(); poly(S.walls); g.clip();
+  g.strokeStyle = 'rgba(255,255,255,.04)'; g.lineWidth = 1;
+  for (let x = Math.ceil(minX / 2) * 2; x < maxX; x += 2) { g.beginPath(); g.moveTo(X(x), 0); g.lineTo(X(x), cv.height); g.stroke(); }
+  for (let z = Math.ceil(minZ / 2) * 2; z < maxZ; z += 2) { g.beginPath(); g.moveTo(0, Y(z)); g.lineTo(cv.width, Y(z)); g.stroke(); }
+  g.restore();
+  // 深溝
+  for (const p of S.pits) { poly(p.poly); g.fillStyle = '#0a0708'; g.fill(); const c = center(p.poly); text(p.name, c[0], c[1], '#5a5048', 13); }
+  // 戰場
+  const A = S.arena;
+  g.fillStyle = 'rgba(232,184,106,.10)'; g.strokeStyle = 'rgba(232,184,106,.6)'; g.setLineDash([7, 6]); g.lineWidth = 1.5;
+  g.fillRect(X(-A.w / 2), Y(A.d), A.w * s, A.d * s); g.strokeRect(X(-A.w / 2), Y(A.d), A.w * s, A.d * s); g.setLineDash([]);
+  text('戰場', 0, A.d * 0.5, 'rgba(232,184,106,.55)', 15);
+  // 高台
+  // 不屬於哪個台的坡（鬥獸坑兩邊上看台）也畫在這一圈
+  for (const L of [...S.levels, ...(S.ramps || []).map((r) => ({ poly: [], ramp: r }))]) {
+    if (L.poly.length) {
+    poly(L.poly); g.fillStyle = L.h < 0 ? '#3e352c' : '#6a5a49'; g.fill();
+    g.save(); poly(L.poly); g.clip(); g.strokeStyle = 'rgba(0,0,0,.25)'; g.lineWidth = 2;
+    for (let k = -cv.width; k < cv.width * 2; k += 9) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k + cv.height, cv.height); g.stroke(); }
+    g.restore();
+    const c = center(L.poly); text(`${L.name} ${L.h}`, c[0], c[1] - 0.2, '#f5e9d4', 12);
+    }
+    if (L.ramp) {
+      const { from: f, to: t, w } = L.ramp, dx = t[0] - f[0], dz = t[1] - f[1], l = Math.hypot(dx, dz), nx = -dz / l * w / 2, nz = dx / l * w / 2;
+      poly([[f[0] + nx, f[1] + nz], [t[0] + nx, t[1] + nz], [t[0] - nx, t[1] - nz], [f[0] - nx, f[1] - nz]]);
+      g.fillStyle = '#58493b'; g.fill();
+      for (let k = 1; k < 6; k++) { const q = k / 6; g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 1; g.beginPath(); g.moveTo(X(f[0] + dx * q + nx), Y(f[1] + dz * q + nz)); g.lineTo(X(f[0] + dx * q - nx), Y(f[1] + dz * q - nz)); g.stroke(); }
+      text('坡', f[0], f[1] - 0.9, '#f5e9d4', 11);
+    }
+  }
+  // 掩體
+  for (const c of S.cover) {
+    g.fillStyle = '#7a6450'; g.fillRect(X(c.x - c.w / 2), Y(c.z + c.d / 2), c.w * s, c.d * s);
+    text(c.name, c.x, c.z - c.d / 2 - 0.55, '#a8987e', 11);
+  }
+  // 牆
+  poly(S.walls); g.strokeStyle = '#7a6d60'; g.lineWidth = 3; g.stroke();
+  // 插座
+  for (const [x, z] of S.sockets.lamp || []) { g.strokeStyle = '#ffc77a'; g.lineWidth = 2; g.beginPath(); g.arc(X(x), Y(z), 9, 0, Math.PI * 2); g.stroke(); g.fillStyle = 'rgba(255,199,122,.5)'; g.beginPath(); g.arc(X(x), Y(z), 4, 0, Math.PI * 2); g.fill(); }
+  for (const [x, z] of S.sockets.barrel || []) { g.fillStyle = '#8a5a2c'; g.beginPath(); g.arc(X(x), Y(z), 7, 0, Math.PI * 2); g.fill(); }
+  // 出生
+  const spawn = (list, c) => { for (const [x, z] of list || []) { g.strokeStyle = c; g.lineWidth = 2.5; g.beginPath(); g.moveTo(X(x) - 5, Y(z) - 5); g.lineTo(X(x) + 5, Y(z) + 5); g.moveTo(X(x) + 5, Y(z) - 5); g.lineTo(X(x) - 5, Y(z) + 5); g.stroke(); } };
+  spawn(S.spawns.back, '#c4543f'); spawn(S.spawns.left, '#e08a3a'); spawn(S.spawns.right, '#e08a3a');
+  // 門口和三個人
+  for (const [id, M] of Object.entries(MERCS)) { g.fillStyle = COL[id]; g.beginPath(); g.arc(X(M.home[0]), Y(M.home[1]), 6, 0, Math.PI * 2); g.fill(); }
+  text('三個人在這裡等你換打光', 0, -0.9, '#a8987e', 11);
+  // 從洞口下來
+  g.strokeStyle = '#a8987e'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(X(ARRIVE.x), Y(ARRIVE.z)); g.lineTo(X(0), Y(-3.2)); g.stroke();
+  text('從洞口的斜坡下來', ARRIVE.x, ARRIVE.z - 0.9, '#a8987e', 11);
+  // 拍攝位
+  for (const v of S.vantage) {
+    const a = Math.atan2(v.look[1], v.look[0]), R = 2.6 * s;
+    g.fillStyle = 'rgba(245,233,212,.12)';
+    g.beginPath(); g.moveTo(X(v.x), Y(v.z)); g.arc(X(v.x), Y(v.z), R, -a - 0.5, -a + 0.5); g.closePath(); g.fill();
+    g.fillStyle = VCOL[v.kind]; g.beginPath(); g.arc(X(v.x), Y(v.z), 6, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#120e0c'; g.lineWidth = 2; g.stroke();
+    if (v.kind !== '門口') text(v.kind, v.x, v.z + 0.75, '#f5e9d4', 12);
+  }
+  // 出口
+  g.strokeStyle = '#7fa8c9'; g.lineWidth = 3;
+  const e = S.exit;
+  g.beginPath(); g.moveTo(X(e.x), Y(e.z)); g.lineTo(X(e.to[0]), Y(e.to[1])); g.stroke();
+  const ang = Math.atan2(-(e.to[1] - e.z), e.to[0] - e.x);
+  g.beginPath(); g.moveTo(X(e.to[0]), Y(e.to[1]));
+  g.lineTo(X(e.to[0]) - 10 * Math.cos(ang - 0.45), Y(e.to[1]) - 10 * Math.sin(ang - 0.45));
+  g.lineTo(X(e.to[0]) - 10 * Math.cos(ang + 0.45), Y(e.to[1]) - 10 * Math.sin(ang + 0.45));
+  g.closePath(); g.fillStyle = '#7fa8c9'; g.fill();
+  text(`↓ ${e.kind}`, (e.x + e.to[0]) / 2, (e.z + e.to[1]) / 2 + 0.8, '#7fa8c9', 12);
+  // 比例尺
+  g.fillStyle = '#a8987e'; g.fillRect(14, cv.height - 18, 5 * s, 3); g.font = '11px "Noto Serif TC", serif'; g.textAlign = 'left'; g.fillText('5 公尺', 14, cv.height - 24);
+}
+function center(p) { return [p.reduce((s, q) => s + q[0], 0) / p.length, p.reduce((s, q) => s + q[1], 0) / p.length]; }
+</script>
+</body>
+</html>

@@ -121,15 +121,16 @@ export function buildOutdoor(room, h) {
   block(jettyBench.x, jettyBench.z, 0.85, 0.3);
 
   // 野餐墊和籃子：大樹東邊的樹蔭下（位置在上面 pic）
-  const stripes = ['#b8423a', '#efe2c8'];
-  for (let i = 0; i < 7; i++) k.box(1.9, 0.01, 0.2, stripes[i % 2], pic.x, G + 0.01, pic.z - 0.6 + i * 0.2);
-  k.cyl(0.22, 0.18, 0.24, '#a87a40', pic.x + 1.25, G + 0.12, pic.z - 0.2, {}, 9);
-  k.torus(0.18, 0.02, Math.PI, '#8a5a30', pic.x + 1.25, G + 0.24, pic.z - 0.2);
-  bread(k, pic.x + 0.55, G + 0.02, pic.z + 0.35, 0.8);
-  fruit(k, 'apple', pic.x + 0.2, G + 0.02, pic.z + 0.4);
-  fruit(k, 'golden', pic.x + 0.32, G + 0.02, pic.z + 0.5);
-  k.cyl(0.04, 0.045, 0.22, '#2a4a32', pic.x + 0.75, G + 0.12, pic.z - 0.35, {}, 8);
-  goblet(k, pic.x - 0.2, G + 0.01, pic.z + 0.45);
+  // 墊子頂面要明顯高過樹蔭貼片（G + 0.015，下面 sh），同一個高度會兩個面搶著畫、一閃一閃
+  const stripes = ['#b8423a', '#efe2c8'], MAT = 0.035;
+  for (let i = 0; i < 7; i++) k.box(1.9, 0.01, 0.2, stripes[i % 2], pic.x, G + MAT - 0.005, pic.z - 0.6 + i * 0.2);
+  k.cyl(0.22, 0.18, 0.24, '#a87a40', pic.x + 1.25, G + 0.12 + MAT, pic.z - 0.2, {}, 9);
+  k.torus(0.18, 0.02, Math.PI, '#8a5a30', pic.x + 1.25, G + 0.24 + MAT, pic.z - 0.2);
+  bread(k, pic.x + 0.55, G + 0.01 + MAT, pic.z + 0.35, 0.8);
+  fruit(k, 'apple', pic.x + 0.2, G + 0.01 + MAT, pic.z + 0.4);
+  fruit(k, 'golden', pic.x + 0.32, G + 0.01 + MAT, pic.z + 0.5);
+  k.cyl(0.04, 0.045, 0.22, '#2a4a32', pic.x + 0.75, G + 0.11 + MAT, pic.z - 0.35, {}, 8);
+  goblet(k, pic.x - 0.2, G + MAT, pic.z + 0.45);
   block(pic.x + 1.25, pic.z - 0.2, 0.25, 0.25);
 
   // 畫架：野餐墊原本那塊地（easel.js）。站在畫布前面，面向夕陽和海；自己一組亂數，不動到草原其他東西
@@ -326,7 +327,7 @@ export function buildOutdoor(room, h) {
   // 椅子從外側入座，有椅背的長椅從前面走過來再轉身坐下
   for (const sx of [-1, 1]) seat(bx + sx * 0.85, Z(bRel), 0.45, Math.PI, false, bx + sx * 1.45, Z(bRel));
   for (const dx of [-0.4, 0.4]) seat(benchAt.x + dx, benchAt.z, 0.45, Math.PI, false, benchAt.x + dx, benchAt.z - 0.75);
-  for (const dx of [-0.45, 0.45]) seat(pic.x + dx, pic.z, 0.02, Math.PI);
+  for (const dx of [-0.45, 0.45]) seat(pic.x + dx, pic.z, 0.04, Math.PI);   // 墊子頂面 G + 0.04
   // 涼亭的石凳面向海。新座位一律加在最後，舊的座位編號不變，多人同步才對得上
   for (const dx of [-0.45, 0.45]) seat(pavBench.x + dx, pavBench.z, 0.45, Math.PI);
   for (const dx of [-0.4, 0.4]) seat(jettyBench.x + dx, jettyBench.z, 0.45, Math.PI, false, jettyBench.x + dx, jettyBench.z - 0.75);

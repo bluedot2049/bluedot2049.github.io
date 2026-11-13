@@ -71,6 +71,7 @@ const ZONES = {
   ting: { load: () => import('./zones/ting/zone-ting.js') },
   jinggong: { load: () => import('./zones/jinggong/zone-jinggong.js') },   // 海市星廟裡的鏡宮，不搭船，從星門進出
   heilin: { load: () => import('./zones/heilin/zone-heilin.js') },   // 黑森林，還在蓋（places.js 的 dev）
+  dong: { load: () => import('./zones/dong/zone-dong.js') },   // 黑森林洞裡（灰模型）：從洞口走到底進來，不搭船、不在 places.js
   concert: { load: () => import('./zones/concert/zone-concert.js') },
   gorge: { load: () => import('./zones/gorge/zone-gorge.js') },   // 深谷：演唱會的第二個場地，灰模型（places.js 的 dev）   // 演唱會：從畫廊的樹洞進去，不搭船（places.js 的 boat: false）
   duel: { load: () => import('./zones/duel/zone-duel.js') },   // 對影：拍照對戰的專用場地，灰模型（places.js 的 dev）
@@ -524,7 +525,7 @@ async function start() {
     // 有隊友的那一區亮他的顏色；want 是點了別區隊友的名牌要去的地方，沒有就翻到隊友剛去的那一區（同船）
     onExit(ex, want) {
       if (ex.home) return ex.home.act();
-      if (ex.gate) return travel(ex.to, {}, 'gate');   // 星門（海市星廟和鏡宮之間）：門光鋪滿就換頁，不渡海
+      if (ex.gate) return travel(ex.to, ex.extra?.() ?? {}, 'gate');   // 星門（海市星廟和鏡宮之間、黑森林洞口）：門光鋪滿就換頁，不渡海；extra 是另外帶的網址參數（洞裡的種子）
       if (!ex.boat) return travel(ex.to);
       if (player.boarding) return;
       const mates = party?.ferryInfo();
@@ -630,7 +631,7 @@ async function start() {
     if (traveling) return;
     traveling = true;
     const q = new URLSearchParams(location.search);
-    for (const k of ['z', 'from', 'go', 'via', ...(to === zone ? [] : ['show'])]) q.delete(k);   // 同一區換頁留在同一場（演唱會）
+    for (const k of ['z', 'from', 'go', 'via', ...(to === zone ? [] : ['show', 'seed'])]) q.delete(k);   // 同一區換頁留在同一場（演唱會）；換到別區清掉 seed（洞裡這一趟的種子由洞口另外帶）
     if (to !== 'gallery') q.set('z', to);
     q.set('from', zone);
     for (const [k, v] of Object.entries(extra)) q.set(k, v);
@@ -1239,6 +1240,7 @@ async function start() {
   // 一幕劇（core/act.js，zone 匯出 acts）：在地圖上一拍一拍演的戲，找到演員才往下，演到哪一拍黑眼清單多一行。演員跟事件一樣評分、讓人轉頭（happen.more）
   acts = new Acts({ guide, player, params, list: Z.acts?.({ world, scene, vendors, ambience, attention, camera, player, ui }) ?? [] });
   happen.more.push(acts);
+  for (const j of world.judges ?? []) happen.more.push(j);   // 區域自己要在快門時評分的（黑森林洞裡的打鬥，寫法同一件事件）
 
   acts.send = (m) => mp?.act(m);
   // 地上的硬幣：撿了告訴同一區的人、剛進來問別人撿走了哪些（沒連線就不送）

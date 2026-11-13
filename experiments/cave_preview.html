@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>洞裡試做</title>
+  <!-- 黑森林洞裡的試做：雇營火那三個人進洞，他們打，你拍。一間房一場，照種子和你選的打光排成一招一招的時間表（js/zones/dong/dong-fight.js）。
+       俯視平面示意，遊戲裡是 3D；暗的地方真的是暗的，東西要被照到才看得見 -->
+  <style>
+    html, body { margin: 0; background: #1c1814; color: #e9e0cc; font-family: "Noto Serif TC", serif; }
+    main { max-width: 1040px; margin: 0 auto; padding: 18px 16px 48px; }
+    h1 { margin: 0; font-size: 17px; font-weight: 600; color: #c9a86e; }
+    h2 { font-size: 15px; font-weight: 600; margin: 26px 0 6px; color: #c9a86e; }
+    .note { font-size: 13px; opacity: .72; margin-top: 4px; line-height: 1.65; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+    button { padding: 7px 12px; border: 1px solid #4a3f35; border-radius: 6px; background: #2a241e; color: inherit; font: inherit; font-size: 14px; cursor: pointer; }
+    button.on { border-color: #e8b86a; color: #f5e9d4; }
+    button:disabled { opacity: .35; cursor: default; }
+    input[type=text] { width: 120px; padding: 7px 9px; border: 1px solid #4a3f35; border-radius: 6px; background: #14110e; color: inherit; font: 14px Consolas, monospace; }
+    label { font-size: 13px; opacity: .85; display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+    #room { font-size: 13px; line-height: 1.6; margin-top: 8px; color: #cfc2ae; }
+    #room b { color: #f5e9d4; font-weight: 600; }
+    .lights { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px; margin-top: 10px; }
+    .merc { border: 1px solid #3a3229; border-radius: 8px; padding: 8px 10px; background: #221d18; }
+    .merc .who { font-size: 13px; font-weight: 600; }
+    .merc .opts { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+    .merc .opts button { font-size: 13px; padding: 5px 9px; }
+    .merc .said { font-size: 13px; margin-top: 6px; min-height: 18px; color: #e8b86a; }
+    .wrap { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 12px; margin-top: 12px; }
+    @media (max-width: 760px) { .wrap { grid-template-columns: 1fr; } }
+    canvas#stage { display: block; width: 100%; aspect-ratio: 4 / 3; background: #0b0809; border-radius: 8px; touch-action: none; cursor: crosshair; }
+    #log { height: 0; min-height: 100%; overflow-y: auto; font-size: 12.5px; line-height: 1.55; background: #15110e; border-radius: 8px; padding: 8px 10px; box-sizing: border-box; }
+    @media (max-width: 760px) { #log { height: 200px; } }
+    #log div { opacity: .55; }
+    #log div.now { opacity: 1; }
+    #log span.t { display: inline-block; width: 38px; color: #8a7d6a; font-family: Consolas, monospace; }
+    #timeline { position: relative; height: 44px; margin-top: 8px; border-radius: 6px; background: #120f0d; cursor: pointer; user-select: none; overflow: hidden; }
+    #timeline .m { position: absolute; bottom: 0; background: #e8b86a; border-radius: 2px; opacity: .8; }
+    #timeline .m.tell { background: #b56a4a; }
+    #timeline .head { position: absolute; top: 0; bottom: 0; width: 2px; background: #f5e9d4; pointer-events: none; }
+    #timeline .lbl { position: absolute; top: 3px; font-size: 10.5px; color: #a8987e; white-space: nowrap; pointer-events: none; }
+    #now { min-height: 20px; margin-top: 6px; font-size: 13px; color: #e8b86a; }
+    #info { font: 12px Consolas, monospace; color: #cfc2ae; margin-left: auto; }
+    #sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 10px; }
+    #sheet figure { margin: 0; background: #221d18; border-radius: 6px; padding: 6px; }
+    #sheet canvas { width: 100%; border-radius: 4px; display: block; }
+    #sheet figcaption { font-size: 12px; margin-top: 5px; line-height: 1.5; }
+    #sheet .pg { font-size: 14px; color: #e8b86a; font-weight: 600; }
+    #sheet .pg.x { color: #8a7d6a; }
+    table { border-collapse: collapse; width: 100%; font-size: 12.5px; margin-top: 8px; }
+    td, th { border-bottom: 1px solid #2e2720; padding: 5px 6px; text-align: left; vertical-align: top; }
+    th { color: #a8987e; font-weight: normal; }
+    td.win { color: #9fc27a; } td.lose { color: #d98a6a; }
+    .key { display: inline-block; border: 1px solid #5a4e3e; border-radius: 4px; padding: 0 5px; font: 12px Consolas, monospace; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>黑森林・洞裡（試做）</h1>
+  <div class="note">雇營火那三個人進洞，他們打，你拍。每一間門口，三個人等你決定這一場怎麼打光（遊戲裡是走到他旁邊按互動鍵輪著換），沒換的照種子自己決定。
+    越往下敵人越菁英；每一趟一個種子，房間、敵人、誰出手打誰、打中沒有都從它抽。換打光時房間和敵人不變，只有打法變。<br>
+    在房間裡<b>按住拖曳</b>：按下的地方是你站的位置，拖的方向是鏡頭方向；點白圈（拍攝位）直接站過去。<span class="key">空白</span> 快門　<span class="key">Enter</span> 播放／暫停。金條是好拍的瞬間（越高越好拍），紅條是敵人大招的起手。</div>
+
+  <div class="row">
+    種子 <input type="text" id="seed" value="營火">
+    <button id="reseed">換一個</button>
+    <span style="width:10px"></span>
+    <span id="floors"></span>
+  </div>
+  <div class="row" id="rooms"></div>
+  <div id="room"></div>
+  <div class="lights" id="lights"></div>
+
+  <div class="wrap">
+    <canvas id="stage" width="1040" height="780"></canvas>
+    <div id="log"></div>
+  </div>
+  <div id="timeline"></div>
+  <div class="row">
+    <button id="play" class="on">播放</button>
+    <button id="restart">從頭</button>
+    <span>速度</span>
+    <button data-sp="1" class="on">1×</button><button data-sp="0.5">½×</button><button data-sp="0.25">¼×</button>
+    <label><input type="checkbox" id="xray"> 看得到暗處</label>
+    <button id="shutter" class="on">快門</button>
+    <span id="info"></span>
+  </div>
+  <div id="now"></div>
+  <div id="sheet"></div>
+
+  <h2>這一趟</h2>
+  <div class="note">照這個種子一層一層往下（每層都用他們自己選的打光，假設每次你都說往下），看走到哪裡、為什麼停。</div>
+  <div id="run"></div>
+
+  <h2>隨機感</h2>
+  <div class="note">抽 30 個種子，同一層各打一場（打光照種子自己選），看房間、敵人、結果、大瞬間有多不一樣。</div>
+  <div class="row"><button id="sample">抽 30 個</button></div>
+  <div id="samples"></div>
+</main>
+
+<script type="module">
+import { rollRoom, planRoom, planRun, stateAt, judge, lightAt, lightOptions, autoLights, lightSay } from '../js/zones/dong/dong-fight.js';
+import { MERCS, MERC_IDS, LIGHTS, FLOORS } from '../js/zones/dong/dong-table.js';
+import { ROOM_SHAPES } from '../js/zones/dong/dong-rooms.js';
+
+const $ = (id) => document.getElementById(id);
+const COL = { dwarf: '#d79a55', elf: '#8fc070', mage: '#9fb2ee' };
+const FOE = '#c4543f';
+// 網址可以帶 ?f=第幾層&room=哪一間&seed=（平面圖頁 dong_plan.html 點過來）
+const Q = new URLSearchParams(location.search);
+if (Q.get('seed')) $('seed').value = Q.get('seed');
+let seed = $('seed').value, floorN = +(Q.get('f') || 1), roomPick = Q.get('room'), roll, plan, choice = {}, t = 0, playing = true, speed = 1;
+let cam = { x: 0, z: 1, yaw: Math.PI / 2, fov: 1.1 };
+const shots = [];
+
+// ── 層 ──
+$('floors').innerHTML = FLOORS.map((f) => `<button data-f="${f.n}">${f.n} ${f.name}</button>`).join('');
+$('floors').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; floorN = +b.dataset.f; roomPick = null; choice = {}; reroll(); };
+$('rooms').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; roomPick = b.dataset.r || null; choice = {}; reroll(); };
+$('seed').onchange = () => { seed = $('seed').value.trim() || '營火'; choice = {}; reroll(); };
+$('reseed').onclick = () => { $('seed').value = seed = Math.random().toString(36).slice(2, 7); choice = {}; reroll(); };
+
+function reroll() {
+  roll = rollRoom(seed, floorN, roomPick);
+  for (const b of $('floors').children) b.classList.toggle('on', +b.dataset.f === floorN);
+  const rooms = FLOORS[floorN - 1].rooms;
+  $('rooms').innerHTML = rooms.length > 1 ? '房間 ' + [`<button data-r="" class="${roomPick ? '' : 'on'}">照種子</button>`, ...rooms.map((r) => `<button data-r="${r.id}" class="${roomPick === r.id ? 'on' : ''}">${ROOM_SHAPES[r.id] ? ROOM_SHAPES[r.id].ver + ' ' : ''}${r.name}</button>`)].join(' ') : '';
+  cam = { x: 0, z: roll.shape ? -1.5 : 1, yaw: Math.PI / 2, fov: 1.1 };
+  drawLights();
+  replan(true);
+  drawRun();
+}
+function replan(fromStart) {
+  plan = planRoom(roll, choice);
+  if (fromStart) { t = 0; playing = true; }
+  t = Math.min(t, plan.dur);
+  const props = Object.keys(roll.props).map((k) => ({ lamp: '吊燈', barrel: '油桶', fire: '敵人的營火' }[k])).join('、') || '沒有';
+  const count = {};
+  for (const f of roll.foes) count[f] = (count[f] || 0) + 1;
+  const foes = Object.entries(count).map(([k, n]) => `${plan.ents.find((e) => e.type === k).name}×${n}`).join('、');
+  $('room').innerHTML = `第 ${floorN} 層　<b>${roll.room.name}</b>（${+roll.room.w.toFixed(1)}×${+roll.room.d.toFixed(1)} 公尺）　敵人：${foes}　道具：${props}${roll.ambush ? '　<b>伏擊</b>（從' + (roll.side === 'left' ? '左' : '右') + '邊）' : ''}<br>`
+    + `結果：<b>${plan.outcome === 'win' ? '打完' : '撤退'}</b>　${plan.dur.toFixed(1)} 秒　好拍的瞬間 ${plan.moments.filter((m) => m.size >= 2).length} 個（大的 ${plan.moments.filter((m) => m.size >= 3).length}）　打完剩血：`
+    + MERC_IDS.map((m) => `${MERCS[m].short} ${plan.hp[m]}/${MERCS[m].hp}`).join('　');
+  drawTimeline();
+  for (const [m, el] of Object.entries(lightEls)) {
+    for (const b of el.opts.children) b.classList.toggle('on', b.dataset.l === (choice[m] || 'auto'));
+  }
+}
+
+// ── 打光：每個人一排 ──
+const lightEls = {};
+function drawLights() {
+  const auto = autoLights(roll);
+  $('lights').innerHTML = '';
+  for (const m of MERC_IDS) {
+    const box = document.createElement('div');
+    box.className = 'merc';
+    const ok = lightOptions(roll, m);
+    box.innerHTML = `<div class="who" style="color:${COL[m]}">${MERCS[m].name}</div><div class="opts"></div><div class="said"></div>`;
+    const opts = box.querySelector('.opts'), said = box.querySelector('.said');
+    for (const id of MERCS[m].lights) {
+      const b = document.createElement('button');
+      b.dataset.l = id;
+      b.textContent = `${LIGHTS[id].name}`;
+      b.title = LIGHTS[id].kind;
+      if (!ok.includes(id)) { b.disabled = true; b.title = '這一間沒有' + (LIGHTS[id].need === 'lamp' ? '吊燈' : '油桶'); }
+      b.onclick = () => { choice[m] = id; said.textContent = '「' + lightSay(roll, id) + '」'; replan(true); };
+      opts.appendChild(b);
+    }
+    const a = document.createElement('button');
+    a.dataset.l = 'auto';
+    a.textContent = `隨他（${LIGHTS[auto[m]].name}）`;
+    a.onclick = () => { delete choice[m]; said.textContent = ''; replan(true); };
+    opts.appendChild(a);
+    lightEls[m] = { opts, said };
+    $('lights').appendChild(box);
+  }
+}
+
+// ── 時間軸 ──
+function drawTimeline() {
+  const tl = $('timeline');
+  tl.innerHTML = '';
+  const D = plan.dur;
+  for (const m of plan.moments) {
+    if (m.size < 1) continue;
+    const d = document.createElement('div');
+    d.className = 'm' + (m.tell ? ' tell' : '');
+    d.style.left = ((m.t - m.w) / D * 100) + '%';
+    d.style.width = Math.max(0.4, (m.w * 2) / D * 100) + '%';
+    d.style.height = (6 + m.size * 9) + 'px';
+    d.title = `${m.t.toFixed(1)} 秒　${m.name}${m.tag.length ? '（' + m.tag.join('、') + '）' : ''}`;
+    tl.appendChild(d);
+  }
+  for (let s = 0; s < D; s += 5) {
+    const l = document.createElement('div');
+    l.className = 'lbl'; l.style.left = (s / D * 100) + '%'; l.textContent = s + 's';
+    tl.appendChild(l);
+  }
+  const h = document.createElement('div'); h.className = 'head'; h.id = 'head'; tl.appendChild(h);
+}
+$('timeline').onpointerdown = (e) => {
+  const seek = (ev) => { const r = $('timeline').getBoundingClientRect(); t = Math.max(0, Math.min(plan.dur, (ev.clientX - r.left) / r.width * plan.dur)); };
+  seek(e); playing = false; syncPlay();
+  const mv = (ev) => seek(ev);
+  window.addEventListener('pointermove', mv);
+  window.addEventListener('pointerup', () => window.removeEventListener('pointermove', mv), { once: true });
+};
+
+// ── 播放 ──
+const syncPlay = () => { $('play').textContent = playing ? '暫停' : '播放'; $('play').classList.toggle('on', !playing); };
+$('play').onclick = () => { if (t >= plan.dur) t = 0; playing = !playing; syncPlay(); };
+$('restart').onclick = () => { t = 0; playing = true; syncPlay(); };
+document.querySelectorAll('[data-sp]').forEach((b) => b.onclick = () => { speed = +b.dataset.sp; document.querySelectorAll('[data-sp]').forEach((x) => x.classList.toggle('on', x === b)); });
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' && e.target.type === 'text') return;
+  if (e.code === 'Space') { e.preventDefault(); shoot(); }
+  if (e.code === 'Enter') { e.preventDefault(); $('play').click(); }
+});
+$('shutter').onclick = shoot;
+
+// ── 房間座標 ↔ 畫布 ──
+const cv = $('stage'), g = cv.getContext('2d');
+const dark = document.createElement('canvas'); dark.width = cv.width; dark.height = cv.height;
+const dg = dark.getContext('2d');
+function view() {
+  let minX, maxX, minZ, maxZ;
+  if (roll.shape) {
+    const xs = roll.shape.walls.map((p) => p[0]), zs = roll.shape.walls.map((p) => p[1]);
+    minX = Math.min(...xs) - 1; maxX = Math.max(...xs) + 1; minZ = Math.max(-4.5, Math.min(...zs)) - 1; maxZ = Math.max(...zs) + 1;
+  } else { const { w, d } = roll.room; minX = -w / 2 - 1.5; maxX = w / 2 + 1.5; minZ = -1.5; maxZ = d + 1.5; }
+  const s = Math.min(cv.width / (maxX - minX), cv.height / (maxZ - minZ));
+  const ox = cv.width / 2 - (minX + maxX) / 2 * s, oy = cv.height / 2 + (minZ + maxZ) / 2 * s;
+  return { s, X: (x) => ox + x * s, Y: (z) => oy - z * s, inv: (px, py) => ({ x: (px - ox) / s, z: (oy - py) / s }) };
+}
+cv.onpointerdown = (e) => {
+  const V = view();
+  const pt = (ev) => { const r = cv.getBoundingClientRect(); return V.inv((ev.clientX - r.left) * cv.width / r.width, (ev.clientY - r.top) * cv.height / r.height); };
+  const p = pt(e);
+  const v = roll.shape?.vantage.find((v) => Math.hypot(v.x - p.x, v.z - p.z) < 0.9);
+  if (v) { cam.x = v.x; cam.z = v.z; cam.yaw = Math.atan2(v.look[1], v.look[0]); return; }
+  cam.x = p.x; cam.z = p.z;
+  cv.setPointerCapture(e.pointerId);
+  const mv = (ev) => { const q = pt(ev); if (Math.hypot(q.x - cam.x, q.z - cam.z) > 0.4) cam.yaw = Math.atan2(q.z - cam.z, q.x - cam.x); };
+  cv.onpointermove = mv;
+  cv.onpointerup = () => { cv.onpointermove = null; };
+};
+
+function draw() {
+  const V = view(), { w, d } = roll.room;
+  const S = stateAt(plan, t);
+  g.clearRect(0, 0, cv.width, cv.height);
+  // 地面
+  const SH = roll.shape;
+  const poly = (p) => { g.beginPath(); p.forEach(([x, z], i) => i ? g.lineTo(V.X(x), V.Y(z)) : g.moveTo(V.X(x), V.Y(z))); g.closePath(); };
+  if (SH) {
+    poly(SH.walls); g.fillStyle = '#2b2622'; g.fill();
+    for (const p of SH.pits) { poly(p.poly); g.fillStyle = '#060405'; g.fill(); }
+    g.strokeStyle = 'rgba(232,184,106,.25)'; g.setLineDash([6, 6]); g.strokeRect(V.X(-w / 2), V.Y(d), w * V.s, d * V.s); g.setLineDash([]);
+    for (const L of SH.levels) { poly(L.poly); g.fillStyle = '#4a4038'; g.fill(); }
+    for (const c of SH.cover) { g.fillStyle = '#5a4a3c'; g.fillRect(V.X(c.x - c.w / 2), V.Y(c.z + c.d / 2), c.w * V.s, c.d * V.s); }
+  } else {
+    g.fillStyle = '#2b2622';
+    g.fillRect(V.X(-w / 2), V.Y(d), w * V.s, d * V.s);
+    g.strokeStyle = '#3a332c'; g.lineWidth = 1;
+    for (let z = 0; z <= d; z += 2) { g.beginPath(); g.moveTo(V.X(-w / 2), V.Y(z)); g.lineTo(V.X(w / 2), V.Y(z)); g.stroke(); }
+  }
+  // 門口
+  g.fillStyle = '#4a3a2a'; g.fillRect(V.X(-1.2), V.Y(0) - 4, 2.4 * V.s, 8);
+  // 道具
+  const P = roll.props;
+  if (P.lamp) { g.strokeStyle = '#b89a6a'; g.lineWidth = 2; g.beginPath(); g.arc(V.X(P.lamp.x), V.Y(P.lamp.z), 0.6 * V.s, 0, Math.PI * 2); g.stroke(); label('吊燈', P.lamp.x, P.lamp.z + 0.9, '#b89a6a'); }
+  if (P.barrel) { g.fillStyle = '#6a4a2a'; g.beginPath(); g.arc(V.X(P.barrel.x), V.Y(P.barrel.z), 0.45 * V.s, 0, Math.PI * 2); g.fill(); label('油桶', P.barrel.x, P.barrel.z + 0.8, '#a08060'); }
+  if (P.fire) { g.fillStyle = '#5a3a20'; g.beginPath(); g.arc(V.X(P.fire.x), V.Y(P.fire.z), 0.5 * V.s, 0, Math.PI * 2); g.fill(); }
+  // 慢動作泡泡
+  for (const b of S.bubbles) { g.setLineDash([6, 6]); g.strokeStyle = '#cfd8ff'; g.lineWidth = 2; g.beginPath(); g.arc(V.X(b.x), V.Y(b.z), b.r * V.s, 0, Math.PI * 2); g.stroke(); g.setLineDash([]); }
+  // 招式：預兆是一圈、打到是一條線
+  for (const ev of S.events) {
+    const a = S.ents.find((e) => e.id === ev.who);
+    if (!a) continue;
+    const tg = ev.target ? S.ents.find((e) => e.id === ev.target) : null;
+    const to = tg || ev.at;
+    if (ev.phase === 'tell') {
+      const k = (t - ev.t0) / Math.max(0.05, ev.act - ev.t0);
+      g.strokeStyle = a.side === 'merc' ? COL[a.type] : FOE; g.globalAlpha = 0.35 + 0.5 * k; g.lineWidth = 1 + ev.size;
+      g.beginPath(); g.arc(V.X(a.x), V.Y(a.z), (a.r + 0.3 + 0.5 * k) * V.s, 0, Math.PI * 2); g.stroke(); g.globalAlpha = 1;
+    } else if (to && t - ev.act < 0.3) {
+      g.strokeStyle = a.side === 'merc' ? COL[a.type] : FOE; g.lineWidth = 2 + ev.size;
+      g.beginPath(); g.moveTo(V.X(a.x), V.Y(a.z)); g.lineTo(V.X(to.x), V.Y(to.z)); g.stroke();
+    }
+  }
+  // 人
+  for (const e of S.ents) drawEnt(V, e);
+
+  // 暗：先整片蓋黑，有光的地方挖開，再疊一點光的顏色
+  dg.globalCompositeOperation = 'source-over';
+  dg.clearRect(0, 0, dark.width, dark.height);
+  dg.fillStyle = $('xray').checked ? 'rgba(6,4,8,0.62)' : 'rgba(6,4,8,0.95)';
+  dg.fillRect(0, 0, dark.width, dark.height);
+  dg.globalCompositeOperation = 'destination-out';
+  for (const L of S.lights) {
+    const r = L.r * V.s, cx = V.X(L.x), cy = V.Y(L.z);
+    const gr = dg.createRadialGradient(cx, cy, 0, cx, cy, r);
+    gr.addColorStop(0, `rgba(0,0,0,${Math.min(1, L.int * 1.05)})`); gr.addColorStop(0.5, `rgba(0,0,0,${Math.min(1, L.int * 0.35)})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    dg.fillStyle = gr; dg.fillRect(cx - r, cy - r, r * 2, r * 2);
+  }
+  g.drawImage(dark, 0, 0);
+  g.globalCompositeOperation = 'lighter';
+  for (const L of S.lights) {
+    const r = L.r * V.s * 0.7, cx = V.X(L.x), cy = V.Y(L.z);
+    const gr = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+    gr.addColorStop(0, hexA(L.col, Math.min(0.5, 0.16 * L.int))); gr.addColorStop(1, hexA(L.col, 0));
+    g.fillStyle = gr; g.fillRect(cx - r, cy - r, r * 2, r * 2);
+    g.fillStyle = hexA(L.col, 0.9); g.beginPath(); g.arc(cx, cy, L.h === 'high' ? 3 : 4, 0, Math.PI * 2); g.fill();
+  }
+  g.globalCompositeOperation = 'source-over';
+  // 牆
+  g.strokeStyle = '#5a4e42'; g.lineWidth = 3;
+  if (SH) {
+    poly(SH.walls); g.stroke();
+    // 拍攝位（點一下站過去）、高台的高度、出口
+    for (const L of SH.levels) { const c = L.poly.reduce((a, q) => [a[0] + q[0] / L.poly.length, a[1] + q[1] / L.poly.length], [0, 0]); g.fillStyle = 'rgba(245,233,212,.45)'; g.font = '12px "Noto Serif TC", serif'; g.textAlign = 'center'; g.fillText(`${L.name} ${L.h}`, V.X(c[0]), V.Y(c[1])); }
+    for (const v of SH.vantage) { g.strokeStyle = 'rgba(245,233,212,.7)'; g.lineWidth = 1.5; g.beginPath(); g.arc(V.X(v.x), V.Y(v.z), 8, 0, Math.PI * 2); g.stroke(); g.fillStyle = 'rgba(245,233,212,.6)'; g.font = '11px "Noto Serif TC", serif'; g.fillText(v.kind, V.X(v.x), V.Y(v.z) - 12); }
+    g.strokeStyle = '#7fa8c9'; g.lineWidth = 2; g.beginPath(); g.moveTo(V.X(SH.exit.x), V.Y(SH.exit.z)); g.lineTo(V.X(SH.exit.to[0]), V.Y(SH.exit.to[1])); g.stroke();
+  } else g.strokeRect(V.X(-w / 2), V.Y(d), w * V.s, d * V.s);
+  // 你和鏡頭
+  const R = 16 * V.s;
+  g.fillStyle = 'rgba(245,233,212,0.07)'; g.strokeStyle = 'rgba(245,233,212,0.45)'; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(V.X(cam.x), V.Y(cam.z));
+  g.arc(V.X(cam.x), V.Y(cam.z), R, -cam.yaw - cam.fov / 2, -cam.yaw + cam.fov / 2);
+  g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = '#f5e9d4'; g.beginPath(); g.arc(V.X(cam.x), V.Y(cam.z), 6, 0, Math.PI * 2); g.fill();
+
+  $('head') && ($('head').style.left = (t / plan.dur * 100) + '%');
+  $('info').textContent = `${t.toFixed(1)} / ${plan.dur.toFixed(1)} 秒`;
+  // 現在正好的瞬間
+  const live = plan.moments.filter((m) => Math.abs(t - m.t) <= m.w && m.size >= 1);
+  $('now').textContent = live.length ? '此刻：' + live.map((m) => m.name).join('、') : '';
+  drawLog();
+}
+function label(s, x, z, c) { const V = view(); g.fillStyle = c; g.font = '13px "Noto Serif TC", serif'; g.textAlign = 'center'; g.fillText(s, V.X(x), V.Y(z)); }
+function drawEnt(V, e) {
+  const x = V.X(e.x), y = V.Y(e.z), r = Math.max(9, e.r * V.s);
+  if (e.state === 'fled' && (e.x < -roll.room.w / 2 || e.z > roll.room.d)) return;
+  const c = e.side === 'merc' ? COL[e.type] : FOE;
+  g.globalAlpha = e.state === 'fled' ? 0.4 : 1;
+  if (e.state === 'dead' || e.state === 'down') g.fillStyle = '#5b5148';
+  else if (e.state === 'stone') g.fillStyle = '#8b8b88';
+  else if (e.state === 'bones') g.fillStyle = 'rgba(200,190,170,0.35)';
+  else g.fillStyle = c;
+  g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  if (e.state === 'ok' || e.state === 'asleep') { g.strokeStyle = '#1c130d'; g.lineWidth = 3; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(e.face) * r * 1.3, y - Math.sin(e.face) * r * 1.3); g.stroke(); }
+  g.fillStyle = '#1c130d'; g.font = `600 ${Math.round(r * 1.05)}px "Noto Serif TC", serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(e.state === 'down' ? '倒' : e.state === 'asleep' ? 'z' : e.short, x, y + 1);
+  g.textBaseline = 'alphabetic';
+  if (e.state === 'ok' && e.hp < e.max) { g.fillStyle = '#1c130d'; g.fillRect(x - r, y + r + 3, r * 2, 4); g.fillStyle = e.side === 'merc' ? '#9fc27a' : '#e0a060'; g.fillRect(x - r, y + r + 3, r * 2 * Math.max(0, e.hp / e.max), 4); }
+  g.globalAlpha = 1;
+}
+const hexA = (h, a) => { const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
+
+let lastLog = -1;
+function drawLog() {
+  const n = plan.log.filter((l) => l.t <= t).length;
+  if (n === lastLog) return;
+  lastLog = n;
+  $('log').innerHTML = plan.log.map((l, i) => `<div class="${i < n ? 'now' : ''}"><span class="t">${l.t.toFixed(1)}</span>${l.say ? `<span style="color:${COL[l.who]}">${MERCS[l.who].short}</span>「${l.text}」` : l.text}</div>`).join('');
+  const el = $('log').children[Math.max(0, n - 1)];
+  if (el) $('log').scrollTop = el.offsetTop - $('log').clientHeight + 40;
+}
+
+// ── 快門 ──
+function shoot() {
+  const j = judge(plan, t, cam);
+  const fig = document.createElement('figure');
+  const c = document.createElement('canvas');
+  c.width = 360; c.height = 270;
+  c.getContext('2d').drawImage(cv, 0, 0, c.width, c.height);
+  fig.appendChild(c);
+  const cap = document.createElement('figcaption');
+  cap.innerHTML = `<div class="pg ${j.page === '不能用' ? 'x' : ''}">${j.page}　<span style="font-weight:normal;font-size:12px">${j.score}</span></div>`
+    + `第 ${floorN} 層 ${roll.room.name}・${t.toFixed(2)} 秒<br>${j.parts.join('<br>')}`;
+  fig.appendChild(cap);
+  $('sheet').prepend(fig);
+  cv.animate([{ filter: 'brightness(2.2)' }, { filter: 'none' }], 160);
+}
+
+// ── 這一趟 ──
+function drawRun() {
+  const run = planRun(seed);
+  $('run').innerHTML = `<table><tr><th>層</th><th>房間</th><th>打光（自己選的）</th><th>結果</th><th>秒</th><th>大瞬間</th><th>打完剩血</th><th>接著</th></tr>`
+    + run.map((f) => `<tr><td>${f.n}</td><td>${f.room}</td><td>${MERC_IDS.map((m) => LIGHTS[f.pick[m]].name).join('、')}</td><td class="${f.outcome === 'win' ? 'win' : 'lose'}">${f.outcome === 'win' ? '打完' : '撤退'}</td><td>${f.dur.toFixed(0)}</td><td>${f.big}</td><td>${MERC_IDS.map((m) => MERCS[m].short + ' ' + f.hp[m]).join(' ')}</td><td>${f.next}</td></tr>`).join('') + '</table>';
+}
+
+// ── 隨機感 ──
+$('sample').onclick = () => {
+  const rows = [];
+  for (let i = 0; i < 30; i++) {
+    const s = Math.random().toString(36).slice(2, 7);
+    const r = rollRoom(s, floorN), p = planRoom(r);
+    const count = {};
+    for (const f of r.foes) count[f] = (count[f] || 0) + 1;
+    const foes = Object.entries(count).map(([k, n]) => `${p.ents.find((e) => e.type === k).short}${n}`).join(' ');
+    const big = p.moments.filter((m) => m.size >= 3).map((m) => m.name);
+    rows.push(`<tr><td>${s}</td><td>${r.room.name}${r.ambush ? '・伏擊' : ''}</td><td>${foes}</td><td>${MERC_IDS.map((m) => LIGHTS[p.pick[m]].name).join('、')}</td><td class="${p.outcome === 'win' ? 'win' : 'lose'}">${p.outcome === 'win' ? '打完' : '撤退'}</td><td>${p.dur.toFixed(0)}</td><td>${[...new Set(big)].slice(0, 4).join('、') || '—'}</td></tr>`);
+  }
+  $('samples').innerHTML = `<table><tr><th>種子</th><th>房間</th><th>敵人</th><th>打光</th><th>結果</th><th>秒</th><th>大瞬間</th></tr>${rows.join('')}</table>`;
+};
+
+// ── 主迴圈 ──
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  if (playing) { t += dt * speed; if (t >= plan.dur) { t = plan.dur; playing = false; syncPlay(); } }
+  draw();
+  requestAnimationFrame(frame);
+}
+reroll();
+syncPlay();
+requestAnimationFrame(frame);
+window.__cave = { get plan() { return plan; }, set t(v) { t = v; }, judge: () => judge(plan, t, cam), cam };
+</script>
+</body>
+</html>

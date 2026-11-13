@@ -40,6 +40,14 @@ export function guide(world) {
 }
 
 // 抵達：棧橋上岸，背對船，面向沿海灘的路和海崖後面的光
-export function arrive({ player, world }) {
+// 從洞裡回來（回去、撤退都是）：坐回營火邊，站在北邊留給第四個人的鋪蓋那裡，面向火
+export function arrive({ player, world, params }) {
+  if (params?.get('from') === 'dong') {
+    player.place(world.camp.x, world.camp.z - 2.3, 0);
+    player.camDist = 5;
+    player.camPitch = 0.25;
+    player.snapCamera?.();
+    return;
+  }
   player.place(world.spawn.x, world.spawn.z, world.spawn.heading);
 }
