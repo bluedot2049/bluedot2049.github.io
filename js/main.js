@@ -15,7 +15,8 @@ import { Creator } from './avatar/creator.js';
 import { Pack } from './save/pack.js';
 import { pack as packCarry, unpack as unpackCarry } from './save/carry.js';
 import { layoutBubbles } from './core/bubbles.js';
-import { UI, panelW, uiScale, WORKS_OPEN } from './controls/ui.js';
+import { UI, panelW, uiScale, pinCard, WORKS_OPEN } from './controls/ui.js';
+import { panelOpen } from './controls/panels.js';
 import { ToastInk } from './controls/toastink.js';
 import { bindJoystick } from './controls/joystick.js';
 import { bindTouch } from './controls/touch.js';
@@ -525,7 +526,8 @@ async function start() {
     // 有隊友的那一區亮他的顏色；want 是點了別區隊友的名牌要去的地方，沒有就翻到隊友剛去的那一區（同船）
     onExit(ex, want) {
       if (ex.home) return ex.home.act();
-      if (ex.gate) return travel(ex.to, ex.extra?.() ?? {}, 'gate');   // 星門（海市星廟和鏡宮之間、黑森林洞口）：門光鋪滿就換頁，不渡海；extra 是另外帶的網址參數（洞裡的種子）
+      // 星門（海市星廟和鏡宮之間、黑森林洞口）：門光鋪滿就換頁，不渡海；extra 是另外帶的網址參數（洞裡的種子）。隊友已經在那裡的一趟（洞裡）就帶他那一趟（?show=）
+      if (ex.gate) { const sh = party?.showFor(ex.to); return travel(ex.to, sh ? { show: sh } : ex.extra?.() ?? {}, 'gate'); }
       if (!ex.boat) return travel(ex.to);
       if (player.boarding) return;
       const mates = party?.ferryInfo();
@@ -687,17 +689,11 @@ async function start() {
     const id = TABLE[i], mine = carried();
     ui.showCams({ i, n: TABLE.length, cam: CAMERAS[id] || SOON[id] || null, ready: !!CAMERAS[id], carried: !!id && mine === id, other: !!mine });
   }
-  // 電腦版的銘牌每幀跟著那台相機：投影台座前緣，銘牌放在它底下，不出畫面、不壓到下方那排按鈕。
-  // 卡片放大過（--ui）：量到的寬高乘上倍數才是畫面上的大小，寫回 --cx、--cy 時除回去
+  // 電腦版的銘牌每幀跟著那台相機：投影台座前緣，銘牌掛在它底下（ui.js 的 pinCard）
   const camsAt = new THREE.Vector3();
   function placeCams() {
-    const t = world.camTable, w = t.slots[player.focus.slot].world, el = ui.cams;
-    bend(camsAt.set(w.x + t.n.x * 0.14, w.y, w.z + t.n.z * 0.14).project(camera));
-    const W = window.innerWidth, H = window.innerHeight, z = uiScale(), hw = (el.offsetWidth * z) / 2;
-    const x = THREE.MathUtils.clamp(((camsAt.x + 1) / 2) * W, hw + 16, W - hw - 16);
-    const y = THREE.MathUtils.clamp(((1 - camsAt.y) / 2) * H + 22, 16, H - (el.offsetHeight + 96) * z);
-    el.style.setProperty('--cx', `${(x / z).toFixed(1)}px`);
-    el.style.setProperty('--cy', `${(y / z).toFixed(1)}px`);
+    const t = world.camTable, w = t.slots[player.focus.slot].world;
+    pinCard(ui.cams, bend(camsAt.set(w.x + t.n.x * 0.14, w.y, w.z + t.n.z * 0.14).project(camera)), { below: true, gap: 22 });
   }
   // 電腦版的渡船卡浮在船上方：投影船艙上方一點，卡片底邊對著那裡，不出畫面。船在鏡頭後面就放畫面中間
   let ferryBoat = null;
@@ -705,15 +701,11 @@ async function start() {
   let hollowWalk = null;  // 點了在演唱會的隊友名牌，正走去樹洞 { x, z, goal }
   const ferryAt = new THREE.Vector3();
   function placeFerry() {
-    const s = ferryBoat.seat(), el = ui.ferry;
+    const s = ferryBoat.seat();
     ferryAt.set(s.x, s.y + 1.2, s.z).project(camera);
     if (ferryAt.z > 1) ferryAt.set(0, -0.2, 0);
     else bend(ferryAt);
-    const W = window.innerWidth, H = window.innerHeight, z = uiScale(), hw = (el.offsetWidth * z) / 2;
-    const x = THREE.MathUtils.clamp(((ferryAt.x + 1) / 2) * W, hw + 16, W - hw - 16);
-    const y = THREE.MathUtils.clamp(((1 - ferryAt.y) / 2) * H, el.offsetHeight * z + 16, H - 96 * z);
-    el.style.setProperty('--cx', `${(x / z).toFixed(1)}px`);
-    el.style.setProperty('--cy', `${(y / z).toFixed(1)}px`);
+    pinCard(ui.ferry, ferryAt);
   }
   document.getElementById('cams-prev').addEventListener('click', () => player.events.onCamStep(-1));
   document.getElementById('cams-next').addEventListener('click', () => player.events.onCamStep(1));
@@ -834,15 +826,15 @@ async function start() {
     document.getElementById('action-title').textContent = t.kind === 'painting' ? t.p.data.title || '' : t.kind === 'pet' || t.kind === 'talk' || t.kind === 'ask' ? t.p.name : t.kind === 'exit' || t.kind === 'follow' ? t.p.title : '';
   }
 
-  // 越肩鎖住滑鼠時，作品面板、清單、行囊、說明卡、樹洞、報社的稿紙和報紙、打字框打開就把游標還回來
+  // 越肩鎖住滑鼠時，面板（panels.js 標 cursor 的）、區域的裝置、打字框打開就把游標還回來
   player.cursorWanted = () => {
     const b = document.body.classList;
-    return b.contains('panel-open') || b.contains('chatting') || !document.getElementById('pack-card').hidden
-      || !!document.querySelector('#list.open, #kaopanel.open, #vol.open, #guide.show, #ask.show, #peek.show, #radio.show, #easel.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show, #shop.show') || fixtures.some(([, f]) => f.isOpen) || !!document.activeElement?.closest?.('input, textarea');
+    return b.contains('panel-open') || b.contains('chatting')
+      || !!panelOpen('cursor') || fixtures.some(([, f]) => f.isOpen) || !!document.activeElement?.closest?.('input, textarea');
   };
-  // 互動鍵打開的卡片：開著時互動鍵是確認，不按卡片後面的東西（player.js 的 keydown）
-  // 區域自己的裝置（fixtures）開著的卡片照 isOpen 和 el 算，新增的不用來這裡加選擇器
-  player.cardOpen = () => document.querySelector('#guide.show, #ask.show, #peek.show, #radio.show, #easel.show, #hollow.show, #cams.open, #ferry.open, #eye-card.open, #press.show, #shop.show, .studio-card:not([hidden])') || fixtures.find(([, f]) => f.isOpen && f.el)?.[1].el || null;
+  // 互動鍵打開的卡片（panels.js 標 card 的）：開著時互動鍵是確認，不按卡片後面的東西（player.js 的 keydown）
+  // 區域自己的裝置（fixtures）開著的卡片照 isOpen 和 el 算，新增的不用來這裡加
+  player.cardOpen = () => panelOpen('card') || fixtures.find(([, f]) => f.isOpen && f.el)?.[1].el || null;
   // 鎖住滑鼠時提一下怎麼叫出游標、暫停（lessons.js 的 locked）
   document.addEventListener('pointerlockchange', () => { if (player.locked) teach('locked'); });
 
@@ -1108,7 +1100,7 @@ async function start() {
   const kao = new KaoPanel({
     player,
     // 舉相機、暫停、全畫面、照鏡子、看畫、操作說明、手機的行囊開著時不開。照相館站好位可以擺，按下快門就收（photo.js 的 kaoOff）
-    blocked: () => photo.kaoOff || !!document.querySelector('#pause.show, #dress.open, #guide.show, #hollow.show, #list.open, #press:not([hidden]), #loading:not(.done), #ph-result:not([hidden]), #album-view:not([hidden]), #viewer.open, .studio-card:not([hidden]), #selfie:not([hidden]), #keymap.show')
+    blocked: () => photo.kaoOff || !!panelOpen('kao')
       || document.body.classList.contains('panel-open') || (pack.isOpen && !document.body.classList.contains('desk')),
     onView: () => applyViewOffset(),
     // 照相館裡揮手、拍手不做完一輪就收，一直做到拍下去

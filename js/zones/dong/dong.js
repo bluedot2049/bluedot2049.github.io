@@ -40,17 +40,19 @@ const area = (poly) => { let a = 0; for (let i = 0, j = poly.length - 1; i < pol
 
 // 蓋到第幾層
 export const BUILT = 5;
-// 這一趟：種子從黑森林洞口進來時帶在網址上（seed=）；直接開 ?z=dong 沒帶的話固定一個，指紋、截圖每次一樣。
-// ?room= 指定第一層哪一間、?room2= 第二層…?room5=；?floor=3 直接從第三層的斜坡開始（測試用）
+// 這一趟：種子從黑森林洞口進來時帶在網址上（seed=，一串數字）；隊友已經在裡面就帶他那一趟（show=種子.進洞時刻，main.js 照 party 給），兩個都有照 show。
+// 直接開 ?z=dong 沒帶的話固定一個，指紋、截圖每次一樣。?room= 指定第一層哪一間、?room2= 第二層…?room5=；?floor=3 直接從第三層的斜坡開始（測試用）
+export const RUN_RE = /^(\d{1,10})\.(\d{12,14})$/;
 export function pickRun(params) {
-  const seed = params?.get?.('seed') || 'dong';
+  const sh = RUN_RE.exec(params?.get?.('show') || '');
+  const seed = sh ? sh[1] : params?.get?.('seed') || 'dong', t0 = sh ? +sh[2] : Date.now();
   const rolls = [];
   for (let n = 1; n <= BUILT; n++) {
     const want = params?.get?.(n === 1 ? 'room' : `room${n}`);
     rolls.push(rollRoom(seed, n, ROOM_SHAPES[want] ? want : null));
   }
   const start = Math.max(0, Math.min(BUILT - 1, (+params?.get?.('floor') || 1) - 1));
-  return { seed, rolls, start };
+  return { seed, t0, rolls, start };
 }
 
 // 蓋一層：回傳這一層自己的座標裡的走路、高度、鏡頭判斷（外面的 buildDong 照 x z 看人在哪一層再問它）
@@ -369,7 +371,7 @@ export function buildDong(scene, { params, coarse } = {}) {
   const room = { index: 0, id: 'dong', data: place(0, 0), group: all, obstacles: [], paintings: [], center: new THREE.Vector3(0, DEPTH[0], 6) };
   const s0 = floors[run.start];
   return Object.assign(world, {
-    floors, start: run.start, coarse,
+    floors, start: run.start, run, coarse,
     rooms: [room], paintings: [], mirror: null, outdoor: null, raycastTargets: floors.map((f) => f.mesh), env, shops: [],
     camDistMax: 14,
     spawn: { x: s0.entry.x + s0.OFF.x, z: s0.entry.z + s0.OFF.z, heading: 0 },   // 斜坡頂（洞口下來），面向往下的坡和房間

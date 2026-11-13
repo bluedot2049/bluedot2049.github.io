@@ -10,6 +10,7 @@ import { sfx, thing } from '../audio/ui-voices.js';
 import { emoteSVG } from '../social/emotes.js';
 import { setPref } from '../save/prefs.js';
 import { is, bindKeymap, paint } from './keymap.js';
+import { panelOpen } from './panels.js';
 
 const typing = (e) => !!e.target.closest?.('#dress, input:not([type=checkbox]):not([type=range]), textarea');
 // 按了就像點那顆按鈕的功能
@@ -169,7 +170,7 @@ export function bindDeskKeys({ player, ui, photo, pack, ambience, emotes, emote,
   // 沒鎖滑鼠時（一般視角，或越肩按過 Esc）什麼都沒開著，按 Esc 也叫得出來，介面大小才找得到。
   // 抓在最前面（capture）：別的 Esc 會先把自己的卡片收掉，到那時就分不出剛才有沒有東西開著
   const busy = () => photo.active || player.cursorWanted?.() || kao?.open
-    || keyCard.shown() || !!document.querySelector('#loading:not(.done), #ph-result:not([hidden]), #album-view:not([hidden]), #viewer.open, .studio-card:not([hidden]), #selfie:not([hidden])');
+    || keyCard.shown() || !!panelOpen('esc');
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' || e.repeat || player.locked || menu.classList.contains('show') || typing(e) || busy()) return;
     show();

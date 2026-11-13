@@ -90,6 +90,19 @@ export function hugMedia(box, el) {
   box.style.setProperty('--mt', `${Math.round(y)}px`);
 }
 
+// 電腦版浮在東西旁邊的小卡（相機桌的銘牌、渡船卡）：p 是投影到畫面的點（-1～1，已經過 lens 的 bend）。
+// below：卡片頂邊掛在點下面 gap 像素；不然卡片底邊對著點。不出畫面、不壓到下方那排按鈕（底下留 96）。
+// 卡片放大過（--ui）：量到的寬高乘上倍數才是畫面上的大小，寫回 --cx、--cy 時除回去
+export function pinCard(el, p, { below = false, gap = 0 } = {}) {
+  const W = window.innerWidth, H = window.innerHeight, z = scale, w = el.offsetWidth * z, h = el.offsetHeight * z;
+  const fit = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const x = fit(((p.x + 1) / 2) * W, w / 2 + 16, W - w / 2 - 16);
+  const y0 = ((1 - p.y) / 2) * H + gap;
+  const y = below ? fit(y0, 16, H - h - 96 * z) : fit(y0, h + 16, H - 96 * z);
+  el.style.setProperty('--cx', `${(x / z).toFixed(1)}px`);
+  el.style.setProperty('--cy', `${(y / z).toFixed(1)}px`);
+}
+
 // 暫停選單拉「介面大小」：存起來，發一次 resize 讓鏡頭、行囊、按鈕照新的大小重排
 export function setUiSize(k) {
   sizePick = Math.min(SIZE_MAX, Math.max(SIZE_MIN, k));

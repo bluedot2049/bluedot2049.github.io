@@ -4,6 +4,7 @@
 // 打完回頭問還往下嗎，走到出口「往下」就墨色過場到下一層（血帶著走、每層回一點，短休的那層打完坐下來）。
 // 不做 AI：每一幀問 stateAt(第幾秒) 每個人在哪、什麼狀態、哪幾盞光；動作（舉斧、瞄準、施法、轉一圈、跳、擋、跌倒、被打退、倒下又爬起來、各自的勝利姿勢）開打時照時間表排成一張 spans，每幀查。
 // zone-dong.js 在 crowd() 造它（要 shadowTex），fixtures() 交給主程式（互動鍵、每幀 update），快門評分走 world.judges
+// 同一趟的隊友看同一場（net，zone 的 shared）：誰換打光大家跟著換；誰走進門，送出「哪一層、打光、帶著的血、開打的伺服器時刻」，大家照同一份排、同一個鐘演。剛進來的人問一聲，跟上隊友在打的那一層
 import * as THREE from 'three';
 import { Character } from '../../avatar/character.js';
 import { sanitizeLook, presetLook, RACES } from '../../avatar/looks.js';
@@ -12,6 +13,7 @@ import { bend } from '../../core/lens.js';
 import { CAMPERS } from '../heilin/heilin-camp.js';   // 同一批人：營火邊的長相和衣服
 import { MERCS, MERC_IDS, FLOORS, ENEMIES } from './dong-table.js';
 import { planRoom, stateAt, autoLights, lightOptions, lightSay, lightAt } from './dong-fight.js';
+import { serverNow } from '../../core/servertime.js';
 import { AFTER } from './dong-lines.js';
 import { makeFoe, poseFoe } from './dong-foes.js';
 import { SCALE } from './dong-rooms.js';
@@ -20,9 +22,35 @@ import { SCALE } from './dong-rooms.js';
 const STAGE = { dwarf: [0, -1.4 * SCALE], elf: [-1.1 * SCALE, -2.6 * SCALE], mage: [1.1 * SCALE, -2.6 * SCALE] };
 const TALK = 2.2, SAY_TIME = 3200, WALK_IN = 1.4, FADE = 0.55;
 // 留時間拍：走到位以後先對峙 STANDOFF 秒才開打（找位置、舉相機）；打的時候照時間表播，播放速度：
-// 舉著相機 aim 倍、好拍的瞬間前 before 秒到後 after 秒再乘 slow 倍（照瞬間大小：2 中、3 大），速度換過去花 1/ease 秒左右。只改播放快慢，時間表、輸贏不變
+// 整場 base 倍，好拍的瞬間前 before 秒到後 after 秒再乘 slow 倍（照瞬間大小：2 中、3 大），速度換過去花 1/ease 秒左右；打完 tail 秒後回到原速。
+// 只看演到第幾秒、不看誰舉相機：同一場的隊友算出來的快慢一樣（clockOf）。只改播放快慢，時間表、輸贏不變
 const STANDOFF = 2.4;
-const TEMPO = { aim: 0.55, slow: { 2: 0.75, 3: 0.45 }, before: 0.9, after: 0.7, ease: 4 };
+const TEMPO = { base: 0.7, slow: { 2: 0.7, 3: 0.4 }, before: 0.9, after: 0.7, ease: 4, tail: 12 };
+// 實際過了幾秒 → 演到第幾秒：每 1/30 秒積一格，查表內插（開打時算一次）
+const STEP = 1 / 30;
+function clockOf(plan) {
+  const slowAt = plan.moments.filter((m) => TEMPO.slow[m.size] && !m.tell).map((m) => [m.t, TEMPO.slow[m.size]]);
+  const T = [-WALK_IN - STANDOFF], end = plan.dur + TEMPO.tail;
+  let t = T[0], rate = 1;
+  while (t < end) {
+    let want = 1;
+    if (t >= 0) {
+      want = TEMPO.base;
+      for (const [b, k] of slowAt) if (t > b - TEMPO.before && t < b + TEMPO.after) want = Math.min(want, TEMPO.base * k);
+    }
+    rate += (want - rate) * Math.min(1, STEP * TEMPO.ease);
+    t += STEP * rate;
+    T.push(t);
+  }
+  const last = T.length - 1;
+  return (real) => {
+    if (real <= 0) return T[0] + real;
+    const i = real / STEP, k = Math.floor(i);
+    return k >= last ? T[last] + (real - last * STEP) : T[k] + (T[k + 1] - T[k]) * (i - k);
+  };
+}
+// 傳給隊友的打光：每個人挑的是 lightOptions 裡第幾個（三位數字）
+const pickCode = (roll, light) => MERC_IDS.map((id) => Math.max(0, lightOptions(roll, id).indexOf(light(id)))).join('');
 // 光的高度：火把在手上（舉高也只比頭高一點）、光球掛在頭上、插地和油火貼地；吊燈照它掛多高
 const LIGHT_Y = { high: 2.6, mid: 1.5, low: 0.45, 火把: 1.55 };
 // 看得到火苗的光（薩滿的綠火是杖頭那一團、龍喉嚨的火在脖子裡，模型自己有）
@@ -142,6 +170,10 @@ export class Party {
     Object.assign(this.ink.style, { position: 'fixed', inset: '0', background: '#0a0807', opacity: '0', pointerEvents: 'none', transition: `opacity ${FADE}s`, zIndex: '50' });
     document.body.appendChild(this.ink);
     this.n = -1;
+    this.runs = {};   // 每一層誰開打的那一份（隊友先下去打的，自己走到那層就接著看）
+    this.born = performance.now();
+    this.asked = 0;
+    this.net = { receive: (m) => this.receive(m) };   // main.js 給它 send
     this.setFloor(world.start, null);
   }
 
@@ -163,6 +195,7 @@ export class Party {
     this.focusT = null;
     this.downAt = -9;
     this.downs = [];
+    this.go = null;
     this.floorGroup.clear();
     for (const g of this.floors) g.group.visible = g === f;   // 只畫這一層（其他層在別的地方，看不到也不用算）
     for (const m of this.mercs) {
@@ -215,6 +248,51 @@ export class Party {
       this.floorGroup.add(this.barrel);
     }
   }
+  // ---------- 隊友 ----------
+  // 收到的：pick 換打光、go 開打、ask 剛進來的人問（回自己這層的 go，還在門口就回打光）
+  receive(m) {
+    const n = m.n;
+    if (m.t === 'ask') {
+      if (this.go) this.net.send?.(this.go);
+      else if (this.phase === 'door') this.net.send?.({ t: 'pick', n: this.n, c: pickCode(this.roll, (id) => this.lightOf(id)), q: 1 });
+      return;
+    }
+    if (!Number.isInteger(n) || n < 0 || n >= this.floors.length || typeof m.c !== 'string' || !/^\d{3}$/.test(m.c)) return;
+    if (m.t === 'pick') {
+      if (n !== this.n || this.phase !== 'door') return;
+      MERC_IDS.forEach((id, i) => {
+        const l = lightOptions(this.roll, id)[+m.c[i]];
+        if (!l || l === this.lightOf(id)) return;
+        this.choice[id] = l;
+        if (!m.q) this.byId[id].say(lightSay(this.roll, l));
+      });
+    } else if (m.t === 'go') {
+      const h = m.h === 0 ? 0 : Array.isArray(m.h) && m.h.length === 3 && m.h.every((v) => Number.isInteger(v) && v >= 0 && v <= 999) ? m.h : null;
+      if (h === null || !Number.isFinite(m.s) || Math.abs(m.s - serverNow()) > 3600e3) return;
+      const go = { t: 'go', n, c: m.c, h, s: m.s };
+      const had = this.runs[n];
+      // 兩個人差不多同時走進門：早的那份留下（同時就比打光）
+      if (had && (had.s < go.s || (had.s === go.s && had.c <= go.c))) return;
+      this.runs[n] = go;
+      if (n === this.n && !this.busy) this.begin(go);
+      // 剛進洞、隊友已經在更深的那層：跟上去（墨色過場，站到那層的斜坡頂）
+      else if (n > this.n && this.phase === 'door' && performance.now() - this.born < 20000 && !this.busy) this.jump(n);
+    }
+  }
+  jump(n) {
+    this.busy = true;
+    this.ink.style.opacity = '1';
+    setTimeout(() => {
+      this.setFloor(n, null);
+      const e = this.f.entry, o = this.f.OFF;
+      this.player?.place(e.x + o.x, e.z + o.z, 0);
+      this.player?.snapCamera?.();
+      this.ink.style.opacity = '0';
+      this.busy = false;
+      if (this.runs[n]) this.begin(this.runs[n]);
+    }, FADE * 1000 + 80);
+  }
+
   // 這一層打完了沒（出口照這個開）
   cleared(n) { return this.n === n && this.phase === 'after' && this.plan?.outcome === 'win'; }
   // 往下：墨色蓋住，換到下一層的斜坡頂，血帶著走（每層回一點），再亮起來
@@ -222,7 +300,8 @@ export class Party {
     if (!this.cleared(this.n) || this.busy || this.n + 1 >= this.floors.length) return;
     this.busy = true;
     const heal = FLOORS[this.n].heal || 0;
-    const carry = Object.fromEntries(MERC_IDS.map((id) => [id, Math.min(MERCS[id].hp, this.plan.hp[id] + MERCS[id].hp * heal)]));
+    // 血取到小數一位（要傳給隊友，大家排同一份）
+    const carry = Object.fromEntries(MERC_IDS.map((id) => [id, Math.round(Math.min(MERCS[id].hp, this.plan.hp[id] + MERCS[id].hp * heal) * 10) / 10]));
     this.ink.style.opacity = '1';
     setTimeout(() => {
       this.setFloor(this.n + 1, carry);
@@ -231,6 +310,7 @@ export class Party {
       this.player?.snapCamera?.();
       this.ink.style.opacity = '0';
       this.busy = false;
+      if (this.runs[this.n]) this.begin(this.runs[this.n]);   // 隊友先下來開打了：接著看
     }, FADE * 1000 + 80);
   }
   W(x, z) { return [x + this.f.OFF.x, z + this.f.OFF.z]; }
@@ -242,6 +322,7 @@ export class Party {
     const next = opts[(opts.indexOf(cur) + 1) % opts.length];
     this.choice[id] = next;
     this.byId[id].say(lightSay(this.roll, next));
+    this.net.send?.({ t: 'pick', n: this.n, c: pickCode(this.roll, (x) => this.lightOf(x)) });
   }
   // 主程式的互動鍵（player.actionables）：門口時，走到誰旁邊就是「換打光」
   target(x, z) {
@@ -255,17 +336,29 @@ export class Party {
     return { kind: 'light', label: '換打光', p: { name: best.name, act: () => this.cycle(best.id) }, d: bd, ax: best.pos.x, az: best.pos.z };
   }
 
+  // 自己走進門：開一場、告訴隊友（伺服器時刻當開打的那一秒）
   start() {
+    const c = this.carry;
+    const go = { t: 'go', n: this.n, c: pickCode(this.roll, (id) => this.lightOf(id)), h: c ? MERC_IDS.map((id) => Math.round(c[id] * 10)) : 0, s: Math.round(serverNow()) };
+    this.runs[this.n] = go;
+    this.begin(go);
+    this.net.send?.(go);
+  }
+  // 照一份 go 開演：打光、帶著的血都照它（自己的或隊友的），時間照伺服器的鐘從它那一秒算起；中途接上的跳到現在
+  begin(go) {
+    this.go = go;
+    this.choice = Object.fromEntries(MERC_IDS.map((id, i) => [id, lightOptions(this.roll, id)[+go.c[i]]]));
+    if (go.h) this.carry = Object.fromEntries(MERC_IDS.map((id, i) => [id, go.h[i] / 10]));
     this.plan = planRoom(this.roll, this.choice, this.carry);
+    this.clock = clockOf(this.plan);
     this.spans = this.buildSpans(this.plan);
     this.spansOf = Object.fromEntries(MERC_IDS.map((id) => [id, this.spans.filter((s) => s.who === id)]));   // 每幀只查自己的
     this.fx = this.buildFx(this.plan);
     this.downs = MERC_IDS.flatMap((id) => this.plan.byId[id].hist.filter((h) => h.state === 'down').map((h) => h.t)).sort((a, b) => a - b);
-    this.slowAt = this.plan.moments.filter((m) => TEMPO.slow[m.size] && !m.tell).map((m) => [m.t, TEMPO.slow[m.size]]);
-    this.rate = 1;
-    this.phase = 'walk';
-    this.t = -WALK_IN - STANDOFF;
-    this.logI = 0;
+    this.t = this.clock((serverNow() - go.s) / 1000);
+    this.phase = this.t < 0 ? 'walk' : this.t < this.plan.dur ? 'fight' : 'after';
+    this.logI = this.plan.log.findIndex((l) => l.t > this.t - 0.5);
+    if (this.logI < 0) this.logI = this.plan.log.length;
     this.from = Object.fromEntries(this.mercs.map((m) => [m.id, [m.pos.x, m.pos.z]]));
   }
 
@@ -313,6 +406,8 @@ export class Party {
   update(dt) {
     const pl = this.player?.pos;
     if (!pl) return;
+    // 剛進來問隊友一聲（連上頻道才送得出去；隊友可能還沒聽到，隔幾秒再問，最多三次）
+    if (this.asked < 3 && performance.now() - (this.askAt ?? 0) > 3000 && this.net.send?.({ t: 'ask' })) { this.asked++; this.askAt = performance.now(); }
     const f = this.f, lx = pl.x - f.OFF.x, lz = pl.z - f.OFF.z;
     if (this.phase === 'door') {
       // 等你：看著走近的人；你走過門線就開打
@@ -331,31 +426,30 @@ export class Party {
       if (fire) door.push({ x: fire.x + f.OFF.x, z: fire.z + f.OFF.z, r: 5, int: 0.75, col: '#ff9a4a', kind: '營火', h: 'low' });
       this.setLights(door, true);
       if (lz > 0.4 && f.inRoom(lx, lz) && !this.busy) this.start();
-    } else if (this.phase === 'walk') {
-      // 走進去：從門口走到各自的位置，臉朝裡
-      this.t += dt;
+      return this.bubbles();
+    }
+    // 開演以後：照伺服器的鐘算演到第幾秒（clockOf 已經放慢過），動作照這一幀實際演了多久走，腳不會滑；中途接上那一下不算
+    const nt = this.clock((serverNow() - this.go.s) / 1000), pdt = Math.max(0, Math.min(0.1, nt - this.t));
+    this.t = nt;
+    if (this.phase === 'walk') {
+      // 走進去：從門口走到各自的位置，臉朝裡；到了先對峙
       const k = Math.min(1, (this.t + WALK_IN + STANDOFF) / WALK_IN);
       for (const m of this.mercs) {
         const [x0, z0] = this.from[m.id], [hx, hz] = this.W(...MERCS[m.id].home);
-        const sp = m.moveTo(x0 + (hx - x0) * k, this.Y0, z0 + (hz - z0) * k, 0, dt);
+        const sp = m.moveTo(x0 + (hx - x0) * k, this.Y0, z0 + (hz - z0) * k, 0, pdt);
         m.ch.setKao(kaoCode(FACE[m.id], k < 0.55 ? DRAW[m.id] : 0, STANCE[m.id]));   // 邊走邊拔武器，到了擺架式
-        m.ch.update(dt, k < 1 ? sp : 0);
+        m.ch.update(pdt, k < 1 ? sp : 0);
       }
-      this.poseFoesIdle(dt);
+      this.poseFoesIdle(pdt);
       this.setLights(stateAt(this.plan, 0).lights);
-      if (this.t >= 0) { this.t = 0; this.phase = 'fight'; }
+      if (this.t >= 0) this.phase = 'fight';
     } else {
-      // 播放速度（TEMPO）：動作、走路、打光都照放慢後的 dt，腳步不會滑
-      const t = this.t, aim = document.body.classList.contains('photo');
-      let slow = 1;
-      for (const [b, k] of this.slowAt) if (t > b - TEMPO.before && t < b + TEMPO.after && k < slow) slow = k;
-      const want = (aim ? TEMPO.aim : 1) * slow;
-      this.rate += (want - this.rate) * Math.min(1, dt * TEMPO.ease);
-      const pdt = dt * this.rate;
-      if (this.phase === 'fight' && this.t + pdt >= this.plan.dur) this.phase = 'after';
-      this.t += pdt;   // 打完以後時間照走（勝利姿勢、還能拍的那幾秒、短休），stateAt 停在最後
-      this.play(pdt);
+      if (this.phase === 'fight' && this.t >= this.plan.dur) this.phase = 'after';
+      this.play(pdt);   // 打完以後時間照走（勝利姿勢、還能拍的那幾秒、短休），stateAt 停在最後
     }
+    this.bubbles();
+  }
+  bubbles() {
     if (this.camera) for (const m of this.mercs) m.placeBubble(this.camera);
   }
 

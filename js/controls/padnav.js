@@ -3,12 +3,10 @@
 // 手把在面板裡移焦點：十字鍵往那個方向找最近的按鈕、圖卡、滑桿，A 按，滑桿和選單用左右調，L／R 換分頁（data-page、data-tab）。
 // 只管最上面那一層（看得到的照 z-index 挑），打開時焦點放在主要那顆；焦點框是 .pad-focus（hud.css）。B 退一層走 Esc 那條路（gamepad.js）
 
-// 會蓋在畫面上、要用手把點的那些。新的跳出介面加在這裡
-const LAYERS = [
-  '#pause.show', '#padmap.show', '#keymap.show', '#ph-result:not([hidden])', '#album-view:not([hidden])', '#viewer.open', '#press.show', '#hollow.show', '#guide.show', '#ask.show', '#peek.show', '#radio.show', '#easel.show', '#lot.show', '#shop.show',
-  '#vol.open', '#eye-card.open', '#cams.open', '#ferry.open', '.studio-card:not([hidden])', '#pack-card:not([hidden])', '#chat:not([hidden])',
-  '#dress.open', '#sheet.open', '#list.open', '#kaopanel.open',
-].join(', ');
+import { panelSel } from './panels.js';
+
+// 會蓋在畫面上、要用手把點的那些：panels.js 表上標 pad 的。新的跳出介面加在那張表
+const LAYERS = panelSel('pad');
 const ITEMS = 'button, [role="button"], a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 let mark = null;   // 現在有焦點框的那一個
