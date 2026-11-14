@@ -183,8 +183,8 @@
 .pack-bar { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
 .pack-bar .close { position: static; width: 34px; min-width: 34px; height: 34px; background: transparent; border-color: var(--line-soft); }
 .pack-bar .close svg { width: 16px; height: 16px; stroke: var(--muted); }
-/* 錢袋（save/purse.js）：行囊兩個字後面一排小晶，袋子裝得下幾顆就幾個。一顆＝雙尖寶石（::before，顏色 --c 每顆不同、上亮下暗）套一圈細金箍（::after）；
-   花掉的只剩淡淡的形。跟地上的晶（scene/coins.js）同一個剪影 */
+/* 錢袋（save/purse.js）：行囊兩個字後面一排小水晶，袋子裝得下幾顆就幾個。一顆＝雙尖寶石（::before，顏色 --c 每顆不同、上亮下暗）套一圈細金箍（::after）；
+   花掉的只剩淡淡的形。跟地上的水晶（scene/coins.js）同一個剪影 */
 .pack-bar .purse { display: inline-flex; gap: 4px; margin-left: 10px; vertical-align: middle; }
 .pack-bar .purse i { position: relative; width: 9px; height: 15px; }
 .pack-bar .purse i::before { content: ""; position: absolute; inset: 0 1px; clip-path: polygon(50% 0, 100% 46%, 50% 100%, 0 46%); background: rgba(232, 184, 106, .18); }
@@ -194,7 +194,7 @@
 .pack-bar .purse i.tide { animation: purse-tide .5s cubic-bezier(.3, .7, .4, 1) calc(.25s + var(--k, 0) * .12s) both; }
 @keyframes purse-tide { from { opacity: .25; transform: translateY(3px); } 60% { filter: brightness(1.6); } }
 @media (prefers-reduced-motion: reduce) { .pack-bar .purse i.tide { animation: none; } }
-/* 有隊友時錢袋是鈕：小晶後面一行「丟一顆」，沒有框，按下去暗一下 */
+/* 有隊友時錢袋是鈕：小水晶後面一行「丟一顆」，沒有框，按下去暗一下 */
 .pack-bar button.purse { align-items: center; padding: 4px 6px; margin: -4px 0 -4px 4px; min-height: 0; border: 0; background: none; border-radius: 999px; font: inherit; color: var(--muted); cursor: pointer; }
 .pack-bar button.purse span { margin-left: 5px; font-size: 12px; font-weight: normal; }
 .pack-bar button.purse:hover span, .pack-bar button.purse:focus-visible span { color: var(--gold); }

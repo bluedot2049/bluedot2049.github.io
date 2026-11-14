@@ -757,7 +757,7 @@ async function start() {
   actionBtn.addEventListener('click', () => player.action(nearT));
   const actionLabel = actionBtn.querySelector('.a1');
   const actionShort = actionBtn.querySelector('.a0');
-  // 要付錢的（點餐、小攤、底片、求籤、香油錢）：目標帶 cost，互動鍵角上標一顆晶和幾顆（hud.css 的 .a3），念出來接在動作後面
+  // 要付錢的（點餐、小攤、底片、求籤、香油錢）：目標帶 cost，互動鍵角上標一顆水晶和幾顆（hud.css 的 .a3），念出來接在動作後面
   const actionCost = actionBtn.querySelector('.a3');
   const setCost = (t, lab) => {
     const n = (t?.kind === 'talk' ? t.p.cost : t?.cost) | 0;
@@ -811,7 +811,7 @@ async function start() {
     actionLabel.textContent = (t.kind === 'talk' && t.p.actionLabel) || (t.kind === 'exit' && t.p.label) || (t.kind === 'lens' && t.on && '不看了') || LABELS[t.kind] || t.label;
     actionShort.textContent = SHORT[actionLabel.textContent] || actionLabel.textContent.slice(0, 2);
     setCost(t, actionLabel.textContent);
-    actionBtn.dataset.kind = t.kind;   // hud.css 照這個在字前面放圖示（撿晶）
+    actionBtn.dataset.kind = t.kind;   // hud.css 照這個在字前面放圖示（撿水晶）
     // 第一次出現的動詞：光暈多擴幾圈（這台裝置記得，prefs.js 的 verbsSeen），不另外寫教學
     if (!seenVerbs.has(actionLabel.textContent)) {
       seenVerbs.add(actionLabel.textContent);

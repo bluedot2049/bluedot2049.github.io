@@ -138,7 +138,7 @@ export const STONES = {
 
 // 籤台和水鏡冒的字（狀態加動作，照介面原則寫短）
 export const LOT_SAY = {
-  broke: '求籤三顆晶　身上不夠　子夜補滿',
+  broke: '求籤三顆水晶　身上不夠　子夜補滿',
   sunk: '籤沉入水鏡　化作一點舊光',
   sinkNote: '退潮乾潮之籤　可放入殿中水鏡',
   sunkNote: '此籤已入水鏡',

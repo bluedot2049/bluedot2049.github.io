@@ -527,17 +527,25 @@ body.desk #easel.show { animation-name: guide-up; }
   display: block; margin-top: 3px; font-size: 11.5px; font-weight: 600; letter-spacing: .1em; color: #7a5a30;
 }
 
-/* 樹洞：作者銘牌、作者的話、一張畫（在這裡做什麼）。跟挑相機一樣是一個停下來看的模式：角色站在洞口，卡片在畫面正中 */
+/* ───────── 樹洞（hollow.js）：作者銘牌、作者的話、接案卡、寫信給作者 ─────────
+   跟挑相機一樣是一個停下來看的模式：角色站在洞口，卡片在畫面正中。
+   版面只有一張 grid，四格：who（銘牌＋作者的話）、main（接案卡，寫信時換成寫字頁）、pager（多張時的翻頁）、foot（底下那排）。
+     直的畫面：四格由上往下一欄。　橫的畫面（電腦、手機橫拿、平板橫拿）：who 收成左邊一欄，其他三格疊在右欄。
+   放不下時（矮螢幕、Esc 選單把介面大小調大）：卡片的最大高度照畫面算，main 那格先縮，接案卡的圖跟著縮到很扁，再不夠才在卡裡捲，
+   foot 一直在卡片底下，不會掉出框外。新的東西排進這四格，不要另外寫一套 media 蓋掉。 */
 #hollow {
-  /* 底下那排按鈕的高度讓出來，置中在按鈕上面那一塊 */
   position: fixed; left: 50%; top: calc(50% - 36px); z-index: 25;
-  display: none; transform: translate(-50%, -50%); width: 380px; max-width: calc(100% - 32px); max-height: calc(100% - 160px);
+  display: none; transform: translate(-50%, -50%);
+  width: 380px; max-width: calc(100% - 32px); max-height: calc(100% - 160px);
+  grid-template: "who" auto "main" minmax(0, 1fr) "pager" auto "foot" auto / minmax(0, 1fr);
+  gap: 0;
   background: rgba(16, 11, 9, .94); box-shadow: var(--shadow);
 }
-#hollow.show { display: flex; animation: hollow-in .4s ease-out both; }
+#hollow.show { display: grid; animation: hollow-in .4s ease-out both; }
 @keyframes hollow-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 6px)); } }
-/* 銘牌和作者的話包在 .who：直拿、電腦不算一層，照樣跟畫一條往下排；橫拿才收成左邊一欄（下面的 media） */
-#hollow > .who { display: contents; }
+
+/* who：銘牌和作者的話 */
+#hollow > .who { grid-area: who; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 /* 銘牌：細金框兩層、四角菱形，上面「開發者」，中間簽名（assets/signature.svg），下面「十三」（assets/shisan.svg），都是象牙墨、不發光 */
 #hollow .plate { position: relative; flex: none; padding: 12px 14px 14px; border: 1px solid rgba(232, 184, 106, .3); }
 #hollow .plate::before { content: ""; position: absolute; inset: 3px; border: 1px solid rgba(232, 184, 106, .1); pointer-events: none; }
@@ -553,10 +561,11 @@ body.desk #easel.show { animation-name: guide-up; }
 #hollow .plate .sig { width: 100%; margin: 8px 0 4px; }
 #hollow .plate .name { width: 76px; margin: 4px auto 0; }
 /* 作者的話：銘牌底下一行，標籤小、話本身置中 */
-#hollow .words { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 15px; letter-spacing: .2em; color: var(--text); }
+#hollow .words { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 15px; letter-spacing: .2em; color: var(--text); text-align: center; }
 #hollow .words span { font-size: 11px; letter-spacing: .4em; color: var(--muted); }
-/* 在這裡做什麼，畫成一格寬銀幕的電影畫面（index.html 的 svg）：大片天空、碼頭一點透視、太陽在右邊三分之一、背光長影、四角壓暗；人小、幾何、只有剪影 */
-#hollow .scene { flex: none; margin: 0; padding-top: 12px; border-top: 1px solid rgba(232, 184, 106, .1); }
+
+/* 原本那張畫（index.html 的 figure.scene，hidden 收著、hollow.js 不再打開）：要拿回來就放進 main 那格 */
+#hollow .scene { grid-area: main; margin: 12px 0 0; padding-top: 12px; border-top: 1px solid rgba(232, 184, 106, .1); }
 #hollow .scene svg { display: block; width: 100%; height: auto; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 #hollow .scene .ink { fill: #100a0a; }
 #hollow .scene .shadow { fill: #0d0809; opacity: .7; }
@@ -570,16 +579,26 @@ body.desk #easel.show { animation-name: guide-up; }
 #hollow .scene .flash { fill: #fff3d6; filter: drop-shadow(0 0 2px rgba(246, 219, 166, 1)); transform-box: fill-box; transform-origin: center; animation: hollow-flash 2.8s ease-in-out infinite; }
 #hollow .scene .boat { animation: hollow-bob 3.6s ease-in-out infinite; }
 #hollow .scene .glint { animation: hollow-glint 2.2s ease-in-out infinite; }
-/* 一打開就在場：閃光在最亮和半亮之間、船浮著、海面的光閃，沒有從零長出來的一拍 */
 @keyframes hollow-flash { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .55; transform: scale(.7); } }
 @keyframes hollow-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-.8px); } }
 @keyframes hollow-glint { 0%, 100% { opacity: .6; } 50% { opacity: .3; } }
-/* 底下按鈕：「留話」窄、確認撐滿；寫字的時候換成「返回」「投進樹洞」 */
-/* 接案卡（hollow.js 照 hollow-jobs.js 排進 #hollow .jobs）：一張像釘在樹洞裡的案子，雙金線框、四角菱形；
-   多張時橫著排、一次看一張（scroll-snap），底下小點。圖畫得比框大，框照版面的比例裁（直拿 16:9、電腦 2:1、手機橫拿 5:2） */
-#hollow .jobs { flex: none; display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding-top: 12px; border-top: 1px solid rgba(232, 184, 106, .1); }
+
+/* main：接案卡（hollow.js 照 hollow-jobs.js 排進 .jobs）。一張像釘在樹洞裡的案子，雙金線框、四角菱形；
+   多張時橫著排、一次看一張（scroll-snap），pager 翻。卡片撐滿 main 那格的高，矮的時候圖先縮（圖畫得比框大，框照剩下的高度裁），
+   縮到底還放不下才在 .jobs 裡上下捲 */
+#hollow .jobs {
+  grid-area: main; min-height: 0; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(232, 184, 106, .1);
+  /* 四邊留 3px 給卡角的菱形（捲動框會裁掉露出去的），卡跟卡之間隔 12px */
+  margin-inline: -3px; padding-inline: 3px; padding-bottom: 3px; scroll-padding-inline: 3px; gap: 12px;
+  display: flex; overflow-x: auto; overflow-y: auto; overscroll-behavior: contain; scroll-snap-type: x mandatory; scrollbar-width: none;
+}
 #hollow .jobs::-webkit-scrollbar { display: none; }
-#hollow .job { position: relative; flex: 0 0 100%; scroll-snap-align: start; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 10px 12px; border: 1px solid rgba(232, 184, 106, .3); background: rgba(232, 184, 106, .025); }
+#hollow .job {
+  position: relative; flex: 0 0 100%; scroll-snap-align: start;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 10px 12px;
+  border: 1px solid rgba(232, 184, 106, .3); background: rgba(232, 184, 106, .025);
+}
+#hollow .job > * { flex: none; }
 #hollow .job::before { content: ""; position: absolute; inset: 3px; border: 1px solid rgba(232, 184, 106, .1); pointer-events: none; }
 #hollow .job > i { position: absolute; width: 5px; height: 5px; background: var(--gold-lo); transform: rotate(45deg); }
 #hollow .job > i:nth-of-type(1) { left: -3px; top: -3px; }
@@ -588,7 +607,12 @@ body.desk #easel.show { animation-name: guide-up; }
 #hollow .job > i:nth-of-type(4) { right: -3px; bottom: -3px; }
 #hollow .job header { align-self: stretch; display: flex; justify-content: space-between; align-items: baseline; padding: 0 2px 6px; font-size: 11px; letter-spacing: .3em; color: var(--muted); }
 #hollow .job .no { font: 12px/1 var(--latin); letter-spacing: .12em; }
-#hollow .job .art { align-self: stretch; aspect-ratio: 16 / 9; overflow: hidden; border-top: 1px solid rgba(232, 184, 106, .45); border-bottom: 1px solid rgba(232, 184, 106, .45); }
+/* 圖：平常照 --art 的比例（直的 16:9、橫的 2:1、手機橫拿 5:2），高度不夠時往下縮到 --art-min */
+#hollow .job .art {
+  --art: 16 / 9;
+  flex: 0 1 auto; align-self: stretch; aspect-ratio: var(--art); min-height: var(--art-min, 40px); overflow: hidden;
+  border-top: 1px solid rgba(232, 184, 106, .45); border-bottom: 1px solid rgba(232, 184, 106, .45);
+}
 #hollow .job .art svg { display: block; width: 100%; height: 100%; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 #hollow .job .sun { fill: #f6dba6; animation: job-rise 6s ease-in-out infinite; }
 #hollow .job .orbit { stroke: var(--gold); stroke-width: .5; opacity: .45; }
@@ -599,41 +623,48 @@ body.desk #easel.show { animation-name: guide-up; }
 #hollow .job .far { fill: #1a1418; }
 #hollow .job .near { fill: #0e0a0c; }
 #hollow .job .ridge { stroke: var(--gold); stroke-width: .8; opacity: .7; }
-#hollow .job .title { margin: 8px 0 0; font: 500 24px/1.1 var(--latin); letter-spacing: .22em; margin-right: -.22em; color: var(--gold-hi); }
-#hollow .job .desc { margin: 0; font-size: 13px; letter-spacing: .16em; color: var(--text); }
+@keyframes job-rise { 0%, 100% { transform: translateY(1.5px); } 50% { transform: translateY(-1.5px); } }
+@keyframes job-star { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+#hollow .job .title { margin: 8px 0 0; font: 500 24px/1.1 var(--latin); letter-spacing: .22em; margin-right: -.22em; color: var(--gold-hi); text-align: center; }
+#hollow .job .desc { margin: 0; font-size: 13px; letter-spacing: .16em; color: var(--text); text-align: center; }
 #hollow .job .flash { margin: 6px 0 0; font-size: 11.5px; letter-spacing: .12em; color: var(--muted); }
-/* 卡片底下：確認就在這張卡裡（選這張＝按這張的鈕），左邊有閃爍提醒的卡多一格「減少閃爍」 */
+/* 卡片底下：確認就在這張卡裡（選這張＝按這張的鈕），有閃爍提醒的卡左邊多一格「減少閃爍」 */
 #hollow .job .take { align-self: stretch; display: flex; align-items: center; gap: 12px; margin-top: 8px; }
 #hollow .job .go { flex: 1; min-width: 0; min-height: 42px; gap: 10px; padding: 0 14px; letter-spacing: .3em; white-space: nowrap; }
 #hollow .job .calm { flex: none; display: flex; align-items: center; gap: 6px; padding-left: 2px; font-size: 12px; letter-spacing: .12em; color: var(--muted); cursor: var(--cur-pointer); }
 #hollow .job .calm input { accent-color: var(--gold); margin: 0; }
-#hollow .job-dots { flex: none; display: flex; justify-content: center; gap: 8px; }
-#hollow .job-dots[hidden] { display: none; }
+
+/* pager：兩張以上才出現（hollow.js），左右鈕夾著小菱形；方向鍵、滑動照樣換 */
+#hollow .pager { grid-area: pager; display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 8px; }
+#hollow .pager[hidden] { display: none; }
+#hollow .pager button { width: 28px; height: 24px; padding: 0; display: grid; place-items: center; color: var(--gold); background: none; border: 0; cursor: var(--cur-pointer); }
+#hollow .pager button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+#hollow .pager button:disabled { opacity: .25; cursor: default; }
+#hollow .job-dots { display: flex; gap: 8px; }
 #hollow .job-dots i { width: 5px; height: 5px; background: rgba(232, 184, 106, .3); transform: rotate(45deg); }
 #hollow .job-dots i.on { background: var(--gold); }
-body.desk #hollow .job .art { aspect-ratio: 2 / 1; }
-/* 電腦：卡片比較高，底下的互動鍵（聽樹洞）會從按鈕之間露出來，開著時收起來 */
-body.desk:has(#hollow.show) #action-btn { visibility: hidden; }
-@keyframes job-rise { 0%, 100% { transform: translateY(1.5px); } 50% { transform: translateY(-1.5px); } }
-@keyframes job-star { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
-/* 底下一排只管整張卡：「寫信給作者」撐滿、封蠟紅（像信封上的蠟印，跟卡裡金色的確認分開），旁邊「關上」窄。
+
+/* foot：只管整張卡。「寫信給作者」撐滿、封蠟紅（像信封上的蠟印，跟卡裡金色的確認分開），旁邊「關上」窄。
    寫字的時候兩顆變「投進樹洞」「返回」（回接案卡那頁） */
-#hollow .foot { flex: none; display: flex; gap: 8px; margin-top: 4px; }
+#hollow .foot { grid-area: foot; display: flex; gap: 8px; margin-top: 12px; }
 #hollow .foot .shut { flex: none; min-height: 42px; padding: 0 16px; gap: 8px; letter-spacing: .3em; }
 #hollow .foot .write {
   flex: 1; min-width: 0; min-height: 42px; padding: 0 14px; letter-spacing: .3em; white-space: nowrap;
   background: #8e3a2c; color: #f8e6cc; border-color: transparent; font-weight: 600; box-shadow: inset 0 0 0 1px rgba(255, 214, 180, .28);
 }
 #hollow .foot .write[hidden] { display: none; }
-#hollow.writing .scene, #hollow.writing .jobs, #hollow.writing .job-dots { display: none; }
-/* 留話：署名一行、內文框、附圖；字用 16px，iPhone 點進去才不會整頁放大 */
-#hollow .letter { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+
+/* 寫信：寫字頁換掉 main 那格的接案卡。署名一行、內文框、附圖；字用 16px，iPhone 點進去才不會整頁放大。
+   矮的時候內文框先縮，再不夠整頁捲 */
+#hollow.writing :is(.jobs, .pager) { display: none; }
+#hollow .letter { grid-area: main; display: flex; flex-direction: column; gap: 8px; min-height: 0; margin-top: 12px; overflow-y: auto; overscroll-behavior: contain; }
 #hollow .letter[hidden] { display: none; }
+#hollow .letter > * { flex: none; }
 #hollow .letter input, #hollow .letter textarea {
   width: 100%; padding: 8px 10px; font: inherit; font-size: 16px; line-height: 1.6; letter-spacing: .04em; color: var(--text);
   background: rgba(0, 0, 0, .25); border: 1px solid rgba(232, 184, 106, .2); border-radius: 2px; outline: none;
 }
-#hollow .letter textarea { resize: none; min-height: 6.5em; }
+#hollow .letter textarea { flex: 1 1 6.5em; resize: none; min-height: 3.4em; }
 #hollow .letter input:focus, #hollow .letter textarea:focus { border-color: rgba(232, 184, 106, .5); }
 #hollow .letter ::placeholder { color: var(--muted); }
 #hollow .pic { display: flex; align-items: center; gap: 10px; }
@@ -641,46 +672,46 @@ body.desk:has(#hollow.show) #action-btn { visibility: hidden; }
 #hollow .pic img { width: 44px; height: 44px; object-fit: cover; border: 1px solid rgba(232, 184, 106, .3); }
 #hollow .pic .drop { padding: 4px 8px; font-size: 16px; color: var(--muted); background: none; border: 0; cursor: var(--cur-pointer); }
 #hollow .note { min-height: 1.4em; font-size: 12px; letter-spacing: .1em; color: var(--muted); }
-/* 手機鍵盤打開（hollow.js 量 visualViewport 給 --kb）：卡片置中在鍵盤上面那一塊，銘牌和作者的話先收起來 */
+
+/* 手機鍵盤打開（hollow.js 量 visualViewport 給 --kb）：卡片置中在鍵盤上面那一塊，who 那格先收起來 */
 #hollow.kb { top: calc((100% - var(--kb)) / 2); max-height: calc(100% - var(--kb) - 16px); }
-#hollow.kb .plate, #hollow.kb .words { display: none; }
-/* 手機橫拿：矮，排成兩欄。左邊銘牌和作者的話，右邊那張畫，按鈕在右下（拇指弧那一邊）。
-   留話時寫字的框換掉那張畫；叫出鍵盤時左欄收起，只剩右欄。
-   卡片寬，一定疊到搖桿、拇指弧和上排，開著時那些先退掉（跟側欄開著一樣），不從卡片邊上露半顆；點畫面照樣收卡片。
-   矮的電腦螢幕（筆電 800 高以下）也用兩欄：一欄排下來約 670 高，按鈕會被擠出畫面底下 */
-@media (orientation: landscape) and (max-height: 820px) {
+#hollow.kb > .who { display: none; }
+
+/* 橫的畫面：who 收成左邊一欄，main、pager、foot 疊在右欄（按鈕在右下，手機是拇指弧那一邊） */
+@media (orientation: landscape) {
   #hollow {
-    top: 50%; width: min(640px, calc(100% - 2 * max(16px, env(safe-area-inset-left), env(safe-area-inset-right))));
-    max-height: calc(100% - 32px); padding: 14px 18px 12px;
-    grid-template: "who scene" minmax(0, 1fr) "who foot" auto / 196px minmax(0, 1fr);
-    gap: 8px 20px;
+    width: min(640px, calc(100% - 2 * max(16px, env(safe-area-inset-left), env(safe-area-inset-right))));
+    padding: 14px 18px 12px;
+    grid-template: "who main" minmax(0, 1fr) "who pager" auto "who foot" auto / 196px minmax(0, 1fr);
+    column-gap: 20px;
   }
-  #hollow.show { display: grid; }
-  /* 電腦：底下那排按鈕的高度照樣讓出來 */
-  body.desk #hollow { top: calc(50% - 36px); max-height: calc(100% - 160px); }
-  body:not(.desk):has(#hollow.show) :is(#joy, #swap-btn, #top-btns, #jump-btn, #sit-btn, #photo-btn, #emote, #emote-btn, #say-btn, #pack-btn, #action-btn) {
-    opacity: 0; pointer-events: none;
-  }
-  #hollow > .who {
-    grid-area: who; display: flex; flex-direction: column; justify-content: center; gap: 14px;
-    padding-right: 20px; border-right: 1px solid rgba(232, 184, 106, .12);
-  }
+  #hollow > .who { justify-content: center; gap: 14px; padding-right: 20px; border-right: 1px solid rgba(232, 184, 106, .12); overflow-y: auto; scrollbar-width: none; }
   #hollow .plate { padding: 10px 12px 12px; }
   #hollow .plate .sig { margin: 6px 0 2px; }
   #hollow .plate .name { width: 60px; }
-  #hollow .words { font-size: 13.5px; letter-spacing: .14em; text-align: center; }
-  #hollow .scene { grid-area: scene; align-self: center; padding-top: 0; border-top: 0; }
-  #hollow .jobs { grid-area: scene; align-self: center; padding-top: 0; border-top: 0; }
-  #hollow .job { padding: 8px 10px 10px; gap: 2px; }
-  #hollow .job .art { aspect-ratio: 5 / 2; }
-  #hollow .job .title { margin-top: 4px; font-size: 20px; }
-  #hollow .job .flash { display: none; }
-  #hollow .job-dots { display: none; }
-  #hollow .letter { grid-area: scene; }
-  #hollow .foot { grid-area: foot; }
-  #hollow.kb { grid-template: "scene" minmax(0, 1fr) "foot" auto / minmax(0, 1fr); }
-  #hollow.kb > .who { display: none; }
-  #hollow.kb .letter { grid-area: scene; }
+  #hollow .words { font-size: 13.5px; letter-spacing: .14em; }
+  #hollow :is(.jobs, .letter, .scene) { margin-top: 0; padding-top: 0; border-top: 0; }
+  #hollow .jobs { padding-top: 3px; margin-top: -3px; }
+  #hollow .job .art { --art: 2 / 1; }
+  #hollow.kb { grid-template: "main" minmax(0, 1fr) "foot" auto / minmax(0, 1fr); }
+}
+/* 電腦：置中在底下那排按鈕上面那一塊（按鈕列約佔底下 70px，跟著 --ui 一起放大）。
+   卡片比互動鍵（聽樹洞）大，開著時把它收起來，不從按鈕之間露出來 */
+body.desk #hollow { top: calc(50% - 30px); max-height: calc(100% - 100px); }
+body.desk:has(#hollow.show) #action-btn { visibility: hidden; }
+/* 手機、平板橫拿：卡片寬，一定疊到搖桿、拇指弧和上排，開著時那些先退掉（跟側欄開著一樣），點畫面照樣收卡片 */
+@media (orientation: landscape) {
+  body:not(.desk) #hollow { top: 50%; max-height: calc(100% - 32px); }
+  body:not(.desk):has(#hollow.show) :is(#joy, #swap-btn, #top-btns, #jump-btn, #sit-btn, #photo-btn, #emote, #emote-btn, #say-btn, #pack-btn, #action-btn) {
+    opacity: 0; pointer-events: none;
+  }
+}
+/* 手機橫拿（矮）：圖更扁、標題小一號、閃爍提醒那行收掉（卡上的「減少閃爍」還在） */
+@media (orientation: landscape) and (max-height: 540px) {
+  body:not(.desk) #hollow .job { padding: 8px 10px 10px; gap: 2px; }
+  body:not(.desk) #hollow .job .art { --art: 5 / 2; --art-min: 40px; }
+  body:not(.desk) #hollow .job .title { margin-top: 4px; font-size: 20px; }
+  body:not(.desk) #hollow .job .flash { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { #hollow.show, #hollow .scene *, #hollow .job * { animation: none; } }
 
@@ -1200,7 +1231,7 @@ body.sitting #sit-btn {
 #action-btn .a2 { font-size: 11px; letter-spacing: .05em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .72; }
 #action-btn .a2:empty { display: none; }
 #action-btn .a0 { display: none; }
-/* 價錢：要付錢的互動鍵（點餐、小攤、底片、求籤、香油錢）右上角一枚小牌，一顆晶的剪影加幾顆（main.js 的 setCost，各區的目標寫 cost） */
+/* 價錢：要付錢的互動鍵（點餐、小攤、底片、求籤、香油錢）右上角一枚小牌，一顆水晶的剪影加幾顆（main.js 的 setCost，各區的目標寫 cost） */
 #action-btn .a3 {
   position: absolute; top: -7px; right: -6px;
   display: flex; align-items: center; gap: 3px; height: 20px; padding: 0 7px 0 6px;
@@ -1210,7 +1241,7 @@ body.sitting #sit-btn {
 }
 #action-btn .a3:empty { display: none; }
 #action-btn .a3::before { content: ""; width: 7px; height: 12px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 20'%3E%3Cpath d='M6 0 11 9.2 6 20 1 9.2Z' fill='%23e8b86a'/%3E%3Crect x='0' y='8.4' width='12' height='1.8' rx='.9' fill='%23fff1cf'/%3E%3C/svg%3E") center / contain no-repeat; }
-/* 撿晶：字前面一顆晶的剪影（雙尖套金箍，跟地上那顆、行囊那排同一個形，scene/coins.js） */
+/* 撿水晶：字前面一顆水晶的剪影（雙尖套金箍，跟地上那顆、行囊那排同一個形，scene/coins.js） */
 #action-btn:is([data-kind="coin"], [data-kind="coinfull"]) :is(.a0, .a1)::before { content: ""; display: inline-block; width: .6em; height: 1em; margin-right: .35em; vertical-align: -.1em; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 20'%3E%3Cpath d='M6 0 11 9.2 6 20 1 9.2Z' fill='%232a1a0c' fill-opacity='.8'/%3E%3Crect x='0' y='8.4' width='12' height='1.8' rx='.9' fill='%232a1a0c'/%3E%3C/svg%3E") center / contain no-repeat; }
 body.panel-open #joy, body.panel-open #action-btn, body.panel-open #emote, body.panel-open #emote-btn, body.panel-open #swap-btn,
 body.panel-open:not(.desk) #photo-btn, body.panel-open:not(.desk) #say-btn, body.panel-open:not(.desk):not(:has(#dress.open)) #pack-btn { opacity: 0; pointer-events: none; }

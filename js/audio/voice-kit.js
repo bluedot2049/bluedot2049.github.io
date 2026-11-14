@@ -51,7 +51,7 @@ export function hiss(ctx, out, noise, t, dur, type, freq, peak, Q = 1) {
   src.stop(t + dur + 0.02);
 }
 
-// ---------- 晶（錢）的聲音零件 ----------
+// ---------- 水晶（錢）的聲音零件 ----------
 // 寫實的硬物撞擊：一碰就開始衰減（envelope 會先停在最大聲一段，像電子鈴，這裡不用它），高的泛音掉得比低的快
 function strike(ctx, t, d, peak) {
   const g = ctx.createGain();
@@ -60,7 +60,7 @@ function strike(ctx, t, d, peak) {
   g.gain.exponentialRampToValueAtTime(0.0001, t + d);
   return g;
 }
-// 晶的清脆：小塊硬晶體的振動模態（自由兩端的棒子 1：2.76：5.40：8.93，再加一個側面的模態），每次每個模態偏一點點，
+// 水晶的清脆：小塊硬晶體的振動模態（自由兩端的棒子 1：2.76：5.40：8.93，再加一個側面的模態），每次每個模態偏一點點，
 // 前面一下極短的接觸聲（濾過的雜訊）。chat：真的碰撞常常是兩下黏在一起（十幾毫秒後再碰一下輕的）。lp 給了就隔著東西聽（袋子裡的）
 const MODES = [[1, 1, 1], [1.48, 0.35, 0.7], [2.76, 0.5, 0.45], [5.4, 0.22, 0.25], [8.93, 0.1, 0.15]];
 export function gemClink(ctx, out, noise, t, f, g, d, { lp = 0, chat = false } = {}) {
@@ -77,7 +77,7 @@ export function gemClink(ctx, out, noise, t, f, g, d, { lp = 0, chat = false } =
   hit(t, g, d);
   if (chat) hit(t + 0.009 + Math.random() * 0.008, g * 0.35, d * 0.6);
 }
-// 晶的悶聲：短短一下有重量的碰（低的正弦往下掉一點＋濾得很暗的雜訊），不拖尾
+// 水晶的悶聲：短短一下有重量的碰（低的正弦往下掉一點＋濾得很暗的雜訊），不拖尾
 export function gemThud(ctx, out, noise, t, f, g, d, lp) {
   osc(ctx, 'sine', t, d, [[0, f], [d * 0.5, f * 0.7]]).connect(strike(ctx, t, d, g)).connect(out);
   hiss(ctx, out, noise, t, d * 0.6, 'lowpass', lp, g * 0.6, 0.7);

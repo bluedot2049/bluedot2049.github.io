@@ -379,7 +379,7 @@ export class Creator {
     if (b.dataset.tab) { this.show(b.dataset.tab); return; }
     if (b.dataset.sub) { this.show(this.tab, b.dataset.sub); return; }
     if (b.dataset.lock) {
-      // 價目表上的（'@店'）：哪裡、誰在賣、幾顆晶；海市攤販那組（GIFTS）：任務寫的 hint，或在海市向哪一攤買
+      // 價目表上的（'@店'）：哪裡、誰在賣、幾顆水晶；海市攤販那組（GIFTS）：任務寫的 hint，或在海市向哪一攤買
       const lock = b.dataset.lock, w = wareOf(b.dataset.hk, b.dataset.hv), g = GIFTS[lock];
       const text = lock[0] === '@' ? `${SHOPS[lock.slice(1)].where}　${SHOPS[lock.slice(1)].who}　${money(w.price)}`
         : g.hint || `在海市，向${g.who}買${g.price ? `　${money(g.price)}` : ''}`;

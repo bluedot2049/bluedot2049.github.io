@@ -6,7 +6,7 @@
 // 稿費這類裝不下的（purse.js 的 earn 回傳多出來的，發 coindrop）掉在腳邊，只有自己看得到，離開這一區就沒了。
 // 丟給隊友的（行囊裡點錢袋，dropMine）：掉在自己腳邊，自己撿不回來，只有隊友撿得到；位置走隊伍頻道（party.js 的 coin），陌生人看不到。
 // 丟的人離開這一區、離隊，隊友那邊的就收掉。
-// 晶是一顆雙尖的長寶石，腰上套一圈細金箍（金箍是錢的記號，世界裡只有它長這樣）；寶石的顏色每顆不一樣（purse.js 的 HUES，照雜湊挑）。
+// 水晶是一顆雙尖的長寶石，腰上套一圈細金箍（金箍是錢的記號，世界裡只有它長這樣）；寶石的顏色每顆不一樣（purse.js 的 HUES，照雜湊挑）。
 // 浮在地上二十幾公分、慢慢轉、上下輕晃，平面著色、吃環境光；隔幾秒閃一下，走近了閃得勤，走到六公尺內叮一聲（一顆一次）
 import * as THREE from 'three';
 import { serverNow, hash, seedOf } from '../core/servertime.js';
@@ -25,7 +25,7 @@ const NEAR = 10, CHIME = 6;                 // 幾公尺內閃得勤、幾公尺
 const MAX_TIDE = 10;
 const RIGHT = new THREE.Vector3();
 
-// 一顆晶：六面的雙尖，腰一小段直的給金箍套。照高度上色：上尖亮一點（往米白混）、腰是本色、下尖暗一點
+// 一顆水晶：六面的雙尖，腰一小段直的給金箍套。照高度上色：上尖亮一點（往米白混）、腰是本色、下尖暗一點
 function gemGeo(hex) {
   const V = (x, y) => new THREE.Vector2(x, y);
   const g = new THREE.LatheGeometry([V(0, -FOOT), V(R, -0.01), V(R, 0.01), V(0, TIP)], 6).toNonIndexed();
@@ -64,7 +64,7 @@ export class GroundCoins {
     this.party = null;       // main.js 接上：{ mates, state, send }（party.js），丟和撿都告訴隊友
     this.drop = (e) => this.dropAt(e.detail?.n | 0);
     addEventListener('coindrop', this.drop);
-    // 晶的聲音（ambience-voices.js 的 gem*）：錢袋多了是收進袋、少了是付出去，每個賺花的地方都響，不用各自叫。
+    // 水晶的聲音（ambience-voices.js 的 gem*）：錢袋多了是收進袋、少了是付出去，每個賺花的地方都響，不用各自叫。
     // 丟給隊友的那一下自己放落地聲（dropping 擋掉付出去的聲音）
     this.change = (e) => {
       const d = e.detail?.d | 0;
@@ -187,7 +187,7 @@ export class GroundCoins {
     this.picked();
   }
 
-  // 撿到了說一聲身上有幾顆；第一次撿另外教晶是什麼（lessons.js 的 gem，排在這句後面）
+  // 撿到了說一聲身上有幾顆；第一次撿另外教水晶是什麼（lessons.js 的 gem，排在這句後面）
   picked() {
     const n = coins();
     this.ui?.hint(`撿到${money(1)}　身上${money(n)}${n >= cap() ? '　滿了' : ''}`, 2500);

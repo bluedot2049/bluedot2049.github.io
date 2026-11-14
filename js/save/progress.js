@@ -56,7 +56,7 @@ export const FIELDS = [
   // 一幕劇（core/act.js）：整齣演完過的 id（那一齣的小寫英文）。演到第幾拍不記，走開或重新整理就從頭開演。
   // 照片裡一齣 1 位元（編號在 ids.js 的 quest，新的一齣加在那張表最後面）；改了不算「有東西沒存」
   { key: 'acts', init: () => [], read: acts, wire: { id: 4, rank: 2, as: flags('quest') } },
-  // 身上的晶（save/purse.js）：0–10，子夜補滿。天天在變，不算「有東西沒存」
+  // 身上的水晶（save/purse.js）：0–10，子夜補滿。天天在變，不算「有東西沒存」
   { key: 'coins', init: () => 0, read: (v) => (Number.isInteger(v) && v >= 0 && v <= 10 ? v : 0),
     wire: { id: 5, rank: 2, as: count(10) } },
   // 錢袋上次子夜補滿是哪一天（purse.js 的 refillDaily，台灣日期）。跟著人走、不進存檔碼：換裝置當天可能多補一次，不要緊

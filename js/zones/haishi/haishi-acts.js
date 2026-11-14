@@ -241,7 +241,7 @@ function fishAct({ world, vendors, ambience, attention, camera, player, ui }) {
       if (d < 2.2) return { kind: 'talk', p: who, d, ax: BUCKET.x, az: BUCKET.z };
       // 香油錢：戲沒在演的時候，站在火盆旁邊（save/purse.js 的 WAYS.offering）
       const db = Math.hypot(x - BRAZIER.x, z - BRAZIER.z);
-      if (db < 2 && Math.abs(player.pos.y - BRAZIER.y) < 1.5) return { kind: 'offer', label: '投晶', cost: cost('offering'), p: { act: offer }, d: db, ax: BRAZIER.x, az: BRAZIER.z };
+      if (db < 2 && Math.abs(player.pos.y - BRAZIER.y) < 1.5) return { kind: 'offer', label: '投水晶', cost: cost('offering'), p: { act: offer }, d: db, ax: BRAZIER.x, az: BRAZIER.z };
       return null;
     },
     update(dt, cue) {

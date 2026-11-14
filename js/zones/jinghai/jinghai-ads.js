@@ -191,7 +191,7 @@ function earth(g, cx, cy, r) {
   g.beginPath(); g.arc(cx + r * 0.55, cy + r * 0.1, r * 1.05, 0, Math.PI * 2); g.fill();
   g.restore();
 }
-// 一顆晶（價錢的單位，save/purse.js）：雙尖的長寶石、腰上一圈細金箍，跟地上那顆、行囊那排同一個形。
+// 一顆水晶（價錢的單位，save/purse.js）：雙尖的長寶石、腰上一圈細金箍，跟地上那顆、行囊那排同一個形。
 // 紅寶（purse.js 的 HUES）配深一點的金箍：芥末黃、奶油、可可三種底上都看得清楚
 export function gem(g, x, y, s, hue = HUES[2], band = '#b8801f') {
   const w = s * 0.3, h = s * 0.5;
@@ -207,7 +207,7 @@ export function gem(g, x, y, s, hue = HUES[2], band = '#b8801f') {
   rrect(g, x - w * 1.08, y - h * 0.16, w * 2.16, h * 0.16, h * 0.08); g.fill();
   g.restore();
 }
-// 價錢那一列：一顆晶 × 數字（點一份付幾顆照 purse.js 的 WAYS.meal）
+// 價錢那一列：一顆水晶 × 數字（點一份付幾顆照 purse.js 的 WAYS.meal）
 function price(g, x, y, s, n, color) {
   gem(g, x + s * 0.4, y + s * 0.5, s * 0.9);
   return script(g, `×${n}`, x + s * 0.95, y, s, color) + s;
@@ -318,7 +318,7 @@ const MENUP = [
     price(g, w * 0.3, h * 0.78, w * 0.12, cost('meal'), MUSTARD);
   },
   (g, w, h) => {
-    // 怎麼點：一顆晶 → 點餐機 → 號碼 → 漢堡
+    // 怎麼點：一顆水晶 → 點餐機 → 號碼 → 漢堡
     g.fillStyle = COCOA; g.fillRect(0, 0, w, h);
     logo(g, w * 0.5, h * 0.1, w * 0.1);
     const steps = [
@@ -345,7 +345,7 @@ const MENUP = [
     price(g, w * 0.32, h * 0.72, w * 0.11, cost('meal'), COCOA);
     g.fillStyle = TOMATO;
     rrect(g, w * 0.14, h * 0.84, w * 0.72, h * 0.1, h * 0.05); g.fill();
-    script(g, '放晶', w * 0.5, h * 0.865, h * 0.05, CREAM, 'center');
+    script(g, '放水晶', w * 0.5, h * 0.865, h * 0.05, CREAM, 'center');
   }),
 ];
 function menuList(g, w, h, title, items) {

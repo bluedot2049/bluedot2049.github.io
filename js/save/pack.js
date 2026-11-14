@@ -42,9 +42,9 @@ export function markPacked(k = savePrint(), t = Date.now()) {
   dispatchEvent(new Event('packed'));
 }
 
-// 錢袋（purse.js）：十顆小晶（雙尖寶石套金箍，顏色照位置輪 HUES），花掉的只剩淡淡的形。不寫數字。
+// 錢袋（purse.js）：十顆小水晶（雙尖寶石套金箍，顏色照位置輪 HUES），花掉的只剩淡淡的形。不寫數字。
 // 子夜剛補滿、還沒看過的那幾顆，打開時一顆接一顆亮起來（像潮水漲上來，.tide）。
-// 有隊友、身上有晶時變成鈕，點一下丟一顆在腳邊給隊友撿（scene/coins.js 的 dropMine）
+// 有隊友、身上有水晶時變成鈕，點一下丟一顆在腳邊給隊友撿（scene/coins.js 的 dropMine）
 function purseRow(drop, fresh) {
   const n = coins(), from = n - fresh;
   const gems = Array.from({ length: MAX }, (_, i) => (i < n ? `<i class="on${i >= from ? ' tide' : ''}" style="--k:${i - from};--c:${HUES[i % HUES.length]}"></i>` : '<i></i>')).join('');
@@ -162,7 +162,7 @@ export class Pack {
   }
 
   // 讀取畫面還蓋著時先擺出來兩幀再收掉（main.js 叫，跟 photo.js 的 warmUI 同一個道理）：行囊第一次顯示，
-  // 瀏覽器要現編畫它用的著色器，不先畫過第一次開會頓一下。不出聲、不動鏡頭；還藏著時先畫好內容，子夜補的晶、新照片都不算看過
+  // 瀏覽器要現編畫它用的著色器，不先畫過第一次開會頓一下。不出聲、不動鏡頭；還藏著時先畫好內容，子夜補的水晶、新照片都不算看過
   async warm() {
     if (!this.card.hidden) return;
     this.render();

@@ -530,7 +530,7 @@ function back(k, L, W, P, cape = null, head = null) {
       break;
     }
     case 'gembox': {
-      // 零錢盒（照片登上頭版拿到的）：右後腰一個扁扁的小盒，蓋子上嵌一顆晶（黃轉紅）
+      // 零錢盒（照片登上頭版拿到的）：右後腰一個扁扁的小盒，蓋子上嵌一顆水晶（黃轉紅）
       const r = cape ? cape(0.42, 0.73) + 0.06 : 0.255 * W + sh(0.42) - chest(0.42, W);
       const x = -r * Math.sin(0.73), z = -r * Math.cos(0.73);
       k.box(0.15, 0.11, 0.07, c, x, 0.42, z, { rx: 0.1, ry: 0.7 });

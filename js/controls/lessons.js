@@ -83,7 +83,7 @@ const L = {
     text: (k) => (k === 'pad' ? null : k === 'touch' ? say(['點擊發光按鈕', '切換越肩視角']) : say([key('view'), '切換越肩視角'])) },
   eye: { calm: true, acts: ['eye'], btn: '#eye-btn', need: () => shown('#eye-btn'),
     text: (k) => (k === 'touch' ? say(['點擊發光按鈕', '呼叫黑眼帶路']) : say([btn(k, 'eye', 5), '呼叫黑眼帶路'])) },
-  // 晶是什麼：第一次撿到（scene/coins.js）、第一次打開店家小卡（scene/shop.js）說；都沒碰過的，有空時也說
+  // 水晶是什麼：第一次撿到（scene/coins.js）、第一次打開店家小卡（scene/shop.js）說；都沒碰過的，有空時也說
   gem: { calm: true, acts: ['pack'], ms: 5500, btn: '#pack-btn', need: () => shown('#pack-btn'),
     text: (k) => `${UNIT}是貨幣　每日午夜補滿${money(MAX)}　${say([k === 'touch' ? '點擊發光按鈕' : btn(k, 'pack', 8), '查看餘額'])}` },
   party: { calm: true, acts: ['party'], btn: '#party-btn', need: (c) => c.near() && shown('#party-btn'),
