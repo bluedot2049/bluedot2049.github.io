@@ -9,6 +9,7 @@ import { drawText } from '../../core/glyphs.js';
 import { AREA, AREAS, BEAM, CARTS, CREAM, DARK, GOLD, GRAY, HOUSE_SIGNS, LAMP, NOREN, PAPER, PLASTER, SHOPS, TILES, TIMBER, WOOD, shade } from './haishi-map.js';
 import { heightIn, terrain } from './haishi-terrain.js';
 import { buildNewsStand, buildPress, PRESS_LOT } from './haishi-press.js';
+import { place } from '../../core/trinkets.js';
 
 // 房子的木框線（2026-11-11）：灰泥牆上的柱樑、門框、窗框是老木頭，不是黑線；窗格細條深一點。暗房照舊用 DARK
 const FRAME = '#a07850', GRILLE = '#7c5a40';
@@ -421,6 +422,7 @@ export function houseKit(c) {
     dk.cyl(0.06, 0.06, 0.025, '#5a1a16', ax - 0.25, y0 + SILL + 0.075, fz + 0.12, {}, 10);
     dk.cyl(0.035, 0.035, 0.06, '#3a2a20', ax - 0.1, y0 + SILL + 0.09, fz + 0.14, {}, 6);
     dk.ball(0.035, '#4a3426', ax - 0.1, y0 + SILL + 0.14, fz + 0.14);
+    place(dk, 'darkroom', ax - 0.5, y0 + SILL + 0.06, fz + 0.1, 0.15, 1.3);
     lantern(dk, AX1 + 0.12, y0 + 2.2, fz + 0.38, 0.55, PAPER, '#fff0d0');
     dk.pool(ax, y0, fz + 0.9, 1.1, '#ffa860', 0.2);
     // 一樓門口上面一道披簷
@@ -560,6 +562,7 @@ export function buildStreets(c) {
     post(kk, x, y, z) {
       for (let i = 0; i < 6; i++) kk.box(0.28, 0.02, 0.2, i % 2 ? CREAM : '#e8dcc0', x - 0.7 + (i % 3) * 0.3, y + 0.02 + Math.floor(i / 3) * 0.03, z, { ry: (R() - 0.5) * 0.4 });
       kk.ball(0.22, '#8a6a3a', x + 0.6, y + 0.15, z, { sy: 0.8 });
+      place(kk, 'seal', x + 0.15, y, z + 0.05, -0.12, 1.7);
     },
     fish(kk, x, y, z) {
       kk.box(1.9, 0.08, 0.5, '#d8e8f0', x, y + 0.04, z);
@@ -573,26 +576,30 @@ export function buildStreets(c) {
       });
     },
     bread(kk, x, y, z) {
-      for (let i = 0; i < 5; i++) kk.ball(0.14, '#c8904a', x - 0.7 + i * 0.35, y + 0.08, z + (i % 2) * 0.12, { sx: 1.5, sy: 0.7, color2: '#e0b070' });
-      kk.cyl(0.05, 0.05, 0.7, '#d8a060', x + 0.2, y + 0.08, z - 0.15, { rz: Math.PI / 2, ry: 0.3 });
-      kk.puff(x - 0.3, y + 0.15, z, 'steam', 0.6);
+      for (let i = 0; i < 4; i++) kk.ball(0.14, '#c8904a', x - 0.95 + i * 0.27, y + 0.08, z + (i % 2) * 0.12, { sx: 1.5, sy: 0.7, color2: '#e0b070' });
+      kk.cyl(0.05, 0.05, 0.7, '#d8a060', x - 0.3, y + 0.08, z - 0.18, { rz: Math.PI / 2, ry: 0.3 });
+      kk.puff(x - 0.5, y + 0.15, z, 'steam', 0.6);
+      place(kk, 'sourdough', x + 0.6, y, z + 0.02, -0.2, 2.3);
     },
     candle(kk, x, y, z) {
       for (let i = 0; i < 7; i++) {
-        const cx = x - 0.75 + i * 0.25, h = 0.15 + (i % 3) * 0.08;
+        const cx = x - 0.85 + i * 0.17, h = 0.15 + (i % 3) * 0.08;
         kk.cyl(0.04, 0.04, h, pick(['#f0e4c8', '#e8a8b8', '#c8d8f0']), cx, y + h / 2, z);
         kk.rock(0.03, '#ffd890', cx, y + h + 0.04, z, { glow: true });
       }
       kk.light(x, y + 0.3, z, '#ffcf80', 0.5);
+      place(kk, 'candlestick', x + 0.62, y, z + 0.04, -0.3, 1.9);
     },
     tea(kk, x, y, z) {
       kk.ball(0.16, '#6a8a6a', x - 0.3, y + 0.15, z, { sy: 0.85 });
       kk.cyl(0.02, 0.03, 0.2, '#6a8a6a', x - 0.12, y + 0.2, z, { rz: -0.8 });
       for (let i = 0; i < 4; i++) kk.cyl(0.05, 0.04, 0.07, CREAM, x + 0.1 + i * 0.18, y + 0.035, z + 0.05);
       kk.puff(x - 0.12, y + 0.3, z, 'steam', 0.5);
+      place(kk, 'ewer', x - 0.8, y, z, 0.2, 1.8);
     },
     tailor(kk, x, y, z) {
-      for (let i = 0; i < 5; i++) kk.cyl(0.07, 0.07, 0.5, pick(['#8a4a8a', '#c8a050', '#4a7a9a', '#c85a4a', '#e8dcc0']), x - 0.6 + i * 0.3, y + 0.07, z, { rx: Math.PI / 2 });
+      for (let i = 0; i < 5; i++) kk.cyl(0.07, 0.07, 0.5, pick(['#8a4a8a', '#c8a050', '#4a7a9a', '#c85a4a', '#e8dcc0']), x - 0.95 + i * 0.19, y + 0.07, z, { rx: Math.PI / 2 });
+      place(kk, 'sewing', x + 0.58, y, z + 0.04, -0.15, 2.4);
     },
     junk(kk, x, y, z) {
       kk.cyl(0.06, 0.08, 0.3, '#9ad0d8', x - 0.6, y + 0.15, z, { glow: true });
@@ -602,17 +609,21 @@ export function buildStreets(c) {
     },
     herbs(kk, x, y, z) {
       for (let i = 0; i < 6; i++) kk.cone(0.07, 0.3, pick(['#5a8a4a', '#8a6aa8', '#a8a04a']), x - 0.8 + i * 0.32, y + 1.6, z + 0.1, { rx: Math.PI });
-      for (let i = 0; i < 4; i++) kk.cyl(0.08, 0.08, 0.18, '#a8c8b0', x - 0.5 + i * 0.32, y + 0.09, z);
+      for (let i = 0; i < 2; i++) kk.cyl(0.08, 0.08, 0.18, '#a8c8b0', x - 0.12 + i * 0.3, y + 0.09, z);
+      place(kk, 'mortar', x - 0.62, y, z, 0.25, 1.6);
+      place(kk, 'balance', x + 0.66, y, z - 0.05, -0.2, 1.6);
     },
     lanterns(kk, x, y, z) {
       ['#e04a3a', '#e8a040', '#d86a9a', '#4a8ac8'].forEach((c, i) => lantern(kk, x - 0.8 + i * 0.53, y + 1.5, z + 0.2, 0.6, c, shade(c, 0.2)));
-      lantern(kk, x, y + 0.2, z, 0.5);
+      lantern(kk, x - 0.15, y + 0.2, z, 0.5);
+      place(kk, 'lanternframe', x + 0.58, y, z + 0.02, -0.25, 2.4);
     },
     glass(kk, x, y, z) {
       ['#66ffcc', '#ff7ad9', '#ffcc44', '#7fb2ff'].forEach((c, i) => {
-        kk.ball(0.12, c, x - 0.6 + i * 0.4, y + 0.13, z, { glow: true });
-        kk.cyl(0.03, 0.04, 0.16, c, x - 0.6 + i * 0.4, y + 0.3, z, { glow: true });
+        kk.ball(0.12, c, x - 0.95 + i * 0.3, y + 0.13, z, { glow: true });
+        kk.cyl(0.03, 0.04, 0.16, c, x - 0.95 + i * 0.3, y + 0.3, z, { glow: true });
       });
+      place(kk, 'retort', x + 0.52, y, z + 0.02, -0.15, 1.7);
     },
     frames(kk, x, y, z) {
       for (let i = 0; i < 3; i++) {
@@ -624,7 +635,7 @@ export function buildStreets(c) {
       for (let i = 0; i < 3; i++) kk.cyl(0.05, 0.05, 0.55, CREAM, x - 0.6 + i * 0.12, y + 0.05 + i * 0.03, z, { rz: Math.PI / 2 });
       kk.cyl(0.02, 0.05, 0.15, WOOD, x + 0.5, y + 0.075, z);
       kk.ball(0.16, '#3a6a9a', x + 0.5, y + 0.3, z, { color2: '#6a9a5a' });
-      kk.plane(0.5, 0.35, '#e8d8a8', x, y + 0.01, z + 0.05, { rx: -Math.PI / 2 });
+      place(kk, 'spyglass', x + 0.1, y, z + 0.06, 0.15, 1.9);
     },
   };
   // 櫃台到角色胸口（0.6），攤販的上半身和手露得出來；貨物大多是矮的，高的掛在上面

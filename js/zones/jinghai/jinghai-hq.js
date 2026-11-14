@@ -7,6 +7,7 @@
 // 座標：x 往東、z 往南，大廳中心是原點，一樓地板是 0
 import * as THREE from 'three';
 import { Kit, rng } from '../../core/props.js';
+import { place } from '../../core/trinkets.js';
 import { foilWall, foilRing as ringFoil, crinkle } from './jinghai-foil.js';
 import { buildCamShop, CAMSHOP, DOOR as CAMDOOR, CLERKS, SPOTS as CAMSPOTS } from './jinghai-camshop.js';
 
@@ -972,6 +973,8 @@ export function buildHQ({ coarse = false, fade = null } = {}) {
     // 培養皿：一盤兩排各三個
     B(k, x0 + 0.1, top, -25.9, x0 + 0.6, top + 0.02, -24.8, SILVERDK);
     for (let i = 0; i < 6; i++) k.cyl(0.09, 0.09, 0.025, SWATCH[i], x0 + 0.22 + (i % 2) * 0.26, top + 0.035, -25.68 + Math.floor(i / 2) * 0.33, {}, 12);
+    // 試管架和培養皿中間：今天試吃的咬月海草堡，插一支小旗，旁邊一張菜色牌（trinkets.js），面向站在桌前的人
+    place(k, 'bitemoon', x0 + 0.38, top, -26.34, -Math.PI / 2, 2.2);
     wallScreen('x-', x1, -31.0, [4, 3, 12, 2]);
     wallScreen('x-', x1, -26.6, [12, 3, 10, 6]);
   }

@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { Kit, rng } from '../../core/props.js';
 import { addRoof } from './eaves.js';
 import { drawText } from '../../core/glyphs.js';
+import { place } from '../../core/trinkets.js';
 import { AREA, BEAM, CREAM, DARK, GOLD, PAPER, PLASTER, TILES, TIMBER, WOOD, shade } from './haishi-map.js';
 
 // 原本那間房子：星台那一排中間的地塊，門口在這裡（路人照樣從這個門進出）
@@ -138,7 +139,11 @@ export function buildPress(c, o) {
   dk.box(0.5, 0.07, 0.36, '#3a2a20', px, y0 + 1.22, pz + 0.05);
   dk.cyl(0.035, 0.035, 0.62, '#7a6a50', px, y0 + 1.56, pz + 0.05, {}, 6);
   dk.cyl(0.022, 0.022, 0.9, DARK, px + 0.12, y0 + 1.5, pz + 0.12, { rz: Math.PI / 2 - 0.35, ry: -0.4 }, 5);
+  // 壓印機左邊一張矮桌，跟印台一樣高：墨缸、一盤活字和墨輥（trinkets.js）
+  dk.box(0.46, 0.05, 0.5, '#5a3a26', px - 0.59, y0 + 0.85, pz + 0.2, { color2: '#6a4a30' });
+  for (const [sx, sz] of [[-0.2, -0.02], [0.2, -0.02], [-0.2, 0.42], [0.2, 0.42]]) dk.box(0.05, 0.83, 0.05, DARK, px - 0.59 + sx, y0 + 0.415, pz + sz);
   dk.cyl(0.07, 0.06, 0.05, '#1a1416', px - 0.42, y0 + 0.9, pz + 0.3, {}, 8);
+  place(dk, 'typecase', px - 0.66, y0 + 0.875, pz + 0.18, 0.35, 1.5);
   sheets.push({ x: px, y: y0 + 0.875, z: pz + 0.08, w: 0.32, h: 0.46, rx: -Math.PI / 2, rz: 0.05, lit: 0.55 });
   lantern(dk, dcx - 0.35, y0 + 2.0, back + 0.55, 0.5, PAPER, '#fff0d0');
   dk.light(dcx, y0 + 1.4, fz + 0.2, '#ffb070', 0.8);

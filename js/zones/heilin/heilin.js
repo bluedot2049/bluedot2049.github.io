@@ -9,6 +9,7 @@ import { Kit, mergeBucket, newBucket, rng } from '../../core/props.js';
 import { makePathfinder } from '../../core/pathgrid.js';
 import { makeSkiff, skiffBerth } from '../../scene/harbor.js';
 import { flameCard, SHAPE } from '../../core/flame.js';
+import { place, watchHand, WATCH_PIVOT } from '../../core/trinkets.js';
 import { buildHomeCircle } from '../../scene/homedoor.js';
 import { getSave, markTour } from '../../save/progress.js';
 import { GRADE } from '../../core/grade.js';
@@ -184,7 +185,7 @@ export function buildHeilin(scene, { coarse = false } = {}) {
 
   // ---------- 洞口前的營火：三個冒險者等第四個人（人在 heilin-camp.js）。西、南、東三根木頭圍著火，北邊空著對著走下來的路，地上已經替你鋪好一捲鋪蓋 ----------
   const camp = { x: C.x + 4.8, z: C.z - 3.4, y: C.y, seats: [] };
-  let fireLight = null;
+  let fireLight = null, watchHandG = null;
   {
     const k = new Kit(rng('heilin:camp')), R = rng('heilin:camp-fire');
     // 火圈：一圈石頭，中間交叉的柴
@@ -226,12 +227,30 @@ export function buildHeilin(scene, { coarse = false } = {}) {
     k.cyl(0.16, 0.16, 0.8, '#4a5a6a', -0.22, 0.17, -2.75, { rz: Math.PI / 2, ry: 0.12 }, 8);
     k.cyl(0.11, 0.07, 0.07, '#5a4636', 0.45, 0.04, -1.5, {}, 8);
     k.box(0.36, 0.08, 0.3, '#4a3a2e', 2.3, 0.54, 1.15, { ry: 0.4 });
+    // 法師腳邊的懷錶，蓋子掀開、面朝北邊走下來的人。一靠近洞口就倒著走（heilin-lines.js），長針另外做一根在 update 裡逆轉
+    const WATCH = { x: -0.6, z: 1.2, ry: Math.PI - 0.3, s: 1.6 };   // 法杖放在法師的 +x 那側，錶擺另一側
+    place(k, 'watch', WATCH.x, 0, WATCH.z, WATCH.ry, WATCH.s, { hands: false });
+    // 矮人腳邊的酒壺、牛角杯、骰子；精靈腳邊擱著兩支箭、磨石、弓弦（箭壺她自己背著）。都朝北邊走下來的人
+    place(k, 'horn', -1.3, 0, -0.72, Math.PI + 0.5, 1.5);
+    place(k, 'fletching', 1.28, 0, -0.7, Math.PI - 0.4, 1.5);
     k.light(0, 0.55, 0, '#ffa860', 1.8);
     const cb = newBucket(), g = new THREE.Group();
     k.emit(cb, camp.x, camp.z, 0);
     for (const obj of bucketObjects(cb)) g.add(obj);
     g.position.y = camp.y;
     group.add(g);
+    {
+      const hk = new Kit(null), hb = newBucket();
+      watchHand(hk);
+      hk.emit(hb, 0, 0, 0);
+      const p = new THREE.Vector3(...WATCH_PIVOT).multiplyScalar(WATCH.s).applyAxisAngle(new THREE.Vector3(0, 1, 0), WATCH.ry);
+      watchHandG = new THREE.Group();
+      for (const o of bucketObjects(hb)) watchHandG.add(o);
+      watchHandG.position.set(camp.x + WATCH.x + p.x, camp.y + p.y, camp.z + WATCH.z + p.z);
+      watchHandG.scale.setScalar(WATCH.s);
+      watchHandG.userData.ry = WATCH.ry;
+      group.add(watchHandG);
+    }
     obstacles.push({ x: camp.x, z: camp.z, hw: 0.62, hd: 0.62 });
     // 火：幾張卡片火（core/flame.js），大塊單色、硬邊
     const FIRE = { base: '#ffa040', tip: '#e0481c', hot: '#ffe0a0' };
@@ -569,6 +588,8 @@ export function buildHeilin(scene, { coarse = false } = {}) {
       lastT = t;
       // 營火的光：幾道不成倍數的抖動疊著
       fireLight.intensity = FIRE_I * (0.82 + 0.1 * Math.sin(t * 7.3) + 0.06 * Math.sin(t * 13.1 + 1.7) + 0.05 * Math.sin(t * 2.3));
+      // 懷錶的長針倒著轉（從上面看逆時針），一秒一格地跳
+      watchHandG.rotation.y = watchHandG.userData.ry + Math.floor(t) * (Math.PI / 30);
       // 第一次走進谷底的空地：記下來，下次來捷徑的柵門開著
       if (!inPhoto && me && !walked && Math.hypot(me.x - C.x, me.z - C.z) < C.r) walked = markTour('heilin-down') || true;
     },
