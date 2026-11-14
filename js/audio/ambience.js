@@ -3,7 +3,9 @@
 // 戶外的風聲、草葉沙沙聲和鳥叫，還有動物的叫聲、鞋子的腳步聲、表情聲、海市的人潮聲，全部用 Web Audio 現場合成，不下載音檔。
 // 瀏覽器規定要等使用者點過畫面才能出聲，所以第一次點擊或按鍵時才建立。
 // 低頻壓掉、音量放輕、起伏放慢，聽起來是貼耳的空氣聲而不是轟轟的風
-import { CHEERS, EMOTE_BURST, EMOTE_HEAR, EMOTE_RATE, EMOTE_VOL, LAND_HEAR, LAND_VOL, MURMUR_DUCK, MURMUR_LAYERS, MURMUR_RMS, MURMUR_VOL, PENTA, SHOES, STEP_BURST, STEP_HEAR, STEP_RATE, STEP_VOL, VOICES, VOICE_LEN, VOICE_RMS, VOICE_VOL, biquad, loopOf, renderMurmur, silentWav } from './ambience-voices.js';
+import { VOICES } from './ambience-voices.js';
+import { CHEERS, EMOTE_BURST, EMOTE_HEAR, EMOTE_RATE, EMOTE_VOL, LAND_HEAR, LAND_VOL, MURMUR_DUCK, MURMUR_LAYERS, MURMUR_RMS, MURMUR_VOL, SHOES, STEP_BURST, STEP_HEAR, STEP_RATE, STEP_VOL, VOICE_LEN, VOICE_RMS, VOICE_VOL, loopOf, renderMurmur, silentWav } from './crowd-voices.js';
+import { PENTA, biquad } from './voice-kit.js';
 import { pref, setPref } from '../save/prefs.js';
 import { hash, seedOf, serverNow, syncTime } from '../core/servertime.js';
 const GUST_EVERY = 4;   // 每隔幾秒換一次風勢

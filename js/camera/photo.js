@@ -18,10 +18,9 @@
 // 看鏡（lookOn）：開著時自己的頭一直看著鏡頭，關著就隨意看（attention.js）。鏡頭的位置和方向由 lensInfo 給別人和自己的頭
 import * as THREE from 'three';
 import { lens, fitSource, unbend, COVER } from '../core/lens.js';
-import { makePostcard, loadQR } from '../save/postcard.js';
+import { postcard, eyepost } from '../save/cards.js';
 import { sanitizeLook } from '../avatar/looks.js';
 import { getSave, savePrint } from '../save/progress.js';
-import { makeEyePost } from '../save/eyepost.js';
 import { wearCode } from '../save/savecode.js';
 import { CAMERAS, LEVER_R, carried, dateKnob, drawDate, eyeShutter, flashKnob, longTan, shutterKnob } from './cameras.js';
 import { SWAY, sway } from './sway.js';
@@ -2615,10 +2614,13 @@ export class PhotoMode {
     const sh = this.shot;
     if (!sh) return;
     let canvas, lost = false, more;
+    // 印明信片的程式用到才載（cards.js），進場後通常已經先抓好了
     if (soul) {
+      const { makeEyePost } = await eyepost();
       ({ canvas, lost } = await makeEyePost(sh, { save: getSave() }));
       more = { kind: 'postcard-save', k: savePrint() };
     } else {
+      const { makePostcard, loadQR } = await postcard();
       await loadQR();
       const qr = { kind: 'look', text: location.origin + location.pathname + '#look=' + wearCode(sanitizeLook(getSave().look)) };
       canvas = makePostcard(sh, new Date(), { qr });

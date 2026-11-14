@@ -3,7 +3,7 @@
 // 蜃樓的風聲：沙漠的風一直都在，照塵的濃淡（weather.js 的 Dust）變大變小，一陣一陣跟著 gust 走（伺服器時間，大家聽到同一陣）。
 // 兩層，都用 ambience.js 那份雜訊現場合成：貼耳的氣流（跟戶外的風一樣兩級高通切掉低頻，不要轟轟的），和起風時細沙打在東西上的沙沙。
 // 城牆裡小一點，下到井裡越深越小、越悶。音量是還沒實際聽過的起始值（下面幾個常數）。第一次聽到就已經在了，不淡入。ambience.js 每一幀叫 update（ambience.beds）
-import { biquad } from '../../audio/ambience-voices.js';
+import { biquad } from '../../audio/voice-kit.js';
 
 const PHONE = matchMedia('(pointer: coarse)').matches;   // 手機喇叭沒有低音，雜訊剛好落在它最響的中高頻，壓低一點
 const HISS = PHONE ? 0.55 : 1;

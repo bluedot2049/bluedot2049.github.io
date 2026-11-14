@@ -9,7 +9,7 @@ import { RACES, OPTIONS, SLIDERS, SKINS, HAT_COLORS, HAIR_COLORS, CLOTH, GIFTS, 
   personOf, outfitOf, dress, samePerson, sameOutfit } from './looks.js';
 import { getSave, putSave, PEOPLE, OUTFITS } from '../save/progress.js';
 import { faceMap, TUCKED } from './character.js';
-import { cached, request } from './thumbs.js';
+import { cached, request, FRAME } from './thumbs.js';
 import { SHOPS, wareOf } from './wares.js';
 import { money } from '../save/purse.js';
 
@@ -71,13 +71,6 @@ const MENU = [
 const TAB = Object.fromEntries(MENU.map((t) => [t.id, t]));
 const PALETTE = { skin: SKINS, hairC: HAIR_COLORS, hatC: HAT_COLORS };
 const palette = (k) => PALETTE[k] || CLOTH;
-// 每個選項的小圖拍哪一段
-export const FRAME = {
-  race: 'head', hair: 'head', hat: 'head',
-  eyes: 'face', brows: 'face', nose: 'face', mouth: 'face', mark: 'face', glasses: 'face',
-  top: 'body', topPat: 'body', outer: 'body', bottom: 'legs', botPat: 'legs', one: 'full',
-  shoes: 'feet', neck: 'neck', back: 'back', hand: 'hand',
-};
 // 拍小圖時要先拿掉、不然會擋住的東西
 const LAYERED = ['top', 'topPat', 'bottom', 'botPat', 'outer', 'hat'];
 const FACE_PARTS = ['eyes', 'brows', 'nose', 'mouth', 'mark', 'glasses'];

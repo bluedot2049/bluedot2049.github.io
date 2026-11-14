@@ -16,6 +16,7 @@ import { EaselCard } from './easel-card.js';
 import { CAMERAS, SOON } from '../../camera/cameras.js';
 import { Ask } from './ask.js';
 import { CellarVoice } from './cellar-voice.js';
+import { Hollow } from './hollow.js';
 
 // 背景音樂「星盤夜讀」（study.js，現場合成）：走進「歡迎光臨煉金畫廊」那間才開始放，往後的房間和戶外一路放著。
 // 那間一進門就是落地擺鐘，滴答聲從那裡來
@@ -108,6 +109,7 @@ export function residents({ scene, world, shadowTex }) {
 // radio：前廳的收音機（radio-card.js），互動鍵「收音機」打開面板，聲音走 ambience.beds
 // easel：原野的畫架（easel-card.js），互動鍵「畫畫」打開面板，畫裡的人是自己的角色（look 回傳現在的造型）
 // voice：地下室會說話的那幅畫（cellar-voice.js），站到畫前互動鍵「聊天」
+// hollow：大樹的樹洞（hollow.js），互動鍵「聽樹洞」或點洞裡的光打開作者的話和接案卡，接下案子穿門光過去（ctx.gate）；也是演唱會的門（door）
 // camTable：前廳的相機桌（camtable.js），正在看的那一格浮起來；卡片擺哪裡是介面的事，留在 main.js（placeCams）
 // tableHost：陽台長桌的主人（residents 建的 host），戶外那間看得到才動，看正在跟他說話的訪客；看不到時不說話
 export function fixtures(ctx) {
@@ -118,6 +120,7 @@ export function fixtures(ctx) {
     radio: world.radio ? new RadioCard({ world, ambience, player, camera }) : null,
     easel: world.outdoor?.easel ? new EaselCard({ world, player, camera, look }) : null,
     voice: world.cellar?.paintings.some((p) => p.data.talks) ? new CellarVoice({ world, player, camera }) : null,
+    hollow: world.outdoor?.hollow ? new Hollow(ctx) : null,
     camTable: table ? {
       update(dt) {
         table.look(player.focus?.kind === 'cameras' ? player.focus.slot : -1);

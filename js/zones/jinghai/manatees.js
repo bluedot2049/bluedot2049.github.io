@@ -11,7 +11,8 @@ import { PROFILE, DEPTH, radiusAt } from '../../npc/manatee.js';
 import { timeline, at } from '../../npc/timeline.js';
 
 const SKIN = '#91abb0', INK = '#2a2722', TONGUE = '#d98a85', BLUSH = '#e8a59c', MOUTH = '#5b2b2b';
-const SEG = 16;                         // 身體一圈切幾刀（平滑著色，16 刀看起來就是圓的）
+// 身體一圈切幾刀（平滑著色，16 刀看起來就是圓的）。手機 12 刀：一隻少約兩百面，月球一百多隻加起來省一成（buildManatees 照 coarse 設）
+let SEG = 16;
 const NECK = 0.78;                      // 衣服的領口：再上去是頭，臉在正面上半
 const FACE = { y: 1.0, h: 0.42, w: 0.56 };
 // 臉的圖集：8 張臉 × 4 個表情（平常、閉眼、說話、笑），一欄一張臉、一列一個表情。原稿一格 320×256，桌機縮成 3/4、手機 1/2
@@ -32,7 +33,8 @@ function bean(k, c) {
 function band(k, y0, y1, d, c, phi = null) {
   const ys = [y0, ...PROFILE.map(([y]) => y).filter((y) => y > y0 + 0.01 && y < y1 - 0.01), y1];
   const pts = ys.map((y) => v2(radiusAt(y) + d, y));
-  k.add(phi ? new THREE.LatheGeometry(pts, Math.max(6, Math.ceil((phi[1] / (Math.PI * 2)) * SEG)), phi[0], phi[1]) : new THREE.LatheGeometry(pts, SEG), c, 0, 0, 0, { sz: DEPTH });
+  // 只包一段的（敞開的外套、圍裙）頂點跟底下整圈的對不齊，照 16 刀的密度切：手機 12 刀時弦凹得深，底下那層會從縫裡露出一條條白線
+  k.add(phi ? new THREE.LatheGeometry(pts, Math.max(6, Math.ceil((phi[1] / (Math.PI * 2)) * 16)), phi[0], phi[1]) : new THREE.LatheGeometry(pts, SEG), c, 0, 0, 0, { sz: DEPTH });
 }
 // 身體正面 (x, y) 那一點：貼著弧面的深度和角度，小零件（領帶、識別證、徽章）照這個轉
 function surf(x, y, d) {
@@ -680,6 +682,7 @@ const MURMUR_R = 18, QUIET = 0.35, VOICE_R = 6;
 
 // ambience、indoorness 給了才有人聲（只在室內）。groundY(x, z, y) 給了，搭手扶梯時腳踩在踏板上（時間表只排中線，踏板比中線高一截）
 export function buildManatees(scene, { shadowTex, plan, coarse = false, ambience = null, indoorness = null, groundY = null }) {
+  SEG = coarse ? 12 : 16;
   const R = rng('jinghai:manatees');
   const pick = (arr) => arr[Math.floor(R() * arr.length)];
   const agents = [];

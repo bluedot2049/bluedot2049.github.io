@@ -516,7 +516,7 @@ export class Player {
     this.aimT = now;
     const r = this.dom.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     const u = this.pick(cx, cy)?.object.userData;
-    document.body.classList.toggle('aim-hot', !!(this.lensAt(cx, cy) || (u && ((WORKS_OPEN && u.painting) || u.mirror || u.animal || u.guide || u.hollow))));
+    document.body.classList.toggle('aim-hot', !!(this.lensAt(cx, cy) || (u && ((WORKS_OPEN && u.painting) || u.mirror || u.animal || u.guide || u.act))));
   }
 
   // 越肩放手：照最後的速度再滑一小段，彈簧接著慢慢停，不會一放手就卡住
@@ -662,7 +662,7 @@ export class Player {
     if (now - (this.hoverT || 0) < 100) return;
     this.hoverT = now;
     const u = this.pick(cx, cy)?.object.userData;
-    this.dom.classList.toggle('hot', !!(this.lensAt(cx, cy) || (u && ((WORKS_OPEN && u.painting) || u.mirror || u.animal || u.guide || u.hollow))));
+    this.dom.classList.toggle('hot', !!(this.lensAt(cx, cy) || (u && ((WORKS_OPEN && u.painting) || u.mirror || u.animal || u.guide || u.act))));
   }
 
   tap(cx, cy) {
@@ -689,7 +689,7 @@ export class Player {
     if (hit.object.userData.mirror) return this.goToMirror();
     if (hit.object.userData.animal) return this.goToAnimal(hit.object.userData.animal);
     if (hit.object.userData.guide) return this.events.onGuide?.();
-    if (hit.object.userData.hollow) return this.events.onHollow?.();
+    if (hit.object.userData.act) return hit.object.userData.act();   // 區域的裝置自己掛的（樹洞的光：hollow.js）
     if (this.shoulder) return;   // 越肩不點地板走路
     const t = this.world.findWalkable(hit.point.x, hit.point.z, this.pos.x, this.pos.z, hit.point.y);
     if (!t) return;
@@ -1109,11 +1109,6 @@ export class Player {
       });
       const t = out.table, d = Math.hypot(Math.max(0, Math.abs(x - t.x) - t.hw), Math.max(0, Math.abs(z - t.z) - t.hd));
       if (d < 1.5) list.push({ kind: 'table', d: d + 0.2, ax: t.x, az: t.z });
-      const ho = out.hollow;
-      if (ho) {
-        const dh = Math.hypot(x - ho.x, z - ho.z);
-        if (dh < 2.2) list.push({ kind: 'hollow', d: dh, ax: ho.x, az: ho.z });
-      }
     }
     const an = this.animals?.nearest(x, z);
     if (an) list.push({ kind: 'pet', p: an.a, d: an.d, ax: an.a.pos.x, az: an.a.pos.z });
@@ -1181,7 +1176,6 @@ export class Player {
       case 'mirror': this.goToMirror(); break;
       case 'cameras': this.events.onCameras?.(); break;
       case 'guide': this.events.onGuide?.(); break;
-      case 'hollow': this.events.onHollow?.(); break;
       case 'seat': this.goTo(this.planSeat(t.p)); break;
       case 'pet': this.goToAnimal(t.p); break;
       case 'talk': t.p.talkTo(); break;

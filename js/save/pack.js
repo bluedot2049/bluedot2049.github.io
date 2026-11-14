@@ -10,10 +10,7 @@
 // 鈕右下的封蠟是魔法印泥：有照片交給師傅、還沒去拿，或拿回來還沒看過時亮著。
 // 存檔有沒有過期只寫在卡片裡，不亮、不催。上次存了什麼記在這台裝置上（packed），不放進存檔。
 import { readCode, openFace, tryOn, codeFrom, hasProgress, restoreSave, attachOldFaces, oldOneFace } from './savecode.js';
-import { readPostcard, joinFace } from './postcard.js';
-import { readMirrorCard } from './mirrorcard.js';
-import { readEyePost } from './eyepost.js';
-import { readPaintCard } from './paintcard.js';
+import { mirrorcard, eyepost, paintcard, postcard } from './cards.js';
 import { encodeFace } from '../avatar/looks.js';
 import { getSave, savePrint } from './progress.js';
 import { dockR, hugMedia, panelW, uiScale } from '../controls/ui.js';
@@ -772,6 +769,10 @@ export class Pack {
     if (small) small.textContent = '讀取中…';
     if (b) b.disabled = true;
     try {
+      // 讀卡的程式用到才載（cards.js），通常進場後已經先抓好了
+      const mods = await Promise.all([mirrorcard(), eyepost(), paintcard(), postcard()]).catch(() => null);
+      if (!mods) return null;   // 離線又還沒抓過：當作讀不到
+      const [{ readMirrorCard }, { readEyePost }, { readPaintCard }, { readPostcard, joinFace }] = mods;
       let m = null, e = null;
       try { m = await readMirrorCard(file); } catch {}
       // 兩種的眼紋是同一套，靈魂明信片的郵票也會被當鏡中照片讀到一半：鏡框沒讀全就再當靈魂明信片讀，讀全的那個算

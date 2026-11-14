@@ -8,6 +8,14 @@ import { Character } from './character.js';
 import { lookKey } from './looks.js';
 import { kaoFacing } from './kaomoji-parts.js';
 
+// 每個選項的小圖拍哪一段（鏡子面板 creator.js、店家小卡 shop.js 都照這張）
+export const FRAME = {
+  race: 'head', hair: 'head', hat: 'head',
+  eyes: 'face', brows: 'face', nose: 'face', mouth: 'face', mark: 'face', glasses: 'face',
+  top: 'body', topPat: 'body', outer: 'body', bottom: 'legs', botPat: 'legs', one: 'full',
+  shoes: 'feet', neck: 'neck', back: 'back', hand: 'hand',
+};
+
 const SIZE = 112;          // 小圖的 CSS 像素，實際依螢幕密度放大
 const PER_FRAME = 3;
 const KEEP = 400;          // 記太多就整個清掉重拍

@@ -12,8 +12,7 @@ import { uiScale } from '../controls/ui.js';
 import { is } from '../controls/keymap.js';
 import { optionName, unlock, unlockedSet, isOpen } from '../avatar/looks.js';
 import { waresAt, SHOPS } from '../avatar/wares.js';
-import { FRAME } from '../avatar/creator.js';
-import { cached, request } from '../avatar/thumbs.js';
+import { cached, request, FRAME } from '../avatar/thumbs.js';
 import { coins, spend, money, MEASURE, AGAIN } from '../save/purse.js';
 import { teach } from '../controls/lessons.js';
 

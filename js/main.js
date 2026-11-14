@@ -11,8 +11,8 @@ import { KaoPanel } from './controls/kaopanel.js';
 import { sanitizeLook, randomPreset } from './avatar/looks.js';
 import { getSave, putSave, markTour } from './save/progress.js';
 import { readCode, openFace, tryOn, hasProgress, restoreSave } from './save/savecode.js';
-import { Creator } from './avatar/creator.js';
 import { Pack } from './save/pack.js';
+import { warmCards } from './save/cards.js';
 import { pack as packCarry, unpack as unpackCarry } from './save/carry.js';
 import { layoutBubbles } from './core/bubbles.js';
 import { UI, panelW, uiScale, pinCard, WORKS_OPEN } from './controls/ui.js';
@@ -42,7 +42,6 @@ import { fullscreenButton, keepFullscreen } from './controls/screen.js';
 import { CAMERAS, SOON, TABLE, carried, carry, chromeLight } from './camera/cameras.js';
 import { FlashFx } from './camera/flashfx.js';
 import { installGrade, gradeAt, NEUTRAL } from './core/grade.js';
-import { Hollow } from './zones/gallery/hollow.js';
 import { PLACES } from './scene/places.js';
 import { bindDeskKeys } from './controls/deskkeys.js';
 import { bindVolume } from './controls/volume.js';
@@ -365,12 +364,6 @@ async function start() {
   character.onStep = (c, foot) => { ambience.footstep(c, foot); world.prints?.stamp(c, foot); world.onStep?.(c, foot); };
   // 角色出來之前先站好的（畫廊的胖頭頭人）
   const { manatee = null, host = null } = Z.residents?.({ scene, world, shadowTex }) ?? {};
-  // 大樹的樹洞：作者的話和接案卡（hollow-jobs.js），接下案子是門光換頁、不搭船。沒有大樹的區域什麼都不做
-  // 有隊友已經在裡面就帶著他那一場（?show=），進到同一場、同一秒
-  const hollow = new Hollow(world.outdoor?.hollow ?? null, zone, (to) => {
-    const sh = party?.showFor(to);
-    travel(to, sh ? { show: sh } : {}, 'gate');
-  });
   const ambience = new Ambience();
   bindUI(ambience, zone);   // 介面的聲音（ui-voices.js）：面板直接叫 sfx、thing，根音跟著這一區
   // 別人閃燈時，那盞閃光燈移過去亮一下
@@ -407,7 +400,10 @@ async function start() {
     preview: (L) => character.setLook(L ?? look),
     wear: (L) => { dressSound(ambience, look, L); wear(L); },
   });
-  const creator = new Creator({
+  // 鏡子的面板（creator.js）：只有畫廊的鏡子會開，不在每一區開場都下載的那份裡。畫廊進場後趁空檔先抓好建好（entered 那段），
+  // 第一次照鏡子時通常已經在了；還沒到就等它，到了人還在鏡子前才打開
+  let creator = null, creatorJob = null;
+  const getCreator = () => (creatorJob ??= import('./avatar/creator.js').then(({ Creator }) => (creator = new Creator({
     // 換上去的那件東西出聲（wear-voices.js），再穿到身上
     onChange(L) {
       dressSound(ambience, look, L);
@@ -422,7 +418,8 @@ async function start() {
       character.paintFace(cells);
       lastInput = performance.now();
     },
-  });
+  }))).catch((e) => { creatorJob = null; throw e; }));   // 沒抓到（離線）下次再試
+  const openCreator = () => getCreator().then((c) => { if (atMirror()) c.open(look); }).catch(() => ui.hint('鏡子的面板沒有載到，網路通了再照一次', 4000));
 
   // 行囊：存讀檔，右上角那顆鈕。拍存檔只在鏡子前；朋友寄的明信片哪裡都能試穿
   const atMirror = () => player.focus?.kind === 'mirror' && ui.dress.classList.contains('open');
@@ -436,7 +433,7 @@ async function start() {
     },
     onView: () => applyViewOffset(),
     onTryOn(L) {
-      if (atMirror()) creator.set(L, true);
+      if (atMirror()) getCreator().then((c) => { if (atMirror()) c.set(L, true); }).catch(() => {});
       else {
         wear(L);
         ui.hint('已換上明信片上的衣服', 3000);
@@ -483,20 +480,15 @@ async function start() {
       if (player.focus?.kind !== 'mirror') ui.hideDress();
       // 提示不跟著收：回饋、事件停到讀得完，教學等做了那件事才收（ui.js 的 hint、tip）
       ui.hideGuide();
-      hollow.close();
       for (const [, f] of fixtures) f.onInput?.();
     },
     // 門邊的問號立牌：能在哪裡玩、支援什麼
     onGuide() {
       ui.guide();
     },
-    // 聽樹洞：原地打開卡片，人和鏡頭都不動
-    onHollow() {
-      hollow.open();
-    },
     onArriveMirror() {
       ui.showDress();
-      creator.open(look);
+      openCreator();
       teach('mirror');
     },
     onJump(k = 1) {
@@ -526,8 +518,8 @@ async function start() {
     // 有隊友的那一區亮他的顏色；want 是點了別區隊友的名牌要去的地方，沒有就翻到隊友剛去的那一區（同船）
     onExit(ex, want) {
       if (ex.home) return ex.home.act();
-      // 星門（海市星廟和鏡宮之間、黑森林洞口）：門光鋪滿就換頁，不渡海；extra 是另外帶的網址參數（洞裡的種子）。隊友已經在那裡的一趟（洞裡）就帶他那一趟（?show=）
-      if (ex.gate) { const sh = party?.showFor(ex.to); return travel(ex.to, sh ? { show: sh } : ex.extra?.() ?? {}, 'gate'); }
+      // 星門（海市星廟和鏡宮之間、黑森林洞口）：門光鋪滿就換頁，不渡海；extra 是另外帶的網址參數（洞裡的種子）
+      if (ex.gate) return gate(ex.to, ex.extra?.() ?? {});
       if (!ex.boat) return travel(ex.to);
       if (player.boarding) return;
       const mates = party?.ferryInfo();
@@ -629,6 +621,11 @@ async function start() {
   // 走進歸門（door 給 true）：不搭船，門裡的光鋪滿畫面就換頁，到了是前廳的前門（from=door）。
   // 星門（door 給 'gate'）：一樣是門光，from 照舊記從哪一區來，另外帶 via=door，到了那頁一開始就是門光
   let traveling = false;
+  // 穿門光過去（星門、洞口、樹洞的接案）：隊友已經在那裡的一趟、一場（洞裡、演唱會）就帶他那一趟（?show=），進到同一場、同一秒；不然帶 extra
+  function gate(to, extra = {}) {
+    const sh = party?.showFor(to);
+    travel(to, sh ? { show: sh } : extra, 'gate');
+  }
   function travel(to, extra = {}, door = false) {
     if (traveling) return;
     traveling = true;
@@ -698,7 +695,7 @@ async function start() {
   // 電腦版的渡船卡浮在船上方：投影船艙上方一點，卡片底邊對著那裡，不出畫面。船在鏡頭後面就放畫面中間
   let ferryBoat = null;
   let ferryWalk = null;   // 點了別區隊友的名牌，正走去渡口 { ex, to, goal }
-  let hollowWalk = null;  // 點了在演唱會的隊友名牌，正走去樹洞 { x, z, goal }
+  let doorWalk = null;    // 點了在演唱會的隊友名牌，正走去那裡的門（畫廊的樹洞）{ x, z, open, goal }
   const ferryAt = new THREE.Vector3();
   function placeFerry() {
     const s = ferryBoat.seat();
@@ -1004,15 +1001,14 @@ async function start() {
     peek = new Peek({ party, mp, player, camera, ui });
     player.actionables.push((x, z) => peek.target(x, z));
     // 點了別區隊友的名牌：走到渡口，到了渡船卡直接翻到他那一區。
-    // 不搭船去的地方（演唱會，places.js 的 boat: false）：在畫廊就走到樹洞前、打開接案卡；在別區先搭船回畫廊
+    // 不搭船去的地方（演唱會，places.js 的 boat: false）：這一區有它的門（fixtures 的 door，畫廊是樹洞）就走到門前打開；沒有就先搭船回畫廊
     party.onFar = (to) => {
       if (PLACES.find((d) => (d.to || d.dev) === to)?.boat === false) {
-        const ho = world.outdoor?.hollow;
-        if (ho) {
-          const x = ho.x + ho.n.x * 1.6, z = ho.z + ho.n.z * 1.6;
-          if (Math.hypot(player.pos.x - x, player.pos.z - z) < 2) return hollow.open();
-          const goal = player.walkToward(x, z);
-          hollowWalk = goal && { x, z, goal };
+        const door = fixtures.map(([, f]) => f.door?.(to)).find(Boolean);
+        if (door) {
+          if (Math.hypot(player.pos.x - door.x, player.pos.z - door.z) < 2) return door.open();
+          const goal = player.walkToward(door.x, door.z);
+          doorWalk = goal && { ...door, goal };
           return;
         }
         to = 'gallery';
@@ -1191,7 +1187,7 @@ async function start() {
     onDone() {
       if (player.focus?.kind !== 'mirror') return;
       ui.showDress();
-      creator.open(look);
+      openCreator();
     },
   });
   // 手機上攝影時同一顆變成收起，按一下就出來
@@ -1242,7 +1238,7 @@ async function start() {
   // 畫廊：前廳胖頭的教學（走近說下一步，互動鍵「問」，泡泡底下那行小字照現在的操作方式寫鍵，所以給 keyOf）、收音機、畫架、地下室會說話的畫
   const PAD_OF = { interact: -1, raise: 6, pack: 8, eye: 5, party: 14 };
   fixtures = Object.entries(Z.fixtures?.({
-    world, player, camera, ambience, params, manatee, host, visitors, ui, look: () => look, back: params.has('from'), openEnv: () => ui.guide(),
+    world, player, camera, ambience, params, manatee, host, visitors, ui, gate, look: () => look, back: params.has('from'), openEnv: () => ui.guide(),
     keyOf: (id) => { const k = inputKind(); return k === 'pad' ? padBtn(PAD_OF[id]) : k === 'touch' ? '' : key(id); },
   }) ?? {}).filter(([, f]) => f);
   for (const [, f] of fixtures) if (f.target) player.actionables.push((x, z) => f.target(x, z));
@@ -1258,7 +1254,7 @@ async function start() {
     guide.isMate = (id) => !!party && [...party.mates.values()].some((o) => o.s === id);
   }
 
-  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, coins, happen, acts, guide, creator, cues, peek, kao, ...Object.fromEntries(fixtures) };
+  if (params.has('debug')) window.__g = { player, world, camera, ui, renderer, mp, party, animals, visitors, vendors, walkers, passers: walkers[0] ?? null, quality, host, manatee, photo, studio, beast, coins, happen, acts, guide, get creator() { return creator; }, cues, peek, kao, ...Object.fromEntries(fixtures) };
   const fxJob = quality.post ? createPostFX(renderer, scene, camera, lensPass, dofPass).catch((e) => { console.warn('後製載入失敗：', e); return null; }) : null;
   // 跑不動自動降級：先關後製，再降解析度
   quality.onChange = (q) => {
@@ -1348,6 +1344,9 @@ async function start() {
   // 這時候主執行緒卡一下看不出來（門的動畫交給合成器）
   setTimeout(() => precompile(renderer, scene, camera, world, true, [guide.eye.group]).then(() => { if (quality.post) warmDraw(renderer, scene, camera, lazy, true); }), 0);
   entered.then(() => {
+    // 不在開場那份裡的程式趁空檔先抓：存檔卡片（讀檔、印明信片用，cards.js）；有鏡子的（畫廊）連鏡子的面板也先建好
+    warmCards();
+    if (world.mirror) window.requestIdleCallback?.(() => getCreator().catch(() => {}), { timeout: 8000 }) ?? setTimeout(() => getCreator().catch(() => {}), 3000);
     guide.ready = true;   // 上次沒收起來的黑眼：進門、上岸以後才蹦出來
     // 從歸門回來的（from=door）也是從前門進來，只是不再跳操作提示；第一次進門的等門關上、房名跳完才出提示
     const homeDoor = params.get('from') === 'door', byDoor = world.frontDoor && (!params.has('from') || homeDoor), at = performance.now();
@@ -1482,7 +1481,6 @@ async function start() {
     .add('world', 'manatee', (dt) => manatee?.update(dt, player.pos.x, player.pos.z, camera))
     .add('world', 'fixtures', (dt) => { for (const [, f] of fixtures) f.update?.(dt); })
     .add('world', 'peek', () => peek?.update())
-    .add('world', 'hollow', (dt) => hollow.update(dt, clock.elapsedTime, player.pos, camera))
     .add('world', 'flash', (dt) => flashFx.update(dt))
     .add('world', 'cues', (dt) => cues?.update(dt))
     .add('world', 'kao', () => kao.tick())
@@ -1503,12 +1501,12 @@ async function start() {
       ferryWalk = null;
       if (player.goal === goal && Math.hypot(player.pos.x - ex.x, player.pos.z - ex.z) < ex.r + 0.8) player.events.onExit(ex, to);
     })
-    // 正走去樹洞找在演唱會的隊友：走到了就打開接案卡（進場時帶著他那一場）
-    .add('people', 'hollowWalk', () => {
-      if (!hollowWalk || (player.goal === hollowWalk.goal && player.path.length)) return;
-      const { x, z, goal } = hollowWalk;
-      hollowWalk = null;
-      if (player.goal === goal && Math.hypot(player.pos.x - x, player.pos.z - z) < 2.5) hollow.open();
+    // 正走去門前（畫廊的樹洞）找在演唱會的隊友：走到了就打開（進場時帶著他那一場）
+    .add('people', 'doorWalk', () => {
+      if (!doorWalk || (player.goal === doorWalk.goal && player.path.length)) return;
+      const { x, z, open, goal } = doorWalk;
+      doorWalk = null;
+      if (player.goal === goal && Math.hypot(player.pos.x - x, player.pos.z - z) < 2.5) open();
     })
     .add('people', 'home', (dt) => world.home?.update(dt, player.pos, mp ? mp.others.values() : [], camera.position), () => !!world.home?.busy)
     .add('people', 'away', () => { if (frame % 30 === 0) checkAway?.(); })

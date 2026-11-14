@@ -5,7 +5,7 @@
 // 重量靠三個參數：基頻低、時間長、泛音多且音程窄＝沉重暗色；基頻高、時間短、泛音少＝清亮小顆。
 // 音高不用固定赫茲：對 PENTA 五聲音階，根音每區一個（ROOT），跟那區的背景音樂同調，叮一聲像從音樂裡掉出來的。
 // 播放走 ambience.js 的出口（out、played、allow）。音量在 LEVEL，離線量過的 dB 之後補在這裡。
-import { PENTA, envelope, osc, rub } from './ambience-voices.js';
+import { PENTA, envelope, osc, rub } from './voice-kit.js';
 import { MAT } from './wear-voices.js';
 
 // 每區的根音（Hz，D4–D5 這一個八度）。畫廊星盤夜讀是 D 小調，用同一組音的 F 大調五聲；月球寂靜軌道 A 大調；汀 D♭ 大調。

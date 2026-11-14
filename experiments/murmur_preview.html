@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>人潮聲試聽</title>
-  <!-- 人潮聲新舊對照：舊的抄在這頁裡，新的是遊戲現在用的 renderMurmur（ambience-voices.js）。混音照 ambience.js 的 murmur()、talk() 抄，人數、近處的人拉桿調，切版本聽同一個場面 -->
+  <!-- 人潮聲新舊對照：舊的抄在這頁裡，新的是遊戲現在用的 renderMurmur（crowd-voices.js）。混音照 ambience.js 的 murmur()、talk() 抄，人數、近處的人拉桿調，切版本聽同一個場面 -->
   <style>
     html, body { margin: 0; background: #1c1814; color: #e9e0cc; font-family: "Noto Serif TC", serif; }
     main { max-width: 760px; margin: 0 auto; padding: 18px 16px 48px; }
@@ -54,7 +54,8 @@
   <div id="log"></div>
 </main>
 <script type="module">
-  import { MURMUR_LAYERS, MURMUR_NOTES, MURMUR_RMS, MURMUR_SR, MURMUR_VOL, MURMUR_XF, VOICE_LEN, VOICE_RMS, VOICE_VOL, VOWELS, biquad, loopOf, osc, renderMurmur } from '../js/audio/ambience-voices.js';
+  import { MURMUR_LAYERS, MURMUR_NOTES, MURMUR_RMS, MURMUR_SR, MURMUR_VOL, MURMUR_XF, VOICE_LEN, VOICE_RMS, VOICE_VOL, VOWELS, loopOf, renderMurmur } from '../js/audio/crowd-voices.js';
+  import { biquad, osc } from '../js/audio/voice-kit.js';
 
   // 舊版原樣抄在這裡，只為了對照（2026-11-05 遊戲裡已經換成新版）：一個音節開一組振盪器和濾波器、沒有字頭、各講各的。音量是當時的 0.22、0.3
   // 算一段 len 秒、talkers 個人在講話的聲音（多算 MURMUR_XF 秒給頭尾交疊）。

@@ -154,7 +154,7 @@ export function buildTree({ k, group, h, x, z, G, heightAt, face, clear = [] }) 
       group.add(o);
     }
     const ball = lamp.find((o) => !o.isPoints), halo = lamp.find((o) => o.isPoints), size = halo.geometry.attributes.aSize;
-    ball.userData.hollow = true;   // 點樹洞裡的光就打開航路
+    hollow.ball = ball;   // 點樹洞裡的光就打開航路（hollow.js 掛 userData.act）
     // 洞口前地上一圈暖光，平貼在草上，疊加上去
     const px = x + fx * 1.9, pz = z + fz * 1.9;
     const pool = new THREE.Mesh(new THREE.CircleGeometry(1.7, 24), new THREE.MeshBasicMaterial({

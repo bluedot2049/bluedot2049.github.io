@@ -4,7 +4,7 @@
 // 全部現場合成（ambience.js 那份雜訊，加上自己撒的幾段小水滴聲），不下載音檔。聲音照站的地方變：躲到屋簷下沙沙變悶、滴答變近又變多；
 // 星廟殿裡幾乎聽不到（水鏡照舊無聲）。撐著傘多一層雨打傘面；踩在濕地上的腳步帶一點水聲（ambience.wetStep）。雨停了屋簷還滴一陣子。
 // 第一次聽到就已經在了，不淡入。下雨時背景音樂壓低一點（duck）。ambience.js 每一幀叫 update（ambience.beds）
-import { biquad, burst, tone } from '../../audio/ambience-voices.js';
+import { biquad, burst, tone } from '../../audio/voice-kit.js';
 import { AREA } from './haishi-map.js';
 
 const PHONE = matchMedia('(pointer: coarse)').matches;   // 手機喇叭沒有低音，雜訊剛好落在它最響的中高頻，壓低一點

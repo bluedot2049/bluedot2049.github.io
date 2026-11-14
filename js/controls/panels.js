@@ -8,7 +8,7 @@
 //   card    互動鍵打開的卡片：開著時互動鍵是確認，不按卡片後面的東西（main.js 的 player.cardOpen）
 //   kao     開著時表情盤不開（main.js 的 KaoPanel blocked）
 //   esc     開著時按 Esc 不叫暫停選單（deskkeys.js；cursor 那些也算，那邊另外看 cursorWanted）
-// 區域自己的裝置（zone 的 fixtures：胖頭的問題卡、收音機、畫架、籤台…）的 cursor、card 照它的 isOpen、el 算，這裡只寫 pad
+// 區域自己的裝置（zone 的 fixtures：胖頭的問題卡、收音機、畫架、樹洞、籤台…）的 cursor、card 照它的 isOpen、el 算，這裡只寫 pad
 const PANELS = [
   ['#pause.show', 'pad kao'],
   ['#padmap.show', 'pad'],
@@ -19,7 +19,7 @@ const PANELS = [
   ['#viewer.open', 'pad kao esc'],
   ['#selfie:not([hidden])', 'kao esc'],
   ['#press.show', 'pad cursor card kao'],
-  ['#hollow.show', 'pad cursor card kao'],
+  ['#hollow.show', 'pad kao'],
   ['#guide.show', 'pad cursor card kao'],
   ['#peek.show', 'pad cursor card'],
   ['#shop.show', 'pad cursor card'],

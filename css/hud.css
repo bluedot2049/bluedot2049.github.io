@@ -537,7 +537,7 @@ body.desk #easel.show { animation-name: guide-up; }
 #hollow.show { display: flex; animation: hollow-in .4s ease-out both; }
 @keyframes hollow-in { from { opacity: 0; transform: translate(-50%, calc(-50% + 6px)); } }
 /* 銘牌和作者的話包在 .who：直拿、電腦不算一層，照樣跟畫一條往下排；橫拿才收成左邊一欄（下面的 media） */
-#hollow .who { display: contents; }
+#hollow > .who { display: contents; }
 /* 銘牌：細金框兩層、四角菱形，上面「開發者」，中間簽名（assets/signature.svg），下面「十三」（assets/shisan.svg），都是象牙墨、不發光 */
 #hollow .plate { position: relative; flex: none; padding: 12px 14px 14px; border: 1px solid rgba(232, 184, 106, .3); }
 #hollow .plate::before { content: ""; position: absolute; inset: 3px; border: 1px solid rgba(232, 184, 106, .1); pointer-events: none; }
@@ -602,7 +602,10 @@ body.desk #easel.show { animation-name: guide-up; }
 #hollow .job .title { margin: 8px 0 0; font: 500 24px/1.1 var(--latin); letter-spacing: .22em; margin-right: -.22em; color: var(--gold-hi); }
 #hollow .job .desc { margin: 0; font-size: 13px; letter-spacing: .16em; color: var(--text); }
 #hollow .job .flash { margin: 6px 0 0; font-size: 11.5px; letter-spacing: .12em; color: var(--muted); }
-#hollow .job .calm { display: flex; align-items: center; gap: 6px; font-size: 12px; letter-spacing: .12em; color: var(--muted); cursor: var(--cur-pointer); }
+/* 卡片底下：確認就在這張卡裡（選這張＝按這張的鈕），左邊有閃爍提醒的卡多一格「減少閃爍」 */
+#hollow .job .take { align-self: stretch; display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+#hollow .job .go { flex: 1; min-width: 0; min-height: 42px; gap: 10px; padding: 0 14px; letter-spacing: .3em; white-space: nowrap; }
+#hollow .job .calm { flex: none; display: flex; align-items: center; gap: 6px; padding-left: 2px; font-size: 12px; letter-spacing: .12em; color: var(--muted); cursor: var(--cur-pointer); }
 #hollow .job .calm input { accent-color: var(--gold); margin: 0; }
 #hollow .job-dots { flex: none; display: flex; justify-content: center; gap: 8px; }
 #hollow .job-dots[hidden] { display: none; }
@@ -613,12 +616,16 @@ body.desk #hollow .job .art { aspect-ratio: 2 / 1; }
 body.desk:has(#hollow.show) #action-btn { visibility: hidden; }
 @keyframes job-rise { 0%, 100% { transform: translateY(1.5px); } 50% { transform: translateY(-1.5px); } }
 @keyframes job-star { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
-#hollow .foot { flex: none; display: flex; gap: 8px; }
-#hollow .foot .write, #hollow .foot .shut { flex: none; min-height: 42px; margin-top: 4px; padding: 0 16px; gap: 8px; letter-spacing: .3em; }
-#hollow .foot .enter { flex: 1; width: auto; min-width: 0; gap: 10px; padding: 0 14px; letter-spacing: .3em; white-space: nowrap; }
-/* 寫字的時候：主鈕變「投進樹洞」，關上收起來（「返回」回演唱會那頁） */
-#hollow.writing .scene, #hollow.writing .jobs, #hollow.writing .job-dots, #hollow.writing .foot .shut { display: none; }
-#hollow.writing .foot .enter kbd { display: none; }
+/* 底下一排只管整張卡：「寫信給作者」撐滿、封蠟紅（像信封上的蠟印，跟卡裡金色的確認分開），旁邊「關上」窄。
+   寫字的時候兩顆變「投進樹洞」「返回」（回接案卡那頁） */
+#hollow .foot { flex: none; display: flex; gap: 8px; margin-top: 4px; }
+#hollow .foot .shut { flex: none; min-height: 42px; padding: 0 16px; gap: 8px; letter-spacing: .3em; }
+#hollow .foot .write {
+  flex: 1; min-width: 0; min-height: 42px; padding: 0 14px; letter-spacing: .3em; white-space: nowrap;
+  background: #8e3a2c; color: #f8e6cc; border-color: transparent; font-weight: 600; box-shadow: inset 0 0 0 1px rgba(255, 214, 180, .28);
+}
+#hollow .foot .write[hidden] { display: none; }
+#hollow.writing .scene, #hollow.writing .jobs, #hollow.writing .job-dots { display: none; }
 /* 留話：署名一行、內文框、附圖；字用 16px，iPhone 點進去才不會整頁放大 */
 #hollow .letter { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 #hollow .letter[hidden] { display: none; }
@@ -654,7 +661,7 @@ body.desk:has(#hollow.show) #action-btn { visibility: hidden; }
   body:not(.desk):has(#hollow.show) :is(#joy, #swap-btn, #top-btns, #jump-btn, #sit-btn, #photo-btn, #emote, #emote-btn, #say-btn, #pack-btn, #action-btn) {
     opacity: 0; pointer-events: none;
   }
-  #hollow .who {
+  #hollow > .who {
     grid-area: who; display: flex; flex-direction: column; justify-content: center; gap: 14px;
     padding-right: 20px; border-right: 1px solid rgba(232, 184, 106, .12);
   }
@@ -672,7 +679,7 @@ body.desk:has(#hollow.show) #action-btn { visibility: hidden; }
   #hollow .letter { grid-area: scene; }
   #hollow .foot { grid-area: foot; }
   #hollow.kb { grid-template: "scene" minmax(0, 1fr) "foot" auto / minmax(0, 1fr); }
-  #hollow.kb .who { display: none; }
+  #hollow.kb > .who { display: none; }
   #hollow.kb .letter { grid-area: scene; }
 }
 @media (prefers-reduced-motion: reduce) { #hollow.show, #hollow .scene *, #hollow .job * { animation: none; } }

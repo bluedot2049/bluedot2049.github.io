@@ -6,7 +6,7 @@
 // 照片一出來就收進相簿（album.js）；卡上存下、重拍（這張丟掉）、好了（留在相簿），跟海市明信片的卡同一排鈕
 import * as THREE from 'three';
 import { Eye } from './eye.js';
-import { makeMirrorCard, drawLids, PHOTO_W, PHOTO_H, CARD_W, LID_STRIP } from '../save/mirrorcard.js';
+import { mirrorcard } from '../save/cards.js';
 import { getSave } from '../save/progress.js';
 import { savePrint } from '../save/pack.js';
 import { addPhoto, discard, saveChosen, saveTip } from './album.js';
@@ -28,8 +28,6 @@ export class Selfie {
     this.el = document.getElementById('selfie');
     this.img = this.el.querySelector('img');
     this.lids = this.el.querySelector('.selfie-lids');
-    this.lids.width = CARD_W;
-    this.lids.height = LID_STRIP;
     this.lids.hidden = true;
     this.tip = this.el.querySelector('.selfie-tip');
     this.keepBtn = this.el.querySelector('[data-act="keep"]');
@@ -59,6 +57,8 @@ export class Selfie {
     const o = this.player.focus.orb;
     if (o) { o.tYaw = 0; o.tPitch = 0; o.tZoom = 1; }
     this.withCode = withCode;
+    // 鏡中照片的程式用到才載（cards.js）；畫廊的畫架開頭就載過了，這裡馬上拿到。快門前還沒到就等它（update 的倒數）
+    if (!this.mc) mirrorcard().then((m) => { this.mc = m; }).catch(() => {});
     this.state = 'settle';
     this.t = 0;
     this.eye = new Eye();
@@ -113,7 +113,7 @@ export class Selfie {
         if (n > this.ticks) { this.ticks = n; this.ambience?.voice('iris', 0.35, 0, [1, 1.12, 1.26][n - 1]); }
         const pulse = 1 + Math.max(0, 0.18 - (at(this.t0) % TICK)) * 1.2;
         eye.setPupil([1, 0.74, 0.52, 0.34][this.ticks] * pulse);
-        if (at(this.t0) >= TICK * 3 + 0.25) {
+        if (at(this.t0) >= TICK * 3 + 0.25 && this.mc) {
           eye.update(0, cam);
           this.from.copy(eye.group.position);   // 快門之後眼睛就停在這裡，不再跟著晃
           this.ambience?.voice('blink', 0.5);   // 先出聲再畫：畫照片會卡一下
@@ -148,6 +148,7 @@ export class Selfie {
   // 從現在的鏡頭畫一張照片大小的畫面，跟攝影模式一樣借用主畫布，畫完馬上拷走再還原
   capture() {
     const r = this.renderer, cam = this.camera, W = window.innerWidth, H = window.innerHeight, dpr = r.getPixelRatio();
+    const { PHOTO_W, PHOTO_H } = this.mc;
     const out = document.createElement('canvas');
     out.width = PHOTO_W;
     out.height = PHOTO_H;
@@ -190,7 +191,7 @@ export class Selfie {
   async develop() {
     this.state = 'result';
     const shot = this.shot;
-    const { canvas, lost } = await makeMirrorCard(shot, { save: this.withCode ? getSave() : null });
+    const { canvas, lost } = await this.mc.makeMirrorCard(shot, { save: this.withCode ? getSave() : null });
     if (this.state !== 'result' || this.shot !== shot) return;
     const blob = await new Promise((ok) => canvas.toBlob(ok, 'image/jpeg', 0.92));
     if (!blob || this.state !== 'result') return;
@@ -209,7 +210,10 @@ export class Selfie {
 
   // 世界裡拱頂那顆眼是閉著的，照片上才睜開：疊一條畫布在照片最上面，閉著停一下再睜開，睜完藏起來露出底下的照片
   openEye(card) {
-    const g = this.lids.getContext('2d'), result = this.result;
+    const { CARD_W, LID_STRIP, drawLids } = this.mc, result = this.result;
+    this.lids.width = CARD_W;
+    this.lids.height = LID_STRIP;
+    const g = this.lids.getContext('2d');
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     drawLids(g, card, 0);
     this.lids.hidden = false;
