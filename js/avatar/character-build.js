@@ -62,11 +62,13 @@ export function swap(m, geo) {
 // 自己畫的臉照這張深度彎成曲面貼上去，眼睛嘴巴也靠它找到臉的表面。每個種族只算一次
 const FN = 32;
 const faceMaps = new Map();
-export function faceMap(race) {
-  let m = faceMaps.get(race.id);
+// bare：不算頭上本來的眼珠和眼座（照滑桿搬眼睛時找臉的表面用，見 eyeMover）
+export function faceMap(race, bare = false) {
+  const key = bare ? race.id + '~bare' : race.id;
+  let m = faceMaps.get(key);
   if (m) return m;
   const fs = race.fs ?? 1, R = 0.26 * fs, cy = race.ey - 0.05 * fs, N1 = FN + 1;
-  const geo = build((k) => HEADS[race.head](k, '#808080', '#a0a0a0'));
+  const geo = build((k) => HEADS[race.head](k, '#808080', '#a0a0a0', bare ? { eye: new Kit(null), base: new Kit(null) } : undefined));
   // 每條射線從正前方往後打，打到的第一個面就是最前面（z 最大）的那一面。
   // 不真的一條一條打：把每個三角形投影到這張格子上，蓋到的格點算出那裡的 z，留最大的（深度緩衝的做法），
   // 結果一樣，快幾十倍。路人每換一個沒見過的種族都要算一次，打射線會讓畫面頓一下
@@ -111,7 +113,7 @@ export function faceMap(race) {
   }
   geo.dispose();
   m = { R, cy, N1, z, hit };
-  faceMaps.set(race.id, m);
+  faceMaps.set(key, m);
   return m;
 }
 
@@ -417,16 +419,64 @@ function glasses(k, L, race, S, m) {
   }
 }
 
-// 頭上本來的眼珠照放的位置記下來，每邊留最大的那顆（瞳孔、反光不算），笑眼弧照它長
-function recordEyes(kit, spots) {
+// 頭上本來的眼珠也照滑桿（眼睛大小、眼距、大小眼、五官高低）走，跟 features 的眼睛同一套倍數。
+// 每邊第一顆是眼睛本體，同一邊後面的瞳孔、反光、細縫跟著它一起縮放、搬家。
+// 支點是眼睛貼著臉的那一點（球心沿臉的法線退回表面）：放大縮小照支點，埋進臉多少照比例留著；
+// 搬家是支點在沒有眼睛的臉上挪（眼距乘、高低加），到新的地方照那裡的法線再立起來。側邊的眼睛（鬚臉、鴿子）不搬出頭的輪廓。
+// 滑桿都在中間回 null，頭原封不動
+function eyeMover(race, S) {
+  if (S.es === 1 && S.eg === 1 && !S.odd && !S.fy) return null;
+  const m = faceMap(race, true), { R, cy, N1, hit } = m, sides = new Map();
+  const inside = (x, y) => {
+    const i = Math.round(((x + R) / (2 * R)) * FN), j = Math.round(((cy + R - y) / (2 * R)) * FN);
+    return i >= 0 && i <= FN && j >= 0 && j <= FN && !!hit[j * N1 + i];
+  };
+  // 臉在 (x, y) 朝外的方向；側面陡的地方深度圖不準，最多斜到 z 剩 0.3
+  const normal = (x, y) => {
+    const e = 0.02, dx = (surf(m, x + e, y) - surf(m, x - e, y)) / (2 * e), dy = (surf(m, x, y + e) - surf(m, x, y - e)) / (2 * e);
+    const l = Math.hypot(dx, dy, 1), n = [-dx / l, -dy / l, 1 / l];
+    if (n[2] >= 0.3) return n;
+    const f = Math.sqrt(1 - 0.09) / (Math.hypot(n[0], n[1]) || 1);
+    return [n[0] * f, n[1] * f, 0.3];
+  };
+  const anchor = (s, x, y, z) => {
+    const n = normal(x, y), d = (z - surf(m, x, y)) * n[2], P = [x - n[0] * d, y - n[1] * d, z - n[2] * d];
+    const k = S.es * (s < 0 ? 1 + S.odd * 0.9 : 1 - S.odd * 0.45);
+    let tx = P[0] * S.eg, ty = P[1] + S.fy + (s < 0 ? S.odd * 0.03 : 0);
+    if (!inside(tx, ty)) {
+      // 出了頭的輪廓：往原本的位置收，留最後一個還在頭上的（原本就在輪廓邊上的，像錘頭兩端，收不回去就不搬）
+      let lo = 0, hi = 1, ok = inside(P[0], P[1]);
+      const at = (t) => [P[0] + (tx - P[0]) * t, P[1] + (ty - P[1]) * t];
+      for (let i = 0; i < 8; i++) { const mid = (lo + hi) / 2; if (inside(...at(mid))) { lo = mid; ok = true; } else hi = mid; }
+      [tx, ty] = at(ok ? lo : 0);
+    }
+    const pz = surf(m, tx, ty) + (P[2] - surf(m, P[0], P[1])), n2 = normal(tx, ty);
+    return { C: [x, y, z], k, C2: [tx + n2[0] * d * k, ty + n2[1] * d * k, pz + n2[2] * d * k] };
+  };
+  return (x, y, z) => {
+    const s = Math.sign(x) || 1;
+    if (!sides.has(s)) sides.set(s, anchor(s, x, y, z));
+    const { C, C2, k } = sides.get(s);
+    return [C2[0] + (x - C[0]) * k, C2[1] + (y - C[1]) * k, C2[2] + (z - C[2]) * k, k];
+  };
+}
+
+// 頭上本來的眼珠照放的位置記下來，每邊留最大的那顆（瞳孔、反光不算），笑眼弧照它長；spots 給 null 只挪不記（眼座）。
+// move：照滑桿挪過的位置和倍數（eyeMover）
+function recordEyes(kit, spots, move = null) {
   return {
     ball(r, c, x, y, z, o = {}) {
-      const s = Math.sign(x), w = r * (o.sx ?? 1), i = spots.findIndex((p) => Math.sign(p.x) === s);
-      if (i < 0 || spots[i].r < w) spots.splice(i < 0 ? spots.length : i, 1, { x, y, z: z + 0.6 * r * (o.sz ?? 1), r: w, rz: o.rz || 0 });
+      if (move) { let k; [x, y, z, k] = move(x, y, z); r *= k; }
+      const s = Math.sign(x), w = r * (o.sx ?? 1), i = spots ? spots.findIndex((p) => Math.sign(p.x) === s) : 0;
+      if (spots && (i < 0 || spots[i].r < w)) spots.splice(i < 0 ? spots.length : i, 1, { x, y, z: z + 0.6 * r * (o.sz ?? 1), r: w, rz: o.rz || 0 });
       kit.ball(r, c, x, y, z, o);
       return this;
     },
-    box(...a) { kit.box(...a); return this; },
+    box(w, h, d, c, x, y, z, o) {
+      if (move) { let k; [x, y, z, k] = move(x, y, z); w *= k; h *= k; d *= k; }
+      kit.box(w, h, d, c, x, y, z, o);
+      return this;
+    },
   };
 }
 
@@ -481,7 +531,8 @@ export function headGeo(L, race, S, skin, split = false) {
   // 頭上本來的眼珠、嘴巴（heads.js 的 f）：眼睛選「原本」、嘴巴選「沒有」才留；選了別的，或畫了臉沒勾保留五官，就換掉
   const drawn = !!L.face && !L.keep, spots = [], junk = new Kit(null);
   const ownEye = race.own && L.eyes === 'base' && !drawn, ownMouth = race.own && L.mouth === 'none' && !drawn;
-  const f = { eye: ownEye ? recordEyes(ke, spots) : junk, mouth: ownMouth ? km : junk };
+  const move = ownEye ? eyeMover(race, S) : null;
+  const f = { eye: ownEye ? recordEyes(ke, spots, move) : junk, mouth: ownMouth ? km : junk };
   let mouthAt = null;
   const head = build((k) => {
     const hooded = HOODED.includes(L.one);
@@ -502,7 +553,7 @@ export function headGeo(L, race, S, skin, split = false) {
         return reachAt(bsh, NECK + y * S.hs, a, 0) / S.hs;
       };
     }
-    HEADS[race.head](k, skin, mix(skin, '#f8f0e4', 0.55), f, o);
+    HEADS[race.head](k, skin, mix(skin, '#f8f0e4', 0.55), move ? { ...f, base: recordEyes(k, null, move) } : f, o);
     if (race.hair) {
       const n = k.lit.length;
       const tuck = hooded || L.hat === 'knight';   // 全罩的頭盔跟頭套一樣，大頭髮收進去

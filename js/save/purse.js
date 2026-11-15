@@ -38,7 +38,7 @@ export const WAYS = {
   meal: { on: true, spend: 1, where: 'zones/jinghai/jinghai-burger.js', note: '咬月點餐機：漢堡、薯條一份（菜單、點餐機螢幕上畫的價錢也照這個，jinghai-ads.js）' },
   fortune: { on: true, spend: 3, where: 'zones/haishi/haishi-lots.js', note: '星廟求籤：擲星石天允了才搖籤，一個人一天一支，子夜重來' },
   offering: { on: false, spend: 1, where: '（2026-11-15 改成許願，不收）', note: '原本的香油錢：星廟火盆改成許願（haishi-wish.js），不收東西；這行留著當紀錄' },
-  film: { on: true, spend: 1, where: 'zones/jinghai/jinghai-film.js', note: '拍立拿a500 的片盒（一盒三張）：月球相機店的底片牆補滿。帶相機附的第一盒不收' },
+  film: { on: true, spend: 1, where: 'zones/jinghai/jinghai-film.js', note: '拍立拿a500 的片盒（一盒八張）：月球相機店的底片牆補滿。帶相機附的第一盒不收' },
 };
 const way = (id) => {
   const w = WAYS[id];

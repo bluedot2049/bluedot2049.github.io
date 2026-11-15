@@ -12,7 +12,7 @@ import { getSave, putSave } from '../save/progress.js';
 import { pref, setPref } from '../save/prefs.js';
 import { drawText } from '../core/manatee-script.js';
 
-export const PACK = 3;          // 一盒幾張
+export const PACK = 8;          // 一盒幾張（progress.js 的 instant 也寫著 8，兩邊一起改）
 const DEV = 180;                // 在中性的地方顯完要幾秒
 const GAP = 90e3;               // 心跳斷了這麼久（毫秒）算關掉遊戲，那段收在口袋裡
 const BAKE = 2048;              // 成品照片那一塊的邊長
@@ -42,7 +42,7 @@ export function useFilm() {
   putSave({ instant: { ...pack(), left: Math.max(0, pack().left - 1) } });
 }
 export function refill() {
-  putSave({ instant: { left: PACK } });
+  putSave({ instant: { ...pack(), left: PACK } });
 }
 
 // ───────── 顯影 ─────────

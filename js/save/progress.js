@@ -46,7 +46,9 @@ export const FIELDS = [
   // 前廳胖頭的教學（zones/gallery/ask.js）：tour 是做過的事（mirror 照過鏡子、photo 拍過照、out 走出後門、各區的 zone 名字、shy 被他拒拍過），
   // asked 是問過他哪幾題（ASK 的 id）。跟著這個人走，但不進存檔碼：換了裝置只是題目又亮起來
   // 拍立拿a500 的片盒（camera/instant.js）：left 還剩幾張（帶相機就附第一盒）。在月球的相機店底片牆隨時補滿。跟著人走、不進存檔碼
-  { key: 'instant', init: () => ({ left: 3 }), read: (v) => ({ left: Number.isInteger(v?.left) && v.left >= 0 && v.left <= 3 ? v.left : 3 }) },
+  // pack 是一盒幾張的那一版：2026-11-15 從三張改八張，沒寫 pack 的是三張盒，直接補到八張。8 跟 instant.js 的 PACK 一起改（那邊 import 這個檔，不能反過來拿）
+  { key: 'instant', init: () => ({ left: 8, pack: 8 }),
+    read: (v) => ({ left: v?.pack === 8 && Number.isInteger(v.left) && v.left >= 0 && v.left <= 8 ? v.left : 8, pack: 8 }) },
   { key: 'tour', init: () => [], read: words },
   { key: 'asked', init: () => [], read: words },
   // 舊存檔每套各畫一張臉，併成一張時丟掉了幾張不一樣的。換裝面板說一次就歸零（creator.js）

@@ -89,10 +89,10 @@ export const CAMERAS = {
   // 沒有閃光、日期、落款；照片的樣子全在顯影，拍下來不上色調
   wang: {
     name: '拍立拿a500',
-    spec: ['月球廠十周年紀念限定款', '一盒三張照片，比其他品牌多出50%!', '泛焦'],
+    spec: ['月球廠十周年紀念限定款', '一盒八張 比上一代多出166%!', '泛焦'],
     maker: '灰球朋友股份有限公司製造',
     focal: 40, prime: true, fstop: 11, bokeh: 1, focus: 'fixed', fixed: 3, aspect: 1, finder: 0.62,   // 一公尺外全清楚；玩具感靠顯影的鏡頭（instant.js），不靠景深
-    instant: 3,
+    instant: 8,
     // 拿法只有腰平（5，低頭看機頂的小窗）和自拍，滾輪上自拍、下腰平。自拍換超廣角 13mm，手舉高 up 公尺、往下拍 pitch：手和全身都進得來
     grips: [5, 3], selfie: { mm: 13, up: 0.3, pitch: -0.4, arm: [-2.3, -0.3, 0.55], reach: 2.2, wrist: [0.16, 0.14, -0.04], roll: 0.1 },
     shutter: 'pola',
@@ -532,11 +532,11 @@ SHUTTERS.silver = () => {
     + '<g class="cap"><circle r="21.6" fill="url(#sh-silver)"/><circle r="21.6" fill="none" stroke="#f4f5f6" stroke-width=".7" opacity=".7"/>'
     + '<ellipse cx="-7" cy="-8.5" rx="6.5" ry="3.2" fill="#fff" opacity=".35" transform="rotate(-38 -7 -8.5)"/></g></svg>';
 };
-// 拍立拿a500：奶油白圓盤、霧銀一圈，中間一顆番茄紅的大圓鈕給鰭按。上緣印型號，下緣三個小窗是片盒還剩幾張
+// 拍立拿a500：奶油白圓盤、霧銀一圈，中間一顆番茄紅的大圓鈕給鰭按。上緣印型號，下緣一排小窗是片盒還剩幾張（一盒八張，沿下緣排開約 100°）
 // （.f 一格一張，用掉的加 .used 變暗；photo.js 的 filmDots），片盒空了窗全暗、鈕按不下去（.jam）
 SHUTTERS.pola = (g) => {
-  const n = g.instant || 3, wins = Array.from({ length: n }, (_, i) => {
-    const a = ((i - (n - 1) / 2) * 17) * Math.PI / 180, x = Math.sin(a) * 28.6, y = Math.cos(a) * 28.6;
+  const n = g.instant || 8, wins = Array.from({ length: n }, (_, i) => {
+    const a = ((i - (n - 1) / 2) * 14) * Math.PI / 180, x = Math.sin(a) * 28.6, y = Math.cos(a) * 28.6;
     return `<circle class="f" cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="2.5"/>`;
   }).join('');
   return '<svg viewBox="-36 -36 72 72" aria-hidden="true">'

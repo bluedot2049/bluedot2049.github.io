@@ -1050,7 +1050,7 @@ export function buildHQ({ coarse = false, fade = null } = {}) {
       onFace(k, n, at, u - half - side, 10.65, u + half + side, 10.65 + side, 0, 0.06, CREAM);
       for (const sg of [-1, 1]) onFace(k, n, at, sg < 0 ? u - half - side : u + half, 6.95, sg < 0 ? u - half : u + half + side, 10.65, 0, 0.06, CREAM);
     }
-    // 招牌帶：底下一道片盒紅，中間一個拍立得的圖案，兩邊各三顆圓點（一盒三張）
+    // 招牌帶：底下一道片盒紅，中間一個拍立得的圖案，兩邊各三顆圓點（拍立拿的商標）
     onFace(k, 'z+', out, C.x0 + 0.35, 4.25, C.x1 - 0.35, 4.42, 0, 0.03, RED);
     const cx = (CAMDOOR.a + CAMDOOR.b) / 2;
     onFace(k, 'z+', out, cx - 0.5, 4.5, cx + 0.5, 5.4, 0, 0.08, CREAM);

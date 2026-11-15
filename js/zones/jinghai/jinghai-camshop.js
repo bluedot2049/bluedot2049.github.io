@@ -78,7 +78,7 @@ export function buildCamShop({ k, kg, B, SB, block, pane, R, fadeKit }) {
         u.box(pw * 0.84, ph * 0.12, 0.02, ten ? DARK : RED, x, y - ph * 0.28, front + 0.005);
       }
     }
-    // 櫃子上面一塊霧銀牌子，三顆奶油色大圓點（一盒三張，跟機背那三顆一樣）
+    // 櫃子上面一塊霧銀牌子，三顆奶油色大圓點（拍立拿的商標，跟張數無關）
     B(k, c0 + 0.4, 8.2, Z0 + 0.04, c1 - 0.4, 10.2, Z0 + 0.12, SILV);
     for (let i = 0; i < 3; i++) k.cyl(0.6, 0.6, 0.06, CREAM, 23.65 + (i - 1) * 1.7, 9.2, Z0 + 0.15, { rx: Math.PI / 2 }, 24);
     // 補貨的梯子靠在櫃子上，旁邊一台推車
@@ -180,7 +180,7 @@ export function buildCamShop({ k, kg, B, SB, block, pane, R, fadeKit }) {
   }
 }
 
-// 底片機：圓角的亮色機身、奶油色面板，窗裡一疊疊片盒，一顆會亮的大圓鈕，底下出盒口；頂上一條燈牌三顆圓點（一盒三張）
+// 底片機：圓角的亮色機身、奶油色面板，窗裡一疊疊片盒，一顆會亮的大圓鈕，底下出盒口；頂上一條燈牌三顆圓點（拍立拿的商標）
 const VEND_COLORS = [['#d64b37', '#b83c2b'], ['#efc24e', '#d4a838'], ['#5fb59a', '#4a9a80']];
 function buildVends(fadeKit, block, B, SB) {
   const w = 1.05, z0 = CAMSHOP.z0 + 0.08, z1 = VEND_FRONT, H = 1.95, zc = (z0 + z1) / 2;

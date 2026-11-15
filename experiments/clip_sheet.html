@@ -12,6 +12,7 @@
   // ?set=hathair 人的髮型 × 帽子｜face 五官 × 眼鏡｜beard 鬍子 × 脖子｜racehat 種族 × 帽子｜hood 連身頭套 × 髮型和種族｜outerback 外套 × 背上｜outerneck 外套 × 脖子｜cam 相機 × 下身和外套｜handhat 右手的東西 × 帽子
   //   raceneck 種族 × 脖子｜racewear 種族 × 領口附近的衣服（帽 T、毛衣、盔甲、披風、斗篷、雨衣、蓑衣、浴衣、太空衣）｜raceback 種族 × 背上｜raceglasses 種族 × 眼鏡
   //   racekao 種族 × 顏文字的表情｜racemouth 種族 × 嘴巴｜racedraw 種族 × 自己畫的臉（兩張畫的臉，配開心、驚訝、哭）
+  //   raceeyes 本來有眼睛的種族（眼睛選「原本」）× 眼睛的滑桿兩頭（大小、眼距、大小眼、五官高低）
   //   kaohand 右手的東西 × 顏文字的手（?body= 身體第幾個，撐著）｜kaobody 顏文字的身體 × 手（?look={"hand":…} 換手上的東西）｜kaoface 顏文字的臉 × 嘴巴
   //   數字的檢查先跑 node tools/check-poses.mjs，列出來的最糟組合再來這裡看
   // ?rows= &cols= 只拍其中幾列、幾欄（逗號隔開）｜?views= ?look= 見下｜?frame=head|bust|body|full 換取景（躺下、坐地上用 full）
@@ -51,6 +52,8 @@
     kaobody: { rows: BODIES.map((b) => b.w), cols: HANDS.map((h) => h.w), look: () => base(), kao: (r, c) => kaoCode(1, HANDS.findIndex((h) => h.w === c), BODIES.findIndex((b) => b.w === r)), frame: 'full', views: ['front', 'side'] },
     // 每種頭的臉：顏文字的表情、嘴巴、自己畫的臉（畫的臉兩張，各配一個表情看照框張嘴、眨眼）
     racekao: { rows: RACES.map((r) => r.id), cols: FACES.map((f) => f.t), look: (r) => ({ ...raced(r), mouth: 'smile' }), kao: (r, c) => kaoCode(FACES.findIndex((f) => f.t === c), 0, 0), frame: 'head', views: ['front'] },
+    raceeyes: { rows: RACES.filter((r) => r.own).map((r) => r.id), cols: ['mid', 'eyeSize:0', 'eyeSize:10', 'eyeGap:0', 'eyeGap:10', 'eyeOdd:10', 'faceY:0', 'faceY:10'],
+      look: (r, c) => { const [k, v] = c.split(':'); return { ...raced(r), eyes: 'base', ...(v ? { [k]: +v } : {}) }; }, frame: 'head', views: ['front', 'side'] },
     racemouth: { rows: RACES.map((r) => r.id), cols: ids('mouth'), look: (r, c) => ({ ...raced(r), mouth: c }), frame: 'head', views: ['front', 'side'] },
     racedraw: { rows: RACES.map((r) => r.id), cols: ['simple', 'simple:＾▽＾', 'simple:゜ロ゜', 'full', 'full:╥﹏╥'],
       look: (r, c) => ({ ...raced(r), face: drawn(c.split(':')[0]), keep: 0 }), kao: (r, c) => kaoCode(Math.max(0, FACES.findIndex((f) => f.t === c.split(':')[1])), 0, 0), frame: 'head', views: ['front', 'side'] },
@@ -80,6 +83,8 @@
     bench: [(m) => { m.sitting = true; m.lift = 0.45; }, 0],
     lie: [(m) => { m.sitting = m.lying = true; m.update(1, 0); }, 0],
     selfie: [(m) => m.setAim({ grip: 3, pitch: 0 }), 0],
+    aim: [(m) => m.setAim({ grip: 1, pitch: 0 }), 0],
+    waist: [(m) => m.setAim({ grip: 5, pitch: 0 }), 0],
   };
   const pose = POSES[q.get('pose') || 'stand'];
   const S = SETS[set];
@@ -120,7 +125,7 @@
     g.fillText(S.rows[ri], 6, HEAD + ri * CELL + CELL / 2);
     for (let ci = 0; ci < S.cols.length; ci++) {
       model.setLook(S.look(S.rows[ri], S.cols[ci]));
-      if (S.camera) model.setCamera('bulb');
+      if (S.camera || q.get('cam')) model.setCamera(q.get('cam') || 'bulb');
       model.group.position.set(0, 0, 0);
       model.sitting = model.lying = false;
       model.lift = 0;

@@ -301,7 +301,7 @@ export class PhotoMode {
     this.filmDots();
   }
 
-  // 拍立得的快門下緣三個小窗：還剩幾張就亮幾個
+  // 拍立得的快門下緣一排小窗（一盒八張）：還剩幾張就亮幾個
   filmDots() {
     if (!this.gear?.instant) return;
     const left = filmLeft();
@@ -468,7 +468,7 @@ export class PhotoMode {
       // 方形的照片直橫一樣，不提
       const turn = g.aspect === 1 ? '' : `　${key('turn')} 直橫`;
       const text = this.padHint() ?? (this.coarse
-        ? `${af}` + (g.zoom ? '推動快門外圈 變焦' : g.hold ? '按住快門 長時間曝光' : g.instant ? '每盒三張' : '')
+        ? `${af}` + (g.zoom ? '推動快門外圈 變焦' : g.hold ? '按住快門 長時間曝光' : g.instant ? '每盒八張' : '')
         : `${af}${key('shutter', 1)} 拍照` + (g.hold ? '，按住長時間曝光' : '') + (g.zoom ? '　滾輪 變焦' : g.grips?.length === 2 && g.grips.includes(3) ? '　滾輪 自拍／腰平' : '') + (g.flash ? `　${key('flash')} 閃光` : '') + (g.lamp ? `　${key('flash')} 打燈` : '') + turn);
       if (text.replace(/　+$/, '')) this.ui.tip(`photo:${id}-${this.inputKind()}`, text.replace(/　+$/, ''), 6000);
     }

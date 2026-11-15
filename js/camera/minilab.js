@@ -78,7 +78,7 @@ async function overlay(blob, other, luck) {
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('toBlob'))), 'image/jpeg', 0.95));
 }
 
-// 店裡的測試圖：黑底（screen 疊黑的地方不出現）、三顆大圓點（一盒三張）、一排配色條、一行海牛字的品名
+// 店裡的測試圖：黑底（screen 疊黑的地方不出現）、三顆大圓點（拍立拿的商標）、一排配色條、一行海牛字的品名
 function testCard(g, w, h, luck) {
   const u = Math.min(w, h), ox = luck.dx * w, oy = luck.dy * h;
   g.save();

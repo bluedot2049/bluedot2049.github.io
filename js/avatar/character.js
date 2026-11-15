@@ -27,7 +27,20 @@ const PET_TIME = 2.4;      // 摸動物摸多久
 // 長袍上窄下寬，手臂要從肩膀往外張開一點，手才會沿著袍子外側垂下，不會插進身體
 const ARM_OUT = 0.28;
 const _capeInv = new THREE.Matrix4();
-const _handM = new THREE.Matrix4(), _handQ = new THREE.Quaternion(), _handE = new THREE.Euler(), _handS = new THREE.Vector3();
+const _handM = new THREE.Matrix4(), _handQ = new THREE.Quaternion(), _handE = new THREE.Euler(), _handS = new THREE.Vector3(), _handV = new THREE.Vector3();
+// 手臂照 (rx, ry, rz) 轉的時候手在哪（跟相機同一個座標）
+const handOf = (arm, rx, ry, rz) => _handV.set(0, -0.36, 0).applyMatrix4(_handM.compose(arm.position, _handQ.setFromEuler(_handE.set(rx, ry, rz, 'YXZ')), arm.scale));
+// 腰平拿法（拍立拿a500）：WAIST_HX 兩手離中線多遠（一般人的肩寬、手臂往裡 0.55 時剛好托在相機兩側），WAIST_CAM 相機在兩手上面、前面多少
+const WAIST_HX = 0.118, WAIST_CAM = [0.108, 0.134];
+// 左手往裡轉多少，手才收到 WAIST_HX：肩膀窄的照原本的 0.55，寬的轉多一點（割線法兩三步就夠）
+function waistTurn(armR) {
+  const x = (ry) => handOf(armR, -0.95, -ry, 0.1).x - WAIST_HX;
+  let a = 0.55, fa = x(a);
+  if (fa <= 0) return a;
+  let b = 0.75, fb = x(b);
+  for (let i = 0; i < 3 && Math.abs(fb) > 1e-4 && fb !== fa; i++) [a, fa, b] = [b, fb, b - fb * (b - a) / (fb - fa)], fb = x(b);
+  return Math.min(1.2, Math.max(0.55, b));
+}
 const SIT_TIME = 0.8;      // 坐下或站起來花幾秒
 const LIE_TIME = 0.9;      // 從坐著躺下去（或坐起來）花幾秒
 const SEAT_BUTT = 0.3;     // 屁股（褲子）底部離身體原點多高，clothes.js 的 hip() 從這裡開始
@@ -1237,9 +1250,12 @@ export class Character {
       const ex = (this.dims.eyeX ?? 0.07 * this.S.H) / this.S.H;
       to.set(-ex - GUI_EYE.x * CAM_S, face - GUI_EYE.y * CAM_S, front);
     } else if (a.grip === 5) {
-      // 腰平（拍立拿a500）：雙手把相機捧在肚子前面
-      arms(-0.95, 0.55, -0.1, -0.95, -0.55, 0.1);
-      to.set(0, face * 0.62, front * 1.25);
+      // 腰平（拍立拿a500）：雙手把相機捧在肚子前面，兩手托在相機兩側。肩膀寬的（胖、海牛）手再往裡收到同一個寬度；
+      // 相機照兩手的位置放，不照臉的高度（頭大臉高的種族照臉放，相機會浮在下巴底下、手垂在腰邊，看起來沒在拿）
+      const ry = waistTurn(this.armR);
+      arms(-0.95, ry, -0.1, -0.95, -ry, 0.1);
+      const h = handOf(this.armR, -0.95, -ry, 0.1);
+      to.set(0, h.y + WAIST_CAM[0], h.z + WAIST_CAM[1]);
     } else arms(-2.45, 0.6, -0.1, -2.45, -0.6, 0.1);
     if (up && !selfie) {
       L.x -= 0.3 * up;
