@@ -1009,9 +1009,28 @@ export function buildHQ({ coarse = false, fade = null } = {}) {
   }
   for (const z of [-18, -22, -26, -30]) glowBox(-12, M.top - 0.06, z - 0.15, 12, M.top - 0.01, z + 0.15, '#fff1dc');
 
+  // ================= 廣播喇叭 =================
+  // 公司的廣播（jinghai-pa.js）從這幾支喇叭講：一個白盒子接一支霧銀號角，a 是號角朝哪（0＝+z），mount 是怎麼掛（up 吊在上面、down 立在台子上、back 釘在後面的牆上）。
+  // speakers 記號角口上面一點，泡泡從那裡冒。不抽亂數（後面 makePlan 的 R 不能被推動）
+  const speakers = [];
+  const speaker = (x, y, z, a, mount, len = 0.35) => {
+    const fx = Math.sin(a), fz = Math.cos(a), along = (d) => [x + fx * d, y, z + fz * d];
+    if (mount === 'up') k.box(0.05, len, 0.05, SILVERDK, x, y + 0.11 + len / 2, z);
+    else if (mount === 'down') k.box(0.05, len, 0.05, SILVERDK, x, y - 0.11 - len / 2, z);
+    else k.box(0.05, 0.05, len, SILVERDK, x - fx * (0.1 + len / 2), y, z - fz * (0.1 + len / 2), { ry: a });
+    k.box(0.22, 0.22, 0.2, WHITE, x, y, z, { ry: a });
+    k.cyl(0.25, 0.07, 0.42, SILVER, ...along(0.3), { rx: Math.PI / 2 + 0.18, ry: a }, 12);
+    k.cyl(0.265, 0.265, 0.03, SILVERDK, ...along(0.51), { rx: Math.PI / 2 + 0.18, ry: a }, 12);
+    speakers.push({ x: x + fx * 0.5, y: y + 0.4, z: z + fz * 0.5 });
+  };
+  speaker(8.52, 3.66, 9.6, -Math.PI / 2, 'down');                 // 大廳：服務台後面立牌頂上，朝進門的人
+  speaker(0, 5.25, -11.55, 0, 'up', 0.3);                          // 大廳：北邊一樓迴廊底下，朝南
+  speaker(-49.55, 5, 0, Math.PI / 2, 'back', 0.2);                 // 食堂：西牆正中，朝東
+  for (const s of [-1, 1]) speaker(40, 4.95, s * 3.65, s > 0 ? Math.PI : 0, 'up', 0.3);   // 商店街：二樓走廊邊底下，兩邊朝走道
+
   // ================= 海牛人 =================
   const plan = makePlan({ seats, shopSpots, coarse, R });
-  return { kit: k, glass: kg, foil: kf, foilIn: kfi, fadeKits, walls: faces.list, obstacles, solids, holes, plan, screens };
+  return { kit: k, glass: kg, foil: kf, foilIn: kfi, fadeKits, walls: faces.list, obstacles, solids, holes, plan, screens, speakers };
 
   // 相機店（北排西頭三間打通，店裡在 jinghai-camshop.js）：西牆、門面、整間的店裡。
   // 門面一樓兩扇大窗夾著沒有門的門口，上面一條奶油色招牌帶；二樓三張放大的拍立得——方的玻璃是照片、白框下巴厚，從二樓走廊看得進挑高的店裡

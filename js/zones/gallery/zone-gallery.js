@@ -175,8 +175,8 @@ export function attention({ world, player }) {
 // ?go=房間.畫 是在別區點了清單裡的畫，到了直接站到那幅畫前面
 export function arrive({ player, world, params, ui }) {
   const ferry = world.exits[0], from = params.get('from'), ho = world.outdoor?.hollow;
-  if (from === 'concert' && ho) {
-    // 從演唱會出來：站在大樹的樹洞前，背對樹洞往外走
+  if ((from === 'concert' || from === 'dixia') && ho) {
+    // 從演唱會、地下室出來（樹洞接案卡進去的）：站在大樹的樹洞前，背對樹洞往外走
     player.place(ho.x + ho.n.x * 2.4, ho.z + ho.n.z * 2.4, Math.atan2(ho.n.x, ho.n.z));
     world.frontDoor?.shut(0, true);
   } else if (from && from !== 'door' && ferry) {

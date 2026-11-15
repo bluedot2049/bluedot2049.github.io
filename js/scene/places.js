@@ -17,6 +17,7 @@ export const PLACES = [
   { to: 'ting', name: '汀', desc: '時間之外。', tags: ['捷運', '沼澤'] },
   { to: 'heilin', name: '黑森林', desc: '往下的路。', tags: ['營火'] },
   { to: 'concert', boat: false, name: '演唱會', desc: '樹洞裡的一場。', tags: ['舞台'] },
+  { to: 'dixia', boat: false, name: '地下室', desc: '樹洞裡的另一場。', tags: ['舞台'] },
   { dev: 'gorge', name: '深谷', desc: '谷底的一場。', tags: ['舞台'] },
   { dev: 'duel', boat: false, name: '對影', desc: '兩個人互拍的場地。', tags: ['對拍'] },
   { to: 'gucheng', wip: true, name: '古城', desc: '山頂的座堂。', tags: ['座堂', '墓園'] },

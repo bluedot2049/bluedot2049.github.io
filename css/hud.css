@@ -1485,6 +1485,8 @@ body.desk #shop { width: 340px; }
 }
 #got .pic img { position: relative; width: 132px; height: 132px; object-fit: cover; border-radius: 50%; }
 #got .name { margin: 0; font-size: 16px; letter-spacing: .12em; color: var(--text); }
+/* 東西的一行說明（avatar/notes.js）：比店家的話再淡一階 */
+:is(#got, #shop) .note { margin: -4px 0 0; font-size: 12px; line-height: 1.6; letter-spacing: .06em; color: var(--muted); opacity: .78; }
 #got .say { margin: -2px 0 2px; font-size: 13px; line-height: 1.6; letter-spacing: .06em; color: var(--muted); }
 #got .foot { display: flex; gap: 8px; }
 #got .foot .keep {

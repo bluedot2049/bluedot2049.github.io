@@ -19,6 +19,7 @@ import { coins, spend, money, MEASURE, AGAIN, OPEN } from '../save/purse.js';
 import { teach } from '../controls/lessons.js';
 import { putOn as tryOn, gotItems } from './gotcard.js';
 import { SHOP_GIFTS } from './gift-lines.js';
+import { notesOf } from '../avatar/notes.js';
 
 const FAR = 4;
 const _v = new THREE.Vector3(), _r = new THREE.Vector3();
@@ -116,6 +117,7 @@ class ShopCard {
     }
     this.el.innerHTML = `<p class="lead">${this.spec.who}</p><p class="sub">${this.spec.where}${OPEN ? `　身上${money(coins())}` : ''}</p>`
       + `<div class="wares">${tiles}</div><p class="say">${note}</p>`
+      + (sel && notesOf(sel.items) ? `<p class="note">${notesOf(sel.items)}</p>` : '')
       + `<div class="foot">${act}<button class="btn enter primary" type="button" data-act="close"><span>好了</span><kbd class="on-kb">Esc</kbd><kbd class="on-pad" data-pad-raw="-2">B</kbd></button></div>`;
     if (jobs.length) request(jobs, (id, src) => {
       this.shown.set(id, src);

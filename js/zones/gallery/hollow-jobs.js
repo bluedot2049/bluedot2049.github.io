@@ -25,4 +25,28 @@ export const JOBS = [
       <path class="ridge" d="M0 152L30 144 52 150 80 138 108 148 132 140 160 152 190 139 214 148 240 136 270 149 296 142 320 148"/>
     </svg>`,
   },
+  {
+    id: 'dixia', to: 'dixia', kind: '演唱會', go: '進場',
+    title: '地下室', desc: '月球工廠下班後的龐克場',
+    alt: '低矮的地下室，一顆燈泡底下三個雞冠頭的剪影',
+    // 低天花板、一顆裸燈泡，底下三個人頭頂著綠、粉、藍的雞冠頭（跟台上那團同三色，dixia-band.js）
+    art: `<svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMax slice">
+      <defs>
+        <radialGradient id="dixia-bulb" cx="160" cy="92" r="110" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f3d6a0" stop-opacity=".45"/><stop offset="1" stop-color="#f3d6a0" stop-opacity="0"/></radialGradient>
+      </defs>
+      <rect width="320" height="180" fill="#120f11"/>
+      <rect y="70" width="320" height="110" fill="url(#dixia-bulb)"/>
+      <rect y="66" width="320" height="10" fill="#26222a"/>
+      <path d="M160 76V88" stroke="#4a4448" stroke-width="1.2"/>
+      <circle cx="160" cy="92" r="4.5" fill="#f3d6a0"/>
+      <g fill="#0b090a">
+        <ellipse cx="104" cy="168" rx="30" ry="26"/><circle cx="104" cy="138" r="15"/>
+        <ellipse cx="160" cy="172" rx="34" ry="28"/><circle cx="160" cy="138" r="17"/>
+        <ellipse cx="216" cy="168" rx="30" ry="26"/><circle cx="216" cy="138" r="15"/>
+      </g>
+      <path d="M93 128l3-14 4 11 4-15 4 15 4-11 3 14z" fill="#ff3d8a"/>
+      <path d="M147 126l3-17 5 13 5-19 5 19 5-13 3 17z" fill="#a8e030"/>
+      <path d="M205 128l3-14 4 11 4-15 4 15 4-11 3 14z" fill="#36c8ff"/>
+    </svg>`,
+  },
 ];

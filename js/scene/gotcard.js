@@ -13,6 +13,7 @@ import { uiScale } from '../controls/ui.js';
 import { is } from '../controls/keymap.js';
 import { optionName, unlock, unlockedSet, isOpen, GIFTS } from '../avatar/looks.js';
 import { cached, request, FRAME } from '../avatar/thumbs.js';
+import { notesOf } from '../avatar/notes.js';
 
 const FAR = 4;
 // 先收著時說的那句：鏡子只有畫廊前廳有
@@ -80,6 +81,7 @@ class GotCard {
     const from = [c.where, c.who].filter(Boolean).join('　');
     this.el.innerHTML = `<p class="lead">拿到了</p>${from ? `<p class="sub">${from}</p>` : ''}`
       + `<div class="pic"><img data-id="${id}" alt=""${src ? ` src="${src}"` : ''}></div><p class="name">${nameOf(c.items)}</p>`
+      + (notesOf(c.items) ? `<p class="note">${notesOf(c.items)}</p>` : '')
       + (c.say ? `<p class="say">「${c.say}」</p>` : '')
       + '<div class="foot"><button type="button" class="keep" data-act="keep"><span>先收著</span><kbd class="on-kb">Esc</kbd><kbd class="on-pad" data-pad-raw="-2">B</kbd></button>'
       + '<button class="btn enter primary" type="button" data-act="wear"><span>穿上</span><kbd class="on-kb" data-kb="interact">E</kbd><kbd class="on-pad" data-pad-raw="-1">A</kbd></button></div>';

@@ -13,6 +13,7 @@ import { BURGER } from './jinghai-burger.js';
 import { GREEN, FACTORY } from './jinghai-back.js';
 import { BRAND } from './jinghai-ads.js';
 import { SilentOrbits } from '../../audio/orbits.js';
+import { PublicAddress } from './jinghai-pa.js';
 
 // 背景音樂「寂靜軌道」：現場合成的宇宙 ambient，一進來就放
 export const bgm = { src: SilentOrbits, from: 'jinghai' };
@@ -85,6 +86,11 @@ export function crowd({ scene, world, shadowTex, coarse, params, ambience, playe
   const manatees = buildManatees(scene, { shadowTex, plan: world.plan, coarse, ambience, indoorness: world.indoorness, groundY: world.groundY });
   const guests = buildGuests(scene, { world, shadowTex, coarse });
   return { vendors, walkers: [manatees, guests] };
+}
+
+// 一區自己的裝置：總部的公司廣播（jinghai-pa.js），照伺服器時間從喇叭講，不接互動鍵
+export function fixtures({ world, player, camera, ambience }) {
+  return { pa: world.speakers?.length ? new PublicAddress({ world, player, camera, ambience }) : null };
 }
 
 // 抵達：站在降落坪上、渡船旁邊，面向北邊的總部和天上的地球

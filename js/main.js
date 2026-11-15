@@ -75,6 +75,7 @@ const ZONES = {
   dong: { load: () => import('./zones/dong/zone-dong.js') },   // 黑森林洞裡（灰模型）：從洞口走到底進來，不搭船、不在 places.js
   concert: { load: () => import('./zones/concert/zone-concert.js') },
   gorge: { load: () => import('./zones/gorge/zone-gorge.js') },   // 深谷：演唱會的第二個場地，灰模型（places.js 的 dev）   // 演唱會：從畫廊的樹洞進去，不搭船（places.js 的 boat: false）
+  dixia: { load: () => import('./zones/dixia/zone-dixia.js') },   // 地下室：靜海後台底下的龐克小場地，灰模型；先從樹洞的接案卡進去（places.js 的 boat: false），之後從靜海後台的門下來
   duel: { load: () => import('./zones/duel/zone-duel.js') },   // 對影：拍照對戰的專用場地，灰模型（places.js 的 dev）
   gucheng: { load: () => import('./zones/gucheng/zone-gucheng.js') },   // 古城（暫名）：獵魔教座堂，開了但還在蓋（places.js 的 wip）
 };

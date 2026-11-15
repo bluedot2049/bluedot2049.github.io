@@ -549,6 +549,8 @@ export function buildJinghai(scene, { coarse = false, renderer = null } = {}) {
       return PLACES.mare;
     },
     walkable: floors.walk, groundY: floors.groundY, findPath: floors.findPath, camFloor: (x, z, y) => floors.groundY(x, z, y), camClip, indoorness,
+    // 總部裡的廣播喇叭（jinghai-hq.js 蓋的，jinghai-pa.js 從這裡冒泡泡）
+    speakers: hq.speakers,
     // 點到樓上（y 是點到的高度）就在那一層找；點到一樓的也標上一樓，人在樓上時才不會走到正上方的迴廊
     findWalkable(x, z, fromX, fromZ, y) {
       if (floors.levelOf(y)) return floors.findWalkable(x, z, fromX, fromZ, y);

@@ -820,6 +820,12 @@ export const VOICES = {
     for (const [dt, f, d] of JINGLE) chip(ctx, sp, t + dt, f * p, d);
     return 1.6;
   },
+  // 月球總部的廣播開頭（jinghai-pa.js）：天花板喇叭「叮叮叮咚」往上四個音，最後一個停久一點
+  pachime(ctx, out, t, p, noise) {
+    const sp = speaker(ctx, out, 0.03, noise, t, 1.5);
+    for (const [dt, f, d] of [[0, G6 / 2, 0.3], [0.22, C6, 0.3], [0.44, E6, 0.3], [0.66, G6, 0.75]]) chip(ctx, sp, t + dt, f * p, d);
+    return 1.5;
+  },
   // 前廳桌上浮起來：片盒在空心殼裡咔啦咔啦晃，手腕繩一甩
   plrattle(ctx, out, t, p, noise) {
     for (const [dt, f, g] of [[0, 1500, 0.3], [0.07, 1750, 0.22], [0.12, 1350, 0.25], [0.21, 1650, 0.15], [0.27, 1450, 0.1]]) knock(ctx, out, noise, t + dt, f * p, g);

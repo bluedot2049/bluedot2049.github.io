@@ -264,10 +264,11 @@ export class Hollow {
     this.close();
   }
 
-  // 不搭船去的地方（places.js 的 boat: false，演唱會）從這裡進：隊友名牌點了，走到洞口前打開接案卡（main.js 的 party.onFar）
-  door() {
-    const s = this.spot;
-    return { x: s.x + s.n.x * 1.6, z: s.z + s.n.z * 1.6, open: () => this.open() };
+  // 不搭船去的地方（places.js 的 boat: false，演唱會、地下室）從這裡進：隊友名牌點了，走到洞口前打開接案卡、翻到隊友那一場（main.js 的 party.onFar）
+  door(to) {
+    const s = this.spot, k = JOBS.findIndex((j) => j.to === to);
+    if (to && k < 0) return null;
+    return { x: s.x + s.n.x * 1.6, z: s.z + s.n.z * 1.6, open: () => { this.open(); if (k >= 0) this.pickJob(k, true); } };
   }
 
   // 每幀：光的亮暗跟著聽過沒，叫人只叫一次，走遠了再回來才再叫
