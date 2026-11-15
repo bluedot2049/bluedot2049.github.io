@@ -31,6 +31,7 @@ const RAW = {
       { name: '麻袋堆', x: -6.4, z: 14.6, w: 2.4, d: 1.6, h: 0.9 },
       { name: '空桶', x: -2.6, z: 16.2, w: 1.4, d: 1.2, h: 1.3 },
     ],
+    decor: [{ kind: 'prop', id: 'winch', x: -5.4, z: 0.95, ry: 0 }],
     sockets: { lamp: [[-2, 6, 4], [2.5, 10, 4]], barrel: [[-5.2, 11.5], [5.4, 12.4], [5.4, 1.6]] },
     spawns: { back: [[-4, 12.5], [-1.5, 13.5], [1.5, 13.2], [4, 12.2], [0, 11.5]], left: [[-6.5, 15.5], [-8.5, 12]], right: [[8.5, 14.5]] },
     vantage: [
@@ -125,6 +126,7 @@ Object.assign(RAW, {
       { name: '骨堆', x: -3.4, z: 2.5, w: 0.8, d: 2.6, h: 0.9 }, { name: '骨堆', x: 3.4, z: 2.4, w: 0.8, d: 1.6, h: 0.8 },
       { name: '骨堆', x: 3.6, z: 14.5, w: 0.8, d: 3, h: 1 }, { name: '骨堆', x: -3.2, z: 12.8, w: 0.9, d: 2.6, h: 0.9 },
     ],
+    decor: [{ kind: 'prop', id: 'shrine', x: -3.45, z: 5, ry: Math.PI / 2 }],
     sockets: { lamp: [[0, 8, 4]], barrel: [[-2.8, 16.4], [3, 11]] },
     spawns: { back: [[-1.5, 15], [0, 15.6], [1.5, 15], [-0.8, 13.6], [0.8, 13.8]], left: [[-4.8, 8]], right: [[5.2, 9.6]] },
     vantage: [
@@ -165,7 +167,7 @@ Object.assign(RAW, {
 // 這幾層多的欄位：deep 深溝多深（預設 12）；pits 的 water 是水面在地面下幾公尺（四層的水，亮面）、glow 是溝底遠遠一條自己亮的河光；
 // cover 的 look 是長相（tent 帳篷、totem 圖騰柱、drum 戰鼓、rock 大石頭、pillar 柱子、skull 獸頭骨、head 石像的頭、none 不畫（石像那些另外蓋）、bench 木凳、hoard 金幣山），y 是放在多高（看台上）；
 // levels 的 posts 是木架（底下柱子、邊上欄杆）、arch 是石拱（底下拱起來）、look: 'bone' 骨頭色、hide 不畫（石像的膝蓋，長相是 decor 的石像）；ramps 是不屬於哪個台的坡（h 爬多高）；
-// decor 是不擋路的擺設（banner 布條、pikes 插骨頭的木樁、palisade 木柵、bars 鐵柵、chain 鐵鏈、bones 骨頭、ribs 巨獸肋骨、stalag 石筍、falls 瀑布、colossus 石像、coins 金幣），dong.js 照 kind 蓋；
+// decor 是不擋路的擺設（prop 每層一件的大擺設 dong-props.js、banner 布條、pikes 插骨頭的木樁、palisade 木柵、bars 鐵柵、chain 鐵鏈、bones 骨頭、ribs 巨獸肋骨、stalag 石筍、falls 瀑布、colossus 石像、coins 金幣），dong.js 照 kind 蓋；
 // spawns 可以寫敵人的種類（ogre: […]）指定那一種從哪裡出來（籠子、河邊、窩）
 Object.assign(RAW, {
   camp: {
@@ -181,6 +183,7 @@ Object.assign(RAW, {
       { name: '戰鼓', look: 'drum', x: -3.6, z: 15.2, w: 1.4, d: 1.4, h: 0.9 },
     ],
     decor: [
+      { kind: 'prop', id: 'shamanGate', x: 5.4, z: 1.4, ry: -2.03 },
       { kind: 'banner', x: -5.5, z: 16.9, h: 5.5, face: [0, -1] }, { kind: 'banner', x: 6.4, z: 16.2, h: 5, face: [-0.5, -1] },
       { kind: 'banner', x: 10.9, z: 7.6, h: 6, face: [-1, 0] }, { kind: 'banner', x: -11, z: 7.8, h: 5.5, face: [1, 0] },
       { kind: 'bones', x: 7, z: 14.4 }, { kind: 'bones', x: -6.8, z: 14.8 }, { kind: 'pikes', x: 0, z: 16.8, n: 5, span: 6 },
@@ -213,6 +216,7 @@ Object.assign(RAW, {
       { name: '斷掉的石欄', look: 'rock', x: 7.4, z: 16.4, w: 1.2, d: 1, h: 0.8 },
     ],
     decor: [
+      { kind: 'prop', id: 'bridgeWinch', x: 9.6, z: 16, ry: Math.PI },
       { kind: 'palisade', a: [-4.9, 18.55], b: [4.9, 18.55], h: 2.8, gate: 2.2 },
       { kind: 'banner', x: -2.6, z: 18.5, h: 4.4, face: [0, -1] }, { kind: 'banner', x: 2.6, z: 18.5, h: 4.4, face: [0, -1] },
       { kind: 'pikes', x: -8, z: 16.4, n: 3, span: 2.4 }, { kind: 'chain', a: [-3.9, 3], b: [-3.9, 14.4] },
@@ -292,6 +296,7 @@ Object.assign(RAW, {
     levels: [{ name: '脊椎骨', look: 'bone', poly: [[6, 13.4], [7.6, 13.4], [7.6, 17.6], [6, 17.4]], h: 3.2, over: true, ramp: { from: [8.7, 7.4], to: [6.9, 13.4], w: 1 } }],
     cover: [{ name: '巨獸的頭骨', look: 'skull', x: 8.4, z: 2.6, w: 2.2, d: 2.6, h: 1.8 }],
     decor: [
+      { kind: 'prop', id: 'wetArch', x: -6, z: 4.2, ry: Math.PI / 2 },
       { kind: 'ribs', x: 6.8, z0: 13.8, z1: 17.4, to: 0.8, h: 3.2, n: 5 },
       { kind: 'bones', x: 2.8, z: 15.6, big: true }, { kind: 'bones', x: -5.6, z: 17 }, { kind: 'bones', x: 9, z: 9.4 }, { kind: 'bones', x: -6.4, z: 1.4 },
       { kind: 'stalag', x: -3, z: 18.4 },
@@ -348,6 +353,7 @@ Object.assign(RAW, {
       { name: '金幣山', look: 'hoard', x: 0, z: 17.6, w: 7, d: 3.6, h: 1.5 },
     ],
     decor: [
+      { kind: 'prop', id: 'vaultAltar', x: -4.2, z: 21.4, ry: Math.PI },
       { kind: 'colossus', x: -10, z: 6, face: [1, 0], headless: true }, { kind: 'colossus', x: 9.6, z: 16.6, face: [-1, -0.3], sword: true },
       { kind: 'coins', x: -6.4, z: 19.4, r: 1.4 }, { kind: 'coins', x: 6.2, z: 19.6, r: 1.6 }, { kind: 'coins', x: -9.4, z: 17.4, r: 0.9 }, { kind: 'coins', x: 3.2, z: 21.6, r: 1 },
       { kind: 'coins', x: 9.8, z: 6.8, r: 0.6 }, { kind: 'coins', x: -2.6, z: 21.4, r: 0.9 },

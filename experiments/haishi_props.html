@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>海市・街角與港區大型物件 — 1:1 標本場</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #10141c;
+      color: #f0e6d2;
+      font-family: "Noto Serif TC", "Microsoft JhengHei", serif;
+      user-select: none;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    .note {
+      position: fixed;
+      top: 14px;
+      left: 16px;
+      max-width: 540px;
+      padding: 11px 15px;
+      background: rgba(14, 18, 26, 0.88);
+      border: 1px solid rgba(255, 160, 96, 0.34);
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.55;
+      pointer-events: none;
+    }
+    .note strong { color: #ffc886; font-weight: 600; }
+    .note .meta {
+      color: #9fb0c4;
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 10px 16px 14px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+      background: linear-gradient(transparent, rgba(8, 11, 16, 0.94));
+    }
+    .bar button {
+      padding: 6px 12px;
+      border: 1px solid #445064;
+      border-radius: 999px;
+      background: #18202c;
+      color: #cfd8e4;
+      font: inherit;
+      font-size: 12.5px;
+      cursor: pointer;
+    }
+    .bar button:hover { border-color: #d8804a; color: #f6ead6; }
+    .bar button.on { border-color: #ffa060; color: #ffdcb4; background: #34241c; }
+    .bar .sep { width: 1px; background: #445064; margin: 0 4px; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "../vendor/three.module.min.js" } }
+  </script>
+</head>
+
+<body>
+  <div class="note" id="info"></div>
+  <div class="bar">
+    <button data-item="all" class="on">全覽（8 座海市物件）</button>
+    <button data-item="0">1 漁港魚簍燈架</button>
+    <button data-item="1">2 藥草符籤棚</button>
+    <button data-item="2">3 琉璃手推車</button>
+    <button data-item="3">4 潮燈指路柱</button>
+    <button data-item="4">5 冷石手搖井</button>
+    <button data-item="5">6 掌櫃算盤帳台</button>
+    <button data-item="6">7 星台銅渾儀座</button>
+    <button data-item="7">8 星廟石燈龕</button>
+    <span class="sep"></span>
+    <button id="btnNight">海市藍夜</button>
+    <button id="btnCompare">對照：預設 vs 這裡</button>
+    <button id="btnForm">灰泥 (-form)</button>
+    <button id="btnWire">線框</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { Kit, newBucket, mergeBucket, rng } from '../js/core/props.js';
+    import { uTime } from '../js/core/scenery.js';
+    import { Character } from '../js/avatar/character.js';
+    import { sanitizeLook } from '../js/avatar/looks.js';
+    import { HAISHI_PROPS } from '../js/zones/haishi/haishi-props.js';
+
+    const params = new URLSearchParams(location.search);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.prepend(renderer.domElement);
+
+    const BG_STUDIO = new THREE.Color(0x141822);
+    const BG_NIGHT = new THREE.Color(0x0b101b);
+    const BG_FORM = new THREE.Color(0x96a0aa);
+    const scene = new THREE.Scene();
+    scene.background = BG_STUDIO.clone();
+
+    const hemi = new THREE.HemisphereLight(0xd8e4f6, 0x262834, 1.45);
+    scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0xffdfb8, 1.28);
+    sun.position.set(5.4, 8.2, 6.2);
+    scene.add(sun);
+    const rim = new THREE.DirectionalLight(0x789cd4, 0.45);
+    rim.position.set(-5.2, 3.8, -4.4);
+    scene.add(rim);
+
+    // 遊戲僅有的兩種材質：吃光平面著色＋頂點色、自發光頂點色
+    const matLit = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+    const matGlow = new THREE.MeshBasicMaterial({ vertexColors: true });
+    const matForm = new THREE.MeshLambertMaterial({ color: 0xcfc8bc, flatShading: true });
+    const matWire = new THREE.MeshBasicMaterial({ color: 0xffd28a, wireframe: true, transparent: true, opacity: 0.30 });
+
+    const ITEMS = [
+      {
+        id: 'fishRack',
+        name: '1. 漁港・懸籠魚簍與集魚燈架',
+        zone: '海市・漁港／小棧橋旁',
+        height: 2.38,
+        desc: '1:1 漁港木架（高約 2.38m）：不對稱外傾雙柱嵌進冷灰 GRAY 石礎，向左探出挑臂垂吊鐵笠集魚燈；正中負空間懸著 0.7 重腹編竹魚簍與風乾魚，腳下綁著不透明漸層琉璃浮球與敞口木魚盆。',
+      },
+      {
+        id: 'herbRack',
+        name: '2. 燈巷／工坊街・歪頂藥草乾燥架與符籤龕',
+        zone: '海市・燈巷／工坊街轉角',
+        height: 2.26,
+        desc: '1:1 街角晾棚（高約 2.26m）：一高一矮老木柱撐起二段下垂小瓦簷與簷角銅鈴；竹桿垂掛四束成團的乾燥藥草，右柱歪掛硃砂符籤板，底下是青瓷藥甕、石臼與暖橘除濕炭缽。',
+      },
+      {
+        id: 'glassBarrow',
+        name: '3. 工坊街・琉璃吹製手推車',
+        zone: '海市・工坊街',
+        height: 1.76,
+        desc: '1:1 手工推車（高約 1.76m）：單輪配冷灰石輪擋、雙撐腳落地貼齊 y = 0；台面左端設小退火窯與微彎鐵煙囪，右端木插架擺不透明漸層琉璃瓶，後角挑竹竿懸一盞屋簷少見的淡藍魔法燈。',
+      },
+      {
+        id: 'tideSignpost',
+        name: '4. 碼頭／牌樓・潮燈指路柱與繫纜樁',
+        zone: '海市・碼頭／下街岔口',
+        height: 2.54,
+        desc: '1:1 港邊路標（高約 2.54m）：兩層冷灰石座配一角青苔、前側石質繫船樁捲三圈粗麻纜；底寬頂窄木柱釘三塊錯落箭頭牌寫毛筆記號字，頂上鍛鐵臂垂暖橘紙燈籠與小銅潮鈴。',
+      },
+      {
+        id: 'stoneWell',
+        name: '5. 下街／巷口・冷石手搖水井與青瓷缸',
+        zone: '海市・下街廣場／人家巷口',
+        height: 1.54,
+        desc: '1:1 街角古井（高約 1.54m）：七邊冷灰 GRAY 石砌井欄與深藍不透明水面，上立歪斜木絞架、麻繩滾軸與單側急垂小瓦棚；井沿擱微傾木水桶，右腳蹲一尊 0.7 腹青瓷水缸配竹水杓。',
+      },
+      {
+        id: 'abacusStand',
+        name: '6. 街邊・掌櫃燈帳台與大算盤',
+        zone: '海市・下街／店鋪門口',
+        height: 1.46,
+        desc: '1:1 帳房立台（高約 1.46m）：四支底寬頂窄微外八木腿托起斜坡寫字檯，擺攤開帳簿、紅印、石硯與毛筆；左後立四檔低面數大木算盤，右角伸出銅鵝頸暖光紙罩燈。',
+      },
+      {
+        id: 'starArmillary',
+        name: '7. 星台／遠眺台・觀星銅渾天儀石座',
+        zone: '海市・星台／遠眺台',
+        height: 1.92,
+        desc: '1:1 觀星石座（高約 1.92m）：兩階冷灰石台配踏腳石，台面嵌銅星盤與三足爪架托起三道 3 邊斜交銅環；中心為霧面冷石天球與北天窺管（避開錢幣寶石剪影），旁點冷藍星油燈與星圖卷軸。',
+      },
+      {
+        id: 'templeShrineLamp',
+        name: '8. 山路／星廟・石階護法石燈龕與竹籤筒',
+        zone: '海市・山路轉角／星廟廟埕',
+        height: 2.04,
+        desc: '1:1 石燈龕（高約 2.04m）：冷灰切石底座旁置兩口星水石缽與插滿木籤的竹籤筒；微斜七角石柱托起四柱鏤空火室框住冷星藍火舌，頂覆飛簷石瓦帽與銅剎寶頂。',
+      },
+    ];
+
+    function buildGroup(fn, seed = 'haishi_prop', ao = true) {
+      const k = new Kit(rng(seed)), b = newBucket();
+      fn(k);
+      k.emit(b, 0, 0, 0);
+      const g = new THREE.Group();
+      let tris = 0;
+      const litGeo = mergeBucket(b.lit, ao);
+      if (litGeo) {
+        tris += litGeo.attributes.position.count / 3;
+        const m = new THREE.Mesh(litGeo, matLit);
+        m.userData.role = 'lit';
+        g.add(m);
+      }
+      const glowGeo = mergeBucket(b.glow, false);
+      if (glowGeo) {
+        tris += glowGeo.attributes.position.count / 3;
+        const m = new THREE.Mesh(glowGeo, matGlow);
+        m.userData.role = 'glow';
+        g.add(m);
+      }
+      // 在展示台底下加上微弱暖/冷地光圈（預覽用，非真實光源）
+      for (const p of b.pools) {
+        const pm = new THREE.Mesh(
+          new THREE.CircleGeometry(p.r * 0.72, 16),
+          new THREE.MeshBasicMaterial({ color: p.color, transparent: true, opacity: p.a * 0.6, depthWrite: false })
+        );
+        pm.rotation.x = -Math.PI / 2;
+        pm.position.set(p.x, 0.004, p.z);
+        pm.userData.isPool = true;
+        g.add(pm);
+      }
+      g.userData.tris = Math.round(tris);
+      g.userData.parts = b.lit.length + b.glow.length;
+      return g;
+    }
+
+    // ── 標本展台（兩排微弧 1:1 排開，左側站 1.7m 角色當比例尺） ──
+    const showcaseRoot = new THREE.Group();
+    scene.add(showcaseRoot);
+
+    {
+      const fk = new Kit(null), fb = newBucket();
+      fk.cyl(8.2, 8.6, 0.18, '#282b34', 0, -0.09, 0, { color2: '#3a3e48' }, 24);
+      fk.cyl(8.36, 8.42, 0.05, '#74757a', 0, -0.04, 0, {}, 24);
+      fk.emit(fb, 0, 0, 0);
+      const fm = new THREE.Mesh(mergeBucket(fb.lit, true), matLit);
+      fm.userData.role = 'lit';
+      showcaseRoot.add(fm);
+    }
+
+    const propGroups = [];
+    const propPositions = [
+      [-4.95, 0,  0.55,  0.22],
+      [-2.35, 0, -0.35,  0.10],
+      [ 0.25, 0, -0.65, -0.04],
+      [ 2.85, 0, -0.25, -0.18],
+      [-3.85, 0,  2.45,  0.18],
+      [-1.35, 0,  2.15,  0.06],
+      [ 1.25, 0,  2.15, -0.08],
+      [ 3.75, 0,  2.45, -0.20],
+    ];
+
+    ITEMS.forEach((it, i) => {
+      const [px, py, pz, rot] = propPositions[i];
+      const pk = new Kit(null), pb = newBucket();
+      pk.cyl(0.84, 0.90, 0.04, '#3e3f44', 0, 0.02, 0, { color2: '#5a5b60' }, 9);
+      pk.emit(pb, px, pz, 0);
+      const pm = new THREE.Mesh(mergeBucket(pb.lit, true), matLit);
+      pm.userData.role = 'lit';
+      showcaseRoot.add(pm);
+
+      const g = buildGroup(HAISHI_PROPS[it.id], it.id, true);
+      g.position.set(px, 0.04, pz);
+      g.rotation.y = rot;
+      showcaseRoot.add(g);
+      it.tris = g.userData.tris;
+      it.parts = g.userData.parts;
+      propGroups.push({ g, x: px, y: it.height * 0.48, z: pz, dist: Math.max(4.6, it.height * 2.35), item: it });
+    });
+
+    function shadowTexture() {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const g = c.getContext('2d').createRadialGradient(32, 32, 2, 32, 32, 30);
+      g.addColorStop(0, 'rgba(0,0,0,0.45)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      c.getContext('2d').fillStyle = g;
+      c.getContext('2d').fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c);
+    }
+
+    const character = new Character(shadowTexture(), sanitizeLook({}));
+    character.group.position.set(-6.15, 0, 1.45);
+    character.group.rotation.y = 0.55;
+    showcaseRoot.add(character.group);
+
+    // ── 1:1 對照展場：左灰墊（預設直筒高面數） vs 右金墊（海市造型語言） ──
+    const compareRoot = new THREE.Group();
+    compareRoot.visible = false;
+    scene.add(compareRoot);
+
+    const COMPARISONS = [
+      {
+        title: '漁港魚簍燈架：筆直對稱雙柱＋高面圓筒＋半透明球 vs 外傾雙柱＋3邊麻繩環＋0.7重腹魚簍＋不透明漸層浮球',
+        bad(k) {
+          k.add(new THREE.CylinderGeometry(0.055, 0.055, 2.2, 20), '#7a5436', -0.45, 1.1, 0, { ao: false });
+          k.add(new THREE.CylinderGeometry(0.055, 0.055, 2.2, 20), '#7a5436', 0.45, 1.1, 0, { ao: false });
+          k.box(1.5, 0.07, 0.07, '#7a5436', -0.1, 2.16, 0, { ao: false });
+          k.add(new THREE.CylinderGeometry(0.14, 0.14, 0.42, 24), '#b89458', 0, 1.48, 0, { ao: false });
+          k.add(new THREE.SphereGeometry(0.12, 24, 16), '#ffffff', -0.78, 1.85, 0, { glow: true, ao: false });
+        },
+        good: HAISHI_PROPS.fishRack,
+      },
+      {
+        title: '星廟石燈龕：24段均粗純白圓柱＋球燈 vs 冷灰 GRAY 切石座＋微斜七角柱＋四柱鏤空火室＋星藍火舌',
+        bad(k) {
+          k.add(new THREE.BoxGeometry(0.64, 0.24, 0.64), '#9a9a9a', 0, 0.12, 0, { ao: false });
+          k.add(new THREE.CylinderGeometry(0.12, 0.12, 1.15, 24), '#a8a8a8', 0, 0.82, 0, { ao: false });
+          k.add(new THREE.SphereGeometry(0.18, 24, 16), '#ffffff', 0, 1.54, 0, { glow: true, ao: false });
+          k.add(new THREE.ConeGeometry(0.36, 0.28, 24), '#808080', 0, 1.82, 0, { ao: false });
+        },
+        good: HAISHI_PROPS.templeShrineLamp,
+      },
+    ];
+
+    const compareStats = [];
+    {
+      const ck = new Kit(null), cb = newBucket();
+      ck.cyl(4.8, 5.1, 0.16, '#262932', 0, -0.08, 0, {}, 20);
+      COMPARISONS.forEach((_, i) => {
+        const cx = (i - 0.5) * 3.8;
+        ck.cyl(0.86, 0.90, 0.04, '#44484d', cx - 0.88, 0.02, -0.15, {}, 12);
+        ck.cyl(0.88, 0.92, 0.045, '#a8823c', cx + 0.88, 0.022, 0.15, { color2: '#d6ae58' }, 12);
+      });
+      ck.emit(cb, 0, 0, 0);
+      const bm = new THREE.Mesh(mergeBucket(cb.lit, true), matLit);
+      bm.userData.role = 'lit';
+      compareRoot.add(bm);
+
+      COMPARISONS.forEach((cmp, i) => {
+        const cx = (i - 0.5) * 3.8;
+        const badG = buildGroup(cmp.bad, 'haishibad_' + i, false);
+        badG.position.set(cx - 0.88, 0.04, -0.15);
+        compareRoot.add(badG);
+
+        const goodG = buildGroup(cmp.good, 'haishigood_' + i, true);
+        goodG.position.set(cx + 0.88, 0.045, 0.15);
+        compareRoot.add(goodG);
+
+        compareStats.push(`${i + 1}. 左（預設）${badG.userData.tris} tris → 右（海市）${goodG.userData.tris} tris`);
+      });
+    }
+
+    // ── 互動與模式切換 ──
+    const state = {
+      item: params.get('item') || 'all',
+      night: params.get('night') === '1',
+      compare: params.get('compare') === '1',
+      form: params.get('form') === '1',
+      wire: params.get('wire') === '1',
+    };
+
+    const camera = new THREE.PerspectiveCamera(36, innerWidth / innerHeight, 0.08, 90);
+    const target = new THREE.Vector3(-0.6, 1.05, 0.95);
+    const goalTarget = target.clone();
+    let yaw = 0.06, pitch = 0.25, dist = 14.5, goalDist = 14.5;
+    if (params.has('yaw')) yaw = +params.get('yaw');
+    if (params.has('pitch')) pitch = +params.get('pitch');
+
+    const infoEl = document.getElementById('info');
+    function updateUI() {
+      showcaseRoot.visible = !state.compare;
+      compareRoot.visible = state.compare;
+      scene.background = state.form ? BG_FORM : (state.night ? BG_NIGHT : BG_STUDIO);
+      hemi.intensity = state.form ? 1.12 : (state.night ? 0.68 : 1.45);
+      sun.intensity = state.form ? 1.18 : (state.night ? 0.45 : 1.28);
+      rim.intensity = state.form ? 0.35 : (state.night ? 0.65 : 0.45);
+
+      scene.traverse((o) => {
+        if (!o.isMesh) return;
+        if (o.userData.role === 'lit') o.material = state.form ? matForm : matLit;
+        if (o.userData.role === 'glow') o.material = state.form ? matForm : matGlow;
+        if (o.userData.isPool) o.visible = !state.form && state.night;
+        if (o.userData.isWire) o.visible = state.wire;
+      });
+
+      document.getElementById('btnNight').classList.toggle('on', state.night);
+      document.getElementById('btnCompare').classList.toggle('on', state.compare);
+      document.getElementById('btnForm').classList.toggle('on', state.form);
+      document.getElementById('btnWire').classList.toggle('on', state.wire);
+
+      for (const b of document.querySelectorAll('[data-item]')) {
+        b.classList.toggle('on', !state.compare && b.dataset.item === String(state.item));
+      }
+
+      if (state.compare) {
+        goalTarget.set(0, 1.18, 0);
+        goalDist = 8.8;
+        infoEl.innerHTML = `<strong>1:1 對照模式：左後灰墊「一般預設」 vs 右前金墊「海市造型語言」</strong><br>` +
+          `1. 漁港魚簍燈架：對稱直柱＋純白球燈 vs 外傾雙柱＋3 邊細環＋0.7 腹竹魚簍＋不透明漸層浮球。<br>` +
+          `2. 星廟石燈龕：24 段均粗灰圓柱 vs 冷灰 GRAY 切石座＋微斜七角柱＋四柱鏤空火室與冷藍星火。` +
+          `<div class="meta">${compareStats.join('　｜　')}</div>`;
+      } else if (state.item === 'all') {
+        goalTarget.set(-0.6, 1.05, 0.95);
+        goalDist = 14.5;
+        const totalTris = ITEMS.reduce((s, it) => s + it.tris, 0);
+        infoEl.innerHTML = `<strong>海市・大型景觀與街角物件標本場（8 座 1:1 尺度，左側人物高約 1.7m 為比例尺）</strong><br>` +
+          `涵蓋漁港、碼頭、下街、燈巷、工坊街、星台與星廟。石材嚴守冷灰偏藍 GRAY 色梯，木鐵靠頂點漸層與單側偏弧塑形。` +
+          `<div class="meta">8 座合計 <strong>${totalTris}</strong> 個三角形（平均每座 ${Math.round(totalTris / ITEMS.length)} tris）。點下方按鈕可逐座 360° 檢視。</div>`;
+      } else {
+        const idx = +state.item;
+        const m = propGroups[idx];
+        if (m) {
+          goalTarget.set(m.x, m.y, m.z);
+          goalDist = m.dist;
+          const it = m.item;
+          infoEl.innerHTML = `<strong>${it.name}</strong>（${it.zone}，高約 ${it.height.toFixed(2)}m）<br>${it.desc}` +
+            `<div class="meta">面數：<strong>${it.tris}</strong> 個三角形　｜　組件：${it.parts} 個基本圖元（合併後單一網格）　｜　拖曳可 360° 檢視接地與剪影</div>`;
+        }
+      }
+    }
+
+    scene.traverse((o) => {
+      if (o.isMesh && (o.userData.role === 'lit' || o.userData.role === 'glow')) {
+        const w = new THREE.Mesh(o.geometry, matWire);
+        w.userData.isWire = true;
+        w.visible = false;
+        o.add(w);
+      }
+    });
+
+    for (const b of document.querySelectorAll('[data-item]')) {
+      b.onclick = () => {
+        state.compare = false;
+        state.item = b.dataset.item;
+        updateUI();
+      };
+    }
+    document.getElementById('btnNight').onclick = () => { state.night = !state.night; updateUI(); };
+    document.getElementById('btnCompare').onclick = () => { state.compare = !state.compare; updateUI(); };
+    document.getElementById('btnForm').onclick = () => { state.form = !state.form; updateUI(); };
+    document.getElementById('btnWire').onclick = () => { state.wire = !state.wire; updateUI(); };
+
+    let drag = null;
+    renderer.domElement.addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; });
+    addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      yaw -= (e.clientX - drag[0]) * 0.007;
+      pitch = Math.max(-0.18, Math.min(1.32, pitch + (e.clientY - drag[1]) * 0.007));
+      drag = [e.clientX, e.clientY];
+    });
+    addEventListener('pointerup', () => { drag = null; });
+    renderer.domElement.addEventListener('wheel', (e) => {
+      goalDist = Math.max(1.6, Math.min(26, goalDist * (1 + e.deltaY * 0.001)));
+    }, { passive: true });
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    updateUI();
+    if (params.has('dist')) { dist = goalDist = +params.get('dist'); }
+    target.copy(goalTarget);
+
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      const dt = Math.min(clock.getDelta(), 0.1);
+      uTime.value = clock.getElapsedTime();
+      character.update(dt, 0);
+
+      target.lerp(goalTarget, Math.min(1, dt * 8));
+      dist += (goalDist - dist) * Math.min(1, dt * 8);
+      const c = Math.cos(pitch);
+      camera.position.set(target.x + Math.sin(yaw) * c * dist, target.y + Math.sin(pitch) * dist, target.z + Math.cos(yaw) * c * dist);
+      camera.lookAt(target);
+      renderer.render(scene, camera);
+    });
+
+    window.__haishiProps = { state, updateUI, ITEMS };
+    window.__ready = true;
+  </script>
+</body>
+
+</html>

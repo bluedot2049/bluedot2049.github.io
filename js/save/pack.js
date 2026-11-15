@@ -20,7 +20,7 @@ import { album, canPick, canShare, discard, folderName, hourMark, KINDS, LABS, l
 import { pref, setPref } from './prefs.js';
 import { developing, peek, PLACES, ripen, segments } from '../camera/instant.js';
 import { is } from '../controls/keymap.js';
-import { coins, MAX, UNIT, MEASURE, takeFresh, HUES } from './purse.js';
+import { coins, MAX, UNIT, MEASURE, takeFresh, HUES, OPEN } from './purse.js';
 
 const ICONS = {
   orb: '<circle cx="12" cy="12" r="7.5"/><path d="M7.5 12c2.5-3 6.5-3 9 0-2.5 3-6.5 3-9 0z"/><circle cx="12" cy="12" r="1.2"/><path d="M18 6.5c1.5-1 2.8-1 3.5-.3"/>',
@@ -45,7 +45,9 @@ export function markPacked(k = savePrint(), t = Date.now()) {
 // 錢袋（purse.js）：十顆小水晶（雙尖寶石套金箍，顏色照位置輪 HUES），花掉的只剩淡淡的形。不寫數字。
 // 子夜剛補滿、還沒看過的那幾顆，打開時一顆接一顆亮起來（像潮水漲上來，.tide）。
 // 有隊友、身上有水晶時變成鈕，點一下丟一顆在腳邊給隊友撿（scene/coins.js 的 dropMine）
+// 錢關著（purse.js 的 OPEN）不放這排
 function purseRow(drop, fresh) {
+  if (!OPEN) return '';
   const n = coins(), from = n - fresh;
   const gems = Array.from({ length: MAX }, (_, i) => (i < n ? `<i class="on${i >= from ? ' tide' : ''}" style="--k:${i - from};--c:${HUES[i % HUES.length]}"></i>` : '<i></i>')).join('');
   const label = `錢袋 ${n}／${MAX} ${MEASURE}${UNIT}`;

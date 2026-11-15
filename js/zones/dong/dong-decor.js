@@ -3,6 +3,7 @@
 // 黑森林洞裡的擺設和掩體長相：帳篷、圖騰柱、戰鼓、大石頭、柱子、巨獸頭骨、石像的頭、金幣山；布條、木柵、鐵柵、骨頭、巨獸肋骨、石筍、瀑布、坐著的巨大石像、金幣堆。
 // 全部是幾個大形狀拼的（低面數、頂點色、平面著色），dong.js 每一層蓋完地形再照 dong-rooms.js 的 cover.look、decor.kind 叫這裡；金幣另外一個亮面網格（點光照到才閃），瀑布是會流的半透明一片。
 import * as THREE from 'three';
+import { dongProp } from './dong-props.js';
 
 // 色票：獸皮、布條暗紅（跟黑森林路上的布條同一個紅）、骨頭帶黃的灰（不用白）、鐵、金（皺金箔三階，見記憶 faceted-foil-look）
 const HIDE = ['#7a5c40', '#6a4e36', '#83644a', '#5e4430'];
@@ -173,10 +174,12 @@ export function coverLook(k, gold, c, y0, pal, R) {
 }
 
 // ---------- 擺設：不擋路，只是長相 ----------
-// ctx：{ k 主網格, gold 金幣網格, Y0, DEEP, pal, R, anim（每幀要動的放這裡，拿到的是經過幾秒）, group }
+// ctx：{ k 主網格, gold 金幣網格, glow 自己亮的, Y0, DEEP, pal, R, anim（每幀要動的放這裡，拿到的是經過幾秒）, group }
 export function decor(d, ctx) {
   const { k, gold, Y0, pal, R } = ctx, V = k.V;
   switch (d.kind) {
+    // 每層一件的大擺設（dong-props.js）：id、ry 朝向
+    case 'prop': dongProp(d, ctx); return;
     case 'banner': {
       // 從黑暗裡吊下來的暗紅布條：一根橫木、兩條繩子往上，底下剪成燕尾；中間一隻骨白的眼睛
       const fl = Math.hypot(...d.face), fx = d.face[0] / fl, fz = d.face[1] / fl, tx = -fz, tz = fx;

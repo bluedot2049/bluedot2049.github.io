@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
 import { Kit, rng, newBucket } from '../../core/props.js';
+import { place as placeBig } from '../../core/bigprops.js';
 import { glowPoints, uTime } from '../../core/scenery.js';
 import { GRADE } from '../../core/grade.js';
 import { makePathfinder } from '../../core/pathgrid.js';
@@ -20,6 +21,7 @@ import { Light, groundPools, sunBeams } from './gucheng-light.js';
 import { buildTales, ring } from './gucheng-tales.js';
 import { buildArchmage } from './gucheng-archmage.js';
 import { buildIce } from './gucheng-ice.js';
+import { CHURCH_PROPS, SPOTS as PROP_SPOTS, spread } from './gucheng-props.js';
 import { SEA, TOP, GROUND, RAMPS, JETTY, BOAT, FILL, CITYWALL, HOUSES, BRIDGE_HOUSE, CATH, inside, inPoly } from './gucheng-map.js';
 
 const STEP = 0.9, HEAD = 1.8, PAD = 0.28, CELL = 2;
@@ -581,6 +583,16 @@ export function buildGucheng(scene, { coarse = false } = {}) {
       k.box(0.025, 0.3, 0.26, '#d8ccb0', bx + 0.08, TOP + 1.95 + dy, bz + dz);
     }
     solid({ x0: bx - 0.2, x1: bx + 0.2, z0: bz - 1.25, z1: bz + 1.25, y0: TOP, y1: TOP + 2.6, tag: 'prop' });
+    // 巷口轉進廣場的轉角一根鍛鐵燈柱（core/bigprops.js）：巫師帽鐵頂、懸臂吊一籠燭火伸到巷口上空，臂上蹲一隻烏鴉
+    {
+      const s = new Kit(null);
+      s.fid = fadeOnly('crowPost', [-33.55, TOP, 4.75, -32.85, TOP + 3.1, 5.95]);   // 鏡頭在柱子後面就淡掉
+      placeBig(s, 'crowPost', 0, 0, 0, 0);
+      s.light(0.44, 1.9, 0.06, GLOW, 1.1);
+      s.pool(0.44, 0, 0.06, 1.8, '#ff9a40', 0.2);
+      emitAt(s, -33.2, TOP, 5.4, Math.PI / 2);
+      obstacles.push({ x: -33.2, z: 5.55, hw: 0.4, hd: 0.4, a: 0 });
+    }
     // 手推車、雪堆、一棵樹
     k.box(2, 0.5, 1.2, WOOD, -7, TOP + 0.75, 14, { ry: 0.3 });
     for (const s2 of [-0.65, 0.65]) k.cyl(0.45, 0.45, 0.08, '#4a3628', -7 + s2 * Math.sin(0.3), TOP + 0.45, 14 + s2 * Math.cos(0.3), { rx: Math.PI / 2, ry: 0.3 }, 10);
@@ -740,6 +752,16 @@ export function buildGucheng(scene, { coarse = false } = {}) {
       obstacles.push({ x, z, hw: 0.85, hd: 0.3, a: ry });
     }
     k.emit(bucket, 0, 0, 0);
+  }
+
+  // ================= 座堂的家具和祭器（gucheng-props.js，位置在那檔的 SPOTS） =================
+  // 每件自己一組：擋在鏡頭和人中間時淡掉；擋路照轉過的外框
+  for (const [id, x, z, y, ry, box, h] of PROP_SPOTS) {
+    const pk = new Kit(rng('gucheng:prop:' + id)), [x0, x1, z0, z1] = spread(box, x, z, ry);
+    CHURCH_PROPS[id](pk);
+    pk.fid = fadeOnly('prop:' + id, [x0 - 0.2, y + 0.5, z0 - 0.2, x1 + 0.2, y + h, z1 + 0.2]);
+    emitAt(pk, x, y, z, ry);
+    solid({ x0, x1, z0, z1, y0: y, y1: y + h, tag: 'prop' });
   }
 
   // ================= 講故事的擺設（gucheng-tales.js）：港口、巷子、墓園、廣場、座堂裡 =================

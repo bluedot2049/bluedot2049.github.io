@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
 import { STAGE, LIFT } from './concert-stage.js';
 import { barSec, songSec } from './concert-show.js';
-import { GIFTS, unlock, unlockedSet } from '../../avatar/looks.js';
+import { unlockedSet } from '../../avatar/looks.js';
+import { gotGift } from '../../scene/gotcard.js';
 
 const Y0 = STAGE.y, FL = LIFT.y0, HEAD = 2.7;   // 台面、台底下的地、地道多高
 // 休息室北牆（z −18）那面碎掉的穿衣鏡＝入口。鏡子後面一條東西向的窄道（band）：西頭是鏡子後面那一格，往東是樓梯一路下到台底下的高度，
@@ -423,7 +424,8 @@ export function buildPit(scene, { exits = [] } = {}) {
   let held = false, told = false;
   const take = {
     x: LX, z: LZ, r: 1.6, title: '還沒升起的太陽', label: '拿',
-    home: { act() { unlock(GIFTS.dawn.items); gift.visible = false; api.ui?.hint('拿到「還沒升起的太陽」　回畫廊照鏡子可以拿在手上', 6000); } },
+    // 拿到了跳「拿到了」那張卡（scene/gotcard.js），選要不要當場拿在手上
+    home: { act() { gotGift('dawn', { where: '演唱會後台', at: () => ({ x: LX, y: FL, z: LZ }) }); gift.visible = false; } },
   };
   const hang = (ex, on) => { const i = exits.indexOf(ex); if (on && i < 0) exits.push(ex); if (!on && i >= 0) exits.splice(i, 1); };
 

@@ -209,6 +209,7 @@ export function gem(g, x, y, s, hue = HUES[2], band = '#b8801f') {
 }
 // 價錢那一列：一顆水晶 × 數字（點一份付幾顆照 purse.js 的 WAYS.meal）
 function price(g, x, y, s, n, color) {
+  if (!n) return 0;   // 不收錢（purse.js 的 OPEN 關著）就不畫價錢
   gem(g, x + s * 0.4, y + s * 0.5, s * 0.9);
   return script(g, `×${n}`, x + s * 0.95, y, s, color) + s;
 }

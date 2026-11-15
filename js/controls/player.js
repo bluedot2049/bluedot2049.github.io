@@ -13,7 +13,7 @@ import { is } from './keymap.js';
 import { lens, fitSource, unbend } from '../core/lens.js';
 import { pref, setPref } from '../save/prefs.js';
 import { GUIDE_LAYER } from '../core/scenery.js';
-import { kaoFacing } from '../avatar/kaomoji-parts.js';
+import { kaoFacing, kaoParts, HANDS } from '../avatar/kaomoji-parts.js';
 
 const SPEED = 2.6;
 const EDGE_LIFT = 0.3;   // 坐在邊上垂腳：屁股就在地面的高度（跟 character.js 的 SEAT_BUTT 一樣），腿垂到邊外
@@ -1534,6 +1534,7 @@ export class Player {
   // 擺表情站著：要看的那一點繞到頭轉不到的地方，身體慢慢轉過來，轉到頭看得舒服就停；回眸、側身照它要的角度。
   // 看哪一點是 attention.turnTo：按了互動鍵「看鏡」的別人鏡頭、表情「自動」對著的人、自己的畫面；表情選了隨意不轉。走路、越肩、看畫照鏡子時不轉
   poseTurn(free) {
+    if (HANDS[kaoParts(this.character.kao)[1]]?.still) free = false;   // 合掌這種對著東西的不轉
     const cam = free && !this.shoulder && this.speed <= 0.05 && !this.path.length && !this.focus ? this.attn?.turnTo() : null;
     if (!cam) {
       this.poseYaw = null;

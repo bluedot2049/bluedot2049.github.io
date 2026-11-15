@@ -1,0 +1,968 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>古城獵魔座堂（教堂區）細節裝飾 — 1:1 標本場</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #14191e;
+      color: #edeae4;
+      font-family: "Noto Serif TC", "Microsoft JhengHei", serif;
+      user-select: none;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    .note {
+      position: fixed;
+      top: 14px;
+      left: 16px;
+      max-width: 615px;
+      padding: 11px 15px;
+      background: rgba(17, 23, 26, 0.88);
+      border: 1px solid rgba(181, 138, 74, 0.36);
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.55;
+      pointer-events: none;
+    }
+    .note strong { color: #ebd19a; font-weight: 600; }
+    .note .meta {
+      color: #a8b0b4;
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 10px 16px 14px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+      background: linear-gradient(transparent, rgba(10, 14, 17, 0.94));
+    }
+    .bar button {
+      padding: 6px 12px;
+      border: 1px solid #48525a;
+      border-radius: 999px;
+      background: #1a2126;
+      color: #d6dce0;
+      font: inherit;
+      font-size: 12.5px;
+      cursor: pointer;
+    }
+    .bar button:hover { border-color: #b58a4a; color: #f6f2ea; }
+    .bar button.on { border-color: #dfb46b; color: #f6e3b8; background: #2d251b; }
+    .bar .sep { width: 1px; background: #48525a; margin: 0 4px; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "../vendor/three.module.min.js" } }
+  </script>
+</head>
+
+<body>
+  <div class="note" id="info"></div>
+  <div class="bar">
+    <button data-item="all" class="on">全覽（教堂設施 4 ＋ 祭器小物 4）</button>
+    <button data-item="0">1 尖拱懺悔亭</button>
+    <button data-item="1">2 後殿洗滌石龕</button>
+    <button data-item="2">3 詩班日輪讀經架</button>
+    <button data-item="3">4 門廊石柱鐵燈座</button>
+    <span class="sep"></span>
+    <button data-item="4">5 聖壇日輪與香爐</button>
+    <button data-item="5">6 許願箱與蠟燭盤</button>
+    <button data-item="6">7 補窗台與碎彩玻璃</button>
+    <button data-item="7">8 守門鑰匙與鐘繩</button>
+    <span class="sep"></span>
+    <button id="btnNave">座堂燭昏</button>
+    <button id="btnCompare">對照：預設 vs 這裡</button>
+    <button id="btnForm">灰泥 (-form)</button>
+    <button id="btnWire">線框</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { Kit, newBucket, mergeBucket, rng } from '../js/core/props.js';
+    import { uTime } from '../js/core/scenery.js';
+    import { Character } from '../js/avatar/character.js';
+    import { sanitizeLook } from '../js/avatar/looks.js';
+
+    const params = new URLSearchParams(location.search);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.prepend(renderer.domElement);
+
+    const BG_NORMAL = new THREE.Color(0x14191e);
+    const BG_NAVE = new THREE.Color(0x0c1116); // 古城座堂青黑陰影 #11171a
+    const BG_FORM = new THREE.Color(0x949ea8);
+    const scene = new THREE.Scene();
+    scene.background = BG_NORMAL.clone();
+
+    const hemi = new THREE.HemisphereLight(0xbac8d4, 0x26292d, 1.28);
+    scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0xffe7c6, 1.16);
+    sun.position.set(5.2, 8.0, 5.4);
+    scene.add(sun);
+    const rim = new THREE.DirectionalLight(0x6684a2, 0.46);
+    rim.position.set(-5.0, 3.6, -4.6);
+    scene.add(rim);
+
+    // 座堂內暖燭／香爐微光（在燭昏模式烘托冷青石與金箔日輪反差）
+    const candleLightL = new THREE.PointLight(0xff9e44, 0, 7.5, 1.4);
+    const candleLightR = new THREE.PointLight(0xffa64c, 0, 6.2, 1.45);
+    scene.add(candleLightL, candleLightR);
+
+    const matLit = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+    const matGlow = new THREE.MeshBasicMaterial({ vertexColors: true });
+    const matBrass = new THREE.MeshPhongMaterial({
+      vertexColors: true, flatShading: true,
+      specular: 0xffe4a4, shininess: 68,
+    });
+    const matGlass = new THREE.MeshPhongMaterial({
+      vertexColors: true, flatShading: true,
+      transparent: true, opacity: 0.72, specular: 0xeaf4ff, shininess: 85, depthWrite: false,
+    });
+    const matForm = new THREE.MeshLambertMaterial({ color: 0xcfc8bc, flatShading: true });
+    const matWire = new THREE.MeshBasicMaterial({ color: 0xecd088, wireframe: true, transparent: true, opacity: 0.28 });
+
+    // ── 對齊 gucheng-church.js / 美術原則古城教堂色票（冷鋼青陰影＋舊暖灰石＋金銅＋血紅深藍幡布） ──
+    const STONE = '#bdb3a2', STONE_HI = '#cec5b4', STONE_DK = '#8e877d', STONE_DEEP = '#635d56';
+    const SLATE = '#3b414a', SLATE_HI = '#555d68', SNOW = '#dfe5ea';
+    const OAK = '#4a3426', OAK_HI = '#694b38', OAK_DK = '#332319';
+    const IRON = '#26221f', IRON_HI = '#4d4843';
+    const BRASS = '#b58a4a', BRASS_HI = '#deb36c';
+    const CLOTH_R = '#7a1622', CLOTH_R_HI = '#9b2432';
+    const CLOTH_B = '#1e2a44', CLOTH_B_HI = '#2d416a';
+    const RUBY = '#9c1c28', COBALT = '#213f88', AMBER = '#b87a24', EMERALD = '#22593f';
+    const WAX = '#e8dfd0', WAX_HI = '#f4ede0', FLAME = '#ffa03c', FLAME_HOT = '#ffe290';
+    const GARLIC = '#ece4d0', STAKE = '#b69262', ROPE = '#8a7a5a', CROW = '#221f25';
+
+    const _y = new THREE.Vector3(0, 1, 0), _q = new THREE.Quaternion(), _e = new THREE.Euler();
+
+    function aim(axis, dir) {
+      _q.setFromUnitVectors(axis, dir.clone().normalize());
+      _e.setFromQuaternion(_q, 'YXZ');
+      return { rx: _e.x, ry: _e.y, rz: _e.z };
+    }
+
+    function rod(k, a, b, r1, r2, c, o = {}, seg = 6) {
+      const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      k.cyl(r2, r1, d.length(), c, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2, { ...o, ...aim(_y, d) }, seg);
+    }
+
+    function ring(k, r, tube, c, x, y, z, o = {}, seg = 8, rad = 4, arc = Math.PI * 2) {
+      k.add(new THREE.TorusGeometry(r, tube, rad, seg, arc), c, x, y, z, o);
+    }
+
+    // 巫師帽曲線小尖塔頂（對應 gucheng-church.js 的 witchHat）
+    function witchHat(r, h, curl = 0, seg = 7) {
+      const pts = [];
+      for (let i = 0; i <= 8; i++) {
+        const t = i / 8;
+        pts.push(new THREE.Vector2(Math.max(0.012, r * Math.pow(1 - t, 1.32)), h * t));
+      }
+      const g = new THREE.LatheGeometry(pts, seg);
+      const p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const t = p.getY(i) / h;
+        p.setX(i, p.getX(i) + curl * t * t * t);
+      }
+      return g;
+    }
+
+    // 立臥交錯 90° 的鐵鏈／銅鏈
+    function addChain(k, start, stepVec, count, r = 0.028, tube = 0.009, col = IRON, col2 = IRON_HI, seed = 4) {
+      const rr = rng(seed);
+      const dir = new THREE.Vector3(...stepVec).normalize();
+      const baseAim = aim(_y, dir);
+      for (let i = 0; i < count; i++) {
+        const px = start[0] + stepVec[0] * i;
+        const py = start[1] + stepVec[1] * i;
+        const pz = start[2] + stepVec[2] * i;
+        k.add(new THREE.TorusGeometry(r, tube, 4, 7), col, px, py, pz, {
+          rx: baseAim.rx,
+          ry: baseAim.ry + (i % 2 ? Math.PI / 2 : 0) + (rr() - 0.5) * 0.12,
+          rz: baseAim.rz,
+          color2: col2,
+        });
+      }
+    }
+
+    // 獵魔教「黃銅日輪」聖徽（無十字！由日輪環＋實心銅心＋十二道放射短棘構成）
+    function addSunDisc(k, x, y, z, r = 0.28, rays = 8, rx = 0, ry = 0, tag = 'brass') {
+      const opt = { rx, ry, color2: BRASS_HI, tag };
+      k.cyl(r * 0.42, r * 0.42, 0.032, BRASS, x, y, z, { ...opt, rx: rx + Math.PI / 2 }, 10);
+      ring(k, r * 0.78, r * 0.08, BRASS, x, y, z, opt, 10, 4);
+      for (let i = 0; i < rays; i++) {
+        const a = (i / rays) * Math.PI * 2;
+        const dist = r * 0.96;
+        const dx = Math.cos(a) * dist * Math.cos(ry);
+        const dz = -Math.cos(a) * dist * Math.sin(ry);
+        const dy = Math.sin(a) * dist;
+        k.cone(r * 0.09, r * 0.36, BRASS, x + dx, y + dy, z + dz, {
+          rz: a - Math.PI / 2, ry, color2: BRASS_HI, tag,
+        });
+      }
+    }
+
+    // 不齊蠟燭＋自發光微火焰＋燭淚台座
+    function addCandle(k, x, y, z, h = 0.16, r = 0.024, lit = true) {
+      k.cyl(r * 0.88, r * 1.05, h, WAX, x, y + h / 2, z, { color2: WAX_HI }, 6);
+      k.box(r * 0.7, h * 0.42, r * 0.55, WAX_HI, x + r * 0.65, y + h * 0.72, z, { rz: 0.15 });
+      if (lit) {
+        k.cyl(0.004, 0.004, 0.022, '#2c2520', x, y + h + 0.01, z, {}, 4);
+        k.cone(r * 0.52, r * 1.85, FLAME, x, y + h + r * 1.15, z, { glow: true, color2: FLAME_HOT });
+      }
+    }
+
+    // 蒜頭顆粒（#ece4d0）與捆繩串
+    function addGarlicBulb(k, x, y, z, r = 0.048, seed = 1) {
+      k.rock(r, GARLIC, x, y + r * 0.72, z, { sy: 0.85, color2: '#f4eee0', ry: seed * 1.1 });
+      k.cone(r * 0.32, r * 0.7, '#cfc3a8', x, y + r * 1.5, z);
+    }
+
+    // 多角鑿面尖拱門框石（pointed arch voussoirs，不含圓滑擠出）
+    function addGothicArch(k, cx, baseY, cz, halfW, springH, peakH, depth = 0.36, thick = 0.24) {
+      const steps = 4;
+      const ptsL = [], ptsR = [];
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = halfW * (1 - t * t * 0.92);
+        const y = springH + (peakH - springH) * Math.sin(t * Math.PI * 0.5);
+        ptsL.push([-x, y]);
+        ptsR.push([x, y]);
+      }
+      // 兩側直石柱
+      for (const s of [-1, 1]) {
+        k.box(thick, springH, depth, STONE, cx + s * halfW, baseY + springH / 2, cz, { color2: STONE_HI });
+        k.box(thick * 1.24, 0.14, depth * 1.15, STONE_DK, cx + s * halfW, baseY + springH - 0.05, cz, { color2: STONE });
+      }
+      // 尖拱斜楔石拱圈（分節楔合，保留切石稜線）
+      for (const pts of [ptsL, ptsR]) {
+        for (let i = 0; i < steps; i++) {
+          const [ax, ay] = pts[i], [bx, by] = pts[i + 1];
+          const mx = cx + (ax + bx) / 2, my = baseY + (ay + by) / 2;
+          const len = Math.hypot(bx - ax, by - ay) + 0.05;
+          const ang = Math.atan2(by - ay, bx - ax);
+          k.box(len, thick * 0.92, depth * 0.96, i % 2 ? STONE : STONE_DK, mx, my, cz, { rz: ang, color2: STONE_HI });
+        }
+      }
+      // 拱頂楔形鎖石（keystone）
+      k.box(thick * 0.95, thick * 1.35, depth * 1.12, STONE_HI, cx, baseY + peakH + 0.04, cz, { color2: STONE_DK });
+    }
+
+    // 烏鴉剪影模型（對齊 gucheng-tales.js 的暖墨黑四面切造型）
+    function addCrow(k, x, y, z, ry = 0, down = 0) {
+      const tmp = new Kit(rng('crow_' + x + z));
+      tmp.rock(0.085, CROW, 0, 0.105, 0, { sx: 0.78, sy: 0.85, sz: 1.25, rx: -0.25 });
+      tmp.rock(0.052, CROW, 0, 0.185 - down * 0.04, 0.088 + down * 0.025);
+      tmp.cone(0.018, 0.07, '#3d3739', 0, 0.178 - down * 0.05, 0.15, { rx: Math.PI / 2 + down });
+      tmp.box(0.068, 0.018, 0.14, CROW, 0, 0.095, -0.125, { rx: -0.35 });
+      for (const s of [-1, 1]) tmp.box(0.01, 0.058, 0.01, '#3d3739', s * 0.028, 0.028, 0.01);
+      const b = newBucket();
+      tmp.emit(b, 0, 0, ry);
+      for (const geo of b.lit) k.add(geo, null, x, y, z);
+    }
+
+    // 教堂祭器小物展示座：高 0.78m 石灰岩側壇供桌（Credence Table，面數不計入小物本體）
+    function addCredenceTable(k) {
+      k.box(0.78, 0.06, 0.62, STONE_DK, 0, 0.03, 0, { color2: STONE });
+      for (const sx of [-0.28, 0.28]) {
+        for (const sz of [-0.21, 0.21]) {
+          k.cyl(0.045, 0.052, 0.66, STONE, sx, 0.39, sz, { color2: STONE_HI }, 6);
+        }
+      }
+      k.box(0.76, 0.06, 0.60, STONE, 0, 0.75, 0, { color2: STONE_HI }); // 頂面剛好在 y = 0.78
+      // 前緣一條獵魔教血紅邊巾
+      k.box(0.56, 0.18, 0.016, CLOTH_R, 0, 0.67, 0.305, { color2: CLOTH_R_HI });
+    }
+
+    // ============================================================================
+    // 8 件古城座堂（教堂區）細節裝飾（1:1 尺度）
+    // ============================================================================
+    const ITEMS = [
+      // ---------------- 中大型建築與教堂家具細節 (0..3) ----------------
+      {
+        name: '1. 尖拱木質告解懺悔亭',
+        zone: '教堂區｜側廊懺悔隔間',
+        height: 2.38,
+        desc: '深橡木鑲板三隔間告解亭：頂冠做壓扁階梯簷與微彎巫師帽小尖塔；中門配斜菱格聽懺窗，左跪墊放紅呢絨膝枕；故事笑點：牧師外側鐵鉤偷偷掛著一串大蒜與一把備用白蠟木樁（「連進來懺悔的客人都得防著」）。',
+        dist: 4.4, camY: 1.15, isSmall: false,
+        build(k) {
+          // 厚實石板底座與左右木壁隔板
+          k.box(1.56, 0.10, 0.88, STONE_DK, 0, 0.05, 0, { color2: STONE });
+          for (const x of [-0.72, -0.24, 0.24, 0.72]) {
+            k.box(0.065, 1.88, 0.80, OAK, x, 1.04, 0, { color2: OAK_HI });
+          }
+          k.box(1.52, 1.92, 0.06, OAK_DK, 0, 1.06, -0.38, { color2: OAK });
+          // 中央神父室面板＋透光斜格聽懺小窗
+          k.box(0.46, 1.05, 0.05, OAK, 0, 0.62, 0.38, { color2: OAK_HI });
+          k.box(0.46, 0.42, 0.05, OAK, 0, 1.72, 0.38, { color2: OAK_HI });
+          k.box(0.46, 0.38, 0.02, '#1c1816', 0, 1.33, 0.36);
+          for (let g = -2; g <= 2; g++) {
+            k.box(0.018, 0.38, 0.025, BRASS, g * 0.08, 1.33, 0.385, { tag: 'brass' });
+            k.box(0.40, 0.018, 0.025, BRASS, 0, 1.33 + g * 0.075, 0.385, { tag: 'brass' });
+          }
+          // 兩側半掀紅絨簾與左跪拜紅軟墊
+          k.box(0.42, 1.48, 0.035, CLOTH_R, -0.48, 0.96, 0.36, { rz: 0.06, color2: CLOTH_R_HI });
+          k.box(0.42, 1.48, 0.035, CLOTH_R, 0.48, 0.96, 0.36, { rz: -0.08, color2: CLOTH_R_HI });
+          k.box(0.44, 0.14, 0.26, OAK_DK, -0.48, 0.16, 0.50);
+          k.box(0.40, 0.065, 0.22, CLOTH_R, -0.48, 0.26, 0.50, { color2: CLOTH_R_HI });
+          // 階梯簷口與頂上小尖塔＋日輪銅飾
+          k.box(1.66, 0.12, 0.94, OAK_DK, 0, 2.02, 0, { color2: OAK });
+          k.box(1.06, 0.12, 0.72, OAK, 0, 2.13, 0, { color2: OAK_HI });
+          k.add(witchHat(0.24, 0.62, 0.08, 6), SLATE, 0, 2.18, 0, { color2: SLATE_HI });
+          addSunDisc(k, 0, 1.82, 0.425, 0.11, 6, 0, 0);
+          // 牧師防身小彩蛋：右壁外側木釘鉤＋一串大蒜＋白蠟木樁與木槌
+          k.box(0.03, 0.03, 0.09, IRON, 0.77, 1.36, 0.18);
+          for (let b = 0; b < 3; b++) addGarlicBulb(k, 0.80, 1.24 - b * 0.09, 0.20, 0.042, b + 3);
+          rod(k, [0.78, 1.24, 0.20], [0.78, 1.02, 0.20], 0.008, 0.008, ROPE, {}, 4);
+          k.cone(0.025, 0.24, STAKE, 0.76, 1.02, -0.08, { rx: Math.PI, color2: '#d8bc8e' });
+          k.box(0.045, 0.22, 0.03, OAK_HI, -0.48, 0.42, 0.36);
+        },
+      },
+      {
+        name: '2. 後殿聖油石龕與獸首洗滌槽',
+        zone: '教堂區｜後殿迴廊牆龕（Piscina）',
+        height: 2.22,
+        desc: '嵌於後殿灰石壁的尖拱洗滌石龕：四段榫接楔形拱圈包住深色龕背，下緣伸出雕成方頭獸嘴的黃銅出水口（承襲飛扶壁石獸語彙）；龕前擺設銅水罐、錫盆、吊掛亞麻巾與兩支滴淚蠟燭壁燈。',
+        dist: 4.1, camY: 1.08, isSmall: false,
+        build(k) {
+          // 靠背灰石厚牆柱座＋尖拱門框
+          k.box(1.42, 0.86, 0.62, STONE_DK, 0, 0.43, -0.14, { color2: STONE });
+          k.box(1.36, 1.28, 0.22, '#3d3935', 0, 1.48, -0.26); // 深暗壁龕內凹背牆
+          addGothicArch(k, 0, 0.84, -0.08, 0.56, 0.66, 1.32, 0.32, 0.22);
+          // 凸出承接水槽台座＋內凹暗色石盆
+          k.box(1.48, 0.12, 0.74, STONE_HI, 0, 0.88, -0.04, { color2: STONE });
+          k.cyl(0.28, 0.22, 0.14, STONE, 0, 0.96, 0.16, { color2: STONE_HI }, 8);
+          k.cyl(0.21, 0.17, 0.04, '#24292c', 0, 1.015, 0.16, {}, 8); // 濕亮石槽水面感
+          // 雕成方頭長吻獸嘴的黃銅出水口（後方接實背牆石座）＋吊掛亞麻擦手巾
+          k.box(0.18, 0.16, 0.16, STONE_DK, 0, 1.36, -0.19);
+          k.box(0.14, 0.12, 0.22, BRASS, 0, 1.36, -0.06, { tag: 'brass', color2: BRASS_HI });
+          k.cone(0.055, 0.16, BRASS_HI, 0, 1.34, 0.10, { rx: Math.PI / 2, ry: Math.PI / 4, tag: 'brass' });
+          for (const h of [-0.045, 0.045]) k.cone(0.018, 0.08, BRASS, h, 1.44, -0.10, { rx: -0.4, tag: 'brass' });
+          // 右前檯面緣鍛鐵環＋懸掛亞麻巾（掛於台緣正面 z=0.345，完整垂落不嵌入台座）＋銅聖水罐
+          ring(k, 0.048, 0.011, IRON, 0.46, 0.86, 0.345, { ry: 0.08 }, 7, 4);
+          k.box(0.16, 0.26, 0.024, '#dad2c2', 0.46, 0.72, 0.348, { rz: 0.05, color2: '#b8ae9c' });
+          k.box(0.14, 0.06, 0.046, '#e2dacb', 0.46, 0.84, 0.350, { rz: 0.03, color2: '#c5bba8' });
+          k.cyl(0.052, 0.068, 0.22, BRASS, -0.34, 1.05, 0.14, { tag: 'brass', color2: BRASS_HI }, 8);
+          k.cyl(0.032, 0.052, 0.06, BRASS, -0.34, 1.18, 0.14, { tag: 'brass' }, 8);
+          ring(k, 0.052, 0.010, BRASS_HI, -0.40, 1.07, 0.14, { rz: Math.PI / 2, tag: 'brass' }, 7, 4);
+          // 龕口兩側鍛鐵壁燭台與滴淚高蠟燭
+          for (const sx of [-0.56, 0.56]) {
+            k.box(0.04, 0.04, 0.18, IRON, sx, 1.24, 0.08);
+            k.cyl(0.055, 0.04, 0.025, IRON_HI, sx, 1.27, 0.16, {}, 7);
+            addCandle(k, sx, 1.28, 0.16, 0.20, 0.024, true);
+          }
+        },
+      },
+      {
+        name: '3. 詩班日輪讀經架與聖鈴立架',
+        zone: '教堂區｜詩班席讀經台',
+        height: 1.72,
+        desc: '置於詩班席中線的胡桃橡木讀經台：斜傾經架背後鑲嵌十二角黃銅日輪（無十字），桌上攤開包銅角大經書與垂落血紅絲帶書籤；旁立一根鐵鍛三音階手搖聖鈴架與長柄熄燭銅罩。',
+        dist: 3.8, camY: 0.94, isSmall: false,
+        build(k) {
+          // 雕面八角石基座＋實木粗支柱＋四條拱撐爪
+          k.cyl(0.28, 0.34, 0.14, STONE_DK, 0, 0.07, 0, { color2: STONE }, 8);
+          k.cyl(0.095, 0.125, 1.06, OAK, 0, 0.67, 0, { color2: OAK_HI }, 8);
+          for (let i = 0; i < 4; i++) {
+            const a = i * Math.PI / 2 + 0.78;
+            rod(k, [Math.cos(a) * 0.10, 0.38, Math.sin(a) * 0.10], [Math.cos(a) * 0.25, 0.12, Math.sin(a) * 0.25], 0.032, 0.024, OAK_DK, {}, 5);
+          }
+          // 背後黃銅大日輪座與傾斜經桌板
+          addSunDisc(k, 0, 1.38, -0.06, 0.30, 8, 0, 0);
+          k.box(0.68, 0.045, 0.48, OAK_HI, 0, 1.26, 0.05, { rx: 0.44, color2: OAK });
+          k.box(0.68, 0.04, 0.055, OAK_DK, 0, 1.15, 0.25, { rx: 0.44 });
+          // 攤開羊皮大詩篇（左頁右頁微曲角＋血紅絲帶書籤＋銅護角）
+          k.box(0.56, 0.048, 0.36, '#3b2420', 0, 1.29, 0.05, { rx: 0.44 });
+          k.box(0.25, 0.025, 0.33, '#e4dbc6', -0.14, 1.32, 0.05, { rx: 0.44, rz: 0.08, color2: '#f2ead8' });
+          k.box(0.25, 0.025, 0.33, '#e4dbc6', 0.14, 1.32, 0.05, { rx: 0.44, rz: -0.08, color2: '#f2ead8' });
+          k.box(0.035, 0.28, 0.008, CLOTH_R, 0.06, 1.08, 0.26, { rx: 0.14, color2: CLOTH_R_HI });
+          // 貼在經書上角的驗身小圓銅鏡（黑色幽默：念經念到一半抬頭照一下聽眾）
+          k.cyl(0.052, 0.052, 0.012, '#d8e3ef', -0.24, 1.38, -0.04, { rx: Math.PI / 2 + 0.44 }, 10);
+          ring(k, 0.055, 0.009, BRASS, -0.24, 1.38, -0.04, { rx: 0.44, tag: 'brass' }, 8, 4);
+          // 旁立鍛鐵三級手搖銅鈴架與長柄熄燭銅鐘
+          k.cyl(0.16, 0.20, 0.06, IRON, 0.56, 0.03, -0.10, { color2: IRON_HI }, 7);
+          rod(k, [0.56, 0.05, -0.10], [0.56, 1.12, -0.10], 0.018, 0.014, IRON_HI, {}, 5);
+          k.box(0.42, 0.032, 0.032, IRON, 0.56, 1.12, -0.10);
+          [[-0.14, 0.055], [0, 0.068], [0.14, 0.046]].forEach(([dx, br]) => {
+            k.cone(br, br * 1.9, BRASS, 0.56 + dx, 1.02, -0.10, { tag: 'brass', color2: BRASS_HI });
+          });
+          rod(k, [-0.46, 0.06, -0.12], [-0.42, 1.32, -0.02], 0.012, 0.010, BRASS, { tag: 'brass' }, 5);
+          k.cone(0.036, 0.08, BRASS_HI, -0.415, 1.34, 0.01, { rx: 0.4, tag: 'brass' });
+        },
+      },
+      {
+        name: '4. 門廊石柱鐵燈座與封欄龕',
+        zone: '教堂區｜入口柱墩夜燈組',
+        height: 2.15,
+        desc: '立於教堂入口與中庭交界石墩的守夜設施：多階劈面石灰岩壁龕柱墩，懸出一支鍛鐵曲臂與立臥 90° 鐵鏈吊著八角夜巡鐵燈（點著暖橘燈火）；底座下圍立臥交錯鐵柵欄加一把大掛鎖，封著一捆防身白蠟木樁。',
+        dist: 4.2, camY: 1.05, isSmall: false,
+        build(k) {
+          // 階梯方石柱墩與上緣灰雪積邊
+          k.box(0.84, 0.32, 0.84, STONE_DK, 0, 0.16, 0, { color2: STONE });
+          k.box(0.62, 1.54, 0.62, STONE, 0, 1.09, 0, { color2: STONE_HI });
+          k.box(0.76, 0.14, 0.76, STONE_DK, 0, 1.92, 0);
+          k.box(0.78, 0.06, 0.78, SNOW, 0, 2.02, 0, { ao: false });
+          k.add(witchHat(0.28, 0.32, 0.04, 4), STONE_DK, 0, 2.05, 0, { ry: Math.PI / 4 });
+          // 鍛鐵懸臂＋立臥 90° 鐵鏈＋八角垂吊油燈（自發光暖焰）
+          k.box(0.06, 0.06, 0.68, IRON, 0, 1.72, 0.48, { color2: IRON_HI });
+          rod(k, [0, 1.38, 0.30], [0, 1.72, 0.66], 0.024, 0.020, IRON_HI, {}, 5);
+          addChain(k, [0, 1.66, 0.76], [0, -0.048, 0], 4, 0.028, 0.008, IRON, IRON_HI, 41);
+          k.cone(0.14, 0.12, IRON, 0, 1.42, 0.76, { color2: IRON_HI });
+          k.cyl(0.095, 0.08, 0.20, FLAME, 0, 1.26, 0.76, { glow: true, color2: FLAME_HOT }, 6);
+          for (let i = 0; i < 4; i++) {
+            const a = i * Math.PI / 2 + 0.4;
+            k.cyl(0.010, 0.010, 0.21, IRON, Math.cos(a) * 0.105, 1.26, 0.76 + Math.sin(a) * 0.105, {}, 4);
+          }
+          k.cyl(0.11, 0.08, 0.04, IRON, 0, 1.14, 0.76, {}, 6);
+          // 柱底鐵柵格櫃與大掛鎖（內裝防身備用木樁，外推出石柱正面避免 Z-fighting）
+          k.box(0.46, 0.44, 0.014, '#181a1c', 0, 0.56, 0.318);
+          for (let s = 0; s < 3; s++) k.cone(0.024, 0.34, STAKE, -0.10 + s * 0.10, 0.52, 0.326, { color2: '#d8bc8e' });
+          for (let g = -2; g <= 2; g++) k.box(0.018, 0.44, 0.018, IRON, g * 0.09, 0.56, 0.336);
+          k.box(0.48, 0.022, 0.024, IRON, 0, 0.78, 0.336);
+          k.box(0.48, 0.022, 0.024, IRON, 0, 0.34, 0.336);
+          k.box(0.085, 0.075, 0.026, BRASS, 0.14, 0.52, 0.354, { tag: 'brass' });
+          ring(k, 0.026, 0.008, IRON, 0.14, 0.57, 0.354, {}, 6, 3, Math.PI);
+          // 柱頂停一隻墨黑烏鴉（gucheng-tales 同款）
+          addCrow(k, -0.16, 2.05, 0.16, 0.55, 0.2);
+        },
+      },
+
+      // ---------------- 聖壇與聖器室精細小物：陳列於 0.78m 石灰岩側壇桌 (4..7) ----------------
+      {
+        name: '5. 聖壇日輪聖體盒與搖擺香爐',
+        zone: '教堂小物（陳列於 0.78m 側壇桌）｜主祭壇器具',
+        height: 0.42,
+        desc: '獵魔教主祭壇桌面微縮聖具：立於八角銅座的十二芒黃銅日輪聖體龕（中心鑲一顆透光紅寶玻璃心）；旁吊一盞立臥 90° 細銅鏈懸掛的鏤空提爐香爐（縫隙透出餘燼紅橘光）；附帶小銅勺與兩支點燃細蠟燭。',
+        dist: 1.48, camY: 0.94, isSmall: true,
+        build(k) {
+          const y0 = 0.78;
+          // 左側：十二芒黃銅日輪聖體龕（中央嵌紅寶石晶）
+          k.cyl(0.068, 0.092, 0.036, BRASS, -0.16, y0 + 0.018, 0.02, { tag: 'brass', color2: BRASS_HI }, 8);
+          k.cyl(0.022, 0.032, 0.13, BRASS, -0.16, y0 + 0.095, 0.02, { tag: 'brass' }, 6);
+          addSunDisc(k, -0.16, y0 + 0.26, 0.02, 0.125, 10, 0, 0.15);
+          k.add(new THREE.OctahedronGeometry(0.036, 0), RUBY, -0.16, y0 + 0.26, 0.02, { tag: 'glass', color2: '#d83848' });
+          // 右側：立架懸掛鏤空黃銅香爐＋細銅鏈＋爐心炭火光
+          k.cyl(0.062, 0.075, 0.024, IRON, 0.15, y0 + 0.012, -0.04, {}, 7);
+          rod(k, [0.15, y0 + 0.02, -0.04], [0.15, y0 + 0.39, -0.04], 0.012, 0.010, IRON_HI, {}, 5);
+          rod(k, [0.15, y0 + 0.38, -0.04], [0.06, y0 + 0.38, 0.05], 0.010, 0.009, BRASS, { tag: 'brass' }, 5);
+          addChain(k, [0.06, y0 + 0.355, 0.05], [0, -0.026, 0], 3, 0.015, 0.004, BRASS, BRASS_HI, 52);
+          k.cyl(0.052, 0.032, 0.05, BRASS, 0.06, y0 + 0.195, 0.05, { tag: 'brass', color2: BRASS_HI }, 7);
+          k.cyl(0.036, 0.036, 0.034, '#ff7228', 0.06, y0 + 0.232, 0.05, { glow: true, color2: '#ffd468' }, 7);
+          for (let st = 0; st < 4; st++) {
+            const a = st * Math.PI / 2 + 0.4;
+            k.cyl(0.004, 0.004, 0.05, BRASS, 0.06 + Math.cos(a) * 0.044, y0 + 0.232, 0.05 + Math.sin(a) * 0.044, { tag: 'brass' }, 4);
+          }
+          k.cone(0.052, 0.072, BRASS_HI, 0.06, y0 + 0.285, 0.05, { tag: 'brass' });
+          // 乳香船形銅盒與小銅勺＋兩支細燭
+          k.box(0.11, 0.032, 0.056, BRASS, -0.02, y0 + 0.016, -0.16, { ry: -0.25, tag: 'brass', color2: BRASS_HI });
+          addCandle(k, 0.24, y0, 0.14, 0.14, 0.018, true);
+          addCandle(k, -0.28, y0, -0.12, 0.11, 0.018, true);
+        },
+      },
+      {
+        name: '6. 許願投幣箱與蠟燭沙盤',
+        zone: '教堂小物（陳列於 0.78m 側壇桌）｜禱告供養組',
+        height: 0.36,
+        desc: '側廊禱告角落的鐵木投幣供養箱（銅框投幣縫加小鐵鎖防竊）、圓形黑鐵沙盤內插七支高矮不一的祈願細燭與融化蠟灘；旁附一只竹編／木條淺籃，整齊碼著大蒜頭與手工削尖小木樁（「隨喜附贈」）。',
+        dist: 1.48, camY: 0.92, isSmall: true,
+        build(k) {
+          const y0 = 0.78;
+          // 橡木鐵角許願投幣箱＋黃銅投幣縫＋正面掛鎖（依旋轉角對準正面法向）
+          k.box(0.17, 0.15, 0.13, OAK, -0.16, y0 + 0.075, -0.08, { ry: 0.24, color2: OAK_HI });
+          k.box(0.18, 0.024, 0.14, OAK_DK, -0.16, y0 + 0.155, -0.08, { ry: 0.24 });
+          k.box(0.075, 0.012, 0.024, BRASS, -0.16, y0 + 0.17, -0.08, { ry: 0.24, tag: 'brass' });
+          k.box(0.044, 0.040, 0.018, IRON_HI, -0.16 + Math.sin(0.24) * 0.072, y0 + 0.078, -0.08 + Math.cos(0.24) * 0.072, { ry: 0.24 });
+          ring(k, 0.014, 0.004, IRON, -0.16 + Math.sin(0.24) * 0.072, y0 + 0.104, -0.08 + Math.cos(0.24) * 0.072, { ry: 0.24 }, 6, 3, Math.PI);
+          // 圓形黑鐵沙盤＋7 支高矮燭火＋蠟油池
+          k.cyl(0.145, 0.13, 0.032, IRON, 0.14, y0 + 0.016, 0.04, { color2: IRON_HI }, 9);
+          k.cyl(0.128, 0.128, 0.012, '#8a7e68', 0.14, y0 + 0.032, 0.04, {}, 9); // 細灰沙床
+          const vCandles = [
+            [0.08, 0.02, 0.13, true], [0.15, 0.09, 0.10, true], [0.21, 0.02, 0.15, true],
+            [0.12, -0.03, 0.07, false], [0.19, 0.07, 0.08, true], [0.06, 0.08, 0.045, false],
+            [0.14, 0.03, 0.165, true],
+          ];
+          vCandles.forEach(([cx, cz, ch, lit]) => addCandle(k, cx, y0 + 0.036, cz, ch, 0.013, lit));
+          // 前左下角木籃：裝著蒜頭與小木樁（平放於籃口上緣）
+          k.box(0.16, 0.055, 0.12, '#6a4c36', -0.12, y0 + 0.028, 0.14, { ry: -0.32, color2: '#8a6648' });
+          addGarlicBulb(k, -0.16, y0 + 0.052, 0.14, 0.032, 61);
+          addGarlicBulb(k, -0.10, y0 + 0.052, 0.16, 0.030, 62);
+          k.cone(0.012, 0.12, STAKE, -0.12, y0 + 0.064, 0.13, { rx: Math.PI / 2, rz: 0.55 });
+          k.cone(0.011, 0.11, STAKE, -0.14, y0 + 0.064, 0.15, { rx: Math.PI / 2, rz: -0.35 });
+        },
+      },
+      {
+        name: '7. 補窗台與花窗碎彩玻璃盤',
+        zone: '教堂小物（陳列於 0.78m 側壇桌）｜花窗修繕器具',
+        height: 0.28,
+        desc: '呼應北側廊那扇被釘死的花窗：木托盤裡盛著紅寶石、夏特深藍、琥珀、祖母綠四色不規則花窗碎玻璃（套用發光／半透邊緣），旁放一卷軟鉛條框、焊錫小木錘與一把盛滿聖水（銀藍）的銅灑水器。',
+        dist: 1.48, camY: 0.90, isSmall: true,
+        build(k) {
+          const y0 = 0.78;
+          // 長方木托盤＋斜靠半塊拼裝中的花窗菱格鉛枠
+          k.box(0.32, 0.022, 0.22, OAK, -0.06, y0 + 0.011, 0.04, { ry: 0.15, color2: OAK_HI });
+          k.box(0.30, 0.012, 0.20, '#22262a', -0.06, y0 + 0.024, 0.04, { ry: 0.15 });
+          // 9 塊發光／半透明彩窗碎玻璃片（遵照美術原則：無粉紫，只取夏特深藍、紅寶、琥珀、祖母綠）
+          const shards = [
+            [-0.14, 0.02, RUBY, 0.055, 0.4], [-0.08, 0.06, COBALT, 0.065, 1.1],
+            [-0.02, -0.01, AMBER, 0.048, 2.0], [0.03, 0.07, EMERALD, 0.052, 0.7],
+            [-0.12, 0.09, COBALT, 0.045, 2.6], [-0.04, 0.08, RUBY, 0.050, 1.8],
+            [-0.06, -0.03, COBALT, 0.042, 0.2], [0.02, 0.01, RUBY, 0.046, 2.4],
+          ];
+          shards.forEach(([sx, sz, col, sw, ry]) => {
+            k.cone(sw * 0.65, 0.012, col, sx, y0 + 0.036, sz, { ry, sz: 0.65, glow: true });
+          });
+          // 斜倚後方的迷你鉛條菱格框樣片
+          k.box(0.18, 0.20, 0.014, IRON, -0.10, y0 + 0.11, -0.14, { rx: -0.22, ry: 0.15 });
+          k.box(0.14, 0.15, 0.016, COBALT, -0.10, y0 + 0.11, -0.138, { rx: -0.22, ry: 0.15, tag: 'glass' });
+          k.box(0.06, 0.08, 0.018, RUBY, -0.10, y0 + 0.11, -0.136, { rx: -0.22, ry: 0.15, tag: 'glass' });
+          // 鉛條捲與修繕手錘
+          ring(k, 0.045, 0.010, '#6a7076', 0.20, y0 + 0.012, -0.12, { rx: Math.PI / 2 }, 8, 4);
+          ring(k, 0.036, 0.008, '#7a8086', 0.20, y0 + 0.026, -0.12, { rx: Math.PI / 2 }, 8, 4);
+          // 右前角：聖水銅瓶＋圓球刷頭（Aspergil）
+          k.cyl(0.044, 0.058, 0.15, BRASS, 0.22, y0 + 0.075, 0.10, { tag: 'brass', color2: BRASS_HI }, 8);
+          k.cyl(0.022, 0.038, 0.04, BRASS, 0.22, y0 + 0.165, 0.10, { tag: 'brass' }, 7);
+          rod(k, [0.16, y0 + 0.02, 0.20], [0.28, y0 + 0.03, 0.22], 0.008, 0.008, OAK_HI, {}, 5);
+          k.ball(0.022, BRASS_HI, 0.28, y0 + 0.032, 0.22, { tag: 'brass' });
+        },
+      },
+      {
+        name: '8. 守門鑰匙板與堂鐘繩盤',
+        zone: '教堂小物（陳列於 0.78m 側壇桌）｜塔樓與墓園守衛組',
+        height: 0.38,
+        desc: '塔樓螺旋階梯入口的守門器具：斜靠壁木鑰匙架掛著五把大大小小鐵鑰與銅鑰（最大那把綁著紅布標記，大概通往鎖死許久的墓園老石棺）；旁盤一卷粗麻堂鐘引繩、黃銅手搖銅鈴，與一隻墨黑烏鴉石鎮紙。',
+        dist: 1.48, camY: 0.94, isSmall: true,
+        build(k) {
+          const y0 = 0.78;
+          // 靠背橡木鑰匙板＋五把大大小小鍛鐵／黃銅鑰匙
+          k.box(0.44, 0.042, 0.10, OAK_DK, 0, y0 + 0.021, -0.15);
+          k.box(0.42, 0.30, 0.032, OAK, 0, y0 + 0.19, -0.17, { rx: -0.12, color2: OAK_HI });
+          k.box(0.44, 0.036, 0.048, OAK_DK, 0, y0 + 0.34, -0.19, { rx: -0.12 });
+          const keys = [
+            [-0.15, 0.14, IRON, false],
+            [-0.075, 0.18, BRASS, false],
+            [0.0, 0.13, IRON_HI, false],
+            [0.08, 0.22, BRASS_HI, true], // 通石棺的超大黃銅鑰匙（綁紅布！）
+            [0.16, 0.15, IRON, false],
+          ];
+          keys.forEach(([kx, kl, col, tagged]) => {
+            const ky = y0 + 0.27;
+            const tag = col.includes('b5') || col.includes('de') ? 'brass' : undefined;
+            k.cyl(0.008, 0.008, 0.032, IRON, kx, ky + 0.01, -0.14, { rx: Math.PI / 2 }, 5);
+            ring(k, 0.022, 0.006, col, kx, ky, -0.128, { ry: 0, tag }, 6, 3);
+            k.cyl(0.006, 0.006, kl, col, kx, ky - kl * 0.5 - 0.018, -0.128, { tag }, 5);
+            k.box(0.028, 0.024, 0.008, col, kx + 0.015, ky - kl, -0.128, { tag });
+            if (tagged) k.box(0.018, 0.065, 0.012, CLOTH_R, kx - 0.012, ky - 0.045, -0.124, { rz: 0.25, color2: CLOTH_R_HI });
+          });
+          // 盤起來的粗麻鐘繩圈＋銅箍拉把
+          for (let r = 0; r < 3; r++) {
+            ring(k, 0.115 - r * 0.022, 0.016, ROPE, -0.12, y0 + 0.016 + r * 0.012, 0.08, { rx: Math.PI / 2, color2: '#a89674' }, 10, 4);
+          }
+          k.cyl(0.024, 0.024, 0.09, CLOTH_R, -0.08, y0 + 0.045, 0.19, { rz: Math.PI / 2, ry: 0.4, color2: CLOTH_R_HI }, 6);
+          // 桌上手搖銅鈴與烏鴉石鎮紙
+          k.cone(0.048, 0.085, BRASS, 0.16, y0 + 0.043, 0.10, { tag: 'brass', color2: BRASS_HI });
+          k.cyl(0.012, 0.014, 0.085, OAK_HI, 0.16, y0 + 0.125, 0.10, {}, 6);
+          k.box(0.11, 0.028, 0.14, '#e6dcc4', 0.22, y0 + 0.014, -0.03, { ry: -0.25 }); // 堂區帳簿
+          addCrow(k, 0.22, y0 + 0.028, -0.02, -0.5, 0.25);
+        },
+      },
+    ];
+
+    // ============================================================================
+    // 建構模型工具（支援普通石灰岩木鐵、高光黃銅、半透彩窗玻璃、自發光燭火）
+    // ============================================================================
+    function buildGroup(builderFn, seed, addTable = false) {
+      const litB = newBucket(), brassB = newBucket(), glassB = newBucket();
+      const kLit = new Kit(rng(seed));
+      const kBrass = new Kit(rng(seed + 11));
+      const kGlass = new Kit(rng(seed + 19));
+      if (addTable) addCredenceTable(kLit);
+
+      const proxy = {
+        add(geo, col, x, y, z, o = {}) {
+          if (o && o.tag === 'glass') kGlass.add(geo, col, x, y, z, o);
+          else if (o && o.tag === 'brass') kBrass.add(geo, col, x, y, z, o);
+          else kLit.add(geo, col, x, y, z, o);
+        },
+        box(w, h, d, c, x, y, z, o = {}) { (o.tag === 'brass' ? kBrass : kLit).box(w, h, d, c, x, y, z, o); },
+        cyl(rt, rb, h, c, x, y, z, o = {}, seg = 8) { (o.tag === 'brass' ? kBrass : kLit).cyl(rt, rb, h, c, x, y, z, o, seg); },
+        ball(r, c, x, y, z, o = {}) { (o.tag === 'brass' ? kBrass : kLit).ball(r, c, x, y, z, o); },
+        rock(r, c, x, y, z, o = {}) { kLit.rock(r, c, x, y, z, o); },
+        cone(r, h, c, x, y, z, o = {}) { (o.tag === 'brass' ? kBrass : kLit).cone(r, h, c, x, y, z, o); },
+        torus(r, t, arc, c, x, y, z, o = {}) { (o.tag === 'brass' ? kBrass : kLit).torus(r, t, arc, c, x, y, z, o); },
+        plane(w, h, c, x, y, z, o = {}) { kLit.plane(w, h, c, x, y, z, o); },
+      };
+      builderFn(proxy);
+      const totalParts = kLit.lit.length + kLit.glow.length + kBrass.lit.length + kGlass.lit.length;
+      kLit.emit(litB, 0, 0, 0);
+      kBrass.emit(brassB, 0, 0, 0);
+      kGlass.emit(glassB, 0, 0, 0);
+
+      const g = new THREE.Group();
+      let tris = 0;
+      const addPart = (list, role, mat, useAO) => {
+        if (!list.length) return;
+        const geo = mergeBucket(list, useAO);
+        if (!geo) return;
+        const m = new THREE.Mesh(geo, mat);
+        m.userData.role = role;
+        tris += m.geometry.attributes.position.count / 3;
+        g.add(m);
+      };
+      addPart(litB.lit, 'lit', matLit, true);
+      addPart(brassB.lit, 'brass', matBrass, true);
+      addPart(glassB.lit, 'glass', matGlass, false);
+      addPart(litB.glow, 'glow', matGlow, false);
+
+      g.userData.tris = Math.round(tris);
+      g.userData.parts = totalParts;
+      return g;
+    }
+
+    function measureItemSelf(item) {
+      const cleanG = buildGroup(item.build, 1000, false);
+      return { tris: cleanG.userData.tris, parts: cleanG.userData.parts };
+    }
+
+    // ============================================================================
+    // 舞台地板：古城座堂棋盤大方磚（一深一淺冷灰石磚，零閃爍共面）
+    // ============================================================================
+    const showcaseRoot = new THREE.Group();
+    scene.add(showcaseRoot);
+
+    {
+      const k = new Kit(rng(1)), b = newBucket();
+      k.cyl(9.2, 9.5, 0.18, '#282d32', 0, -0.092, 0, { color2: '#33393f' }, 44);
+      k.cyl(9.22, 9.22, 0.06, '#50565d', 0, -0.052, 0, { color2: '#3b414a' }, 44);
+      // 教堂大廳一深一淺方形地磚（top 嚴格設於 y = 0.002，與外台階錯開不閃爍）
+      for (let gx = -5; gx <= 5; gx++) {
+        for (let gz = -4; gz <= 4; gz++) {
+          const px = gx * 1.15, pz = gz * 1.15;
+          if (Math.hypot(px, pz) > 7.4) continue;
+          const dark = (gx + gz) & 1;
+          k.box(1.13, 0.012, 1.13, dark ? '#585550' : '#736e66', px, -0.004, pz, { ao: false });
+        }
+      }
+      // 聖壇地上子午銅線呼應（gucheng-church.js 同款黃銅子午嵌線）
+      k.box(0.08, 0.008, 12.6, BRASS, 0.25, 0.004, -0.2, { ao: false });
+      k.emit(b, 0, 0, 0);
+      const fm = new THREE.Mesh(mergeBucket(b.lit, true), matLit);
+      fm.userData.role = 'lit';
+      showcaseRoot.add(fm);
+    }
+
+    function shadowTexture() {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const g = c.getContext('2d').createRadialGradient(32, 32, 2, 32, 32, 30);
+      g.addColorStop(0, 'rgba(0,0,0,0.45)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      c.getContext('2d').fillStyle = g;
+      c.getContext('2d').fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c);
+    }
+
+    const character = new Character(shadowTexture(), sanitizeLook({}));
+    character.group.position.set(-4.15, 0, 1.35);
+    character.group.rotation.y = 0.52;
+    character.update(0.016, 0);
+    showcaseRoot.add(character.group);
+
+    // 擺放位置：中大型教堂設施 0..3 在後弧，祭器桌 4..7 在前右弧（0 與 3 完全不重疊視線）
+    const LAYOUT = [
+      { x: -2.75, z: -1.75, ry: 0.28 },
+      { x: -0.20, z: -2.55, ry: 0.04 },
+      { x: 2.40, z: -1.85, ry: -0.32 },
+      { x: -0.95, z: 0.85, ry: 0.22 },
+      { x: 0.55, z: 1.68, ry: -0.14 },
+      { x: 1.95, z: 1.38, ry: -0.28 },
+      { x: 3.25, z: 0.72, ry: -0.44 },
+      { x: 4.20, z: -0.35, ry: -0.62 },
+    ];
+
+    const propGroups = [];
+    ITEMS.forEach((it, i) => {
+      const pos = LAYOUT[i];
+      const selfStats = measureItemSelf(it);
+      it.tris = selfStats.tris;
+      it.parts = selfStats.parts;
+
+      const g = buildGroup(it.build, 820 + i * 31, it.isSmall);
+      g.position.set(pos.x, 0, pos.z);
+      g.rotation.y = pos.ry;
+      showcaseRoot.add(g);
+
+      propGroups.push({
+        g, item: it,
+        x: pos.x,
+        y: it.isSmall ? 0.92 : it.camY,
+        z: pos.z,
+        dist: it.dist,
+      });
+    });
+
+    // ============================================================================
+    // 對照模式（左：預設泛用教堂做法 vs 右：古城教堂區規則做法）
+    // ============================================================================
+    const compareRoot = new THREE.Group();
+    compareRoot.visible = false;
+    scene.add(compareRoot);
+
+    const COMPARISONS = [
+      {
+        bad(k) {
+          // 預設：圓拱厚框＋高段光滑銀環平鏈＋純白光滑圓柱
+          k.add(new THREE.TorusGeometry(0.45, 0.10, 12, 24, Math.PI), '#96989e', 0, 0.95, 0);
+          k.cyl(0.10, 0.10, 0.95, '#96989e', -0.45, 0.48, 0, {}, 20);
+          k.cyl(0.10, 0.10, 0.95, '#96989e', 0.45, 0.48, 0, {}, 20);
+          // 沒轉 90° 的扁鏈（像梯子）
+          for (let i = 0; i < 6; i++) {
+            k.add(new THREE.TorusGeometry(0.032, 0.009, 8, 16), '#a8aeb4', 0, 1.32 - i * 0.06, 0, { ry: 0 });
+          }
+          k.add(new THREE.SphereGeometry(0.12, 16, 12), '#e8c448', 0, 0.88, 0);
+        },
+        good(k) {
+          // 這裡：分節尖拱契石＋獵魔教黃銅日輪（無十字）＋立臥 90° 鏈條懸香爐
+          addGothicArch(k, 0, 0, 0, 0.48, 0.92, 1.48, 0.28, 0.18);
+          addSunDisc(k, 0, 1.62, 0.15, 0.15, 8, 0, 0);
+          addChain(k, [0, 1.38, 0.04], [0, -0.048, 0], 6, 0.026, 0.008, IRON, IRON_HI, 902);
+          k.cyl(0.075, 0.048, 0.09, BRASS, 0, 0.98, 0.04, { tag: 'brass', color2: BRASS_HI }, 7);
+          k.cyl(0.058, 0.058, 0.035, '#ff7228', 0, 1.03, 0.04, { glow: true, color2: '#ffd468' }, 7);
+          k.cone(0.075, 0.10, BRASS_HI, 0, 1.08, 0.04, { tag: 'brass' });
+        },
+      },
+      {
+        bad(k) {
+          // 預設：高段光滑對稱粉彩燈＋塑膠白燭＋紫紅糖果花窗塊
+          const y0 = 0.78;
+          for (let i = -1; i <= 1; i++) {
+            k.cyl(0.025, 0.025, 0.18, '#ffffff', i * 0.09, y0 + 0.09, 0.04, {}, 20);
+            k.add(new THREE.SphereGeometry(0.024, 14, 10), '#ffd86a', i * 0.09, y0 + 0.20, 0.04, { glow: true });
+          }
+          k.box(0.28, 0.03, 0.16, '#f4a8dc', 0, y0 + 0.015, -0.14);
+          k.box(0.18, 0.14, 0.02, '#d878e8', 0, y0 + 0.10, -0.14);
+        },
+        good(k) {
+          // 這裡：滴蠟高低蠟燭＋暖黑鐵燭盤＋夏特深藍／紅寶石／琥珀碎彩玻璃盤
+          const y0 = 0.78;
+          k.cyl(0.13, 0.115, 0.03, IRON, 0.02, y0 + 0.015, 0.09, { color2: IRON_HI }, 8);
+          addCandle(k, -0.05, y0 + 0.03, 0.08, 0.12, 0.018, true);
+          addCandle(k, 0.02, y0 + 0.03, 0.12, 0.18, 0.020, true);
+          addCandle(k, 0.09, y0 + 0.03, 0.07, 0.07, 0.018, false);
+          k.box(0.26, 0.02, 0.16, OAK, -0.02, y0 + 0.01, -0.14, { color2: OAK_HI });
+          k.cone(0.042, 0.012, COBALT, -0.08, y0 + 0.028, -0.14, { ry: 0.4, glow: true });
+          k.cone(0.038, 0.012, RUBY, 0.0, y0 + 0.028, -0.12, { ry: 1.5, glow: true });
+          k.cone(0.036, 0.012, AMBER, 0.07, y0 + 0.028, -0.16, { ry: 2.3, glow: true });
+        },
+      },
+    ];
+
+    const compareStats = [];
+    {
+      const kb = new Kit(rng(3)), b = newBucket();
+      kb.cyl(5.2, 5.4, 0.14, '#24292e', 0, -0.07, 0, { color2: '#31373d' }, 36);
+      for (const cx of [-2.0, 2.0]) {
+        kb.cyl(0.76, 0.80, 0.04, '#505256', cx - 0.85, 0.02, -0.1, {}, 12);
+        kb.cyl(0.76, 0.80, 0.04, '#5a5042', cx + 0.85, 0.02, 0.1, {}, 12);
+      }
+      kb.emit(b, 0, 0, 0);
+      const bm = new THREE.Mesh(mergeBucket(b.lit, true), matLit);
+      bm.userData.role = 'lit';
+      compareRoot.add(bm);
+
+      COMPARISONS.forEach((cmp, i) => {
+        const cx = (i - 0.5) * 4.0;
+        const badG = buildGroup(cmp.bad, 'cbad_' + i, i === 1);
+        badG.position.set(cx - 0.85, 0.04, -0.1);
+        compareRoot.add(badG);
+
+        const goodG = buildGroup(cmp.good, 'cgood_' + i, i === 1);
+        goodG.position.set(cx + 0.85, 0.04, 0.1);
+        compareRoot.add(goodG);
+
+        const badSelf = i === 1 ? buildGroup(cmp.bad, 'cbad_s', false).userData.tris : badG.userData.tris;
+        const goodSelf = i === 1 ? buildGroup(cmp.good, 'cgood_s', false).userData.tris : goodG.userData.tris;
+        compareStats.push(`${i + 1}. 左（預設）${badSelf} tris → 右（這裡）${goodSelf} tris`);
+      });
+    }
+
+    // ============================================================================
+    // 互動、座堂燭昏與相機控制
+    // ============================================================================
+    const state = {
+      item: params.get('item') || 'all',
+      nave: params.get('nave') === '1',
+      compare: params.get('compare') === '1',
+      form: params.get('form') === '1',
+      wire: params.get('wire') === '1',
+    };
+
+    const camera = new THREE.PerspectiveCamera(36, innerWidth / innerHeight, 0.06, 80);
+    const target = new THREE.Vector3(0.20, 0.96, -0.25);
+    const goalTarget = target.clone();
+    let yaw = 0.14, pitch = 0.25, dist = 10.8, goalDist = 10.8;
+    if (params.has('yaw')) yaw = +params.get('yaw');
+    if (params.has('pitch')) pitch = +params.get('pitch');
+
+    const infoEl = document.getElementById('info');
+    function updateUI() {
+      showcaseRoot.visible = !state.compare;
+      compareRoot.visible = state.compare;
+
+      if (state.form) {
+        scene.background = BG_FORM;
+        scene.fog = null;
+        hemi.intensity = 1.15;
+        sun.intensity = 1.15;
+        rim.intensity = 0.35;
+        candleLightL.intensity = 0;
+        candleLightR.intensity = 0;
+      } else if (state.nave) {
+        scene.background = BG_NAVE;
+        scene.fog = new THREE.FogExp2(0x11171a, 0.055);
+        hemi.intensity = 0.42;
+        sun.intensity = 0.26;
+        rim.intensity = 0.56;
+        candleLightL.intensity = 3.2;
+        candleLightR.intensity = 2.6;
+      } else {
+        scene.background = BG_NORMAL;
+        scene.fog = null;
+        hemi.intensity = 1.28;
+        sun.intensity = 1.16;
+        rim.intensity = 0.46;
+        candleLightL.intensity = 0.8;
+        candleLightR.intensity = 0.8;
+      }
+
+      scene.traverse((o) => {
+        if (!o.isMesh) return;
+        if (o.userData.role === 'lit') o.material = state.form ? matForm : matLit;
+        if (o.userData.role === 'brass') o.material = state.form ? matForm : matBrass;
+        if (o.userData.role === 'glass') o.material = state.form ? matForm : matGlass;
+        if (o.userData.role === 'glow') o.material = state.form ? matForm : matGlow;
+        if (o.userData.isWire) o.visible = state.wire;
+      });
+
+      document.getElementById('btnNave').classList.toggle('on', state.nave);
+      document.getElementById('btnCompare').classList.toggle('on', state.compare);
+      document.getElementById('btnForm').classList.toggle('on', state.form);
+      document.getElementById('btnWire').classList.toggle('on', state.wire);
+
+      for (const b of document.querySelectorAll('[data-item]')) {
+        b.classList.toggle('on', !state.compare && b.dataset.item === String(state.item));
+      }
+
+      if (state.compare) {
+        goalTarget.set(0, 0.95, 0);
+        goalDist = 7.8;
+        infoEl.innerHTML = `<strong>教堂區 1:1 對照模式：左灰墊「預設泛用教堂」 vs 右褐墊「古城獵魔座堂規則」</strong><br>` +
+          `1. 尖拱與吊香爐：光滑圓拱＋梯狀平鏈 vs 楔石尖拱＋黃銅日輪（無十字）＋立臥 90° 鐵鏈提爐。<br>` +
+          `2. 燭台與花窗：粉紫糖果塊＋光滑白燭 vs 滴蠟高矮蜜蠟燭＋夏特深藍／紅寶石／琥珀碎彩窗與鉛條。` +
+          `<div class="meta">${compareStats.join('　｜　')}</div>`;
+      } else if (state.item === 'all') {
+        goalTarget.set(0.20, 0.96, -0.25);
+        goalDist = 10.8;
+        const archTris = ITEMS.filter(x => !x.isSmall).reduce((s, it) => s + it.tris, 0);
+        const smallTris = ITEMS.filter(x => x.isSmall).reduce((s, it) => s + it.tris, 0);
+        infoEl.innerHTML = `<strong>古城獵魔座堂（教堂區）細節裝飾（1:1 尺度，左側人物高約 1.7m 為比例尺）</strong><br>` +
+          `後排 4 組教堂結構／聖龕設施直接落於座堂棋盤大方磚，前右排 4 組祭器／禱告／補窗小物陳列於 0.78m 石灰岩側壇桌。<br>` +
+          `<div class="meta">設施類 4 組合計 <strong>${archTris}</strong> tris　｜　小物類 4 組（不含供桌）合計 <strong>${smallTris}</strong> tris</div>`;
+      } else {
+        const idx = +state.item;
+        const m = propGroups[idx];
+        if (m) {
+          goalTarget.set(m.x, m.y, m.z);
+          goalDist = m.dist;
+          const it = m.item;
+          infoEl.innerHTML = `<strong>${it.name}</strong>（${it.zone}，高約 ${it.height.toFixed(2)}m）<br>${it.desc}` +
+            `<div class="meta">物件本體面數：<strong>${it.tris}</strong> 個三角形　｜　組件：${it.parts} 個基本圖元　｜　可切換「座堂燭昏」檢視燭光與黃銅高光</div>`;
+        }
+      }
+    }
+
+    scene.traverse((o) => {
+      if (o.isMesh && (o.userData.role === 'lit' || o.userData.role === 'brass' || o.userData.role === 'glass')) {
+        const w = new THREE.Mesh(o.geometry, matWire);
+        w.userData.isWire = true;
+        w.visible = false;
+        o.add(w);
+      }
+    });
+
+    for (const b of document.querySelectorAll('[data-item]')) {
+      b.onclick = () => {
+        state.compare = false;
+        state.item = b.dataset.item;
+        updateUI();
+      };
+    }
+    document.getElementById('btnNave').onclick = () => { state.nave = !state.nave; state.form = false; updateUI(); };
+    document.getElementById('btnCompare').onclick = () => { state.compare = !state.compare; updateUI(); };
+    document.getElementById('btnForm').onclick = () => { state.form = !state.form; updateUI(); };
+    document.getElementById('btnWire').onclick = () => { state.wire = !state.wire; updateUI(); };
+
+    let drag = null;
+    renderer.domElement.addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; });
+    addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      yaw -= (e.clientX - drag[0]) * 0.007;
+      pitch = Math.max(-0.12, Math.min(1.32, pitch + (e.clientY - drag[1]) * 0.007));
+      drag = [e.clientX, e.clientY];
+    });
+    addEventListener('pointerup', () => { drag = null; });
+    renderer.domElement.addEventListener('wheel', (e) => {
+      goalDist = Math.max(0.8, Math.min(24, goalDist * (1 + e.deltaY * 0.001)));
+    }, { passive: true });
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    updateUI();
+    if (params.has('dist')) { dist = goalDist = +params.get('dist'); }
+    target.copy(goalTarget);
+
+    // 兩個暖燭光源分別對準門廊吊燈與聖壇供桌蠟燭組
+    candleLightL.position.set(-0.78, 1.42, 1.62);
+    candleLightR.position.set(1.35, 1.15, 1.55);
+
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      const dt = Math.min(clock.getDelta(), 0.1);
+      const t = clock.getElapsedTime();
+      uTime.value = t;
+      if (state.nave && !state.form) {
+        candleLightL.intensity = 3.2 + Math.sin(t * 7.2) * 0.25;
+        candleLightR.intensity = 2.6 + Math.cos(t * 6.4) * 0.20;
+      }
+      character.update(dt, 0);
+      target.lerp(goalTarget, Math.min(1, dt * 8));
+      dist += (goalDist - dist) * Math.min(1, dt * 8);
+      const c = Math.cos(pitch);
+      camera.position.set(target.x + Math.sin(yaw) * c * dist, target.y + Math.sin(pitch) * dist, target.z + Math.cos(yaw) * c * dist);
+      camera.lookAt(target);
+      renderer.render(scene, camera);
+    });
+
+    window.__churchProps = { state, updateUI, ITEMS };
+    window.__ready = true;
+  </script>
+</body>
+
+</html>

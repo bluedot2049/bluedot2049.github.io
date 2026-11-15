@@ -10,6 +10,7 @@ import { makePathfinder } from '../../core/pathgrid.js';
 import { makeSkiff, skiffBerth } from '../../scene/harbor.js';
 import { flameCard, SHAPE } from '../../core/flame.js';
 import { place, watchHand, WATCH_PIVOT } from '../../core/trinkets.js';
+import { place as placeProp } from './heilin-props.js';
 import { buildHomeCircle } from '../../scene/homedoor.js';
 import { getSave, markTour } from '../../save/progress.js';
 import { GRADE } from '../../core/grade.js';
@@ -22,7 +23,7 @@ import { buildStory, tieRibbons } from './heilin-story.js';
 const EARTH = '#5b4b3c', NEEDLE = '#1d2b25', NEEDLE2 = '#355042', BARK = '#3b2f29';
 const WOOD = '#6a5340', CARVED = '#7d654b', WATER = '#1c2a2f';
 const FIRE_I = 9;   // 營火點光多亮（每幀照這個抖）
-const SLICK = '#58723f', AMANITA = '#8a2f28', CAP_DOT = '#d9d2c0', RIDGE = ['#25332f', '#33433f', '#46565a'];
+const SLICK = '#58723f', RIDGE = ['#25332f', '#33433f', '#46565a'];
 
 // 樹不擋視線（2026-11-13）：鏡頭到角色那條線穿過哪棵樹，那棵就淡成網點（跟 fade.js 一樣丟像素、不用半透明）。
 // 每棵樹在頂點著色器裡自己算（實例矩陣是樹腳的位置、寬、高），視線那個高度的樹冠多寬照三層錐的形狀估；樹腳那段只有樹幹，不淡
@@ -233,6 +234,11 @@ export function buildHeilin(scene, { coarse = false } = {}) {
     // 矮人腳邊的酒壺、牛角杯、骰子；精靈腳邊擱著兩支箭、磨石、弓弦（箭壺她自己背著）。都朝北邊走下來的人
     place(k, 'horn', -1.3, 0, -0.72, Math.PI + 0.5, 1.5);
     place(k, 'fletching', 1.28, 0, -0.7, Math.PI - 0.4, 1.5);
+    // 各人的家當（heilin-props.js）：矮人身後的小鍛砧和磨石輪、法師身後的石臼和標本罐、精靈那頭的羅盤盒和手燈（燈罩亮著）、鋪蓋旁一個張開的獸夾
+    placeProp(k, 'anvil', -2.4, 0, -0.85, Math.PI + 0.35, 1.3);
+    placeProp(k, 'mortar', 0.45, 0, 2.45, Math.PI - 0.15, 1.3);
+    placeProp(k, 'compass', 2.15, 0, -1.3, Math.PI - 0.5, 1.3);
+    placeProp(k, 'trap', 3.35, 0, -1.25, Math.PI + 0.3, 1.3);
     k.light(0, 0.55, 0, '#ffa860', 1.8);
     const cb = newBucket(), g = new THREE.Group();
     k.emit(cb, camp.x, camp.z, 0);
@@ -332,15 +338,39 @@ export function buildHeilin(scene, { coarse = false } = {}) {
     const u = beat('bigfir').u, sd = upSide(u), p = beside(u, sd, HALF + 1.6), y = T.at(p.x, p.z);
     extraTrees.push({ x: p.x, y: y - 0.3, z: p.z, h: 30, w: 30 * 0.52, a: 0.4, tint: 0.9 });
   }
-  {
-    // 毒蠅傘：一小團，路邊下坡那側的坡上，只有這一處紅
-    const u = beat('ring').u, p = beside(u, -upSide(u), HALF + 1.9), R = rng('heilin:ring'), k = new Kit(R);
-    for (let m = 0; m < 7; m++) {
-      const a = (m / 7) * Math.PI * 2 + R() * 0.4, r = 0.7 + R() * 0.4, x = Math.cos(a) * r, z = Math.sin(a) * r, y = T.at(p.x + x, p.z + z), h = 0.18 + R() * 0.2;
-      k.cyl(0.04, 0.055, h, CAP_DOT, x, y + h / 2, z, {}, 5);
-      k.ball(0.12 + R() * 0.07, AMANITA, x, y + h, z, { sy: 0.55 });
+  // 大件（heilin-props.js）：順著坡面斜放（tilt 1＝整件貼坡、0＝站直），再整件往下沉到底面每一點都碰到地，坡上才不會懸空；路邊東西讓開。
+  // 原本只沉到四角最低的地面：這段路每 2 公尺就降半公尺，下坡那側更陡，量過朽木九成六、海崖疊岩八成五埋在土裡（2026-11-15）
+  const bigs = [], _n = new THREE.Vector3(), _q = new THREE.Quaternion(), _up = new THREE.Vector3(0, 1, 0), _tm = new THREE.Matrix4();
+  const putBig = (id, p, ry, tilt, r) => {
+    const g = (x, z) => T.at(p.x + x, p.z + z), e = 1;
+    _n.set(-(g(e, 0) - g(-e, 0)) / (2 * e), 1, -(g(0, e) - g(0, -e)) / (2 * e)).normalize().lerp(_up, 1 - tilt).normalize();
+    const k = new Kit(null);
+    placeProp(k, id, 0, 0, 0, ry);
+    _tm.makeRotationFromQuaternion(_q.setFromUnitVectors(_up, _n));
+    let y = Infinity;
+    for (const geo of [...k.lit, ...k.glow]) {
+      // 底面是斜放之前離地 25 公分以內的點（斜放之後再挑會挑到下坡那頭的頂面，整件被拉進土裡）
+      const pos = geo.attributes.position, low = [];
+      for (let i = 0; i < pos.count; i++) if (pos.getY(i) < 0.25) low.push(i);
+      geo.applyMatrix4(_tm);
+      for (const i of low) y = Math.min(y, g(pos.getX(i), pos.getZ(i)) - pos.getY(i));
     }
+    for (const geo of [...k.lit, ...k.glow]) geo.translate(0, y - 0.05, 0);
     k.emit(bucket, p.x, p.z, 0);
+    bigs.push({ x: p.x, z: p.z, r });
+    obstacles.push({ x: p.x, z: p.z, hw: r * 0.6, hd: r * 0.6 });
+  };
+  {
+    // 毒蠅傘：一小團，長在下坡那側一截空心倒木和樹樁的腳邊，只有這一處紅。倒木順著路、順著坡躺
+    const u = beat('ring').u, p = beside(u, -upSide(u), HALF + 2.2), i = p.i;
+    putBig('rotLog', p, Math.atan2(P.TX[i], P.TZ[i]) - Math.PI / 2, 1, 1.6);
+  }
+  {
+    // 上岸後爬海崖那段，靠海那側：層層錯開的灰岩卡著一截漂流木；第二個彎上坡那側一座劈面巨石，轉過去才露出下一段
+    for (const [u, d, id, r, sd] of [[0.05, 2.2, 'strata', 1.5, -1], [0.31, 2.4, 'slab', 1.7, 1]]) {
+      const p = beside(u, sd * upSide(u), HALF + d), i = p.i;
+      putBig(id, p, Math.atan2(-P.TX[i], -P.TZ[i]), 0.7, r);
+    }
   }
   {
     // 樹根拱：一棵大杉樹的根從上坡拱過路面插進下坡，人從底下鑽過去
@@ -361,6 +391,7 @@ export function buildHeilin(scene, { coarse = false } = {}) {
     if (Math.abs(x - P.cave.x) < 7 && z - P.cave.z > -4 && z - P.cave.z < P.cave.len + 6) return false;
     const lt = Math.max(-log.len / 2, Math.min(log.len / 2, (x - log.x) * log.ox + (z - log.z) * log.oz));
     if (Math.hypot(log.x + log.ox * lt - x, log.z + log.oz * lt - z) < 2.5) return false;
+    if (bigs.some((b) => Math.hypot(x - b.x, z - b.z) < b.r + 0.8)) return false;
     return !extraTrees.some((t) => Math.hypot(x - t.x, z - t.z) < 2.5);
   };
   // 以前走下來的人留下的東西（heilin-story.js）：石堆、路標、冷掉的營地、斷繩、丟下的盾和矛、警告的牌子、逃跑的人掉的裝備

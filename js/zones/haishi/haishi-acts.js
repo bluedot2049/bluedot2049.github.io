@@ -6,13 +6,15 @@
 // 你走近、面對著牠才會飛走；跟太遠牠停下來回頭等。台詞在 haishi-act-lines.js。可以重複演，演完魚桶裡又有一條
 import * as THREE from 'three';
 import { rng } from '../../core/props.js';
-import { gainGift, cost, UNIT, AGAIN } from '../../save/purse.js';
+import { gotGift } from '../../scene/gotcard.js';
 import { getSave, putSave } from '../../save/progress.js';
 import { V, bell, ramp } from '../../core/happen.js';
 import { piece, halo } from './haishi-happen.js';
 import { SEA, WOOD, DARK } from './haishi-map.js';
 import { FISH_LINES, SPOT_LINES, FIRE_LINES } from './haishi-act-lines.js';
 import { buildBrazier, BRAZIER, SPREAD, SHORE_T } from './haishi-brazier.js';
+import { buildWish, PRAY_FOR } from './haishi-wish.js';
+import { PRAY, kaoCode } from '../../avatar/kaomoji-parts.js';
 import { radial } from '../../npc/beast-models.js';
 import { flameCard, SHAPE, RED } from '../../core/flame.js';
 
@@ -48,7 +50,7 @@ function spots(world) {
   ];
 }
 
-function fishAct({ world, vendors, ambience, attention, camera, player, ui }) {
+function fishAct({ world, vendors, ambience, attention, camera, player, ui, kao }) {
   const room = world.rooms[0].group, R = rng('haishi:act:fish');
   const S = spots(world);
   // 魚桶：魚攤櫃台左前方一個木桶，水面暗暗的
@@ -90,6 +92,7 @@ function fishAct({ world, vendors, ambience, attention, camera, player, ui }) {
   room.add(lit);
   // 廟埕的大火盆；火傳到海邊時海上亮起一盞新的漁火（到下次進這一區前都在）
   const brazier = buildBrazier(room, world);
+  const wishFx = buildWish(room, brazier.pos);
   const sea = halo(room, [{ x: FAR.x, y: FAR.y, z: FAR.z, color: '#ffd8a0', size: 9 }]);
   sea.set(0, 0);
   // 火傳下來經過時，旁邊那攤說一句（你在附近才說）。at：火走到這裡要幾秒
@@ -205,6 +208,7 @@ function fishAct({ world, vendors, ambience, attention, camera, player, ui }) {
   // 火盆每幀；火傳到海邊海上亮一盞；經過攤子時說一句；還沒燒時隔一陣子問同一區有沒有人燒著
   function fire(dt) {
     brazier.update(dt);
+    wishFx.update(dt);
     const age = brazier.age;
     sea.set(0, age < 0 ? 0 : ramp(age, SHORE_T, SHORE_T + 2.5));
     for (const h of heard) if (age >= h.at && age - dt < h.at && near(h.x, h.z, 14)) say(h.who, h.lines);
@@ -215,7 +219,7 @@ function fishAct({ world, vendors, ambience, attention, camera, player, ui }) {
   }
 
   const act = {
-    id: 'fish', name: '漁火', beats: S.length - 1, actors: [ev], state: null,
+    id: 'fish', name: '漁火', beats: S.length - 1, actors: [ev], state: null, wishFx,
     get moving() { return phase === 'leap' || phase === 'pop' || phase === 'fly' || phase === 'finale' || brazier.busy; },
     get phase() { return phase; },   // 測試用：bucket、leap、fly、hide、pop、finale
     spots: S,
@@ -239,9 +243,9 @@ function fishAct({ world, vendors, ambience, attention, camera, player, ui }) {
       if (phase !== 'bucket') return null;
       const d = Math.hypot(x - BUCKET.x, z - BUCKET.z);
       if (d < 2.2) return { kind: 'talk', p: who, d, ax: BUCKET.x, az: BUCKET.z };
-      // 香油錢：戲沒在演的時候，站在火盆旁邊（save/purse.js 的 WAYS.offering）
+      // 許願：戲沒在演的時候，站在火盆旁邊（演出在 haishi-wish.js）
       const db = Math.hypot(x - BRAZIER.x, z - BRAZIER.z);
-      if (db < 2 && Math.abs(player.pos.y - BRAZIER.y) < 1.5) return { kind: 'offer', label: '投水晶', cost: cost('offering'), p: { act: offer }, d: db, ax: BRAZIER.x, az: BRAZIER.z };
+      if (db < 2 && Math.abs(player.pos.y - BRAZIER.y) < 1.5 && !wishFx.busy) return { kind: 'offer', label: '許願', p: { act: wish }, d: db, ax: BRAZIER.x, az: BRAZIER.z };
       return null;
     },
     update(dt, cue) {
@@ -393,8 +397,8 @@ function fishAct({ world, vendors, ambience, attention, camera, player, ui }) {
           }
           if (t > 8.6) {
             cue.finish();
-            // 演完第一次：火盆邊留下一個魚皮袋（背的配件，looks.js 的 GIFTS.purse7）
-            if (gainGift('purse7')) ui?.toast('拿到魚皮袋', '到畫廊鏡前背上');
+            // 演完第一次：火盆邊留下一個魚皮袋（背的配件，looks.js 的 GIFTS.purse7），跳「拿到了」那張卡選穿不穿
+            gotGift('purse7', { where: '海市', who: '漁火' });
             gone = 1;
             act.init(0);
             return;
@@ -436,17 +440,31 @@ function fishAct({ world, vendors, ambience, attention, camera, player, ui }) {
       ev.seen = phase === 'leap' || phase === 'pop' || phase === 'fly' || phase === 'finale' ? pos : null;
     },
   };
-  // 香油錢：一個人一天一次（台灣日期，progress.js 的 offered）。投了火盆點著、燈河亮下山，跟漁火演完一樣傳給同一區的人
-  function offer() {
+  // 許願（2026-11-15 由香油錢改來，不收東西）：一個人一天一次（台灣日期，progress.js 的 offered）。角色轉向火盆合掌，
+  // 演出在 haishi-wish.js：光落進火盆那一刻才點著、燈河亮下山，跟漁火演完一樣傳給同一區的人；火星升上天變成一顆星
+  function wish() {
+    if (wishFx.busy) return;
     const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
-    if (getSave().offered === today) return ui?.hint('今天投過了　明天再來', 3000);
-    if (!brazier.offer()) return ui?.hint(`身上沒有${UNIT}了　${AGAIN}`, 2500);
+    if (getSave().offered === today) return ui?.hint('今天許過願了　明天再來', 3000);
     putSave({ offered: today });
-    lastFire = clock;
-    act.send?.({ t: 'fire', s: 0 });
-    sound('coin', 0.5, brazier.pos);
-    sound('ignite', 0.7, brazier.pos, 0.9);
-    sound('swell', 0.35, brazier.pos, 0.8);
+    const p = player.pos, ch = kao?.ch;
+    player.faceYaw = Math.atan2(BRAZIER.x - p.x, BRAZIER.z - p.z);
+    // 合掌：擺到光落進火盆，中間自己換了別的就不收回
+    const before = ch?.kao ?? 0, code = kaoCode(0, PRAY, 0);
+    kao?.set(code);
+    setTimeout(() => { if (ch?.kao === code) kao.set(before); }, PRAY_FOR * 1000);
+    sound('swell', 0.22, p, 1.4);
+    wishFx.start((v) => (ch?.handG ? ch.handG.getWorldPosition(v) : v.set(player.pos.x, player.pos.y + 1, player.pos.z)), p.clone(), {
+      enter() {
+        brazier.ignite(0);
+        lastFire = clock;
+        act.send?.({ t: 'fire', s: 0 });
+        sound('coin', 0.45, brazier.pos, 0.8);
+        sound('ignite', 0.7, brazier.pos, 0.9);
+        sound('swell', 0.35, brazier.pos, 0.8);
+      },
+      starLit: () => ambience?.voice('tink', 0.3, 0, 0.75),
+    });
   }
 
   // 同一區別人的消息（core/act.js 轉過來）：fire 那邊火盆燒了 s 秒；ask 晚到的人問，燒著的晚一點回，別人先回了就不回

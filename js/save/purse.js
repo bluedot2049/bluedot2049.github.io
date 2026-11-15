@@ -5,10 +5,12 @@
 // 錢的名字和量詞只寫在 UNIT、MEASURE：畫面上的字一律用 money(n) 組，要改名改這裡就好
 import { getSave, putSave } from './progress.js';
 import { serverNow } from '../core/servertime.js';
-import { unlock, GIFTS } from '../avatar/looks.js';
 
 export const UNIT = '水晶', MEASURE = '顆';
 export const MAX = 10;
+// 錢的總開關（2026-11-15 先關起來試）：關著時 WAYS 每一行都當成 on: false（不收不給），地上不掉、行囊不放那排、
+// 店家小卡不標價（scene/shop.js：直接拿，拿東西換的照樣要換）、價目牌不畫。存檔的 coins 照留不讀，打開就回來
+export const OPEN = false;
 // 水晶的顏色：每顆不一樣（地上那顆照雜湊挑，行囊那排照位置輪著），樣子都一樣是雙尖長寶石套一圈細金箍（scene/coins.js、panels.css）。
 // 托帕、藍寶、紅寶、祖母綠、紫晶、橘、海藍、玫瑰：相鄰的對比大
 export const HUES = ['#f0b23a', '#3460cf', '#c8283c', '#2f9e5e', '#8c52c9', '#e8782e', '#45bfc4', '#e2679a'];
@@ -35,13 +37,13 @@ export const WAYS = {
   snack: { on: true, spend: 1, where: 'zones/jinghai/jinghai-stalls.js', note: '靜海的冰淇淋、汽水、熱茶，吃完就沒了' },
   meal: { on: true, spend: 1, where: 'zones/jinghai/jinghai-burger.js', note: '咬月點餐機：漢堡、薯條一份（菜單、點餐機螢幕上畫的價錢也照這個，jinghai-ads.js）' },
   fortune: { on: true, spend: 3, where: 'zones/haishi/haishi-lots.js', note: '星廟求籤：擲星石天允了才搖籤，一個人一天一支，子夜重來' },
-  offering: { on: true, spend: 1, where: 'zones/haishi/haishi-acts.js 的火盆（haishi-brazier.js 的 offer）', note: '香油錢：投進星廟火盆，燈河亮下山，同一區的人看得到。一個人一天一次（progress.js 的 offered）' },
+  offering: { on: false, spend: 1, where: '（2026-11-15 改成許願，不收）', note: '原本的香油錢：星廟火盆改成許願（haishi-wish.js），不收東西；這行留著當紀錄' },
   film: { on: true, spend: 1, where: 'zones/jinghai/jinghai-film.js', note: '拍立拿a500 的片盒（一盒三張）：月球相機店的底片牆補滿。帶相機附的第一盒不收' },
 };
 const way = (id) => {
   const w = WAYS[id];
   if (!w) throw new Error(`purse.js 的 WAYS 沒有 ${id}`);
-  return w;
+  return OPEN ? w : { ...w, on: false };
 };
 // 這個地方收幾顆（沒打開是 0）
 export const cost = (id) => (way(id).on ? way(id).spend ?? 0 : 0);
@@ -97,6 +99,7 @@ let fresh = 0;
 export const takeFresh = () => { const n = fresh; fresh = 0; return n; };
 // 換天了就補滿，回傳補了幾顆。main.js 的主迴圈隔幾秒看一次
 export function refillDaily() {
+  if (!OPEN) return 0;
   const s = getSave(), day = purseDay();
   if (s.refill === day) return 0;
   const n = MAX - coins();
@@ -107,9 +110,4 @@ export function refillDaily() {
     if (typeof dispatchEvent === 'function') dispatchEvent(new CustomEvent('coinrefill', { detail: { n } }));
   }
   return n;
-}
-
-// 一幕劇、頭版這類大事給的東西（GIFTS 寫了 hint 的那幾項，例如魚皮袋、零錢盒）：回傳是不是第一次拿到
-export function gainGift(id) {
-  return unlock(GIFTS[id].items);
 }

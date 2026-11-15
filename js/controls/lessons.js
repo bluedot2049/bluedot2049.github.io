@@ -6,7 +6,7 @@
 // 寫鍵一律用 say：一件事「鍵　動詞」，好幾件「鍵 動詞　鍵 動詞」。說到的鈕慢慢閃（btn，beckon），用過才停；手機字寫「點擊發光按鈕」
 import { key, is } from './keymap.js';
 import { padBtn } from './gamepad.js';
-import { UNIT, MAX, money } from '../save/purse.js';
+import { UNIT, MAX, money, OPEN } from '../save/purse.js';
 
 // 現在用哪一種操作：手把 pad（body.pad，gamepad.js）、電腦 desk（body.desk，ui.js）、其他是手機 touch
 export function kind() {
@@ -84,7 +84,7 @@ const L = {
   eye: { calm: true, acts: ['eye'], btn: '#eye-btn', need: () => shown('#eye-btn'),
     text: (k) => (k === 'touch' ? say(['點擊發光按鈕', '呼叫黑眼帶路']) : say([btn(k, 'eye', 5), '呼叫黑眼帶路'])) },
   // 水晶是什麼：第一次撿到（scene/coins.js）、第一次打開店家小卡（scene/shop.js）說；都沒碰過的，有空時也說
-  gem: { calm: true, acts: ['pack'], ms: 5500, btn: '#pack-btn', need: () => shown('#pack-btn'),
+  gem: { calm: true, acts: ['pack'], ms: 5500, btn: '#pack-btn', need: () => OPEN && shown('#pack-btn'),
     text: (k) => `${UNIT}是貨幣　每日午夜補滿${money(MAX)}　${say([k === 'touch' ? '點擊發光按鈕' : btn(k, 'pack', 8), '查看餘額'])}` },
   party: { calm: true, acts: ['party'], btn: '#party-btn', need: (c) => c.near() && shown('#party-btn'),
     text: (k) => say([k === 'touch' ? '點擊發光按鈕' : btn(k, 'party', 14), '邀請附近玩家同行']) },

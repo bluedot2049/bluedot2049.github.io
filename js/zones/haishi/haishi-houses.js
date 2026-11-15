@@ -10,6 +10,26 @@ import { AREA, AREAS, BEAM, CARTS, CREAM, DARK, GOLD, GRAY, HOUSE_SIGNS, LAMP, N
 import { heightIn, terrain } from './haishi-terrain.js';
 import { buildNewsStand, buildPress, PRESS_LOT } from './haishi-press.js';
 import { place } from '../../core/trinkets.js';
+import { place as placeBig } from '../../core/bigprops.js';
+import { place as placeProp } from './haishi-props.js';
+
+// 街角的大件（haishi-props.js）：[名字, x, z, 地面高, 朝向 ry（正面原本朝 +z）, 擋路的範圍 [x0, x1, z0, z1]（擺正時的局部座標）, 多高]
+const PROPS = [
+  ['fishRack', -9.7, 11.35, 0, Math.PI, [-0.62, 0.58, -0.2, 0.55], 2.4],            // 漁港岸壁補出來那塊的水邊，背對海
+  ['herbRack', -10.3, -34.5, 11.6, Math.PI / 2, [-0.62, 0.62, -0.2, 0.35], 2.3],    // 工坊街西頭靠著房子，朝東對著街
+  ['glassBarrow', 5.6, -37.2, 11.6, 0, [-0.9, 0.95, -0.38, 0.38], 1.8],             // 玻璃工坊東邊停一台推車
+  ['tideSignpost', 8.9, 8.35, 0, 0.6, [-0.36, 0.52, -0.3, 0.36], 2.6],              // 渡船口岸壁靠碼頭那頭的水邊，牌子朝著從渡船走上來的人（碼頭前緣那條是去東邊唯一的路，不能放）
+  ['stoneWell', -3.4, -14.6, 6.8, 0, [-0.66, 0.86, -0.6, 0.8], 1.6],                 // 下街小廣場
+  ['abacusStand', 13.3, -12.6, 7.2, -Math.PI / 2, [-0.45, 0.48, -0.3, 0.3], 1.5],   // 下街東頭盡頭，朝西
+  ['starArmillary', -13.2, -45.8, 14, 0.6, [-0.56, 0.66, -0.56, 0.52], 1.95],       // 星台西半邊
+  ['templeShrineLamp', -20.2, -58.8, 19.2, -Math.PI / 2, [-0.56, 0.58, -0.35, 0.36], 2.05], // 山頂平台東半邊、上星廟石階前，朝西對著路（石埕有火盆和兩盞石燈了，轉角平台也各有一盞）
+];
+// 擺正時的範圍轉 ry 之後的外框（世界座標，軸對齊）
+function spread([x0, x1, z0, z1], x, z, ry) {
+  const c = Math.cos(ry), s = Math.sin(ry), xs = [], zs = [];
+  for (const lx of [x0, x1]) for (const lz of [z0, z1]) { xs.push(x + lx * c + lz * s); zs.push(z - lx * s + lz * c); }
+  return [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)];
+}
 
 // 房子的木框線（2026-11-11）：灰泥牆上的柱樑、門框、窗框是老木頭，不是黑線；窗格細條深一點。暗房照舊用 DARK
 const FRAME = '#a07850', GRILLE = '#7c5a40';
@@ -692,6 +712,24 @@ export function buildStreets(c) {
     k.box(0.02, 1.2, 0.02, DARK, x, 3.0, z);
     k.pool(x, 0, z, 2.2, '#ffa060', 0.3);
     obstacles.push({ x, z, hw: 0.85, hd: 1.0 });
+  }
+  // 燈巷東頭轉角一座煮茶涼棚（core/bigprops.js）：石灶炭火上吊一口銅甕，正面朝北對著街。鏡頭穿過棚頂就整座淡掉
+  {
+    const x = 10.6, z = -21.2, y = AREA.lanternC.y, tk = new Kit(R);
+    tk.fid = fader.add([[x - 0.8, y + 1.7, z - 0.7, x + 0.8, y + 2.3, z + 0.7]]);
+    placeBig(tk, 'teaKiosk', 0, y, 0, Math.PI);
+    tk.light(0, y + 0.25, -0.2, '#ff9a4a', 0.6);
+    tk.pool(0, y, -0.4, 1.3, '#ffa060', 0.22);
+    tk.emit(bucket, x, z, 0);
+    obstacles.push({ x, z, hw: 0.8, hd: 0.55 });
+  }
+  // 街角的大件（haishi-props.js，位置在檔頭 PROPS）：不抽亂數；鏡頭穿過就整件淡掉，擋路照轉過的外框
+  for (const [id, x, z, y, ry, box, h] of PROPS) {
+    const pk = new Kit(null), [x0, x1, z0, z1] = spread(box, x, z, ry);
+    pk.fid = fader.add([[x0 - 0.3, y + 0.4, z0 - 0.3, x1 + 0.3, y + h, z1 + 0.3]]);
+    placeProp(pk, id, 0, y, 0, ry);
+    pk.emit(bucket, x, z, 0);
+    obstacles.push({ x: (x0 + x1) / 2, z: (z0 + z1) / 2, hw: (x1 - x0) / 2, hd: (z1 - z0) / 2 });
   }
   // 信差站門口的紅郵筒，玻璃工坊裡的爐火（店面在 shops 裡，z 是攤販站的地方，正面再往北 0.45）
   k.cyl(0.22, 0.22, 1.0, '#b8322a', -3.0, 0.5, 6.0, {}, 10);

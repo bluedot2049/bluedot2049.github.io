@@ -1,0 +1,1030 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>黑森林低面數大石與小物 — 1:1 標本場</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #14191b;
+      color: #edf0ea;
+      font-family: "Noto Serif TC", "Microsoft JhengHei", serif;
+      user-select: none;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    .note {
+      position: fixed;
+      top: 14px;
+      left: 16px;
+      max-width: 600px;
+      padding: 11px 15px;
+      background: rgba(16, 20, 21, 0.86);
+      border: 1px solid rgba(138, 162, 134, 0.34);
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.55;
+      pointer-events: none;
+    }
+    .note strong { color: #d8e5c4; font-weight: 600; }
+    .note .meta {
+      color: #a6b4aa;
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 10px 16px 14px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+      background: linear-gradient(transparent, rgba(10, 12, 13, 0.92));
+    }
+    .bar button {
+      padding: 6px 12px;
+      border: 1px solid #49574e;
+      border-radius: 999px;
+      background: #1b2220;
+      color: #d2dcd4;
+      font: inherit;
+      font-size: 12.5px;
+      cursor: pointer;
+    }
+    .bar button:hover { border-color: #88a47c; color: #f1f6ee; }
+    .bar button.on { border-color: #c9d99a; color: #f2f7e4; background: #2d3b2b; }
+    .bar .sep { width: 1px; background: #49574e; margin: 0 4px; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "../vendor/three.module.min.js" } }
+  </script>
+</head>
+
+<body>
+  <div class="note" id="info"></div>
+  <div class="bar">
+    <button data-item="all" class="on">全覽（大石 4 ＋ 小物 4）</button>
+    <button data-item="0">1 青苔劈面巨石</button>
+    <button data-item="1">2 朽木倒木靈芝</button>
+    <button data-item="2">3 崖瀑層疊灰岩</button>
+    <button data-item="3">4 崩斜界碑紅布</button>
+    <span class="sep"></span>
+    <button data-item="4">5 齒爪獸夾骨符</button>
+    <button data-item="5">6 採藥石臼菇罐</button>
+    <button data-item="6">7 矮人修甲鍛輪</button>
+    <button data-item="7">8 黃銅羅盤手燈</button>
+    <span class="sep"></span>
+    <button id="btnFog">林霧藍昏</button>
+    <button id="btnCompare">對照：預設 vs 這裡</button>
+    <button id="btnForm">灰泥 (-form)</button>
+    <button id="btnWire">線框</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { Kit, newBucket, mergeBucket, rng } from '../js/core/props.js';
+    import { uTime } from '../js/core/scenery.js';
+    import { Character } from '../js/avatar/character.js';
+    import { sanitizeLook } from '../js/avatar/looks.js';
+
+    const params = new URLSearchParams(location.search);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.prepend(renderer.domElement);
+
+    const BG_NORMAL = new THREE.Color(0x14191b);
+    const BG_FOG = new THREE.Color(0x5d6f74); // 美術原則：黑森林霧色 #5d6f74
+    const BG_FORM = new THREE.Color(0x949ea8);
+    const scene = new THREE.Scene();
+    scene.background = BG_NORMAL.clone();
+
+    const hemi = new THREE.HemisphereLight(0xbcccd4, 0x262e28, 1.32);
+    scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0xffead2, 1.15);
+    sun.position.set(5.4, 8.2, 5.2);
+    scene.add(sun);
+    const rim = new THREE.DirectionalLight(0x6e8ea8, 0.44);
+    rim.position.set(-5.2, 3.4, -4.6);
+    scene.add(rim);
+    const lanternLight = new THREE.PointLight(0xffa448, 0, 5.5, 1.5);
+    scene.add(lanternLight);
+
+    const matLit = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+    const matGlow = new THREE.MeshBasicMaterial({ vertexColors: true });
+    const matGlass = new THREE.MeshPhongMaterial({
+      vertexColors: true, flatShading: true,
+      transparent: true, opacity: 0.46, specular: 0xd8f0ec, shininess: 72, depthWrite: false,
+    });
+    const matForm = new THREE.MeshLambertMaterial({ color: 0xcfc8bc, flatShading: true });
+    const matWire = new THREE.MeshBasicMaterial({ color: 0xc8e498, wireframe: true, transparent: true, opacity: 0.28 });
+
+    // ── 對齊 heilin-dress.js / 美術原則色票 ──
+    const STONES = ['#4a4d4a', '#555a56', '#3f4442', '#5d605a', '#484b45'];
+    const MOSSES = ['#3d4a35', '#46553a', '#55663f', '#4a5a44', '#5a6b48'];
+    const FERNS = ['#3f5a3a', '#4d6440', '#56693f', '#5d6e45', '#47603f'];
+    const BARKS = ['#3b2f29', '#46382f', '#33291f', '#4a3c33'];
+    const FUNGI = ['#b39a72', '#9a8060', '#c4ad85', '#8a6a4a'];
+    const GRASS = ['#6b6a45', '#7a7550', '#5d6440', '#857a52'];
+    const PEBBLES = ['#6a6660', '#57534d', '#7a7266', '#4e4a44', '#5b5f5a'];
+    const RED = '#5e221c', RED_HI = '#7c2f27', BONE = '#b3a891', BONE_HI = '#cec2a8';
+    const IRON = '#2a2c2e', IRON_HI = '#52565a', BRASS = '#9e7a3c', BRASS_HI = '#c9a054';
+    const HEMP = '#8a7a5c', HEMP_HI = '#ae9c7a', OILCLOTH = '#3f4434', OILCLOTH_HI = '#565d48';
+    const LEATHER = '#5a3d2b', LEATHER_HI = '#7a563d';
+
+    const _y = new THREE.Vector3(0, 1, 0), _q = new THREE.Quaternion(), _e = new THREE.Euler();
+
+    function aim(axis, dir) {
+      _q.setFromUnitVectors(axis, dir.clone().normalize());
+      _e.setFromQuaternion(_q, 'YXZ');
+      return { rx: _e.x, ry: _e.y, rz: _e.z };
+    }
+
+    function rod(k, a, b, r1, r2, c, o = {}, seg = 6) {
+      const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      k.cyl(r2, r1, d.length(), c, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2, { ...o, ...aim(_y, d) }, seg);
+    }
+
+    function bentCyl(k, rt, rb, h, c, x, y, z, o = {}, seg = 7, hSeg = 5) {
+      k.add(new THREE.CylinderGeometry(rt, rb, h, seg, hSeg), c, x, y, z, o);
+    }
+
+    function ring(k, r, tube, c, x, y, z, o = {}, seg = 7, rad = 4, arc = Math.PI * 2) {
+      k.add(new THREE.TorusGeometry(r, tube, rad, seg, arc), c, x, y, z, o);
+    }
+
+    // ============================================================================
+    // 劈面低面數大石建造器：幾個大平面＋少數銳利階梯，不圓滾滾、底面貼地 (y=0)
+    // ============================================================================
+    function makePlanarRock({
+      r = 0.7, h = 0.85, sides = 6, topScale = 0.68,
+      shearX = 0.22, shearZ = -0.14, seed = 1,
+      colBot = '#383c39', colSide = '#4a4d4a', colTop = '#5d605a',
+    } = {}) {
+      const rr = rng(seed);
+      const g0 = new THREE.CylinderGeometry(r * topScale, r, h, sides, 2);
+      const pos0 = g0.attributes.position;
+
+      // 按原始幾何空間座標分組頂點，避免接縫裂開
+      const groups = new Map();
+      for (let i = 0; i < pos0.count; i++) {
+        const key = `${Math.round(pos0.getX(i) * 1e4)}_${Math.round(pos0.getY(i) * 1e4)}_${Math.round(pos0.getZ(i) * 1e4)}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(i);
+      }
+
+      // 每條棱角分配獨立徑向擾動，形成非對稱石塊劈面
+      const angJitter = new Map();
+      for (const [key, idxs] of groups) {
+        const x = pos0.getX(idxs[0]), y = pos0.getY(idxs[0]), z = pos0.getZ(idxs[0]);
+        const rad = Math.hypot(x, z);
+        if (rad < 1e-4) {
+          // 上下中心點：跟隨斜面高度傾斜
+          const dy = y > 0 ? (0.04 * h + rr() * 0.04 * h) : 0;
+          for (const i of idxs) pos0.setY(i, y + dy);
+          continue;
+        }
+        const ak = `${Math.round(Math.atan2(z, x) * 100)}`;
+        if (!angJitter.has(ak)) angJitter.set(ak, 0.76 + rr() * 0.44);
+        const rMul = angJitter.get(ak) * (0.94 + rr() * 0.12);
+        const nx = x * rMul;
+        const nz = z * rMul;
+        const tY = (y + h / 2) / h; // 0=底, 0.5=中稜, 1=頂
+        let ny = y;
+        if (tY > 0.85) {
+          ny = h * 0.5 + shearX * nx + shearZ * nz + (rr() - 0.5) * 0.04 * h;
+        } else if (tY > 0.25) {
+          // 中段肩膀形成不規則階梯切線
+          ny = (rr() - 0.35) * 0.22 * h + (shearX * nx + shearZ * nz) * 0.48;
+        } else {
+          // 底面刻意微外擴並平整貼地
+          ny = -h * 0.5;
+        }
+        for (const i of idxs) pos0.setXYZ(i, nx, ny, nz);
+      }
+
+      g0.translate(0, h * 0.5, 0);
+      const g = g0.toNonIndexed();
+      g.computeVertexNormals();
+
+      const pos = g.attributes.position;
+      const nor = g.attributes.normal;
+      const cols = new Float32Array(pos.count * 3);
+      const cB = new THREE.Color(colBot);
+      const cS = new THREE.Color(colSide);
+      const cT = new THREE.Color(colTop);
+      const tmp = new THREE.Color();
+
+      for (let i = 0; i < pos.count; i += 3) {
+        const ny = nor.getY(i);
+        const avgY = (pos.getY(i) + pos.getY(i + 1) + pos.getY(i + 2)) / (3 * h);
+        const faceTint = (rr() - 0.5) * 0.06;
+        if (ny > 0.48) {
+          tmp.copy(cS).lerp(cT, Math.min(1, 0.45 + avgY * 0.6));
+        } else if (ny < -0.3) {
+          tmp.copy(cB);
+        } else {
+          tmp.copy(cB).lerp(cS, 0.28 + Math.max(0, avgY) * 0.72);
+        }
+        tmp.offsetHSL(0, 0, faceTint);
+        for (let v = 0; v < 3; v++) {
+          cols[(i + v) * 3] = tmp.r;
+          cols[(i + v) * 3 + 1] = tmp.g;
+          cols[(i + v) * 3 + 2] = tmp.b;
+        }
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+      return g;
+    }
+
+    // 貼附於岩石斜面頂端的低面青苔墊
+    function addMossCap(k, x, y, z, r, h, rx, rz, col1 = '#46553a', col2 = '#5a6b48') {
+      k.add(makePlanarRock({
+        r, h, sides: 6, topScale: 0.72, shearX: 0.12, shearZ: -0.08, seed: Math.round((x + z + y) * 100) + 17,
+        colBot: '#34412d', colSide: col1, colTop: col2,
+      }), null, x, y, z, { rx, rz });
+    }
+
+    // 劍葉蕨（俐落扁長弓葉，絕對不做圓球多肉）
+    function addSwordFern(k, x, y, z, scale = 1, seed = 1) {
+      const rr = rng(seed);
+      const count = 6;
+      for (let i = 0; i < count; i++) {
+        const a = (i / count) * Math.PI * 2 + (rr() - 0.5) * 0.35;
+        const len = (0.34 + rr() * 0.14) * scale;
+        const w = (0.075 + rr() * 0.025) * scale;
+        const leanOut = 0.52 + rr() * 0.28;
+        const g = new THREE.BoxGeometry(w, len, 0.012 * scale, 1, 4, 1);
+        const p = g.attributes.position;
+        for (let j = 0; j < p.count; j++) {
+          const yy = p.getY(j);
+          const t = Math.max(0, (yy + len / 2) / len); // 0..1 從根到葉尖
+          const taper = t < 0.2 ? (0.5 + t * 2.5) : Math.max(0.14, 1.0 - (t - 0.2) * 1.15);
+          p.setX(j, p.getX(j) * taper);
+          // 先挺立後外垂（arc apex = 0.35）
+          p.setZ(j, p.getZ(j) + Math.pow(t, 1.8) * len * 0.32);
+        }
+        g.computeVertexNormals();
+        const col = FERNS[i % FERNS.length];
+        k.add(g, col, x + Math.sin(a) * len * 0.36 * leanOut, y + len * 0.36, z + Math.cos(a) * len * 0.36 * leanOut, {
+          ry: a, rx: leanOut, color2: '#7d8a52', ao: true,
+        });
+      }
+    }
+
+    // 乾黃細草簇（微傾斜細葉）
+    function addDryGrass(k, x, y, z, scale = 1, seed = 9) {
+      const rr = rng(seed);
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + rr() * 0.4;
+        const h = (0.24 + rr() * 0.14) * scale;
+        k.box(0.026 * scale, h, 0.012 * scale, GRASS[i % GRASS.length],
+          x + Math.sin(a) * 0.04 * scale, y + h * 0.45, z + Math.cos(a) * 0.04 * scale,
+          { ry: a, rx: 0.32 + rr() * 0.25, color2: '#9a905a', ao: true });
+      }
+    }
+
+    // 立臥交錯 90° 的鐵鏈（美術原則點名要求）
+    function addIronChain(k, start, stepVec, count, r = 0.036, tube = 0.011, col = IRON, seed = 4) {
+      const rr = rng(seed);
+      const dir = new THREE.Vector3(...stepVec).normalize();
+      const baseAim = aim(new THREE.Vector3(0, 1, 0), dir);
+      for (let i = 0; i < count; i++) {
+        const px = start[0] + stepVec[0] * i;
+        const py = start[1] + stepVec[1] * i;
+        const pz = start[2] + stepVec[2] * i;
+        k.add(new THREE.TorusGeometry(r, tube, 4, 7), col, px, py, pz, {
+          rx: baseAim.rx,
+          ry: baseAim.ry + (i % 2 ? Math.PI / 2 : 0) + (rr() - 0.5) * 0.14,
+          rz: baseAim.rz,
+          color2: IRON_HI,
+        });
+      }
+    }
+
+    // 毒蠅傘（紅帽白點，矮小略歪斜，依原則必須聚生一團）
+    function addAmanita(k, x, y, z, scale = 1, lean = [0.1, -0.05]) {
+      const lx = lean[0] * scale * 0.18, lz = lean[1] * scale * 0.18;
+      const h = 0.14 * scale;
+      bentCyl(k, 0.018 * scale, 0.026 * scale, h, '#d9d0be', x, y + h * 0.5, z, { lean: [lx, lz], color2: '#b6ac98' }, 6, 4);
+      const cx = x + lx, cy = y + h, cz = z + lz;
+      k.cone(0.088 * scale, 0.068 * scale, '#a63428', cx, cy + 0.022 * scale, cz, {
+        rx: -lean[1] * 0.65, rz: lean[0] * 0.65, color2: '#c94c38',
+      });
+      for (let s = 0; s < 5; s++) {
+        const a = s * 1.28;
+        k.box(0.018 * scale, 0.008 * scale, 0.018 * scale, '#e6decb',
+          cx + Math.cos(a) * 0.044 * scale, cy + 0.034 * scale, cz + Math.sin(a) * 0.044 * scale, { ry: a });
+      }
+    }
+
+    // 小物陳列專用高 0.56m 老杉木截斷樹樁展示台（不計入小物本身面數）
+    function addDisplayStump(k, x, z, ry = 0, rTop = 0.44, rBot = 0.54) {
+      k.cyl(rTop, rBot, 0.56, BARKS[0], x, 0.28, z, { ry, color2: BARKS[1] }, 8);
+      // 頂面淺木芯切面（0.56m 嚴格平面，小物放上面不穿模不浮空）
+      k.cyl(rTop * 0.86, rTop * 0.86, 0.016, '#846b4c', x, 0.553, z, { color2: '#9a7e5c' }, 8);
+      // 樁腳短根與青苔點綴
+      for (let i = 0; i < 4; i++) {
+        const a = ry + i * 1.55 + 0.3;
+        k.box(0.14, 0.11, 0.22, BARKS[2], x + Math.sin(a) * (rBot - 0.04), 0.055, z + Math.cos(a) * (rBot - 0.04), {
+          ry: a, rx: 0.22, color2: MOSSES[i % MOSSES.length], ao: true,
+        });
+      }
+    }
+
+    // ============================================================================
+    // 8 件黑森林自然大石 ＋ 營地／獵人小物（1:1 尺度）
+    // ============================================================================
+    const ITEMS = [
+      // ---------------- 大型低面數自然與路標資產 (0..3) ----------------
+      {
+        name: '1. 青苔劈面巨石陣',
+        zone: '黑森林大石｜地表基礎素材',
+        height: 1.85,
+        desc: '主體由三塊錯階斜切的大平面玄武岩柱構成，只保留少數銳利台階與劈裂稜線（零圓滾細分球）；頂蓋厚實橄欖青苔墊，岩縫斜長弓形劍葉蕨與枯黃野草，完全符合森林地面低面結構。',
+        dist: 4.5, camY: 0.92,
+        isSmall: false,
+        build(k) {
+          // 主巨岩：斜頂大劈面六邊稜岩
+          k.add(makePlanarRock({
+            r: 0.92, h: 1.72, sides: 6, topScale: 0.64, shearX: 0.34, shearZ: -0.18, seed: 101,
+            colBot: '#313634', colSide: STONES[0], colTop: STONES[3],
+          }), null, -0.18, 0, -0.08);
+          // 頂端厚青苔帽（順應主岩斜切）
+          addMossCap(k, -0.16, 1.66, -0.11, 0.52, 0.14, 0.16, -0.24, MOSSES[1], MOSSES[2]);
+          // 側階附岩一：銳利扁石階
+          k.add(makePlanarRock({
+            r: 0.68, h: 0.92, sides: 5, topScale: 0.78, shearX: -0.22, shearZ: 0.16, seed: 204,
+            colBot: '#353936', colSide: STONES[2], colTop: STONES[1],
+          }), null, 0.72, 0, 0.26);
+          addMossCap(k, 0.70, 0.88, 0.24, 0.44, 0.11, -0.12, 0.14, MOSSES[0], MOSSES[4]);
+          // 前左下嵌階石塊
+          k.add(makePlanarRock({
+            r: 0.52, h: 0.52, sides: 5, topScale: 0.82, shearX: 0.18, shearZ: 0.2, seed: 309,
+            colBot: '#363a37', colSide: STONES[4], colTop: STONES[3],
+          }), null, -0.78, 0, 0.58);
+          // 碎裂踏石與石縫劍葉蕨叢
+          for (let i = 0; i < 4; i++) {
+            const a = i * 1.45 + 0.4;
+            k.add(makePlanarRock({
+              r: 0.22 + (i % 2) * 0.08, h: 0.20, sides: 5, topScale: 0.8, shearX: 0.1, shearZ: -0.1, seed: 410 + i,
+              colBot: '#3d403d', colSide: PEBBLES[i % PEBBLES.length], colTop: STONES[1],
+            }), null, 0.28 + Math.cos(a) * 0.86, 0, 0.36 + Math.sin(a) * 0.72);
+          }
+          addSwordFern(k, 0.36, 0.04, 0.76, 1.12, 55);
+          addSwordFern(k, -0.68, 0.38, -0.58, 0.85, 77);
+          addDryGrass(k, -0.42, 0, 0.88, 1.15, 31);
+          addDryGrass(k, 1.05, 0, -0.12, 1.0, 44);
+        },
+      },
+      {
+        name: '2. 朽木樹洞靈芝與毒菇叢',
+        zone: '黑森林枯木｜林床微生態群',
+        height: 1.25,
+        desc: '七邊朽皮斷樁旁斜臥一截中空劈裂倒木，樹洞內外貼生層疊扁扇硬質木耳靈芝；陰濕倒木根側聚生一叢高矮不齊的白點紅帽毒蠅傘（遵照聚生不零散原則）。',
+        dist: 4.3, camY: 0.68,
+        isSmall: false,
+        build(k) {
+          // 七邊截斷樹樁＋空心洞槽感
+          k.cyl(0.36, 0.48, 0.96, BARKS[0], -0.72, 0.48, -0.18, { lean: [-0.06, 0.04], color2: BARKS[1] }, 7);
+          k.cyl(0.30, 0.30, 0.03, '#725c42', -0.75, 0.96, -0.16, { color2: '#564430' }, 7);
+          addMossCap(k, -0.56, 0.93, -0.08, 0.22, 0.07, 0.1, 0, MOSSES[1], MOSSES[3]);
+          // 斜倚空心倒木（兩半木壁構成裂開中空樹洞效果，低面且不遮光）
+          k.cyl(0.24, 0.32, 1.88, BARKS[2], 0.26, 0.34, 0.12, { rz: 1.28, ry: 0.22, color2: BARKS[3] }, 7);
+          k.box(0.36, 0.28, 0.22, '#221a14', 1.10, 0.14, -0.06, { ry: 0.22 }); // 遠端黑洞口內凹感
+          // 根鬚三條壓地
+          for (let i = 0; i < 3; i++) {
+            const a = i * 2.1 - 0.5;
+            k.box(0.16, 0.14, 0.52, BARKS[0], -0.78 + Math.sin(a) * 0.45, 0.08, -0.18 + Math.cos(a) * 0.45, {
+              ry: a, rx: 0.24, color2: MOSSES[i % MOSSES.length], ao: true,
+            });
+          }
+          // 層疊扁扇木耳靈芝群（沿倒木側棱貼生，橫向凸出帶暗底與奶黃邊）
+          const shelfData = [
+            [-0.18, 0.56, 0.36, 0.24, 0.22],
+            [-0.02, 0.48, 0.40, 0.18, 0.30],
+            [0.24, 0.47, 0.35, 0.21, -0.14],
+            [0.42, 0.39, 0.36, 0.16, 0.12],
+            [0.68, 0.34, 0.27, 0.14, -0.22],
+          ];
+          shelfData.forEach(([sx, sy, sz, sr, ry], idx) => {
+            k.cyl(sr, sr * 0.76, 0.048, FUNGI[idx % FUNGI.length], sx, sy, sz, {
+              ry, rx: 0.06, sz: 0.76, color2: '#dfd0af',
+            }, 7);
+          });
+          // 倒木陰涼腳邊：7 朵大小聚生一團的毒蠅傘（絕不單獨零星亂散）
+          const shrooms = [
+            [-0.12, 0, 0.52, 1.35, [0.14, 0.06]],
+            [-0.28, 0, 0.62, 0.95, [-0.12, 0.10]],
+            [0.05, 0, 0.64, 1.12, [0.06, -0.12]],
+            [0.18, 0, 0.56, 0.78, [0.16, 0.08]],
+            [-0.04, 0, 0.76, 0.70, [-0.08, 0.14]],
+            [-0.22, 0, 0.46, 0.65, [-0.14, -0.06]],
+          ];
+          shrooms.forEach(([mx, my, mz, sc, ln]) => addAmanita(k, mx, my, mz, sc, ln));
+          // 護角扁石塊與劍葉蕨
+          k.add(makePlanarRock({ r: 0.36, h: 0.28, sides: 5, seed: 512, colBot: '#363936', colSide: STONES[1], colTop: STONES[3] }), null, 0.85, 0, 0.44);
+          addSwordFern(k, -0.98, 0, 0.36, 1.05, 88);
+          addDryGrass(k, 0.62, 0, 0.68, 0.95, 99);
+        },
+      },
+      {
+        name: '3. 崖瀑層疊灰岩群',
+        zone: '黑森林海岸／崖坡層岩',
+        height: 1.72,
+        desc: '模擬黑森林北端崖坡與海岸礁岩：四層錯位平切玄武階岩板疊出明顯水平岩理，夾縫嵌碎灰卵石、一支被水沖上卡住的漂流枯木樁，與一叢尖銳向光伸展的崖邊水蕨。',
+        dist: 4.5, camY: 0.86,
+        isSmall: false,
+        build(k) {
+          // 4 層錯疊劈裂片岩階板（斜坡感與水平層理）
+          const strata = [
+            { x: 0.0, y: 0, z: 0.05, r: 0.98, h: 0.44, sides: 6, sx: 0.08, sz: -0.06, seed: 601 },
+            { x: -0.12, y: 0.40, z: -0.06, r: 0.84, h: 0.46, sides: 6, sx: 0.16, sz: -0.12, seed: 602 },
+            { x: -0.22, y: 0.82, z: -0.14, r: 0.66, h: 0.44, sides: 5, sx: 0.24, sz: -0.10, seed: 603 },
+            { x: -0.28, y: 1.22, z: -0.18, r: 0.46, h: 0.40, sides: 5, sx: 0.30, sz: -0.18, seed: 604 },
+          ];
+          strata.forEach((st, i) => {
+            k.add(makePlanarRock({
+              r: st.r, h: st.h, sides: st.sides, topScale: 0.82, shearX: st.sx, shearZ: st.sz, seed: st.seed,
+              colBot: '#2e3335', colSide: STONES[i % STONES.length], colTop: '#6b706c',
+            }), null, st.x, st.y, st.z);
+          });
+          // 右側斜倚劈面副岩與碎卵石帶
+          k.add(makePlanarRock({
+            r: 0.56, h: 0.58, sides: 5, topScale: 0.62, shearX: -0.28, shearZ: 0.14, seed: 610,
+            colBot: '#2f3334', colSide: STONES[2], colTop: STONES[3],
+          }), null, 0.78, 0, 0.34);
+          for (let i = 0; i < 6; i++) {
+            const px = 0.25 + (i % 3) * 0.28, pz = 0.62 + Math.floor(i / 3) * 0.22;
+            k.add(makePlanarRock({
+              r: 0.14 + (i % 2) * 0.05, h: 0.11, sides: 5, seed: 620 + i,
+              colBot: '#43413d', colSide: PEBBLES[i % PEBBLES.length], colTop: '#7a7770',
+            }), null, px, 0, pz);
+          }
+          // 卡在岩層間的蒼白漂流枯木樁＋頂部微青苔
+          bentCyl(k, 0.075, 0.125, 1.38, '#5a5248', 0.46, 0.68, -0.05, { rz: -0.58, rx: 0.18, bow: [0.12, 0.04, 0.35], color2: '#7a7266' }, 6, 5);
+          addMossCap(k, -0.26, 1.59, -0.18, 0.30, 0.08, 0.18, -0.14, MOSSES[0], MOSSES[2]);
+          addSwordFern(k, 0.52, 0.42, 0.14, 0.96, 633);
+          addSwordFern(k, -0.68, 0, 0.56, 1.04, 634);
+        },
+      },
+      {
+        name: '4. 崩斜界碑與紅布吊鈴柱',
+        zone: '黑森林林道｜遠離營火警告標誌',
+        height: 2.02,
+        desc: '不被踢倒的舊時獵人分界碑：底座壓著三塊斜楔扁石，木柱上釘出歪斜懸臂，垂掛一條暗紅撕裂警示布（#5e221c）與立臥交錯鐵鏈繫住的鏽鐵小警鈴，提醒行人莫再深走。',
+        dist: 4.5, camY: 1.02,
+        isSmall: false,
+        build(k) {
+          // 三塊歪楔基座大扁石
+          k.add(makePlanarRock({ r: 0.68, h: 0.38, sides: 6, topScale: 0.85, shearX: 0.14, shearZ: -0.08, seed: 701, colBot: '#333734', colSide: STONES[0], colTop: STONES[3] }), null, 0, 0, 0);
+          k.add(makePlanarRock({ r: 0.52, h: 0.34, sides: 5, topScale: 0.80, shearX: -0.18, shearZ: 0.12, seed: 702, colBot: '#333734', colSide: STONES[2], colTop: STONES[1] }), null, -0.10, 0.34, 0.05);
+          k.add(makePlanarRock({ r: 0.44, h: 0.24, sides: 5, topScale: 0.72, shearX: 0.12, shearZ: 0.18, seed: 703, colBot: '#363a37', colSide: STONES[4], colTop: STONES[3] }), null, 0.44, 0, 0.42);
+          // 歪斜粗木立柱＋懸臂橫樑
+          bentCyl(k, 0.068, 0.088, 1.72, BARKS[0], -0.04, 1.12, 0, { lean: [0.12, -0.06], bow: [0.06, 0.02, 0.35], color2: BARKS[1] }, 6, 5);
+          k.box(0.86, 0.085, 0.085, BARKS[1], 0.28, 1.82, 0.02, { rz: -0.14, color2: BARKS[3] });
+          // 箍木柱的鍛鐵箍
+          k.cyl(0.084, 0.086, 0.07, IRON, 0.02, 1.82, -0.02, { rz: -0.10, color2: IRON_HI }, 7);
+          // 立臥交替 90° 垂掛短鐵鏈＋鏽鐵警鈴
+          addIronChain(k, [0.58, 1.66, 0.02], [0, -0.056, 0], 4, 0.032, 0.010, IRON, 711);
+          k.cone(0.095, 0.17, '#4c3e36', 0.58, 1.38, 0.02, { color2: '#6e5c50' });
+          k.cyl(0.105, 0.105, 0.028, '#3b2e26', 0.58, 1.30, 0.02, {}, 7);
+          k.ball(0.026, IRON, 0.58, 1.27, 0.02);
+          // 暗紅撕裂警戒布條（#5e221c）緊繞柱身垂下，末端兩岔不浮空
+          const pX148 = 0.032, pZ148 = -0.028;
+          k.cyl(0.082, 0.084, 0.085, RED, pX148, 1.48, pZ148, { color2: RED_HI }, 7);
+          k.box(0.092, 0.46, 0.018, RED, pX148 - 0.072, 1.25, pZ148 + 0.042, { rz: 0.14, ry: 0.22, color2: RED_HI });
+          k.cone(0.038, 0.16, RED, pX148 - 0.104, 0.96, pZ148 + 0.048, { rx: Math.PI, rz: -0.14, sz: 0.35, color2: RED_HI });
+          addSwordFern(k, -0.52, 0, 0.42, 0.92, 730);
+          addDryGrass(k, 0.62, 0, -0.28, 1.10, 731);
+        },
+      },
+
+      // ---------------- 黑森林適合小物：陳列在 0.56m 老杉木樁台頂 (4..7) ----------------
+      {
+        name: '5. 獵人齒爪獸夾與骨符',
+        zone: '黑森林小物（陳列於 0.56m 木樁）｜獵人機關',
+        height: 0.34,
+        desc: '張開的鍛鐵鋸齒獸夾，含中央踏盤、左右彎弓彈片與對咬鐵齒；旁以立臥交替 90° 短鐵鏈栓進木釘樁，並附一捲油布彈藥包與帶焦黃舊骨護符（#b3a891）。',
+        dist: 1.42, camY: 0.72,
+        isSmall: true,
+        build(k) {
+          const y0 = 0.56;
+          // 鍛鐵獸夾底交叉十字架與中央踏盤
+          k.box(0.32, 0.016, 0.042, IRON, -0.04, y0 + 0.008, 0.02, { ry: 0.22, color2: IRON_HI });
+          k.box(0.042, 0.016, 0.26, IRON, -0.04, y0 + 0.012, 0.02, { ry: 0.22, color2: IRON_HI });
+          k.cyl(0.052, 0.052, 0.022, '#434648', -0.04, y0 + 0.024, 0.02, { color2: '#666b6e' }, 7);
+          // 張開對咬鋸齒雙顎（前弧＋後弧＋每顎 4 顆精準貼合弧環之鋼齒）
+          for (const side of [-1, 1]) {
+            const jZ = 0.02 + side * 0.026;
+            const tilt = Math.PI / 2 - side * 0.42;
+            ring(k, 0.115, 0.013, IRON, -0.04, y0 + 0.026, jZ, {
+              rx: tilt, ry: 0.22,
+            }, 8, 4, Math.PI);
+            for (let t = 0; t < 4; t++) {
+              const a = 0.42 + t * 0.76; // 沿半圓弧均勻分佈 (0..PI)
+              const lx = Math.cos(a) * 0.112;
+              const ly = Math.sin(a) * 0.112;
+              // 旋轉到環所在傾斜平面再旋 ry=0.22
+              const py = Math.cos(tilt) * ly;
+              const pz = Math.sin(tilt) * ly;
+              const rxW = Math.cos(-0.22) * lx - Math.sin(-0.22) * pz;
+              const rzW = Math.sin(-0.22) * lx + Math.cos(-0.22) * pz;
+              k.cone(0.011, 0.036, '#767c82',
+                -0.04 + rxW, y0 + 0.036 + py, jZ + rzW,
+                { rx: -side * 0.35, color2: '#98a0a6' });
+            }
+          }
+          // 立臥交替 90° 短鐵鏈栓向木釘樁
+          addIronChain(k, [0.11, y0 + 0.024, 0.04], [0.048, 0.004, 0.036], 5, 0.022, 0.007, IRON, 801);
+          k.cyl(0.026, 0.018, 0.16, BARKS[0], 0.30, y0 + 0.065, 0.18, { rx: 0.22, rz: -0.28, color2: BARKS[1] }, 6);
+          k.cyl(0.032, 0.032, 0.024, IRON, 0.32, y0 + 0.135, 0.16, { rz: -0.28 }, 6);
+          // 油布獵包與焦黃骨片護符（#b3a891）
+          k.box(0.18, 0.075, 0.13, OILCLOTH, -0.18, y0 + 0.038, -0.16, { ry: -0.45, color2: OILCLOTH_HI });
+          k.box(0.185, 0.024, 0.032, LEATHER, -0.18, y0 + 0.064, -0.16, { ry: -0.45, color2: LEATHER_HI });
+          k.box(0.055, 0.016, 0.095, BONE, -0.14, y0 + 0.084, -0.14, { ry: 0.35, color2: BONE_HI });
+        },
+      },
+      {
+        name: '6. 採藥石臼與毒菇標本罐',
+        zone: '黑森林小物（陳列於 0.56m 木樁）｜林間採藥器具',
+        height: 0.36,
+        desc: '冷灰岩鑿出的多邊低面研缽配粗木杵；一隻蠟封玻璃標本瓶內透見兩朵迷你紅毒蠅傘（半透明玻璃＋紅白菌帽）；木架倒懸綁縛一把晾乾的劍葉草藥束。',
+        dist: 1.42, camY: 0.74,
+        isSmall: true,
+        build(k) {
+          const y0 = 0.56;
+          // 七邊石研缽（外寬內凹結構）＋傾斜木杵
+          k.cyl(0.105, 0.082, 0.115, STONES[0], -0.15, y0 + 0.058, 0.06, { color2: STONES[3] }, 7);
+          k.cyl(0.078, 0.065, 0.024, '#2b2e2c', -0.15, y0 + 0.106, 0.06, {}, 7); // 缽內凹暗色碾槽
+          k.cyl(0.020, 0.014, 0.19, '#7a5d3d', -0.11, y0 + 0.138, 0.08, { rz: -0.58, rx: 0.25, color2: '#9a7852' }, 6);
+          // 木架倒懸晾乾草藥束
+          rod(k, [0.16, y0, -0.12], [0.16, y0 + 0.33, -0.12], 0.016, 0.014, BARKS[0], {}, 5);
+          rod(k, [0.02, y0 + 0.31, -0.12], [0.28, y0 + 0.31, -0.12], 0.014, 0.012, BARKS[1], {}, 5);
+          for (let h = 0; h < 2; h++) {
+            const hx = 0.08 + h * 0.12;
+            k.cyl(0.015, 0.015, 0.022, HEMP, hx, y0 + 0.27, -0.12, { color2: HEMP_HI }, 6);
+            for (let b = 0; b < 3; b++) {
+              k.box(0.022, 0.14, 0.008, FERNS[b % FERNS.length], hx + (b - 1) * 0.016, y0 + 0.20, -0.12 + (b % 2) * 0.012, {
+                rz: (b - 1) * 0.18, color2: '#7a7550',
+              });
+            }
+          }
+          // 紅蠟封瓶塞與毒蠅傘標本（先放內部菇，外罩玻璃瓶）
+          k.cyl(0.058, 0.064, 0.02, '#3a342c', 0.14, y0 + 0.01, 0.14, {}, 7);
+          addAmanita(k, 0.125, y0 + 0.016, 0.13, 0.56, [0.08, -0.04]);
+          addAmanita(k, 0.160, y0 + 0.016, 0.155, 0.42, [-0.10, 0.06]);
+          // 外玻璃瓶與暗紅蜂蠟封頭
+          k.add(new THREE.CylinderGeometry(0.064, 0.068, 0.165, 7), '#9ec2bc', 0.14, y0 + 0.095, 0.14, { tag: 'glass', color2: '#cde5e0' });
+          k.cyl(0.040, 0.044, 0.035, '#8a5d3b', 0.14, y0 + 0.19, 0.14, {}, 6);
+          k.cyl(0.048, 0.046, 0.028, RED, 0.14, y0 + 0.202, 0.14, { color2: RED_HI }, 7);
+        },
+      },
+      {
+        name: '7. 矮人修甲鍛砧與磨石輪',
+        zone: '黑森林小物（陳列於 0.56m 木樁）｜營火鍛修工具',
+        height: 0.30,
+        desc: '呼應黑森林營火矮人的修理行囊：一塊掌上型角尖小鍛砧與短柄鍛錘、手搖斜架灰磨石輪，外加捲起綁繩的厚皮革護腕與火種小鐵盒。',
+        dist: 1.42, camY: 0.72,
+        isSmall: true,
+        build(k) {
+          const y0 = 0.56;
+          // 便攜鍛砧（木墊座＋鍛鐵砧體＋尖角）
+          k.box(0.20, 0.045, 0.13, BARKS[1], -0.14, y0 + 0.022, 0.05, { ry: 0.18, color2: BARKS[3] });
+          k.box(0.14, 0.055, 0.075, IRON, -0.14, y0 + 0.072, 0.05, { ry: 0.18, color2: IRON_HI });
+          k.box(0.22, 0.042, 0.088, '#464a4f', -0.14, y0 + 0.118, 0.05, { ry: 0.18, color2: '#6e747c' });
+          k.cone(0.042, 0.11, '#585d64', -0.27, y0 + 0.118, 0.025, { rz: Math.PI / 2, ry: 0.18, color2: '#7a8088' });
+          // 鍛錘斜擱在砧旁
+          k.cyl(0.012, 0.014, 0.20, '#6a4e36', -0.05, y0 + 0.032, 0.18, { rz: Math.PI / 2, ry: -0.42 }, 5);
+          k.box(0.068, 0.044, 0.044, IRON, 0.03, y0 + 0.032, 0.215, { ry: -0.42, color2: IRON_HI });
+          // 手搖小磨石輪＋三角木支架
+          k.box(0.22, 0.022, 0.16, BARKS[0], 0.14, y0 + 0.011, -0.08, { ry: -0.2, color2: BARKS[2] });
+          for (const sz of [-0.052, 0.052]) {
+            rod(k, [0.06, y0 + 0.02, -0.08 + sz], [0.14, y0 + 0.145, -0.08 + sz], 0.013, 0.011, BARKS[1], {}, 5);
+            rod(k, [0.22, y0 + 0.02, -0.08 + sz], [0.14, y0 + 0.145, -0.08 + sz], 0.013, 0.011, BARKS[1], {}, 5);
+          }
+          k.cyl(0.095, 0.095, 0.055, STONES[3], 0.14, y0 + 0.145, -0.08, { rx: Math.PI / 2, ry: -0.2, color2: '#7a7e78' }, 8);
+          k.cyl(0.014, 0.014, 0.17, IRON, 0.14, y0 + 0.145, -0.08, { rx: Math.PI / 2, ry: -0.2 }, 5);
+          // 捲皮護腕與火種小鐵盒
+          k.cyl(0.045, 0.048, 0.13, LEATHER, -0.14, y0 + 0.045, -0.18, { rz: Math.PI / 2, ry: 0.45, color2: LEATHER_HI }, 7);
+          k.cyl(0.048, 0.048, 0.016, IRON, -0.14, y0 + 0.045, -0.18, { rz: Math.PI / 2, ry: 0.45 }, 7);
+          k.box(0.095, 0.044, 0.072, IRON, 0.12, y0 + 0.022, 0.16, { ry: 0.35, color2: BRASS });
+        },
+      },
+      {
+        name: '8. 苔匣黃銅羅盤與六角手燈',
+        zone: '黑森林小物（陳列於 0.56m 木樁）｜旅人引路組',
+        height: 0.34,
+        desc: '掀開卡扣的厚木黃銅羅盤盒（內嵌赤紅與亮銅指向菱針）；一盞八邊骨架鏽鐵小手燈，點著微弱暖橘燈芯（切至林霧藍昏可看暖光照上木樁與黃銅邊緣）；旁攤著折起邊角的舊地圖捲。',
+        dist: 1.42, camY: 0.74,
+        isSmall: true,
+        build(k) {
+          const y0 = 0.56;
+          // 掀蓋黃銅羅盤木盒
+          k.box(0.15, 0.048, 0.15, BARKS[1], -0.12, y0 + 0.024, 0.06, { ry: 0.25, color2: BARKS[3] });
+          k.box(0.15, 0.018, 0.15, BARKS[0], -0.14, y0 + 0.105, -0.035, { rx: -1.12, ry: 0.25, color2: BARKS[3] });
+          k.cyl(0.056, 0.056, 0.016, BRASS, -0.12, y0 + 0.050, 0.06, { color2: BRASS_HI }, 8);
+          k.cyl(0.044, 0.044, 0.018, '#dcd6c4', -0.12, y0 + 0.052, 0.06, {}, 8);
+          k.cone(0.012, 0.045, RED, -0.105, y0 + 0.066, 0.082, { rx: Math.PI / 2, ry: 0.45, color2: RED_HI });
+          k.cone(0.012, 0.040, IRON_HI, -0.135, y0 + 0.066, 0.038, { rx: -Math.PI / 2, ry: 0.45 });
+          // 八角旅人小手風燈＋琥珀暖燈芯
+          k.cyl(0.072, 0.084, 0.032, IRON, 0.14, y0 + 0.016, -0.06, { color2: IRON_HI }, 6);
+          for (let i = 0; i < 4; i++) {
+            const a = i * Math.PI / 2 + 0.35;
+            k.cyl(0.008, 0.008, 0.16, IRON, 0.14 + Math.cos(a) * 0.060, y0 + 0.11, -0.06 + Math.sin(a) * 0.060, {}, 4);
+          }
+          k.add(new THREE.CylinderGeometry(0.052, 0.058, 0.14, 6), '#c9b48a', 0.14, y0 + 0.10, -0.06, { tag: 'glass' });
+          k.cone(0.022, 0.058, '#ff9c38', 0.14, y0 + 0.082, -0.06, { glow: true, color2: '#ffe490' });
+          k.cone(0.090, 0.075, IRON, 0.14, y0 + 0.222, -0.06, { color2: IRON_HI });
+          ring(k, 0.032, 0.007, BRASS, 0.14, y0 + 0.278, -0.06, { ry: 0.4 }, 6, 4);
+          // 展開半截的舊羊皮油紙地圖＋兩粒鎮紙灰石
+          k.box(0.20, 0.008, 0.14, '#c7b892', -0.02, y0 + 0.004, -0.16, { ry: -0.28, color2: '#aa9a74' });
+          k.cyl(0.022, 0.022, 0.15, '#b8a882', -0.11, y0 + 0.022, -0.14, { rx: Math.PI / 2, ry: -0.28 }, 6);
+          k.add(makePlanarRock({ r: 0.032, h: 0.026, sides: 5, seed: 855, colBot: '#3f4442', colSide: STONES[0], colTop: STONES[3] }), null, 0.06, y0, -0.19);
+        },
+      },
+    ];
+
+    // ============================================================================
+    // 建構模型工具（支援普通材質＋半透明標本瓶＋自發光燈芯）
+    // ============================================================================
+    function buildGroup(builderFn, seed, addStump = false) {
+      const litB = newBucket(), glassB = newBucket();
+      const kLit = new Kit(rng(seed));
+      const kGlass = new Kit(rng(seed + 19));
+      if (addStump) addDisplayStump(kLit, 0, 0, seed * 0.4);
+      const proxy = {
+        add(geo, col, x, y, z, o = {}) {
+          if (o && o.tag === 'glass') kGlass.add(geo, col, x, y, z, o);
+          else kLit.add(geo, col, x, y, z, o);
+        },
+        box(...a) { kLit.box(...a); },
+        cyl(...a) { kLit.cyl(...a); },
+        ball(...a) { kLit.ball(...a); },
+        rock(...a) { kLit.rock(...a); },
+        cone(...a) { kLit.cone(...a); },
+        torus(...a) { kLit.torus(...a); },
+        plane(...a) { kLit.plane(...a); },
+      };
+      builderFn(proxy);
+      const totalParts = kLit.lit.length + kLit.glow.length + kGlass.lit.length;
+      kLit.emit(litB, 0, 0, 0);
+      kGlass.emit(glassB, 0, 0, 0);
+
+      const g = new THREE.Group();
+      let tris = 0;
+      const addPart = (list, role, mat, useAO) => {
+        if (!list.length) return;
+        const geo = mergeBucket(list, useAO);
+        if (!geo) return;
+        const m = new THREE.Mesh(geo, mat);
+        m.userData.role = role;
+        tris += m.geometry.attributes.position.count / 3;
+        g.add(m);
+      };
+      addPart(litB.lit, 'lit', matLit, true);
+      addPart(glassB.lit, 'glass', matGlass, false);
+      addPart(litB.glow, 'glow', matGlow, false);
+
+      g.userData.tris = Math.round(tris);
+      g.userData.parts = totalParts;
+      return g;
+    }
+
+    // 單獨計算小物本身（不含陳列木樁）的面數與組件數
+    function measureItemSelf(item) {
+      const cleanG = buildGroup(item.build, 1000, false);
+      return { tris: cleanG.userData.tris, parts: cleanG.userData.parts };
+    }
+
+    // ============================================================================
+    // 舞台與擺位：左側 1.7m 女巫作尺度參考，大石貼地、小物在 0.56m 木樁上
+    // ============================================================================
+    const showcaseRoot = new THREE.Group();
+    scene.add(showcaseRoot);
+
+    {
+      const k = new Kit(rng(1)), b = newBucket();
+      k.cyl(9.2, 9.5, 0.18, '#262b28', 0, -0.09, 0, { color2: '#333934' }, 44);
+      k.cyl(9.22, 9.22, 0.06, '#485249', 0, -0.05, 0, { color2: '#343c36' }, 44);
+      k.cyl(7.6, 7.6, 0.015, '#2e3530', 0, 0.002, 0, {}, 36);
+      k.emit(b, 0, 0, 0);
+      const fm = new THREE.Mesh(mergeBucket(b.lit, true), matLit);
+      fm.userData.role = 'lit';
+      showcaseRoot.add(fm);
+    }
+
+    function shadowTexture() {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const g = c.getContext('2d').createRadialGradient(32, 32, 2, 32, 32, 30);
+      g.addColorStop(0, 'rgba(0,0,0,0.45)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      c.getContext('2d').fillStyle = g;
+      c.getContext('2d').fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c);
+    }
+
+    // 1.7m 比例尺人物（與遊戲內完全一致）
+    const character = new Character(shadowTexture(), sanitizeLook({}));
+    character.group.position.set(-4.0, 0, 1.35);
+    character.group.rotation.y = 0.52;
+    character.update(0.016, 0);
+    showcaseRoot.add(character.group);
+
+    // 擺放位置：大石 0..3 在中後弧，小物木樁 4..7 在前右弧（互不遮擋，且 3 不擋 0 鏡頭）
+    const LAYOUT = [
+      { x: -2.85, z: -1.65, ry: 0.25 },
+      { x: -0.25, z: -2.45, ry: -0.15 },
+      { x: 2.55, z: -1.85, ry: -0.45 },
+      { x: -1.10, z: 0.85, ry: 0.35 },
+      { x: 0.35, z: 1.65, ry: -0.18 },
+      { x: 1.75, z: 1.42, ry: -0.25 },
+      { x: 3.15, z: 0.85, ry: -0.42 },
+      { x: 4.18, z: -0.15, ry: -0.62 },
+    ];
+
+    const propGroups = [];
+    ITEMS.forEach((it, i) => {
+      const pos = LAYOUT[i];
+      const selfStats = measureItemSelf(it);
+      it.tris = selfStats.tris;
+      it.parts = selfStats.parts;
+
+      const g = buildGroup(it.build, 700 + i * 37, it.isSmall);
+      g.position.set(pos.x, 0, pos.z);
+      g.rotation.y = pos.ry;
+      showcaseRoot.add(g);
+
+      propGroups.push({
+        g, item: it,
+        x: pos.x,
+        y: it.isSmall ? 0.68 : it.camY,
+        z: pos.z,
+        dist: it.dist,
+      });
+    });
+
+    // ============================================================================
+    // 對照模式（左：預設做法 vs 右：這裡的黑森林做法）
+    // ============================================================================
+    const compareRoot = new THREE.Group();
+    compareRoot.visible = false;
+    scene.add(compareRoot);
+
+    const COMPARISONS = [
+      {
+        bad(k) {
+          // 預設：高細分平滑圓球岩石＋圓球多肉植物
+          k.add(new THREE.IcosahedronGeometry(0.68, 2), '#5a625c', -0.15, 0.56, 0, { sx: 1.15, sy: 0.88 });
+          k.add(new THREE.IcosahedronGeometry(0.42, 2), '#666e68', 0.42, 0.34, 0.2, { sy: 0.82 });
+          k.add(new THREE.SphereGeometry(0.24, 14, 10), '#4d7a42', -0.45, 0.20, 0.38, { sy: 0.72 });
+          k.add(new THREE.SphereGeometry(0.18, 14, 10), '#5d8a52', 0.38, 0.16, 0.52, { sy: 0.72 });
+        },
+        good(k) {
+          // 這裡：幾個大劈面平階岩塊＋青苔墊＋弓形劍葉蕨
+          k.add(makePlanarRock({ r: 0.72, h: 1.08, sides: 6, topScale: 0.68, shearX: 0.28, shearZ: -0.16, seed: 901, colBot: '#323634', colSide: STONES[0], colTop: STONES[3] }), null, -0.14, 0, -0.05);
+          k.add(makePlanarRock({ r: 0.48, h: 0.56, sides: 5, topScale: 0.78, shearX: -0.22, shearZ: 0.16, seed: 902, colBot: '#353936', colSide: STONES[2], colTop: STONES[1] }), null, 0.48, 0, 0.20);
+          addMossCap(k, -0.14, 1.04, -0.07, 0.42, 0.11, 0.14, -0.20, MOSSES[1], MOSSES[2]);
+          addSwordFern(k, -0.42, 0, 0.48, 0.95, 903);
+          addDryGrass(k, 0.52, 0, 0.54, 0.95, 904);
+        },
+      },
+      {
+        bad(k) {
+          // 預設：高段光滑塑膠圈＋亮白高細分球帽菇（還孤零零單排沒轉 90° 的扁鏈）
+          const y0 = 0.56;
+          k.add(new THREE.TorusGeometry(0.14, 0.018, 12, 24), '#808890', -0.08, y0 + 0.03, 0, { rx: Math.PI / 2 });
+          for (let i = 0; i < 4; i++) {
+            k.add(new THREE.TorusGeometry(0.025, 0.008, 8, 16), '#9098a0', 0.08 + i * 0.048, y0 + 0.02, 0.05 * i, { rx: Math.PI / 2 });
+          }
+          k.cyl(0.022, 0.025, 0.16, '#ffffff', -0.18, y0 + 0.08, -0.16, {}, 16);
+          k.add(new THREE.SphereGeometry(0.085, 16, 12), '#e84838', -0.18, y0 + 0.17, -0.16, { sy: 0.62 });
+        },
+        good(k) {
+          // 這裡：八邊鍛鐵鋸齒獸夾＋立臥 90° 鐵鏈＋骨符＋矮小聚生一團的毒蠅傘
+          const y0 = 0.56;
+          k.box(0.28, 0.016, 0.04, IRON, -0.08, y0 + 0.008, 0.02, { color2: IRON_HI });
+          k.cyl(0.048, 0.048, 0.02, '#434648', -0.08, y0 + 0.022, 0.02, { color2: '#666b6e' }, 7);
+          for (const side of [-1, 1]) {
+            const jZ = 0.02 + side * 0.025;
+            const tilt = Math.PI / 2 - side * 0.42;
+            ring(k, 0.105, 0.012, IRON, -0.08, y0 + 0.026, jZ, { rx: tilt }, 8, 4, Math.PI);
+            for (let t = 0; t < 3; t++) {
+              const a = 0.55 + t * 1.02;
+              const lx = Math.cos(a) * 0.102, ly = Math.sin(a) * 0.102;
+              k.cone(0.010, 0.032, '#767c82', -0.08 + lx, y0 + 0.036 + Math.cos(tilt) * ly, jZ + Math.sin(tilt) * ly, { rx: -side * 0.35 });
+            }
+          }
+          addIronChain(k, [0.06, y0 + 0.022, 0.04], [0.046, 0.004, 0.034], 4, 0.022, 0.007, IRON, 912);
+          k.box(0.055, 0.016, 0.095, BONE, 0.16, y0 + 0.01, -0.14, { ry: 0.4, color2: BONE_HI });
+          addAmanita(k, -0.18, y0, -0.16, 0.85, [0.12, 0.04]);
+          addAmanita(k, -0.11, y0, -0.20, 0.58, [-0.1, 0.08]);
+          addAmanita(k, -0.23, y0, -0.21, 0.52, [0.04, -0.1]);
+        },
+      },
+    ];
+
+    const compareStats = [];
+    {
+      const kb = new Kit(rng(3)), b = newBucket();
+      kb.cyl(5.2, 5.4, 0.14, '#242926', 0, -0.07, 0, { color2: '#313732' }, 36);
+      // 左組（預設）灰墊，右組（這裡）苔石墊（半徑 0.78 確保不重疊消閃）
+      for (const cx of [-2.0, 2.0]) {
+        kb.cyl(0.76, 0.80, 0.04, '#505256', cx - 0.85, 0.02, -0.1, {}, 12);
+        kb.cyl(0.76, 0.80, 0.04, '#3d4c37', cx + 0.85, 0.02, 0.1, {}, 12);
+      }
+      kb.emit(b, 0, 0, 0);
+      const bm = new THREE.Mesh(mergeBucket(b.lit, true), matLit);
+      bm.userData.role = 'lit';
+      compareRoot.add(bm);
+
+      COMPARISONS.forEach((cmp, i) => {
+        const cx = (i - 0.5) * 4.0;
+        const badG = buildGroup(cmp.bad, 'hbad_' + i, i === 1);
+        badG.position.set(cx - 0.85, 0.04, -0.1);
+        compareRoot.add(badG);
+
+        const goodG = buildGroup(cmp.good, 'hgood_' + i, i === 1);
+        goodG.position.set(cx + 0.85, 0.04, 0.1);
+        compareRoot.add(goodG);
+
+        const badSelf = i === 1 ? buildGroup(cmp.bad, 'hbad_s', false).userData.tris : badG.userData.tris;
+        const goodSelf = i === 1 ? buildGroup(cmp.good, 'hgood_s', false).userData.tris : goodG.userData.tris;
+        compareStats.push(`${i + 1}. 左（預設）${badSelf} tris → 右（這裡）${goodSelf} tris`);
+      });
+    }
+
+    // ============================================================================
+    // 互動、林霧藍昏與相機控制
+    // ============================================================================
+    const state = {
+      item: params.get('item') || 'all',
+      fog: params.get('fog') === '1',
+      compare: params.get('compare') === '1',
+      form: params.get('form') === '1',
+      wire: params.get('wire') === '1',
+    };
+
+    const camera = new THREE.PerspectiveCamera(36, innerWidth / innerHeight, 0.06, 80);
+    const target = new THREE.Vector3(0.15, 0.88, -0.25);
+    const goalTarget = target.clone();
+    let yaw = 0.14, pitch = 0.25, dist = 10.6, goalDist = 10.6;
+    if (params.has('yaw')) yaw = +params.get('yaw');
+    if (params.has('pitch')) pitch = +params.get('pitch');
+
+    const infoEl = document.getElementById('info');
+    function updateUI() {
+      showcaseRoot.visible = !state.compare;
+      compareRoot.visible = state.compare;
+
+      if (state.form) {
+        scene.background = BG_FORM;
+        scene.fog = null;
+        hemi.intensity = 1.15;
+        sun.intensity = 1.15;
+        rim.intensity = 0.35;
+        lanternLight.intensity = 0;
+      } else if (state.fog) {
+        scene.background = BG_FOG;
+        scene.fog = new THREE.FogExp2(0x5d6f74, 0.068);
+        hemi.intensity = 0.92;
+        sun.intensity = 0.42;
+        rim.intensity = 0.65;
+        lanternLight.intensity = 2.6;
+      } else {
+        scene.background = BG_NORMAL;
+        scene.fog = null;
+        hemi.intensity = 1.32;
+        sun.intensity = 1.15;
+        rim.intensity = 0.44;
+        lanternLight.intensity = 1.1;
+      }
+
+      scene.traverse((o) => {
+        if (!o.isMesh) return;
+        if (o.userData.role === 'lit') o.material = state.form ? matForm : matLit;
+        if (o.userData.role === 'glass') o.material = state.form ? matForm : matGlass;
+        if (o.userData.role === 'glow') o.material = state.form ? matForm : matGlow;
+        if (o.userData.isWire) o.visible = state.wire;
+      });
+
+      document.getElementById('btnFog').classList.toggle('on', state.fog);
+      document.getElementById('btnCompare').classList.toggle('on', state.compare);
+      document.getElementById('btnForm').classList.toggle('on', state.form);
+      document.getElementById('btnWire').classList.toggle('on', state.wire);
+
+      for (const b of document.querySelectorAll('[data-item]')) {
+        b.classList.toggle('on', !state.compare && b.dataset.item === String(state.item));
+      }
+
+      if (state.compare) {
+        goalTarget.set(0, 0.85, 0);
+        goalDist = 7.8;
+        infoEl.innerHTML = `<strong>黑森林 1:1 對照模式：左灰墊「預設做法」 vs 右苔墊「黑森林做法」</strong><br>` +
+          `1. 大石與蕨草：高細分圓球＋球形多肉 vs 幾個大劈面＋少數階梯棱線＋青苔＋劍葉蕨。<br>` +
+          `2. 獸夾與毒菇：光滑圓圈＋不轉 90° 扁鏈＋單顆亮白球菇 vs 鍛鐵鋸齒夾＋立臥鏈＋#b3a891 骨符＋聚生一團毒蠅傘。` +
+          `<div class="meta">${compareStats.join('　｜　')}</div>`;
+      } else if (state.item === 'all') {
+        goalTarget.set(0.15, 0.88, -0.25);
+        goalDist = 10.6;
+        const bigTris = ITEMS.filter(x => !x.isSmall).reduce((s, it) => s + it.tris, 0);
+        const smallTris = ITEMS.filter(x => x.isSmall).reduce((s, it) => s + it.tris, 0);
+        infoEl.innerHTML = `<strong>黑森林低面數大石與營地小物（1:1 尺度，左側女巫高約 1.7m 為比例尺）</strong><br>` +
+          `中後排 4 組大型劈面岩石／朽木／海崖階岩／紅布界碑直接落地；前右排 4 組獵人／採藥／矮人／羅盤小物置於 0.56m 木樁陳列，點選下方按鈕可拉近檢視。<br>` +
+          `<div class="meta">大石類 4 組合計 <strong>${bigTris}</strong> tris　｜　小物類 4 組（不含木樁）合計 <strong>${smallTris}</strong> tris</div>`;
+      } else {
+        const idx = +state.item;
+        const m = propGroups[idx];
+        if (m) {
+          goalTarget.set(m.x, m.y, m.z);
+          goalDist = m.dist;
+          const it = m.item;
+          infoEl.innerHTML = `<strong>${it.name}</strong>（${it.zone}，高約 ${it.height.toFixed(2)}m）<br>${it.desc}` +
+            `<div class="meta">物件本體面數：<strong>${it.tris}</strong> 個三角形　｜　組件：${it.parts} 個基本圖元　｜　可切換「灰泥」與「林霧藍昏」檢視</div>`;
+        }
+      }
+    }
+
+    scene.traverse((o) => {
+      if (o.isMesh && (o.userData.role === 'lit' || o.userData.role === 'glass')) {
+        const w = new THREE.Mesh(o.geometry, matWire);
+        w.userData.isWire = true;
+        w.visible = false;
+        o.add(w);
+      }
+    });
+
+    for (const b of document.querySelectorAll('[data-item]')) {
+      b.onclick = () => {
+        state.compare = false;
+        state.item = b.dataset.item;
+        updateUI();
+      };
+    }
+    document.getElementById('btnFog').onclick = () => { state.fog = !state.fog; state.form = false; updateUI(); };
+    document.getElementById('btnCompare').onclick = () => { state.compare = !state.compare; updateUI(); };
+    document.getElementById('btnForm').onclick = () => { state.form = !state.form; updateUI(); };
+    document.getElementById('btnWire').onclick = () => { state.wire = !state.wire; updateUI(); };
+
+    let drag = null;
+    renderer.domElement.addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; });
+    addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      yaw -= (e.clientX - drag[0]) * 0.007;
+      pitch = Math.max(-0.12, Math.min(1.32, pitch + (e.clientY - drag[1]) * 0.007));
+      drag = [e.clientX, e.clientY];
+    });
+    addEventListener('pointerup', () => { drag = null; });
+    renderer.domElement.addEventListener('wheel', (e) => {
+      goalDist = Math.max(0.8, Math.min(24, goalDist * (1 + e.deltaY * 0.001)));
+    }, { passive: true });
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    updateUI();
+    if (params.has('dist')) { dist = goalDist = +params.get('dist'); }
+    target.copy(goalTarget);
+
+    // 讓手燈暖光跟著第 8 號木樁旋轉位置走
+    const lanternWorld = new THREE.Vector3(0.14, 0.72, -0.06);
+    lanternWorld.applyAxisAngle(new THREE.Vector3(0, 1, 0), LAYOUT[7].ry);
+    lanternLight.position.set(LAYOUT[7].x + lanternWorld.x, lanternWorld.y, LAYOUT[7].z + lanternWorld.z);
+
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      const dt = Math.min(clock.getDelta(), 0.1);
+      const t = clock.getElapsedTime();
+      uTime.value = t;
+      if (state.fog && !state.form) {
+        lanternLight.intensity = 2.6 + Math.sin(t * 7.5) * 0.22;
+      }
+      character.update(dt, 0);
+      target.lerp(goalTarget, Math.min(1, dt * 8));
+      dist += (goalDist - dist) * Math.min(1, dt * 8);
+      const c = Math.cos(pitch);
+      camera.position.set(target.x + Math.sin(yaw) * c * dist, target.y + Math.sin(pitch) * dist, target.z + Math.cos(yaw) * c * dist);
+      camera.lookAt(target);
+      renderer.render(scene, camera);
+    });
+
+    window.__heilinProps = { state, updateUI, ITEMS };
+    window.__ready = true;
+  </script>
+</body>
+
+</html>

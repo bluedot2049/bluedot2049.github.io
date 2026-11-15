@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { Kit, rng } from '../../core/props.js';
 import { HALF, SLIDE, STEP } from './heilin-map.js';
+import { place as placeProp } from './heilin-props.js';
 
 const STONE = ['#4a4d4a', '#555a56', '#3f4442', '#5d605a', '#484b45'];
 const WOOD = '#5a4636', OLDWOOD = '#4a3c33', CHAR = '#1f1a17', ASH = '#5a5550', ROPE = '#8a7556', CLOTH = '#5e221c', CLOTH2 = '#3e1714';
@@ -137,7 +138,7 @@ export function buildStory({ P, T, bucket, obstacles, free = () => true }) {
   }
 
   // ================= 警告的牌子和逃跑的人掉的東西 =================
-  // 牌子都朝著走下來的人（面向上坡），越往下越兇：畫紅叉 → 紅手掌（停）→ 推倒的路障 → 歪掉的紅叉 → 掛頭骨和鐵鏈的柱子 → 有抓痕的紅手掌。
+  // 牌子都朝著走下來的人（面向上坡），越往下越兇：畫紅叉 → 掛鈴的分界碑 → 紅手掌（停）→ 推倒的路障 → 歪掉的紅叉 → 掛頭骨和鐵鏈的柱子 → 有抓痕的紅手掌。
   // 掉的東西是逃上去的人沿路丟的，越接近谷底越多（剛開始跑的時候丟得最兇）；很多是壞的：斷劍、斷弓、裂成一半的盾、輪子掉了的推車
   const place = (u, s, d, fn, opt = {}) => {
     const i = Math.round(u * P.n), sd = s === 'down' ? downSide(i) : s === 'up' ? -downSide(i) : s, p = side(i, sd, HALF + d);
@@ -174,6 +175,8 @@ export function buildStory({ P, T, bucket, obstacles, free = () => true }) {
 
   // --- 牌子 ---
   place(0.22, 'up', 0.8, (k, y) => { const cy = board(k, y); redX(k, cy); }, { rot: 'face', block: 0.15 });
+  // 舊的分界碑：三塊楔石壓著一根歪柱，懸臂吊一個鏽鈴，柱身纏紅布（heilin-props.js 的 bellPost）
+  place(0.33, 'up', 0.9, (k, y) => placeProp(k, 'bellPost', 0, y, 0), { rot: 'face', r: 1.4, block: 0.3 });
   place(0.42, 'down', 0.8, (k, y) => { const cy = board(k, y, 0.7, 0.6, [0.04, -0.03]); hand(k, cy, 1.4); }, { rot: 'face', block: 0.15 });
   place(0.58, 'down', 0.6, (k, y) => {
     // 路障被推到路邊：一個 X 形木架還站著，橫木一頭掉在地上，上面纏著一條紅布

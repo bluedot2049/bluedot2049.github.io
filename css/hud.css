@@ -157,12 +157,12 @@ body.panel-open #hint { left: calc((100vw / var(--ui, 1) - var(--panel-w)) / 2);
 
 /* 門邊立牌那張（能在哪裡玩）和問胖頭的題目卡：門口告示（.notice）同一張卡，這裡只管位置和裡面多出來的東西。
    手機橫拿靠左、垂直置中，不擋住畫面中間的角色；直式貼底，房間外那片空的地方剛好放得下；電腦在下面 */
-#guide, #ask, #peek, #shop {
+#guide, #ask, #peek, #shop, #got {
   position: fixed; left: calc(24px + env(safe-area-inset-left)); top: 50%; z-index: 25;
   display: none; transform: translateY(-50%);
   background: rgba(16, 11, 9, .94); box-shadow: var(--shadow);
 }
-:is(#guide, #ask, #peek, #shop).show { display: flex; animation: guide-in .4s ease-out both; }
+:is(#guide, #ask, #peek, #shop, #got).show { display: flex; animation: guide-in .4s ease-out both; }
 @keyframes guide-in { from { opacity: 0; transform: translateY(calc(-50% + 6px)); } }
 #guide .keys { list-style: none; margin: 0; padding: 0; }
 #guide .keys li {
@@ -175,17 +175,17 @@ body.panel-open #hint { left: calc((100vw / var(--ui, 1) - var(--panel-w)) / 2);
 #guide .keys li:nth-child(3) { animation-delay: .12s; }
 #guide .keys li:nth-child(4) { animation-delay: .18s; }
 #guide .keys li:nth-child(5) { animation-delay: .24s; }
-:is(#guide, #ask, #peek, #shop) kbd {
+:is(#guide, #ask, #peek, #shop, #got) kbd {
   min-width: 20px; padding: 0 5px; text-align: center;
   font: 11.5px/1.6 var(--latin); letter-spacing: .04em; color: var(--text);
   border: 1px solid rgba(232, 184, 106, .35); border-radius: 2px;
 }
-:is(#guide, #ask, #peek) .btn kbd { color: inherit; }
+:is(#guide, #ask, #peek, #got) .btn kbd { color: inherit; border-color: currentColor; }
 body.touch #guide .for-desk, body:not(.touch) #guide .for-touch { display: none; }
 /* 中間那條小標（支援）：跟告示的副標同一種字 */
 #guide .part { margin-top: 2px; font-size: 12.5px; letter-spacing: .12em; color: var(--muted); }
 /* 矮的螢幕可以捲 */
-:is(#guide, #ask, #peek, #shop) { max-height: calc(100vh / var(--ui, 1) - 24px); overflow-y: auto; }
+:is(#guide, #ask, #peek, #shop, #got) { max-height: calc(100vh / var(--ui, 1) - 24px); overflow-y: auto; }
 /* 題目：一列一題，前面一顆魔法印泥（沒問過的亮著，panels.css 的封蠟同一款），電腦後面寫 1–9 */
 #ask .asks { list-style: none; margin: 0; padding: 0; }
 #ask .asks button {
@@ -204,11 +204,11 @@ body.touch #guide .for-desk, body:not(.touch) #guide .for-touch { display: none;
 #ask .asks kbd { color: var(--muted); border-color: rgba(232, 184, 106, .2); }
 #ask .ink { position: relative; width: 9px; height: 9px; }
 @media (orientation: portrait) {
-  #guide, #ask, #peek, #shop {
+  #guide, #ask, #peek, #shop, #got {
     left: 16px; right: 16px; top: auto; bottom: calc(16px + env(safe-area-inset-bottom));
     width: auto; max-width: 420px; margin: 0 auto; transform: none;
   }
-  :is(#guide, #ask, #peek, #shop).show { animation-name: guide-up; }
+  :is(#guide, #ask, #peek, #shop, #got).show { animation-name: guide-up; }
   /* 題目卡在手機上蓋住拇指那排：互動鍵、搖桿都在卡片底下，開著時只聽卡片 */
   #ask { max-height: 62vh; }
 }
@@ -230,7 +230,7 @@ body.touch #guide .for-desk, body:not(.touch) #guide .for-touch { display: none;
 body.desk #guide { left: 50%; transform: translate(-50%, -50%); }
 body.desk #guide.show { animation-name: guide-mid; }
 @keyframes guide-mid { from { opacity: 0; transform: translate(-50%, calc(-50% + 6px)); } }
-body.desk :is(#ask, #peek, #shop) { left: var(--cx, 50%); top: var(--cy, 30%); right: auto; bottom: auto; transform: none; width: 300px; }
+body.desk :is(#ask, #peek, #shop, #got) { left: var(--cx, 50%); top: var(--cy, 30%); right: auto; bottom: auto; transform: none; width: 300px; }
 body.desk :is(#ask, #peek).show { animation-name: guide-up; }
 @media (orientation: landscape) and (max-height: 560px) {
   #guide .keys li, #ask .asks button { padding: 6px 0; }
@@ -1471,3 +1471,34 @@ body.desk #shop { width: 340px; }
 #shop .foot .buy:disabled { color: var(--muted); border-style: dashed; cursor: var(--cur-default); }
 #shop .foot .enter { flex: 1; width: auto; min-height: 42px; gap: 10px; padding: 0 14px; white-space: nowrap; }
 @media (orientation: portrait) { #shop .wares { max-height: 34vh; } }
+/* 拿到了（scene/gotcard.js）：跟店家小卡同一個位置，金邊、一張穿著的小圖（角色本身也當場換上），底下「先收著」「穿上」。
+   要一眼看得出是拿到東西：標題金色、小圖後面一圈暖光，出來時光圈亮一下再退成常亮 */
+#got, body.desk #got { width: 280px; align-items: stretch; text-align: center; border-color: var(--gold); }
+#got .lead { color: var(--gold-hi); letter-spacing: .32em; }
+#got .pic {
+  position: relative; width: 132px; height: 132px; margin: 2px auto 0; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 214, 140, .30) 0%, rgba(232, 184, 106, .10) 55%, rgba(232, 184, 106, 0) 72%);
+}
+#got .pic::after {
+  content: ""; position: absolute; inset: 4px; border-radius: 50%; border: 1px solid rgba(232, 184, 106, .45);
+  animation: got-ring 1.1s ease-out both;
+}
+#got .pic img { position: relative; width: 132px; height: 132px; object-fit: cover; border-radius: 50%; }
+#got .name { margin: 0; font-size: 16px; letter-spacing: .12em; color: var(--text); }
+#got .say { margin: -2px 0 2px; font-size: 13px; line-height: 1.6; letter-spacing: .06em; color: var(--muted); }
+#got .foot { display: flex; gap: 8px; }
+#got .foot .keep {
+  flex: none; display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 14px; font: inherit; letter-spacing: .14em; white-space: nowrap;
+  cursor: var(--cur-pointer); color: var(--text); background: rgba(232, 184, 106, .06); border: 1px solid var(--gold-lo); border-radius: 999px;
+}
+#got .foot .enter { flex: 1; width: auto; min-height: 42px; gap: 10px; padding: 0 14px; white-space: nowrap; }
+#got.show { animation-name: got-in; }
+@keyframes got-in { from { opacity: 0; transform: translateY(-50%) scale(.94); } }
+@keyframes got-ring { 0% { opacity: 0; transform: scale(.7); } 35% { opacity: 1; box-shadow: 0 0 24px rgba(255, 214, 140, .55); } 100% { box-shadow: 0 0 6px rgba(255, 214, 140, .2); } }
+@media (orientation: portrait) {
+  #got { width: auto; }
+  #got.show { animation-name: got-up; }
+}
+body.desk #got.show { animation-name: got-up; }
+@keyframes got-up { from { opacity: 0; transform: translateY(8px) scale(.96); } }
+@media (prefers-reduced-motion: reduce) { #got.show, #got .pic::after { animation: none; } }

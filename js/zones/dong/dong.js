@@ -231,7 +231,7 @@ function buildFloor(scene, roll, n) {
     if (c.hang != null) boxGeo(c.x - 0.04, c.x + 0.04, y0 + c.h, y0 + c.h + 8, c.z - 0.04, c.z + 0.04, GREY.wood);
   }
   // ---------- 擺設（不擋路）：布條、木柵、骨頭、石像、金幣、瀑布… ----------
-  for (const d of S.decor || []) decor(d, { k, gold, Y0, DEEP, pal: GREY, R, anim, group });
+  for (const d of S.decor || []) decor(d, { k, gold, glow, Y0, DEEP, pal: GREY, R, anim, group });
 
   // ---------- 出口：隧道盡頭一片黑、繩子從溝邊垂下去 ----------
   {

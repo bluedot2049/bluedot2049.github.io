@@ -10,7 +10,7 @@
 // 浮在地上二十幾公分、慢慢轉、上下輕晃，平面著色、吃環境光；隔幾秒閃一下，走近了閃得勤，走到六公尺內叮一聲（一顆一次）
 import * as THREE from 'three';
 import { serverNow, hash, seedOf } from '../core/servertime.js';
-import { gain, room, coins, spend, money, cap, HUES } from '../save/purse.js';
+import { gain, room, coins, spend, money, cap, HUES, OPEN } from '../save/purse.js';
 import { teach } from '../controls/lessons.js';
 import { pref, setPref } from '../save/prefs.js';
 
@@ -111,7 +111,7 @@ export class GroundCoins {
     this.gone = new Set([...this.gone].filter((k) => k.endsWith(':' + slot)));
     for (const k of this.gone) picked.add(k);
     this.asked = false;
-    if (NONE.has(this.zone)) return;
+    if (NONE.has(this.zone) || !OPEN) return;   // 錢關著（purse.js 的 OPEN）地上不掉
     this.spots.forEach((s, i) => {
       if (hash(this.seed, i, slot) >= CHANCE) return;
       const key = `${this.zone}:${i}:${slot}`;
@@ -197,7 +197,7 @@ export class GroundCoins {
   // ---------- 丟給隊友 ----------
   // 行囊裡點錢袋：有隊友、身上有錢才丟得出去（pack.js 問 canDrop）。掉在面前半公尺
   canDrop() {
-    return coins() > 0 && !!this.party?.state && this.party.mates.size > 0;
+    return OPEN && coins() > 0 && !!this.party?.state && this.party.mates.size > 0;
   }
 
   dropMine() {

@@ -23,6 +23,7 @@ const PANELS = [
   ['#guide.show', 'pad cursor card kao'],
   ['#peek.show', 'pad cursor card'],
   ['#shop.show', 'pad cursor card'],
+  ['#got.show', 'pad cursor card kao'],
   ['#ask.show', 'pad'],
   ['#radio.show', 'pad'],
   ['#easel.show', 'pad'],

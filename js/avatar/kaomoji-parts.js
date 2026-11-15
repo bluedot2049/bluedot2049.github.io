@@ -33,6 +33,7 @@ export const FACES = [
 // firm：要碰到東西的，點一下（沒按住）也擺滿；其他的點一下只擺七成（character.js 的 KAO_LOOSE）
 // spin：擺出來時原地轉一圈（秒），轉完定住；舊的 ✨ 表情就是這樣轉
 // tilt：手上「長的」東西（clothes.js 的 ITEMS kind: long）往前倒多少，法杖就變成魔杖
+// still：擺著時身體不轉過來看鏡頭（player.js 的 poseTurn），合掌對著火盆用
 // once：做一輪就收（秒），揮手、拍手、敬禮這類；沒寫的留著（摀臉、施法、比心），走路也照樣留著。like 同臉
 export const HANDS = [
   { w: '(%)' },
@@ -47,7 +48,10 @@ export const HANDS = [
   { w: '(%)ﾊﾟﾁﾊﾟﾁ', e: '👏', n: '拍手', like: '👏', a: [-1.82, -0.6, 0.1], b: [-1.82, -0.6, 0.1], osc: ['y', 9.4, 0.3, 1], free: true, bfree: true, once: 2.4, cost: 0.4 },
   { w: '(%)♡', e: ['🫶', '❤️'], n: '比心', like: '❤️', a: [-1.26, -0.675, 0.2], b: [-1.26, -0.675, 0.2], free: true, bfree: true, cost: 0.3 },
   { w: '(%)ｸｲｯ', e: '🎩', n: '壓帽', a: [-3.3, -0.65, 0], head: [0.25, 0, -0.3], firm: true, free: true, hat: 0.18, once: 1.6, cost: 0.15 },
+  // 合掌：不在表情盤上，星廟火盆許願時擺（haishi-wish.js），兩手在胸前合起來、頭低一點。still：身體不轉過來看鏡頭（對著火盆）
+  { w: '(人%)', e: '🙏', n: '合掌', a: [-1.45, -0.8, 0.05], b: [-1.45, -0.8, 0.05], head: [0.22, 0, 0], free: true, bfree: true, still: true, cost: 0.2 },
 ];
+export const PRAY = HANDS.length - 1;
 
 // 身體：w 是寫在外面的（% 是臉和手）。B 身體 [前傾, 扭腰, 側傾]、drop 往下沉、legs 兩腿 [左, 右] 往前抬（負的往前）、
 // head 頭 [低頭, 轉頭（往左肩為正）, 歪頭]、arms 手垂著時（手那張選了「(%)」）的 [左手, 右手]，右手一樣自動鏡像。

@@ -292,7 +292,7 @@ export class Lots {
       const stones = `<div class="lot-stones${threw ? ' threw' : ''}">${(s || ['blank', 'star']).map((f) => `<i class="${s ? f : 'idle'}"></i>`).join('')}</div>`;
       const say = this.phase === 'ask' ? '擲星石　問天可否' : this.result;
       const main = this.phase === 'drawable' ? '<button type="button" class="go" data-act="draw">搖籤</button>' : '<button type="button" class="go" data-act="throw">擲星石</button>';
-      html = `<div class="lot-ask"><h3>求籤</h3><p class="lot-sub">一日一籤　籤金${money(cost('fortune'))}</p>${stones}<p class="lot-say">${say}</p></div>
+      html = `<div class="lot-ask"><h3>求籤</h3><p class="lot-sub">一日一籤${cost('fortune') ? `　籤金${money(cost('fortune'))}` : ''}</p>${stones}<p class="lot-say">${say}</p></div>
         <div class="lot-acts">${main}<button type="button" data-act="close">算了</button></div>`;
     }
     this.el.innerHTML = `<div class="lot-card">${html}</div>`;

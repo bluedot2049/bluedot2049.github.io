@@ -53,6 +53,7 @@ import { bindLessons, teach, taught, tickLessons, kind as inputKind, say } from 
 import { Beast } from './npc/beast.js';
 import { GroundCoins } from './scene/coins.js';
 import { shop, configureShop } from './scene/shop.js';
+import { got, configureGot } from './scene/gotcard.js';
 import { refillDaily, money } from './save/purse.js';
 import { Happenings } from './core/happen.js';
 import { Acts } from './core/act.js';
@@ -399,6 +400,13 @@ async function start() {
     camera, ui, ambience, get player() { return player; }, look: () => look,
     preview: (L) => character.setLook(L ?? look),
     wear: (L) => { dressSound(ambience, look, L); wear(L); },
+  });
+  // 拿到了（scene/gotcard.js）：同一套試穿、穿上；拍照、自拍、上船、別的卡片或全畫面開著時先排著，手空了才跳
+  configureGot({
+    camera, ui, ambience, get player() { return player; }, look: () => look,
+    preview: (L) => character.setLook(L ?? look),
+    wear: (L) => { dressSound(ambience, look, L); wear(L); },
+    busy: () => photo.active || selfie.active || player.boarding || !!panelOpen('card') || !!panelOpen('esc'),
   });
   // 鏡子的面板（creator.js）：只有畫廊的鏡子會開，不在每一區開場都下載的那份裡。畫廊進場後趁空檔先抓好建好（entered 那段），
   // 第一次照鏡子時通常已經在了；還沒到就等它，到了人還在鏡子前才打開
@@ -1226,7 +1234,7 @@ async function start() {
   guide.onShip = (ex) => player.events.onExit(ex);
   player.actionables.push((x, z) => guide.target(x, z));
   // 一幕劇（core/act.js，zone 匯出 acts）：在地圖上一拍一拍演的戲，找到演員才往下，演到哪一拍黑眼清單多一行。演員跟事件一樣評分、讓人轉頭（happen.more）
-  acts = new Acts({ guide, player, params, list: Z.acts?.({ world, scene, vendors, ambience, attention, camera, player, ui }) ?? [] });
+  acts = new Acts({ guide, player, params, list: Z.acts?.({ world, scene, vendors, ambience, attention, camera, player, ui, kao }) ?? [] });
   happen.more.push(acts);
   for (const j of world.judges ?? []) happen.more.push(j);   // 區域自己要在快門時評分的（黑森林洞裡的打鬥，寫法同一件事件）
 
@@ -1469,6 +1477,7 @@ async function start() {
     .add('world', 'beast', (dt) => beast.update(dt, camera, player.pos), () => beast.busy)
     .add('world', 'coins', (dt) => coins.update(dt))
     .add('ui', 'shop', () => shop.update())
+    .add('ui', 'got', () => got.update())
     // 錢袋子夜補滿（save/purse.js）：第一幀看一次，之後隔五秒看有沒有換天
     .add('world', 'purse', ((t = 5) => (dt) => { if ((t += dt) >= 5) { t = 0; refillDaily(); } })())
     .add('world', 'happen', (dt) => happen.update(dt), () => happen.busy)

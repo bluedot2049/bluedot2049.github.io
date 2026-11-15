@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { Kit, rng } from '../../core/props.js';
 import { place } from '../../core/trinkets.js';
+import { place as placeBig } from '../../core/bigprops.js';
 import { foilWall, foilRing as ringFoil, crinkle } from './jinghai-foil.js';
 import { buildCamShop, CAMSHOP, DOOR as CAMDOOR, CLERKS, SPOTS as CAMSPOTS } from './jinghai-camshop.js';
 
@@ -827,6 +828,9 @@ export function buildHQ({ coarse = false, fade = null } = {}) {
       block(x + 1.9, s * 1.4 - 0.25, x + 4.5, s * 1.4 + 0.25);
     }
   }
+  // 北排玩具店櫥窗邊的壁柱前一台配方膠囊販賣亭（core/bigprops.js）：腰上一圈菜色、正面金色嘴邊肉和亮著的展示窗，朝南對著走道
+  placeBig(k, 'vending', 48.95, 0, -5.2, 0);
+  block(48.45, -5.7, 49.55, -4.75);
   // 小亭子和鐘：鏡頭壓低順著走道看時擋在中間，擋住就淡掉
   const kk = fadeKit([[31.4, 0, -1.8, 34.6, 3.6, 1.8]]);
   kk.cyl(1.3, 1.3, 1.0, WHITE, 33, 0.5, 0, {}, 16);

@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>黑森林地下洞穴大型裝飾物 — 1:1 標本場</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #0d0e12;
+      color: #f5e9d4;
+      font-family: "Noto Serif TC", "Microsoft JhengHei", serif;
+      user-select: none;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    .note {
+      position: fixed;
+      top: 14px;
+      left: 16px;
+      max-width: 580px;
+      padding: 11px 15px;
+      background: rgba(14, 13, 15, 0.86);
+      border: 1px solid rgba(232, 184, 106, 0.28);
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.55;
+      pointer-events: none;
+    }
+    .note strong { color: #f6dba6; font-weight: 600; }
+    .note .meta {
+      color: #b5a084;
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 10px 16px 14px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+      background: linear-gradient(transparent, rgba(8, 7, 9, 0.92));
+    }
+    .bar button {
+      padding: 6px 12px;
+      border: 1px solid #5a4e3e;
+      border-radius: 999px;
+      background: #1f1a17;
+      color: #d8ccb8;
+      font: inherit;
+      font-size: 12.5px;
+      cursor: pointer;
+    }
+    .bar button:hover { border-color: #a9763a; color: #f5e9d4; }
+    .bar button.on { border-color: #e8b86a; color: #f6dba6; background: #382819; }
+    .bar .sep { width: 1px; background: #5a4e3e; margin: 0 4px; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "../vendor/three.module.min.js" } }
+  </script>
+</head>
+
+<body>
+  <div class="note" id="info"></div>
+  <div class="bar">
+    <button data-item="all" class="on">全覽（一～五層洞穴 6 件）</button>
+    <button data-item="0">1 一層：絞盤礦車架</button>
+    <button data-item="1">2 二層：切石骨龕燭台</button>
+    <button data-item="2">3 三層：木砦薩滿柱</button>
+    <button data-item="3">4 四層：濕黑溶岩骨灘</button>
+    <button data-item="4">5 五層：古代金箔祭器</button>
+    <button data-item="5">6 跨層：深溝斷橋絞錨</button>
+    <span class="sep"></span>
+    <button id="btnTorch">洞穴火把掃光</button>
+    <button id="btnCompare">對照：預設 vs 這裡</button>
+    <button id="btnForm">灰泥 (-form)</button>
+    <button id="btnWire">線框</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { Kit, newBucket, mergeBucket, rng } from '../js/core/props.js';
+    import { uTime } from '../js/core/scenery.js';
+    import { Character } from '../js/avatar/character.js';
+    import { sanitizeLook } from '../js/avatar/looks.js';
+
+    const params = new URLSearchParams(location.search);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.prepend(renderer.domElement);
+
+    const BG_NORMAL = new THREE.Color(0x0d0e12);
+    const BG_TORCH = new THREE.Color(0x050507);
+    const BG_FORM = new THREE.Color(0x949ea8);
+    const scene = new THREE.Scene();
+    scene.background = BG_NORMAL.clone();
+
+    const hemi = new THREE.HemisphereLight(0xc8d8e8, 0x262022, 1.32);
+    scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0xffe2be, 1.18);
+    sun.position.set(5.2, 8.0, 5.8);
+    scene.add(sun);
+    const rim = new THREE.DirectionalLight(0x6e8cb4, 0.42);
+    rim.position.set(-5.0, 3.2, -4.5);
+    scene.add(rim);
+
+    // 洞穴模式專用動態點光（模擬隊友手舉火把與法師光球掃過切面）
+    const torchLight = new THREE.PointLight(0xff9438, 0, 12.5, 1.35);
+    scene.add(torchLight);
+    const torchOrb = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.08, 0),
+      new THREE.MeshBasicMaterial({ color: 0xffb852 })
+    );
+    torchOrb.visible = false;
+    scene.add(torchOrb);
+
+    const mageLight = new THREE.PointLight(0x74b8ff, 0, 9.0, 1.5);
+    scene.add(mageLight);
+
+    // ── 共用材質：普通吃光（Lambert）、自發光（火／鬼火）、濕黑反光岩與皺金箔（Phong） ──
+    const matLit = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+    const matGlow = new THREE.MeshBasicMaterial({ vertexColors: true });
+    const matWet = new THREE.MeshPhongMaterial({ vertexColors: true, flatShading: true, specular: 0x7a96ac, shininess: 38 });
+    const matFoil = new THREE.MeshPhongMaterial({ vertexColors: true, flatShading: true, specular: 0xffe4a0, shininess: 76 });
+    const matForm = new THREE.MeshLambertMaterial({ color: 0xcfc8bc, flatShading: true });
+    const matWire = new THREE.MeshBasicMaterial({ color: 0xffe09a, wireframe: true, transparent: true, opacity: 0.28 });
+
+    // ── 對齊 dong.js PAL[0..4] 五層岩色 ＋ 黑森林洞穴共用材質色票 ──
+    const LAYER_ROCK = [
+      ['#34312f', '#76716b'], // 一層：冷灰礦坑岩
+      ['#2c2f33', '#6f737a'], // 二層：灰藍古墓切石
+      ['#3a2620', '#8c5c46'], // 三層：紅褐裂谷岩
+      ['#15181c', '#4c5662'], // 四層：濕黑帶藍巨魔岩
+      ['#4a4036', '#b2a388'], // 五層：淡砂岩古代大廳
+    ];
+    const WOOD = '#4a3626', WOOD_HI = '#6e523a', FIR = '#33251c', FIR_HI = '#564030';
+    const RED = '#5e221c', RED_HI = '#843026', BONE = '#b3a891', BONE_HI = '#cfc3a8';
+    const IRON = '#292727', IRON_HI = '#4e4b49', STEEL = '#646a72', STEEL_HI = '#9aa1aa';
+    const HEMP = '#8c7a5c', HEMP_HI = '#b29e7a', BRONZE = '#7a5c32', BRONZE_HI = '#ad8448';
+    const GOLD_TIERS = [['#8a5418', '#a06a20'], ['#c07c26', '#d09430'], ['#d49a34', '#ecc050']];
+
+    const _y = new THREE.Vector3(0, 1, 0), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
+
+    function aim(axis, dir) {
+      _q.setFromUnitVectors(axis, dir.clone().normalize());
+      _e.setFromQuaternion(_q, 'YXZ');
+      return { rx: _e.x, ry: _e.y, rz: _e.z };
+    }
+
+    function rod(k, a, b, r1, r2, c, o = {}, seg = 6) {
+      const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      k.cyl(r2, r1, d.length(), c, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2, { ...o, ...aim(_y, d) }, seg);
+    }
+
+    function ring(k, r, tube, c, x, y, z, o = {}, seg = 7, rad = 4, arc = Math.PI * 2) {
+      k.add(new THREE.TorusGeometry(r, tube, rad, seg, arc), c, x, y, z, o);
+    }
+
+    function bentCyl(k, rt, rb, h, c, x, y, z, o = {}, seg = 7, hSeg = 5) {
+      k.add(new THREE.CylinderGeometry(rt, rb, h, seg, hSeg), c, x, y, z, o);
+    }
+
+    // 皺金箔（照法線畫出 3 階菱格金箔切面，頂亮底暗）
+    function makeFoilBlob(r, sx, sy, sz, wob = 0.04) {
+      const g0 = new THREE.IcosahedronGeometry(r, 2);
+      const g = g0.index ? g0.toNonIndexed() : g0;
+      const pos = g.attributes.position;
+      const cols = new Float32Array(pos.count * 3);
+      const fr = (v) => ((v % 1) + 1) % 1;
+      for (let i = 0; i < pos.count; i++) {
+        const px = pos.getX(i), py = pos.getY(i), pz = pos.getZ(i);
+        const k = 1 + wob * Math.sin(px * 14.3 + py * 63.1 + pz * 31.7);
+        pos.setXYZ(i, px * sx * k, py * sy * k, pz * sz * k);
+      }
+      for (let i = 0; i < pos.count; i += 3) {
+        const nx = (pos.getX(i) + pos.getX(i + 1) + pos.getX(i + 2)) / 3;
+        const ny = (pos.getY(i) + pos.getY(i + 1) + pos.getY(i + 2)) / 3;
+        const nz = (pos.getZ(i) + pos.getZ(i + 1) + pos.getZ(i + 2)) / 3;
+        const len = Math.hypot(nx, ny, nz) || 1;
+        const dx = nx / len, dy = ny / len, dz = nz / len;
+        const th = (Math.atan2(dx, dz) / (Math.PI * 2)) * 8;
+        const ph = (Math.acos(Math.max(-1, Math.min(1, dy))) / Math.PI) * 4.5;
+        const fu = fr(th + ph), fv = fr(th - ph);
+        const edge = Math.min(fu, 1 - fu, fv, 1 - fv);
+        const [a, b] = edge < 0.09 ? GOLD_TIERS[0] : edge < 0.2 ? GOLD_TIERS[1] : GOLD_TIERS[2];
+        const col = new THREE.Color(a).lerp(new THREE.Color(b), (dy + 1) / 2);
+        for (let j = 0; j < 3; j++) cols.set([col.r, col.g, col.b], (i + j) * 3);
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+      g.computeVertexNormals();
+      return g;
+    }
+
+    function buildGroup(fn, seed = 'cave', ao = true) {
+      const k = new Kit(rng(seed)), b = newBucket();
+      const wetK = new Kit(rng(seed + '_wet')), wetB = newBucket();
+      const foilK = new Kit(rng(seed + '_foil')), foilB = newBucket();
+      const extra = fn(k, wetK, foilK) || {};
+      k.emit(b, 0, 0, 0);
+      wetK.emit(wetB, 0, 0, 0);
+      foilK.emit(foilB, 0, 0, 0);
+
+      const g = new THREE.Group();
+      let tris = 0, parts = b.lit.length + b.glow.length + wetB.lit.length + foilB.lit.length + (extra.parts || 0);
+
+      const addMerged = (list, mat, role, useAO) => {
+        if (!list.length) return;
+        const geo = mergeBucket(list, useAO);
+        if (!geo) return;
+        tris += geo.attributes.position.count / 3;
+        const m = new THREE.Mesh(geo, mat);
+        m.userData.role = role;
+        g.add(m);
+      };
+      addMerged(b.lit, matLit, 'lit', ao);
+      addMerged(b.glow, matGlow, 'glow', false);
+      addMerged(wetB.lit, matWet, 'wet', ao);
+      addMerged(foilB.lit, matFoil, 'foil', false);
+
+      if (extra.setup) tris += extra.setup(g) || 0;
+      g.userData.tris = Math.round(tris);
+      g.userData.parts = parts;
+      g.userData.tick = extra.tick || null;
+      return g;
+    }
+
+    // ============================================================================
+    // 6 座黑森林地下洞穴大型裝飾物／掩體（補齊 1–5 層未建構物件）
+    // ============================================================================
+    const ITEMS = [
+      {
+        id: 'layer1_winch_crates',
+        name: '1. 一層礦坑：哥布林絞盤吊架與火藥桶堆',
+        zone: '黑森林洞・一層（儲藏間／吊籠走道｜冷灰岩）',
+        height: 2.45,
+        layerIdx: 0,
+        desc: '補齊一層只有通用方塊的木箱、麻袋與吊籠絞車：不對稱朽木雙柱配麻繩斜撐，捲軸吊下一串立臥 90° 交錯粗鐵鏈掛著破鐵柵籠；底座旁擠著歪斜木板補強貨箱、0.7 下沉鼓腹麻袋，與箍上暗紅警告條的火藥桶。',
+        build(k) {
+          const [rLo, rHi] = LAYER_ROCK[0];
+          // 靠背冷灰碎岩堆底座
+          k.rock(0.32, rLo, -0.52, 0.16, -0.22, { sx: 1.25, sy: 0.62, color2: rHi });
+          k.rock(0.22, rLo, 0.56, 0.12, -0.26, { sx: 1.15, sy: 0.58, color2: rHi });
+
+          // 不對稱朽木絞盤架（右高左矮 5%，帶微斜靠內傾）
+          bentCyl(k, 0.056, 0.078, 2.28, WOOD, -0.52, 1.14, -0.08, { lean: [0.06, 0.02], bow: [-0.03, 0, 0.3], color2: WOOD_HI }, 6, 5);
+          bentCyl(k, 0.054, 0.080, 2.38, WOOD, 0.50, 1.19, -0.06, { lean: [-0.07, 0.01], bow: [0.025, 0, 0.3], color2: WOOD_HI }, 6, 5);
+          // 兩根粗斜撐腳柱＋麻繩捆紮節點
+          rod(k, [-0.50, 1.38, -0.08], [-0.82, 0.02, 0.24], 0.044, 0.055, FIR, { color2: FIR_HI }, 5);
+          rod(k, [0.49, 1.44, -0.06], [0.76, 0.02, 0.20], 0.042, 0.054, FIR, { color2: FIR_HI }, 5);
+          ring(k, 0.072, 0.016, HEMP, -0.49, 1.38, -0.07, { rx: 0.4, color2: HEMP_HI }, 6, 3);
+          ring(k, 0.070, 0.016, HEMP, 0.48, 1.44, -0.06, { rx: -0.4, color2: HEMP_HI }, 6, 3);
+
+          // 頂軸捲輪＋右伸曲柄
+          rod(k, [-0.62, 2.26, -0.06], [0.64, 2.30, -0.06], 0.052, 0.052, WOOD, { color2: WOOD_HI }, 6);
+          k.cyl(0.11, 0.11, 0.38, IRON, 0.02, 2.28, -0.06, { rz: Math.PI / 2, color2: IRON_HI }, 8);
+          ring(k, 0.14, 0.018, IRON_HI, 0.21, 2.28, -0.06, { ry: Math.PI / 2 }, 7, 3);
+          ring(k, 0.14, 0.018, IRON_HI, -0.17, 2.28, -0.06, { ry: Math.PI / 2 }, 7, 3);
+          rod(k, [0.64, 2.30, -0.06], [0.78, 2.08, 0.10], 0.018, 0.018, IRON_HI, {}, 5);
+          rod(k, [0.78, 2.08, 0.10], [0.92, 2.08, 0.10], 0.016, 0.016, WOOD_HI, {}, 5);
+
+          // 立臥 90° 交錯鐵鏈垂吊半毀鐵吊籠（底框斜吊於負空間中）
+          for (let i = 0; i < 6; i++) {
+            ring(k, 0.044, 0.011, IRON_HI, 0.02, 2.16 - i * 0.068, -0.06, { ry: (i % 2) * Math.PI / 2 }, 7, 3);
+          }
+          // 鐵柵殘籠框（頂鐵環＋四根斜拉鎖柱＋斷裂木底板）
+          const cy = 1.38;
+          k.box(0.54, 0.04, 0.52, WOOD, 0.02, cy - 0.18, -0.04, { rz: 0.08, rx: -0.06, color2: WOOD_HI });
+          k.box(0.56, 0.035, 0.54, IRON, 0.02, cy + 0.30, -0.06, { rz: 0.08, rx: -0.06 });
+          for (const [bx, bz] of [[-0.24, -0.22], [0.24, -0.22], [0.24, 0.22], [-0.24, 0.22]]) {
+            rod(k, [0.02 + bx, cy - 0.18, -0.04 + bz], [0.02 + bx * 0.9, cy + 0.30, -0.06 + bz * 0.9], 0.016, 0.016, IRON_HI, {}, 4);
+            rod(k, [0.02 + bx * 0.9, cy + 0.30, -0.06 + bz * 0.9], [0.02, cy + 0.42, -0.06], 0.014, 0.014, IRON, {}, 4);
+          }
+
+          // 地面掩體組：對角斜條木箱＋鼓腹 0.7 重心麻袋＋紅帶油藥桶
+          k.box(0.56, 0.52, 0.54, WOOD, -0.34, 0.26, 0.22, { ry: 0.22, color2: WOOD_HI });
+          rod(k, [-0.58, 0.04, 0.46], [-0.10, 0.48, 0.50], 0.026, 0.026, FIR_HI, {}, 4); // 箱面 X 補強斜木條
+          // 鼓腹麻袋（下寬上束）
+          k.cyl(0.11, 0.22, 0.34, HEMP, 0.08, 0.17, 0.36, { sx: 1.25, sz: 0.92, rz: -0.08, color2: HEMP_HI }, 7);
+          k.cyl(0.16, 0.09, 0.09, HEMP_HI, 0.10, 0.38, 0.36, {}, 7);
+          // 哥布林暗紅條火藥桶
+          k.cyl(0.16, 0.15, 0.46, FIR, 0.44, 0.23, 0.24, { ry: -0.2, color2: WOOD_HI }, 8);
+          k.cyl(0.168, 0.168, 0.11, RED, 0.44, 0.25, 0.24, { color2: RED_HI }, 8);
+          k.cyl(0.17, 0.17, 0.025, IRON_HI, 0.44, 0.40, 0.24, {}, 8);
+          k.cyl(0.17, 0.17, 0.025, IRON_HI, 0.44, 0.08, 0.24, {}, 8);
+        },
+      },
+
+      {
+        id: 'layer2_ossuary_shrine',
+        name: '2. 二層古墓：切石骨龕拱碑與鍛鐵燭台',
+        zone: '黑森林洞・二層（墓室／骨堆長廊｜灰藍切石）',
+        height: 2.65,
+        layerIdx: 1,
+        desc: '補齊二層切石、壁龕骨頭與蠟燭：兩層灰藍切石拱龕一側已崩斷露出參差斷面，龕肚橫陳帶黃灰（#b3a891）長骨與頭骨剪影；龕座階前立著三叉鍛鐵燭台燃三點微燭火，左側斜靠半截斷裂墓碑。',
+        build(k) {
+          const [rLo, rHi] = LAYER_ROCK[1];
+          // 兩級切石階座（灰藍偏冷，底深頂亮）
+          k.box(1.24, 0.22, 0.86, rLo, 0, 0.11, 0, { ry: 0.04, color2: rHi });
+          k.box(0.96, 0.24, 0.66, rLo, 0, 0.34, -0.04, { ry: 0.04, color2: rHi });
+
+          // 左完整八角石柱（略內收）＋右崩斷參差半柱
+          k.cyl(0.14, 0.17, 1.32, rLo, -0.34, 1.12, -0.06, { color2: rHi }, 7);
+          k.box(0.36, 0.14, 0.34, rLo, -0.34, 1.84, -0.06, { color2: rHi });
+          // 右柱斷裂成 0.75m 矮樁（不等高切面）
+          k.cyl(0.15, 0.17, 0.68, rLo, 0.34, 0.80, -0.04, { color2: rHi }, 7);
+          k.rock(0.14, rHi, 0.34, 1.16, -0.04, { sx: 1.0, sy: 0.55, rz: 0.35, color2: rLo });
+          // 斷落在右下角的石柱殘塊
+          k.cyl(0.14, 0.14, 0.42, rLo, 0.62, 0.14, 0.18, { rz: 1.38, ry: 0.5, color2: rHi }, 7);
+
+          // 傾歪的拱龕背牆與斜倒過樑
+          k.box(0.84, 1.38, 0.24, '#24272b', -0.04, 1.15, -0.22, { rz: 0.03, color2: rLo });
+          k.box(1.06, 0.26, 0.44, rLo, -0.10, 2.00, -0.08, { rz: -0.14, color2: rHi });
+          k.cone(0.22, 0.46, rHi, -0.32, 2.34, -0.08, { rz: -0.14, color2: rLo });
+
+          // 龕肚分層石格架＋帶黃灰骨堆（#b3a891）與頭骨剪影（每層骨頭實實在在擱在石架上）
+          k.box(0.54, 0.14, 0.24, '#141518', -0.02, 0.54, -0.06, {});
+          for (const sy of [0.60, 0.88, 1.10]) {
+            k.box(0.56, 0.055, 0.26, rLo, -0.03, sy, -0.06, { color2: rHi });
+          }
+          for (let i = 0; i < 6; i++) {
+            const bx = -0.18 + (i % 3) * 0.16, by = 0.65 + Math.floor(i / 3) * 0.28;
+            rod(k, [bx - 0.11, by, -0.02], [bx + 0.11, by + (i % 2 ? 0.03 : -0.02), 0.04], 0.032, 0.028, BONE, { color2: BONE_HI }, 5);
+          }
+          k.rock(0.11, BONE, -0.04, 1.22, -0.02, { sx: 1.0, sy: 1.15, sz: 0.9, color2: BONE_HI });
+          k.box(0.08, 0.035, 0.04, '#18181a', -0.04, 1.19, 0.07, {});
+
+          // 左前斜靠的斷裂古石碑
+          k.box(0.38, 0.72, 0.12, rLo, -0.62, 0.34, 0.24, { rx: -0.26, ry: 0.38, rz: 0.16, color2: rHi });
+
+          // 右前階梯立起的三叉鍛鐵燭台（微傾＋三根粗蠟燭＋小點暖火）
+          bentCyl(k, 0.022, 0.045, 0.92, IRON, 0.22, 0.88, 0.26, { lean: [0.03, 0.02], color2: IRON_HI }, 6, 4);
+          k.cyl(0.14, 0.18, 0.05, IRON_HI, 0.22, 0.48, 0.26, {}, 6);
+          for (const [cx, cy, ch] of [[0.24, 1.36, 0.16], [0.06, 1.28, 0.12], [0.40, 1.25, 0.11]]) {
+            if (cx !== 0.24) rod(k, [0.24, 1.18, 0.27], [cx, cy - 0.04, 0.27], 0.012, 0.012, IRON_HI, {}, 4);
+            k.cyl(0.036, 0.036, 0.024, IRON_HI, cx, cy - 0.02, 0.27, {}, 6);
+            k.cyl(0.022, 0.025, ch, BONE_HI, cx, cy + ch / 2, 0.27, {}, 6);
+            k.cone(0.018, 0.062, '#ff8e24', cx, cy + ch + 0.035, 0.27, { glow: true, color2: '#ffe278' });
+          }
+        },
+      },
+
+      {
+        id: 'layer3_shaman_gate',
+        name: '3. 三層戰團：木砦拒馬與薩滿磷火骨杖',
+        zone: '黑森林洞・三層（戰團營地／守橋｜紅褐岩）',
+        height: 2.75,
+        layerIdx: 2,
+        desc: '呼應三層大裂谷戰團、獸皮與薩滿綠火：前方三根削尖木拒馬由橫樑鎖死成低姿掩體；後方紅褐碎岩嵌著高聳彎曲骨杖柱，懸一面裂尾暗紅戰旗（#5e221c），頂端獸顎骨籠託著一團冷綠薩滿磷火。',
+        build(k) {
+          const [rLo, rHi] = LAYER_ROCK[2];
+          // 紅褐大裂谷岩座＋踩地骨碎片
+          k.rock(0.36, rLo, -0.05, 0.18, -0.14, { sx: 1.3, sy: 0.65, color2: rHi });
+          k.rock(0.24, rLo, 0.34, 0.12, -0.06, { sx: 1.1, sy: 0.58, color2: rHi });
+
+          // 前方三根削尖交錯戰術木拒馬（形成 X 形低姿掩體）
+          rod(k, [-0.62, 0.02, 0.34], [0.64, 0.02, 0.28], 0.052, 0.046, WOOD, { color2: WOOD_HI }, 6);
+          const stakes = [
+            [[-0.46, 0.02, 0.06], [-0.14, 1.08, 0.58]],
+            [[0.02, 0.02, 0.02], [0.06, 1.14, 0.62]],
+            [[0.46, 0.02, 0.04], [0.22, 1.04, 0.54]],
+          ];
+          for (const [a, b] of stakes) {
+            rod(k, a, b, 0.056, 0.024, FIR, { color2: FIR_HI }, 5);
+            const tip = new THREE.Vector3(...b).sub(new THREE.Vector3(...a)).normalize().multiplyScalar(0.24).add(new THREE.Vector3(...b));
+            rod(k, b, tip.toArray(), 0.026, 0.002, WOOD_HI, {}, 5);
+          }
+
+          // 後方高聳 C 彎薩滿圖騰骨杖柱（高約 2.75m）
+          bentCyl(k, 0.048, 0.088, 2.38, FIR, -0.06, 1.24, -0.18, { lean: [0.08, 0.04], bow: [-0.07, 0.02, 0.3], color2: FIR_HI }, 7, 5);
+          // 橫綁枯木挑臂＋燕尾撕裂暗紅布條（#5e221c，與路上布條同色）
+          rod(k, [-0.36, 1.94, -0.14], [0.54, 1.98, -0.10], 0.036, 0.026, WOOD, { color2: WOOD_HI }, 5);
+          k.box(0.42, 0.78, 0.025, RED, 0.32, 1.54, -0.10, { rz: 0.04, rx: 0.08, color2: RED_HI });
+          k.box(0.16, 0.24, 0.03, BONE, 0.32, 1.66, -0.09, { ry: 0.05 }); // 中央骨白瞳徽
+          k.cone(0.10, 0.28, RED, 0.22, 1.04, -0.08, { rz: Math.PI });
+          k.cone(0.10, 0.24, RED, 0.42, 1.06, -0.08, { rz: Math.PI });
+
+          // 杖頂 3 根弧角骨籠託著一團冷綠薩滿磷火（自發光）
+          for (let i = 0; i < 3; i++) {
+            const a = i * (Math.PI * 2 / 3) + 0.3;
+            const bx = 0.0 + Math.cos(a) * 0.08, bz = -0.14 + Math.sin(a) * 0.08;
+            const mx = 0.0 + Math.cos(a) * 0.22, mz = -0.14 + Math.sin(a) * 0.22;
+            const tx = 0.0 + Math.cos(a) * 0.10, tz = -0.14 + Math.sin(a) * 0.10;
+            rod(k, [bx, 2.38, bz], [mx, 2.58, mz], 0.024, 0.018, BONE, { color2: BONE_HI }, 5);
+            rod(k, [mx, 2.58, mz], [tx, 2.75, tz], 0.018, 0.006, BONE_HI, {}, 4);
+          }
+          k.rock(0.10, '#36b85a', 0.0, 2.56, -0.14, { sx: 0.9, sy: 1.35, glow: true, color2: '#a6ff98' });
+        },
+      },
+
+      {
+        id: 'layer4_wet_stalag_arch',
+        name: '4. 四層巨魔巢：濕黑溶岩半拱與肋骨水灘',
+        zone: '黑森林洞・四層（地下河／骨頭灘｜濕黑帶藍）',
+        height: 3.05,
+        layerIdx: 3,
+        desc: '展示四層「濕黑岩、黑水面反射把光拉長」：低粗糙高光（Phong）濕黑岩壁斜傾成 3 公尺半拱溶棚，下垂四根尖銳鐘乳石；棚下淹著一泊黑藍反光深水片，灘邊插出彎曲巨獸肋骨與破敗鐵盾殘骸。',
+        build(k, wetK) {
+          const [rLo, rHi] = LAYER_ROCK[3];
+          // 濕黑帶藍岩石放進 wetK（用 matWet 接點光反光，石塊上下實緊密咬合成半拱，絕不懸空）
+          wetK.rock(0.48, rLo, -0.44, 0.34, -0.08, { sx: 1.15, sy: 1.35, color2: rHi });
+          wetK.rock(0.40, rLo, -0.44, 1.16, -0.08, { sx: 1.0, sy: 1.38, rz: -0.24, color2: rHi });
+          wetK.rock(0.32, rLo, -0.28, 1.62, -0.07, { sx: 1.25, sy: 0.85, rz: -0.32, color2: rHi });
+          // 半拱橫跨岩棚頂＋4 根參差尖銳下垂石鐘乳
+          wetK.rock(0.44, rLo, 0.06, 1.92, -0.06, { sx: 1.85, sy: 0.56, rz: -0.24, color2: rHi });
+          wetK.cyl(0.0, 0.14, 0.82, rLo, -0.20, 2.48, -0.06, { color2: rHi }, 6);
+          for (const [sx, sy, h, rad] of [[0.14, 1.56, 0.52, 0.09], [0.36, 1.44, 0.68, 0.11], [0.54, 1.56, 0.40, 0.075], [-0.06, 1.62, 0.36, 0.07]]) {
+            wetK.cyl(rad, 0.005, h, rHi, sx, sy, -0.05, { color2: rLo }, 5);
+          }
+
+          // 地面石筍＋貼地一泊黑藍反光淺水灘（洞穴火把照到水面拉出一道光）
+          wetK.cyl(0.01, 0.20, 0.92, rLo, 0.52, 0.44, -0.22, { color2: rHi }, 6);
+          wetK.cyl(0.01, 0.13, 0.54, rLo, 0.68, 0.26, 0.02, { color2: rHi }, 5);
+          wetK.cyl(0.68, 0.70, 0.035, '#12222c', 0.10, 0.02, 0.16, { sx: 1.15, sz: 0.85, color2: '#233b4a' }, 9);
+
+          // 三根彎拱巨獸肋骨插在灘邊（#b3a891）＋半截爛鐵盾牌
+          for (let i = 0; i < 3; i++) {
+            const ox = -0.10 + i * 0.24, oz = 0.24 - i * 0.12;
+            rod(k, [ox, 0.02, oz], [ox - 0.16, 0.52, oz + 0.08], 0.05, 0.04, BONE, { color2: BONE_HI }, 5);
+            rod(k, [ox - 0.16, 0.52, oz + 0.08], [ox + 0.08, 0.92, oz + 0.04], 0.04, 0.022, BONE_HI, {}, 5);
+          }
+          k.cyl(0.24, 0.24, 0.045, IRON, 0.38, 0.20, 0.34, { rx: 1.12, ry: 0.4, color2: IRON_HI }, 7);
+          k.ball(0.06, STEEL, 0.38, 0.22, 0.35, { sy: 0.65 });
+        },
+      },
+
+      {
+        id: 'layer5_vault_altar',
+        name: '5. 五層寶庫：古代崩裂石座與皺金箔祭器',
+        zone: '黑森林洞・五層（龍的寶庫｜淡砂岩＋皺金箔）',
+        height: 2.52,
+        layerIdx: 4,
+        desc: '展示五層古代大廳淡砂岩與「皺金箔（foil）亮面反光」：崩掉一角的雙階砂岩方座上斜立著雙環古代青銅渾儀輪（缺一角露出天空負空間）；座腳堆起菱格三階皺金箔金丘，嵌出半埋高腳金聖杯、大金盤與傾倒寶箱。',
+        build(k, _wetK, foilK) {
+          const [rLo, rHi] = LAYER_ROCK[4];
+          // 雙階古代淡砂岩台座（右側缺崩露階塊）
+          k.box(1.18, 0.24, 0.92, rLo, -0.08, 0.12, -0.04, { ry: -0.06, color2: rHi });
+          k.box(0.76, 0.58, 0.66, rLo, -0.14, 0.53, -0.08, { ry: -0.06, color2: rHi });
+          k.box(0.32, 0.22, 0.34, rHi, 0.42, 0.11, 0.22, { ry: 0.35, rz: -0.18, color2: rLo });
+
+          // 座頂古代雙環銅製星象儀輪（略歪傾，呈現年久失修的遺跡感）
+          k.cyl(0.18, 0.24, 0.26, BRONZE, -0.14, 0.95, -0.08, { color2: BRONZE_HI }, 7);
+          ring(k, 0.54, 0.032, BRONZE, -0.14, 1.56, -0.08, { rx: 0.32, ry: -0.28, color2: BRONZE_HI }, 9, 4);
+          ring(k, 0.38, 0.024, BRONZE_HI, -0.14, 1.56, -0.08, { rx: -0.58, ry: 0.42, rz: 0.2 }, 8, 3);
+          rod(k, [-0.14, 1.06, -0.08], [-0.14, 2.24, -0.08], 0.026, 0.016, BRONZE_HI, { lean: [0.06, -0.03] }, 5);
+          // 頂端銅座套＋崩殘彎金角殘片（進 foilK，點光掃過會閃耀）
+          k.cyl(0.05, 0.032, 0.08, BRONZE, -0.085, 2.22, -0.105, { color2: BRONZE_HI }, 6);
+          foilK.add(makeFoilBlob(0.11, 1.1, 1.6, 0.8), '#d49a34', -0.08, 2.34, -0.11);
+
+          // 座旁散出的「皺金箔金丘＋高腳金聖杯＋斜嵌寶箱」（進 foilK 吃 Phong 鏡面光！）
+          foilK.add(makeFoilBlob(0.42, 1.15, 0.52, 0.95, 0.05), '#d49a34', 0.38, 0.16, 0.24);
+          foilK.add(makeFoilBlob(0.24, 1.05, 0.48, 0.92, 0.04), '#c07c26', -0.46, 0.10, 0.42);
+          // 斜開半埋古箱（木框＋皺金蓋鑲邊）
+          k.box(0.44, 0.28, 0.30, WOOD, -0.32, 0.18, 0.36, { ry: 0.46, rz: -0.14, color2: WOOD_HI });
+          foilK.box(0.46, 0.07, 0.32, '#ecc050', -0.32, 0.31, 0.36, { ry: 0.46, rz: -0.32, color2: '#8a5418' });
+          // 倒扣金盤與高腳金杯
+          foilK.cyl(0.16, 0.10, 0.05, '#ecc050', 0.56, 0.22, 0.42, { rx: 0.65, ry: -0.3, color2: '#a06a20' }, 7);
+          foilK.cyl(0.08, 0.03, 0.14, '#d49a34', 0.24, 0.36, 0.34, { rz: -0.35, color2: '#ecc050' }, 6);
+          foilK.cyl(0.03, 0.06, 0.08, '#a06a20', 0.18, 0.27, 0.34, { rz: -0.35 }, 6);
+        },
+      },
+
+      {
+        id: 'cave_bridge_winch',
+        name: '6. 跨層深溝：斷崖吊橋棘輪絞錨與垂鏈',
+        zone: '黑森林洞・三層守橋／深溝邊緣',
+        height: 2.35,
+        layerIdx: 2,
+        desc: '替補目前深溝邊僅有的細繩矮樁：錯縫砌石崖墩釘著厚重鍛鐵棘輪捲軸（8 齒棘輪＋單側止回爪），拉出一條「立臥 90° 交錯鐵鏈」直垂向深溝底，末端牽著兩片斷裂翹起的吊橋腐木棧板與一盞鏽鐵角燈。',
+        build(k) {
+          const [rLo, rHi] = LAYER_ROCK[2];
+          // 懸崖邊錯縫楔形石墩（略往後退，正面留出絞鏈通道）
+          k.box(1.06, 0.36, 0.80, '#261a16', -0.20, 0.18, -0.22, { color2: rLo });
+          k.box(0.84, 0.44, 0.64, rLo, -0.20, 0.58, -0.24, { color2: rHi });
+          k.box(0.56, 0.22, 0.52, rHi, -0.20, 0.90, -0.24, { ry: 0.12, color2: rLo });
+
+          // 重型鍛鐵絞錨支架＋8 齒棘輪與捲筒
+          k.box(0.10, 0.72, 0.24, IRON, -0.48, 1.32, -0.22, { rz: -0.08, color2: IRON_HI });
+          k.box(0.10, 0.72, 0.24, IRON, 0.08, 1.32, -0.22, { rz: 0.08, color2: IRON_HI });
+          k.cyl(0.12, 0.12, 0.64, IRON_HI, -0.20, 1.50, -0.22, { rz: Math.PI / 2, color2: STEEL }, 8);
+          // 棘輪齒盤（8 齒硬切方齒）
+          k.cyl(0.24, 0.24, 0.055, STEEL, 0.03, 1.50, -0.22, { rz: Math.PI / 2, color2: IRON_HI }, 8);
+          for (let i = 0; i < 8; i++) {
+            const a = i * (Math.PI / 4);
+            k.box(0.05, 0.06, 0.06, STEEL_HI, 0.03, 1.50 + Math.sin(a) * 0.24, -0.22 + Math.cos(a) * 0.24, { rx: -a });
+          }
+          // 止回棘爪與長手搖鐵柄
+          rod(k, [-0.10, 1.78, -0.40], [0.03, 1.72, -0.26], 0.022, 0.016, RED, { color2: RED_HI }, 4);
+          rod(k, [-0.52, 1.50, -0.22], [-0.74, 1.94, 0.06], 0.022, 0.020, IRON_HI, {}, 5);
+
+          // 立臥 90° 密接粗鐵鏈：從捲筒繞過墩緣導向鐵環，無穿模、環環相扣拉進斷裂木棧板鐵環
+          const pDrum = new THREE.Vector3(-0.18, 1.46, -0.08);
+          const pEdge = new THREE.Vector3(0.06, 0.96, 0.16);
+          const pDeck = new THREE.Vector3(0.46, 0.20, 0.36);
+          ring(k, 0.058, 0.014, STEEL_HI, pEdge.x, pEdge.y, pEdge.z, { rx: Math.PI / 2 }, 7, 3);
+          ring(k, 0.065, 0.015, STEEL_HI, pDeck.x, pDeck.y, pDeck.z, { ry: 0.4 }, 7, 3);
+          const chainSeg = (a, b, n) => {
+            for (let i = 0; i < n; i++) {
+              const p = a.clone().lerp(b, (i + 0.5) / n);
+              ring(k, 0.046, 0.013, i % 2 ? IRON_HI : STEEL, p.x, p.y, p.z, { rx: 0.85, ry: (i % 2) * Math.PI / 2 }, 7, 3);
+            }
+          };
+          chainSeg(pDrum, pEdge, 10);
+          chainSeg(pEdge, pDeck, 14);
+
+          // 右下翹起斷裂的吊橋腐木棧板＋鐵釘木枕
+          k.box(0.58, 0.055, 0.92, WOOD, 0.52, 0.14, 0.32, { ry: -0.28, rz: -0.18, rx: 0.10, color2: WOOD_HI });
+          k.box(0.54, 0.05, 0.22, FIR, 0.56, 0.08, 0.62, { ry: -0.15, rz: 0.12, color2: WOOD });
+          k.box(0.14, 0.10, 0.88, FIR_HI, 0.50, 0.07, 0.28, { ry: -0.28 });
+
+          // 左石墩旁實連斜臂掛著一盞低面鐵角提燈（一點點暖火引路用）
+          rod(k, [-0.48, 1.38, -0.20], [-0.78, 1.44, 0.06], 0.022, 0.018, IRON_HI, {}, 5);
+          rod(k, [-0.78, 1.44, 0.06], [-0.78, 1.28, 0.06], 0.012, 0.012, IRON_HI, {}, 4);
+          k.cyl(0.08, 0.06, 0.18, IRON, -0.78, 1.18, 0.06, { color2: IRON_HI }, 6);
+          k.cone(0.032, 0.08, '#ff8e28', -0.78, 1.19, 0.06, { glow: true, color2: '#ffe278' });
+        },
+      },
+    ];
+
+    // ============================================================================
+    // 標本展示弧面（1:1 尺度，含可切換的「洞穴火把掃光」點光源）
+    // ============================================================================
+    const showcaseRoot = new THREE.Group();
+    scene.add(showcaseRoot);
+
+    {
+      const fk = new Kit(null), fb = newBucket();
+      fk.cyl(7.6, 8.0, 0.18, '#1b1b1f', 0, -0.09, 0, { color2: '#26272c' }, 24);
+      fk.cyl(7.78, 7.82, 0.06, GOLD_TIERS[0][1], 0, -0.05, 0, {}, 24);
+      fk.emit(fb, 0, 0, 0);
+      const fm = new THREE.Mesh(mergeBucket(fb.lit, true), matLit);
+      fm.userData.role = 'lit';
+      showcaseRoot.add(fm);
+    }
+
+    const propGroups = [];
+    const propPositions = [
+      [-4.25, 0, -0.10, 0.22],
+      [-2.55, 0, -0.82, 0.14],
+      [-0.85, 0, -1.18, 0.04],
+      [ 0.90, 0, -1.16, -0.06],
+      [ 2.60, 0, -0.78, -0.16],
+      [ 4.25, 0, -0.08, -0.24],
+    ];
+
+    ITEMS.forEach((it, i) => {
+      const [px, py, pz, rot] = propPositions[i];
+      const [rLo, rHi] = LAYER_ROCK[it.layerIdx];
+      // 每一件底下用它那一層的岩盤色墊腳
+      const pk = new Kit(null), pb = newBucket();
+      pk.cyl(0.88, 0.94, 0.04, rLo, 0, 0.02, 0, { color2: rHi }, 9);
+      pk.emit(pb, px, pz, 0);
+      const pm = new THREE.Mesh(mergeBucket(pb.lit, true), matLit);
+      pm.userData.role = 'lit';
+      showcaseRoot.add(pm);
+
+      const g = buildGroup(it.build, it.id, true);
+      g.position.set(px, 0.04, pz);
+      g.rotation.y = rot;
+      showcaseRoot.add(g);
+      propGroups.push({ g, x: px, y: it.height * 0.46, z: pz, dist: Math.max(4.8, it.height * 2.1), item: it });
+    });
+
+    const character = new Character(shadowTexture(), sanitizeLook({}));
+    character.group.position.set(-5.75, 0, 0.72);
+    character.group.rotation.y = 0.62;
+    showcaseRoot.add(character.group);
+
+    function shadowTexture() {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const g = c.getContext('2d').createRadialGradient(32, 32, 2, 32, 32, 30);
+      g.addColorStop(0, 'rgba(0,0,0,0.45)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      c.getContext('2d').fillStyle = g;
+      c.getContext('2d').fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c);
+    }
+
+    // ============================================================================
+    // 對照模式（預設 vs 洞穴做法）：1. 骨龕石柱燭台　2. 絞盤鐵鏈木箱架
+    // ============================================================================
+    const compareRoot = new THREE.Group();
+    compareRoot.visible = false;
+    scene.add(compareRoot);
+
+    const COMPARISONS = [
+      {
+        title: '二層墓室石龕：平滑圓柱＋純白球頭骨 vs 參差斷石柱＋#b3a891 骨堆＋鍛鐵三叉燭台',
+        bad(k) {
+          k.box(1.1, 0.35, 0.7, '#777777', 0, 0.175, 0, { ao: false });
+          k.add(new THREE.CylinderGeometry(0.14, 0.14, 1.5, 24), '#888888', -0.35, 1.1, 0, { ao: false });
+          k.add(new THREE.CylinderGeometry(0.14, 0.14, 1.5, 24), '#888888', 0.35, 1.1, 0, { ao: false });
+          k.box(1.0, 0.18, 0.35, '#888888', 0, 1.9, 0, { ao: false });
+          k.add(new THREE.SphereGeometry(0.14, 18, 12), '#ffffff', 0, 0.52, 0, { ao: false });
+        },
+        good(k, wetK, foilK) {
+          return ITEMS[1].build(k, wetK, foilK);
+        },
+      },
+      {
+        title: '一層鎖鏈絞架：直排梯子狀平鏈＋光板方箱 vs 立臥 90° 粗鐵鏈＋斜撐破籠＋紅帶火藥桶',
+        bad(k) {
+          k.add(new THREE.CylinderGeometry(0.06, 0.06, 2.2, 20), '#7a5230', -0.5, 1.1, 0, { ao: false });
+          k.add(new THREE.CylinderGeometry(0.06, 0.06, 2.2, 20), '#7a5230', 0.5, 1.1, 0, { ao: false });
+          k.box(1.15, 0.08, 0.12, '#7a5230', 0, 2.22, 0, { ao: false });
+          // 躺平沒轉 90° 看起來像梯子
+          for (let i = 0; i < 7; i++) {
+            ring(k, 0.045, 0.01, '#888888', 0, 2.10 - i * 0.075, 0, { ry: 0, ao: false }, 12, 6);
+          }
+          k.box(0.55, 0.55, 0.55, '#8a603a', 0, 0.275, 0.1, { ao: false });
+        },
+        good(k, wetK, foilK) {
+          return ITEMS[0].build(k, wetK, foilK);
+        },
+      },
+    ];
+
+    const compareStats = [];
+    {
+      const ck = new Kit(null), cb = newBucket();
+      ck.cyl(4.6, 4.9, 0.16, '#1b1b1f', 0, -0.08, 0, {}, 20);
+      COMPARISONS.forEach((_, i) => {
+        const cx = (i - 0.5) * 3.6;
+        ck.cyl(0.84, 0.88, 0.04, '#3a3d42', cx - 0.84, 0.02, -0.15, {}, 12);
+        ck.cyl(0.88, 0.92, 0.045, BRONZE, cx + 0.84, 0.022, 0.15, { color2: BRONZE_HI }, 12);
+      });
+      ck.emit(cb, 0, 0, 0);
+      const bm = new THREE.Mesh(mergeBucket(cb.lit, true), matLit);
+      bm.userData.role = 'lit';
+      compareRoot.add(bm);
+
+      COMPARISONS.forEach((cmp, i) => {
+        const cx = (i - 0.5) * 3.6;
+        const badG = buildGroup(cmp.bad, 'cavebad_' + i, false);
+        badG.position.set(cx - 0.84, 0.04, -0.15);
+        compareRoot.add(badG);
+
+        const goodG = buildGroup(cmp.good, 'cavegood_' + i, true);
+        goodG.position.set(cx + 0.84, 0.045, 0.15);
+        compareRoot.add(goodG);
+
+        compareStats.push(`${i + 1}. 左（預設）${badG.userData.tris} tris → 右（這裡）${goodG.userData.tris} tris`);
+      });
+    }
+
+    // ============================================================================
+    // 互動與打光切換
+    // ============================================================================
+    const state = {
+      item: params.get('item') || 'all',
+      torch: params.get('torch') === '1',
+      compare: params.get('compare') === '1',
+      form: params.get('form') === '1',
+      wire: params.get('wire') === '1',
+    };
+
+    const camera = new THREE.PerspectiveCamera(36, innerWidth / innerHeight, 0.08, 90);
+    const target = new THREE.Vector3(-0.35, 1.15, -0.35);
+    const goalTarget = target.clone();
+    let yaw = 0.08, pitch = 0.24, dist = 12.8, goalDist = 12.8;
+    if (params.has('yaw')) yaw = +params.get('yaw');
+    if (params.has('pitch')) pitch = +params.get('pitch');
+
+    const infoEl = document.getElementById('info');
+    function updateUI() {
+      showcaseRoot.visible = !state.compare;
+      compareRoot.visible = state.compare;
+
+      if (state.form) {
+        scene.background = BG_FORM;
+        hemi.intensity = 1.15;
+        sun.intensity = 1.15;
+        rim.intensity = 0.35;
+        torchLight.intensity = 0;
+        mageLight.intensity = 0;
+        torchOrb.visible = false;
+      } else if (state.torch) {
+        scene.background = BG_TORCH;
+        hemi.intensity = 0.20;
+        sun.intensity = 0.12;
+        rim.intensity = 0.24;
+        torchLight.intensity = 4.2;
+        mageLight.intensity = 1.6;
+        torchOrb.visible = true;
+      } else {
+        scene.background = BG_NORMAL;
+        hemi.intensity = 1.32;
+        sun.intensity = 1.18;
+        rim.intensity = 0.42;
+        torchLight.intensity = 0;
+        mageLight.intensity = 0;
+        torchOrb.visible = false;
+      }
+
+      scene.traverse((o) => {
+        if (!o.isMesh) return;
+        if (o.userData.role === 'lit') o.material = state.form ? matForm : matLit;
+        if (o.userData.role === 'wet') o.material = state.form ? matForm : matWet;
+        if (o.userData.role === 'foil') o.material = state.form ? matForm : matFoil;
+        if (o.userData.role === 'glow') o.material = state.form ? matForm : matGlow;
+        if (o.userData.isWire) o.visible = state.wire;
+      });
+
+      document.getElementById('btnTorch').classList.toggle('on', state.torch);
+      document.getElementById('btnCompare').classList.toggle('on', state.compare);
+      document.getElementById('btnForm').classList.toggle('on', state.form);
+      document.getElementById('btnWire').classList.toggle('on', state.wire);
+
+      for (const b of document.querySelectorAll('[data-item]')) {
+        b.classList.toggle('on', !state.compare && b.dataset.item === String(state.item));
+      }
+
+      if (state.compare) {
+        goalTarget.set(0, 1.28, 0);
+        goalDist = 8.4;
+        infoEl.innerHTML = `<strong>黑森林洞穴 1:1 對照模式：左灰墊「預設做法」 vs 右銅墊「洞裡做法」</strong><br>` +
+          `1. 骨龕燭台：24 段光圓柱＋純白球 vs 參差斷石柱＋#b3a891 骨堆＋鍛鐵三叉微燭。<br>` +
+          `2. 鎖鏈絞架：沒轉 90° 的梯子狀平鏈＋方塊 vs 立臥交錯粗鐵鏈＋破鐵籠＋紅條火藥桶。` +
+          `<div class="meta">${compareStats.join('　｜　')}</div>`;
+      } else if (state.item === 'all') {
+        goalTarget.set(-0.35, 1.15, -0.35);
+        goalDist = 12.8;
+        const totalTris = ITEMS.reduce((s, it) => s + it.tris, 0);
+        infoEl.innerHTML = `<strong>黑森林地下洞穴 1～5 層大型裝飾物（1:1 尺度，左側女巫高約 1.7m 為比例尺）</strong><br>` +
+          `依洞裡 5 層岩色與規則塑形；可按「洞穴火把掃光」測試黑洞裡只有動態火把與法師光球掃過時，四層濕岩與五層皺金箔的反光效果。` +
+          `<div class="meta">6 座合計 <strong>${totalTris}</strong> 個三角形（平均每座 ${Math.round(totalTris / ITEMS.length)} tris）。</div>`;
+      } else {
+        const idx = +state.item;
+        const m = propGroups[idx];
+        if (m) {
+          goalTarget.set(m.x, m.y, m.z);
+          goalDist = m.dist;
+          const it = m.item;
+          infoEl.innerHTML = `<strong>${it.name}</strong>（${it.zone}，高約 ${it.height.toFixed(2)}m）<br>${it.desc}` +
+            `<div class="meta">面數：<strong>${it.tris}</strong> 個三角形　｜　組件：${it.parts} 個基本圖元　｜　可切換「洞穴火把掃光」檢視切面光影</div>`;
+        }
+      }
+    }
+
+    scene.traverse((o) => {
+      if (o.isMesh && (o.userData.role === 'lit' || o.userData.role === 'wet' || o.userData.role === 'foil')) {
+        const w = new THREE.Mesh(o.geometry, matWire);
+        w.userData.isWire = true;
+        w.visible = false;
+        o.add(w);
+      }
+    });
+
+    ITEMS.forEach((it, i) => {
+      it.tris = propGroups[i].g.userData.tris;
+      it.parts = propGroups[i].g.userData.parts;
+    });
+
+    for (const b of document.querySelectorAll('[data-item]')) {
+      b.onclick = () => {
+        state.compare = false;
+        state.item = b.dataset.item;
+        updateUI();
+      };
+    }
+    document.getElementById('btnTorch').onclick = () => { state.torch = !state.torch; state.form = false; updateUI(); };
+    document.getElementById('btnCompare').onclick = () => { state.compare = !state.compare; updateUI(); };
+    document.getElementById('btnForm').onclick = () => { state.form = !state.form; updateUI(); };
+    document.getElementById('btnWire').onclick = () => { state.wire = !state.wire; updateUI(); };
+
+    let drag = null;
+    renderer.domElement.addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; });
+    addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      yaw -= (e.clientX - drag[0]) * 0.007;
+      pitch = Math.max(-0.18, Math.min(1.32, pitch + (e.clientY - drag[1]) * 0.007));
+      drag = [e.clientX, e.clientY];
+    });
+    addEventListener('pointerup', () => { drag = null; });
+    renderer.domElement.addEventListener('wheel', (e) => {
+      goalDist = Math.max(1.8, Math.min(26, goalDist * (1 + e.deltaY * 0.001)));
+    }, { passive: true });
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    updateUI();
+    if (params.has('dist')) { dist = goalDist = +params.get('dist'); }
+    target.copy(goalTarget);
+
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      const dt = Math.min(clock.getDelta(), 0.1);
+      const t = clock.getElapsedTime();
+      uTime.value = t;
+
+      // 洞穴模式：暖火把在主目標周圍掃光、冷法師光球在對側微弱補反光
+      if (state.torch && !state.form) {
+        if (state.item !== 'all' && !state.compare && propGroups[+state.item]) {
+          const m = propGroups[+state.item];
+          torchLight.position.set(m.x + Math.sin(t * 0.9) * 1.45, 1.45 + Math.sin(t * 2.3) * 0.14, m.z + 1.35 + Math.cos(t * 0.9) * 0.65);
+          mageLight.position.set(m.x - Math.sin(t * 0.7) * 1.6, 1.75, m.z - 0.85);
+        } else {
+          torchLight.position.set(Math.sin(t * 0.55) * 4.4, 1.65 + Math.sin(t * 2.1) * 0.15, 1.45 + Math.cos(t * 0.55) * 0.9);
+          mageLight.position.set(-Math.sin(t * 0.55) * 3.8, 2.0, -0.6);
+        }
+        torchLight.intensity = 4.2 + Math.sin(t * 9.0) * 0.32;
+        torchOrb.position.copy(torchLight.position);
+      }
+
+      character.update(dt, 0);
+      target.lerp(goalTarget, Math.min(1, dt * 8));
+      dist += (goalDist - dist) * Math.min(1, dt * 8);
+      const c = Math.cos(pitch);
+      camera.position.set(target.x + Math.sin(yaw) * c * dist, target.y + Math.sin(pitch) * dist, target.z + Math.cos(yaw) * c * dist);
+      camera.lookAt(target);
+      renderer.render(scene, camera);
+    });
+
+    window.__dongProps = { state, updateUI, ITEMS };
+    window.__ready = true;
+  </script>
+</body>
+
+</html>

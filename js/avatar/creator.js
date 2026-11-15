@@ -11,7 +11,7 @@ import { getSave, putSave, PEOPLE, OUTFITS } from '../save/progress.js';
 import { faceMap, TUCKED } from './character.js';
 import { cached, request, FRAME } from './thumbs.js';
 import { SHOPS, wareOf } from './wares.js';
-import { money } from '../save/purse.js';
+import { money, OPEN } from '../save/purse.js';
 
 // 圖示：24 × 24 的線條
 const ICONS = {
@@ -372,6 +372,12 @@ export class Creator {
       + label(`海市拿到的　${got.length} / ${gifts.length}`) + `<div class="stamps">${stamps}</div>` + this.hintHTML('stamps');
   }
 
+  // 海市攤販那組上鎖時說去哪拿：錢開著寫價錢；關著時要拿東西換的寫換什麼
+  giftWhere(g) {
+    if (OPEN) return `在海市，向${g.who}買${g.price ? `　${money(g.price)}` : ''}`;
+    return g.need ? `在海市，拿${optionName(...g.need)}找${g.who}換` : `在海市，找${g.who}`;
+  }
+
   onClick(e) {
     const b = e.target.closest('button');
     if (!b) return;
@@ -379,10 +385,10 @@ export class Creator {
     if (b.dataset.tab) { this.show(b.dataset.tab); return; }
     if (b.dataset.sub) { this.show(this.tab, b.dataset.sub); return; }
     if (b.dataset.lock) {
-      // 價目表上的（'@店'）：哪裡、誰在賣、幾顆水晶；海市攤販那組（GIFTS）：任務寫的 hint，或在海市向哪一攤買
+      // 價目表上的（'@店'）：哪裡、誰在賣、幾顆水晶；海市攤販那組（GIFTS）：任務寫的 hint，或在海市向哪一攤拿。錢關著（purse.js 的 OPEN）不寫價錢
       const lock = b.dataset.lock, w = wareOf(b.dataset.hk, b.dataset.hv), g = GIFTS[lock];
-      const text = lock[0] === '@' ? `${SHOPS[lock.slice(1)].where}　${SHOPS[lock.slice(1)].who}　${money(w.price)}`
-        : g.hint || `在海市，向${g.who}買${g.price ? `　${money(g.price)}` : ''}`;
+      const text = lock[0] === '@' ? `${SHOPS[lock.slice(1)].where}　${SHOPS[lock.slice(1)].who}${OPEN ? `　${money(w.price)}` : ''}`
+        : g.hint || this.giftWhere(g);
       this.hint = { k: b.dataset.hk, text };
       this.render();
       return;
@@ -390,7 +396,7 @@ export class Creator {
     if (b.dataset.stamp) {
       const v = b.dataset.stamp, g = GIFTS[v];
       const got = !b.classList.contains('empty');
-      this.hint = { k: 'stamps', text: got ? `${g.who}那裡買的：${g.items.map(([kk, id]) => optionName(kk, id)).join('、')}` : `在海市，向${g.who}買${g.price ? `　${money(g.price)}` : ''}` };
+      this.hint = { k: 'stamps', text: got ? `${g.who}那裡${OPEN ? '買' : '拿'}的：${g.items.map(([kk, id]) => optionName(kk, id)).join('、')}` : this.giftWhere(g) };
       this.render();
       return;
     }

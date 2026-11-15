@@ -9,7 +9,9 @@
 import * as THREE from 'three';
 import { Character } from '../avatar/character.js';
 import { sanitizeLook, presetLook, RACES, GIFTS, unlock, unlockedSet, isOpen, optionName } from '../avatar/looks.js';
-import { gain, gainGift } from '../save/purse.js';
+import { gain, OPEN } from '../save/purse.js';
+import { STALL_GIFTS } from '../scene/gift-lines.js';
+import { gotGift } from '../scene/gotcard.js';
 import { openShop, hasNew } from '../scene/shop.js';
 import { SHOPS } from '../avatar/wares.js';
 import { getSave, putSave } from '../save/progress.js';
@@ -238,7 +240,9 @@ class Vendor {
       block: () => this.gate(g),
       trade: () => !!g.need && getSave().look?.[g.need[0]] === g.need[1],
       tradeName: g.need ? optionName(...g.need) : '',
-      bought: () => this.say(g.line),
+      // 交給你時那句：錢開著是賣出去的口氣（GIFTS 的 line），關著是好像早就認識你、送你（gift-lines.js），頭上講、卡上也印
+      say: () => (OPEN ? g.line : pick(STALL_GIFTS[this.id] ?? [g.line])),
+      bought: (trade, say) => say && this.say(say),
     }];
   }
   shopId() { return SHOPS[this.id] ? this.id : null; }
@@ -291,12 +295,12 @@ class Vendor {
     if (this.spec.postcard) this.onPostcard?.();
   }
 
-  // 稿費：照登在哪一版給（purse.js WAYS.fee，press.js 的 grade 0 角落到 3 號外）。頭版以上第一次多給一個零錢盒（looks.js 的 GIFTS.purse10）。
-  // 先換錢袋再算裝不裝得下，裝不下的掉在腳邊（scene/coins.js 聽 coindrop）
+  // 稿費：照登在哪一版給（purse.js WAYS.fee，press.js 的 grade 0 角落到 3 號外）。頭版以上第一次多給一個零錢盒（looks.js 的 GIFTS.purse10），
+  // 跳「拿到了」那張卡（scene/gotcard.js）。錢關著時沒有稿費，零錢盒照給。裝不下的稿費掉在腳邊（scene/coins.js 聽 coindrop）
   payFee(grade) {
-    const big = grade >= 2 && gainGift('purse10');
+    if (grade >= 2) gotGift('purse10', { where: '海市', who: this.spec.name, at: () => this.pos });
     const n = gain('fee', grade);
-    if (n) this.onFee?.(n, big);
+    if (n) this.onFee?.(n);
   }
 
   next() {

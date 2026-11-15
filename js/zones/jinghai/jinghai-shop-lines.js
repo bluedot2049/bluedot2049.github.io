@@ -8,7 +8,7 @@ import { cost, money } from '../../save/purse.js';
 export const CLERK = {
   talk: [
     '底片在那三台機器 按一下就掉出來',
-    '底片一盒一顆水晶 機器自己收',
+    ...(cost('film') ? ['底片一盒一顆水晶 機器自己收'] : []),
     '出了月球就沒地方補了喔',
     '一盒三張 比別家多一半',
     '別家相機拍的也收 用我們的機器洗',
@@ -29,7 +29,7 @@ export const CLERK = {
 export const FILM = {
   got: '拿了一盒，三張',
   full: '片盒還是滿的',
-  look: `拍立拿a500 的底片，一盒三張，${money(cost('film'))}`,
+  look: `拍立拿a500 的底片，一盒三張${cost('film') ? `，${money(cost('film'))}` : ''}`,
   noCam: '拍立拿a500 的底片。前廳桌上那台才用得到',
 };
 

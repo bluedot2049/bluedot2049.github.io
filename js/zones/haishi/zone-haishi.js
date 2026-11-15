@@ -115,8 +115,8 @@ export function crowd({ scene, world, shadowTex, player, camera, ambience, coars
     onPostcard: postcard,
     onGift: (g) => ui.toast('收到' + g.items.map(([k, id]) => optionName(k, id)).join('、'), '到畫廊鏡前換上'),
     onLab: (n, L) => ui.toast(`拿到 ${n} 張照片・${L.style}`, '在行囊的相簿'),
-    // 稿費（vendors.js 的 payFee）：頭版第一次多一個零錢盒（背的配件）
-    onFee: (n, big) => (big ? ui.toast('拿到零錢盒', `稿費${money(n)}・到畫廊鏡前背上`) : ui.hint(`稿費${money(n)}`, 2500)),
+    // 稿費（vendors.js 的 payFee）：頭版第一次多的零錢盒由「拿到了」那張卡說（scene/gotcard.js）
+    onFee: (n) => ui.hint(`稿費${money(n)}`, 2500),
   });
   const passers = new Passersby({ scene, world, shadowTex, ambience, coarse, force: params.get('crowd') });
   vendors.setQuiet(() => passers.busy < 0.2);
