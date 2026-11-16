@@ -137,6 +137,11 @@ export function buildOutdoor(room, h) {
   const easel = buildEasel({ G, bucket, group, x: -6.5, z: Z(19.4), rot: 0.18 });
   for (const b of easel.blocks) block(b.x, b.z, b.hw, b.hd, b.rot);
 
+  // 草原上的石頭記下腳印（世界座標的橢圓、轉的角度），草照這張表避開（grass 的 stones）
+  // band：腳印外面這一圈的草由矮到高
+  const stones = [];
+  const stone = (x, z, rx, rz, ry, band) => stones.push({ x, z, rx, rz, c: Math.cos(ry), s: Math.sin(ry), band, reach: Math.max(rx, rz) + band });
+
   // 石階下來的踏腳石，一路分到大樹（野餐墊）和畫架
   const path = (x1, r1, cx, cr, x2, r2) => {
     const steps = Math.round(Math.hypot(x2 - x1, r2 - r1) / 0.75);
@@ -145,7 +150,9 @@ export function buildOutdoor(room, h) {
       const x = u * u * x1 + 2 * u * t * cx + t * t * x2 + (R() - 0.5) * 0.2;
       const rel = u * u * r1 + 2 * u * t * cr + t * t * r2 + (R() - 0.5) * 0.2;
       const r = 0.24 + R() * 0.1;
-      k.cyl(r, r + 0.03, 0.05, R() < 0.5 ? '#a89a88' : '#9a8c7a', x, G + 0.02, Z(rel), { sx: 1 + R() * 0.3, ry: R() * 3 }, 7);
+      const col = R() < 0.5 ? '#a89a88' : '#9a8c7a', sx = 1 + R() * 0.3, ry = R() * 3;   // 亂數照原本的順序取
+      k.cyl(r, r + 0.03, 0.05, col, x, G + 0.02, Z(rel), { sx, ry }, 7);
+      stone(x, Z(rel), (r + 0.03) * sx, r + 0.03, ry, 0.25);
     }
   };
   path(0, TD + SD, 0.5, 15, 7.3, 22.2);
@@ -161,6 +168,8 @@ export function buildOutdoor(room, h) {
     if (R() < 0.5) {
       const r = 0.25 + R() * 0.35;
       (skip ? skipK : k).rock(r, R() < 0.5 ? '#8a8078' : '#7a7068', x, y + r * 0.4, Z(rel), { sy: 0.7, ry: R() * 3 });
+      // 埋了四成、壓扁成七成，露出地面的那圈半徑在 0.6r～0.8r 之間（看轉到哪一面）
+      if (!skip) stone(x, Z(rel), r * 0.7, r * 0.7, 0, 0.35);
       if (e < 1.3 && !skip) block(x, Z(rel), r, r);
     } else {
       for (let j = 0; j < 3; j++) R(), R(), R();   // 照舊取亂數，後面的花叢位置才不會跟著變
@@ -340,7 +349,7 @@ export function buildOutdoor(room, h) {
   for (const o of h.bucketObjects(hillBucket)) { o.layers.enable(REFLECT_LAYER); o.renderOrder = ORDER.hills; group.add(o); }
   // 野餐墊底下不種草：草葉會隨風擺，從薄薄的墊子穿出來一閃一閃
   const onMat = (x, z) => Math.abs(x - pic.x) < 1.05 && Math.abs(z - pic.z) < 0.8;
-  meadowGroup.add(grass(terrain, z0, coarse ? 10000 : 20000, h.uTime, (x, z) => nearTrail(x, z, 0.6) || onJetty(x, z0 - z, -0.15) || onMat(x, z)));
+  meadowGroup.add(grass(terrain, z0, coarse ? 10000 : 20000, h.uTime, (x, z) => nearTrail(x, z, 0.6) || onJetty(x, z0 - z, -0.15) || onMat(x, z), stones));
   meadowGroup.add(seeds(mz, h.uTime));
   meadowGroup.add(h.glowPoints(Array.from({ length: 28 }, () => {
     const a = R() * Math.PI * 2, e = Math.sqrt(R()) * 1.1;

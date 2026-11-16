@@ -208,8 +208,24 @@ export function groundMesh(terrain, mz) {
 }
 
 // 草葉：每片一個三角形，整片草合成一個網格。風在頂點著色器裡算，越靠近葉尖擺越大
-export function grass(terrain, z0, count, uTime, skip) {
+// stones：石頭的腳印（outdoor.js 的 stone()）。蓋住的地方不種；往外 band 公尺由矮到高，
+// 葉尖擺的幅度跟著縮，風吹、人走過推開也不會蓋到石頭上
+export function grass(terrain, z0, count, uTime, skip, stones = []) {
   const pos = [], col = [], bend = [];
+  // 回傳這裡的草長多高（0＝不種，1＝原本的高度）
+  const byStone = (x, z) => {
+    let s = 1;
+    for (const t of stones) {
+      const dx = x - t.x, dz = z - t.z;
+      if (Math.abs(dx) > t.reach || Math.abs(dz) > t.reach) continue;
+      const lx = dx * t.c - dz * t.s, lz = dx * t.s + dz * t.c;
+      const dn = Math.hypot(lx / t.rx, lz / t.rz);
+      if (dn < 1) return 0;
+      const f = Math.min(1, (dn - 1) * Math.min(t.rx, t.rz) / t.band);
+      s = Math.min(s, 0.15 + 0.85 * f * f * (3 - 2 * f));
+    }
+    return s;
+  };
   const base = new THREE.Color('#46652c'), c = new THREE.Color();
   const tips = ['#a8b850', '#c4bc62', '#8eaa44', '#d0b060', '#b0c058'];
   const flowers = ['#f4f0e0', '#f2c84a', '#e88aa8', '#b08ad8', '#f08a5a'];
@@ -224,22 +240,26 @@ export function grass(terrain, z0, count, uTime, skip) {
     if (rel < TD + SD + 0.3 && Math.abs(x) < SW + 0.5) continue;
     if (rel < 0 && Math.abs(x) < BW + 0.3) continue;
     if (skip(x, z)) continue;
+    const sh = byStone(x, z);
+    if (!sh) continue;
     const y = terrain(x, z) - 0.02;
     const ry = Math.random() * Math.PI, w = 0.035 + Math.random() * 0.03;
-    const hgt = (e > 1 ? 0.3 : 0.12) + Math.random() * (e > 1 ? 0.35 : 0.2);
+    const hgt = ((e > 1 ? 0.3 : 0.12) + Math.random() * (e > 1 ? 0.35 : 0.2)) * sh;
     const lx = Math.cos(ry) * w / 2, lz = Math.sin(ry) * w / 2;
     const lean = (Math.random() - 0.5) * 0.15;
     pos.push(x - lx, y, z - lz, x + lx, y, z + lz, x + lean, y + hgt, z + lean * 0.5);
     c.set(tips[placed % tips.length]);
     col.push(base.r, base.g, base.b, base.r, base.g, base.b, c.r, c.g, c.b);
-    bend.push(0, 0, 1);
-    // 每十幾片草夾一朵小花
-    if (placed % 14 === 0) {
+    // 著色器拿 bend² 乘擺幅：矮的草擺得跟高度成比例
+    const tb = Math.sqrt(sh);
+    bend.push(0, 0, tb);
+    // 每十幾片草夾一朵小花（石頭腳下被壓矮的不開）
+    if (placed % 14 === 0 && sh > 0.6) {
       c.set(flowers[(placed / 14) % flowers.length | 0]);
       const fy = y + hgt, s = 0.045;
       pos.push(x + lean - s, fy, z + lean * 0.5, x + lean + s, fy, z + lean * 0.5, x + lean, fy + s * 1.4, z + lean * 0.5 + s * 0.3);
       for (let i = 0; i < 3; i++) col.push(c.r, c.g, c.b);
-      bend.push(1, 1, 1);
+      bend.push(tb, tb, tb);
     }
     placed++;
   }
