@@ -3,7 +3,7 @@
 // 角色的零件怎麼組：頭（種族的臉曲面 faceMap、自己畫的臉的著色器片段）、頭髮、鬍子、五官、眼鏡、帽子、手上的食物。Character（character.js）換外觀時照這裡重建網格
 import * as THREE from 'three';
 import { Kit, mergeBucket } from '../core/props.js';
-import { HEADS, rod } from './heads.js';
+import { HEADS, DANGLES, rod } from './heads.js';
 import { HAT_COLORS, HAIR_COLORS, FACE, FACE_INK, raceOf, sizes } from './looks.js';
 import { HIP, HOODED, shell, bodyGeo, hood, frontOf } from './clothes.js';
 import { shapeOf, reachAt } from './handclear.js';
@@ -533,13 +533,13 @@ export function headGeo(L, race, S, skin, split = false) {
   const ownEye = race.own && L.eyes === 'base' && !drawn, ownMouth = race.own && L.mouth === 'none' && !drawn;
   const move = ownEye ? eyeMover(race, S) : null;
   const f = { eye: ownEye ? recordEyes(ke, spots, move) : junk, mouth: ownMouth ? km : junk };
-  let mouthAt = null;
+  let mouthAt = null, dangles = [];
   const head = build((k) => {
     const hooded = HOODED.includes(L.one);
     // 頭的造型要讓開的：hat 戴著哪頂帽子（紙箱把蓋子蓋上、耳朵收低；豆芽只是一根莖不算；連身裝的頭套是 'hood'）；front 胸前最外層（連圍巾）在頭的高度 y 離中軸多遠，
     // 垂到胸前的鬚照它擺（身體的座標換成頭的：扣掉脖子高度、除以頭的縮放）
     const out = frontOf(L, S.W), cowl = hooded && L.one !== 'astronaut' && race.hood !== false;
-    const o = { hat: cowl ? 'hood' : !hooded && L.hat !== 'none' && L.hat !== 'sprout' ? L.hat : null, front: (y) => out(NECK + y * S.hs) / S.hs };
+    const o = { hat: cowl ? 'hood' : !hooded && L.hat !== 'none' && L.hat !== 'sprout' ? L.hat : null, hair: hex(HAIR_COLORS[L.hairC]), front: (y) => out(NECK + y * S.hs) / S.hs };   // hair：自己長頭髮的頭（動漫女生）吃髮色
     // 背後最外層：真的把身體（連外套的帽兜、背的東西）拼一次來量，垂鬚的頭才會問，問了才拼。披風自己會繞開頭和鬚，不用讓；
     // 斜背的長東西（會照頭的形狀往後仰，見 TALL_BACK）和掛在腰側的腰包不算，鬚照樣垂在它們旁邊
     let bsh = null;
@@ -554,6 +554,7 @@ export function headGeo(L, race, S, skin, split = false) {
       };
     }
     HEADS[race.head](k, skin, mix(skin, '#f8f0e4', 0.55), move ? { ...f, base: recordEyes(k, null, move) } : f, o);
+    dangles = DANGLES[race.head]?.(o, skin) || [];
     if (race.hair) {
       const n = k.lit.length;
       const tuck = hooded || L.hat === 'knight';   // 全罩的頭盔跟頭套一樣，大頭髮收進去
@@ -583,7 +584,8 @@ export function headGeo(L, race, S, skin, split = false) {
   const arcs = split ? arcGeo(spots, race.ink || '#1a120c') : null, tears = split ? tearGeo(spots) : null;
   const eyeY = ownEye && spots.length ? spots.reduce((s, p) => s + p.y, 0) / spots.length : race.ey + S.fy;
   const eyeWide = spots.some((p) => Math.abs(p.x) > 0.12);
-  return { head, eyes: mergeBucket(ke.lit, false), pupils: mergeBucket(kp.lit, false), mouth, mouthAt, arcs, tears, smile, eyeY, eyeWide };
+  // dangles：頭上會甩的一串（heads.js 的 DANGLES），character.js 照它掛 Dangle
+  return { head, eyes: mergeBucket(ke.lit, false), pupils: mergeBucket(kp.lit, false), mouth, mouthAt, arcs, tears, smile, eyeY, eyeWide, dangles };
 }
 
 // 背上會高過肩膀的東西：頭大時要往後仰讓開後腦（clothes.js 的 back）

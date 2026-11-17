@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>新種族</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #141114;
+      color: #f5e9d4;
+      font-family: "Noto Serif TC", "Microsoft JhengHei", sans-serif;
+      user-select: none;
+    }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+    .note {
+      position: fixed;
+      top: 14px;
+      left: 16px;
+      max-width: 560px;
+      padding: 11px 15px;
+      background: rgba(20, 14, 11, 0.84);
+      border: 1px solid rgba(232, 184, 106, 0.28);
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.55;
+      pointer-events: none;
+    }
+    .note strong { color: #f6dba6; font-weight: 600; }
+    .note .meta { color: #b5a084; font-size: 12px; margin-top: 3px; }
+
+    .bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 10px 16px 14px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+      background: linear-gradient(transparent, rgba(12, 8, 6, 0.92));
+    }
+    .bar button {
+      padding: 6px 11px;
+      border: 1px solid #5a4e3e;
+      border-radius: 999px;
+      background: #241c16;
+      color: #d8ccb8;
+      font: inherit;
+      font-size: 12.5px;
+      cursor: pointer;
+    }
+    .bar button:hover { border-color: #a9763a; color: #f5e9d4; }
+    .bar button.on { border-color: #e8b86a; color: #f6dba6; background: #382819; }
+    .guide { position: fixed; top: 14px; right: 16px; padding: 8px; background: rgba(20, 14, 11, 0.84); border: 1px solid rgba(232, 184, 106, 0.28); border-radius: 10px; font-size: 12px; color: #b5a084; text-align: center; }
+    .guide canvas { display: block; width: 176px; height: 176px; image-rendering: pixelated; margin-bottom: 4px; }
+    .bar .sep { width: 1px; background: #5a4e3e; margin: 0 3px; }
+  </style>
+  <script type="importmap">{ "imports": { "three": "../vendor/three.module.min.js" } }</script>
+</head>
+<body>
+  <div class="note" id="info"></div>
+  <div class="guide" id="guide" hidden></div>
+  <div class="bar" id="bar">
+    <button data-item="all" class="on">全覽</button>
+    <button data-item="0">1 土撥鼠</button>
+    <button data-item="1">2 小象</button>
+    <button data-item="2">3 動漫女生</button>
+    <button data-item="3">4 海牛</button>
+    <span class="sep"></span>
+    <button data-cam="iso" class="on">45°</button>
+    <button data-cam="front">正面</button>
+    <button data-cam="side">側面</button>
+    <button data-cam="back">背面</button>
+    <span class="sep"></span>
+    <button id="btnHat"></button>
+    <button id="btnGlasses"></button>
+    <button id="btnKao"></button>
+    <button id="btnSkin">膚色：預設</button>
+    <button id="btnHair">髮色</button>
+    <button id="btnFace"></button>
+    <span class="sep"></span>
+    <button id="btnWalk">走路</button>
+    <button id="btnFling">甩一下</button>
+    <span class="sep"></span>
+    <button id="btnForm">灰泥 (-form)</button>
+    <button id="btnWire">線框</button>
+  </div>
+
+  <script type="module">
+    // 2026-11-17 加的三族（土撥鼠、小象、動漫女生）和加了鼻孔的海牛：全部用遊戲本體（looks.js、heads.js、dangle.js），這頁只擺出來看
+    import * as THREE from 'three';
+    import { Character } from '../js/avatar/character.js';
+    import { DANGLES } from '../js/avatar/heads.js';
+    import { restPoints } from '../js/avatar/dangle.js';
+    import { RACES, SKINS, HAIR_COLORS, FACE, encodeFace, presetLook } from '../js/avatar/looks.js';
+    import { faceMap } from '../js/avatar/character-build.js';
+    import { kaoCode, FACES } from '../js/avatar/kaomoji-parts.js';
+
+    const q = new URLSearchParams(location.search);
+    const IDS = ['marmot', 'elephant', 'animegirl', 'manatee', 'human'];   // 最後一個是比例對照
+    const RACE = Object.fromEntries(RACES.map((r) => [r.id, r]));
+    const DESC = {
+      marmot: '照布偶：一整顆梨形、嘴鼻一大顆往前鼓、大黑鼻頭、一顆小門牙、頭兩側扁扁的半圓耳；預設灰棕膚色（第 17 色）',
+      elephant: '小象：沒有象牙、一層扁圓大耳；鼻子軟的，走路跟著步子擺，15 秒左右自己甩一下或捲起來',
+      animegirl: '大眼一顆主高光、頭髮一整片（瀏海、鬢角）、雙馬尾會甩、尾巴分兩撮；頭髮吃「髮色」',
+      manatee: '原本的海牛，加兩個小鼻孔',
+    };
+    // 各自預設穿搭（還是能穿所有衣服帽子）
+    const LOOK_OVERRIDES = {
+      marmot: { top: 'sweater', bottom: 'overalls', outer: 'none', neck: 'none', topC: 12, botC: 2, shoes: 'boots' },
+      elephant: { top: 'sweater', bottom: 'shorts', outer: 'none', neck: 'none', topC: 4, botC: 7 },
+      animegirl: { top: 'shirt', bottom: 'skirt', outer: 'none', neck: 'bowtie', topC: 16, botC: 5, neckC: 13, shoes: 'sneakers', shoeC: 16 },
+    };
+    const HATS = [['none', '不戴'], ['wizard', '尖帽'], ['straw', '斗笠'], ['crown', '皇冠'], ['chef', '廚師帽'], ['party', '派對帽'], ['knight', '頭盔'], ['sprout', '豆芽']];
+    const GLASSES = [['none', '不戴'], ['round', '圓眼鏡'], ['shades', '墨鏡'], ['3d', '3D 眼鏡']];
+    const KAOS = [[0, '平常'], [kaoCode(1, 0, 0), '＾▽＾'], [kaoCode(FACES.findIndex((f) => f.t === '゜ロ゜'), 0, 0), '゜ロ゜'], [kaoCode(FACES.findIndex((f) => f.t === '╥﹏╥'), 0, 0), '╥﹏╥']];
+    // 測試用的畫臉（照 clip_sheet.html 的 drawn）：simple 兩點眼加一條弧嘴；full 白底黑瞳大眼、腮紅、紅嘴，滿版一點
+    function drawn(kind) {
+      const c = new Array(FACE * FACE).fill(0), dot = (x0, y0, r, v) => { for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) if (x * x + y * y <= r * r + r) c[(y0 + y) * FACE + x0 + x] = v; };
+      let eyes, mouth;
+      if (kind === 'full') {
+        for (const x of [20, 44]) { dot(x, 26, 7, 2); dot(x + 1, 27, 4, 1); dot(x, 38, 4, 4); }
+        for (let x = 24; x <= 40; x++) { const y = 42 + Math.round(4 * Math.sin(((x - 24) / 16) * Math.PI)); dot(x, y, 1, 3); }
+        eyes = [{ x: 13, y: 19, w: 15, h: 15 }, { x: 37, y: 19, w: 15, h: 15 }]; mouth = { x: 22, y: 40, w: 21, h: 9 };
+      } else {
+        for (const x of [22, 42]) dot(x, 26, 3, 1);
+        for (let x = 26; x <= 38; x++) { const y = 38 + Math.round(3 * Math.sin(((x - 26) / 12) * Math.PI)); dot(x, y, 1, 1); }
+        eyes = [{ x: 18, y: 22, w: 9, h: 9 }, { x: 38, y: 22, w: 9, h: 9 }]; mouth = { x: 24, y: 36, w: 17, h: 8 };
+      }
+      return encodeFace(c, eyes, mouth);
+    }
+    const DRAWN = [['', '沒有'], [drawn('simple'), '簡單'], [drawn('full'), '滿版']];
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.prepend(renderer.domElement);
+
+    const BG_NORMAL = new THREE.Color(0x1b1512), BG_FORM = new THREE.Color(0x98a2ac);
+    const scene = new THREE.Scene();
+    scene.background = BG_NORMAL.clone();
+    scene.add(new THREE.HemisphereLight(0xfff0dc, 0x44352a, 1.7));
+    const sun = new THREE.DirectionalLight(0xffdfc0, 1.35);
+    sun.position.set(3.5, 6.0, 5.5);
+    scene.add(sun);
+    const rim = new THREE.DirectionalLight(0x88a8cc, 0.42);
+    rim.position.set(-4.5, 3.0, -4.0);
+    scene.add(rim);
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(4.4, 48), new THREE.MeshLambertMaterial({ color: 0x261e19, flatShading: true }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.002;
+    scene.add(floor);
+    const grid = new THREE.GridHelper(8, 16, 0x5c4a39, 0x362b22);
+    grid.position.y = 0.001;
+    scene.add(grid);
+    const matForm = new THREE.MeshLambertMaterial({ color: 0xcfc8bc, flatShading: true });
+    const matWire = new THREE.MeshBasicMaterial({ color: 0xffe09a, wireframe: true, transparent: true, opacity: 0.3 });
+
+    const state = {
+      item: q.get('item') || 'all', cam: q.get('cam') || 'iso',
+      hat: Math.max(0, HATS.findIndex(([id]) => id === q.get('hat'))), glasses: 0, kao: 0, skinOffset: 0, hairC: 7,
+      face: Math.max(0, ['', 'simple', 'full'].indexOf(q.get('face') || '')),
+      walk: q.has('walk'), form: q.has('form'), wire: q.has('wire'),
+    };
+
+    const slots = IDS.map((id) => {
+      const ch = new Character(null, presetLook(0));
+      ch.shadow.visible = false;
+      ch.splitMouth = true;
+      ch.race = RACE[id];
+      ch.isRef = id === 'human';
+      scene.add(ch.group);
+      return ch;
+    });
+
+    const wireClones = [];
+    function refreshAppearance() {
+      const [hat] = HATS[state.hat], [glasses] = GLASSES[state.glasses], [kao] = KAOS[state.kao];
+      for (const ch of slots) {
+        const r = ch.race, skin = ch.isRef ? 0 : ((r.skin ?? 0) + state.skinOffset) % SKINS.length;
+        ch.setLook({ ...presetLook(0), ...(LOOK_OVERRIDES[r.id] || {}), race: r.id, hat, glasses, skin, hairC: state.hairC, face: DRAWN[state.face][0], keep: 0 });
+        ch.setKao(kao);
+        ch.brace(!!kao);
+      }
+      applyMaterials();
+      layoutPositions();
+      updateInfo();
+    }
+
+    function applyMaterials() {
+      while (wireClones.length) { const w = wireClones.pop(); w.parent?.remove(w); }
+      for (const ch of slots) {
+        ch.group.traverse((obj) => {
+          if (!obj.isMesh || obj === ch.shadow || obj === ch.glass) return;
+          if (!obj.userData.origMat) obj.userData.origMat = obj.material;
+          obj.material = state.form ? matForm : obj.userData.origMat;
+          if (state.wire && obj.visible && obj.geometry?.attributes?.position?.count > 0) {
+            const wm = new THREE.Mesh(obj.geometry, matWire);
+            wm.scale.setScalar(1.002);
+            obj.add(wm);
+            wireClones.push(wm);
+          }
+        });
+      }
+      scene.background = state.form ? BG_FORM.clone() : BG_NORMAL.clone();
+    }
+
+    function layoutPositions() {
+      const single = state.item !== 'all';
+      slots.forEach((ch, i) => {
+        const x = single ? (i === +state.item ? -0.35 : ch.isRef ? 0.55 : null) : (i - (slots.length - 1) / 2) * 1.2;
+        ch.group.visible = x != null;
+        ch.home = [x ?? 0, 0];
+        ch.group.position.set(x ?? 0, 0, 0);
+      });
+    }
+
+    // 畫臉編輯器的底圖（照 creator.js 的 makeGuide：越前面越亮、眼睛嘴巴原本的位置、垂在臉前面的那串畫灰影）
+    function guideCanvas(race, W = 264) {
+      const m = faceMap(race), N1 = m.N1;
+      let lo = Infinity, hi = -Infinity;
+      for (let i = 0; i < m.z.length; i++) if (m.hit[i]) { lo = Math.min(lo, m.z[i]); hi = Math.max(hi, m.z[i]); }
+      const small = document.createElement('canvas');
+      small.width = small.height = N1;
+      const sg = small.getContext('2d'), img = sg.createImageData(N1, N1);
+      for (let i = 0; i < m.z.length; i++) {
+        if (!m.hit[i]) continue;
+        const t = hi > lo ? (m.z[i] - lo) / (hi - lo) : 1;
+        img.data.set([122 + 110 * t, 101 + 111 * t, 80 + 96 * t, 255], i * 4);
+      }
+      sg.putImageData(img, 0, 0);
+      const c = document.createElement('canvas');
+      c.width = c.height = W;
+      const g = c.getContext('2d'), P = (x, y) => [((x + m.R) / (2 * m.R)) * W, ((m.cy + m.R - y) / (2 * m.R)) * W];
+      g.fillStyle = '#2a1e16';
+      g.fillRect(0, 0, W, W);
+      g.drawImage(small, 0, 0, W, W);
+      g.fillStyle = 'rgba(58, 54, 62, .55)';
+      for (const spec of DANGLES[race.head]?.({ hat: null }, '#808080') || []) {
+        for (const [x, y, r, z] of restPoints(spec)) {
+          if (z <= 0.05) continue;
+          const [px, py] = P(x, y);
+          g.beginPath();
+          g.arc(px, py, Math.max(1, (r / (2 * m.R)) * W), 0, Math.PI * 2);
+          g.fill();
+        }
+      }
+      g.strokeStyle = 'rgba(42, 30, 22, .7)';
+      g.lineWidth = 2;
+      for (const s of [-1, 1]) {
+        const [x, y] = P(s * race.ex, race.ey);
+        g.beginPath();
+        g.arc(x, y, W * 0.035, 0, Math.PI * 2);
+        g.stroke();
+      }
+      return c;
+    }
+
+    function updateInfo() {
+      const el = document.getElementById('info'), box = document.getElementById('guide');
+      box.hidden = state.item === 'all';
+      if (state.item === 'all') {
+        el.innerHTML = '<strong>新種族</strong><div class="meta">由左至右：土撥鼠／小象／動漫女生／海牛（加鼻孔）／人（比例對照）。拖曳旋轉、滾輪縮放。「走路」繞小圈看鼻子和馬尾怎麼甩。</div>';
+        return;
+      }
+      const r = slots[+state.item].race;
+      el.innerHTML = `<strong>${r.name}（${r.id}）</strong><div class="meta">${DESC[r.id]}</div>`;
+      box.replaceChildren(guideCanvas(r), '畫臉編輯器的底圖');
+    }
+
+    // 簡易軌道相機
+    const camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, 0.05, 50);
+    const orbit = { theta: 0.42, phi: 1.38, dist: 5.0, tx: 0, ty: 0.85 };
+    function setPresetCam(mode) {
+      state.cam = mode;
+      const single = state.item !== 'all';
+      orbit.tx = single ? 0.05 : 0;
+      orbit.ty = single ? 0.92 : 0.86;
+      orbit.dist = single ? 2.55 : 7.2;
+      [orbit.theta, orbit.phi] = { iso: [0.42, 1.38], front: [0, 1.44], side: [Math.PI / 2, 1.44], back: [Math.PI, 1.4] }[mode];
+      document.querySelectorAll('[data-cam]').forEach((b) => b.classList.toggle('on', b.dataset.cam === mode));
+    }
+
+    let drag = null;
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      drag = { x: e.clientX, y: e.clientY, btn: e.button, theta: orbit.theta, phi: orbit.phi, tx: orbit.tx, ty: orbit.ty };
+      renderer.domElement.setPointerCapture(e.pointerId);
+    });
+    renderer.domElement.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (drag.btn === 2 || e.shiftKey) {
+        orbit.tx = drag.tx - dx * 0.004;
+        orbit.ty = Math.max(0.1, drag.ty + dy * 0.004);
+      } else {
+        orbit.theta = drag.theta - dx * 0.008;
+        orbit.phi = Math.min(Math.PI - 0.15, Math.max(0.2, drag.phi - dy * 0.008));
+      }
+    });
+    renderer.domElement.addEventListener('pointerup', () => { drag = null; });
+    renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+    renderer.domElement.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      orbit.dist = Math.min(12, Math.max(1.1, orbit.dist * (1 + e.deltaY * 0.001)));
+    }, { passive: false });
+
+    document.querySelectorAll('[data-item]').forEach((b) => {
+      b.classList.toggle('on', b.dataset.item === state.item);
+      b.addEventListener('click', () => {
+        state.item = b.dataset.item;
+        document.querySelectorAll('[data-item]').forEach((x) => x.classList.toggle('on', x === b));
+        layoutPositions();
+        setPresetCam(state.cam);
+        updateInfo();
+      });
+    });
+    document.querySelectorAll('[data-cam]').forEach((b) => b.addEventListener('click', () => setPresetCam(b.dataset.cam)));
+    // 循環切換的鈕：按一下換下一個，鈕上寫現在是哪個
+    const cycle = (id, label, list, key) => {
+      const b = document.getElementById(id), show = () => (b.textContent = `${label}：${list[state[key]][1]}`);
+      show();
+      b.addEventListener('click', () => { state[key] = (state[key] + 1) % list.length; show(); refreshAppearance(); });
+    };
+    cycle('btnHat', '帽子', HATS, 'hat');
+    cycle('btnGlasses', '眼鏡', GLASSES, 'glasses');
+    cycle('btnKao', '顏文字', KAOS, 'kao');
+    cycle('btnFace', '手繪臉', DRAWN, 'face');
+    document.getElementById('btnSkin').addEventListener('click', (e) => {
+      state.skinOffset = (state.skinOffset + 1) % SKINS.length;
+      e.target.textContent = state.skinOffset ? `膚色：+${state.skinOffset}` : '膚色：預設';
+      refreshAppearance();
+    });
+    document.getElementById('btnHair').addEventListener('click', () => { state.hairC = (state.hairC + 1) % HAIR_COLORS.length; refreshAppearance(); });
+    const btnWalk = document.getElementById('btnWalk');
+    btnWalk.classList.toggle('on', state.walk);
+    btnWalk.addEventListener('click', () => {
+      state.walk = !state.walk;
+      btnWalk.classList.toggle('on', state.walk);
+      if (!state.walk) layoutPositions();
+    });
+    document.getElementById('btnFling').addEventListener('click', () => {
+      for (const ch of slots) ch.dangles.forEach((d, i) => d.fling(i % 2 ? 'lift' : 'side'));
+    });
+    for (const [id, key] of [['btnForm', 'form'], ['btnWire', 'wire']]) {
+      const b = document.getElementById(id);
+      b.classList.toggle('on', state[key]);
+      b.addEventListener('click', () => { state[key] = !state[key]; b.classList.toggle('on', state[key]); applyMaterials(); });
+    }
+
+    refreshAppearance();
+    setPresetCam(state.cam);
+    window.addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    let last = performance.now(), walkT = 0;
+    function tick(now) {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      // 走路：每個人繞自己的位置走一個小圈，轉彎和步伐讓鼻子、馬尾甩起來（甩的在 Character.update 裡）
+      const R = 0.38, V = 0.85;
+      if (state.walk) walkT += dt;
+      slots.forEach((ch, i) => {
+        if (state.walk && ch.group.visible) {
+          const a = walkT * V / R + i * 1.3;
+          ch.group.position.set(ch.home[0] + Math.sin(a) * R, 0, ch.home[1] + Math.cos(a) * R);
+          ch.group.rotation.y = a + Math.PI / 2;
+        } else ch.group.rotation.y = 0;
+        ch.update(dt, state.walk ? V : 0);
+      });
+      const sp = Math.sin(orbit.phi);
+      camera.position.set(orbit.tx + orbit.dist * sp * Math.sin(orbit.theta), orbit.ty + orbit.dist * Math.cos(orbit.phi), orbit.dist * sp * Math.cos(orbit.theta));
+      camera.lookAt(orbit.tx, orbit.ty, 0);
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>

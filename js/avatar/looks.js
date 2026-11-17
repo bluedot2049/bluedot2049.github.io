@@ -13,6 +13,7 @@ export const HAIR_COLORS = [0x5a3a22, 0x1a1412, 0x8a5a2a, 0xd8b060, 0xe8e4dc, 0x
 export const SKINS = [
   0xf1c9a5, 0xe0a87e, 0xb87a52, 0x7a4a30, 0xf0e8d8, 0x8a8a92, 0x3a3036, 0xd8893a,
   0xc8a060, 0x5a9a4a, 0x4a8a7a, 0x4a8ad0, 0x8a7aa0, 0xd07ab0, 0xc83a2a, 0xe8d040,
+  0x8f8172,   // 2026-11-17：土撥鼠布偶的灰棕。色號存在照片裡，只能往後加
 ];
 // 衣服、鞋子、配件共用的顏色。前 8 個是舊版的長袍色，接著 8 個是舊版的圍巾色，舊存檔的色號才換得過來
 export const CLOTH = [
@@ -72,9 +73,14 @@ export const RACES = [
   { id: 'owl', name: '貓頭鷹', head: 'owl', own: true, ey: 0.235, ex: 0.078, top: 0.34, hs: 1, skin: 2, hood: [0.22, 0.27], home: 'heilin' },
   { id: 'moss', name: '苔人', head: 'moss', ey: 0.22, ex: 0.075, top: 0.4, hs: 1.05, skin: 5, hood: [0.22, 0.28], home: 'heilin' },
   { id: 'manatee', name: '海牛', head: 'manatee', own: true, ey: 0.26, ex: 0.1, md: 0.19, top: 0.42, hs: 1.15, skin: 5, hood: [0.21, 0.3], helmet: [0.21, 0.36, 0.03], body: { W: 1.2 }, home: 'jinghai' },
+  // 2026-11-17 加的三族（heads.js 有自己的五官）。小象的鼻子、動漫女生的雙馬尾是會甩的一串（heads.js 的 DANGLES）。
+  // crowd: false 先不讓路人抽：抽種族的亂數一動，每一區的路人全部換人
+  { id: 'marmot', name: '土撥鼠', head: 'marmot', own: true, ey: 0.25, ex: 0.1, md: 0.12, top: 0.36, hs: 1.02, skin: 16, hood: [0.21, 0.29], helmet: [0.2, 0.34, 0.03], knight: [0.21, 0.35, 0.04], body: { H: 0.95, W: 1.15 }, crowd: false },
+  { id: 'elephant', name: '小象', head: 'elephant', own: true, ey: 0.25, ex: 0.1, md: 0.1, top: 0.4, hs: 1.05, skin: 5, hood: [0.22, 0.29], helmet: false, knight: [0.23, 0.36, 0.06], body: { H: 0.97, W: 1.1 }, crowd: false },
+  { id: 'animegirl', name: '動漫女生', head: 'animegirl', own: true, ey: 0.19, ex: 0.075, md: 0.1, fs: 0.9, top: 0.38, hs: 1, skin: 0, hood: [0.21, 0.27], helmet: [0.21, 0.32, 0.01], knight: [0.21, 0.34, 0.02], body: { H: 0.96, W: 0.86, hs: 0.98 }, crowd: false },
 ];
-// 路人、旅人、演唱會的人群抽種族用的：住在某一區的正經種族不在外面亂逛
-export const crowdRaces = () => RACES.filter((r) => !r.home);
+// 路人、旅人、演唱會的人群抽種族用的：住在某一區的正經種族不在外面亂逛；crowd: false 的也不抽
+export const crowdRaces = () => RACES.filter((r) => !r.home && r.crowd !== false);
 const RACE_BY_ID = new Map(RACES.map((r) => [r.id, r]));
 export const raceOf = (L) => RACE_BY_ID.get(L.race) || RACES[0];
 

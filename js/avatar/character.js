@@ -9,6 +9,7 @@ import { SKINS, CLOTH, FACE, FACE_INK, raceOf, sizes, sanitizeLook, lookKey, dec
 import { CAMERAS, GUI_EYE, cameraModel, cameraPart, cameraParts, chromeMat, isChrome } from '../camera/cameras.js';
 import { HIP, HOODED, itemOf, bodyGeo, armGeo, legGeo, capeGeo, CAPE_BEND, capeT, camStrap, wingGeo, wingAt, hasWings, tailGeo, tailAt, katanaGeo, katanaFit, KATANA_ARM } from './clothes.js';
 import { HandClear, shapeOf, reachAt, shapePoints } from './handclear.js';
+import { Dangle } from './dangle.js';
 import { FACES, HANDS, BODIES, kaoCode, kaoParts } from './kaomoji-parts.js';
 import { BREEZE } from '../core/weather.js';
 import { BITES, BITE_TIME, EMPTY, FACE_GLSL_HEAD, FACE_GLSL_MAP, HAIR_FIT, HAT_H, INK_RGB, NECK, TALL_BACK, build, decalGeo, faceMap, foodModel, hatGeo, headGeo, hex, shorten, smooth, swap } from './character-build.js';
@@ -265,6 +266,7 @@ export class Character {
     this.hdv = new THREE.Vector3();
     this.hpOk = this.hvOk = false;
     this.clear = new HandClear(this);   // 手上的東西讓開帽子和身體、坐躺時放地上
+    this.dangles = [];              // 頭上會甩的一串（象鼻、雙馬尾，dangle.js）
     this.key = null;
     this.setLook(look);
   }
@@ -312,6 +314,8 @@ export class Character {
     }
     swap(this.torso, shorten(bodyGeo(L, W, envPre, headBack), S.leg));
     swap(this.headMesh, hg.head);
+    for (const d of this.dangles) d.dispose();
+    this.dangles = hg.dangles.map((spec) => new Dangle(this.head, this.mat, spec));
     swap(this.mouthMesh, hg.mouth);
     if (hg.mouthAt) this.mouth.position.set(...hg.mouthAt);
     swap(this.smShut, hg.smile?.shut);
@@ -1019,6 +1023,8 @@ export class Character {
     this.clear.update(dt);
     // 跪、趴時小腿往後折：腿往後多少，披風就多掀起來多少
     this.bendCape(this.capeX + 0.35 * this.sitP + Math.max(0, this.footL.rotation.x - 0.6, this.footR.rotation.x - 0.6), this.capeZ);
+    // 頭上會甩的一串：頭的姿勢都擺好了才量它這一幀怎麼動
+    for (const d of this.dangles) d.update(dt, this.walk, this.phase);
   }
 
   // 披風照走路、跳、風往後彎（bx 前後、bz 左右），碰到地就貼著地。肩上不動、越下面彎越多（clothes.js 的 capeGeo、capeT），

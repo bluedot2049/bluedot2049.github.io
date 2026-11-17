@@ -13,7 +13,7 @@ import { RACES, OPTIONS, SLIDERS, COLOR_FIELDS, WEAR, GIFTS, lockKeys } from '..
 // <pinned>（tools/save-order.mjs 會改寫這一段，手改只能往後加）
 export const PINNED = {
   slot: ['race:p:b', 'eyes:p:b', 'brows:p:b', 'nose:p:b', 'mouth:p:b', 'mark:p:b', 'glasses:p:w', 'hair:p:b', 'hat:p:w', 'top:p:w', 'topPat:p:w:top', 'bottom:p:w', 'botPat:p:w:bottom', 'outer:p:w', 'shoes:p:w', 'one:p:w', 'neck:p:w', 'back:p:w', 'hand:p:w', 'skin:c:b', 'hairC:c:b', 'hatC:c:w:hat', 'topC:c:w:top', 'topC2:c:w:top', 'botC:c:w:bottom', 'botC2:c:w:bottom', 'outC:c:w:outer', 'outC2:c:w:outer', 'oneC:c:w:one', 'oneC2:c:w:one', 'shoeC:c:w:shoes', 'neckC:c:w:neck', 'backC:c:w:back', 'handC:c:w:hand', 'head:s:b', 'tall:s:b', 'fat:s:b', 'eyeSize:s:b', 'eyeGap:s:b', 'eyeOdd:s:b', 'faceY:s:b', 'keep:f:b', 'face:f:b'],
-  race: ['human', 'cat', 'dog', 'bull', 'goat', 'fox', 'bear', 'rabbit', 'frog', 'lizard', 'mushroom', 'pigeon', 'bigeye', 'tails', 'hammer', 'squid', 'alien', 'egg', 'toast', 'boba', 'onigiri', 'potato', 'tv', 'box', 'robot', 'snowman', 'dwarf', 'elf', 'teaegg', 'pineapple', 'xiaolongbao', 'cactus', 'ricecooker', 'bulb', 'owl', 'moss', 'manatee'],
+  race: ['human', 'cat', 'dog', 'bull', 'goat', 'fox', 'bear', 'rabbit', 'frog', 'lizard', 'mushroom', 'pigeon', 'bigeye', 'tails', 'hammer', 'squid', 'alien', 'egg', 'toast', 'boba', 'onigiri', 'potato', 'tv', 'box', 'robot', 'snowman', 'dwarf', 'elf', 'teaegg', 'pineapple', 'xiaolongbao', 'cactus', 'ricecooker', 'bulb', 'owl', 'moss', 'manatee', 'marmot', 'elephant', 'animegirl'],
   'opt.eyes': ['base', 'dot', 'big', 'line', 'sleepy', 'cross', 'one', 'three', 'none'],
   'opt.brows': ['none', 'thick', 'uni', 'angry', 'sad'],
   'opt.nose': ['none', 'ball', 'big', 'pig', 'long'],

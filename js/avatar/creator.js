@@ -9,6 +9,8 @@ import { RACES, OPTIONS, SLIDERS, SKINS, HAT_COLORS, HAIR_COLORS, CLOTH, GIFTS, 
   personOf, outfitOf, dress, samePerson, sameOutfit } from './looks.js';
 import { getSave, putSave, PEOPLE, OUTFITS } from '../save/progress.js';
 import { faceMap, TUCKED } from './character.js';
+import { DANGLES } from './heads.js';
+import { restPoints } from './dangle.js';
 import { cached, request, FRAME } from './thumbs.js';
 import { SHOPS, wareOf } from './wares.js';
 import { money, OPEN } from '../save/purse.js';
@@ -693,7 +695,9 @@ export class Creator {
     }
     g.putImageData(img, 0, 0);
     const toPad = (x, y) => [((x + m.R) / (2 * m.R)) * PAD, ((m.cy + m.R - y) / (2 * m.R)) * PAD];
-    return { img: c, eyes: [-1, 1].map((s) => toPad(s * race.ex, race.ey)), mouth: toPad(0, race.ey - (race.md ?? 0.11) * (race.fs ?? 1)) };
+    // 頭上垂在臉前面的那串（象鼻）不在臉的深度圖裡：照靜止的樣子畫一塊灰影，畫在那裡的會被擋住。垂在後面的（雙馬尾）不畫
+    const shade = (DANGLES[race.head]?.({ hat: null }, '#808080') || []).flatMap((spec) => restPoints(spec)).filter((p) => p[3] > 0.05).map(([x, y, r]) => [...toPad(x, y), (r / (2 * m.R)) * PAD]);
+    return { img: c, shade, eyes: [-1, 1].map((s) => toPad(s * race.ex, race.ey)), mouth: toPad(0, race.ey - (race.md ?? 0.11) * (race.fs ?? 1)) };
   }
 
   drawPad() {
@@ -702,6 +706,12 @@ export class Creator {
     g.fillRect(0, 0, PAD, PAD);
     g.imageSmoothingEnabled = true;
     g.drawImage(this.guide.img, 0, 0, PAD, PAD);
+    g.fillStyle = 'rgba(58, 54, 62, .55)';
+    for (const [x, y, r] of this.guide.shade) {
+      g.beginPath();
+      g.arc(x, y, Math.max(1, r), 0, Math.PI * 2);
+      g.fill();
+    }
     g.strokeStyle = 'rgba(42, 30, 22, .35)';
     g.lineWidth = 1.5;
     for (const [x, y] of this.guide.eyes) {

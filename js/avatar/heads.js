@@ -104,6 +104,76 @@ function muzzle() {
   }
   return g;
 }
+// ---------- 2026-11-17 加的三族用的形狀（土撥鼠、動漫女生） ----------
+const BRIM = ['wizard', 'straw', 'chef', 'propeller', 'party', 'cone'];   // 有帽簷、會壓低馬尾的帽子
+
+// 土撥鼠的頭：一整顆梨形（上窄下寬，下緣往下垂到脖子），不是兩顆球疊起來
+function pear() {
+  const g = new THREE.IcosahedronGeometry(1, 2), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const w = y < 0 ? 1 + 0.24 * Math.sin(Math.min(1, -y * 1.3) * Math.PI / 2) : 1 - 0.06 * y;   // 下半往兩邊胖、頭頂收一點
+    x *= w;
+    z *= y < 0 ? 1 + 0.06 * -y : 1;
+    if (y < 0) y *= 1.12;
+    p.setXYZ(i, x * 0.2, 0.2 + y * 0.2, -0.015 + z * 0.2);
+  }
+  return g;
+}
+
+// 動漫女生的臉：球的下半往中間收一點成小下巴，正面壓平好貼大眼睛，臉還是圓圓的
+function animeFace() {
+  const g = new THREE.IcosahedronGeometry(1, 2), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    if (y < 0) {
+      const t = Math.min(1, -y);
+      x *= 1 - 0.34 * t ** 1.6;
+      z *= 1 - 0.2 * t ** 1.5;
+    }
+    if (z > 0.3) z = 0.3 + (z - 0.3) * 0.75;
+    p.setXYZ(i, x * 0.185, 0.205 + y * 0.18, z * 0.18);
+  }
+  return g;
+}
+
+// 動漫女生的頭髮：整片一個殼。一圈直條（column），每條從頭頂往下長到自己的下緣 yb：
+// 正面五束瀏海（尖朝下、兩肩圓）、兩邊鬢角垂到下巴、後面短短幾個髮尖；赤道以下直直往下（鮑伯頭，不收成球）。下緣往裡折一圈當厚度
+function animeHair() {
+  const R = 0.205, Cy = 0.205, Cz = -0.012, SZ = 0.95, W = 0.95, cols = [];   // W：臉的開口半寬（弧度）
+  for (let u = -1; u <= 1.001; u += 0.1) {
+    const d = Math.abs(((u + 0.2) % 0.4 + 0.4) % 0.4 - 0.2) / 0.2;   // 0＝髮尖、1＝兩束之間
+    const tip = 0.246 - 0.03 * u * u, notch = 0.288 - 0.012 * u * u;
+    cols.push([u * W, Math.abs(u) > 0.999 ? 0.2 : tip + (notch - tip) * d ** 1.6]);
+  }
+  for (const s of [-1, 1]) {
+    for (const [a, y] of [[1.05, 0.07], [1.17, 0.025], [1.32, 0.075], [1.55, 0.06], [1.85, 0.035], [2.15, 0.065], [2.5, 0.03], [2.85, 0.06]]) cols.push([s * a, y]);
+  }
+  cols.push([Math.PI, 0.035]);
+  cols.sort((a, b) => a[0] - b[0]);
+  const N = 9, rows = [];
+  for (const [az, yb] of cols) {
+    const ring = [], total = yb >= Cy ? Math.acos((yb - Cy) / R) : Math.PI / 2 + (Cy - yb) / R;
+    for (let v = 0; v <= N; v++) {
+      const t = (v / N) * total;
+      const [Y, r] = t <= Math.PI / 2 ? [Cy + R * Math.cos(t), R * Math.sin(t)] : [Cy - (t - Math.PI / 2) * R, R * (1 - 0.1 * (t - Math.PI / 2))];
+      ring.push([r * Math.sin(az), Y, Cz + r * Math.cos(az) * SZ]);
+    }
+    const [x, y, z] = ring[N];
+    ring.push([x * 0.84, y + 0.014, Cz + (z - Cz) * 0.84]);
+    rows.push(ring);
+  }
+  const pos = [];
+  for (let c = 0; c < rows.length; c++) {
+    const A = rows[c], B = rows[(c + 1) % rows.length];
+    for (let v = 0; v <= N; v++) pos.push(...A[v], ...A[v + 1], ...B[v], ...B[v], ...A[v + 1], ...B[v + 1]);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
 export const HEADS = {
   bull(k, c, c2, f) {
     k.ball(0.22, c, 0, 0.2, 0, { sx: 1.05 });
@@ -501,6 +571,7 @@ export const HEADS = {
     k.ball(0.24, c, 0, 0.22, 0, { sx: 1.08, sy: 0.95 });
     k.ball(0.2, c, 0, 0.1, 0, { sx: 1.15, sy: 0.6 });
     k.add(muzzle(), c, 0, 0.13, 0.16);
+    for (const s of [-1, 1]) k.ball(0.0065, '#2a2722', s * 0.038, 0.218, 0.236, { sz: 0.5 });   // 鼻孔：嘴墊上緣再上面一點、很小的兩點（照布偶）
     for (const s of [-1, 1]) k.ball(0.035, '#e8a59c', s * 0.18, 0.2, 0.16, { sz: 0.35 });
     eyes(E(k, f), 0.1, 0.26, 0.2, 0.022, '#2a2722');
     M(k, f).box(0.05, 0.01, 0.01, '#5b2b2b', 0, 0.07, 0.2);
@@ -514,5 +585,90 @@ export const HEADS = {
     for (const [x, z, rz, rx, len] of [[0.04, -0.02, -0.25, -0.15, 0.24], [-0.07, 0.03, 0.4, 0.1, 0.19], [0.1, 0.05, -0.6, 0.25, 0.16]]) {
       k.cone(0.04, len, '#3e6a32', x - Math.sin(rz) * len / 2, 0.37 + len / 2 * Math.cos(rz), z + Math.sin(rx) * len / 2, { rz, rx, sx: 0.35, color2: '#9ac06a' });
     }
+  },
+
+  // ---------- 2026-11-17 加的三族 ----------
+
+  // 土撥鼠：照布偶，一整顆梨形、嘴鼻一大顆往前鼓、大黑鼻頭、一顆小門牙、頭兩側扁扁的半圓耳
+  marmot(k, c, c2, f, o) {
+    const snout = mix(c2, '#e0c08a', 0.4), nose = mix(c, '#2a2220', 0.7);
+    k.add(pear(), c, 0, 0, 0, { color2: mix(c, '#fff4e4', 0.12) });
+    k.ball(0.105, snout, 0, 0.15, 0.15, { sx: 1.12, sy: 0.92, sz: 0.85 });
+    k.ball(0.05, nose, 0, 0.168, 0.228, { sx: 1.3, sy: 0.88, sz: 0.7 });
+    M(k, f).box(0.032, 0.028, 0.012, '#f4eee2', 0, 0.072, 0.212);
+    eyes(E(k, f), 0.1, 0.255, 0.165, 0.021);
+    if (under(o, 'hood')) return;
+    // 耳朵下半埋進頭裡、順著頭的弧往外斜（整顆圓立在頭頂會像熊）
+    const y = under(o, 'straw') ? 0.322 : 0.332;
+    for (const s of [-1, 1]) {
+      const rz = -s * 0.75;
+      k.ball(0.052, c, s * 0.152, y, -0.025, { sx: 1.2, sy: 0.8, sz: 0.42, rz });
+      k.ball(0.03, snout, s * 0.156, y + 0.004, -0.008, { sx: 1.15, sy: 0.65, sz: 0.3, rz });
+    }
+  },
+  // 小象：圓額頭、一層扁圓大耳、沒有象牙。鼻子是 DANGLES 那一串（會甩），頭上只畫鼻根
+  elephant(k, c, c2, f, o) {
+    k.ball(0.21, c, 0, 0.225, 0, { sy: 1.02, color2: mix(c, '#f4efe6', 0.15) });
+    k.ball(0.15, c, 0, 0.12, 0.05, { sx: 1.1, sy: 0.8 });
+    k.ball(0.06, c, 0, 0.17, 0.17, { sz: 0.9 });
+    eyes(E(k, f), 0.1, 0.255, 0.17, 0.023);
+    M(k, f).box(0.04, 0.01, 0.01, '#5b2b2b', 0, 0.065, 0.19);
+    if (under(o, 'hood')) return;
+    for (const s of [-1, 1]) k.ball(0.15, c, s * 0.25, 0.21, -0.03, { sy: 1.05, sz: 0.2, ry: s * 0.35, color2: mix(c, '#e8b8b4', 0.2) });
+  },
+  // 動漫女生：圓一點的小臉、大眼一顆主高光、上睫毛一道弧、頭髮一整片（吃髮色 o.hair）、呆毛、緞帶。雙馬尾是 DANGLES 那兩串
+  animegirl(k, c, _c2, f, o) {
+    const hair = o?.hair || '#d07ab0', hi = mix(hair, '#fff6f0', 0.28), ink = '#2a1c24';
+    const iris = mix(hair, '#4a64c8', 0.55), irisTop = mix(iris, '#141428', 0.6);
+    k.add(animeFace(), c, 0, 0, 0);
+    M(k, f).torus(0.016, 0.005, Math.PI, '#b45660', 0, 0.112, 0.152, { rz: Math.PI });
+    for (const s of [-1, 1]) {
+      const x = s * 0.076, y = 0.188, z = 0.13, ry = s * 0.2;
+      E(k, f).ball(0.044, iris, x, y, z, { sx: 0.82, sy: 1.12, sz: 0.32, ry, color2: irisTop });
+      E(k, f).ball(0.02, '#1a1426', x, y + 0.006, z + 0.006, { sy: 1.1, sz: 0.3, ry });
+      E(k, f).ball(0.013, '#fffdf8', x - s * 0.012, y + 0.018, z + 0.012, { sz: 0.4 });
+      E(k, f).ball(0.006, '#fffdf8', x + s * 0.012, y - 0.022, z + 0.01, { sz: 0.4 });
+      for (const a of [0.35, 0, -0.35]) {
+        const t = Math.PI / 2 - s * a * 1.4;   // a＞0 往外眼角
+        E(k, f).box(0.032, 0.0085, 0.006, ink, x + Math.cos(t) * 0.04, y + 0.002 + Math.sin(t) * 0.05, z + 0.006, { rz: t - Math.PI / 2, ry });
+      }
+      E(k, f).box(0.018, 0.008, 0.006, ink, x + s * 0.046, y + 0.034, z - 0.002, { rz: s * 0.6, ry });   // 外眼角翹一下
+      k.ball(0.024, '#f2a0a4', s * 0.105, 0.135, 0.12, { sx: 1.3, sy: 0.6, sz: 0.25, ry: s * 0.35 });
+    }
+    k.add(animeHair(), hair, 0, 0, 0, { color2: hi });
+    if (!o?.hat) rod(k, [0, 0.39, -0.02], [0.05, 0.47, 0.01], 0.006, hi, { r2: 0.014, seg: 5 });
+    if (under(o, 'hood', 'knight')) return;
+    const ty = under(o, ...BRIM) ? 0.22 : 0.29;
+    for (const s of [-1, 1]) {
+      k.ball(0.03, '#c83e4d', s * 0.18, ty, -0.06);
+      for (const a of [-1, 1]) k.cone(0.022, 0.05, '#c83e4d', s * 0.18 + a * 0.03, ty + 0.012, -0.055, { rz: -a * 1.3, sz: 0.4 });
+    }
+  },
+};
+
+// 頭上會甩的一串（dangle.js 的 Dangle 照這裡的樣子做、每幀晃）：照 HEADS 的名字查，回傳 spec 的陣列（沒有就空的）。
+// o 跟 HEADS 的一樣（hat 戴著哪頂、hair 髮色），c 膚色。spec 的欄位見 dangle.js 開頭
+export const DANGLES = {
+  // 象鼻：六節，先往前再垂下來、鼻尖往前捲，鼻尖一圈深一點的鼻孔。平常 15 秒左右自己甩一下或捲起來
+  elephant(o, c) {
+    const segs = [[0.05, 0.047, -1.0], [0.047, 0.043, 0.3], [0.043, 0.039, 0.3], [0.039, 0.035, 0.15], [0.035, 0.032, -0.4], [0.032, 0.03, -0.7]]
+      .map(([r0, r1, rx]) => ({ len: 0.042, r0, r1, rx, rz: 0, c }));
+    const tip = mix(c, '#3a2a2a', 0.35);
+    return [{ at: [0, 0.165, 0.2], segs, stiff: 110, hang: 0.55, sway: 0.2, every: 15, deco: (k, i, s) => i === segs.length - 1 && k.cyl(s.r1 * 0.75, s.r1 * 0.75, 0.006, tip, 0, -s.len - s.r1 * 0.75, 0, {}, 8) }];
+  },
+  // 雙馬尾：扁扁的一束，根部細、中段鼓，S 形往外再往下，尾巴分成兩小撮往兩邊岔開。戴有帽簷的帽子從帽簷底下垂出來；頭套、全罩頭盔收起來
+  animegirl(o) {
+    if (under(o, 'hood', 'knight')) return [];
+    const hair = o?.hair || '#d07ab0', hi = mix(hair, '#fff6f0', 0.28), brim = under(o, ...BRIM);
+    return [-1, 1].map((s) => ({
+      at: [s * 0.2, brim ? 0.21 : 0.28, brim ? -0.07 : -0.065],
+      segs: [[0.03, 0.05, 0.05, 0.95], [0.05, 0.05, 0.07, -0.4], [0.05, 0.042, 0.07, -0.3], [0.042, 0.028, 0.07, -0.2], [0.028, 0.02, 0.035, 0.2]]
+        .map(([r0, r1, len, rz], i) => ({ len, r0, r1, rx: 0.12, rz: s * rz, sz: 0.62, c: i ? hair : hi })),
+      stiff: 70, hang: 0.85, sway: 0.13, every: 0,
+      deco: (k, i, g) => i === 4 && [-1, 1].forEach((d) => {
+        const h = d * s > 0 ? 0.06 : 0.048, a = 0.32;
+        k.cone(0.015, h, g.c, d * (0.007 + Math.sin(a) * h / 2), -g.len - Math.cos(a) * h / 2 + 0.006, 0, { rx: Math.PI, rz: -d * a, sz: 0.62 });
+      }),
+    }));
   },
 };
