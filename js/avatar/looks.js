@@ -75,13 +75,20 @@ export const RACES = [
   { id: 'manatee', name: '海牛', head: 'manatee', own: true, ey: 0.26, ex: 0.1, md: 0.19, top: 0.42, hs: 1.15, skin: 5, hood: [0.21, 0.3], helmet: [0.21, 0.36, 0.03], body: { W: 1.2 }, home: 'jinghai' },
   // 2026-11-17 加的三族（heads.js 有自己的五官）。小象的鼻子、動漫女生的雙馬尾是會甩的一串（heads.js 的 DANGLES）。
   // crowd: false 先不讓路人抽：抽種族的亂數一動，每一區的路人全部換人
-  { id: 'marmot', name: '土撥鼠', head: 'marmot', own: true, ey: 0.25, ex: 0.1, md: 0.12, top: 0.36, hs: 1.02, skin: 16, hood: [0.21, 0.29], helmet: [0.2, 0.34, 0.03], knight: [0.21, 0.35, 0.04], body: { H: 0.95, W: 1.15 }, crowd: false },
+  { id: 'marmot', name: '土撥鼠', head: 'marmot', own: true, ey: 0.25, ex: 0.1, md: 0.12, top: 0.36, hs: 1.1, skin: 16, hood: [0.21, 0.29], helmet: [0.2, 0.34, 0.03], knight: [0.21, 0.35, 0.04], body: { H: 0.9, W: 1.32, leg: 0.7 }, crowd: false },
   { id: 'elephant', name: '小象', head: 'elephant', own: true, ey: 0.25, ex: 0.1, md: 0.1, top: 0.4, hs: 1.05, skin: 5, hood: [0.22, 0.29], helmet: false, knight: [0.23, 0.36, 0.06], body: { H: 0.97, W: 1.1 }, crowd: false },
   { id: 'animegirl', name: '動漫女生', head: 'animegirl', own: true, ey: 0.19, ex: 0.075, md: 0.1, fs: 0.9, top: 0.38, hs: 1, skin: 0, hood: [0.21, 0.27], helmet: [0.21, 0.32, 0.01], knight: [0.21, 0.34, 0.02], body: { H: 0.96, W: 0.86, hs: 0.98 }, crowd: false },
 ];
 // 路人、旅人、演唱會的人群抽種族用的：住在某一區的正經種族不在外面亂逛；crowd: false 的也不抽
 export const crowdRaces = () => RACES.filter((r) => !r.home && r.crowd !== false);
-const RACE_BY_ID = new Map(RACES.map((r) => [r.id, r]));
+// 只有 NPC 用的頭（主線的發膏）：不在 RACES 裡，所以鏡子選不到、路人不抽、不進存檔的編號表；
+// 看 look 帶 npc: 1 才收（sanitizeLook），照片、存檔碼讀回來的不會帶，玩家拿不到。tone 是自帶的膚色（頭、手一起），不用玩家色票
+export const NPC_RACES = [
+  { id: 'sealion', name: '海獅', head: 'sealion', own: true, ey: 0.25, ex: 0.088, top: 0.42, hs: 1.08, tone: '#6cbf3a', hood: false, helmet: false, body: { W: 2.1, H: 0.9, hs: 1.35, leg: 0.6 }, npc: true },
+  // 別人的發膏（陌生人畫面上的 2P 色）：同一顆頭，不自帶膚色，吃玩家色票（npc/fagao.js 的 plainLook 抽）
+  { id: 'sealion2', name: '海獅', head: 'sealion', own: true, ey: 0.25, ex: 0.088, top: 0.42, hs: 1.08, hood: false, helmet: false, body: { W: 2.1, H: 0.9, hs: 1.35, leg: 0.6 }, npc: true },
+];
+const RACE_BY_ID = new Map([...RACES, ...NPC_RACES].map((r) => [r.id, r]));
 export const raceOf = (L) => RACE_BY_ID.get(L.race) || RACES[0];
 
 // 選項：[代號, 名字]。第一個是預設
@@ -329,7 +336,8 @@ function fromClothes(L, clothes, robe, scarf) {
 export function sanitizeLook(o) {
   const src = o && typeof o === 'object' ? o : {};
   const L = presetLook(0);
-  if (RACE_BY_ID.has(src.race)) L.race = src.race;
+  if (RACE_BY_ID.has(src.race) && (!RACE_BY_ID.get(src.race).npc || src.npc === 1)) L.race = src.race;
+  if (src.npc === 1) L.npc = 1;
   for (const k in OPTIONS) if (OPTIONS[k].some(([id]) => id === src[k])) L[k] = src[k];
   for (const k in COUNTS) if (Number.isInteger(src[k]) && src[k] >= 0 && src[k] < COUNTS[k]) L[k] = src[k];
   for (const [k] of SLIDERS) if (Number.isInteger(src[k]) && src[k] >= 0 && src[k] <= SLIDER_MAX) L[k] = src[k];

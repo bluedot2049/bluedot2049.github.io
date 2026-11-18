@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>發膏 模型預覽</title>
+  <style>
+    :root { --ink: #1c130d; --paper: #f5e9d4; --gold: #e8b86a; --line: rgba(232, 184, 106, .4); }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: var(--ink); color: var(--paper); font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif; user-select: none; }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    .note { position: fixed; top: 14px; left: 16px; right: 16px; max-width: 560px; padding: 11px 15px; background: rgba(28, 19, 13, .88); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; line-height: 1.6; pointer-events: none; }
+    .note strong { color: var(--gold); font-weight: 600; }
+    .note .meta { color: #b9a98f; font-size: 12px; margin-top: 4px; }
+    .bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px 14px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; background: linear-gradient(transparent, rgba(16, 11, 8, .94)); }
+    .bar button { padding: 6px 13px; border: 1px solid #5a4632; border-radius: 999px; background: #241a12; color: #e6d8c0; font: inherit; font-size: 12.5px; cursor: pointer; }
+    .bar button:hover { border-color: var(--gold); }
+    .bar button.on { border-color: var(--gold); color: #fbe9c4; background: #3a2a1b; }
+    .bar .sep { width: 1px; background: #5a4632; margin: 0 4px; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "../vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+  <div class="note" id="info"></div>
+  <div class="bar">
+    <button data-v="all" class="on">跟玩家比</button>
+    <button data-v="0">正面</button>
+    <button data-v="1">背面</button>
+    <button data-v="2">別人的發膏</button>
+    <span class="sep"></span>
+    <button id="spin">轉台</button>
+    <button id="form">灰泥</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { Character } from '../js/avatar/character.js';
+    import { sanitizeLook } from '../js/avatar/looks.js';
+    import { makeFagao, MATS } from '../js/npc/fagao.js';
+
+    // 被神明除名的第零號煉成師　發膏：正式模型在 js/npc/fagao.js（胖海獅、大衣小高帽、護目鏡、金手臂、鰭、蒸氣背包）。
+    // 定案：垂臉三層下巴＋舌頭（makeFagao 的預設 face）
+    const INFO = {
+      all: ['定案', '誇張卡通的胖海獅：垂臉三層下巴加吐舌頭、大圓鼻頭、嫩綠、大衣、歪戴高帽、護目鏡、黃銅金手臂、鰭、蒸氣背包。左邊那位是一般玩家。'],
+      0: ['正面', '垂臉、三層下巴、舌頭掛在嘴角、水汪汪的大眼，鼻頭是整張臉最大的東西。'],
+      1: ['背面', '蒸氣鍋爐背包：壓力錶、兩根冒白汽的煙囪、四瓶光、閥輪，銅管接到金手臂的肩膀。'],
+      2: ['別人的發膏', '陌生人畫面上看到的：2P 色（膚色、衣服照那個人的編號抽），沒有高帽、護目鏡、金手臂、背包、燒瓶，兩隻都是鰭。身形和臉照舊，一看就知道是別人的發膏。'],
+    };
+
+    const shadowTex = (() => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+      r.addColorStop(0, 'rgba(0,0,0,0.45)');
+      r.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = r;
+      g.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c);
+    })();
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.prepend(renderer.domElement);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1c130d);
+    scene.fog = new THREE.Fog(0x1c130d, 9, 20);
+    scene.add(new THREE.HemisphereLight(0xd9c2ff, 0x3a2418, 1.05));
+    const key = new THREE.DirectionalLight(0xffd9a8, 1.35);
+    key.position.set(3, 6, 5);
+    scene.add(key);
+    const rim = new THREE.DirectionalLight(0x8c7ad8, 0.55);
+    rim.position.set(-4, 3, -5);
+    scene.add(rim);
+
+    const XS = [0];
+    const figs = [makeFagao(shadowTex)];
+    scene.add(figs[0].group);
+    // 別人的發膏：右邊排三隻，三個不同的人
+    const OTHERS = [11, 27, 53];
+    OTHERS.forEach((seed, i) => {
+      const f = makeFagao(shadowTex, { seed, plain: true });
+      f.group.position.set(1.2 + i * 0.95, 0, -0.3 - (i % 2) * 0.25);
+      f.group.rotation.y = -0.35;
+      scene.add(f.group);
+      figs.push(f);
+    });
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.54, 0.04, 24), new THREE.MeshLambertMaterial({ color: 0x2c2018 }));
+    disc.position.set(0, -0.02, 0);
+    scene.add(disc);
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(12, 40), new THREE.MeshLambertMaterial({ color: 0x241811 }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.041;
+    scene.add(floor);
+    const player = new Character(shadowTex, sanitizeLook({}));
+    player.group.position.set(-1.1, 0, 0.2);
+    player.group.rotation.y = 0.4;
+    scene.add(player.group);
+
+    // 鏡頭：拖曳轉、滾輪拉近；選一個時對準那一個
+    const camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, 0.05, 40);
+    const tall = () => innerWidth < innerHeight;
+    const view = { yaw: 0.1, pitch: 0.14, dist: 4.2, at: new THREE.Vector3(-0.55, 0.7, 0), want: null };
+    function frame(v) {
+      view.want = v === 'all' ? { at: new THREE.Vector3(0.9, 0.7, -0.2), dist: tall() ? 9 : 6.5 } : { at: new THREE.Vector3(0, 0.75, 0), dist: tall() ? 4.2 : 3 };
+      if (v === 0) view.yaw = 0.15;
+      if (v === 1) view.yaw = Math.PI + 0.3;
+      if (v === 2) { view.yaw = 0.15; view.want = { at: new THREE.Vector3(2.15, 0.7, -0.4), dist: tall() ? 6 : 4.2 }; }
+    }
+    let drag = null;
+    renderer.domElement.addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; renderer.domElement.setPointerCapture(e.pointerId); });
+    renderer.domElement.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      view.yaw -= (e.clientX - drag[0]) * 0.006;
+      view.pitch = THREE.MathUtils.clamp(view.pitch + (e.clientY - drag[1]) * 0.004, -0.2, 0.9);
+      drag = [e.clientX, e.clientY];
+    });
+    renderer.domElement.addEventListener('pointerup', () => { drag = null; });
+    addEventListener('wheel', (e) => {
+      const d = THREE.MathUtils.clamp((view.want?.dist ?? view.dist) * (1 + Math.sign(e.deltaY) * 0.1), 1.2, 14);
+      view.want = { at: (view.want?.at ?? view.at).clone(), dist: d };
+    }, { passive: true });
+
+    const info = document.getElementById('info');
+    function show(v) {
+      const [t, d] = INFO[v];
+      info.innerHTML = `<strong>被神明除名的第零號煉成師　發膏</strong>　${t}<div class="meta">${d}</div>`;
+      document.querySelectorAll('[data-v]').forEach((b) => b.classList.toggle('on', b.dataset.v === String(v)));
+      frame(v);
+    }
+    document.querySelectorAll('[data-v]').forEach((b) => b.addEventListener('click', () => show(b.dataset.v === 'all' ? 'all' : +b.dataset.v)));
+    let spin = false, form = false;
+    document.getElementById('spin').addEventListener('click', (e) => { spin = !spin; e.currentTarget.classList.toggle('on', spin); });
+    const matForm = new THREE.MeshLambertMaterial({ color: 0xcfc6b8, flatShading: true });
+    const saved = new Map();
+    document.getElementById('form').addEventListener('click', (e) => {
+      form = !form;
+      e.currentTarget.classList.toggle('on', form);
+      for (const f of figs) f.group.traverse((o) => {
+        if (!o.isMesh || o.material === MATS.glass || o.material === MATS.steam || o.material === MATS.glow) return;
+        if (form) { saved.set(o, o.material); o.material = matForm; }
+        else if (saved.has(o)) o.material = saved.get(o);
+      });
+    });
+    show('all');
+
+    addEventListener('resize', () => {
+      renderer.setSize(innerWidth, innerHeight);
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+    });
+
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      const dt = Math.min(0.05, clock.getDelta());
+      if (view.want) {
+        view.at.lerp(view.want.at, Math.min(1, dt * 5));
+        view.dist += (view.want.dist - view.dist) * Math.min(1, dt * 5);
+      }
+      if (spin) for (const f of figs) f.group.rotation.y += dt * 0.5;
+      for (const f of figs) f.update(dt);
+      player.update(dt, 0);
+      camera.position.set(
+        view.at.x + Math.sin(view.yaw) * Math.cos(view.pitch) * view.dist,
+        view.at.y + Math.sin(view.pitch) * view.dist,
+        view.at.z + Math.cos(view.yaw) * Math.cos(view.pitch) * view.dist,
+      );
+      camera.lookAt(view.at);
+      renderer.render(scene, camera);
+    });
+    window.__fig = { figs, show };
+  </script>
+</body>
+</html>

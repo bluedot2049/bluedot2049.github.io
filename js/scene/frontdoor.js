@@ -144,14 +144,21 @@ export function buildFrontDoor() {
       if (now) { t0 = -1; to = AJAR; set(AJAR); return; }
       from = open; to = AJAR; wait = delay; t0 = 0;
     },
+    // 有人從外面推開（主線序章的發膏，zones/gallery/prologue.js）：很快推到全開，停 hold 秒，再照原本的樣子慢慢闔回一條縫
+    swing(hold = 2.5) {
+      from = open; to = OPEN; wait = 0; t0 = 0; this.reshut = hold;
+    },
     update(dt) {
-      if (t0 < 0) return;
+      if (t0 < 0) {
+        if (this.reshut > 0 && (this.reshut -= dt) <= 0) this.shut(0);
+        return;
+      }
       if (wait > 0) { wait -= dt; return; }
-      t0 = Math.min(1, t0 + dt / SHUT_T);
+      t0 = Math.min(1, t0 + dt / (to === OPEN ? 0.35 : SHUT_T));
       // 先推一把，後面越來越慢，最後輕輕靠上
       const e = 1 - (1 - t0) ** 3;
       set(from + (to - from) * e);
-      if (t0 >= 1) { t0 = -1; this.onClose?.(); }
+      if (t0 >= 1) { t0 = -1; if (to !== OPEN) this.onClose?.(); }
     },
   };
 }

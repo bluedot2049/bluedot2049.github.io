@@ -283,7 +283,7 @@ export class Character {
     if (key === this.key) return;
     this.key = key;
     this.look = L;
-    const race = raceOf(L), S = sizes(L), skin = hex(SKINS[L.skin]), W = S.W;
+    const race = raceOf(L), S = sizes(L), skin = race.tone || hex(SKINS[L.skin]), W = S.W;   // tone：NPC 專用的頭自帶膚色（looks.js 的 NPC_RACES），不進玩家的色票
     this.S = S;
     this.drop = HIP * (1 - S.leg);   // 腿短了多少（身體座標），整個身體往下移這麼多
     const hg = headGeo(L, race, S, skin, this.splitMouth), eyeY = hg.eyeY;

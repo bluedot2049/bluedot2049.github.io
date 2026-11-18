@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>樹下花園</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; height: 100%; overflow: hidden;
+      background: #d9a07c; color: #f5e9d4;
+      font-family: "Noto Serif TC", "Microsoft JhengHei", sans-serif; user-select: none;
+    }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    .card {
+      background: rgba(28, 19, 13, 0.86); border: 1px solid rgba(232, 184, 106, 0.32);
+      border-radius: 12px; padding: 9px 11px; font-size: 13px; line-height: 1.5;
+    }
+    #info { position: fixed; top: 12px; left: 12px; max-width: 400px; }
+    #info b { color: #f6dba6; font-weight: 600; }
+    .meta { color: #b5a084; font-size: 12px; }
+    #msg { color: #f0a080; min-height: 1.4em; font-size: 12px; }
+    #side { position: fixed; top: 12px; right: 12px; width: 230px; display: grid; gap: 7px; }
+    #more { display: none; position: fixed; top: 12px; right: 12px; z-index: 3; background: rgba(28, 19, 13, 0.86); }
+    #dock { position: fixed; left: 12px; right: 12px; bottom: 12px; display: grid; gap: 7px; }
+    .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .scroll { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
+    .grp { display: flex; gap: 5px; align-items: center; flex: none; }
+    button {
+      font: inherit; font-size: 13px; color: #f5e9d4; background: transparent;
+      border: 1px solid rgba(232, 184, 106, 0.4); border-radius: 999px; padding: 5px 12px; cursor: pointer; white-space: nowrap; flex: none;
+    }
+    button:hover { border-color: #e8b86a; }
+    button.on { background: #e8b86a; color: #1c130d; border-color: #e8b86a; }
+    button:disabled { opacity: 0.35; cursor: default; }
+    button.go { border-color: #e8b86a; color: #f6dba6; font-weight: 600; }
+    button.big { padding: 7px 18px; font-size: 14px; }
+    button.ico { padding: 3px 6px; display: inline-flex; flex-direction: column; align-items: center; font-size: 11px; line-height: 1.1; border-radius: 10px; min-width: 42px; }
+    button.ico svg { width: 26px; height: 26px; }
+    button.preset { color: #1c130d; font-weight: 600; text-shadow: 0 0 3px rgba(255, 250, 240, 0.9); border-color: rgba(0, 0, 0, 0.25); }
+    .sw { width: 22px; height: 22px; border-radius: 50%; padding: 0; border: 2px solid transparent; }
+    .sw.on { border-color: #f5e9d4; box-shadow: 0 0 0 1px #1c130d inset; }
+    .slot { display: inline-flex; gap: 6px; align-items: center; padding: 3px 10px 3px 4px; }
+    .slot i { width: 18px; height: 18px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0, 0, 0, 0.3); }
+    .lab { color: #b5a084; font-size: 12px; flex: none; }
+    .num { min-width: 3.2em; text-align: center; flex: none; }
+    .sep { width: 1px; align-self: stretch; background: rgba(232, 184, 106, 0.25); margin: 0 3px; flex: none; }
+    #tab { display: grid; gap: 6px; margin-top: 7px; }
+    input[type=range] { width: 100%; accent-color: #e8b86a; }
+    select, input[type=text] {
+      font: inherit; font-size: 12px; color: #f5e9d4; background: #1c130d;
+      border: 1px solid rgba(232, 184, 106, 0.4); border-radius: 8px; padding: 3px 6px;
+    }
+    #code { width: 100%; font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+    @media (max-width: 720px) {
+      #info { max-width: calc(100% - 90px); font-size: 12px; padding: 8px 10px; }
+      #info .help { display: none; }
+      #side { display: none; top: 56px; width: 220px; font-size: 12px; z-index: 2; }
+      body.side #side { display: grid; }
+      #more { display: block; }
+      button { padding: 5px 10px; font-size: 12px; }
+    }
+  </style>
+  <script type="importmap">{ "imports": { "three": "../vendor/three.module.min.js" } }</script>
+</head>
+<body>
+  <div class="card" id="info">
+    <b>樹下花園 · 一人一朵</b>
+    <div class="meta" id="stat"></div>
+    <div class="help meta">拖曳轉、滾輪或兩指縮放。花會開一週，回來照顧就再開一週；想改隨時改。</div>
+    <div id="msg"></div>
+  </div>
+
+  <button id="more">天數</button>
+  <div class="card" id="side">
+    <div class="row"><button id="v-mine" class="on">我的花</button><button id="v-wall">萬花筒牆</button></div>
+    <div class="row"><span id="dayline"></span></div>
+    <div class="row"><button id="nextday">下一天</button></div>
+    <div><span class="lab">幾天沒照顧：<span id="idlev">0</span></span><input type="range" id="idle" min="0" max="7" step="1" value="0"></div>
+    <div>
+      <input type="text" id="code" spellcheck="false">
+      <div class="row" style="margin-top:5px"><button id="copy">複製</button><button id="load">讀這串</button><button id="reseed">拔掉</button></div>
+    </div>
+  </div>
+
+  <div id="dock">
+    <div class="card row scroll" id="actions"></div>
+    <div class="card" id="editor">
+      <div class="row scroll" id="tabs"></div>
+      <div id="tab"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { PALETTE, SHAPES, OPEN_NAMES, PATTERNS, CENTERS, LAYER_MODES, STEMS, LEAVES, FORMS, FX, MOTIONS, SIZES, FINISHES, THEMES, PRESETS,
+      petalOutline, encodePlot, decodePlot, randomFlower, seeded, ORNAMENTS, buildOrnament } from './garden_kit.js';
+    import { FlowerView, scaleOf } from './garden_view.js';
+
+    const $ = (s) => document.querySelector(s);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    document.body.prepend(renderer.domElement);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#d9a07c');
+    scene.fog = new THREE.Fog('#d9a07c', 8, 28);
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.02, 80);
+    scene.add(new THREE.HemisphereLight('#ffe8d0', '#5a6438', 1.6));
+    const sun = new THREE.DirectionalLight('#ffd2a0', 2.0);
+    sun.position.set(-3, 4, 2.5);
+    scene.add(sun);
+    scene.add(new THREE.Mesh(new THREE.CircleGeometry(40, 32).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#5a7232' })));
+
+    // 花的材質、眼睛、萌臉、每幀的動作都在 garden_view.js
+    const fv = new FlowerView(), { solid, glowMat } = fv;
+    const SOIL = new THREE.CylinderGeometry(0.34, 0.38, 0.04, 16).translate(0, -0.018, 0);
+    const soilMat = new THREE.MeshLambertMaterial({ color: '#56502c', flatShading: true });
+    const dotMat = new THREE.MeshBasicMaterial({ color: '#f6dba6' });
+    // 飾品放在花旁邊一圈八個點上
+    const ORING = Array.from({ length: 8 }, (_, k) => [Math.cos(k * Math.PI / 4 + 0.4) * 0.22, Math.sin(k * Math.PI / 4 + 0.4) * 0.22]);
+
+    // ── 狀態 ──
+    // 調花的四頁（改到哪頁，那頁標籤多一個點）
+    const GROUPS = { 花瓣: ['shape', 'n', 'open', 'layers', 'twist', 'soft'], 花型: ['form', 'center', 'size', 'scale', 'motion'], 顏色: ['c1', 'c2', 'c3', 'mode', 'pattern', 'fx', 'finish'], 莖葉: ['height', 'stem', 'leaves', 'leaf'] };
+    const WEEK = 7;
+    const q = new URLSearchParams(location.search);
+    let day = 10, idle = 0, caredToday = false;
+    let flower = null, orns = [];
+    const loaded = decodePlot(q.get('g'));
+    if (loaded) { flower = { ...loaded.flowers[0], pos: 0 }; orns = loaded.orns.filter((o) => o.pos < 8); }
+    let mode = 'view', view = 'mine', tab = '花瓣', slot = 'c1', theme = THEMES.includes(q.get('theme')) ? q.get('theme') : '全部';
+    let pick = null, pickOrn = { kind: 1, c: 51 }, ornAt = -1;
+    let anim = null, wall = [];
+
+    const wiltOf = () => (idle <= 4 ? 0 : idle === 5 ? 0.35 : idle === 6 ? 0.7 : 1);
+    const changedGroups = () => (flower && pick ? Object.entries(GROUPS).filter(([, ks]) => ks.some((k) => (flower[k] | 0) !== (pick[k] | 0))).map(([g]) => g) : []);
+
+
+    let world = new THREE.Group(), headAt = new THREE.Vector3(0, 0.3, 0);
+    scene.add(world);
+    function redraw() {
+      scene.remove(world);
+      world = new THREE.Group();
+      scene.add(world);
+      fv.reset();
+      if (view === 'wall') {
+        fv.uWilt.value = 0;
+        wall.forEach((f, k) => {
+          const g = new THREE.Group();
+          const soil = new THREE.Mesh(SOIL, soilMat);
+          soil.scale.set(0.5, 1, 0.5);
+          g.add(soil, fv.node(f, { fi: k }));
+          g.position.set((k % 8 - 3.5) * 0.66, 0, (Math.floor(k / 8) - 2) * 0.66);
+          g.traverse((o) => (o.userData.wall = k));
+          world.add(g);
+        });
+        status();
+        return;
+      }
+      const soil = new THREE.Mesh(SOIL, soilMat);
+      soil.userData.soil = true;
+      world.add(soil);
+      const shown = mode === 'plant' || mode === 'edit' ? pick : flower;
+      const wilt = mode === 'view' || mode === 'orn' ? wiltOf() : 0;
+      fv.uWilt.value = wilt;
+      if (shown && wilt >= 1) {
+        const seed = new THREE.Mesh(new THREE.IcosahedronGeometry(0.035, 0), new THREE.MeshBasicMaterial({ color: '#f4b870' }));
+        seed.position.y = 0.03;
+        world.add(seed);
+      } else if (shown) {
+        const node = fv.node(shown, { age: 1, wilt, grow: scaleOf(shown) });
+        world.add(node);
+        headAt.copy(node.userData.head ?? new THREE.Vector3(0, 0.3, 0));
+      } else headAt.set(0, 0.15, 0);
+      const os = mode === 'orn' && ornAt >= 0 ? [...orns, { ...pickOrn, pos: ornAt }] : orns;
+      for (const o of os) {
+        const b = buildOrnament(o), node = new THREE.Group();
+        node.position.set(ORING[o.pos][0], 0, ORING[o.pos][1]);
+        node.rotation.y = o.pos * 1.7;
+        if (b.geo) node.add(new THREE.Mesh(b.geo, solid));
+        if (b.glow) node.add(new THREE.Mesh(b.glow, glowMat));
+        world.add(node);
+      }
+      // 放飾品的時候，空的點亮一顆小金點
+      if (mode === 'orn') {
+        const taken = new Set(orns.map((o) => o.pos));
+        ORING.forEach(([x, z], k) => {
+          if (taken.has(k) || k === ornAt) return;
+          const d = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), dotMat);
+          d.position.set(x, 0.02, z);
+          d.userData.ring = k;
+          world.add(d);
+        });
+      }
+      status();
+    }
+
+    // ── 按鈕和文字 ──
+    function actionsUI() {
+      const S = '<span class="sep"></span>';
+      const themes = `<span class="grp">${THEMES.map((t) => `<button data-theme="${t}" class="${t === theme ? 'on' : ''}">${t}</button>`).join('')}</span>`;
+      let h = '';
+      if (view === 'wall') h = `<button id="dice" class="big">換一面</button>${themes}`;
+      else if (mode === 'view' && !flower) h = `<button id="plantNew" class="big go">種一朵</button>`;
+      else if (mode === 'view') h = `<button id="careBtn" class="big go" ${caredToday || wiltOf() >= 1 ? 'disabled' : ''}>照顧</button><button id="editBtn" class="big">改</button><button id="ornBtn" class="big" ${orns.length >= 2 ? 'disabled' : ''}>飾品</button>`;
+      else if (mode === 'orn') h = `<button id="cancel">取消</button><button id="ok" class="go">放下</button>`;
+      else h = `<button id="dice">骰子</button>${themes}${S}<button id="cancel">取消</button><button id="ok" class="go">${mode === 'plant' ? '種下' : '改好了'}</button>`;
+      $('#actions').innerHTML = h;
+      const ok = $('#ok');
+      if (ok) ok.disabled = (mode === 'orn' && ornAt < 0) || (mode === 'edit' && changedGroups().length === 0);
+    }
+    function status() {
+      const s = $('#stat');
+      if (view === 'wall') s.textContent = '點一朵拿來用';
+      else if (!flower) s.textContent = '還沒種花';
+      else s.textContent = wiltOf() >= 1 ? '縮回種子了' : `還會開 ${WEEK - idle} 天 · ${caredToday ? '今天照顧過了' : '今天還沒照顧'} · 10 bytes`;
+      $('#dayline').textContent = `第 ${day} 天`;
+      $('#code').value = flower ? encodePlot([flower], orns) : '';
+      $('#idlev').textContent = idle; $('#idle').value = idle;
+      let m = '';
+      if (view === 'mine') {
+        if (mode === 'edit') m = '想改哪裡都可以';
+        else if (mode === 'plant') m = '種下去會開一週，回來照顧就再開一週';
+        else if (mode === 'orn') m = ornAt < 0 ? '點花旁邊的小金點' : '';
+        else if (flower && wiltOf() >= 1) m = '七天沒照顧，縮回種子了。按「下一天」它就回樹洞';
+        else if (flower && idle >= 5) m = `${idle} 天沒照顧，開始凋了，還會開 ${WEEK - idle} 天`;
+      }
+      if (m || !$('#msg').dataset.keep) $('#msg').textContent = m;
+      delete $('#msg').dataset.keep;
+      $('#editor').style.display = mode === 'plant' || mode === 'edit' || mode === 'orn' ? '' : 'none';
+      actionsUI();
+      resize();
+    }
+    const say = (t) => { $('#msg').textContent = t; $('#msg').dataset.keep = 1; };
+
+    // ── 調花的卡片 ──
+    const svgPetal = (si) => {
+      const pts = petalOutline(si);
+      const xs = pts.map((p) => p[0]), w = Math.max(0.5, Math.max(...xs) - Math.min(...xs)), s = Math.min(22, 22 / w), cx = (Math.max(...xs) + Math.min(...xs)) / 2;
+      return `<svg viewBox="0 0 26 26"><path fill="currentColor" d="M${pts.map(([x, y]) => `${(13 + (x - cx) * s).toFixed(1)},${(24 - y * 22).toFixed(1)}`).join('L')}Z"/></svg>`;
+    };
+    const chips = (key, names, cur) => names.map((n, i) => `<button data-k="${key}" data-v="${i}" class="${i === cur ? 'on' : ''}">${n}</button>`).join('');
+    const stepper = (key, label, text) => `<span class="grp"><span class="lab">${label}</span><button data-step="${key}" data-d="-1">−</button><span class="num">${text}</span><button data-step="${key}" data-d="1">＋</button></span>`;
+    const swatches = (cur, attr, from, to) => PALETTE.slice(from, to).map((h, k) => `<button class="sw ${k + from === cur ? 'on' : ''}" data-${attr}="${k + from}" style="background:${h}"></button>`).join('');
+    const palette = (cur, attr) => `<div class="row scroll"><span class="lab">柔</span>${swatches(cur, attr, 0, 32)}</div><div class="row scroll"><span class="lab">幻</span>${swatches(cur, attr, 32, 64)}</div>`;
+    const grp = (label, inner) => `<span class="grp"><span class="lab">${label}</span>${inner}</span>`;
+    function editorUI() {
+      if (mode === 'orn') {
+        $('#tabs').innerHTML = '';
+        $('#tab').innerHTML = `<div class="row scroll">${ORNAMENTS.map((o, i) => `<button data-orn="${i}" class="${i === pickOrn.kind ? 'on' : ''}">${o.name}</button>`).join('')}</div>${palette(pickOrn.c, 'oc')}`;
+        return;
+      }
+      if (!pick) return;
+      const tabs = Object.keys(GROUPS), ch = mode === 'edit' ? changedGroups() : [];
+      $('#tabs').innerHTML = tabs.map((t) => `<button data-tab="${t}" class="${t === tab ? 'on' : ''}">${t}${ch.includes(t) ? ' •' : ''}</button>`).join('');
+      const p = pick, S = '<span class="sep"></span>';
+      let h = '';
+      if (tab === '花瓣') h = `
+        <div class="row scroll">${SHAPES.map((s, i) => `<button class="ico ${i === p.shape ? 'on' : ''}" data-k="shape" data-v="${i}">${svgPetal(i)}${s.name}</button>`).join('')}</div>
+        <div class="row scroll">${stepper('n', '瓣數', p.n + 3)}${S}${stepper('open', '開合', OPEN_NAMES[p.open])}${S}${grp('層', chips('layers', ['1', '2', '3'], p.layers))}${S}${grp('扭', chips('twist', ['無', '輕', '強'], p.twist))}${S}${grp('風格', chips('soft', ['幾何', '柔'], p.soft))}</div>`;
+      if (tab === '花型') h = `
+        <div class="row scroll">${grp('花型', chips('form', FORMS, p.form))}</div>
+        <div class="row scroll">${grp('花心', chips('center', CENTERS, p.center))}</div>
+        <div class="row scroll">${grp('整朵', chips('scale', SIZES, p.scale ?? 1))}${S}${grp('花頭', chips('size', SIZES, p.size))}${S}${grp('動', chips('motion', MOTIONS, p.motion))}</div>`;
+      if (tab === '顏色') h = `
+        <div class="row scroll"><span class="lab">配色</span>${PRESETS.map((s, i) => `<button class="preset" data-preset="${i}" style="background:linear-gradient(90deg, ${PALETTE[s.c1]}, ${PALETTE[s.c3]}, ${PALETTE[s.c2]})">${s.name}</button>`).join('')}</div>
+        <div class="row scroll">${grp('質感', chips('finish', FINISHES, p.finish))}${S}${grp('幻彩', chips('fx', FX, p.fx))}</div>
+        <div class="row scroll">${[['c1', '瓣根'], ['c2', '瓣尖'], ['c3', '花紋花心']].map(([k, n]) => `<button class="slot ${slot === k ? 'on' : ''}" data-slot="${k}"><i style="background:${PALETTE[p[k]]}"></i>${n}</button>`).join('')}${S}${grp('層次', chips('mode', LAYER_MODES, p.mode))}</div>
+        ${palette(p[slot], 'col')}
+        <div class="row scroll">${grp('花紋', chips('pattern', PATTERNS, p.pattern))}</div>`;
+      if (tab === '莖葉') h = `
+        <div class="row scroll">${stepper('height', '高', ['矮', '低', '中', '高', '最高'][p.height])}${S}${grp('莖', chips('stem', STEMS, p.stem))}</div>
+        <div class="row scroll">${grp('葉', chips('leaves', ['0', '1', '2', '3'], p.leaves))}${S}${grp('葉形', chips('leaf', LEAVES, p.leaf))}</div>`;
+      $('#tab').innerHTML = h;
+    }
+    const LIMIT = { n: 11, open: 7, height: 4 };
+    function changed() { editorUI(); redraw(); }
+    $('#editor').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const d = b.dataset;
+      if (d.tab) { tab = d.tab; editorUI(); return; }
+      if (d.slot) { slot = d.slot; editorUI(); return; }
+      if (d.orn != null) { pickOrn.kind = +d.orn; pickOrn.c = ORNAMENTS[+d.orn].c; changed(); return; }
+      if (d.oc != null) { pickOrn.c = +d.oc; changed(); return; }
+      if (!pick) return;
+      if (d.k) pick[d.k] = +d.v;
+      else if (d.step) pick[d.step] = Math.max(0, Math.min(LIMIT[d.step], pick[d.step] + +d.d));
+      else if (d.col != null) pick[slot] = +d.col;
+      else if (d.preset != null) { const s = PRESETS[+d.preset]; Object.assign(pick, { c1: s.c1, c2: s.c2, c3: s.c3, fx: s.fx, finish: s.finish }); }
+      else return;
+      changed();
+    });
+
+    // ── 動作 ──
+    const roll = () => ({ ...randomFlower(Math.random, 0, theme), pos: 0 });
+    function setMode(m) { mode = m; ornAt = -1; changed(); }
+    $('#actions').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b || b.disabled) return;
+      if (b.dataset.theme) {
+        theme = b.dataset.theme;
+        if (view === 'wall') showWall();
+        else { pick = roll(); changed(); }
+        return;
+      }
+      switch (b.id) {
+        case 'plantNew': pick = roll(); tab = '花瓣'; setMode('plant'); break;
+        case 'careBtn':
+          caredToday = true; idle = 0;
+          anim = { t0: performance.now(), from: 0.9 };
+          say('澆了水，又會開一週');
+          redraw();
+          break;
+        case 'editBtn': pick = { ...flower }; tab = '花瓣'; setMode('edit'); break;
+        case 'ornBtn': setMode('orn'); break;
+        case 'dice':
+          if (view === 'wall') showWall();
+          else { pick = roll(); changed(); }
+          break;
+        case 'cancel': pick = null; setMode('view'); break;
+        case 'ok':
+          if (mode === 'plant') { flower = { ...pick }; caredToday = true; idle = 0; say('種下了。會開一週，回來照顧就再開一週'); anim = { t0: performance.now(), from: 0 }; }
+          else if (mode === 'edit') { flower = { ...pick }; anim = { t0: performance.now(), from: 0.85 }; say('改好了'); }
+          else if (mode === 'orn') orns.push({ ...pickOrn, pos: ornAt });
+          pick = null;
+          setMode('view');
+          break;
+      }
+    });
+
+    // ── 天數 ──
+    $('#nextday').onclick = () => {
+      if (flower && wiltOf() >= 1) { flower = null; orns = []; idle = 0; say('種子滾回樹洞了'); }
+      else if (flower) idle = caredToday ? 1 : Math.min(WEEK, idle + 1);
+      caredToday = false;
+      day++;
+      pick = null;
+      setMode('view');
+    };
+    $('#idle').oninput = (e) => { idle = +e.target.value; redraw(); };
+    $('#reseed').onclick = () => { flower = null; orns = []; idle = 0; pick = null; setMode('view'); };
+    $('#copy').onclick = () => { navigator.clipboard?.writeText($('#code').value); say('複製好了'); status(); };
+    $('#load').onclick = () => {
+      const d = decodePlot($('#code').value);
+      if (!d) { say('讀不出來'); status(); return; }
+      flower = { ...d.flowers[0], pos: 0 }; orns = d.orns.filter((o) => o.pos < 8);
+      showMine();
+    };
+    $('#more').onclick = () => document.body.classList.toggle('side');
+
+    // ── 萬花筒牆：照主題隨機 40 朵 ──
+    function showWall() {
+      view = 'wall';
+      $('#v-wall').classList.add('on'); $('#v-mine').classList.remove('on');
+      const R = seeded((Math.random() * 1e9) | 0);
+      wall = Array.from({ length: 40 }, () => randomFlower(R, 0, theme));
+      goal.target.set(0, 0.18, 0); goal.dist = 4.6; orbit.phi = 1.0;
+      redraw();
+    }
+    function showMine() {
+      view = 'mine';
+      $('#v-mine').classList.add('on'); $('#v-wall').classList.remove('on');
+      changed();
+    }
+    $('#v-wall').onclick = () => { pick = null; mode = 'view'; showWall(); };
+    $('#v-mine').onclick = showMine;
+
+    // ── 鏡頭：繞著花轉，調的時候湊近花頭 ──
+    const orbit = { target: new THREE.Vector3(0, 0.3, 0), dist: 1.5, theta: 0.5, phi: 1.1 };
+    const goal = { target: new THREE.Vector3(0, 0.3, 0), dist: 1.5 };
+    function placeCam(dt) {
+      if (view === 'mine') {
+        goal.target.copy(headAt).multiplyScalar(mode === 'view' ? 0.8 : 1);
+        const shownF = mode === 'plant' || mode === 'edit' ? pick : flower;
+        const want = (mode === 'plant' || mode === 'edit' ? 0.95 : 1.45) * (shownF ? scaleOf(shownF) : 1);
+        if (Math.abs(goal.dist - want) > 0.01 && !userZoomed) goal.dist = want;
+      }
+      const k = 1 - Math.exp(-dt * 5);
+      orbit.target.lerp(goal.target, k);
+      orbit.dist += (goal.dist - orbit.dist) * k;
+      const { target: t, dist: d, theta, phi } = orbit;
+      camera.position.set(t.x + d * Math.sin(phi) * Math.sin(theta), t.y + d * Math.cos(phi), t.z + d * Math.sin(phi) * Math.cos(theta));
+      camera.lookAt(t);
+    }
+    let userZoomed = false;
+    const ptr = new Map();
+    let downAt = null, pinch = 0;
+    const cv = renderer.domElement;
+    const zoom = (f) => { userZoomed = true; goal.dist = orbit.dist = Math.min(14, Math.max(0.3, orbit.dist * f)); };
+    cv.addEventListener('pointerdown', (e) => {
+      cv.setPointerCapture(e.pointerId);
+      ptr.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      downAt = ptr.size === 1 ? { moved: 0 } : null;
+      if (ptr.size === 2) { const [a, b] = [...ptr.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
+    });
+    cv.addEventListener('pointermove', (e) => {
+      const p = ptr.get(e.pointerId);
+      if (!p) return;
+      const dx = e.clientX - p.x, dy = e.clientY - p.y;
+      p.x = e.clientX; p.y = e.clientY;
+      if (ptr.size === 1) {
+        orbit.theta -= dx * 0.008;
+        orbit.phi = Math.min(1.5, Math.max(0.2, orbit.phi - dy * 0.006));
+        if (downAt) downAt.moved += Math.abs(dx) + Math.abs(dy);
+      } else if (ptr.size === 2) {
+        const [a, b] = [...ptr.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (pinch) zoom(pinch / d);
+        pinch = d;
+      }
+    });
+    const up = (e) => {
+      if (!ptr.has(e.pointerId)) return;
+      ptr.delete(e.pointerId);
+      if (downAt && downAt.moved < 6 && ptr.size === 0) click(e);
+      downAt = null;
+      if (ptr.size < 2) pinch = 0;
+    };
+    cv.addEventListener('pointerup', up);
+    cv.addEventListener('pointercancel', up);
+    cv.addEventListener('wheel', (e) => { e.preventDefault(); zoom(Math.exp(e.deltaY * 0.001)); }, { passive: false });
+
+    const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+    function click(e) {
+      ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      if (view === 'wall') {
+        const h = ray.intersectObjects(world.children, true).find((x) => x.object.userData.wall != null && x.object.userData.fi != null);
+        if (!h) return;
+        pick = { ...wall[h.object.userData.wall], pos: 0 };
+        mode = flower ? 'edit' : 'plant';
+        tab = '花瓣'; userZoomed = false;
+        showMine();
+        return;
+      }
+      if (mode !== 'orn') return;
+      // 放飾品：挑螢幕上離手指最近的空點
+      let best = -1, bd = 40;
+      for (const d of world.children.filter((o) => o.userData.ring != null)) {
+        const s = d.position.clone().project(camera);
+        const px = Math.hypot((s.x - ndc.x) * innerWidth / 2, (s.y - ndc.y) * innerHeight / 2);
+        if (px < bd) { bd = px; best = d.userData.ring; }
+      }
+      if (best >= 0) { ornAt = best; changed(); }
+    }
+
+    // ── 每幀：花的動作交給 FlowerView（晚上萌臉睡覺），照顧和改好時整朵彈一下 ──
+    const backOut = (k) => { const s = 1.9; k -= 1; return 1 + (s + 1) * k * k * k + s * k * k; };
+    const camW = new THREE.Vector3();
+    function animate(now) {
+      const t = now / 1000, hr = new Date().getHours();
+      camera.getWorldPosition(camW);
+      fv.update(t, camW, { sleepy: hr >= 22 || hr < 6 });
+      const n = fv.nodes[0];
+      if (anim && view === 'mine' && n) {
+        const k = Math.min(1, (now - anim.t0) / 520);
+        n.scale.setScalar(Math.max(0.0001, n.userData.grow * (anim.from + (1 - anim.from) * backOut(k))));
+        if (k >= 1) anim = null;
+      }
+    }
+
+    function resize() {
+      renderer.setSize(innerWidth, innerHeight);
+      camera.aspect = innerWidth / innerHeight;
+      const dh = $('#dock').offsetHeight + 12;
+      camera.setViewOffset(innerWidth, innerHeight, 0, dh * 0.5, innerWidth, innerHeight);
+      camera.updateProjectionMatrix();
+    }
+    addEventListener('resize', resize);
+    redraw();
+    if (q.get('view') === 'wall') showWall();
+    let last = performance.now();
+    renderer.setAnimationLoop((now) => {
+      placeCam(Math.min(0.1, (now - last) / 1000));
+      last = now;
+      animate(now);
+      renderer.render(scene, camera);
+    });
+    // 測試用
+    window.__garden = {
+      get flower() { return flower; }, showWall, showMine,
+      set(f) { if (pick) { Object.assign(pick, f); changed(); } },
+      plant(f) { pick = { ...roll(), ...f }; mode = 'plant'; changed(); },
+    };
+  </script>
+</body>
+</html>

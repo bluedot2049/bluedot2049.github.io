@@ -378,7 +378,7 @@ async function start() {
   let peek = null;    // 湊過來看隊友的照片（social/peek.js），有連線才有
   let guide = null;   // 黑眼帶路（scene/guide.js），攝影模式建好以後才建
   let acts = null;    // 一幕劇（core/act.js），黑眼建好以後才建
-  let fixtures = [];   // 這一區自己的裝置（zone 的 fixtures：畫廊的胖頭教學、收音機、畫架、會說話的畫），黑眼建好以後才建。每個是 [名字, 東西]
+  let fixtures = [];   // 這一區自己的裝置（zone 的 fixtures：畫廊立牌的教學、收音機、畫架、會說話的畫），黑眼建好以後才建。每個是 [名字, 東西]
   let checkAway = null;   // 看自己是不是掛機中，有連線才有
   let studio = null;   // 海市信差站的照相館（studio.js），畫廊沒有
   let place = null;   // 戶外現在在哪裡：null 是陽台，否則是草原或棧橋盡頭的地名
@@ -491,9 +491,11 @@ async function start() {
       ui.hideGuide();
       for (const [, f] of fixtures) f.onInput?.();
     },
-    // 門邊的問號立牌：能在哪裡玩、支援什麼
+    // 門邊的問號立牌：前廳的教學（zones/gallery/ask.js）打開題目卡；沒有教學的地方照舊打開能在哪裡玩那張卡
     onGuide() {
-      ui.guide();
+      const ask = fixtures.find(([k]) => k === 'ask')?.[1];
+      if (ask) ask.open();
+      else ui.guide();
     },
     onArriveMirror() {
       ui.showDress();
@@ -779,7 +781,7 @@ async function start() {
   // peek：站在剛用燭火乙式拍完的隊友旁邊，按了看他最後一張（social/peek.js）
   // radio：站在前廳收音機前面，關著按就開機，再打開面板（zones/gallery/radio-card.js）
   // easel：站在原野畫架的畫布前面，打開畫架的面板（zones/gallery/easel-card.js）
-  const LABELS = { coin: '撿', ask: '問', painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '說明', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來', lens: '看鏡頭', follow: '跟著', peek: '看照片', radio: '收音機', easel: '畫畫' };
+  const LABELS = { coin: '撿', ask: '問', painting: '看畫', mirror: '照鏡子', cameras: '挑相機', guide: '問', hollow: '聽樹洞', seat: '坐下', table: '拿點心', pet: '摸摸', talk: '聊天', exit: '搭船', eat: '吃一口', stand: '起來', lens: '看鏡頭', follow: '跟著', peek: '看照片', radio: '收音機', easel: '畫畫' };
   // 手機的互動鍵是一顆小圓章，只放兩個字；沒列在這裡的取前兩個字
   const SHORT = { 照鏡子: '換裝', 挑相機: '相機', 聽樹洞: '樹洞', 拿點心: '點心', 吃一口: '吃', 寄明信片: '寄信', 看鏡頭: '看鏡', 不看了: '不看', 叫電梯: '叫梯', 上觀星台: '上樓', 回一樓: '下樓', 看照片: '照片', 收音機: '收音', 拿海草: '海草', 放進水鏡: '放籤', 要冰淇淋: '甜筒', 要汽水: '汽水', 要熱茶: '熱茶', 取照片: '照片', 拿底片: '底片' };
   // 剛走出範圍的那一下（走過攤位、動物走開）互動鍵先留著：手指可能已經在按的路上，按到了照原本的做（player.action 的 fallback）。
@@ -1235,7 +1237,7 @@ async function start() {
   guide.onShip = (ex) => player.events.onExit(ex);
   player.actionables.push((x, z) => guide.target(x, z));
   // 一幕劇（core/act.js，zone 匯出 acts）：在地圖上一拍一拍演的戲，找到演員才往下，演到哪一拍黑眼清單多一行。演員跟事件一樣評分、讓人轉頭（happen.more）
-  acts = new Acts({ guide, player, params, list: Z.acts?.({ world, scene, vendors, ambience, attention, camera, player, ui, kao }) ?? [] });
+  acts = new Acts({ guide, player, params, list: Z.acts?.({ world, scene, vendors, ambience, attention, camera, player, ui, kao, manatee, shadowTex }) ?? [] });
   happen.more.push(acts);
   for (const j of world.judges ?? []) happen.more.push(j);   // 區域自己要在快門時評分的（黑森林洞裡的打鬥，寫法同一件事件）
 
@@ -1244,14 +1246,14 @@ async function start() {
   if (mp) coins.send = (m) => mp.coin(m);
   player.actionables.push((x, z) => acts.target(x, z));
   // 這一區自己的裝置（zone 的 fixtures，約定見 docs/新區域與改地圖.md）：走近有互動鍵（target）、每幀 update、玩家一動要收的 onInput、開著的卡片 isOpen。
-  // 畫廊：前廳胖頭的教學（走近說下一步，互動鍵「問」，泡泡底下那行小字照現在的操作方式寫鍵，所以給 keyOf）、收音機、畫架、地下室會說話的畫
+  // 畫廊：問號立牌的教學（走近說下一步，互動鍵「問」，泡泡底下那行小字照現在的操作方式寫鍵，所以給 keyOf）、收音機、畫架、地下室會說話的畫
   const PAD_OF = { interact: -1, raise: 6, pack: 8, eye: 5, party: 14 };
   fixtures = Object.entries(Z.fixtures?.({
     world, player, camera, ambience, params, manatee, host, visitors, ui, gate, look: () => look, back: params.has('from'), openEnv: () => ui.guide(),
     keyOf: (id) => { const k = inputKind(); return k === 'pad' ? padBtn(PAD_OF[id]) : k === 'touch' ? '' : key(id); },
   }) ?? {}).filter(([, f]) => f);
   for (const [, f] of fixtures) if (f.target) player.actionables.push((x, z) => f.target(x, z));
-  // 做過的事（progress.js 的 tour）：來過哪一區、拍過照。前廳胖頭照這個決定說什麼、題目長出哪幾題
+  // 做過的事（progress.js 的 tour）：來過哪一區、拍過照。前廳的問號立牌照這個決定說什麼、題目長出哪幾題
   markTour(zone);
   // 第一次拍到照片：說照片在行囊（lessons.js 的 pack）
   addEventListener('photoadd', (e) => { const k = e.detail?.kind; if (!k?.endsWith('-save') && k !== 'mate') { markTour('photo'); teach('pack'); } });

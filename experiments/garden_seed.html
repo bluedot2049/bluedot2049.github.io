@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>樹洞給種子</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; height: 100%; overflow: hidden;
+      background: #d9a07c; color: #f5e9d4;
+      font-family: "Noto Serif TC", "Microsoft JhengHei", sans-serif; user-select: none;
+    }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    .card {
+      background: rgba(28, 19, 13, 0.86); border: 1px solid rgba(232, 184, 106, 0.32);
+      border-radius: 12px; padding: 9px 12px; font-size: 13px; line-height: 1.5;
+    }
+    #info { position: fixed; top: 12px; left: 12px; max-width: 440px; }
+    #info b { color: #f6dba6; font-weight: 600; }
+    #beat { color: #f0a080; margin-top: 2px; min-height: 1.5em; }
+    .meta { color: #b5a084; font-size: 12px; }
+    #bar { position: fixed; left: 12px; right: 12px; bottom: 12px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    button {
+      font: inherit; font-size: 13px; color: #f5e9d4; background: transparent;
+      border: 1px solid rgba(232, 184, 106, 0.4); border-radius: 999px; padding: 6px 14px; cursor: pointer; white-space: nowrap;
+    }
+    button:hover { border-color: #e8b86a; }
+    button.on { background: #e8b86a; color: #1c130d; border-color: #e8b86a; }
+    button.go { border-color: #e8b86a; color: #f6dba6; font-weight: 600; }
+    .sep { width: 1px; align-self: stretch; background: rgba(232, 184, 106, 0.25); margin: 0 3px; }
+  </style>
+  <script type="importmap">{ "imports": { "three": "../vendor/three.module.min.js" } }</script>
+</head>
+<body>
+  <div class="card" id="info">
+    <b>樹洞給種子 · 演出試做</b>
+    <div id="beat"></div>
+    <div class="meta">戴耳機聽。拖曳轉、滾輪縮放。「逐步」時按「下一步」或空白鍵；慢放時不出聲（對不上）。</div>
+  </div>
+  <div class="card" id="bar">
+    <button id="restart" class="go">從頭</button>
+    <button id="next">下一步</button>
+    <span class="sep"></span>
+    <button id="auto" class="on">自動</button>
+    <button id="slow">慢放</button>
+    <button id="sound" class="on">聲音</button>
+    <span class="sep"></span>
+    <button id="flower">換一朵花</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { Character } from '../js/avatar/character.js';
+    import { presetLook } from '../js/avatar/looks.js';
+    import { randomFlower } from './garden_kit.js';
+    import { FlowerView, scaleOf } from './garden_view.js';
+    import { makeSounds } from './garden_sounds.js';
+
+    const $ = (s) => document.querySelector(s);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    document.body.prepend(renderer.domElement);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#d9a07c');
+    scene.fog = new THREE.Fog('#d9a07c', 10, 32);
+    const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 80);
+    scene.add(new THREE.HemisphereLight('#ffe8d0', '#5a6438', 1.5));
+    const sun = new THREE.DirectionalLight('#ffd2a0', 2.0);
+    sun.position.set(-3, 5, 4);
+    scene.add(sun);
+    scene.add(new THREE.Mesh(new THREE.CircleGeometry(40, 32).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#5a7232' })));
+    const sfx = makeSounds();
+
+    // 柔邊光點貼圖（樹洞的光暈、種子的光、地上的暖光）
+    const glowTex = (() => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c);
+    })();
+    const add = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, side: THREE.DoubleSide });
+
+    // ── 樹（替身：樹幹、樹冠幾團、面向 +z 的樹洞）──
+    const trunk = new THREE.Group();
+    scene.add(trunk);
+    const bark = new THREE.MeshLambertMaterial({ color: '#5a3a26', flatShading: true });
+    // 十二面，轉半格讓一個平面正對 +z，樹洞貼在那一面上
+    trunk.add(new THREE.Mesh(new THREE.CylinderGeometry(0.85, 1.25, 4.2, 12).rotateY(Math.PI / 12).translate(0, 2.1, 0), bark));
+    for (const [x, y, z, r, c] of [[0, 4.8, 0, 1.7, '#5e7a30'], [1.3, 4.3, 0.4, 1.2, '#7e9a3c'], [-1.2, 4.4, 0.6, 1.25, '#6a8a34'], [0.4, 5.3, -1, 1.3, '#9aac46'], [-0.6, 4.2, -1.1, 1.1, '#c8a040']]) {
+      const blob = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), new THREE.MeshLambertMaterial({ color: c, flatShading: true }));
+      blob.position.set(x, y, z);
+      trunk.add(blob);
+    }
+    // 樹幹在 0.95 高的地方，正面離中心約 1.12；往後仰 5 度（樹幹上細下粗）
+    const FACE_Z = 1.125, LEAN = Math.atan(0.4 / 4.2);
+    const MOUTH = new THREE.Vector3(0, 0.95, FACE_Z + 0.12);
+    const hole = new THREE.Mesh(new THREE.CircleGeometry(0.4, 18), new THREE.MeshBasicMaterial({ color: '#1e140e' }));
+    hole.scale.set(0.78, 1.2, 1);
+    hole.position.set(0, 0.95, FACE_Z + 0.005);
+    hole.rotation.x = -LEAN;
+    trunk.add(hole);
+    const holeLight = new THREE.Mesh(new THREE.CircleGeometry(0.3, 18), new THREE.MeshBasicMaterial({ color: '#ffc870', toneMapped: false }));
+    holeLight.position.set(0, 0.92, FACE_Z + 0.012);
+    holeLight.rotation.x = -LEAN;
+    trunk.add(holeLight);
+    const holeHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: '#ffb860', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    holeHalo.position.copy(MOUTH);
+    trunk.add(holeHalo);
+    const pool = new THREE.Mesh(new THREE.CircleGeometry(1.4, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: glowTex, color: '#ff9a50', transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
+    pool.position.set(0, 0.02, 1.9);
+    scene.add(pool);
+    // 樹洞的亮度：v 1 平常，越大越亮，0 收進去
+    const holeGlow = (v) => {
+      v = Math.max(0, v);
+      holeLight.material.color.set('#ffc870').multiplyScalar(0.3 + 0.7 * Math.min(1.6, v));
+      const s = 0.45 + 0.45 * Math.min(1.6, v);
+      holeLight.scale.set(0.78 * s, 1.15 * s, 1);
+      holeHalo.scale.setScalar(0.5 + 1.0 * v);
+      holeHalo.material.opacity = Math.min(1, 0.25 + 0.6 * v);
+      pool.material.opacity = 0.1 + 0.25 * Math.min(2, v);
+    };
+
+    // ── 角色 ──
+    const ch = new Character(null, presetLook(0));
+    if (ch.shadow) ch.shadow.visible = false;   // 這頁沒有影子貼圖
+    scene.add(ch.group);
+
+    // ── 種子：一顆暖金色的小殼，頂上兩片小芽，外面一圈光 ──
+    const seed = new THREE.Group(), seedBody = new THREE.Group();
+    seed.add(seedBody);
+    const shell = new THREE.Mesh(new THREE.IcosahedronGeometry(0.065, 1), new THREE.MeshLambertMaterial({ color: '#f2c070', emissive: '#ff9a40', emissiveIntensity: 0.55, flatShading: true }));
+    shell.scale.set(1, 1.25, 1);
+    shell.position.y = 0.075;
+    seedBody.add(shell);
+    const leafMat = new THREE.MeshLambertMaterial({ color: '#8ac050', flatShading: true, side: THREE.DoubleSide });
+    for (const s of [-1, 1]) {
+      const l = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 3), leafMat);
+      l.scale.set(1.2, 0.35, 0.7);
+      l.position.set(s * 0.028, 0.165, 0);
+      l.rotation.z = -s * 0.5;
+      seedBody.add(l);
+    }
+    const seedHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: '#ffc870', transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }));
+    seedHalo.position.y = 0.08;
+    seedHalo.scale.setScalar(0.45);
+    seed.add(seedHalo);
+    scene.add(seed);
+
+    // ── 兩圈煙、小星星（四角星，對著鏡頭）、地上一圈光波 ──
+    const puffs = [0, 1].map(() => {
+      const m = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.06, 6, 24), add('#fff0d8', 0));
+      m.position.copy(MOUTH);
+      scene.add(m);
+      return m;
+    });
+    const starShape = new THREE.Shape();
+    for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4 + Math.PI / 2, r = k % 2 ? 0.018 : 0.065; starShape[k ? 'lineTo' : 'moveTo'](Math.cos(a) * r, Math.sin(a) * r); }
+    const STAR = new THREE.ShapeGeometry(starShape);
+    const stars = [];
+    function burst(at, n, { speed = 1.6, up = 1.2, color = '#ffe0a0', life = 0.9, size = 1 } = {}) {
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + Math.random() * 0.5, m = new THREE.Mesh(STAR, add(color, 1));
+        m.position.copy(at);
+        m.userData = { v: new THREE.Vector3(Math.cos(a) * speed * (0.6 + Math.random() * 0.5), up * (0.6 + Math.random()), Math.sin(a) * speed * (0.6 + Math.random() * 0.5)), t: 0, life: life * (0.8 + Math.random() * 0.4), spin: (Math.random() - 0.5) * 8, s: size * (0.7 + Math.random() * 0.7) };
+        scene.add(m);
+        stars.push(m);
+      }
+    }
+    const wave = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 56).rotateX(-Math.PI / 2), add('#ffe0a0', 0));
+    scene.add(wave);
+
+    // ── 花位：拿著種子時地上浮出的金圈 ──
+    const SPOTS = [-52, -26, 26, 52].map((d) => { const a = d * Math.PI / 180; return new THREE.Vector3(Math.sin(a) * 2.5, 0, Math.cos(a) * 2.5); });
+    const PICKED = 1;
+    const rings = SPOTS.map((p) => {
+      const r = new THREE.Mesh(new THREE.RingGeometry(0.17, 0.2, 40).rotateX(-Math.PI / 2), add('#f6dba6', 0.55));
+      r.position.copy(p).setY(0.015);
+      r.scale.setScalar(0.0001);
+      scene.add(r);
+      return r;
+    });
+
+    // ── 種下的地方：花瓣形的小法陣（外圈、內圈、六片花瓣一筆一筆畫）、果凍土丘 ──
+    const spot = SPOTS[PICKED];
+    const circle = new THREE.Group();
+    circle.position.copy(spot).setY(0.012);
+    scene.add(circle);
+    const inkMat = add('#ffd890', 0);
+    // 一條沿著點走的細帶（平貼地面），三角形照路線排，setDrawRange 就是一筆畫過去
+    function strip(pts, w) {
+      const pos = [], idx = [];
+      pts.forEach((p, i) => {
+        const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+        const tx = b.x - a.x, tz = b.z - a.z, l = Math.hypot(tx, tz) || 1, nx = -tz / l * w / 2, nz = tx / l * w / 2;
+        pos.push(p.x + nx, 0, p.z + nz, p.x - nx, 0, p.z - nz);
+        if (i) { const k = 2 * i; idx.push(k - 2, k - 1, k, k - 1, k + 1, k); }
+      });
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setIndex(idx);
+      g.setDrawRange(0, 0);
+      return g;
+    }
+    const loop = (r, n = 64) => Array.from({ length: n + 1 }, (_, i) => new THREE.Vector3(Math.sin(i / n * Math.PI * 2) * r, 0, Math.cos(i / n * Math.PI * 2) * r));
+    // 一片花瓣：從中心往外到尖、再從另一邊回來
+    const petal = (a, len = 0.3, wid = 0.085) => {
+      const d = new THREE.Vector3(Math.sin(a), 0, Math.cos(a)), n = new THREE.Vector3(d.z, 0, -d.x), pts = [];
+      for (let i = 0; i <= 14; i++) { const u = i / 14; pts.push(d.clone().multiplyScalar(0.04 + len * u).addScaledVector(n, wid * Math.sin(Math.PI * u) * (1 - 0.25 * u))); }
+      for (let i = 14; i >= 0; i--) { const u = i / 14; pts.push(d.clone().multiplyScalar(0.04 + len * u).addScaledVector(n, -wid * Math.sin(Math.PI * u) * (1 - 0.25 * u))); }
+      return pts;
+    };
+    const strokes = [strip(loop(0.42), 0.022), strip(loop(0.36), 0.012), ...Array.from({ length: 6 }, (_, k) => strip(petal(k * Math.PI / 3), 0.012)),
+      ...Array.from({ length: 6 }, (_, k) => strip(petal(k * Math.PI / 3 + Math.PI / 6, 0.16, 0.05), 0.009))];
+    for (const g of strokes) circle.add(new THREE.Mesh(g, inkMat));
+    // 第 i 筆畫到 f（0~1）
+    const draw = (i, f) => { const g = strokes[i], n = g.index.count; g.setDrawRange(0, Math.floor(n * Math.min(1, Math.max(0, f)) / 6) * 6); };
+    const mound = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 5, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#5a4630', flatShading: true }));
+    mound.position.copy(spot);
+    scene.add(mound);
+
+    // ── 花 ──
+    const fv = new FlowerView();
+    let flowerSpec = { ...randomFlower(Math.random, 0, '可愛'), scale: 2, pos: 0 };
+    let flowerNode = null;
+    function makeFlower(age) {
+      if (flowerNode) scene.remove(flowerNode);
+      fv.reset();
+      flowerNode = fv.node(flowerSpec, { age });
+      flowerNode.position.copy(spot).setY(0.03);
+      scene.add(flowerNode);
+      return flowerNode;
+    }
+
+    // ── 劇本：每一拍 { 名字, 多久, 開始做什麼, 每幀做什麼(k 0~1, 秒) } ──
+    // 角色站在樹洞斜前方（不擋洞口），種的時候站在花位旁邊（不擋花）
+    const START = new THREE.Vector3(2.2, 0, 5.4), STAND = new THREE.Vector3(0.95, 0, 2.6), LAND = new THREE.Vector3(0.55, 0, 2.05);
+    const STAND2 = spot.clone().add(new THREE.Vector3(spot.z, 0, -spot.x).normalize().multiplyScalar(-0.6));
+    const ease = (k) => k * k * (3 - 2 * k);
+    const backOut = (k, s = 1.9) => { k -= 1; return 1 + (s + 1) * k * k * k + s * k * k; };
+    const spring = (t, amp, decay, freq) => amp * Math.exp(-t * decay) * Math.cos(t * freq);
+    let walkTo = null;
+    const face = (p) => { ch.group.rotation.y = Math.atan2(p.x - ch.group.position.x, p.z - ch.group.position.z); };
+    const handPos = () => { ch.group.updateMatrixWorld(true); return new THREE.Vector3(0, -0.37, 0.07).applyMatrix4(ch.armR.matrixWorld); };
+    const crouch = (dur) => { ch.act = { e: 'pet', t: 0, high: false, dur }; };
+    let seedFrom = new THREE.Vector3(), seedHeld = false, hopT = 0, hopN = -1;
+    const play = (name, delay = 0, ...a) => { if (!slow) sfx.play(name, delay, ...a); };
+    const once = (B, key, at, s) => { if (s >= at && !B[key]) { B[key] = 1; return true; } return false; };
+
+    const BEATS = [
+      { name: '走到樹洞前', dur: 2.6, start() { walkTo = { to: STAND, speed: 1.25 }; } },
+      { name: '樹洞叫一聲', dur: 1.2, start() { play('call'); }, tick(k) {
+        holeGlow(1 + 0.7 * Math.abs(Math.sin(k * Math.PI * 2)));
+        trunk.scale.set(1, 1 + 0.02 * Math.sin(k * Math.PI * 4), 1);
+      } },
+      { name: '吸一大口氣：整棵樹縮下去、往後仰，光收進洞裡', dur: 1.2, start() { play('inhale'); face(MOUTH); }, tick(k) {
+        const e = ease(k);
+        trunk.scale.set(1 + 0.17 * e, 1 - 0.2 * e, 1 + 0.17 * e);
+        trunk.rotation.x = -0.08 * e;
+        holeGlow(1 - 0.95 * e);
+      } },
+      { name: '噗！猛地伸長，噴出兩圈煙和星星，種子飛出來', dur: 1.3, start() {
+        play('puff'); play('fly', 0.05);
+        seed.visible = true; seedHeld = false;
+        seed.position.copy(MOUTH); seed.scale.setScalar(1);
+        burst(MOUTH.clone().add(new THREE.Vector3(0, 0, 0.15)), 14, { speed: 2.2, up: 1.2, life: 0.9, size: 1.3 });
+      }, tick(k, s) {
+        // 樹：從縮著一下彈到最長，再像彈簧一樣晃回來；往前點一下頭
+        trunk.scale.set(1 - spring(s, 0.13, 4.5, 17), 1 + spring(s, 0.24, 4.5, 17), 1 - spring(s, 0.13, 4.5, 17));
+        trunk.rotation.x = spring(s, 0.09, 4, 13);
+        holeGlow(1 + 2.4 * Math.exp(-s * 5));
+        puffs.forEach((p, i) => {
+          const u = Math.max(0, s - i * 0.09);
+          p.material.opacity = u > 0 ? Math.max(0, 0.9 * (1 - u * 1.5)) : 0;
+          p.scale.setScalar(0.3 + (i ? 1.9 : 2.8) * Math.min(1, u * 1.5));
+        });
+        // 種子：從洞口到腳邊的大弧，最高多 1.8 公尺
+        const f = Math.min(1, s / 1.0), p = MOUTH.clone().lerp(LAND, f);
+        p.y = MOUTH.y + (LAND.y - MOUTH.y) * f + Math.sin(f * Math.PI) * 1.8;
+        seed.position.copy(p);
+        seedBody.rotation.z = f * 14;
+        const b = Math.exp(-s * 6);
+        seedBody.scale.set(1 - 0.2 * b, 1 + 0.4 * b, 1 - 0.2 * b);
+        if (f >= 1) seed.position.y = LAND.y;
+      }, end() { trunk.scale.set(1, 1, 1); trunk.rotation.x = 0; holeGlow(1); seedBody.rotation.z = 0; } },
+      { name: '彈三下，落在腳邊', dur: 1.15, tick(k, s) {
+        const segs = [[0.5, 0.38], [0.3, 0.14], [0.2, 0.05]];
+        let acc = 0, h = 0, impact = 0;
+        for (const [i, [len, hh]] of segs.entries()) {
+          if (k < acc + len || i === segs.length - 1) {
+            const u = Math.min(1, (k - acc) / len);
+            h = Math.sin(u * Math.PI) * hh;
+            impact = Math.max(0, 1 - u * 7) * (hh / 0.38 + 0.3);
+            if (once(this, 'land' + i, 0, 1) && k >= acc) play('land', 0, [1, 0.6, 0.35][i]);
+            break;
+          }
+          acc += len;
+        }
+        seed.position.set(LAND.x, h, LAND.z);
+        seedBody.scale.set(1 + 0.35 * impact, 1 - 0.45 * impact, 1 + 0.35 * impact);
+      }, start() { for (const k of ['land0', 'land1', 'land2']) delete this[k]; }, end() { seedBody.scale.set(1, 1, 1); } },
+      { name: '種子在原地蹦蹦跳（按互動鍵「撿」）', dur: 2.0, wait: true, start() { face(LAND); hopT = 0; hopN = -1; } },
+      { name: '彎腰撿起來', dur: 1.25, start() { face(LAND); crouch(1.1); seedFrom.copy(seed.position); delete this.p; }, tick(k) {
+        if (k > 0.38) {
+          if (once(this, 'p', 0, 1)) play('pick');
+          const e = ease(Math.min(1, (k - 0.38) / 0.4)), hp = handPos();
+          seed.position.copy(seedFrom).lerp(hp, e).add(new THREE.Vector3(0, Math.sin(e * Math.PI) * 0.45, 0));
+          seedBody.rotation.y = e * 8;
+          seed.scale.setScalar(1 - 0.25 * e);
+        }
+      }, end() { seedHeld = true; seedBody.rotation.y = 0; } },
+      { name: '拿著種子：空的花位一個一個浮出金圈', dur: 1.3, start() { rings.forEach((r, i) => play('ring', i * 0.16, i)); }, tick(k) {
+        rings.forEach((r, i) => r.scale.setScalar(Math.max(0.0001, backOut(Math.min(1, Math.max(0, (k - i * 0.16) / 0.45)), 2.8))));
+      } },
+      { name: '走到一個金圈', dur: 1.9, start() { walkTo = { to: STAND2, speed: 1.1 }; } },
+      { name: '（遊戲裡這裡打開調花台）按「種」', dur: 1.2, wait: true, start() { face(spot); } },
+      { name: '彎腰種下：種子轉著鑽進土裡', dur: 1.05, start() { face(spot); crouch(1.0); play('plant', 0.3); }, tick(k) {
+        if (k > 0.35) {
+          if (seedHeld) { seedHeld = false; seedFrom.copy(seed.position); }
+          const e = Math.min(1, (k - 0.35) / 0.42);
+          seed.position.copy(seedFrom).lerp(spot.clone().setY(0.02), ease(e));
+          seedBody.rotation.y = e * 12;
+          seed.scale.setScalar(0.75 * (1 - Math.max(0, (k - 0.8) / 0.2) * 0.95));
+          rings.forEach((r, i) => { if (i !== PICKED) r.scale.setScalar(Math.max(0.0001, 1 - e)); });
+        }
+      }, end() { seed.visible = false; rings[PICKED].scale.setScalar(0.0001); } },
+      { name: '一筆一筆畫出花瓣法陣，土像果凍一樣鼓起來', dur: 1.9, start() { inkMat.opacity = 0.9; mound.visible = true; play('circle', 0, 1.7); play('jelly', 0.95); play('grow', 1.15, 0.75); }, tick(k) {
+        draw(0, k / 0.3); draw(1, (k - 0.15) / 0.3);
+        for (let i = 0; i < 6; i++) draw(2 + i, (k - 0.35 - i * 0.07) / 0.14);
+        for (let i = 0; i < 6; i++) draw(8 + i, (k - 0.6 - i * 0.04) / 0.1);
+        inkMat.opacity = 0.7 + 0.3 * Math.sin(k * Math.PI * 6) * k;
+        const km = Math.max(0, (k - 0.5) / 0.5);   // 土丘：鼓起來、晃三下、停住
+        const sy = km <= 0 ? 0.0001 : (1 + spring(km, 1.1, 3.2, 16)) * Math.min(1, km * 5);
+        mound.scale.set(1 + (1 - sy) * 0.4, Math.max(0.0001, sy * 0.6), 1 + (1 - sy) * 0.4);
+      } },
+      { name: '啵！花彈出來轉兩圈，地上一圈光波', dur: 1.8, start() {
+        play('bloom');
+        makeFlower(0);
+        burst(spot.clone().setY(0.3), 16, { speed: 1.6, up: 1.8, color: '#fff0c0', life: 1.2, size: 1.2 });
+        wave.position.copy(spot).setY(0.02);
+        inkMat.opacity = 2.2;
+      }, tick(k, s) {
+        const kp = Math.min(1, k / 0.42), sc = Math.max(0.0001, backOut(kp, 3.2)) * scaleOf(flowerSpec);
+        const step = Math.min(6, Math.floor(k * 9));
+        if (step !== flowerNode.userData.step) { makeFlower(step / 6); flowerNode.userData.step = step; }
+        flowerNode.scale.setScalar(sc);
+        flowerNode.rotation.y = (1 - ease(kp)) * Math.PI * 4;
+        mound.scale.y = 0.6 * (1 - 0.65 * ease(Math.min(1, k * 2)));
+        inkMat.opacity = 2.2 - 1.8 * ease(k);
+        wave.scale.setScalar(0.2 + 2.6 * ease(Math.min(1, s / 0.9)));
+        wave.material.opacity = Math.max(0, 0.9 * (1 - s / 0.9));
+      }, end() { makeFlower(1); flowerNode.scale.setScalar(scaleOf(flowerSpec)); wave.material.opacity = 0; ch.emote('✨'); play('sparkle'); } },
+      { name: '種好了。會開一週，回來照顧就再開一週', dur: null, tick(k, s) { inkMat.opacity = Math.max(0, 0.4 - s * 0.05); } },
+    ];
+
+    let beat = -1, bt = 0, auto = true, slow = false;
+    function go(i) {
+      BEATS[beat]?.end?.call(BEATS[beat]);
+      beat = i; bt = 0;
+      BEATS[i]?.start?.call(BEATS[i]);
+      $('#beat').textContent = BEATS[i] ? `${i + 1}／${BEATS.length}　${BEATS[i].name}` : '';
+    }
+    function reset() {
+      for (const s of stars) scene.remove(s);
+      stars.length = 0;
+      ch.group.position.copy(START);
+      face(STAND);
+      ch.act = null;
+      walkTo = null;
+      trunk.scale.set(1, 1, 1); trunk.rotation.x = 0;
+      holeGlow(1);
+      seed.visible = false; seedHeld = false; seed.scale.setScalar(1); seedBody.scale.set(1, 1, 1); seedBody.rotation.set(0, 0, 0);
+      puffs.forEach((p) => (p.material.opacity = 0));
+      wave.material.opacity = 0;
+      rings.forEach((r) => r.scale.setScalar(0.0001));
+      inkMat.opacity = 0;
+      strokes.forEach((g) => g.setDrawRange(0, 0));
+      mound.scale.set(1, 0.0001, 1);
+      mound.visible = false;
+      if (flowerNode) { scene.remove(flowerNode); flowerNode = null; fv.reset(); }
+      beat = -1;
+      go(0);
+    }
+    // 第一次點畫面或按鈕才開聲音
+    addEventListener('pointerdown', () => sfx.unlock(), { capture: true });
+    addEventListener('keydown', () => sfx.unlock(), { capture: true });
+    $('#restart').onclick = reset;
+    $('#next').onclick = () => { if (beat < BEATS.length - 1) go(beat + 1); };
+    addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); $('#next').click(); } });
+    $('#auto').onclick = () => { auto = !auto; $('#auto').classList.toggle('on', auto); };
+    $('#slow').onclick = () => { slow = !slow; $('#slow').classList.toggle('on', slow); };
+    $('#sound').onclick = () => { sfx.on = !sfx.on; $('#sound').classList.toggle('on', sfx.on); };
+    $('#flower').onclick = () => {
+      flowerSpec = { ...randomFlower(Math.random, 0), scale: 2, pos: 0 };
+      if (flowerNode) { makeFlower(1); flowerNode.scale.setScalar(scaleOf(flowerSpec)); }
+    };
+
+    // ── 鏡頭：繞著樹前面這一塊 ──
+    const orbit = { target: new THREE.Vector3(0, 0.8, 2.2), dist: 6.8, theta: -0.3, phi: 1.2 };
+    const ptr = new Map();
+    const cv = renderer.domElement;
+    cv.addEventListener('pointerdown', (e) => { cv.setPointerCapture(e.pointerId); ptr.set(e.pointerId, { x: e.clientX, y: e.clientY }); });
+    cv.addEventListener('pointermove', (e) => {
+      const p = ptr.get(e.pointerId);
+      if (!p || ptr.size > 1) return;
+      orbit.theta -= (e.clientX - p.x) * 0.008;
+      orbit.phi = Math.min(1.5, Math.max(0.3, orbit.phi - (e.clientY - p.y) * 0.006));
+      p.x = e.clientX; p.y = e.clientY;
+    });
+    const up = (e) => ptr.delete(e.pointerId);
+    cv.addEventListener('pointerup', up);
+    cv.addEventListener('pointercancel', up);
+    cv.addEventListener('wheel', (e) => { e.preventDefault(); orbit.dist = Math.min(16, Math.max(1.5, orbit.dist * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+    function placeCam() {
+      const { target: t, dist: d, theta, phi } = orbit;
+      camera.position.set(t.x + d * Math.sin(phi) * Math.sin(theta), t.y + d * Math.cos(phi), t.z + d * Math.sin(phi) * Math.cos(theta));
+      camera.lookAt(t);
+    }
+
+    function resize() {
+      renderer.setSize(innerWidth, innerHeight);
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+    }
+    addEventListener('resize', resize);
+    resize();
+    reset();
+
+    const camW = new THREE.Vector3();
+    let last = performance.now(), clock = 0;
+    renderer.setAnimationLoop((now) => {
+      const real = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const dt = real * (slow ? 0.35 : 1);
+      clock += dt;
+      // 角色走路
+      let speed = 0;
+      if (walkTo) {
+        const d = walkTo.to.clone().sub(ch.group.position).setY(0), len = d.length();
+        if (len < 0.03) walkTo = null;
+        else {
+          ch.group.position.addScaledVector(d.normalize(), Math.min(len, walkTo.speed * dt));
+          face(walkTo.to.clone().add(d));
+          speed = walkTo.speed;
+        }
+      }
+      ch.update(dt, speed);
+      // 這一拍
+      const B = BEATS[beat];
+      bt += dt;
+      if (B) {
+        const k = B.dur ? Math.min(1, bt / B.dur) : 0;
+        B.tick?.call(B, k, bt);
+        if (B.dur && bt >= B.dur && auto && beat < BEATS.length - 1) go(beat + 1);
+      }
+      // 種子在原地蹦蹦跳：跳一下、壓扁、扭一下，偶爾連跳兩下
+      if (B?.wait && beat === 5) {
+        hopT += dt;
+        const P = 0.9, n = Math.floor(hopT / P), k = (hopT % P) / P, dbl = n % 3 === 2;
+        const air = dbl ? (k < 0.25 ? Math.sin(k / 0.25 * Math.PI) * 0.07 : k < 0.55 ? Math.sin((k - 0.25) / 0.3 * Math.PI) * 0.12 : 0) : (k < 0.45 ? Math.sin((k / 0.45) * Math.PI) * 0.12 : 0);
+        const land = dbl ? 0.55 : 0.45, sq = k > land - 0.03 && k < land + 0.12 ? 1 - Math.abs(k - land - 0.04) / 0.08 : 0;
+        if (n !== hopN) { hopN = n; play('hop'); }
+        seed.position.set(LAND.x, air, LAND.z);
+        seedBody.scale.set(1 + 0.25 * Math.max(0, sq), 1 - 0.35 * Math.max(0, sq) + (air > 0 ? 0.12 : 0), 1 + 0.25 * Math.max(0, sq));
+        seedBody.rotation.z = air > 0 ? Math.sin(hopT * 9) * 0.3 : 0;
+      }
+      if (seedHeld) { seed.position.copy(handPos()); seed.scale.setScalar(0.75); }
+      seedHalo.material.opacity = 0.55 + 0.3 * Math.sin(clock * 3);
+      // 星星：往外飛、轉、縮掉
+      for (let i = stars.length - 1; i >= 0; i--) {
+        const s = stars[i], u = s.userData;
+        u.t += dt;
+        u.v.y -= 2.4 * dt;
+        u.v.multiplyScalar(1 - 1.2 * dt);
+        s.position.addScaledVector(u.v, dt);
+        s.lookAt(camera.position);
+        s.rotateZ(u.spin * u.t);
+        const life = 1 - u.t / u.life;
+        s.scale.setScalar(Math.max(0.0001, u.s * Math.min(1, life * 2.5) * Math.min(1, u.t * 12)));
+        if (life <= 0) { scene.remove(s); stars.splice(i, 1); }
+      }
+      placeCam();
+      camera.getWorldPosition(camW);
+      fv.update(clock, camW);
+      renderer.render(scene, camera);
+    });
+    // 測試用
+    window.__seed = { go, reset, get beat() { return beat; }, set auto(v) { auto = v; }, orbit };
+  </script>
+</body>
+</html>

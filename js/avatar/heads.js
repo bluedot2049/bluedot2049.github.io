@@ -112,10 +112,11 @@ function pear() {
   const g = new THREE.IcosahedronGeometry(1, 2), p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
     let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const w = y < 0 ? 1 + 0.24 * Math.sin(Math.min(1, -y * 1.3) * Math.PI / 2) : 1 - 0.06 * y;   // 下半往兩邊胖、頭頂收一點
+    const t = Math.sin(Math.min(1, -y * 1.3) * Math.PI / 2);
+    const w = y < 0 ? 1 + 0.42 * t : 1 - 0.1 * y;   // 下半往兩邊胖（肥嘟嘟的下巴）、頭頂收一點
     x *= w;
-    z *= y < 0 ? 1 + 0.06 * -y : 1;
-    if (y < 0) y *= 1.12;
+    z *= y < 0 ? 1 + 0.14 * t : 1;                    // 臉頰往前鼓
+    if (y < 0) y *= 1.22;
     p.setXYZ(i, x * 0.2, 0.2 + y * 0.2, -0.015 + z * 0.2);
   }
   return g;
@@ -593,17 +594,17 @@ export const HEADS = {
   marmot(k, c, c2, f, o) {
     const snout = mix(c2, '#e0c08a', 0.4), nose = mix(c, '#2a2220', 0.7);
     k.add(pear(), c, 0, 0, 0, { color2: mix(c, '#fff4e4', 0.12) });
-    k.ball(0.105, snout, 0, 0.15, 0.15, { sx: 1.12, sy: 0.92, sz: 0.85 });
-    k.ball(0.05, nose, 0, 0.168, 0.228, { sx: 1.3, sy: 0.88, sz: 0.7 });
-    M(k, f).box(0.032, 0.028, 0.012, '#f4eee2', 0, 0.072, 0.212);
+    k.ball(0.113, snout, 0, 0.15, 0.16, { sx: 1.12, sy: 0.92, sz: 0.85 });
+    k.ball(0.064, nose, 0, 0.17, 0.24, { sx: 1.3, sy: 0.88, sz: 0.7 });
+    M(k, f).box(0.032, 0.028, 0.012, '#f4eee2', 0, 0.067, 0.222);
     eyes(E(k, f), 0.1, 0.255, 0.165, 0.021);
     if (under(o, 'hood')) return;
     // 耳朵下半埋進頭裡、順著頭的弧往外斜（整顆圓立在頭頂會像熊）
     const y = under(o, 'straw') ? 0.322 : 0.332;
     for (const s of [-1, 1]) {
       const rz = -s * 0.75;
-      k.ball(0.052, c, s * 0.152, y, -0.025, { sx: 1.2, sy: 0.8, sz: 0.42, rz });
-      k.ball(0.03, snout, s * 0.156, y + 0.004, -0.008, { sx: 1.15, sy: 0.65, sz: 0.3, rz });
+      k.ball(0.052, c, s * 0.137, y, -0.025, { sx: 1.2, sy: 0.8, sz: 0.42, rz });
+      k.ball(0.03, snout, s * 0.14, y + 0.004, -0.008, { sx: 1.15, sy: 0.65, sz: 0.3, rz });
     }
   },
   // 小象：圓額頭、一層扁圓大耳、沒有象牙。鼻子是 DANGLES 那一串（會甩），頭上只畫鼻根
@@ -643,6 +644,24 @@ export const HEADS = {
       k.ball(0.03, '#c83e4d', s * 0.18, ty, -0.06);
       for (const a of [-1, 1]) k.cone(0.022, 0.05, '#c83e4d', s * 0.18 + a * 0.03, ty + 0.012, -0.055, { rz: -a * 1.3, sz: 0.4 });
     }
+  },
+  // 胖海獅（只有 NPC：主線的發膏，looks.js 的 NPC_RACES）：圓頭往前收成短吻、又大又圓的黑鼻頭、兩團鼓鼓的鬍鬚墊（沒有鬍鬚）、水汪汪的大眼、
+  // 小耳朵、雙下巴。跟胖頭、海牛分開靠大鼻頭、大眼。顏色吃膚色；護目鏡、帽子由 npc/fagao.js 另外掛
+  sealion(k, c, c2, f) {
+    const pad = mix(c, c2, 0.55), dark = mix(c, '#141018', 0.55);
+    k.ball(0.2, c, 0, 0.23, -0.01, { sz: 1.05, color2: mix(c, c2, 0.35) });
+    k.ball(0.15, c, 0, 0.1, 0.06, { sx: 1.25, sy: 0.7 });
+    k.ball(0.11, c, 0, 0.15, 0.15, { sx: 1.15, sy: 0.85, sz: 1.1 });
+    for (const s of [-1, 1]) {
+      k.ball(0.058, pad, s * 0.055, 0.12, 0.22, { sz: 0.85 });
+      E(k, f).ball(0.036, '#140e10', s * 0.088, 0.25, 0.155);
+      E(k, f).ball(0.011, '#fffaf0', s * 0.088 - s * 0.012, 0.264, 0.188);
+      k.cone(0.022, 0.035, dark, s * 0.17, 0.3, -0.02, { rz: -s * 1.2 });
+    }
+    k.ball(0.062, '#1a1214', 0, 0.19, 0.28, { sx: 1.12, sy: 0.92 });
+    k.ball(0.016, '#5a4a50', -0.02, 0.22, 0.335);
+    k.ball(0.04, pad, 0, 0.065, 0.2, { sx: 1.3, sy: 0.6 });
+    M(k, f).box(0.05, 0.008, 0.01, dark, 0, 0.085, 0.235);
   },
 };
 

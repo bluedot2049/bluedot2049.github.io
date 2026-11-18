@@ -15,6 +15,7 @@ import { RadioCard } from './radio-card.js';
 import { EaselCard } from './easel-card.js';
 import { CAMERAS, SOON } from '../../camera/cameras.js';
 import { Ask } from './ask.js';
+import { buildPrologue } from './prologue.js';
 import { CellarVoice } from './cellar-voice.js';
 import { Hollow } from './hollow.js';
 
@@ -103,9 +104,15 @@ export function residents({ scene, world, shadowTex }) {
   return { manatee, host };
 }
 
+// 一幕劇（core/act.js）：主線序章「第零號」（prologue.js），照完鏡子走開，發膏從前門擠進來帶你到渡口。main.js 在黑眼建好之後呼叫
+export function acts(ctx) {
+  const p = buildPrologue(ctx);
+  return p ? [p] : [];
+}
+
 // 這一區自己的裝置：走近有互動鍵、有的會開卡片。main.js 建好黑眼以後叫一次，照順序接上（target、update、onInput、isOpen），
 // 新增一個只要在這裡加一行，不用改 main.js（約定見 docs/新區域與改地圖.md 的 fixtures）
-// ask：前廳胖頭的教學（ask.js），走近時說下一步、按「問」打開題目卡、轉身用魔杖指方向
+// ask：前門旁問號立牌的教學（ask.js），走近時說下一步、按「問」（player.js 的 guide）打開題目卡、整塊轉向要去的地方
 // radio：前廳的收音機（radio-card.js），互動鍵「收音機」打開面板，聲音走 ambience.beds
 // easel：原野的畫架（easel-card.js），互動鍵「畫畫」打開面板，畫裡的人是自己的角色（look 回傳現在的造型）
 // voice：地下室會說話的那幅畫（cellar-voice.js），站到畫前互動鍵「聊天」
@@ -116,7 +123,7 @@ export function fixtures(ctx) {
   const { world, ambience, player, camera, look, host, visitors } = ctx;
   const table = world.camTable;
   return {
-    ask: ctx.manatee ? new Ask(ctx) : null,
+    ask: world.guideSign ? new Ask(ctx) : null,
     radio: world.radio ? new RadioCard({ world, ambience, player, camera }) : null,
     easel: world.outdoor?.easel ? new EaselCard({ world, player, camera, look }) : null,
     voice: world.cellar?.paintings.some((p) => p.data.talks) ? new CellarVoice({ world, player, camera }) : null,

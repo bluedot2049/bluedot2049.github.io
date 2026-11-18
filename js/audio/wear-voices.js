@@ -146,13 +146,11 @@ export const MAT = {
     air(ctx, out, noise, t, [[0, 2600 * p], [0.07, 1700 * p]], 0.008, 0.08, 0.85, 1.4, 'bandpass');
     return 0.1;
   },
-  // 換種族：鏡面起一圈漣漪，往外散的細細的光
-  ripple(ctx, out, t, p, noise) {
-    for (const [dt, f] of [[0, 880], [0.07, 1320], [0.15, 1760], [0.24, 2640]]) {
-      osc(ctx, 'sine', t + dt, 0.7, [[0, f * p], [0.7, f * p * 0.985]]).connect(envelope(ctx, t + dt, 0.02, 0.7, 0.05)).connect(out);
-    }
-    air(ctx, out, noise, t, [[0, 2000], [0.8, 6000]], 0.3, 0.9, 0.12, 1.2, 'bandpass');
-    return 1;
+  // 換種族：輕輕啵一聲（音高很快往上翹、馬上收），沒有高頻。原本的漣漪高音疊太多，被說刺耳（2026-11-18）
+  pop(ctx, out, t, p, noise) {
+    osc(ctx, 'sine', t, 0.08, [[0, 260 * p], [0.035, 620 * p], [0.08, 540 * p]]).connect(envelope(ctx, t, 0.004, 0.08, 0.3)).connect(out);
+    air(ctx, out, noise, t, [[0, 900 * p], [0.05, 400 * p]], 0.003, 0.05, 0.12, 0.7);
+    return 0.1;
   },
   // 滑桿一格：細細的棘輪
   dial(ctx, out, t, p, noise) {
@@ -172,7 +170,7 @@ const PART = {
   top: 'cloth', bottom: 'cloth', topPat: 'cloth', botPat: 'cloth', outer: 'heavy', one: 'heavy', neck: 'cloth',
   hat: 'pat', hair: 'hair', glasses: 'glass', back: 'leather', hand: 'grab',
   eyes: 'dab', brows: 'dab', nose: 'dab', mouth: 'dab', mark: 'dab',
-  race: 'ripple',
+  race: 'pop',
 };
 // 例外表：「部位:代號」。這裡沒寫的就是部位的聲音
 const ITEM = {
