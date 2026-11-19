@@ -248,7 +248,11 @@ export function buildTree({ k, group, h, x, z, G, heightAt, face, clear = [] }) 
 
   const cb = newBucket();
   ck.emit(cb, 0, 0, 0);
-  for (const o of h.bucketObjects(cb, true)) { fade.push(o); group.add(o); }
+  // 樹冠包在一個群組裡、軸心在樹幹底：樹洞吐種子時整團吸一口氣、彈一下（garden-show.js）。位置照舊，畫出來一樣
+  const crown = new THREE.Group();
+  crown.position.set(x, G, z);
+  for (const o of h.bucketObjects(cb, true)) { fade.push(o); o.position.x -= x; o.position.y -= G; o.position.z -= z; crown.add(o); }
+  group.add(crown);
 
   // 飄在樹冠上方的三塊小樹冠
   const isles = [];
@@ -279,6 +283,7 @@ export function buildTree({ k, group, h, x, z, G, heightAt, face, clear = [] }) 
   return {
     blocks,
     hollow,
+    crown,   // 樹冠（上面那團的群組，軸心在樹幹底）
     // 貓頭鷹停的地方：低枝的枝頭往回一點
     perch: { x: twigEnd.x - fx * 0.15, y: twigEnd.y + 0.05, z: twigEnd.z - fz * 0.15, h: Math.atan2(fx, fz) },
     update(t, cam, target) {

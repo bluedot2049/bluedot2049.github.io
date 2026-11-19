@@ -41,6 +41,9 @@ export const PREFS = {
   polaAlive: { kind: 'num', init: 0 },          // instant.js：還有拍立得在顯影時，遊戲上次還開著是什麼時候（中間關掉的那段算放口袋）
   coinsPicked: { kind: 'json' },                 // coins.js：這一批地上的硬幣撿過哪幾枚 ['區:點:批']，換批就清掉舊的
   radioAt: { kind: 'json' },                   // radio-card.js：收音機面板拖到哪 { desk|land|port: { dx, dy } }，左上角離畫面中心多遠
+  gardenToken: { kind: 'text' },                 // garden-db.js：種花的身分（這台裝置的亂碼，伺服器上只有它能照顧、改、拔自己那朵；不進存檔照片，明信片會送人）
+  gardenCache: { kind: 'json' },                 // garden.js：上次讀到的整座花園 { at, list: [[花位, 碼, 照顧的時間]] }，第一幀先畫這份
+  gardenMine: { kind: 'json' },                  // garden.js：自己那朵 { spot, code, cared }，連不上伺服器時也看得到、照顧得到
 };
 
 export function pref(key) {

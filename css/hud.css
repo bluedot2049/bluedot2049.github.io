@@ -513,6 +513,89 @@ body.desk #easel .board { --bh: min(420px, calc(100vh / var(--ui, 1) - 240px)); 
 body.desk #easel.show { animation-name: guide-up; }
 @media (prefers-reduced-motion: reduce) { #easel.show { animation: none; } }
 
+/* 樹下花園的調花卡片（garden-card.js）：照畫架那張做，深墨棕木框、內圈細金線；中間一個小畫面看那朵花（拖著轉），
+   骰子（銅鈕）和主題、四頁選項（小的深底金線鈕，選到的亮金，每一排太長就橫著捲），最下面種下／改好了、好了（銅鈕），改的時候多一顆拔掉。
+   位置跟畫架一樣：電腦長在花位旁邊，手機直拿貼底（小畫面 24vh），手機橫拿靠左（小畫面撐滿左欄） */
+#garden {
+  position: fixed; left: calc(24px + env(safe-area-inset-left)); top: 50%; z-index: 25;
+  display: none; flex-direction: column; gap: 8px; transform: translateY(-50%);
+  width: min(460px, calc(100vw - 32px)); padding: 16px 16px 12px; border-radius: 10px;
+  background:
+    linear-gradient(115deg, rgba(246, 219, 166, .07), transparent 30%, transparent 72%, rgba(0, 0, 0, .22)),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, .09) 0 1px, transparent 1px 7px, rgba(246, 219, 166, .025) 7px 9px, transparent 9px 13px),
+    linear-gradient(180deg, #3a2618, #2a1b12 60%, #1e130c);
+  border: 1px solid #120b07;
+  box-shadow: inset 0 1px 0 rgba(246, 219, 166, .12), inset 0 -2px 4px rgba(0, 0, 0, .45), 0 10px 30px rgba(0, 0, 0, .55);
+  color: var(--text);
+}
+#garden.show { display: flex; animation: guide-in .4s ease-out both; }
+#garden::before { content: ''; position: absolute; inset: 5px; border-radius: 7px; border: 1px solid var(--line); pointer-events: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), inset 0 0 0 1px rgba(0, 0, 0, .3); }
+#garden .view {
+  --vh: 220px;
+  position: relative; height: var(--vh); border-radius: 6px; touch-action: none;
+  background: radial-gradient(ellipse at 50% 45%, rgba(255, 214, 170, .16), rgba(0, 0, 0, .28) 75%);
+  box-shadow: inset 0 0 0 1px rgba(246, 219, 166, .16), inset 0 2px 8px rgba(0, 0, 0, .45);
+}
+#garden .view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: var(--cur-grab, grab); }
+#garden .pickrow { display: flex; gap: 8px; align-items: center; }
+#garden .themes, #garden .tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+#garden .themes::-webkit-scrollbar, #garden .tabs::-webkit-scrollbar { display: none; }
+#garden .opts { --oh: 190px; display: grid; gap: 6px; max-height: var(--oh); overflow-y: auto; scrollbar-width: thin; }
+#garden .opts .row { display: flex; gap: 6px; align-items: center; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
+#garden .grp { display: flex; gap: 5px; align-items: center; flex: none; }
+#garden .lab { font-size: 11px; color: var(--gold-hi); opacity: .75; flex: none; }
+#garden .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 2px; flex: none; }
+#garden .num { min-width: 2.6em; text-align: center; font-size: 12px; flex: none; }
+/* 選項：深底細金線的小鈕，選到的亮金 */
+#garden :is(.opts, .themes, .tabs) button {
+  flex: none; font: inherit; font-size: 12px; letter-spacing: .06em; color: var(--text); white-space: nowrap; cursor: var(--cur-pointer);
+  background: rgba(0, 0, 0, .22); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px;
+}
+#garden :is(.opts, .themes, .tabs) button.on { background: var(--gold); color: #2a1a0e; border-color: var(--gold); }
+#garden .opts .ico { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; padding: 2px 5px; border-radius: 8px; font-size: 10px; min-width: 40px; }
+#garden .opts .ico svg { width: 22px; height: 22px; }
+#garden .opts .sw { width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 2px solid transparent; }
+#garden .opts .sw.on { border-color: var(--text); box-shadow: 0 0 0 1px #1c130d inset; }
+#garden .opts .slot { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px 2px 3px; }
+#garden .opts .slot i { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .35); }
+#garden .opts .preset { color: #1c130d; font-weight: 600; text-shadow: 0 0 3px rgba(255, 250, 240, .9); border-color: rgba(0, 0, 0, .3); }
+#garden .note { margin: 0; font-size: 11px; line-height: 1.5; color: var(--gold-hi); opacity: .75; text-align: center; }
+#garden .foot { display: flex; gap: 8px; }
+#garden .foot button { flex: 1; }
+/* 銅鈕：骰子、種下、好了、拔掉（跟畫架一樣） */
+#garden :is(.foot button, .dice) {
+  position: relative; min-height: 34px; padding: 4px 12px; font: inherit; font-size: 13px; letter-spacing: .16em; color: #3e2810; flex: none;
+  border: 1px solid rgba(90, 58, 24, .95); border-radius: 3px; cursor: var(--cur-pointer);
+  background:
+    linear-gradient(118deg, transparent 6%, rgba(255, 238, 205, .25) 20%, transparent 34%, transparent 60%, rgba(255, 238, 205, .15) 76%, transparent 90%),
+    linear-gradient(180deg, #cd9f5b, #ba8d4a 45%, #9c7036);
+  box-shadow: inset 0 1px 1px rgba(245, 222, 180, .48), inset 0 -2px 3px rgba(50, 30, 10, .5), 0 2px 4px rgba(0, 0, 0, .4);
+  text-shadow: 0 1px 0 rgba(255, 238, 205, .45); transition: transform .1s; white-space: nowrap;
+}
+#garden .foot button { flex: 1; }
+#garden :is(.foot button, .dice):active { transform: scale(.95); }
+#garden :is(.foot button, .dice):disabled { filter: saturate(.4) brightness(.8); }
+#garden .pull { flex: .7 !important; letter-spacing: .06em; }
+#garden .enter { display: flex; align-items: center; justify-content: center; gap: 8px; }
+#garden .enter kbd { min-width: 20px; padding: 0 4px; font: 11px/1.5 var(--latin); color: inherit; border: 1px solid rgba(62, 40, 16, .5); border-radius: 2px; }
+@media (orientation: portrait) {
+  #garden { left: 16px; right: 16px; top: auto; bottom: calc(16px + env(safe-area-inset-bottom)); width: auto; max-width: 460px; margin: 0 auto; transform: none; padding: 12px 12px 10px; gap: 7px; }
+  #garden .view { --vh: 24vh; }
+  #garden .opts { --oh: 26vh; }
+  #garden.show { animation-name: guide-up; }
+}
+/* 手機橫拿：畫面矮，小畫面放左欄撐滿高度，其他排右欄 */
+@media (orientation: landscape) and (max-height: 540px) {
+  body:not(.desk) #garden.show { display: grid; grid-template-columns: 34vh 1fr; grid-template-rows: auto auto 1fr auto auto; column-gap: 12px; row-gap: 6px; width: min(720px, calc(100vw - 32px)); padding: 12px; }
+  body:not(.desk) #garden .view { --vh: auto; grid-row: 1 / 6; height: auto; }
+  body:not(.desk) #garden .opts { --oh: calc(100vh - 190px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+}
+body.desk #garden { left: var(--cx, 50%); top: var(--cy, 20%); right: auto; bottom: auto; transform: none; }
+body.desk #garden .view { --vh: min(240px, calc(100vh / var(--ui, 1) - 520px)); }
+body.desk #garden .opts { --oh: min(230px, calc(100vh / var(--ui, 1) - 420px)); }
+body.desk #garden.show { animation-name: guide-up; }
+@media (prefers-reduced-motion: reduce) { #garden.show { animation: none; } }
+
 /* 教學說到、胖頭指著的按鈕（lessons.js 的 beckon）：外圈金光慢慢一明一暗，用過才停。閃的是 ::before，不碰按鈕自己的動畫 */
 .beckon { position: relative; border-color: var(--gold) !important; color: var(--gold-hi) !important; }
 .beckon::before {

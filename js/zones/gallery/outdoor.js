@@ -9,6 +9,7 @@ import { JETTY, buildHarbor, onJetty } from '../../scene/harbor.js';
 import { buildLore } from './lore.js';
 import { buildTree } from './tree.js';
 import { buildEasel } from './easel.js';
+import { makeSpots } from './garden-spots.js';
 import { REFLECT_LAYER } from '../../core/scenery.js';
 import { BW, DROP, JETTY_NAME, MEADOW, MEADOW_NAME, ORDER, PAV, SD, SEA_BED, SEA_LEVEL, SUN_DIR, SW, TD, TRAIL, TRAIL_W, TW } from './outdoor-map.js';
 import { buildSea, grass, groundMesh, makeTerrain, meadowWade, nearestOnLine, patch, seeds, smooth, vnoise } from './outdoor-ground.js';
@@ -349,6 +350,16 @@ export function buildOutdoor(room, h) {
   for (const o of h.bucketObjects(hillBucket)) { o.layers.enable(REFLECT_LAYER); o.renderOrder = ORDER.hills; group.add(o); }
   // 野餐墊底下不種草：草葉會隨風擺，從薄薄的墊子穿出來一閃一閃
   const onMat = (x, z) => Math.abs(x - pic.x) < 1.05 && Math.abs(z - pic.z) < 0.8;
+  // 樹下花園的花位（garden-spots.js）：長草之前先算好，花位周圍的草矮一點，花才不會埋在草裡（2026-11-19）。
+  // 種得下：在草原裡、不壓小徑、野餐墊、石頭、擋路的東西。不抽亂數，後面的擺設不會跟著變
+  const gardenFree = (x, z, r) => {
+    const ex = x / (MEADOW.rx - 0.6), ez = (z0 - z - MEADOW.c) / (MEADOW.rz - 0.6);
+    return ex * ex + ez * ez < 1 && !nearTrail(x, z, r + 0.2) && !(Math.abs(x - pic.x) < 1.25 + r && Math.abs(z - pic.z) < 1.0 + r)
+      && obstacles.every((o) => Math.hypot(x - o.x, z - o.z) > Math.hypot(o.hw, o.hd) + r)
+      && stones.every((st) => Math.hypot(x - st.x, z - st.z) > st.reach + r * 0.5);
+  };
+  const gardenSpots = makeSpots({ tree: treeAt, hollow: tree.hollow, free: gardenFree, groundY: heightAt });
+  for (const p of gardenSpots) stone(p.x, p.z, 0.1, 0.1, 0, 0.5);
   meadowGroup.add(grass(terrain, z0, coarse ? 10000 : 20000, h.uTime, (x, z) => nearTrail(x, z, 0.6) || onJetty(x, z0 - z, -0.15) || onMat(x, z), stones));
   meadowGroup.add(seeds(mz, h.uTime));
   meadowGroup.add(h.glowPoints(Array.from({ length: 28 }, () => {
@@ -433,6 +444,8 @@ export function buildOutdoor(room, h) {
     table: { x: tableX, z: Z(tableRel), hw: 0.5, hd: tableLen / 2 },
     pavilion: { x: pc.x, z: pc.z, r: PAV.r },
     hollow: tree.hollow,                     // 大樹的樹洞：作者和網站消息（hollow.js）
+    // 樹下花園（garden.js）：六十個花位、大樹在哪、樹冠（演出時縮一下）、樹洞、地面多高
+    garden: { spots: gardenSpots, tree: treeAt, crown: tree.crown, hollow: tree.hollow, groundY },
     easel,                                   // 原野的畫架（easel.js，面板在 easel-card.js）
     lore,                                    // 偶爾才看得到的東西（lore.js）：大鳥飛過時角色會抬頭看
     // 貓頭鷹停的地方：大樹的枝幹、石階口兩根燈串柱、棧橋的燈柱、涼亭頂上的金球。y 是站的高度，h 是面向，w 是停在那裡的機會

@@ -18,6 +18,8 @@ import { Ask } from './ask.js';
 import { buildPrologue } from './prologue.js';
 import { CellarVoice } from './cellar-voice.js';
 import { Hollow } from './hollow.js';
+import { Garden } from './garden.js';
+import { GardenCard } from './garden-card.js';
 
 // 背景音樂「星盤夜讀」（study.js，現場合成）：走進「歡迎光臨煉金畫廊」那間才開始放，往後的房間和戶外一路放著。
 // 那間一進門就是落地擺鐘，滴答聲從那裡來
@@ -37,9 +39,16 @@ export const grade = {
 };
 
 // 前廳的舞台光：電腦（中、高畫質）放三盞真的燈，低畫質以上有光柱裡的浮塵；手機只有地上的光池和光柱（vestibule-light.js）
+// 樹下花園（garden.js）：原野大樹周圍的花，所有人都看得到；同一區的人剛種、剛改的走 world.shared 的 garden（main.js 接 multiplayer.js 的 share）
 export function build(scene, { gallery, coarse, quality }) {
   const level = quality?.level ?? 'mid';
-  return buildWorld(scene, gallery, { lights: !coarse && level !== 'low', motes: level !== 'low' });
+  const world = buildWorld(scene, gallery, { lights: !coarse && level !== 'low', motes: level !== 'low' });
+  const site = world.outdoor?.garden;
+  if (site) {
+    world.garden = new Garden({ site, parent: world.rooms[world.rooms.length - 1].group, realtime: gallery.realtime });
+    world.shared = { ...world.shared, garden: world.garden };
+  }
+  return world;
 }
 
 // 白獸（beast.js）可能出現的地方：place 是登報時的地名（不用房間的名字），room 是第幾間（那間藏起來時牠也藏起來，戶外是最後一間）
@@ -118,6 +127,7 @@ export function acts(ctx) {
 // voice：地下室會說話的那幅畫（cellar-voice.js），站到畫前互動鍵「聊天」
 // hollow：大樹的樹洞（hollow.js），互動鍵「聽樹洞」或點洞裡的光打開作者的話和接案卡，接下案子穿門光過去（ctx.gate）；也是演唱會的門（door）
 // camTable：前廳的相機桌（camtable.js），正在看的那一格浮起來；卡片擺哪裡是介面的事，留在 main.js（placeCams）
+// garden：樹下花園（garden-card.js），沒有花的人走近樹洞拿到種子，互動鍵「撿」「種」「照顧」「改」，種和改打開調花卡片
 // tableHost：陽台長桌的主人（residents 建的 host），戶外那間看得到才動，看正在跟他說話的訪客；看不到時不說話
 export function fixtures(ctx) {
   const { world, ambience, player, camera, look, host, visitors } = ctx;
@@ -128,6 +138,7 @@ export function fixtures(ctx) {
     easel: world.outdoor?.easel ? new EaselCard({ world, player, camera, look }) : null,
     voice: world.cellar?.paintings.some((p) => p.data.talks) ? new CellarVoice({ world, player, camera }) : null,
     hollow: world.outdoor?.hollow ? new Hollow(ctx) : null,
+    garden: world.garden ? new GardenCard(ctx) : null,
     camTable: table ? {
       update(dt) {
         table.look(player.focus?.kind === 'cameras' ? player.focus.slot : -1);
