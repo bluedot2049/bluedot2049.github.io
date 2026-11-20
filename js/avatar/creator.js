@@ -267,6 +267,7 @@ export class Creator {
     if (FACE_PARTS.includes(k)) Object.assign(base, { face: '', keep: 1 });
     const cards = list.map(([id, name]) => {
       const open = isOpen(k, id, this.unlocked);
+      if (!open && GIFTS[lockedBy(k, id)]?.secret) return '';   // 專屬連結給的（爛熊）：沒拿到的人整格不出現
       const pic = this.thumb(k + ':' + id, { ...base, [k]: id }, FRAME[k]);
       return open
         ? `<button class="tile${L[k] === id ? ' on' : ''}" data-k="${k}" data-v="${id}">${pic}<span>${name}</span></button>`
@@ -362,7 +363,7 @@ export class Creator {
       return `<div class="closet-slot">${pic}<small>${s ? outfitName(s) : '空的'}</small><button class="store" data-act="keepoutfit" data-i="${i}">存進來</button></div>`;
     }).join('');
     // 印章只算海市攤販賣的（GIFTS 有 price 的那幾攤）；寫了 hint 的（任務、別區）不在這裡
-    const gifts = Object.entries(GIFTS).filter(([, g]) => !g.hint), got = gifts.filter(([, g]) => g.items.every(([k, id]) => this.unlocked.has(k + ':' + id)));
+    const gifts = Object.entries(GIFTS).filter(([, g]) => !g.hint && !g.secret), got = gifts.filter(([, g]) => g.items.every(([k, id]) => this.unlocked.has(k + ':' + id)));
     const stamps = gifts.map(([v, g]) => {
       const [k, id] = g.items[0];
       return got.some(([gv]) => gv === v)

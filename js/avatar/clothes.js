@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { Kit, mergeBucket } from '../core/props.js';
 import { rod } from './heads.js';
-import { CLOTH, HOODED, raceOf } from './looks.js';
+import { CLOTH, SKINS, HOODED, raceOf } from './looks.js';
 
 export const HIP = 0.42;
 const WHITE = '#f4f2ec', BLACK = '#1e1c1e', DARK = '#3a2414', GOLD = '#d4a54a', METAL = '#a0a6ae', WOOD = '#7a5432', LEATHER = '#5a3a24';
@@ -25,6 +25,7 @@ function palette(L) {
   return {
     top: col(L.topC), top2: col(L.topC2), bot: col(L.botC), bot2: col(L.botC2), out: col(L.outC), out2: col(L.outC2),
     one: col(L.oneC), one2: col(L.oneC2), shoe: col(L.shoeC), neck: col(L.neckC), back: col(L.backC), hand: col(L.handC),
+    skin: hex(SKINS[L.skin] ?? SKINS[0]),   // 光溜溜（爛熊）的身體是膚色
   };
 }
 
@@ -42,7 +43,11 @@ const COAT = {
   mino: [[0.2, 0.5, 0.36, 0.26], [0.42, 0.68, 0.3, 0.22], [0.6, 0.84, 0.26, 0.17]],
 };
 const SUIT_COAT = [[0.3, 0.8, 0.25, 0.18]];
-const ONE_COAT = { dino: SUIT_COAT, panda: SUIT_COAT, astronaut: SUIT_COAT, banana: [[0.08, 0.8, 0.26, 0.2]], yukata: [[0.08, 0.8, 0.27, 0.17]] };
+// 光溜溜：爛熊那一整坨身體，屁股最寬、往上收到肩膀接頭。點 [y, 半徑]（半徑乘胖瘦）。
+// 手臂掛在 0.72、往外張 0.28：肩膀、腰收得夠窄手才不會埋進去，手垂到的高度（0.4）以下才放寬
+const FUR = [[0.16, 0.12], [0.22, 0.22], [0.3, 0.27], [0.4, 0.265], [0.52, 0.235], [0.64, 0.2], [0.74, 0.17], [0.82, 0.14], [0.88, 0.08]];
+const ONE_COAT = { dino: SUIT_COAT, panda: SUIT_COAT, astronaut: SUIT_COAT, banana: [[0.08, 0.8, 0.26, 0.2]], yukata: [[0.08, 0.8, 0.27, 0.17]],
+  fur: FUR.slice(1).map(([y1, r1], i) => [FUR[i][0], y1, FUR[i][1], r1]) };
 
 // 身上最外層在 y 高度離中線多遠（前後一樣）。領帶、項鍊、背包、腰包照它擺，穿了斗篷、蓑衣也不會埋進去。
 // 沒穿寬外套時就是 chest()，原本的位置不變
@@ -394,6 +399,10 @@ function onepiece(k, L, W, P) {
       k.cyl(sr(0.42) + 0.006, sr(0.38) + 0.006, 0.04, '#8a8a90', 0, 0.4, 0);
       break;
     }
+    case 'fur':
+      // 光溜溜：一整坨膚色的身體，車床轉出來（平面著色看得到一圈圈的面）。腿、手臂也是膚色（ONE_LEG 沒寫＝光腿，sleeveOf 是 none）
+      k.add(new THREE.LatheGeometry([[0.13, 0], ...FUR].map(([y, r]) => new THREE.Vector2(r * W, y)), 12), P.skin, 0, 0, 0, { color2: mix(P.skin, '#ffffff', 0.2) });
+      break;
     case 'yukata': {
       // 浴衣：長到腳踝，身上小花，腰上寬寬的帶子，背後打結，領口交叉
       const [[, , a0, a1]] = ONE_COAT.yukata, r0 = a0 * W, r1 = a1 * W, th = Math.atan((r0 - r1) / 0.72);
@@ -664,7 +673,7 @@ export function bodyGeo(L, W, cape = null, head = null) {
 
 // 袖子：long 長袖、short 短袖、none 露出手臂、wide 和服那種垂下來的大袖子
 function sleeveOf(L, P) {
-  if (L.one !== 'none') return { dino: ['long', P.one], panda: ['long', BLACK], banana: ['long', BANANA], astronaut: ['long', SUIT], yukata: ['wide', P.one] }[L.one];
+  if (L.one !== 'none') return { dino: ['long', P.one], panda: ['long', BLACK], banana: ['long', BANANA], astronaut: ['long', SUIT], yukata: ['wide', P.one], fur: ['none', P.skin] }[L.one];
   if (OUTER_SLEEVE[L.outer]) return [OUTER_SLEEVE[L.outer], P.out];
   return [TOP_SLEEVE[L.top] || 'long', L.top === 'armor' ? METAL : P.top];
 }

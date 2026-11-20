@@ -176,7 +176,7 @@ const PART = {
 const ITEM = {
   'top:armor': 'metal', 'top:sweater': 'knit', 'top:robe': 'heavy', 'bottom:robe': 'heavy', 'bottom:hakama': 'heavy',
   'outer:raincoat': 'plastic', 'outer:mino': 'straw', 'outer:vest': 'cloth', 'outer:apron': 'cloth',
-  'one:dino': 'fluff', 'one:panda': 'fluff', 'one:banana': 'fluff', 'one:astronaut': 'plastic', 'one:yukata': 'cloth',
+  'one:dino': 'fluff', 'one:panda': 'fluff', 'one:banana': 'fluff', 'one:astronaut': 'plastic', 'one:yukata': 'cloth', 'one:fur': 'fluff',
   'hat:crown': 'trinket', 'hat:straw': 'straw', 'hat:cone': 'plastic', 'hat:party': 'paper', 'hat:sprout': 'straw',
   'neck:bell': 'bell', 'neck:necklace': 'trinket', 'neck:lei': 'straw',
   'back:guitar': 'string', 'back:sword': 'metal', 'back:wingA': 'wing', 'back:wingB': 'wing', 'back:wingC': 'wing', 'back:tail': 'fluff', 'back:shell': 'wood', 'back:pouch': 'leather',

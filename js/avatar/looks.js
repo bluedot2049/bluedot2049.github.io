@@ -14,6 +14,7 @@ export const SKINS = [
   0xf1c9a5, 0xe0a87e, 0xb87a52, 0x7a4a30, 0xf0e8d8, 0x8a8a92, 0x3a3036, 0xd8893a,
   0xc8a060, 0x5a9a4a, 0x4a8a7a, 0x4a8ad0, 0x8a7aa0, 0xd07ab0, 0xc83a2a, 0xe8d040,
   0x8f8172,   // 2026-11-17：土撥鼠布偶的灰棕。色號存在照片裡，只能往後加
+  0xf3f1ec,   // 2026-11-20：爛熊的白（偏冷的米白，不是純白；第 4 色太黃，熊看起來像泰迪熊）
 ];
 // 衣服、鞋子、配件共用的顏色。前 8 個是舊版的長袍色，接著 8 個是舊版的圍巾色，舊存檔的色號才換得過來
 export const CLOTH = [
@@ -78,6 +79,9 @@ export const RACES = [
   { id: 'marmot', name: '土撥鼠', head: 'marmot', own: true, ey: 0.25, ex: 0.1, md: 0.12, top: 0.36, hs: 1.1, skin: 16, hood: [0.21, 0.29], helmet: [0.2, 0.34, 0.03], knight: [0.21, 0.35, 0.04], body: { H: 0.9, W: 1.32, leg: 0.7 }, crowd: false },
   { id: 'elephant', name: '小象', head: 'elephant', own: true, ey: 0.25, ex: 0.1, md: 0.1, top: 0.4, hs: 1.05, skin: 5, hood: [0.22, 0.29], helmet: false, knight: [0.23, 0.36, 0.06], body: { H: 0.97, W: 1.1 }, crowd: false },
   { id: 'animegirl', name: '動漫女生', head: 'animegirl', own: true, ey: 0.19, ex: 0.075, md: 0.1, fs: 0.9, top: 0.38, hs: 1, skin: 0, hood: [0.21, 0.27], helmet: [0.21, 0.32, 0.01], knight: [0.21, 0.34, 0.02], body: { H: 0.96, W: 0.86, hs: 0.98 }, crowd: false },
+  // 2026-11-20：使用者朋友畫的白熊（IG bossyfkbear）。只給拿到專屬連結的人（GIFTS 的 lanxiong），鏡子裡沒拿到的人看不到這一格。
+  // 配 one 的「光溜溜」（膚色的一整坨身體）才像他畫的：頭身一體、上窄下寬
+  { id: 'lanxiong', name: '爛熊', head: 'lanxiong', own: true, ey: 0.215, ex: 0.07, md: 0.13, top: 0.4, hs: 1.1, skin: 17, hood: false, helmet: false, knight: [0.2, 0.33, 0.03], body: { H: 0.9, W: 1.4, hs: 1.22, leg: 0.6 }, crowd: false },
 ];
 // 路人、旅人、演唱會的人群抽種族用的：住在某一區的正經種族不在外面亂逛；crowd: false 的也不抽
 export const crowdRaces = () => RACES.filter((r) => !r.home && r.crowd !== false);
@@ -108,7 +112,7 @@ export const OPTIONS = {
   botPat: [['plain', '素面'], ['stripe', '條紋'], ['dot', '點點'], ['band', '一條線']],
   outer: [['none', '不穿'], ['cape', '披風'], ['cloak', '斗篷'], ['vest', '背心'], ['blazer', '西裝外套'], ['raincoat', '雨衣'], ['apron', '圍裙'], ['haori', '羽織'], ['mino', '蓑衣']],
   shoes: [['boots', '靴子'], ['bare', '赤腳'], ['sneakers', '運動鞋'], ['slippers', '藍白拖'], ['rainboots', '雨鞋'], ['heels', '高跟鞋'], ['ballet', '芭蕾舞鞋'], ['clown', '小丑鞋'], ['geta', '木屐'], ['odd', '只有一隻']],
-  one: [['none', '不穿'], ['dino', '恐龍裝'], ['panda', '熊貓裝'], ['banana', '香蕉裝'], ['astronaut', '太空衣'], ['yukata', '浴衣']],
+  one: [['none', '不穿'], ['dino', '恐龍裝'], ['panda', '熊貓裝'], ['banana', '香蕉裝'], ['astronaut', '太空衣'], ['yukata', '浴衣'], ['fur', '光溜溜']],
   neck: [['scarf', '圍巾'], ['none', '沒有'], ['tie', '領帶'], ['bowtie', '領結'], ['necklace', '項鍊'], ['lei', '花環'], ['bell', '鈴鐺'], ['towel', '毛巾']],
   back: [['pouch', '腰包'], ['none', '沒有'], ['backpack', '背包'], ['schoolbag', '書包'], ['satchel', '郵差包'], ['guitar', '吉他'], ['sword', '大劍'], ['quiver', '箭筒'], ['wingA', '天使翅膀'], ['wingB', '蝙蝠翅膀'], ['wingC', '蝴蝶翅膀'], ['tail', '尾巴'], ['shell', '龜殼'], ['shield', '圓盾'], ['kite', '騎士盾'], ['bowpack', '弓和箭筒'], ['fishpouch', '魚皮袋'], ['gembox', '零錢盒'], ['katana', '武士刀']],
   // 右手拿的東西。左手留著拿點心，之後探索世界撿東西也用左手
@@ -154,6 +158,10 @@ export const GIFTS = {
   // 背的配件，一幕劇、報社給的（以前想過當錢袋升級，2026-11-11 改成錢包固定十顆、子夜補滿，這兩個只是背在身上）
   purse7: { hint: '海市　跟著漁火走到最後', items: [['back', 'fishpouch']] },         // 漁火演完（haishi-acts.js）
   purse10: { hint: '自己拍的照片登上星潮報頭版', items: [['back', 'gembox']] },        // 頭版、號外（vendors.js 的編輯）
+  // secret：沒拿到的人鏡子裡整格不出現（不蓋紅印、不說去哪拿），也不算進海市印章。link：網址 #gift=這個字 打開就收下、換上 look（main.js 的 loadLook）。
+  // 口令寫在程式裡，讀得到、連結也轉傳得出去：使用者說朋友之間傳開沒關係
+  lanxiong: { secret: true, link: 'bossybear', items: [['race', 'lanxiong'], ['one', 'fur']],
+    look: { race: 'lanxiong', skin: 17, one: 'fur', shoes: 'bare', hat: 'none', neck: 'none', back: 'none', hand: 'none', glasses: 'none', eyes: 'base', brows: 'none', nose: 'none', mouth: 'none', mark: 'none', face: '', keep: 0 } },
 };
 // 上鎖的東西：送禮表的照攤販 id 記，價目表（wares.js）的記 '@店'，接在送禮表後面
 const LOCKS = new Map();
@@ -175,6 +183,14 @@ export function unlock(items) {
   for (const [k, id] of items) set.add(k + ':' + id);
   putSave({ unlocked: [...set] });
   return set.size > n;
+}
+
+// 專屬連結（#gift=口令）：收下那一項，回傳要換上的樣子；口令不對回 null
+export function giftFromLink(word) {
+  const g = Object.values(GIFTS).find((x) => x.link === word);
+  if (!g) return null;
+  unlock(g.items);
+  return sanitizeLook({ ...presetLook(0), ...g.look });
 }
 
 export const isOpen = (k, id, set) => !LOCKS.has(k + ':' + id) || set.has(k + ':' + id);

@@ -8,7 +8,7 @@ import { addMirrorLight, setMirrorLight, setStageLight } from './avatar/mirrorli
 import { Attention } from './avatar/attention.js';
 import { kaoLike, kaoFacing, kaoGrew, kaoFaceNew } from './avatar/kaomoji-parts.js';
 import { KaoPanel } from './controls/kaopanel.js';
-import { sanitizeLook, randomPreset } from './avatar/looks.js';
+import { sanitizeLook, randomPreset, giftFromLink } from './avatar/looks.js';
 import { getSave, putSave, markTour } from './save/progress.js';
 import { readCode, openFace, tryOn, hasProgress, restoreSave } from './save/savecode.js';
 import { Pack } from './save/pack.js';
@@ -115,11 +115,16 @@ document.addEventListener('dragstart', (e) => { if (e.target.tagName === 'IMG' &
 
 // 自己捏的樣子存在這台裝置上（looks.js 的存檔），下次來還是同一個。第一次來隨機配一套顏色
 // 網址帶 #save=存檔碼：整份存檔搬過來（蓋掉之前先問）。#look=造型碼：只是試穿，不存、不動解鎖，重新整理就回到自己的樣子
+// #gift=口令：專屬連結（looks.js GIFTS 的 link），收下那一項、換上它的樣子並存起來
 function loadLook() {
-  const m = /^#(save|look)=([\w.,:~=-]+)$/.exec(location.hash);
+  const m = /^#(save|look|gift)=([\w.,:~=-]+)$/.exec(location.hash);
   if (m) {
     try { history.replaceState(null, '', location.pathname + location.search); } catch {}
-    const got = readCode(m[2]);
+    if (m[1] === 'gift') {
+      const L = giftFromLink(m[2]);
+      if (L) { saveLook(L); return L; }
+    }
+    const got = m[1] === 'gift' ? null : readCode(m[2]);
     if (m[1] === 'save') {
       const sv = got?.save;
       if (!sv) alert('存檔碼打不開，可能缺字');
