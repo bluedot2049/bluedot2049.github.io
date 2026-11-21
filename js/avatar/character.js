@@ -10,7 +10,7 @@ import { CAMERAS, GUI_EYE, cameraModel, cameraPart, cameraParts, chromeMat, isCh
 import { HIP, HOODED, itemOf, bodyGeo, armGeo, legGeo, capeGeo, CAPE_BEND, capeT, camStrap, wingGeo, wingAt, hasWings, tailGeo, tailAt, katanaGeo, katanaFit, KATANA_ARM } from './clothes.js';
 import { HandClear, shapeOf, reachAt, shapePoints } from './handclear.js';
 import { Dangle } from './dangle.js';
-import { BEAR_SHOULDER, BEAR_FACES, bearFaceGeo, smokeAt, SMOKE_PUFFS } from './lanxiong.js';
+import { BEAR_SHOULDER, BEAR_FACES, BEAR_HANDS, bearFaceGeo, smokeAt, SMOKE_PUFFS } from './lanxiong.js';
 import { FACES, HANDS, BODIES, kaoCode, kaoParts } from './kaomoji-parts.js';
 import { BREEZE } from '../core/weather.js';
 import { BITES, BITE_TIME, EMPTY, FACE_GLSL_HEAD, FACE_GLSL_MAP, HAIR_FIT, HAT_H, INK_RGB, NECK, TALL_BACK, build, decalGeo, faceMap, foodModel, hatGeo, headGeo, hex, shorten, smooth, swap } from './character-build.js';
@@ -1192,7 +1192,7 @@ export class Character {
     };
     let tilt = 0;
     const handAt = (id, w) => {
-      const h = HANDS[id];
+      const h = this.bean && BEAR_HANDS[id] ? { ...HANDS[id], ...BEAR_HANDS[id] } : HANDS[id];   // 爛熊有幾個動作手臂另外擺（lanxiong.js）
       if (!id || w <= 0) return;
       const k = w * (h.firm ? Math.min(1, A / KAO_LOOSE) : A);   // firm：要碰到東西的（壓帽），點一下也擺滿
       const a = usable(this.armR, h.free) ? this.armR : usable(this.armL, h.free) ? this.armL : null;
