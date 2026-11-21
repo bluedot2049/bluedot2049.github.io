@@ -392,7 +392,8 @@ export class Multiplayer {
     const seats = this.player.world.outdoor?.seats || [];
     m.s = Number.isInteger(m.s) && m.s >= -3 && m.s <= seats.length ? m.s : 0;   // -2 躺、-3 坐邊上（player.sitCode）
     m.f = isFood(m.f) ? m.f : 0;
-    m.a = Number.isInteger(m.a) && m.a >= 0 && m.a <= 5 ? m.a : 0;
+    // 拿法＋1（photo.js 的 GRIPS）：1 蹲低…4 自拍、5 沒帶相機比取景框、6 腰平（拍立拿a500）。加了拿法這裡要跟著放寬，不然別人看到的是放下
+    m.a = Number.isInteger(m.a) && m.a >= 0 && m.a <= 6 ? m.a : 0;
     m.q = isNum(m.q, 2) ? m.q : 0;
     m.w = m.w === 1 ? 1 : 0;
     m.y = isNum(m.y, 200) ? m.y : null;

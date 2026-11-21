@@ -160,7 +160,7 @@ export const GIFTS = {
   // 背的配件，一幕劇、報社給的（以前想過當錢袋升級，2026-11-11 改成錢包固定十顆、子夜補滿，這兩個只是背在身上）
   purse7: { hint: '海市　跟著漁火走到最後', items: [['back', 'fishpouch']] },         // 漁火演完（haishi-acts.js）
   purse10: { hint: '自己拍的照片登上星潮報頭版', items: [['back', 'gembox']] },        // 頭版、號外（vendors.js 的編輯）
-  // secret：沒拿到的人鏡子裡整格不出現（不蓋紅印、不說去哪拿），也不算進海市印章。link：網址 #gift=這個字 打開就收下、換上 look（main.js 的 loadLook）。
+  // secret：沒拿到的人鏡子裡整格不出現（不蓋紅印、不說去哪拿），也不算進海市印章。link：網址 #gift=這個字 打開就收下、這一趟換上 look，不存（main.js 的 loadLook）。
   // 口令寫在程式裡，讀得到、連結也轉傳得出去：使用者說朋友之間傳開沒關係
   lanxiong: { secret: true, link: 'bossybear', items: [['race', 'lanxiong'], ['one', 'fur']],
     look: { race: 'lanxiong', skin: 17, one: 'fur', shoes: 'bare', hat: 'none', neck: 'none', back: 'none', hand: 'none', glasses: 'none', eyes: 'base', brows: 'none', nose: 'none', mouth: 'none', mark: 'none', face: '', keep: 0 } },
