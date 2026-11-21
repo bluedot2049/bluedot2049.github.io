@@ -3,6 +3,7 @@
 // 頭的造型：原點在脖子上，面向 +z，大小跟旅人和學徒的頭差不多（半徑約 0.2）。
 // 旅人和捏角色共用。每個頭用 Kit 拼，合併成一個幾何。
 import * as THREE from 'three';
+import { bearHead } from './lanxiong.js';
 
 const GOLD = '#d4a54a';
 const mix = (a, b, t) => '#' + new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString();
@@ -118,22 +119,6 @@ function pear() {
     z *= y < 0 ? 1 + 0.14 * t : 1;                    // 臉頰往前鼓
     if (y < 0) y *= 1.22;
     p.setXYZ(i, x * 0.2, 0.2 + y * 0.2, -0.015 + z * 0.2);
-  }
-  return g;
-}
-
-// 爛熊的頭：圓頂，下半往兩邊、往下撐開接到肩膀上（頭身一體，沒有脖子），正面稍微壓平
-function dome() {
-  const g = new THREE.IcosahedronGeometry(1, 2), p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const t = Math.max(0, -y), rs = Math.hypot(x, z);
-    // 下半不收成球底，往下撐成筒，底跟肩膀一樣寬，看不出脖子
-    const w = rs > 1e-4 ? (rs + (1 - rs) * Math.sqrt(t)) / rs : 1;
-    x *= w;
-    z *= w * (z > 0 ? 0.93 : 1);
-    if (y < 0) y *= 1.7;             // 往下長，底邊埋進身體比較寬的地方，從後面看不到接縫
-    p.setXYZ(i, x * 0.2, 0.21 + y * 0.2, z * 0.2);
   }
   return g;
 }
@@ -661,18 +646,10 @@ export const HEADS = {
       for (const a of [-1, 1]) k.cone(0.022, 0.05, '#c83e4d', s * 0.18 + a * 0.03, ty + 0.012, -0.055, { rz: -a * 1.3, sz: 0.4 });
     }
   },
-  // 爛熊（朋友畫的白熊）：圓頂頭往下接身體、頭頂兩個小圓耳；五官很小、擠在臉的下半：
-  // 眼睛是兩條短橫線（半閉、厭世）、一點黑鼻頭在微微鼓起的口鼻上、一條短短的嘴。原圖沒有別的顏色，口鼻跟頭同色
+  // 爛熊（朋友畫的白熊，Gemini 做的形狀在 lanxiong.js）：頭身一體，整顆身體在 clothes.js 的「光溜溜」，這裡只放跟著頭轉的耳朵和臉。
+  // 沒有 o.bean 的（畫臉用的深度圖、別的地方單獨拼頭）連身體一起放，臉才有東西可貼
   lanxiong(k, c, _c2, f, o) {
-    const ink = '#1a1412';
-    k.add(dome(), c, 0, 0, 0, { color2: mix(c, '#ffffff', 0.25) });
-    k.ball(0.075, c, 0, 0.14, 0.15, { sx: 1.15, sy: 0.75, sz: 0.75 });
-    k.ball(0.019, ink, 0, 0.164, 0.205, { sx: 1.3, sy: 0.85, sz: 0.7 });
-    for (const s of [-1, 1]) E(k, f).box(0.036, 0.008, 0.01, ink, s * 0.07, 0.215, 0.18, { ry: s * 0.36, rz: s * 0.08 });
-    M(k, f).box(0.03, 0.006, 0.01, ink, 0, 0.105, 0.198);
-    if (under(o, 'knight')) return;
-    const y = under(o, 'straw') ? 0.37 : 0.39;
-    for (const s of [-1, 1]) k.ball(0.055, c, s * 0.12, y, -0.01, { sz: 0.7 });
+    bearHead(k, c, f, !o?.bean);
   },
   // 胖海獅（只有 NPC：主線的發膏，looks.js 的 NPC_RACES）：圓頭往前收成短吻、又大又圓的黑鼻頭、兩團鼓鼓的鬍鬚墊（沒有鬍鬚）、水汪汪的大眼、
   // 小耳朵、雙下巴。跟胖頭、海牛分開靠大鼻頭、大眼。顏色吃膚色；護目鏡、帽子由 npc/fagao.js 另外掛

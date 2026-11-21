@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { Kit, mergeBucket } from '../core/props.js';
 import { rod } from './heads.js';
 import { CLOTH, SKINS, HOODED, raceOf } from './looks.js';
+import { BEAR_SHELL, bearBody, bearArm, bearLeg } from './lanxiong.js';
 
 export const HIP = 0.42;
 const WHITE = '#f4f2ec', BLACK = '#1e1c1e', DARK = '#3a2414', GOLD = '#d4a54a', METAL = '#a0a6ae', WOOD = '#7a5432', LEATHER = '#5a3a24';
@@ -43,16 +44,14 @@ const COAT = {
   mino: [[0.2, 0.5, 0.36, 0.26], [0.42, 0.68, 0.3, 0.22], [0.6, 0.84, 0.26, 0.17]],
 };
 const SUIT_COAT = [[0.3, 0.8, 0.25, 0.18]];
-// 光溜溜：爛熊那一整坨身體，屁股最寬、往上收到肩膀接頭。點 [y, 半徑]（半徑乘胖瘦）。
-// 手臂掛在 0.72、往外張 0.28：肩膀、腰收得夠窄手才不會埋進去，手垂到的高度（0.4）以下才放寬
-const FUR = [[0.16, 0.12], [0.22, 0.22], [0.3, 0.27], [0.4, 0.265], [0.52, 0.235], [0.64, 0.2], [0.74, 0.17], [0.82, 0.14], [0.88, 0.08]];
+// 光溜溜：爛熊（looks.js 的 bean 種族）頭身一體的整顆身體，形狀在 lanxiong.js（Gemini 做的）。BEAR_SHELL 是它在每個高度多寬，背包、腰包照它擺
 const ONE_COAT = { dino: SUIT_COAT, panda: SUIT_COAT, astronaut: SUIT_COAT, banana: [[0.08, 0.8, 0.26, 0.2]], yukata: [[0.08, 0.8, 0.27, 0.17]],
-  fur: FUR.slice(1).map(([y1, r1], i) => [FUR[i][0], y1, FUR[i][1], r1]) };
+  fur: BEAR_SHELL };
 
 // 身上最外層在 y 高度離中線多遠（前後一樣）。領帶、項鍊、背包、腰包照它擺，穿了斗篷、蓑衣也不會埋進去。
 // 沒穿寬外套時就是 chest()，原本的位置不變
 export function shell(L, W) {
-  const segs = (L.one !== 'none' ? ONE_COAT[L.one] : COAT[L.outer]) || [];
+  const segs = (L.one !== 'none' ? ONE_COAT[L.one] : COAT[L.outer]) || [];   // 光溜溜照豆子的輪廓（ONE_COAT.fur），背包貼在豆子背上
   return (y) => {
     let r = chest(y, W);
     for (const [y0, y1, r0, r1] of segs) if (y >= y0 && y <= y1) r = Math.max(r, lerp(r0, r1, (y - y0) / (y1 - y0)) * W);
@@ -400,8 +399,8 @@ function onepiece(k, L, W, P) {
       break;
     }
     case 'fur':
-      // 光溜溜：一整坨膚色的身體，車床轉出來（平面著色看得到一圈圈的面）。腿、手臂也是膚色（ONE_LEG 沒寫＝光腿，sleeveOf 是 none）
-      k.add(new THREE.LatheGeometry([[0.13, 0], ...FUR].map(([y, r]) => new THREE.Vector2(r * W, y)), 12), P.skin, 0, 0, 0, { color2: mix(P.skin, '#ffffff', 0.2) });
+      // 光溜溜：爛熊整顆身體連頭頂（lanxiong.js），吃膚色。手腳見 armGeo、legGeo 的 fur
+      bearBody(k, P.skin, W);
       break;
     case 'yukata': {
       // 浴衣：長到腳踝，身上小花，腰上寬寬的帶子，背後打結，領口交叉
@@ -664,7 +663,7 @@ export function bodyGeo(L, W, cape = null, head = null) {
       bottom(k, L, W, P);
       outer(k, L, W, P);
     }
-    neck(k, L, W, P);
+    if (L.one !== 'fur') neck(k, L, W, P);   // 光溜溜沒有脖子可以圍
     back(k, L, W, P, cape, head);
   });
 }
@@ -679,8 +678,10 @@ function sleeveOf(L, P) {
 }
 
 // 手臂：原點在肩膀，往 -y 垂下去，手在 -0.33
-export function armGeo(L, W, skin) {
+export function armGeo(L, W, skin, armSide = 1) {
   const P = palette(L), r = 0.055 * Math.sqrt(W), [type, c] = sleeveOf(L, P);
+  // 光溜溜：爛熊粗短圓的手（lanxiong.js）。拉長到手心 -0.33，相機、雨傘、麥克風照原本的位置拿
+  if (L.one === 'fur') return build((k) => bearArm(k, armSide, skin, W));
   return build((k) => {
     const cap = (color, rr) => k.add(new THREE.CapsuleGeometry(rr, 0.25, 2, 6), color, 0, -0.16, 0);
     if (type === 'none') cap(skin, r * 0.85);
@@ -698,6 +699,8 @@ export function armGeo(L, W, skin) {
 // 一條腿加一隻鞋：原點在腿的關節，地面在 -HIP。side 是左（-1）右（1）
 export function legGeo(L, W, skin, side) {
   const P = palette(L), lr = 0.045 * Math.sqrt(W);
+  // 光溜溜：爛熊粗短的腿、平底腳掌，不穿鞋（lanxiong.js）。腳底在 -BEAR_HIP，character.js 不再壓它的長度
+  if (L.one === 'fur') return build((k) => bearLeg(k, side, skin, W));
   return build((k) => {
     const bare = (from = 0) => k.cyl(lr * 0.85, lr * 0.75, 0.38 - from, skin, 0, -(from + 0.38) / 2, 0, {}, 6);
     const cloth = (c, to = 0.38, r0 = lr * 1.35, r1 = lr * 1.2) => k.cyl(r0, r1, to + 0.02, c, 0, (0.02 - to) / 2, 0, {}, 7);

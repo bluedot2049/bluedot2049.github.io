@@ -71,6 +71,11 @@ const MENU = [
   { id: 'closet', name: '衣櫃', view: 'body', subs: [] },
 ];
 const TAB = Object.fromEntries(MENU.map((t) => [t.id, t]));
+// 爛熊（頭身一體的 bean 種族，專屬連結給的）只改得到這幾頁：眼鏡、帽子、背上、右手。
+// 種族、膚色、體型、五官、畫臉、衣服都關掉（臉和身體是畫好的那一隻，衣服穿不上），衣櫃（換人會換掉種族）、骰子、預設也收起來
+const BEAN_SUBS = ['glasses', 'hat', 'back', 'hand'];
+const tabOf = (L, id) => (raceOf(L).bean ? { ...TAB[id], subs: TAB[id].subs.filter((s) => BEAN_SUBS.includes(s.id)) } : TAB[id]);
+const tabOpen = (L, id) => !raceOf(L).bean || tabOf(L, id).subs.length > 0;
 const PALETTE = { skin: SKINS, hairC: HAIR_COLORS, hatC: HAT_COLORS };
 const palette = (k) => PALETTE[k] || CLOTH;
 // 拍小圖時要先拿掉、不然會擋住的東西
@@ -209,7 +214,7 @@ export class Creator {
   }
 
   get page() {
-    const t = TAB[this.tab];
+    const t = tabOf(this.look, this.tab);
     return t.subs.find((s) => s.id === this.sub[this.tab]) ?? null;
   }
 
@@ -220,12 +225,18 @@ export class Creator {
     this.slot = 0;
     this.render();
     this.body.scrollTop = 0;
-    this.events.onView(this.page?.view ?? TAB[tab].view);
+    this.events.onView(this.page?.view ?? tabOf(this.look, this.tab).view);
   }
 
   render() {
-    const L = this.look, t = TAB[this.tab], page = this.page;
-    this.nav.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === this.tab));
+    const L = this.look;
+    // 爛熊：關掉的分頁、骰子、預設藏起來；停在關掉的那頁就換到開著的第一頁
+    if (!tabOpen(L, this.tab)) this.tab = MENU.find((m) => tabOpen(L, m.id)).id;
+    const open = tabOf(L, this.tab).subs;
+    if (open.length && !open.some((s) => s.id === this.sub[this.tab])) this.sub[this.tab] = open[0].id;
+    const t = tabOf(L, this.tab), page = this.page;
+    this.nav.querySelectorAll('[data-tab]').forEach((b) => { b.hidden = !tabOpen(L, b.dataset.tab); b.classList.toggle('on', b.dataset.tab === this.tab); });
+    this.nav.querySelectorAll('[data-act]').forEach((b) => { b.hidden = !!raceOf(L).bean; });
 
     // 第二層：部位小格，角落的小點是那一格現在的顏色
     this.subs.hidden = !t.subs.length;
@@ -288,7 +299,9 @@ export class Creator {
   pageHTML(id) {
     const L = this.look;
     const races = (odd) => RACES.filter((r) => !!r.odd === odd).map((r) => [r.id, r.name]);
-    const covered = L.one !== 'none' ? `<p class="dress-note">${optionName('one', L.one)}蓋住這一層<button data-act="unone">脫掉</button></p>` : '';
+    // 頭身一體的豆子（爛熊）不穿衣服（character.js 拼的時候一律換成光溜溜）：衣服還是能挑，換別的種族才穿得出來
+    const covered = raceOf(L).bean ? `<p class="dress-note">${raceOf(L).name}不穿衣服</p>`
+      : L.one !== 'none' ? `<p class="dress-note">${optionName('one', L.one)}蓋住這一層<button data-act="unone">脫掉</button></p>` : '';
     switch (id) {
       case 'race': return this.tiles('race', '人和動物', races(false), false) + this.tiles('race', '其他', races(true));
       case 'shape': return this.slider('tall') + this.slider('fat') + this.slider('head');
@@ -323,7 +336,7 @@ export class Creator {
       case 'top': return covered + this.tiles('top') + this.tiles('topPat', '花紋');
       case 'bottom': return covered + this.tiles('bottom') + this.tiles('botPat', '花紋');
       case 'outer': return covered + this.tiles('outer');
-      default: return this.tiles(id);
+      default: return (raceOf(L).bean && ['one', 'shoes', 'neck'].includes(id) ? covered : '') + this.tiles(id);
     }
   }
 
@@ -385,7 +398,7 @@ export class Creator {
     const b = e.target.closest('button');
     if (!b) return;
     const L = this.look, k = b.dataset.k;
-    if (b.dataset.tab) { this.show(b.dataset.tab); return; }
+    if (b.dataset.tab) { if (tabOpen(L, b.dataset.tab)) this.show(b.dataset.tab); return; }
     if (b.dataset.sub) { this.show(this.tab, b.dataset.sub); return; }
     if (b.dataset.lock) {
       // 價目表上的（'@店'）：哪裡、誰在賣、幾顆水晶；海市攤販那組（GIFTS）：任務寫的 hint，或在海市向哪一攤拿。錢關著（purse.js 的 OPEN）不寫價錢

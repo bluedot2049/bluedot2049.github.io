@@ -80,8 +80,10 @@ export const RACES = [
   { id: 'elephant', name: '小象', head: 'elephant', own: true, ey: 0.25, ex: 0.1, md: 0.1, top: 0.4, hs: 1.05, skin: 5, hood: [0.22, 0.29], helmet: false, knight: [0.23, 0.36, 0.06], body: { H: 0.97, W: 1.1 }, crowd: false },
   { id: 'animegirl', name: '動漫女生', head: 'animegirl', own: true, ey: 0.19, ex: 0.075, md: 0.1, fs: 0.9, top: 0.38, hs: 1, skin: 0, hood: [0.21, 0.27], helmet: [0.21, 0.32, 0.01], knight: [0.21, 0.34, 0.02], body: { H: 0.96, W: 0.86, hs: 0.98 }, crowd: false },
   // 2026-11-20：使用者朋友畫的白熊（IG bossyfkbear）。只給拿到專屬連結的人（GIFTS 的 lanxiong），鏡子裡沒拿到的人看不到這一格。
-  // 配 one 的「光溜溜」（膚色的一整坨身體）才像他畫的：頭身一體、上窄下寬
-  { id: 'lanxiong', name: '爛熊', head: 'lanxiong', own: true, ey: 0.215, ex: 0.07, md: 0.13, top: 0.4, hs: 1.1, skin: 17, hood: false, helmet: false, knight: [0.2, 0.33, 0.03], body: { H: 0.9, W: 1.4, hs: 1.22, leg: 0.6 }, crowd: false },
+  // 2026-11-21 換成 Gemini 做的形狀（lanxiong.js）。bean：頭身一體，身體一律是 one 的「光溜溜」（整顆身體連頭頂），不穿衣服；
+  // 頭的關節只帶臉和耳朵（character-build.js 傳 o.bean）。turn、nod：轉頭、點頭只動幾成，臉才不會滑出身體。
+  // body.leg 照它的屁股高度（lanxiong.js 的 BEAR_HIP / 0.42）；頭的大小滑桿不管用（臉貼在身體上，sizes()）
+  { id: 'lanxiong', name: '爛熊', head: 'lanxiong', own: true, ey: 0.248, ex: 0.068, md: 0.088, top: 0.43, hs: 1.1, skin: 17, hood: false, helmet: false, knight: [0.27, 0.3, 0.02], body: { leg: 0.25 / 0.42 }, bean: true, turn: 0.25, nod: 0.25, crowd: false },
 ];
 // 路人、旅人、演唱會的人群抽種族用的：住在某一區的正經種族不在外面亂逛；crowd: false 的也不抽
 export const crowdRaces = () => RACES.filter((r) => !r.home && r.crowd !== false);
@@ -240,7 +242,7 @@ export function sizes(L) {
   return {
     H: spread(L.tall, 0.65, 1.4) * (b?.H ?? 1),
     W: spread(L.fat, 0.55, 1.7) * (b?.W ?? 1),
-    hs: spread(L.head, 0.45, 1.8) * (b?.hs ?? 1),
+    hs: raceOf(L).bean ? 1 : spread(L.head, 0.45, 1.8) * (b?.hs ?? 1),   // 頭身一體的臉貼在身體上，頭不能單獨放大
     leg: b?.leg ?? 1,
     es: spread(L.eyeSize, 0.4, 2.4),
     eg: spread(L.eyeGap, 0.35, 1.9),

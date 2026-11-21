@@ -45,6 +45,7 @@
 /* 第一層：四顆圓章，右邊骰子、重來 */
 #dress-tabs { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; padding: 16px 62px 0 12px; }
 #dress-tabs > i { flex: 1; }
+#dress-tabs button[hidden] { display: none; }   /* 爛熊關掉的分頁、骰子、預設（creator.js 的 tabOpen） */
 .med {
   flex: 0 0 52px; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 0;
   font: inherit; font-size: 11px; letter-spacing: .15em; color: var(--muted);

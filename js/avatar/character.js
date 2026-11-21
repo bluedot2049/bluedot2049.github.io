@@ -10,6 +10,7 @@ import { CAMERAS, GUI_EYE, cameraModel, cameraPart, cameraParts, chromeMat, isCh
 import { HIP, HOODED, itemOf, bodyGeo, armGeo, legGeo, capeGeo, CAPE_BEND, capeT, camStrap, wingGeo, wingAt, hasWings, tailGeo, tailAt, katanaGeo, katanaFit, KATANA_ARM } from './clothes.js';
 import { HandClear, shapeOf, reachAt, shapePoints } from './handclear.js';
 import { Dangle } from './dangle.js';
+import { BEAR_SHOULDER, BEAR_FACES, bearFaceGeo, smokeAt, SMOKE_PUFFS } from './lanxiong.js';
 import { FACES, HANDS, BODIES, kaoCode, kaoParts } from './kaomoji-parts.js';
 import { BREEZE } from '../core/weather.js';
 import { BITES, BITE_TIME, EMPTY, FACE_GLSL_HEAD, FACE_GLSL_MAP, HAIR_FIT, HAT_H, INK_RGB, NECK, TALL_BACK, build, decalGeo, faceMap, foodModel, hatGeo, headGeo, hex, shorten, smooth, swap } from './character-build.js';
@@ -27,6 +28,10 @@ const CAM_BACK = 0.045;    // 相機模型背面離中心多遠（cameras.js 燭
 const PET_TIME = 2.4;      // 摸動物摸多久
 // 長袍上窄下寬，手臂要從肩膀往外張開一點，手才會沿著袍子外側垂下，不會插進身體
 const ARM_OUT = 0.28;
+// 爛熊換臉的網格每隻共用（不吃膚色），用到才拼；抽菸的煙一團（淡灰、低面數）
+const BEAR_FACE_GEO = new Map();
+const bearFace = (id) => BEAR_FACE_GEO.get(id) ?? BEAR_FACE_GEO.set(id, bearFaceGeo(id)).get(id);
+let PUFF_GEO = null;   // 第一次抽菸才拼（build 從 character-build.js 來，模組載入時還不能叫）
 const _capeInv = new THREE.Matrix4();
 const _handM = new THREE.Matrix4(), _handQ = new THREE.Quaternion(), _handE = new THREE.Euler(), _handS = new THREE.Vector3(), _handV = new THREE.Vector3();
 // 手臂照 (rx, ry, rz) 轉的時候手在哪（跟相機同一個座標）
@@ -279,13 +284,17 @@ export class Character {
 
   // 換外觀：整個重建。外觀一樣就不動
   setLook(look) {
-    const L = sanitizeLook(look), key = lookKey(L);
+    const L0 = sanitizeLook(look), key = lookKey(L0);
     if (key === this.key) return;
     this.key = key;
-    this.look = L;
+    this.look = L0;
+    // 頭身一體的豆子（looks.js 的 bean，爛熊）不穿衣服：身體一律是光溜溜，圍巾領帶沒地方掛。帽子、眼鏡、背的、手拿的照舊。
+    // 只是這裡拼的時候換掉，存檔、衣櫃裡那套衣服不動，換回別的種族就穿回去
+    const L = raceOf(L0).bean ? { ...L0, one: 'fur', neck: 'none' } : L0;
     const race = raceOf(L), S = sizes(L), skin = race.tone || hex(SKINS[L.skin]), W = S.W;   // tone：NPC 專用的頭自帶膚色（looks.js 的 NPC_RACES），不進玩家的色票
     this.S = S;
     this.drop = HIP * (1 - S.leg);   // 腿短了多少（身體座標），整個身體往下移這麼多
+    const legK = race.bean ? 1 : S.leg;   // 爛熊的身體、腿照它自己的高度做好了，不用壓
     const hg = headGeo(L, race, S, skin, this.splitMouth), eyeY = hg.eyeY;
     // 披風照身體（不含背的東西）、頭量出來；背的東西、翅膀、尾巴再擺到披風外面（clothes.js 的 capeGeo）
     let capeG = null, env = null;
@@ -312,7 +321,7 @@ export class Character {
         return Math.max(ball, ...[-1.2, -0.6, 0, 0.6, 1.2].map((a) => reachAt(hsh, hy, Math.PI + a))) * S.hs;
       };
     }
-    swap(this.torso, shorten(bodyGeo(L, W, envPre, headBack), S.leg));
+    swap(this.torso, shorten(bodyGeo(L, W, envPre, headBack), legK));
     swap(this.headMesh, hg.head);
     for (const d of this.dangles) d.dispose();
     this.dangles = hg.dangles.map((spec) => new Dangle(this.head, this.mat, spec));
@@ -350,16 +359,23 @@ export class Character {
     this.hatLoose = L.hat === 'knight' ? 0 : 1;   // 頭盔是扣緊的：不歪戴、風吹不動、不用伸手壓、轉圈不會甩歪
     this.hat.scale.setScalar(race.hs * grow);
 
-    const [aL, aR, fL, fR] = this.limbs, sh = 0.07 + 0.17 * W;
+    // 爛熊的手掛在它自己的寬肩上；頭身一體，轉頭、點頭只動幾成（looks.js 的 turn、nod），臉才不會滑出身體
+    const [aL, aR, fL, fR] = this.limbs, sh = race.bean ? BEAR_SHOULDER[0] * W : 0.07 + 0.17 * W;
+    this.nod = race.nod ?? 1;
+    this.turn = race.turn ?? 1;
+    this.bean = !!race.bean;
+    if (!this.bean) this.dropBearFaces();
     this.armL.position.x = -sh;
     this.armR.position.x = sh;
-    swap(aL, armGeo(L, W, skin));
-    swap(aR, armGeo(L, W, skin));
-    const fx = 0.09 * Math.max(0.75, W);
+    swap(aL, armGeo(L, W, skin, -1));
+    swap(aR, armGeo(L, W, skin, 1));
+    // 爛熊的肩膀、腿照它自己的形狀擺（lanxiong.js）；身體已經是壓好腿長的樣子，不再壓（legK）
+    this.armL.position.y = this.armR.position.y = race.bean ? BEAR_SHOULDER[1] + this.drop : 0.72;
+    const fx = race.bean ? 0.132 * W : 0.09 * Math.max(0.75, W);
     this.footL.position.x = -fx;
     this.footR.position.x = fx;
-    swap(fL, shorten(legGeo(L, W, skin, -1), S.leg, true));
-    swap(fR, shorten(legGeo(L, W, skin, 1), S.leg, true));
+    swap(fL, shorten(legGeo(L, W, skin, -1), legK, true));
+    swap(fR, shorten(legGeo(L, W, skin, 1), legK, true));
 
     swap(this.scarfTail, L.neck === 'scarf' ? build((k) => k.box(0.08, 0.28, 0.04, hex(CLOTH[L.neckC]), 0, 0, 0)) : null);
     this.scarfTail.position.set(0.08, 0.68, -0.17 * W);
@@ -586,6 +602,40 @@ export class Character {
   emote(e) {
     this.act = { e, t: 0 };
     this.onEmote?.(this, e);
+  }
+
+  // 爛熊換臉（lanxiong.js 的 BEAR_FACES）：kaoPose 挑好 bearPick，這裡把那張臉掛上去、原本的眼睛嘴巴藏起來。
+  // 網格用到才拼（幾何每隻熊共用，lanxiong.js 拼一次），失落那張（抽菸）另外有幾團煙往上飄
+  showBearFace() {
+    const id = this.bearPick;
+    this.bearMeshes ??= new Map();
+    if (id && !this.bearMeshes.has(id)) {
+      const m = new THREE.Mesh(bearFace(id), this.mat);
+      m.castShadow = false;
+      this.head.add(m);
+      this.bearMeshes.set(id, m);
+    }
+    for (const [k, m] of this.bearMeshes) m.visible = k === id;
+    if (id) this.eyes.visible = this.arcs.visible = this.tears.visible = this.mouth.visible = this.smShut.visible = this.smOpen.visible = false;
+    const smoke = id === 'smoke';
+    if (smoke && !this.puffs) {
+      this.puffs = Array.from({ length: SMOKE_PUFFS }, () => {
+        const m = new THREE.Mesh(PUFF_GEO ??= build((k) => k.rock(0.024, '#c6c2bc', 0, 0, 0)), this.mat);
+        this.head.add(m);
+        return m;
+      });
+    }
+    this.puffs?.forEach((m, i) => {
+      m.visible = smoke;
+      if (smoke) m.scale.setScalar(smokeAt(this.time, i, m.position));
+    });
+  }
+
+  dropBearFaces() {
+    for (const m of this.bearMeshes?.values() ?? []) m.removeFromParent();
+    for (const m of this.puffs ?? []) m.removeFromParent();
+    this.bearMeshes = this.puffs = null;
+    this.bearPick = null;
   }
 
   // 擺一個顏文字（kaomoji-parts.js 的 kaoCode），0 放下。換了的那幾層從舊的慢慢換過去
@@ -931,6 +981,11 @@ export class Character {
       this.head.rotation.y += kh.y;
       this.head.rotation.z += kh.z;
     }
+    if (this.nod < 1 || this.turn < 1) {
+      this.head.rotation.x *= this.nod;
+      this.head.rotation.z *= this.nod;
+      this.head.rotation.y *= this.turn;
+    }
     // 眨眼：隔幾秒眨一下，偶爾連眨兩下；閉得快、睜得慢；掛機時閉著。各自的畫面自己眨，不送給別人
     if (this.asleep) this.blink = Math.min(1, this.blink + dt * 3);
     else if (this.blinkA >= 0) {
@@ -980,6 +1035,7 @@ export class Character {
     this.faceU.uMouthS.value.set(kf.mx * keep, mY * keep, kf.mr);
     this.faceU.uArc.value = arc;
     this.faceU.uSmile.value.set(Math.min(1, kf.sa), Math.min(1, kf.so), kf.sw);
+    if (this.bean) this.showBearFace();
     // 眼珠先溜過去、頭再跟上：要看的方向跟頭現在的角度差多少，眼珠就往那邊偏多少（畫的臉是整個框平移一點）
     if (this.pupilMesh.visible || this.faceU.uEyeN.value) {
       const gy = this.gaze != null ? clampTo(this.gaze - (this.headYaw ?? 0), 0.6) : 0;
@@ -1087,10 +1143,18 @@ export class Character {
     // 臉：兩張臉照權重混
     const kf = this.kaoFace, kh = this.kaoHead.set(0, 0, 0);
     kf.s = kf.sy = kf.mx = kf.my = kf.sw = 1; kf.dy = kf.mr = kf.arc = kf.sa = kf.so = kf.tear = 0;
+    let bearId = null, bearW = 0;
     const faceAt = (id, w) => {
       const f = FACES[id];
       if (!id || w <= 0) return;
       const k = w * (0.6 + 0.4 * A);
+      // 爛熊有自己畫好的那張臉（lanxiong.js 的 BEAR_FACES）：整張換上去，這裡只動頭，眼睛嘴巴不另外改
+      const bid = this.bean && BEAR_FACES[id];
+      if (bid) {
+        if (k > bearW) { bearW = k; bearId = bid; }
+        if (f.head) { kh.x += f.head[0] * k; kh.y += f.head[1] * k; kh.z += f.head[2] * k; }
+        return;
+      }
       kf.s += ((f.s ?? 1) - 1) * k;
       kf.sy += ((f.sy ?? 1) - 1) * k;
       kf.dy += (f.dy || 0) * k;
@@ -1102,6 +1166,7 @@ export class Character {
     };
     faceAt(lf.prev, lf.wp);
     faceAt(lf.cur, lf.w);
+    this.bearPick = bearW > 0.35 ? bearId : null;
     if (A < 0.001) { this.itemTilt *= Math.exp(-dt * 8); this.kaoTurnK = this.kaoLow = 0; return; }
 
     // 垮的時候吐一口氣、頭低下去（快沒力時發抖試過，不好看，拿掉了）
@@ -1223,7 +1288,10 @@ export class Character {
       L.x += (lx - L.x) * r; L.y += (ly - L.y) * r; L.z += (lz - L.z) * r;
       R.x += (rx - R.x) * r; R.y += (ry - R.y) * r; R.z += (rz - R.z) * r;
     };
-    const hs = this.S.hs, face = this.dims.faceY / this.S.H, front = 0.25 * hs + 0.01 + CAM_BACK * CAM_S;
+    // 相機掛在 body 底下，dims 卻是離地的高度：腿短往下移過的（drop）相機會低一截。矮人、土撥鼠、海獅低得剛好跟手對上，先不動；
+    // 爛熊低了 17 公分、拿在胸口，加回去（lift：bean 才加）
+    const lift0 = this.bean ? this.drop : 0;
+    const hs = this.S.hs, face = this.dims.faceY / this.S.H + lift0, front = 0.25 * hs + 0.01 + CAM_BACK * CAM_S;
     const to = new THREE.Vector3(0, face - 0.055 * CAM_S, front), lift = a.grip === 2;
     if (a.grip === 4) arms(-2.5, 0.2, -0.45, -2.5, -0.2, 0.45);
     else if (selfie) {
@@ -1249,7 +1317,7 @@ export class Character {
       } else this.handAt = null;
     } else if (lift) {
       arms(-2.85, 0.3, -0.05, -2.85, -0.3, 0.05);
-      to.set(0, this.dims.crownY / this.S.H, front * 0.8);
+      to.set(0, this.dims.crownY / this.S.H + lift0, front * 0.8);
     } else if (CAMERAS[this.camId]?.eyepiece) {
       // 獵魔III：機背的小圓孔貼著右眼，機身往右手那邊讓開（鼻子在左邊空著）
       arms(-2.4, 0.75, -0.1, -2.5, -0.35, 0.15);

@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>爛熊 3D 模組預覽 — BossyFKBear</title>
+  <style>
+    :root {
+      --bg: #171412;
+      --card: rgba(24, 19, 16, 0.88);
+      --ink: #f3eee4;
+      --muted: #b6aa98;
+      --gold: #e6ba70;
+      --line: rgba(230, 186, 112, 0.32);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      user-select: none;
+    }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+    .note {
+      position: fixed;
+      top: 14px;
+      left: 16px;
+      right: 16px;
+      max-width: 560px;
+      padding: 11px 15px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.55;
+      pointer-events: none;
+    }
+    .note strong { color: var(--gold); font-weight: 600; }
+    .note .meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .note .stat { color: #9c9282; font-size: 11.5px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+    .bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 10px 14px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+      background: linear-gradient(transparent, rgba(12, 10, 9, 0.94) 36%);
+    }
+    .row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+    }
+    .lbl {
+      font-size: 11.5px;
+      color: #9e9382;
+      margin-right: 2px;
+      letter-spacing: 0.05em;
+    }
+    .bar button {
+      padding: 5px 12px;
+      border: 1px solid #4c4339;
+      border-radius: 999px;
+      background: #231e1a;
+      color: #e2d8c8;
+      font: inherit;
+      font-size: 12.5px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, color 0.15s;
+    }
+    .bar button:hover { border-color: var(--gold); color: #fff8eb; }
+    .bar button.on {
+      border-color: var(--gold);
+      color: #fff2d4;
+      background: #3c2e1f;
+    }
+    .bar .sep { width: 1px; height: 18px; background: #4c4339; margin: 0 3px; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "../vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+  <div class="note" id="info"></div>
+  <div class="bar">
+    <div class="row" id="exprRow">
+      <span class="lbl">表情</span>
+    </div>
+    <div class="row" id="poseRow">
+      <span class="lbl">動作</span>
+      <span class="sep"></span>
+      <button id="btnLineup">全表情排排站</button>
+    </div>
+    <div class="row">
+      <button data-cam="iso" class="on">45°</button>
+      <button data-cam="front">正面</button>
+      <button data-cam="side">側面</button>
+      <button data-cam="back">背面</button>
+      <button id="btnSpin">轉台</button>
+      <span class="sep"></span>
+      <button id="btnRef" class="on">比例人</button>
+      <button id="btnOrig">對照現有種族</button>
+      <span class="sep"></span>
+      <button id="btnForm">灰泥 (-form)</button>
+      <button id="btnWire">線框</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { Character } from '../js/avatar/character.js';
+    import { sanitizeLook, presetLook, GIFTS } from '../js/avatar/looks.js';
+    import { makeLanxiong, EXPRESSIONS, POSES, MATS } from './lanxiong_rig.js';
+
+    const q = new URLSearchParams(location.search);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.prepend(renderer.domElement);
+
+    const BG_NORMAL = new THREE.Color(0x1b1715);
+    const BG_FORM = new THREE.Color(0x959ea8);
+    const scene = new THREE.Scene();
+    scene.background = BG_NORMAL.clone();
+
+    // 工作室三點平行光＋半球光（不放 PointLight，符合建模原則）
+    scene.add(new THREE.HemisphereLight(0xfff4e4, 0x3b322b, 1.35));
+    const key = new THREE.DirectionalLight(0xffebd6, 1.25);
+    key.position.set(4, 7, 5.5);
+    scene.add(key);
+    const rim = new THREE.DirectionalLight(0x8ea8c8, 0.48);
+    rim.position.set(-5, 3.5, -4.5);
+    scene.add(rim);
+
+    // 地板與格線（1 格 = 0.5 公尺）
+    const floor = new THREE.Mesh(
+      new THREE.CircleGeometry(6.5, 48),
+      new THREE.MeshLambertMaterial({ color: 0x26201c, flatShading: true })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.002;
+    scene.add(floor);
+
+    const grid = new THREE.GridHelper(10, 20, 0x5c4f42, 0x342c26);
+    grid.position.y = 0.001;
+    scene.add(grid);
+
+    // 腳底淡影貼圖（給 Character 對照用）
+    const shadowTex = (() => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const g = c.getContext('2d');
+      const r = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+      r.addColorStop(0, 'rgba(0,0,0,0.42)');
+      r.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = r;
+      g.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c);
+    })();
+
+    // 主角爛熊
+    const bear = makeLanxiong({
+      expression: q.get('expr') || 'deadpan',
+      pose: q.get('pose') || 'idle',
+      seed: 'lanxiong-hero',
+    });
+    scene.add(bear.group);
+
+    // 6 種表情排排站（點「全表情排排站」才顯示）
+    const lineupGroup = new THREE.Group();
+    lineupGroup.visible = false;
+    scene.add(lineupGroup);
+    const lineupBears = EXPRESSIONS.map((e, i) => {
+      const b = makeLanxiong({ expression: e.id, pose: 'act', seed: 'lx-line-' + e.id });
+      b.group.position.set((i - (EXPRESSIONS.length - 1) / 2) * 0.96, 0, 0);
+      lineupGroup.add(b.group);
+      return b;
+    });
+
+    // 左側：一般玩家比例對照（Character）
+    const humanRef = new Character(shadowTex, sanitizeLook(presetLook(0)));
+    humanRef.group.position.set(-1.12, 0, -0.05);
+    humanRef.group.rotation.y = 0.25;
+    scene.add(humanRef.group);
+
+    // 右側：現有遊戲裡的 lanxiong 種族對照（預設隱藏，按「對照現有種族」打開）
+    const origRef = new Character(shadowTex, sanitizeLook({ ...presetLook(0), ...GIFTS.lanxiong.look }));
+    origRef.group.position.set(1.12, 0, -0.05);
+    origRef.group.rotation.y = -0.25;
+    origRef.group.visible = false;
+    scene.add(origRef.group);
+
+    const matForm = new THREE.MeshLambertMaterial({ color: 0xcfc8bc, flatShading: true });
+    const matWire = new THREE.MeshBasicMaterial({ color: 0xffe09a, wireframe: true, transparent: true, opacity: 0.34 });
+
+    const state = {
+      expr: bear.expression,
+      pose: bear.pose,
+      lineup: q.has('lineup'),
+      cam: q.get('cam') || 'iso',
+      spin: false,
+      ref: !q.has('noref'),
+      orig: q.has('orig'),
+      form: q.has('form'),
+      wire: q.has('wire'),
+    };
+
+    // 動態建立表情與動作按鈕
+    const exprRow = document.getElementById('exprRow');
+    for (const e of EXPRESSIONS) {
+      const b = document.createElement('button');
+      b.dataset.expr = e.id;
+      b.textContent = e.name;
+      b.addEventListener('click', () => {
+        state.lineup = false;
+        state.expr = e.id;
+        bear.setExpression(e.id);
+        syncUI();
+      });
+      exprRow.appendChild(b);
+    }
+
+    const poseRow = document.getElementById('poseRow');
+    const sepEl = poseRow.querySelector('.sep');
+    for (const p of POSES) {
+      const b = document.createElement('button');
+      b.dataset.pose = p.id;
+      b.textContent = p.name;
+      b.addEventListener('click', () => {
+        state.lineup = false;
+        state.pose = p.id;
+        bear.setPose(p.id);
+        syncUI();
+      });
+      poseRow.insertBefore(b, sepEl);
+    }
+
+    const wireClones = [];
+    function applyViewMaterials() {
+      while (wireClones.length) {
+        const w = wireClones.pop();
+        w.parent?.remove(w);
+      }
+      const meshes = [];
+      const targets = [bear.group, lineupGroup, humanRef.group, origRef.group];
+      for (const root of targets) {
+        root.traverse((o) => {
+          if (!o.isMesh || o.userData.isGlow || o.userData.isWire || o === humanRef.shadow || o === origRef.shadow) return;
+          meshes.push(o);
+        });
+      }
+      for (const o of meshes) {
+        if (!o.userData.origMat) o.userData.origMat = o.material;
+        o.material = state.form ? matForm : o.userData.origMat;
+        if (state.wire && o.geometry?.attributes?.position?.count > 0) {
+          const wm = new THREE.Mesh(o.geometry, matWire);
+          wm.userData.isWire = true;
+          wm.scale.setScalar(1.002);
+          o.add(wm);
+          wireClones.push(wm);
+        }
+      }
+      scene.background = state.form ? BG_FORM.clone() : BG_NORMAL.clone();
+    }
+
+    // 鏡頭控制
+    const camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, 0.05, 50);
+    const orbit = { theta: 0.36, phi: 1.38, dist: 3.1, tx: 0, ty: 0.62 };
+
+    function setCam(mode) {
+      state.cam = mode;
+      const wide = state.lineup;
+      orbit.tx = wide ? 0 : (state.ref && !state.orig ? -0.35 : 0);
+      orbit.ty = wide ? 0.58 : 0.62;
+      orbit.dist = wide ? 6.6 : (state.orig ? 4.0 : 3.2);
+      const presets = {
+        iso:   [0.36, 1.38],
+        front: [0.00, 1.44],
+        side:  [Math.PI / 2, 1.44],
+        back:  [Math.PI, 1.40],
+      };
+      [orbit.theta, orbit.phi] = presets[mode] || presets.iso;
+      document.querySelectorAll('[data-cam]').forEach((b) => b.classList.toggle('on', b.dataset.cam === mode));
+    }
+
+    function syncUI() {
+      bear.group.visible = !state.lineup;
+      lineupGroup.visible = state.lineup;
+      humanRef.group.visible = !state.lineup && state.ref;
+      origRef.group.visible = !state.lineup && state.orig;
+
+      document.querySelectorAll('[data-expr]').forEach((b) => b.classList.toggle('on', !state.lineup && b.dataset.expr === state.expr));
+      document.querySelectorAll('[data-pose]').forEach((b) => b.classList.toggle('on', !state.lineup && b.dataset.pose === state.pose));
+      document.getElementById('btnLineup').classList.toggle('on', state.lineup);
+      document.getElementById('btnSpin').classList.toggle('on', state.spin);
+      document.getElementById('btnRef').classList.toggle('on', state.ref);
+      document.getElementById('btnOrig').classList.toggle('on', state.orig);
+      document.getElementById('btnForm').classList.toggle('on', state.form);
+      document.getElementById('btnWire').classList.toggle('on', state.wire);
+
+      const expInfo = EXPRESSIONS.find((e) => e.id === state.expr) || EXPRESSIONS[0];
+      const st = state.lineup ? lineupBears[0].stats() : bear.stats();
+      const info = document.getElementById('info');
+      if (state.lineup) {
+        info.innerHTML =
+          `<strong>爛熊 3D 模組（全 6 種表情一覽）</strong>` +
+          `<div class="meta">由左至右：經典厭世 ／ 頭貼瞪眼 ／ 爆笑 &gt;&lt; ／ 深情高歌 ／ 抽菸放空 ／ 斜眼嫌棄。點任意表情回到單隻檢視。</div>` +
+          `<div class="stat">單隻面數：約 ${st.tris} 三角形 · 全 Kit 頂點色平面著色 · 拖曳旋轉 / 滾輪縮放</div>`;
+      } else {
+        const cmpNote = state.orig ? '（左：一般玩家　中：新版獨立模型　右：現有遊戲種族）' : (state.ref ? '（左：一般玩家比例對照）' : '');
+        info.innerHTML =
+          `<strong>爛熊 BossyFKBear</strong>　${expInfo.name} ${cmpNote}` +
+          `<div class="meta">${expInfo.note}</div>` +
+          `<div class="stat">面數：${st.tris} 三角形 · 網格數：${st.meshes} · 高度：1.17 m · 原點貼地 y = 0</div>`;
+      }
+
+      applyViewMaterials();
+    }
+
+    document.getElementById('btnLineup').addEventListener('click', () => {
+      state.lineup = !state.lineup;
+      syncUI();
+      setCam(state.lineup ? 'front' : state.cam);
+    });
+    document.getElementById('btnSpin').addEventListener('click', () => { state.spin = !state.spin; syncUI(); });
+    document.getElementById('btnRef').addEventListener('click', () => { state.ref = !state.ref; syncUI(); setCam(state.cam); });
+    document.getElementById('btnOrig').addEventListener('click', () => { state.orig = !state.orig; syncUI(); setCam(state.cam); });
+    document.getElementById('btnForm').addEventListener('click', () => { state.form = !state.form; syncUI(); });
+    document.getElementById('btnWire').addEventListener('click', () => { state.wire = !state.wire; syncUI(); });
+    document.querySelectorAll('[data-cam]').forEach((b) => b.addEventListener('click', () => setCam(b.dataset.cam)));
+
+    // 軌道拖曳與縮放
+    let drag = null;
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      drag = { x: e.clientX, y: e.clientY, btn: e.button, theta: orbit.theta, phi: orbit.phi, tx: orbit.tx, ty: orbit.ty };
+      renderer.domElement.setPointerCapture(e.pointerId);
+    });
+    renderer.domElement.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (drag.btn === 2 || e.shiftKey) {
+        orbit.tx = drag.tx - dx * 0.004;
+        orbit.ty = Math.max(0.1, drag.ty + dy * 0.004);
+      } else {
+        orbit.theta = drag.theta - dx * 0.008;
+        orbit.phi = Math.min(Math.PI - 0.14, Math.max(0.18, drag.phi - dy * 0.008));
+      }
+    });
+    renderer.domElement.addEventListener('pointerup', () => { drag = null; });
+    renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+    renderer.domElement.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      orbit.dist = Math.min(12, Math.max(1.1, orbit.dist * (1 + e.deltaY * 0.001)));
+    }, { passive: false });
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    syncUI();
+    setCam(state.cam);
+
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      const dt = Math.min(0.05, clock.getDelta());
+      if (state.spin && !state.lineup) bear.group.rotation.y += dt * 0.65;
+      else if (!state.spin) bear.group.rotation.y *= Math.max(0, 1 - dt * 6);
+
+      if (state.lineup) {
+        for (const b of lineupBears) b.update(dt);
+      } else {
+        bear.update(dt);
+        if (humanRef.group.visible) humanRef.update(dt, 0);
+        if (origRef.group.visible) origRef.update(dt, 0);
+      }
+
+      const sp = Math.sin(orbit.phi);
+      camera.position.set(
+        orbit.tx + orbit.dist * sp * Math.sin(orbit.theta),
+        orbit.ty + orbit.dist * Math.cos(orbit.phi),
+        orbit.dist * sp * Math.cos(orbit.theta),
+      );
+      camera.lookAt(orbit.tx, orbit.ty, 0);
+      renderer.render(scene, camera);
+    });
+
+    window.__lanxiong = { bear, lineupBears, setCam, state, syncUI };
+  </script>
+</body>
+</html>

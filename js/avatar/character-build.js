@@ -472,8 +472,11 @@ function recordEyes(kit, spots, move = null) {
       kit.ball(r, c, x, y, z, o);
       return this;
     },
-    box(w, h, d, c, x, y, z, o) {
+    box(w, h, d, c, x, y, z, o = {}) {
       if (move) { let k; [x, y, z, k] = move(x, y, z); w *= k; h *= k; d *= k; }
+      // 一條線的眼睛（爛熊）也記下來，笑眼、眼淚才長得出來；比同一邊已經記的小就不換（動漫女生的睫毛）
+      const s = Math.sign(x), r = (w * (o.sx ?? 1)) / 2, i = spots ? spots.findIndex((p) => Math.sign(p.x) === s) : 0;
+      if (spots && (i < 0 || spots[i].r < r)) spots.splice(i < 0 ? spots.length : i, 1, { x, y, z: z + d / 2, r, rz: o.rz || 0 });
       kit.box(w, h, d, c, x, y, z, o);
       return this;
     },
@@ -540,6 +543,7 @@ export function headGeo(L, race, S, skin, split = false) {
     // 垂到胸前的鬚照它擺（身體的座標換成頭的：扣掉脖子高度、除以頭的縮放）
     const out = frontOf(L, S.W), cowl = hooded && L.one !== 'astronaut' && race.hood !== false;
     const o = { hat: cowl ? 'hood' : !hooded && L.hat !== 'none' && L.hat !== 'sprout' ? L.hat : null, hair: hex(HAIR_COLORS[L.hairC]), front: (y) => out(NECK + y * S.hs) / S.hs };   // hair：自己長頭髮的頭（動漫女生）吃髮色
+    if (race.bean) o.bean = true;   // 頭身一體（爛熊）：身體那一整顆在 clothes.js，頭這裡只放臉和耳朵
     // 背後最外層：真的把身體（連外套的帽兜、背的東西）拼一次來量，垂鬚的頭才會問，問了才拼。披風自己會繞開頭和鬚，不用讓；
     // 斜背的長東西（會照頭的形狀往後仰，見 TALL_BACK）和掛在腰側的腰包不算，鬚照樣垂在它們旁邊
     let bsh = null;
