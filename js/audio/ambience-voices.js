@@ -895,6 +895,19 @@ export const VOICES = {
     o.connect(biquad(ctx, 'bandpass', 900, 4)).connect(envelope(ctx, t + 0.12, 0.08, 0.55, 0.12)).connect(out);
     return 0.7;
   },
+  // 前門被外面的人撞一下、推不開（序章的發膏，prologue.js）：門板悶的一記，門閂在框裡喀啦兩下
+  doorbang(ctx, out, t, p, noise) {
+    osc(ctx, 'sine', t, 0.3, [[0, 120 * p], [0.28, 46 * p]]).connect(envelope(ctx, t, 0.003, 0.3, 1)).connect(out);
+    hiss(ctx, out, noise, t, 0.09, 'lowpass', 900, 0.9);
+    knock(ctx, out, noise, t + 0.05, 1500 * p, 0.35);
+    knock(ctx, out, noise, t + 0.14, 1700 * p, 0.2);
+    return 0.45;
+  },
+  // 發膏背上的鍋爐放一口汽（還沒看到他時，聽得到他在哪）
+  vent(ctx, out, t, p, noise) {
+    air(ctx, out, noise, t, [[0, 3400 * p], [0.5, 2500 * p]], 0.05, 0.55, 0.2, 1.2, 'bandpass');
+    return 0.6;
+  },
   // 門在背後靠上（留著一條縫，門閂沒落下）：一記悶的木頭聲
   doorshut(ctx, out, t, p, noise) {
     osc(ctx, 'sine', t, 0.2, [[0, 110 * p], [0.2, 52 * p]]).connect(envelope(ctx, t, 0.004, 0.2, 0.8)).connect(out);

@@ -148,7 +148,17 @@ export function buildFrontDoor() {
     swing(hold = 2.5) {
       from = open; to = OPEN; wait = 0; t0 = 0; this.reshut = hold;
     },
+    // 外面有人撞一下（推不開）：門往裡彈開一點、馬上彈回來，在晃的那 0.4 秒
+    bump() {
+      this.jolt = 0.4;
+    },
     update(dt) {
+      if (this.jolt > 0) {
+        this.jolt = Math.max(0, this.jolt - dt);
+        const k = this.jolt / 0.4;
+        leaf.rotation.y = -(open + Math.abs(Math.sin((1 - k) * Math.PI * 2)) * k * 0.16);   // 只往裡彈，彈兩下
+        if (!this.jolt) set(open);
+      }
       if (t0 < 0) {
         if (this.reshut > 0 && (this.reshut -= dt) <= 0) this.shut(0);
         return;

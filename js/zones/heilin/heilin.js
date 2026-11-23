@@ -14,7 +14,7 @@ import { place as placeProp } from './heilin-props.js';
 import { buildHomeCircle } from '../../scene/homedoor.js';
 import { getSave, markTour } from '../../save/progress.js';
 import { GRADE } from '../../core/grade.js';
-import { BEATS, HALF, SIGHTS, SLIDE, STEP, buildPath, chuteAt, groundAt, onWay, shoreZ, vnoise } from './heilin-map.js';
+import { BEATS, HALF, SIGHTS, SLIDE, STEP, WIND, buildPath, chuteAt, groundAt, onWay, shoreZ, vnoise } from './heilin-map.js';
 import { buildCave } from './heilin-cave.js';
 import { buildDress, groundColor } from './heilin-dress.js';
 import { buildStory, tieRibbons } from './heilin-story.js';
@@ -27,16 +27,32 @@ const SLICK = '#58723f', RIDGE = ['#25332f', '#33433f', '#46565a'];
 
 // 樹不擋視線（2026-11-13）：鏡頭到角色那條線穿過哪棵樹，那棵就淡成網點（跟 fade.js 一樣丟像素、不用半透明）。
 // 每棵樹在頂點著色器裡自己算（實例矩陣是樹腳的位置、寬、高），視線那個高度的樹冠多寬照三層錐的形狀估；樹腳那段只有樹幹，不淡
+// 風吹杉樹（2026-11-24）：同一段頂點著色器裡順便搖，不多畫東西。樹越高的地方擺越多（高度平方），陣風照 heilin-map.js 的 gustAt 從北往南走過林子：
+// 順風彎下去（陣風大彎多）、上面再疊一點每棵自己相位的來回晃。位移先在世界座標算好（公尺、樹高 20 公尺為準），再換回這棵樹自己的座標（除掉它的縮放和轉向）
+const SWAY = { lean: 0.12, gust: 0.45, wag: 0.07 };   // 樹梢：平常順風偏多少、一陣最大再多多少、來回晃多少（公尺）
 const SEE = { eye: { value: new THREE.Vector3(0, -999, 0) }, at: { value: new THREE.Vector3(0, -999, 0) } };
 function seeThrough(mat) {
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uSeeEye = SEE.eye;
     sh.uniforms.uSeeAt = SEE.at;
-    sh.vertexShader = 'uniform vec3 uSeeEye; uniform vec3 uSeeAt; varying float vSee;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+    sh.uniforms.uWindT = uTime;
+    const f = (v) => v.toFixed(4);
+    sh.vertexShader = 'uniform vec3 uSeeEye; uniform vec3 uSeeAt; uniform float uWindT; varying float vSee;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       vSee = 0.0;
       #ifdef USE_INSTANCING
       vec3 tb = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
       float tw = length(instanceMatrix[0].xyz), th = length(instanceMatrix[1].xyz);
+      {
+        vec2 wd = vec2(${f(WIND.x)}, ${f(WIND.z)});
+        float gs = uWindT * ${f(WIND.speed)} - dot(tb.xz, wd) * ${f(WIND.wave)};
+        float g = (0.5 + 0.5 * sin(gs)) * (0.35 + 0.65 * (0.5 + 0.5 * sin(gs * 0.37 + 1.3)));
+        float ph = fract(sin(dot(tb.xz, vec2(12.9898, 78.233))) * 43758.5453) * 6.2832;
+        float hk = clamp(transformed.y, 0.0, 1.2); hk *= hk;
+        vec2 sw = wd * (${f(SWAY.lean)} + ${f(SWAY.gust)} * g + ${f(SWAY.wag)} * (0.4 + g) * sin(uWindT * 0.9 + ph))
+                + vec2(wd.y, -wd.x) * ${f(SWAY.wag)} * (0.3 + g) * sin(uWindT * 1.3 + ph * 1.7);
+        vec3 wv = vec3(sw.x, 0.0, sw.y) * hk * (th / 20.0);
+        transformed += (transpose(mat3(instanceMatrix)) * wv) / vec3(tw * tw, th * th, tw * tw);
+      }
       vec2 ab = uSeeAt.xz - uSeeEye.xz;
       float t = dot(tb.xz - uSeeEye.xz, ab) / max(dot(ab, ab), 1e-4);
       float tc = clamp(t, 0.0, 1.0);
@@ -67,10 +83,11 @@ export function buildHeilin(scene, { coarse = false } = {}) {
   const beat = (id) => BEATS.find((b) => b.id === id);
   const LIT = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   const bucketPier = newBucket();
+  const shaded = [];   // 地面、路面的幾何和每個頂點離路中線多遠：樹種好之後再一起上樹腳的暗和彎道的光（見「地面的光影」）
 
   // ---------- 地形：苔地、松針落葉、地衣、陡坡的石頭、路邊的土、海邊的沙、洞口那圈死地（heilin-dress.js 的 groundColor） ----------
   {
-    const { cols, rows, cell, x0, z0, H } = T, pos = new Float32Array(cols * rows * 3), col = new Float32Array(cols * rows * 3);
+    const { cols, rows, cell, x0, z0, H } = T, pos = new Float32Array(cols * rows * 3), col = new Float32Array(cols * rows * 3), off = new Float32Array(cols * rows);
     const c = new THREE.Color();
     for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) {
       const i = r * cols + k, x = x0 + k * cell, z = z0 + r * cell;
@@ -78,7 +95,8 @@ export function buildHeilin(scene, { coarse = false } = {}) {
       const gx = (H[r * cols + Math.min(cols - 1, k + 1)] - H[r * cols + Math.max(0, k - 1)]) / (2 * cell);
       const gz = (H[Math.min(rows - 1, r + 1) * cols + k] - H[Math.max(0, r - 1) * cols + k]) / (2 * cell);
       const q = P.nearest(x, z);
-      groundColor(P, x, z, H[i], Math.hypot(gx, gz), q ? q.d : 16, c);
+      off[i] = q ? q.d : 16;
+      groundColor(P, x, z, H[i], Math.hypot(gx, gz), off[i], c);
       col.set([c.r, c.g, c.b], i * 3);
     }
     const idx = [];
@@ -91,6 +109,7 @@ export function buildHeilin(scene, { coarse = false } = {}) {
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     geo.setIndex(idx);
     geo.computeVertexNormals();
+    shaded.push({ geo, off });
     const ground = new THREE.Mesh(geo, LIT);
     group.add(ground);
     meshes.push(ground);
@@ -99,7 +118,7 @@ export function buildHeilin(scene, { coarse = false } = {}) {
   // ---------- 路面：沿著路一條帶子，橫切七排頂點：中間是碎石土路，邊緣寬窄照雜訊變、最外一排直接是地面的顏色，邊緣糊進地裡 ----------
   {
     // 土色一段深一段淺；碎石照頂點雜湊挑幾種灰、褐，頂點每 25 公分一排，顏色在三角形上內插開，看起來是糊的碎石點。滑坡那段換成亮苔
-    const pos = [], col = [], idx = [], c = new THREE.Color(), g = new THREE.Color(), dirt = new THREE.Color(EARTH), slick = new THREE.Color(SLICK), DIRT2 = new THREE.Color('#463b30');
+    const pos = [], col = [], idx = [], off = [], c = new THREE.Color(), g = new THREE.Color(), dirt = new THREE.Color(EARTH), slick = new THREE.Color(SLICK), DIRT2 = new THREE.Color('#463b30');
     const GRAVEL = ['#6a6660', '#57534d', '#7a7266', '#4e4a44', '#665a4a', '#5b5f5a', '#72695a'].map((h) => new THREE.Color(h));
     const hash = (x, z) => { const v = Math.sin(x * 91.7 + z * 47.3) * 43758.5453; return v - Math.floor(v); };
     const COLS = 7;
@@ -127,6 +146,7 @@ export function buildHeilin(scene, { coarse = false } = {}) {
           pos.push(x, Math.max(P.Y[i], ty) + (mid ? 0.035 : 0.04), z);
         }
         col.push(c.r, c.g, c.b);
+        off.push(Math.abs(lat[j] + jl));
       }
       if (i > 0) {
         const a = (row - 1) * COLS, b = row * COLS;
@@ -138,6 +158,7 @@ export function buildHeilin(scene, { coarse = false } = {}) {
     geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     geo.setIndex(idx);
     geo.computeVertexNormals();
+    shaded.push({ geo, off });
     const road = new THREE.Mesh(geo, LIT);
     group.add(road);
     meshes.push(road);
@@ -481,6 +502,44 @@ export function buildHeilin(scene, { coarse = false } = {}) {
     });
   }
 
+  // ---------- 地面的光影烘進頂點色（2026-11-24，不加燈、不加貼圖、不多畫東西） ----------
+  // 樹腳一圈暗（樹幹插進地裡的接觸影，照樹多粗）、樹冠底下整片再暗一點：林子密的地方暗，空地、凹口、路相對亮。
+  // 彎道的光池：每個彎的路面和路邊亮一點（只提明度、不換色相：往霧色偏會把土和亮苔洗成灰藍），走直線時眼睛被盡頭那塊亮的拉過去（美術原則：彎道的構圖放在每段直線的盡頭）。
+  // 路是踩開的空地，樹冠的暗不蓋上去（蓋了滑坡的亮苔就認不出來）：離路中線 1.6 公尺內不暗、4.5 公尺外照算，林子暗下去、路相對更醒目。
+  // 地面和路面照同一條式子算，路邊最外一排跟底下的地才接得起來
+  {
+    const FOOT = 0.42, CANOPY = 0.18, FLOOR = 0.5, POOL = 0.2, POOL_R = 6.5;
+    const c = new THREE.Color();
+    const pools = P.bends.slice(1);   // 起點在海灘上，不算
+    const S = 4, near = new Map(), key = (i, j) => i * 4096 + j;
+    for (const t of trees) {
+      const k = key(Math.floor(t.x / S), Math.floor(t.z / S));
+      if (!near.has(k)) near.set(k, []);
+      near.get(k).push(t);
+    }
+    const ss = (a, b, x) => { const v = Math.min(1, Math.max(0, (x - a) / (b - a))); return v * v * (3 - 2 * v); };
+    for (const { geo, off } of shaded) {
+      const pos = geo.attributes.position.array, col = geo.attributes.color.array;
+      for (let v = 0; v < pos.length; v += 3) {
+        const x = pos[v], z = pos[v + 2], ci = Math.floor(x / S), cj = Math.floor(z / S);
+        let dark = 1;
+        for (let i = ci - 2; i <= ci + 2; i++) for (let j = cj - 2; j <= cj + 2; j++) for (const t of near.get(key(i, j)) ?? []) {
+          const d = Math.hypot(x - t.x, z - t.z), r0 = t.w * 0.05, R = t.w * 0.34;
+          if (d > R) continue;
+          dark *= (1 - FOOT * (1 - ss(r0, r0 + 1.6, d))) * (1 - CANOPY * (1 - ss(R * 0.3, R, d)));
+        }
+        let p = 0;
+        for (const b of pools) p = Math.max(p, 1 - ss(POOL_R * 0.3, POOL_R, Math.hypot(x - b.x, z - b.z)));
+        dark = Math.max(FLOOR, dark);
+        dark += (1 - dark) * Math.max(p * 0.7, 1 - ss(1.6, 4.5, off[v / 3]));
+        c.setRGB(col[v], col[v + 1], col[v + 2]).multiplyScalar(dark * (1 + POOL * p));
+        col[v] = c.r;
+        col[v + 1] = c.g;
+        col[v + 2] = c.b;
+      }
+    }
+  }
+
   // 樹上的紅布條（heilin-story.js）：樹種好了才綁
   {
     const rb = newBucket();
@@ -596,7 +655,7 @@ export function buildHeilin(scene, { coarse = false } = {}) {
   const spawn = { x: S0.x + ux * 0.6, z: S0.z + uz * 0.6, heading: Math.atan2(P.TX[0] + (beacon.x - S0.x) / tb, P.TZ[0] + (beacon.z - S0.z) / tb) };
 
   let walked = open, lastT = null;
-  const WIND = new THREE.Vector2(0.25, 1).normalize();
+  const DRIFT = new THREE.Vector2(WIND.x, WIND.z);   // 霧團順著風（heilin-map.js 的 WIND）
   return {
     rooms: [room], paintings: [], mirror: null, outdoor: null, raycastTargets: meshes, env, shops: [],
     camDistMax: 30,
@@ -615,7 +674,7 @@ export function buildHeilin(scene, { coarse = false } = {}) {
       // 樹不擋視線：鏡頭和角色胸口那條線
       if (me && cam) { SEE.eye.value.copy(cam); SEE.at.value.set(me.x, groundY(me.x, me.z) + 1.1, me.z); } else SEE.eye.value.y = SEE.at.value.y = -999;
       // 霧團從海那邊（北）慢慢飄進盆地：每秒 0.5 公尺，風向稍微偏東
-      if (lastT != null) GRADE.driftOff.addScaledVector(WIND, -0.5 * Math.min(0.1, t - lastT));
+      if (lastT != null) GRADE.driftOff.addScaledVector(DRIFT, -0.5 * Math.min(0.1, t - lastT));
       lastT = t;
       // 營火的光：幾道不成倍數的抖動疊著
       fireLight.intensity = FIRE_I * (0.82 + 0.1 * Math.sin(t * 7.3) + 0.06 * Math.sin(t * 13.1 + 1.7) + 0.05 * Math.sin(t * 2.3));

@@ -70,6 +70,14 @@ export const BEATS = [
   { u: 1, what: '尾巴轉過去，光整個露出來，進空地' },                   // 57
 ];
 
+// 風（2026-11-24）：從海那邊（北）吹進盆地，一陣一陣往南走過林子（陣頭每秒約 12 公尺）。霧團飄的方向、杉樹搖（heilin.js 的著色器裡同一條式子）、
+// 樹梢的風聲（heilin-sound.js）都照這個：看到的和聽到的是同一陣。x、z 是吹去的方向；gustAt 回 0（靜）到 1（一陣最大）
+export const WIND = { x: 0.2425, z: 0.9701, speed: 0.35, wave: 0.03 };
+export function gustAt(t, x, z) {
+  const s = t * WIND.speed - (x * WIND.x + z * WIND.z) * WIND.wave;
+  return (0.5 + 0.5 * Math.sin(s)) * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(s * 0.37 + 1.3)));
+}
+
 // 苔蘚滑坡：第幾個彎到第幾個彎（bends 的順序）。站著不動也會慢慢往下滑，坡越陡滑越快；往上走幾乎走不動
 export const SLIDE = { from: 5, to: 6, push: 3.4 };
 // 捷徑：上一段路邊直直一條苔坡滑到下一段，只能往下（往上推回去的比走的快）。第一次走完整條（tour 記 heilin-down）才開。

@@ -9,6 +9,7 @@
 // 底下一排只有「寫信給作者」（有顏色）和旁邊的「關上」；寫信換成寫字頁，兩顆變「投進樹洞」「返回」。
 // 投進去的送到作者自己的 Google Apps Script，記進試算表、寄到作者 Gmail；不回信。投進去光閃一下、樹洞應一聲
 import { bend } from '../../core/lens.js';
+import { hushed } from '../../core/act.js';
 import { GOT, CALLS } from './hollow-lines.js';
 import { JOBS } from './hollow-jobs.js';
 import * as THREE from 'three';
@@ -281,7 +282,7 @@ export class Hollow {
     s.glow(this.glow);
     const d = Math.hypot(p.x - s.x, p.z - s.z);
     if (d > AWAY) this.called = false;
-    else if (d < CALL && !this.called && unread && !this.isOpen) {
+    else if (d < CALL && !this.called && unread && !this.isOpen && !hushed(s.x, s.z)) {   // 有戲在演（act.js）先不叫
       this.called = true;
       this.say(this.pick());
     }

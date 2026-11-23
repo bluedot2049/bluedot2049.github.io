@@ -20,6 +20,7 @@ import { uiScale, panelW, dockR } from '../controls/ui.js';
 import { pref, setPref } from '../save/prefs.js';
 import { is } from '../controls/keymap.js';
 import { teach, taught } from '../controls/lessons.js';
+import { mainNote } from '../core/act.js';
 
 const LEAD = 3.2;       // 帶路時飛在角色前面幾公尺（沿著路量）
 const PEEK = 2.4;       // 眼珠看的地方再往前幾公尺：快到轉角就先看下一段
@@ -310,6 +311,9 @@ export class Guide {
       return `<button type="button" class="eye-go${on ? ' on' : ''}${i === this.kb ? ' kb' : ''}" data-i="${i}"${at ? ' disabled' : ''}>`
         + `<b>${esc(d.name)}</b><span>${esc(tag)}</span>${i < 9 ? `<kbd>${i + 1}</kbd>` : ''}</button>`;
     }).join('');
+    // 主線序章演完、後面還沒做好：最後一行灰的，不能點、不算在 rows 裡（act.js 的 mainNote）
+    const note = mainNote();
+    if (note) this.listEl.insertAdjacentHTML('beforeend', `<button type="button" class="eye-go" disabled><b>${esc(note.name)}</b><span>${esc(note.tag)}</span></button>`);
     this.noteEl.textContent = this.rows.length < 2 && this.dests.length > this.rows.length ? '走過的地方，黑眼會記得。' : '';
     this.offBtn.hidden = this.stayBtn.hidden = !this.on;
     this.stayBtn.setAttribute('aria-checked', this.stay);

@@ -209,6 +209,7 @@ export class Player {
     this.raycaster = new THREE.Raycaster();
     this.raycaster.layers.enable(1);   // 動物在圖層 1
     this.animals = null;            // 主程式建好動物後填進來
+    this.blockers = [];             // 其他會擋路的人 (x, z, ox, oz) → 擋不擋（只擋往他身上靠近的那一步），例如序章的發膏（prologue.js）
     this.actionables = [];          // 別的模組掛上來的互動：(x, z) => { kind, p, d } 或 null，按了呼叫 p.act()（黑眼的「跟著」，scene/guide.js）
     this.marker = this.makeMarker();
     this.markerT = 1;
@@ -1589,7 +1590,7 @@ export class Player {
     const w = this.world, ox = this.pos.x, oz = this.pos.z;
     const y = this.pos.y, stuck = !w.walkable(ox, oz, y);   // 已經卡在家具裡（例如瞬移進去），允許往任何方向脫困。y：樓上的區域照現在多高找是哪一層
     const go = (x, z) => {
-      if (stuck || (w.walkable(x, z, y) && !this.animals?.blocks(x, z, ox, oz) && !this.visitors?.blocks(x, z, ox, oz))) { this.pos.x = x; this.pos.z = z; return true; }
+      if (stuck || (w.walkable(x, z, y) && !this.animals?.blocks(x, z, ox, oz) && !this.visitors?.blocks(x, z, ox, oz) && !this.blockers.some((b) => b(x, z, ox, oz)))) { this.pos.x = x; this.pos.z = z; return true; }
       return false;
     };
     if (go(ox + vx, oz + vz)) return true;

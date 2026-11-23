@@ -16,6 +16,7 @@ import { JETTY } from '../scene/harbor.js';
 import { along, hash, wrapAngle } from './animals.js';
 import { bend } from '../core/lens.js';
 import { serverNow } from '../core/servertime.js';
+import { hushed } from '../core/act.js';
 import { BOAT, EVENTS, HOST, LINES, NEXTS, ORIGINS, REGULARS, ROLE_LINES, VOICES } from './visitor-lines.js';
 import { BOAT_DIM, CHANCE, DECK_Y, DODGE, FOODS, GREET_R, HEAR, HIP, HOP, REGULAR_EVERY, SAY_GAP, SAY_MAX, SLOT, SPOTS, boatModel, boatTimes, buildRig, clamp01, fishingLine, foodGeo, lerp, looks, smooth, tag } from './visitor-models.js';
 
@@ -376,7 +377,7 @@ class Visitor {
     this.talk = { until: performance.now() / 1000 + 4 };
     const about = TALK_ABOUT[this.act] || (this.sitting ? 'talkBench' : null);
     const kind = about && Math.random() < 0.55 ? about : 'talk';
-    this.say(this.pickLine(kind) || this.pickLine('talk'));
+    this.say(this.pickLine(kind) || this.pickLine('talk'), true);
   }
 
   // 船上說的話：人在看得到的地方才冒對話框
@@ -384,8 +385,9 @@ class Visitor {
     if (this.shown && Math.hypot(this.rig.root.position.x - this.set.player.pos.x, this.rig.root.position.z - this.set.player.pos.z) < 40) this.say(text);
   }
 
-  say(text) {
-    if (!text) return;
+  // asked：玩家按了聊天才回的，有戲在演（act.js 的 hushed）也照樣回；其他自己冒的話演戲時不說
+  say(text, asked = false) {
+    if (!text || (!asked && hushed(this.pos.x, this.pos.z))) return;
     if (!this.bubble) {
       this.bubble = document.createElement('div');
       this.bubble.className = 'speech';
@@ -463,6 +465,8 @@ export class Visitors {
     this.offset = 0;
     this.force = null;
     if (!this.dock) return;
+    // 一齣戲剛開演（act.js 的 setStage）：舞台上正在講的先收掉
+    addEventListener('stagehush', () => { for (const v of this.list) if (hushed(v.pos.x, v.pos.z)) v.hush(); });
     this.shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false });
     this.boatInfo = boatTimes(this.dock.route, this.dock.far);
     this.boat = boatModel();

@@ -3,8 +3,10 @@
 // 黑森林這一區：海邊棧橋上岸，翻過海崖、之字形的路往下到比海還低的谷底鐘錶匠的工坊，從歸門回畫廊。寫法跟 zone-ting.js 一樣，main.js 照順序呼叫。還在蓋（places.js 的 dev）
 import { buildHeilin } from './heilin.js';
 import { Camp } from './heilin-camp.js';
+import { ForestSound } from './heilin-sound.js';
+import { SLIDE } from './heilin-map.js';
 
-// 還沒有音樂：先聽得到森林自己
+// 還沒有音樂：先聽得到森林自己（heilin-sound.js：樹梢的風、針葉、營火、洞口的嗡、滑坡滴水、烏鴉）
 
 // 調色（grade.js）：濃霧積在盆地裡（2026-11-11）。霧最濃的高度是谷底（base 4），往上變淡得快（falloff），海灘和鞍口在霧上面，
 // 往下看是一池霧、樹梢冒出來；走進去 15 公尺外的樹幹一層層退掉，40 公尺外就沒了。濃淡一團一團從海那邊飄進來（drift，heilin.js 每幀吹）。
@@ -29,7 +31,9 @@ export function env(world) {
 }
 
 // 洞口前營火邊的三個冒險者（heilin-camp.js）：介面跟海市攤販一樣，當 vendors 交出去，聊天鍵、擋鏡頭變淡主程式照接
-export function crowd({ scene, world, shadowTex }) {
+// 森林的聲音也在這裡接（ambience.beds）
+export function crowd({ scene, world, shadowTex, ambience }) {
+  ambience.beds.push(new ForestSound(world, SLIDE));
   return { vendors: new Camp({ scene, shadowTex, camp: world.camp }) };
 }
 

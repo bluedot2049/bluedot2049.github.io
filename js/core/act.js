@@ -6,6 +6,28 @@
 // ?act=0 不演（無頭測試、空拍用：舞台擺在開演前、不動）；?act=名字:第幾拍 從那一拍開始。?debug 時 window.__act
 import { getSave, putSave } from '../save/progress.js';
 
+// 舞台：一齣戲演著、有人在講的時候，旁邊的 NPC 不插嘴（胖頭、訪客、樹洞照 hushed 決定說不說）。
+// 演員每幀 setStage(id, (x, z) => 這一點算不算舞台上 | null)；剛搭起來那一刻發 'stagehush'，正在講的泡泡收掉。玩家自己按聊天的照樣回
+const stages = new Map();
+export function setStage(id, test) {
+  if (!test) return void stages.delete(id);
+  const fresh = !stages.has(id);
+  stages.set(id, test);
+  if (fresh) dispatchEvent(new Event('stagehush'));
+}
+export function hushed(x, z) {
+  for (const t of stages.values()) if (t(x, z)) return true;
+  return false;
+}
+
+// 主線演到哪：序章（zones/gallery/prologue.js）演完、後面還沒做好時，黑眼清單留一行灰的（guide.js）、演完那一刻上緣出一張字卡。
+// 第一章接上以後 next 改成 true
+export const MAIN = { first: 'prologue', next: false };
+export function mainNote() {
+  if (MAIN.next || !getSave().acts.includes(MAIN.first)) return null;
+  return { name: '後續劇情', tag: '尚未開放　製作中' };
+}
+
 // 清單裡每一齣（zone 給的）：
 //   id（小寫英文，記進存檔碼）、name（黑眼清單上寫的）、beats（開演以後有幾拍，第 0 拍是還沒開演）
 //   init(b)：舞台直接擺成第 b 拍的樣子，演員已經在那一拍的地方等著（進區、跳拍都走這裡，第一幀就在場）

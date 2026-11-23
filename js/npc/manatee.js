@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { bend } from '../core/lens.js';
 import { rng } from '../core/props.js';
+import { hushed } from '../core/act.js';
 import { GREETINGS, TABLE_LINES, SURPRISED, NO_PHOTO } from './manatee-lines.js';
 export { TABLE_LINES };
 
@@ -294,6 +295,11 @@ export class Manatee {
     this.aim = { x, z, t: secs };
   }
 
+  // 只轉過去看 (x, z)，不舉魔杖（門被撞、有人在講話）
+  glance(x, z, secs = 2) {
+    this.aim = { x, z, t: secs, plain: true };
+  }
+
   hush() {
     clearTimeout(this.hideTimer);
     this.bubble.classList.remove('show');
@@ -313,7 +319,7 @@ export class Manatee {
         s.out = 0;
         if (!s.on && s.in >= SEEN_IN) {
           s.on = true;
-          if (this.time > s.quiet) { s.quiet = this.time + LENS_QUIET; this.say(pick(NO_PHOTO)); this.onShy?.(L.id); }
+          if (this.time > s.quiet && !hushed(g.x, g.z)) { s.quiet = this.time + LENS_QUIET; this.say(pick(NO_PHOTO)); this.onShy?.(L.id); }
         }
       } else {
         s.in = 0;
@@ -349,7 +355,7 @@ export class Manatee {
   // 玩家對胖頭用驚訝表情
   startled(px, pz) {
     const g = this.group.position;
-    if (Math.hypot(px - g.x, pz - g.z) < NEAR) this.say(pick(SURPRISED));
+    if (Math.hypot(px - g.x, pz - g.z) < NEAR && !hushed(g.x, g.z)) this.say(pick(SURPRISED));
   }
 
   placeBubble(camera) {
@@ -369,7 +375,8 @@ export class Manatee {
     const g = this.group;
     const dx = px - g.position.x, dz = pz - g.position.z;
     const dist = Math.hypot(dx, dz);
-    if (dist < GREET_DIST && !this.greeted) {
+    // 有戲在演（act.js 的 hushed，例如發膏進門）：不打招呼，也不算打過，戲演完你還在旁邊再說
+    if (dist < GREET_DIST && !this.greeted && !hushed(g.position.x, g.position.z)) {
       this.greeted = true;
       const line = this.greet?.();
       if (line) this.say(line[0], line[1]);
@@ -394,7 +401,7 @@ export class Manatee {
     this.body.scale.y = 1 + breath * 0.015;
     this.armL.rotation.x = Math.sin(this.time * 1.3) * 0.05;
     // 指東西：拿魔杖那隻手往前抬平，冰晶朝那個方向
-    this.lift += ((this.aim ? 1 : 0) - this.lift) * Math.min(1, dt * 6);
+    this.lift += ((this.aim && !this.aim.plain ? 1 : 0) - this.lift) * Math.min(1, dt * 6);
     this.armR.rotation.x = -0.9 - this.lift * 0.75;
     this.ice.rotation.y = this.time * 1.5;
     const s = 1 + Math.sin(this.time * 3) * 0.1;
