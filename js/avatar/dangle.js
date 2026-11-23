@@ -6,7 +6,7 @@ import { build } from './character-build.js';
 
 // spec（heads.js 的 DANGLES 給的）：
 //   at [x, y, z] 掛在頭上的哪一點（頭的座標）
-//   segs [{ len, r0, r1, rx, rz, c, sz? }] 每一節：長度、上下兩端粗細、靜止時往前（rx）往旁（rz）彎多少、顏色、前後壓扁
+//   segs [{ len, r0, r1, rx, rz, c, c2?, sz? }] 每一節：長度、上下兩端粗細、靜止時往前（rx）往旁（rz）彎多少、顏色（c2 給了就是上端的顏色，往下漸層到 c）、前後壓扁
 //   stiff 多硬（越大回得越快）　hang 頭仰、低時照重力回到朝下多少（0 不管、1 全垂）
 //   sway 走路照步伐擺多大　every 平常每隔幾秒自己甩一下（0 不甩）　deco(k, 第幾節, 那一節) 在那一節上多畫東西
 const _w = new THREE.Vector3(), _v = new THREE.Vector3(), _a = new THREE.Vector3(), _g = new THREE.Vector3(), _q = new THREE.Quaternion();
@@ -27,8 +27,8 @@ export class Dangle {
       if (mat) {
         const geo = build((k) => {
           const sz = s.sz ?? 1;
-          if (!i) k.ball(s.r0, s.c, 0, 0, 0, { sz });
-          k.cyl(s.r0, s.r1, s.len, s.c, 0, -s.len / 2, 0, { sz }, 8);
+          if (!i) k.ball(s.r0, s.c2 ?? s.c, 0, 0, 0, { sz });
+          k.cyl(s.r0, s.r1, s.len, s.c, 0, -s.len / 2, 0, { sz, color2: s.c2 }, 8);   // c2：上端的顏色（由下往上漸層到它）
           if (s.r1 > 0.01) k.ball(s.r1 * 0.92, s.c, 0, -s.len, 0, { sz });   // 關節的球比棍子細一點，不然一節一節鼓起來像香腸
           spec.deco?.(k, i, s);
         });

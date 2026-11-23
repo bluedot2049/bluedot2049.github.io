@@ -126,8 +126,8 @@ function pear() {
 // 動漫女生的臉：一圈一圈掃出來的圓臉（2026-11-23 照 Gemini 的試做改）。每圈 [高度 y, 半寬, 往前凸, 往後, 方圓指數]，
 // 一圈 16 段錯開半格，正前方是一片面、臉中間不會劈出一條明暗線；嘴邊那幾圈幾乎直立，平面著色不會在嘴旁切出暗帶
 const ANIME_RINGS = [
-  [0.032, 0, 0, 0, 1], [0.048, 0.086, 0.102, 0.084, 0.96], [0.076, 0.144, 0.158, 0.132, 0.95], [0.104, 0.172, 0.181, 0.154, 0.94],
-  [0.168, 0.193, 0.193, 0.174, 0.94], [0.236, 0.194, 0.188, 0.18, 0.94], [0.294, 0.18, 0.168, 0.174, 0.94], [0.342, 0.148, 0.136, 0.146, 0.95],
+  [0.032, 0, 0, 0, 1], [0.048, 0.086, 0.114, 0.084, 0.96], [0.076, 0.144, 0.172, 0.132, 0.95], [0.104, 0.172, 0.192, 0.154, 0.94],
+  [0.168, 0.193, 0.2, 0.174, 0.94], [0.236, 0.194, 0.19, 0.18, 0.94], [0.294, 0.18, 0.168, 0.174, 0.94], [0.342, 0.148, 0.136, 0.146, 0.95],
   [0.376, 0.094, 0.086, 0.094, 0.96], [0.39, 0, 0, 0, 1],
 ];
 function animeRing(y) {
@@ -168,7 +168,24 @@ function animeFace(c) {
   out.computeVertexNormals();
   return out;
 }
-// 臉上 (x, y) 那一點：表面的 z、朝外的方向、貼著臉要轉的角度（眼睛、腮紅照它貼）
+// 臉真正的面（平面著色的一片一片）在 (x, y) 正前方的 z：從前面往後打一條線，找最前面那片三角形。
+// 平滑曲面比這些面凸出一點（弦和弧），照平滑曲面貼的話眼睛、腮紅會浮起來，側面看得到
+let FACE_TRIS = null;
+function animeFaceZ(x, y) {
+  if (!FACE_TRIS) FACE_TRIS = animeFace('#ffffff').attributes.position.array;
+  const P = FACE_TRIS;
+  let best = -Infinity;
+  for (let i = 0; i < P.length; i += 9) {
+    const ax = P[i], ay = P[i + 1], bx = P[i + 3], by = P[i + 4], cx = P[i + 6], cy = P[i + 7];
+    const d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+    if (Math.abs(d) < 1e-12) continue;
+    const u = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / d, v = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / d, w = 1 - u - v;
+    if (u < -1e-6 || v < -1e-6 || w < -1e-6) continue;
+    best = Math.max(best, u * P[i + 2] + v * P[i + 5] + w * P[i + 8]);
+  }
+  return best;
+}
+// 臉上 (x, y) 那一點：表面的 z（貼在真正的面上）、朝外的方向（照平滑曲面，零件跨兩片面時取平均的斜度）、貼著臉要轉的角度（眼睛、腮紅照它貼）
 function animeSurf(x, y) {
   const zAt = (px, py) => {
     const [rx, zf, , sq] = animeRing(py);
@@ -177,7 +194,20 @@ function animeSurf(x, y) {
     return Math.sqrt(Math.max(0, 1 - s * s)) ** sq * zf;
   };
   const e = 0.006, z = zAt(x, y), dx = (zAt(x + e, y) - zAt(x - e, y)) / (2 * e), dy = (zAt(x, y + e) - zAt(x, y - e)) / (2 * e), l = Math.hypot(dx, dy, 1);
-  return { z, nx: -dx / l, ny: -dy / l, nz: 1 / l, ry: Math.atan2(-dx, 1), rx: Math.atan2(dy, 1) };
+  return { z: animeFaceZ(x, y), nx: -dx / l, ny: -dy / l, nz: 1 / l, ry: Math.atan2(-dx, 1), rx: Math.atan2(dy, 1) };
+}
+// 貼在臉上的零件（Kit 的 wrap）：擺好以後每個頂點照臉的面往前投影，平的眼睛圓片跟著臉彎過去。
+// 零件中心離臉多高、每點在自己那片平面上的前後都留著，只把「平面」換成真正的面：彎的臉上鼻樑那側不會翹起來（側面看凸出臉）
+function onAnimeFace(g) {
+  g.computeBoundingBox();
+  const p = g.attributes.position, b = g.boundingBox, cx = (b.min.x + b.max.x) / 2, cy = (b.min.y + b.max.y) / 2, cz = (b.min.z + b.max.z) / 2;
+  const S = animeSurf(cx, cy);
+  if (!isFinite(S.z)) return;
+  const lift = cz - S.z, px = -S.nx / S.nz, py = -S.ny / S.nz;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), f = animeFaceZ(x, y);
+    if (isFinite(f)) p.setZ(i, f + lift + z - (cz + px * (x - cx) + py * (y - cy)));
+  }
 }
 // 照髮色配眼色：表上是八種髮色各配的色相，沒在表上的取髮色的對面
 const ANIME_IRIS = { '#5a3a22': 0.39, '#1a1412': 0.64, '#8a5a2a': 0.46, '#d8b060': 0.58, '#e8e4dc': 0.56, '#c83a2a': 0.37, '#4a8ad0': 0.8, '#d07ab0': 0.61 };
@@ -189,36 +219,45 @@ function animeIris(hair) {
 }
 
 // 動漫女生的頭髮：整片一個殼。一圈直條（column），每條從頭頂往下長到自己的下緣 yb：
-// 正面五束瀏海（尖朝下、兩肩圓）、兩邊鬢角垂到下巴、後面短短幾個髮尖；赤道以下直直往下（鮑伯頭，不收成球）。下緣往裡折一圈當厚度。
-// R、SZ：殼的半徑、前後壓多扁，要包得住 animeFace（額頭那圈往前凸 0.188）
+// 正面五束瀏海（尖朝下、兩肩圓）、鬢角在耳朵前面垂一撮（臉頰露出來，側面才看得到臉）、後面一排髮尖；赤道以下直直往下（鮑伯頭，不收成球）。下緣往裡折一圈當厚度。
+// 每一條的橫排都切在同樣的角度 T：相鄰兩條之間是一片平的梯形，背面是一圈一圈整齊的面。
+// （各條自己平分長度的話橫排高低錯開，每格劈成兩片不同亮的三角形，背面像鳳梨）。短的那條到底就停在下緣，旁邊長的那條收成三角形髮尖。
+// R、SZ：殼的半徑、前後壓多扁，要包得住 animeFace（額頭那圈往前凸 0.19）
 function animeHair(R = 0.212, SZ = 0.98) {
-  const Cy = 0.205, Cz = -0.012, W = 0.95, cols = [];   // W：臉的開口半寬（弧度）
+  const Cy = 0.205, Cz = -0.012, W = 0.95, cols = [];   // W：瀏海的開口半寬（弧度）
   for (let u = -1; u <= 1.001; u += 0.1) {
     const d = Math.abs(((u + 0.2) % 0.4 + 0.4) % 0.4 - 0.2) / 0.2;   // 0＝髮尖、1＝兩束之間
     const tip = 0.246 - 0.03 * u * u, notch = 0.288 - 0.012 * u * u;
     cols.push([u * W, Math.abs(u) > 0.999 ? 0.2 : tip + (notch - tip) * d ** 1.6]);
   }
-  for (const s of [-1, 1]) {
-    for (const [a, y] of [[1.05, 0.07], [1.17, 0.025], [1.32, 0.075], [1.55, 0.06], [1.85, 0.035], [2.15, 0.065], [2.5, 0.03], [2.85, 0.06]]) cols.push([s * a, y]);
-  }
-  cols.push([Math.PI, 0.035]);
+  // 太陽穴往後斜下到耳前那一撮，再往後是一排長短交錯的髮尖，間隔差不多
+  const SIDE = [[1.08, 0.19], [1.22, 0.06], [1.34, 0.11], [1.47, 0.05],
+    [1.62, 0.085], [1.77, 0.04], [1.92, 0.075], [2.07, 0.035], [2.22, 0.07], [2.37, 0.03], [2.52, 0.065], [2.67, 0.035], [2.82, 0.06], [2.98, 0.035]];
+  for (const s of [-1, 1]) for (const [a, y] of SIDE) cols.push([s * a, y]);
+  cols.push([Math.PI, 0.065]);
   cols.sort((a, b) => a[0] - b[0]);
-  const N = 9, rows = [];
+  const along = (yb) => (yb >= Cy ? Math.acos((yb - Cy) / R) : Math.PI / 2 + (Cy - yb) / R);
+  const STEP = Math.PI / 14, T = [];
+  const deepest = Math.max(...cols.map(([, yb]) => along(yb)));
+  for (let t = 0; t < deepest + STEP; t += STEP) T.push(t);
+  const rows = [];
   for (const [az, yb] of cols) {
-    const ring = [], total = yb >= Cy ? Math.acos((yb - Cy) / R) : Math.PI / 2 + (Cy - yb) / R;
-    for (let v = 0; v <= N; v++) {
-      const t = (v / N) * total;
+    const total = along(yb), ring = [];
+    for (const t0 of T) {
+      const t = Math.min(t0, total);
       const [Y, r] = t <= Math.PI / 2 ? [Cy + R * Math.cos(t), R * Math.sin(t)] : [Cy - (t - Math.PI / 2) * R, R * (1 - 0.1 * (t - Math.PI / 2))];
       ring.push([r * Math.sin(az), Y, Cz + r * Math.cos(az) * SZ]);
     }
-    const [x, y, z] = ring[N];
+    const [x, y, z] = ring[ring.length - 1];
     ring.push([x * 0.84, y + 0.014, Cz + (z - Cz) * 0.84]);
     rows.push(ring);
   }
-  const pos = [];
+  const pos = [], N = T.length;
+  const same = (p, q) => p[0] === q[0] && p[1] === q[1] && p[2] === q[2];
+  const tri = (a, b, c) => { if (!same(a, b) && !same(b, c) && !same(a, c)) pos.push(...a, ...b, ...c); };
   for (let c = 0; c < rows.length; c++) {
     const A = rows[c], B = rows[(c + 1) % rows.length];
-    for (let v = 0; v <= N; v++) pos.push(...A[v], ...A[v + 1], ...B[v], ...B[v], ...A[v + 1], ...B[v + 1]);
+    for (let v = 0; v < N; v++) { tri(A[v], A[v + 1], B[v]); tri(B[v], A[v + 1], B[v + 1]); }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -674,23 +713,24 @@ export const HEADS = {
     const hair = o?.hair || '#d07ab0', hi = mix(hair, '#fff6f0', 0.28), ink = '#241720', iris = animeIris(hair);
     k.add(animeFace(c), null, 0, 0, 0);
     const ms = animeSurf(0, 0.114);
-    M(k, f).torus(0.0135, 0.0032, Math.PI * 0.84, '#c85a66', 0, 0.12, ms.z + 0.0035, { rx: ms.rx * 0.5, rz: Math.PI + 0.25 });
+    M(k, f).torus(0.0135, 0.0032, Math.PI * 0.84, '#c85a66', 0, 0.12, ms.z + 0.0015, { rx: ms.rx * 0.5, rz: Math.PI + 0.25, wrap: onAnimeFace });
     for (const s of [-1, 1]) {
       const ex = s * 0.072, ey = 0.184;
       const at = (dx, dy, lift) => { const p = animeSurf(ex + dx, ey + dy); return [ex + dx + p.nx * lift, ey + dy + p.ny * lift, p.z + p.nz * lift, p.ry, p.rx]; };
-      const put = (kind, size, col, [x, y, z, ry, rx], o2) => E(k, f)[kind](...size, col, x, y, z, { ry, rx, ...o2 });
-      put('ball', [0.041], '#fcf8f2', at(0, -0.002, 0.0015), { sx: 1.08, sy: 0.88, sz: 0.2 });
-      put('ball', [0.036], iris.main, at(-s * 0.002, -0.001, 0.0066), { sx: 0.91, sy: 1.03, sz: 0.19, color2: iris.top });
-      put('ball', [0.018], '#181124', at(-s * 0.002, 0.001, 0.0118), { sx: 0.86, sy: 1.04, sz: 0.18 });
-      put('ball', [0.0094], '#fffef8', at(-0.0135, 0.014, 0.0142), { sx: 1.05, sy: 0.92, sz: 0.19 });   // 高光兩眼都在左上，光從同一邊來
+      const put = (kind, size, col, [x, y, z, ry, rx], o2) => E(k, f)[kind](...size, col, x, y, z, { ry, rx, ...o2, wrap: onAnimeFace });
+      // 一層一層壓薄、往臉裡沉：眼白只凸 2.5 毫米，最上面的高光、睫毛也不到 6 毫米（以前疊到 1.6 公分，側面看眼睛凸出臉）
+      put('ball', [0.041], '#fcf8f2', at(0, -0.002, -0.0016), { sx: 1.08, sy: 0.88, sz: 0.1 });
+      put('ball', [0.036], iris.main, at(-s * 0.002, -0.001, 0.0008), { sx: 0.91, sy: 1.03, sz: 0.1, color2: iris.top });
+      put('ball', [0.018], '#181124', at(-s * 0.002, 0.001, 0.0039), { sx: 0.86, sy: 1.04, sz: 0.1 });
+      put('ball', [0.0094], '#fffef8', at(-0.0135, 0.014, 0.0042), { sx: 1.05, sy: 0.92, sz: 0.1 });   // 高光兩眼都在左上，光從同一邊來
       for (const [a, th] of [[0.55, 0.0085], [0, 0.011], [-0.55, 0.0105]]) {
         const t = Math.PI / 2 - s * a;   // a＞0 往外眼角
-        const p = at(Math.cos(t) * 0.0435, Math.sin(t) * 0.0345, 0.0112);
-        put('box', [0.034, th, 0.008], ink, p, { rz: (t - Math.PI / 2) * 0.85 });
+        const p = at(Math.cos(t) * 0.0435, Math.sin(t) * 0.0345, 0.0028);
+        put('box', [0.034, th, 0.005], ink, p, { rz: (t - Math.PI / 2) * 0.85 });
       }
-      put('box', [0.017, 0.0068, 0.007], ink, at(s * 0.043, 0.02, 0.009), { rz: s * 0.38 });   // 外眼角翹一下
+      put('box', [0.017, 0.0068, 0.005], ink, at(s * 0.043, 0.02, 0.0024), { rz: s * 0.38 });   // 外眼角翹一下
       const bl = animeSurf(s * 0.106, 0.132);
-      k.ball(0.025, mix(c, '#f6929c', 0.48), s * 0.106 + bl.nx * 0.001, 0.132 + bl.ny * 0.001, bl.z + bl.nz * 0.001, { sx: 1.28, sy: 0.56, sz: 0.08, ry: bl.ry, rx: bl.rx });
+      k.ball(0.025, mix(c, '#f6929c', 0.48), s * 0.106 + bl.nx * 0.0012, 0.132 + bl.ny * 0.0012, bl.z + bl.nz * 0.0012, { sx: 1.28, sy: 0.56, sz: 0.08, ry: bl.ry, rx: bl.rx, wrap: onAnimeFace });
     }
     k.add(animeHair(), hair, 0, 0, 0, { color2: hi });
     if (!o?.hat) rod(k, [0, 0.4, -0.02], [0.05, 0.477, 0.01], 0.006, hi, { r2: 0.014, seg: 5 });
@@ -739,11 +779,18 @@ export const DANGLES = {
   // 雙馬尾：扁扁的一束，根部細、中段鼓，S 形往外再往下，尾巴分成兩小撮往兩邊岔開。戴有帽簷的帽子從帽簷底下垂出來；頭套、全罩頭盔收起來
   animegirl(o) {
     if (under(o, 'hood', 'knight')) return [];
+    // 顏色接著頭髮殼的漸層（殼由下往上從髮色淡到 hi，底 0.025、頂 0.417）：根部是殼在那個高度的顏色，往下慢慢回到髮色。
+    // 以前根部一節整個是 hi、下面整條是髮色，深色頭髮時根部一坨灰、馬尾比殼深一截，看起來是另外黏上去的
     const hair = o?.hair || '#d07ab0', hi = mix(hair, '#fff6f0', 0.28), brim = under(o, ...BRIM);
+    const y0 = brim ? 0.21 : 0.28, top = Math.min(1, Math.max(0, (y0 - 0.025) / 0.392));
+    const SEGS = [[0.03, 0.05, 0.05, 0.95], [0.05, 0.05, 0.07, -0.4], [0.05, 0.042, 0.07, -0.3], [0.042, 0.028, 0.07, -0.2], [0.028, 0.02, 0.035, 0.2]];
+    const total = SEGS.reduce((n, g) => n + g[2], 0), shade = (d) => mix(hair, hi, top * (1 - d / total) ** 1.4);
     return [-1, 1].map((s) => ({
-      at: [s * 0.2, brim ? 0.21 : 0.28, brim ? -0.07 : -0.065],
-      segs: [[0.03, 0.05, 0.05, 0.95], [0.05, 0.05, 0.07, -0.4], [0.05, 0.042, 0.07, -0.3], [0.042, 0.028, 0.07, -0.2], [0.028, 0.02, 0.035, 0.2]]
-        .map(([r0, r1, len, rz], i) => ({ len, r0, r1, rx: 0.12, rz: s * rz, sz: 0.62, c: i ? hair : hi })),
+      at: [s * 0.2, y0, brim ? -0.07 : -0.065],
+      segs: SEGS.map(([r0, r1, len, rz], i) => {
+        const d0 = SEGS.slice(0, i).reduce((n, g) => n + g[2], 0);
+        return { len, r0, r1, rx: 0.12, rz: s * rz, sz: 0.62, c: shade(d0 + len), c2: shade(d0) };
+      }),
       stiff: 70, hang: 0.85, sway: 0.13, every: 0,
       deco: (k, i, g) => i === 4 && [-1, 1].forEach((d) => {
         const h = d * s > 0 ? 0.06 : 0.048, a = 0.32;

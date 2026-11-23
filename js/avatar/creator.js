@@ -49,7 +49,7 @@ const MENU = [
   { id: 'self', name: '本人', subs: [
     { id: 'race', name: '種族', view: 'face', paint: ['skin'] },
     { id: 'shape', name: '體型', view: 'body' },
-    { id: 'hair', name: '頭髮', view: 'face', paint: ['hairC'], when: (L) => !!raceOf(L).hair },
+    { id: 'hair', name: '頭髮', view: 'face', paint: ['hairC'], when: (L) => !!(raceOf(L).hair || raceOf(L).hairTint) },
   ] },
   { id: 'face', name: '臉', subs: [
     { id: 'parts', name: '五官', icon: 'eye', view: 'face' },
@@ -305,7 +305,8 @@ export class Creator {
     switch (id) {
       case 'race': return this.tiles('race', '人和動物', races(false), false) + this.tiles('race', '其他', races(true));
       case 'shape': return this.slider('tall') + this.slider('fat') + this.slider('head');
-      case 'hair': return !raceOf(L).hair ? '<p class="dress-note">這個種族沒有頭髮</p>'
+      case 'hair': return raceOf(L).hairTint ? `<p class="dress-note">${raceOf(L).name}的頭髮只換得到顏色</p>`
+        : !raceOf(L).hair ? '<p class="dress-note">這個種族沒有頭髮</p>'
         : (HOODED.includes(L.one) && TUCKED[L.hair] ? `<p class="dress-note">${optionName('one', L.one)}蓋住頭髮<button data-act="unone">脫掉</button></p>` : '') + this.tiles('hair');
       case 'parts': return (L.face && !L.keep ? `<p class="dress-note">畫的臉蓋住五官<button data-act="keep">顯示五官</button></p>` : '')
         + (!L.face && getSave().face ? `<p class="dress-note">這套沒戴畫的臉<button data-act="wearface">戴上</button></p>` : '')

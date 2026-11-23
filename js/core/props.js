@@ -90,6 +90,7 @@ export class Kit {
     _q.setFromEuler(_e);
     _m.compose(_p.set(x, y, z), _q, _s.set(o.sx || 1, o.sy || 1, o.sz || 1));
     g.applyMatrix4(_m);
+    if (o.wrap) o.wrap(g);   // 擺好之後再交給它改頂點（動漫女生的眼睛照臉的面彎過去，見 heads.js onAnimeFace）
     if (o.ao === false) g.userData.noAO = true;
     if (o.hang) g.userData.hang = o.hang;   // 掛點 [x, y, z]（這個 Kit 的座標）：海市的燈籠、暖簾照這點晃（fade.js 的 sway）
     (o.glow ? this.glow : this.lit).push(g);
