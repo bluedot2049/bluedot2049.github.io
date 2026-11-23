@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>動漫女生新版預覽 — V2 vs 原版對照</title>
+  <style>
+    :root {
+      --bg: #171412;
+      --card: rgba(24, 19, 16, 0.88);
+      --ink: #f3eee4;
+      --muted: #b6aa98;
+      --gold: #e6ba70;
+      --line: rgba(230, 186, 112, 0.32);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      user-select: none;
+    }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+    .note {
+      position: fixed;
+      top: 14px;
+      left: 16px;
+      max-width: 560px;
+      padding: 11px 15px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.55;
+      pointer-events: none;
+    }
+    .note strong { color: var(--gold); font-weight: 600; }
+    .note .meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .note .stat { color: #9c9282; font-size: 11.5px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+    .labels {
+      position: fixed;
+      top: 14px;
+      right: 16px;
+      padding: 9px 13px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--muted);
+      pointer-events: none;
+    }
+    .labels strong { color: var(--gold); }
+
+    .bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 10px 14px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+      background: linear-gradient(transparent, rgba(12, 10, 9, 0.94) 36%);
+    }
+    .row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+    }
+    .bar button {
+      padding: 5px 12px;
+      border: 1px solid #4c4339;
+      border-radius: 999px;
+      background: #231e1a;
+      color: #e2d8c8;
+      font: inherit;
+      font-size: 12.5px;
+      cursor: pointer;
+    }
+    .bar button:hover { border-color: var(--gold); color: #fff8eb; }
+    .bar button.on { border-color: var(--gold); color: #fff2d4; background: #3c2e1f; }
+    .bar .sep { width: 1px; height: 18px; background: #4c4339; margin: 0 3px; }
+  </style>
+  <script type="importmap">{ "imports": { "three": "../vendor/three.module.min.js" } }</script>
+</head>
+<body>
+  <div class="note" id="info"></div>
+  <div class="labels" id="legend"></div>
+  <div class="bar">
+    <div class="row">
+      <button data-mode="compare" class="on">新版 vs 原版</button>
+      <button data-mode="solo">只看新版</button>
+      <button data-mode="colors">全髮色一覽</button>
+      <span class="sep"></span>
+      <button data-cam="iso" class="on">45°</button>
+      <button data-cam="close">臉部特寫</button>
+      <button data-cam="front">正面</button>
+      <button data-cam="side">側面</button>
+      <button data-cam="back">背面</button>
+      <button id="btnSpin">轉台</button>
+    </div>
+    <div class="row">
+      <button id="btnHair"></button>
+      <button id="btnSkin"></button>
+      <button id="btnHat"></button>
+      <button id="btnGlasses"></button>
+      <button id="btnKao"></button>
+      <span class="sep"></span>
+      <button id="btnWalk">走路</button>
+      <button id="btnFling">甩馬尾</button>
+      <span class="sep"></span>
+      <button id="btnForm">灰泥 (-form)</button>
+      <button id="btnWire">線框</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { Character } from '../js/avatar/character.js';
+    import { HEADS, DANGLES } from '../js/avatar/heads.js';
+    import { RACES, SKINS, HAIR_COLORS, presetLook } from '../js/avatar/looks.js';
+    import { kaoCode, FACES } from '../js/avatar/kaomoji-parts.js';
+    import { animegirlHeadV2, animegirlDanglesV2, ANIMEGIRL_RACE_V2 } from './animegirl_v2.js';
+
+    const q = new URLSearchParams(location.search);
+    const ORIG_HEAD = HEADS.animegirl;
+    const ORIG_DANGLES = DANGLES.animegirl;
+    const RACE_OBJ = RACES.find((r) => r.id === 'animegirl');
+    const ORIG_METRICS = { ey: RACE_OBJ.ey, ex: RACE_OBJ.ex, md: RACE_OBJ.md, fs: RACE_OBJ.fs, top: RACE_OBJ.top, hs: RACE_OBJ.hs };
+
+    const BASE_OUTFIT = {
+      race: 'animegirl',
+      top: 'shirt', bottom: 'skirt', outer: 'none', neck: 'bowtie',
+      topC: 16, botC: 5, neckC: 13, shoes: 'sneakers', shoeC: 16,
+    };
+    const HAIR_NAMES = ['栗棕', '烏黑', '暖棕', '金髮', '銀白', '茜紅', '晴藍', '櫻粉'];
+    const SKIN_IDX = [0, 4, 1, 2, 3];
+    const SKIN_NAMES = ['白皙', '瓷白', '自然', '小麥', '健康'];
+    const HATS = [['none', '不戴'], ['wizard', '尖帽'], ['straw', '斗笠'], ['crown', '皇冠'], ['chef', '廚師帽'], ['party', '派對帽'], ['knight', '頭盔'], ['sprout', '豆芽']];
+    const GLASSES = [['none', '不戴'], ['round', '圓眼鏡'], ['shades', '墨鏡'], ['3d', '3D 眼鏡']];
+    const KAOS = [
+      [0, '平常'],
+      [kaoCode(1, 0, 0), '＾▽＾'],
+      [kaoCode(FACES.findIndex((f) => f.t === '゜ロ゜'), 0, 0), '゜ロ゜'],
+      [kaoCode(FACES.findIndex((f) => f.t === '╥﹏╥'), 0, 0), '╥﹏╥'],
+    ];
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.prepend(renderer.domElement);
+
+    const BG_NORMAL = new THREE.Color(0x1b1512), BG_FORM = new THREE.Color(0x98a2ac);
+    const scene = new THREE.Scene();
+    scene.background = BG_NORMAL.clone();
+    scene.add(new THREE.HemisphereLight(0xfff0dc, 0x44352a, 1.7));
+    const sun = new THREE.DirectionalLight(0xffdfc0, 1.35);
+    sun.position.set(3.5, 6.0, 5.5);
+    scene.add(sun);
+    const rim = new THREE.DirectionalLight(0x88a8cc, 0.44);
+    rim.position.set(-4.5, 3.0, -4.0);
+    scene.add(rim);
+
+    const floor = new THREE.Mesh(
+      new THREE.CircleGeometry(6.0, 48),
+      new THREE.MeshLambertMaterial({ color: 0x261e19, flatShading: true })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.002;
+    scene.add(floor);
+    const grid = new THREE.GridHelper(10, 20, 0x5c4a39, 0x362b22);
+    grid.position.y = 0.001;
+    scene.add(grid);
+
+    const matForm = new THREE.MeshLambertMaterial({ color: 0xcfc8bc, flatShading: true });
+    const matWire = new THREE.MeshBasicMaterial({ color: 0xffe09a, wireframe: true, transparent: true, opacity: 0.30 });
+
+    const state = {
+      mode: q.get('mode') || 'compare',
+      cam: q.get('cam') || 'iso',
+      hairC: q.has('hair') ? +q.get('hair') : 7,
+      skinI: 0,
+      hat: Math.max(0, HATS.findIndex(([id]) => id === q.get('hat'))),
+      glasses: Math.max(0, GLASSES.findIndex(([id]) => id === q.get('glasses'))),
+      kao: Math.max(0, +q.get('kao') || 0),
+      walk: q.has('walk'),
+      spin: false,
+      form: q.has('form'),
+      wire: q.has('wire'),
+    };
+
+    function withVersion(isV2, fn) {
+      HEADS.animegirl = isV2 ? animegirlHeadV2 : ORIG_HEAD;
+      DANGLES.animegirl = isV2 ? animegirlDanglesV2 : ORIG_DANGLES;
+      Object.assign(RACE_OBJ, isV2 ? ANIMEGIRL_RACE_V2 : ORIG_METRICS);
+      try { return fn(); }
+      finally {
+        HEADS.animegirl = animegirlHeadV2;
+        DANGLES.animegirl = animegirlDanglesV2;
+        Object.assign(RACE_OBJ, ANIMEGIRL_RACE_V2);
+      }
+    }
+
+    function makeChar() {
+      const ch = new Character(null, presetLook(0));
+      ch.shadow.visible = false;
+      ch.splitMouth = true;
+      scene.add(ch.group);
+      return ch;
+    }
+
+    // 先建立新版（讓 faceMap 快取新版飽滿臉型，眼鏡與手繪臉精準貼面）
+    const chNew = withVersion(true, makeChar);
+    const chOld = withVersion(false, makeChar);
+    const lineup = HAIR_COLORS.map(() => withVersion(true, makeChar));
+
+    const wireClones = [];
+    function applyMaterials() {
+      while (wireClones.length) { const w = wireClones.pop(); w.parent?.remove(w); }
+      for (const ch of [chNew, chOld, ...lineup]) {
+        ch.group.traverse((obj) => {
+          if (!obj.isMesh || obj === ch.shadow || obj === ch.glass) return;
+          if (!obj.userData.origMat) obj.userData.origMat = obj.material;
+          obj.material = state.form ? matForm : obj.userData.origMat;
+          if (state.wire && obj.visible && obj.geometry?.attributes?.position?.count > 0) {
+            const wm = new THREE.Mesh(obj.geometry, matWire);
+            wm.scale.setScalar(1.002);
+            obj.add(wm);
+            wireClones.push(wm);
+          }
+        });
+      }
+      scene.background = state.form ? BG_FORM.clone() : BG_NORMAL.clone();
+    }
+
+    function countHeadTris(ch) {
+      let tris = 0;
+      ch.head.traverse((o) => {
+        if (!o.isMesh || !o.visible || !o.geometry || o === ch.glass) return;
+        const pos = o.geometry.attributes.position;
+        tris += o.geometry.index ? o.geometry.index.count / 3 : (pos ? pos.count / 3 : 0);
+      });
+      return Math.round(tris);
+    }
+
+    function refreshAppearance() {
+      const [hat] = HATS[state.hat], [glasses] = GLASSES[state.glasses], [kao] = KAOS[state.kao];
+      const skin = SKIN_IDX[state.skinI];
+      const look = { ...presetLook(0), ...BASE_OUTFIT, hat, glasses, skin, hairC: state.hairC };
+
+      withVersion(true, () => {
+        chNew.key = null;
+        chNew.setLook(look);
+        chNew.setKao(kao);
+        chNew.brace(!!kao);
+      });
+      withVersion(false, () => {
+        chOld.key = null;
+        chOld.setLook(look);
+        chOld.setKao(kao);
+        chOld.brace(!!kao);
+      });
+      withVersion(true, () => {
+        lineup.forEach((ch, i) => {
+          ch.key = null;
+          ch.setLook({ ...look, hairC: i, hat: 'none', glasses: 'none' });
+          ch.setKao(0);
+        });
+      });
+
+      layout();
+      applyMaterials();
+      updateInfo();
+    }
+
+    function layout() {
+      const m = state.mode;
+      chNew.group.visible = m !== 'colors';
+      chOld.group.visible = m === 'compare';
+      lineup.forEach((ch, i) => {
+        ch.group.visible = m === 'colors';
+        const x = (i - (lineup.length - 1) / 2) * 0.88;
+        ch.home = [x, 0];
+        ch.group.position.set(x, 0, 0);
+      });
+      if (m === 'compare') {
+        chNew.home = [-0.46, 0];
+        chOld.home = [0.46, 0];
+        chNew.group.position.set(-0.46, 0, 0);
+        chOld.group.position.set(0.46, 0, 0);
+      } else if (m === 'solo') {
+        chNew.home = [0, 0];
+        chNew.group.position.set(0, 0, 0);
+      }
+    }
+
+    function updateInfo() {
+      const info = document.getElementById('info');
+      const legend = document.getElementById('legend');
+      const tNew = countHeadTris(chNew), tOld = countHeadTris(chOld);
+      info.innerHTML =
+        `<strong>動漫女生 V2（重塑臉型＋分層立體髮型）</strong>` +
+        `<div class="meta">修正原版壓扁凹臉、沒眼白、斷裂睫毛與硬殼瀏海：改用對稱環形飽滿小臉、三層寶石大眼與貼合雕塑髮束。</div>` +
+        `<div class="stat">頭部面數：新版 ${tNew} 三角形 vs 原版 ${tOld} 三角形 · 拖曳旋轉 / 右鍵平移 / 滾輪縮放</div>`;
+      if (state.mode === 'compare') {
+        legend.innerHTML = '<strong>左：新版 V2</strong><br>右：遊戲原版';
+      } else if (state.mode === 'solo') {
+        legend.innerHTML = '<strong>單獨檢視：新版 V2</strong>';
+      } else {
+        legend.innerHTML = '<strong>全 8 種髮色＋自動配色寶石眼</strong>';
+      }
+    }
+
+    const camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, 0.05, 50);
+    const orbit = { theta: 0.36, phi: 1.42, dist: 2.35, tx: 0, ty: 0.94 };
+
+    function setCam(mode) {
+      state.cam = mode;
+      const isColors = state.mode === 'colors';
+      const isSolo = state.mode === 'solo';
+      if (mode === 'close') {
+        orbit.tx = state.mode === 'compare' ? -0.46 : 0;
+        orbit.ty = 0.98;
+        orbit.dist = 1.06;
+        orbit.theta = 0.22;
+        orbit.phi = 1.48;
+      } else {
+        orbit.tx = 0;
+        orbit.ty = isColors ? 0.86 : 0.90;
+        orbit.dist = isColors ? 8.8 : (isSolo ? 2.25 : 2.75);
+        [orbit.theta, orbit.phi] = {
+          iso:   [0.36, 1.42],
+          front: [0.00, 1.46],
+          side:  [Math.PI / 2, 1.46],
+          back:  [Math.PI, 1.42],
+        }[mode] || [0.36, 1.42];
+      }
+      document.querySelectorAll('[data-cam]').forEach((b) => b.classList.toggle('on', b.dataset.cam === mode));
+    }
+
+    // 軌道鏡頭控制
+    let drag = null;
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      drag = { x: e.clientX, y: e.clientY, btn: e.button, theta: orbit.theta, phi: orbit.phi, tx: orbit.tx, ty: orbit.ty };
+      renderer.domElement.setPointerCapture(e.pointerId);
+    });
+    renderer.domElement.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (drag.btn === 2 || e.shiftKey) {
+        orbit.tx = drag.tx - dx * 0.003;
+        orbit.ty = Math.max(0.1, drag.ty + dy * 0.003);
+      } else {
+        orbit.theta = drag.theta - dx * 0.008;
+        orbit.phi = Math.min(Math.PI - 0.14, Math.max(0.18, drag.phi - dy * 0.008));
+      }
+    });
+    renderer.domElement.addEventListener('pointerup', () => { drag = null; });
+    renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+    renderer.domElement.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      orbit.dist = Math.min(12, Math.max(0.75, orbit.dist * (1 + e.deltaY * 0.001)));
+    }, { passive: false });
+
+    document.querySelectorAll('[data-mode]').forEach((b) => {
+      b.classList.toggle('on', b.dataset.mode === state.mode);
+      b.addEventListener('click', () => {
+        state.mode = b.dataset.mode;
+        document.querySelectorAll('[data-mode]').forEach((x) => x.classList.toggle('on', x === b));
+        layout();
+        updateInfo();
+        setCam(state.mode === 'colors' ? 'front' : state.cam);
+      });
+    });
+    document.querySelectorAll('[data-cam]').forEach((b) => b.addEventListener('click', () => setCam(b.dataset.cam)));
+
+    const cycle = (id, label, list, key, names = null) => {
+      const b = document.getElementById(id);
+      const show = () => (b.textContent = `${label}：${names ? names[state[key]] : list[state[key]][1]}`);
+      show();
+      b.addEventListener('click', () => { state[key] = (state[key] + 1) % (names ? names.length : list.length); show(); refreshAppearance(); });
+    };
+    cycle('btnHair', '髮色', HAIR_COLORS, 'hairC', HAIR_NAMES);
+    cycle('btnSkin', '膚色', SKIN_IDX, 'skinI', SKIN_NAMES);
+    cycle('btnHat', '帽子', HATS, 'hat');
+    cycle('btnGlasses', '眼鏡', GLASSES, 'glasses');
+    cycle('btnKao', '表情', KAOS, 'kao');
+
+    const toggle = (id, key, after) => {
+      const b = document.getElementById(id);
+      b.classList.toggle('on', state[key]);
+      b.addEventListener('click', () => { state[key] = !state[key]; b.classList.toggle('on', state[key]); after?.(); });
+    };
+    toggle('btnWalk', 'walk', () => { if (!state.walk) layout(); });
+    toggle('btnSpin', 'spin');
+    toggle('btnForm', 'form', applyMaterials);
+    toggle('btnWire', 'wire', applyMaterials);
+    document.getElementById('btnFling').addEventListener('click', () => {
+      for (const ch of [chNew, chOld, ...lineup]) ch.dangles.forEach((d, i) => d.fling(i % 2 ? 'lift' : 'side'));
+    });
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    refreshAppearance();
+    setCam(state.cam);
+
+    let last = performance.now(), walkT = 0;
+    function tick(now) {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const R = 0.34, V = 0.85;
+      if (state.walk) walkT += dt;
+      const all = [chNew, chOld, ...lineup];
+      all.forEach((ch, i) => {
+        if (!ch.group.visible) return;
+        if (state.walk) {
+          const a = walkT * V / R + i * 0.9;
+          ch.group.position.set(ch.home[0] + Math.sin(a) * R, 0, ch.home[1] + Math.cos(a) * R);
+          ch.group.rotation.y = a + Math.PI / 2;
+        } else if (state.spin) {
+          ch.group.rotation.y += dt * 0.7;
+        } else {
+          ch.group.rotation.y *= Math.max(0, 1 - dt * 8);
+        }
+        ch.update(dt, state.walk ? V : 0);
+      });
+
+      const sp = Math.sin(orbit.phi);
+      camera.position.set(
+        orbit.tx + orbit.dist * sp * Math.sin(orbit.theta),
+        orbit.ty + orbit.dist * Math.cos(orbit.phi),
+        orbit.dist * sp * Math.cos(orbit.theta)
+      );
+      camera.lookAt(orbit.tx, orbit.ty, 0);
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>

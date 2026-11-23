@@ -78,7 +78,7 @@ export const RACES = [
   // crowd: false 先不讓路人抽：抽種族的亂數一動，每一區的路人全部換人
   { id: 'marmot', name: '土撥鼠', head: 'marmot', own: true, ey: 0.25, ex: 0.1, md: 0.12, top: 0.36, hs: 1.1, skin: 16, hood: [0.21, 0.29], helmet: [0.2, 0.34, 0.03], knight: [0.21, 0.35, 0.04], body: { H: 0.9, W: 1.32, leg: 0.7 }, crowd: false },
   { id: 'elephant', name: '小象', head: 'elephant', own: true, ey: 0.25, ex: 0.1, md: 0.1, top: 0.4, hs: 1.05, skin: 5, hood: [0.22, 0.29], helmet: false, knight: [0.23, 0.36, 0.06], body: { H: 0.97, W: 1.1 }, crowd: false },
-  { id: 'animegirl', name: '動漫女生', head: 'animegirl', own: true, ey: 0.19, ex: 0.075, md: 0.1, fs: 0.9, top: 0.38, hs: 1, skin: 0, hood: [0.21, 0.27], helmet: [0.21, 0.32, 0.01], knight: [0.21, 0.34, 0.02], body: { H: 0.96, W: 0.86, hs: 0.98 }, crowd: false },
+  { id: 'animegirl', name: '動漫女生', head: 'animegirl', own: true, ey: 0.184, ex: 0.072, md: 0.072, fs: 0.92, top: 0.39, hs: 1, skin: 0, hood: [0.21, 0.27], helmet: [0.21, 0.32, 0.01], knight: [0.21, 0.34, 0.02], body: { H: 0.96, W: 0.86, hs: 0.98 }, crowd: false },
   // 2026-11-20：使用者朋友畫的白熊（IG bossyfkbear）。只給拿到專屬連結的人（GIFTS 的 lanxiong），鏡子裡沒拿到的人看不到這一格。
   // 2026-11-21 換成 Gemini 做的形狀（lanxiong.js）。bean：頭身一體，身體一律是 one 的「光溜溜」（整顆身體連頭頂），不穿衣服；
   // 頭的關節只帶臉和耳朵（character-build.js 傳 o.bean）。turn、nod：轉頭、點頭只動幾成，臉才不會滑出身體。

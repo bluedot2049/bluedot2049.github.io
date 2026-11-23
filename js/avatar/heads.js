@@ -123,26 +123,76 @@ function pear() {
   return g;
 }
 
-// 動漫女生的臉：球的下半往中間收一點成小下巴，正面壓平好貼大眼睛，臉還是圓圓的
-function animeFace() {
-  const g = new THREE.IcosahedronGeometry(1, 2), p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    if (y < 0) {
-      const t = Math.min(1, -y);
-      x *= 1 - 0.34 * t ** 1.6;
-      z *= 1 - 0.2 * t ** 1.5;
-    }
-    if (z > 0.3) z = 0.3 + (z - 0.3) * 0.75;
-    p.setXYZ(i, x * 0.185, 0.205 + y * 0.18, z * 0.18);
+// 動漫女生的臉：一圈一圈掃出來的圓臉（2026-11-23 照 Gemini 的試做改）。每圈 [高度 y, 半寬, 往前凸, 往後, 方圓指數]，
+// 一圈 16 段錯開半格，正前方是一片面、臉中間不會劈出一條明暗線；嘴邊那幾圈幾乎直立，平面著色不會在嘴旁切出暗帶
+const ANIME_RINGS = [
+  [0.032, 0, 0, 0, 1], [0.048, 0.086, 0.102, 0.084, 0.96], [0.076, 0.144, 0.158, 0.132, 0.95], [0.104, 0.172, 0.181, 0.154, 0.94],
+  [0.168, 0.193, 0.193, 0.174, 0.94], [0.236, 0.194, 0.188, 0.18, 0.94], [0.294, 0.18, 0.168, 0.174, 0.94], [0.342, 0.148, 0.136, 0.146, 0.95],
+  [0.376, 0.094, 0.086, 0.094, 0.96], [0.39, 0, 0, 0, 1],
+];
+function animeRing(y) {
+  const R = ANIME_RINGS, n = R.length;
+  if (y <= R[0][0]) return R[0].slice(1);
+  for (let i = 0; i < n - 1; i++) {
+    const a = R[i], b = R[i + 1];
+    if (y <= b[0]) { const t = (y - a[0]) / (b[0] - a[0]); return [1, 2, 3, 4].map((j) => a[j] + (b[j] - a[j]) * t); }
   }
-  return g;
+  return R[n - 1].slice(1);
+}
+// 頂點色：下巴、下臉頰補一點暖光，抵掉往下變暗的那一截
+function animeFace(c) {
+  const segs = 16, pos = [], col = [], idx = [], tmp = new THREE.Color(), rows = ANIME_RINGS.length;
+  const bounce = mix(c, '#ffe2d4', 0.26), bright = mix(c, '#fff6ee', 0.2);
+  for (const [y, rx, zf, zb, sq] of ANIME_RINGS) {
+    for (let i = 0; i < segs; i++) {
+      const th = ((i + 0.5) / segs) * Math.PI * 2, s = Math.sin(th), co = Math.cos(th);
+      const x = Math.sign(s) * Math.abs(s) ** sq * rx, z = Math.sign(co) * Math.abs(co) ** sq * (co >= 0 ? zf : zb);
+      pos.push(x, y, z);
+      tmp.set(z > 0.04 && y < 0.15 ? mix(c, bounce, Math.min(1, (0.15 - y) / 0.09) * 0.72) : z > 0.1 && y < 0.26 ? mix(c, bright, 0.22) : y > 0.29 ? mix(c, bright, 0.14) : c);
+      col.push(tmp.r, tmp.g, tmp.b);
+    }
+  }
+  for (let j = 0; j < rows - 1; j++) {
+    for (let i = 0; i < segs; i++) {
+      const a = j * segs + i, b = j * segs + (i + 1) % segs, cc = a + segs, d = b + segs;
+      if (j === 0) idx.push(a, d, cc);
+      else if (j === rows - 2) idx.push(a, b, cc);
+      else idx.push(a, b, d, a, d, cc);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  const out = g.toNonIndexed();   // 每片自己的法線＝平面著色
+  out.computeVertexNormals();
+  return out;
+}
+// 臉上 (x, y) 那一點：表面的 z、朝外的方向、貼著臉要轉的角度（眼睛、腮紅照它貼）
+function animeSurf(x, y) {
+  const zAt = (px, py) => {
+    const [rx, zf, , sq] = animeRing(py);
+    if (rx < 1e-4) return zf;
+    const s = Math.min(0.97, Math.abs(px / rx)) ** (1 / sq);
+    return Math.sqrt(Math.max(0, 1 - s * s)) ** sq * zf;
+  };
+  const e = 0.006, z = zAt(x, y), dx = (zAt(x + e, y) - zAt(x - e, y)) / (2 * e), dy = (zAt(x, y + e) - zAt(x, y - e)) / (2 * e), l = Math.hypot(dx, dy, 1);
+  return { z, nx: -dx / l, ny: -dy / l, nz: 1 / l, ry: Math.atan2(-dx, 1), rx: Math.atan2(dy, 1) };
+}
+// 照髮色配眼色：表上是八種髮色各配的色相，沒在表上的取髮色的對面
+const ANIME_IRIS = { '#5a3a22': 0.39, '#1a1412': 0.64, '#8a5a2a': 0.46, '#d8b060': 0.58, '#e8e4dc': 0.56, '#c83a2a': 0.37, '#4a8ad0': 0.8, '#d07ab0': 0.61 };
+function animeIris(hair) {
+  let h = ANIME_IRIS[hair.toLowerCase()];
+  if (h == null) { const hsl = {}; new THREE.Color(hair).getHSL(hsl); h = hsl.s < 0.15 ? 0.61 : (hsl.h + 0.58) % 1; }
+  const hsl = (dh, s, l) => '#' + new THREE.Color().setHSL((h + dh + 1) % 1, s, l).getHexString();
+  return { main: hsl(0, 0.72, 0.5), top: hsl(0.03, 0.78, 0.2) };
 }
 
 // 動漫女生的頭髮：整片一個殼。一圈直條（column），每條從頭頂往下長到自己的下緣 yb：
-// 正面五束瀏海（尖朝下、兩肩圓）、兩邊鬢角垂到下巴、後面短短幾個髮尖；赤道以下直直往下（鮑伯頭，不收成球）。下緣往裡折一圈當厚度
-function animeHair() {
-  const R = 0.205, Cy = 0.205, Cz = -0.012, SZ = 0.95, W = 0.95, cols = [];   // W：臉的開口半寬（弧度）
+// 正面五束瀏海（尖朝下、兩肩圓）、兩邊鬢角垂到下巴、後面短短幾個髮尖；赤道以下直直往下（鮑伯頭，不收成球）。下緣往裡折一圈當厚度。
+// R、SZ：殼的半徑、前後壓多扁，要包得住 animeFace（額頭那圈往前凸 0.188）
+function animeHair(R = 0.212, SZ = 0.98) {
+  const Cy = 0.205, Cz = -0.012, W = 0.95, cols = [];   // W：臉的開口半寬（弧度）
   for (let u = -1; u <= 1.001; u += 0.1) {
     const d = Math.abs(((u + 0.2) % 0.4 + 0.4) % 0.4 - 0.2) / 0.2;   // 0＝髮尖、1＝兩束之間
     const tip = 0.246 - 0.03 * u * u, notch = 0.288 - 0.012 * u * u;
@@ -618,32 +668,37 @@ export const HEADS = {
     if (under(o, 'hood')) return;
     for (const s of [-1, 1]) k.ball(0.15, c, s * 0.25, 0.21, -0.03, { sy: 1.05, sz: 0.2, ry: s * 0.35, color2: mix(c, '#e8b8b4', 0.2) });
   },
-  // 動漫女生：圓一點的小臉、大眼一顆主高光、上睫毛一道弧、頭髮一整片（吃髮色 o.hair）、呆毛、緞帶。雙馬尾是 DANGLES 那兩串
+  // 動漫女生：圓臉、大眼（左右露眼白、虹膜照髮色配、一顆主高光、上睫毛一道弧）、頭髮一整片（吃髮色 o.hair）、呆毛、緞帶。雙馬尾是 DANGLES 那兩串。
+  // 眼睛的零件照臉的表面貼（animeSurf），第一顆是眼白：滑桿搬眼睛照它當支點，笑眼弧照它的大小
   animegirl(k, c, _c2, f, o) {
-    const hair = o?.hair || '#d07ab0', hi = mix(hair, '#fff6f0', 0.28), ink = '#2a1c24';
-    const iris = mix(hair, '#4a64c8', 0.55), irisTop = mix(iris, '#141428', 0.6);
-    k.add(animeFace(), c, 0, 0, 0);
-    M(k, f).torus(0.016, 0.005, Math.PI, '#b45660', 0, 0.112, 0.152, { rz: Math.PI });
+    const hair = o?.hair || '#d07ab0', hi = mix(hair, '#fff6f0', 0.28), ink = '#241720', iris = animeIris(hair);
+    k.add(animeFace(c), null, 0, 0, 0);
+    const ms = animeSurf(0, 0.114);
+    M(k, f).torus(0.0135, 0.0032, Math.PI * 0.84, '#c85a66', 0, 0.12, ms.z + 0.0035, { rx: ms.rx * 0.5, rz: Math.PI + 0.25 });
     for (const s of [-1, 1]) {
-      const x = s * 0.076, y = 0.188, z = 0.13, ry = s * 0.2;
-      E(k, f).ball(0.044, iris, x, y, z, { sx: 0.82, sy: 1.12, sz: 0.32, ry, color2: irisTop });
-      E(k, f).ball(0.02, '#1a1426', x, y + 0.006, z + 0.006, { sy: 1.1, sz: 0.3, ry });
-      E(k, f).ball(0.013, '#fffdf8', x - s * 0.012, y + 0.018, z + 0.012, { sz: 0.4 });
-      E(k, f).ball(0.006, '#fffdf8', x + s * 0.012, y - 0.022, z + 0.01, { sz: 0.4 });
-      for (const a of [0.35, 0, -0.35]) {
-        const t = Math.PI / 2 - s * a * 1.4;   // a＞0 往外眼角
-        E(k, f).box(0.032, 0.0085, 0.006, ink, x + Math.cos(t) * 0.04, y + 0.002 + Math.sin(t) * 0.05, z + 0.006, { rz: t - Math.PI / 2, ry });
+      const ex = s * 0.072, ey = 0.184;
+      const at = (dx, dy, lift) => { const p = animeSurf(ex + dx, ey + dy); return [ex + dx + p.nx * lift, ey + dy + p.ny * lift, p.z + p.nz * lift, p.ry, p.rx]; };
+      const put = (kind, size, col, [x, y, z, ry, rx], o2) => E(k, f)[kind](...size, col, x, y, z, { ry, rx, ...o2 });
+      put('ball', [0.041], '#fcf8f2', at(0, -0.002, 0.0015), { sx: 1.08, sy: 0.88, sz: 0.2 });
+      put('ball', [0.036], iris.main, at(-s * 0.002, -0.001, 0.0066), { sx: 0.91, sy: 1.03, sz: 0.19, color2: iris.top });
+      put('ball', [0.018], '#181124', at(-s * 0.002, 0.001, 0.0118), { sx: 0.86, sy: 1.04, sz: 0.18 });
+      put('ball', [0.0094], '#fffef8', at(-0.0135, 0.014, 0.0142), { sx: 1.05, sy: 0.92, sz: 0.19 });   // 高光兩眼都在左上，光從同一邊來
+      for (const [a, th] of [[0.55, 0.0085], [0, 0.011], [-0.55, 0.0105]]) {
+        const t = Math.PI / 2 - s * a;   // a＞0 往外眼角
+        const p = at(Math.cos(t) * 0.0435, Math.sin(t) * 0.0345, 0.0112);
+        put('box', [0.034, th, 0.008], ink, p, { rz: (t - Math.PI / 2) * 0.85 });
       }
-      E(k, f).box(0.018, 0.008, 0.006, ink, x + s * 0.046, y + 0.034, z - 0.002, { rz: s * 0.6, ry });   // 外眼角翹一下
-      k.ball(0.024, '#f2a0a4', s * 0.105, 0.135, 0.12, { sx: 1.3, sy: 0.6, sz: 0.25, ry: s * 0.35 });
+      put('box', [0.017, 0.0068, 0.007], ink, at(s * 0.043, 0.02, 0.009), { rz: s * 0.38 });   // 外眼角翹一下
+      const bl = animeSurf(s * 0.106, 0.132);
+      k.ball(0.025, mix(c, '#f6929c', 0.48), s * 0.106 + bl.nx * 0.001, 0.132 + bl.ny * 0.001, bl.z + bl.nz * 0.001, { sx: 1.28, sy: 0.56, sz: 0.08, ry: bl.ry, rx: bl.rx });
     }
     k.add(animeHair(), hair, 0, 0, 0, { color2: hi });
-    if (!o?.hat) rod(k, [0, 0.39, -0.02], [0.05, 0.47, 0.01], 0.006, hi, { r2: 0.014, seg: 5 });
+    if (!o?.hat) rod(k, [0, 0.4, -0.02], [0.05, 0.477, 0.01], 0.006, hi, { r2: 0.014, seg: 5 });
     if (under(o, 'hood', 'knight')) return;
     const ty = under(o, ...BRIM) ? 0.22 : 0.29;
     for (const s of [-1, 1]) {
-      k.ball(0.03, '#c83e4d', s * 0.18, ty, -0.06);
-      for (const a of [-1, 1]) k.cone(0.022, 0.05, '#c83e4d', s * 0.18 + a * 0.03, ty + 0.012, -0.055, { rz: -a * 1.3, sz: 0.4 });
+      k.ball(0.03, '#c83e4d', s * 0.186, ty, -0.06);
+      for (const a of [-1, 1]) k.cone(0.022, 0.05, '#c83e4d', s * 0.186 + a * 0.03, ty + 0.012, -0.055, { rz: -a * 1.3, sz: 0.4 });
     }
   },
   // 爛熊（朋友畫的白熊，Gemini 做的形狀在 lanxiong.js）：頭身一體，整顆身體在 clothes.js 的「光溜溜」，這裡只放跟著頭轉的耳朵和臉。

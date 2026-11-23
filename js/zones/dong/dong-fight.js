@@ -3,12 +3,13 @@
 // 黑森林洞裡一場戰鬥怎麼排：照這一趟的種子和你選的打光，先把整場一招一招排成時間表（誰出手、打誰、打中沒有、光在哪），之後給一個秒數就算得出每個人在哪、多亮、這一下好不好拍。
 // 不做 AI：每一招是 dong-table.js 裡做好的一段（預兆、打到、收招），挑哪一招、打誰、結果都從種子抽，照個性和光加權。
 // 種子分四條：room（房間、敵人、道具）、auto（你沒管的人自己選的打光）、fight（打鬥）、talk（打到一半的吐槽），換打光時房間和敵人不變、改台詞不會改變打鬥。
+// 平常的一趟是第一層三間連著走（rollChain）：每一間自己一段種子（roll.key），第一間跟以前單抽一間的結果一樣。
 import { MERCS, MERC_IDS, LIGHTS, ENEMIES, FLOORS, HURT, HURT_P, PAGES } from './dong-table.js';
 import { LIGHT_SAY, TELLS, WARN, OOPS, AFTER, BANTER } from './dong-lines.js';
 import { ROOM_SHAPES } from './dong-rooms.js';
 
 // ── 亂數：一個字串一條序列 ──
-function stream(key) {
+export function stream(key) {
   let h = 2166136261;
   for (const ch of key) h = Math.imul(h ^ ch.codePointAt(0), 16777619);
   let a = h >>> 0;
@@ -35,12 +36,15 @@ function stream(key) {
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const AMBIENT = 0.04;
 const MOMENT_W = [0.18, 0.18, 0.25, 0.32];
+// 你自己的閃光燈照得到多遠（公尺）：這麼近以內，暗處的人也算拍得到，光是平的
+export const FLASH_R = 8;
 
 // ── 房間：抽哪一間、有什麼道具、幾隻什麼敵人 ──
 // 有形狀（dong-rooms.js）的房間：道具挑插座、敵人挑出生點；roomId 指定哪一間（試做頁比較用）
-export function rollRoom(seed, floorN, roomId = null) {
+// key：這一間用哪一段種子（同一層連著走好幾間時每間不一樣；沒給就是第幾層，跟以前一樣）
+export function rollRoom(seed, floorN, roomId = null, key = String(floorN)) {
   const F = FLOORS[floorN - 1];
-  const R = stream(`${seed}:${floorN}:room`);
+  const R = stream(`${seed}:${key}:room`);
   let room = R.pick(F.rooms);
   if (roomId) room = F.rooms.find((r) => r.id === roomId) || room;
   const shape = ROOM_SHAPES[room.id] || null;
@@ -67,6 +71,8 @@ export function rollRoom(seed, floorN, roomId = null) {
     used.add(list === shape.spawns.back ? list.indexOf(p) : 'x' + p);
     return { x: p[0] + R.range(-0.5, 0.5), z: p[1] + R.range(-0.5, 0.5) };
   };
+  // lurk：伏擊時貼在側面等的那幾隻（醒著；其他的在裡面，還不知道有人來）
+  const lurk = foes.map((type, i) => !!(shape && type !== 'dragon' && !shape.spawns[type]?.length && ambush && i % 2 === 0 && shape.spawns[side]?.length));
   const spots = foes.map((type, i) => {
     const E = ENEMIES[type];
     if (type === 'dragon') return { x: 0, z: d - 3 };
@@ -76,7 +82,16 @@ export function rollRoom(seed, floorN, roomId = null) {
     const back = E.keep ? R.range(0.85, 0.95) : R.range(0.62, 0.85);
     return { x: R.range(-w / 2 + 1, w / 2 - 1), z: Math.min(d - 0.8, d * back) };
   });
-  return { seed, floorN, floor: F, room, shape, props, foes, spots, ambush, side };
+  return { seed, floorN, key, floor: F, room, shape, props, foes, spots, lurk, ambush, side };
+}
+
+// 一層連著走的幾間：第一間照舊（種子抽，或 first 指定），剩下的照種子排先後，每間自己一段種子
+export function rollChain(seed, floorN = 1, first = null) {
+  const a = rollRoom(seed, floorN, first);
+  const rest = FLOORS[floorN - 1].rooms.map((r) => r.id).filter((id) => id !== a.room.id);
+  const R = stream(`${seed}:${floorN}:chain`);
+  for (let i = rest.length - 1; i > 0; i--) { const j = R.int(0, i); [rest[i], rest[j]] = [rest[j], rest[i]]; }
+  return [a, ...rest.map((id, i) => rollRoom(seed, floorN, id, `${floorN}${'bcdefg'[i]}`))];
 }
 
 // 這一間每個人選得到的打光（要道具的，沒有道具就選不到）
@@ -85,7 +100,7 @@ export function lightOptions(roll, merc) {
 }
 // 你沒管的人自己選
 export function autoLights(roll) {
-  const R = stream(`${roll.seed}:${roll.floorN}:auto`);
+  const R = stream(`${roll.seed}:${roll.key}:auto`);
   const out = {};
   for (const m of MERC_IDS) out[m] = R.pick(lightOptions(roll, m));
   // 他們自己選的時候不會湊成整場沒有一直亮的光（丟火把、不點燈、收著閃光）：那樣矮人把火把舉高。你自己選成這樣可以
@@ -94,7 +109,7 @@ export function autoLights(roll) {
 }
 // 換打光時他回的那句
 export function lightSay(roll, light) {
-  const R = stream(`${roll.seed}:${roll.floorN}:say:${light}`);
+  const R = stream(`${roll.seed}:${roll.key}:say:${light}`);
   return R.pick(LIGHT_SAY[light] || ['好']);
 }
 
@@ -159,8 +174,9 @@ export function lightAt(plan, t, x, z, only) {
 
 // ── 排一場 ──
 // choice：{ dwarf: 'throw', elf: null, mage: 'hold' }，null 照種子；carry：每個傭兵進來時剩多少血
-export function planRoom(roll, choice = {}, carry = null) {
-  const R = stream(`${roll.seed}:${roll.floorN}:fight`);
+// opts.spotted：你還沒喊就先被牠們發現了——牠們先動，三個人從門口趕進來慢半拍（不是輸，只是這一場難打一點）
+export function planRoom(roll, choice = {}, carry = null, opts = {}) {
+  const R = stream(`${roll.seed}:${roll.key}:fight`);
   const auto = autoLights(roll);
   const lights = {};
   for (const m of MERC_IDS) {
@@ -170,7 +186,7 @@ export function planRoom(roll, choice = {}, carry = null) {
   const { room, floor, props } = roll;
   const elite = floor.elite;
   // pick 是這一場每個人用哪種打光；lights 是排出來的光源（每盞一筆）
-  const plan = { roll, pick: lights, chosen: { ...choice }, ents: [], byId: {}, lights: [], events: [], moments: [], bubbles: [], log: [], dur: 0, outcome: null };
+  const plan = { roll, pick: lights, chosen: { ...choice }, spotted: !!opts.spotted, ents: [], byId: {}, lights: [], events: [], moments: [], bubbles: [], log: [], dur: 0, outcome: null };
   // 同一個人一秒多內不連著講兩句（大招的預兆照講）
   const lastSay = {};
   const say = (t, who, text, force = false) => {
@@ -182,7 +198,7 @@ export function planRoom(roll, choice = {}, carry = null) {
   const note = (t, text) => plan.log.push({ t, text });
   const pickLine = (arr) => arr[Math.floor(R() * arr.length)];
   // 打到一半的吐槽（dong-lines.js 的 BANTER）：自己一條亂數，不動打鬥那條；一段講完隔幾秒才有下一段，講的人都要還站著
-  const T = stream(`${roll.seed}:${roll.floorN}:talk`);
+  const T = stream(`${roll.seed}:${roll.key}:talk`);
   let chatAt = -9;
   const kills = { dwarf: 0, elf: 0, mage: 0 };
   const ZH = ['零', '一', '兩', '三', '四', '五', '六', '七', '八', '九', '十'];
@@ -282,7 +298,7 @@ export function planRoom(roll, choice = {}, carry = null) {
     setState(f, t, 'fled');
     const p = posAt(f, t);
     moveTo(f, t, t + 1.6, p.x + (p.x < 0 ? -1.5 : 1.5), room.d + 1);
-    moment(t + 0.15, 1, `${f.name}四散`, f, null, p);
+    moment(t + 0.15, 1, `${f.name}四散`, f, null, p, { k: 'flee' });
     note(t, `${f.name} 被光照到，跑了`);
     checkEnd(t);
   };
@@ -297,13 +313,14 @@ export function planRoom(roll, choice = {}, carry = null) {
     note(0, '龍睡在寶藏上');
   }
   let mercStart = 0.8;
-  if (roll.ambush) {
+  if (opts.spotted) mercStart = 1.5;
+  else if (roll.ambush) {
     const heard = R() < elf.spec.hear;
     if (heard) { say(0.5, 'elf', pickLine(WARN[roll.side])); mercStart = 0.6; }
     else { note(0.5, '沒人聽到，被伏擊'); mercStart = 1.8; }
   }
   for (const m of mercs) queueReady(m, mercStart + R.range(0, 0.9) + (dragon ? 1.4 : 0) + (m === mage && L.mage === 'behind' ? 1.4 : 0));
-  for (const f of foes) if (!f.spec.sleep) queueReady(f, (roll.ambush ? 0.3 : 0.9) + R.range(0, 1.2));
+  for (const f of foes) if (!f.spec.sleep) queueReady(f, (opts.spotted ? 0.15 : roll.ambush ? 0.3 : 0.9) + R.range(0, opts.spotted ? 0.8 : 1.2));
 
   let over = null, cap = foes.some((f) => f.spec.cap) ? Math.max(...foes.map((f) => f.spec.cap || 0)) : 38;
   const pending = new Set(); // 骷髏還會拼回來的
@@ -313,7 +330,7 @@ export function planRoom(roll, choice = {}, carry = null) {
     if (downs >= 2) { retreat(t + 0.8, '兩個人倒了'); return; }
     if (foes.every((f) => !up(f)) && pending.size === 0) {
       over = { t: t + 2.6, outcome: 'win' };
-      moment(t + 1.3, 2, '打完回頭', 'party', null, null, { face: true });
+      moment(t + 1.3, 2, '打完回頭', 'party', null, null, { face: true, k: 'pose' });
       const id = R.pick(mercs.filter((m) => m.state === 'ok')).id;
       say(t + 1.4, id, pickLine(AFTER.win[id]), true);
     }
@@ -324,7 +341,7 @@ export function planRoom(roll, choice = {}, carry = null) {
     const line = dragon && up(dragon) ? pickLine(AFTER.grab) : pickLine(AFTER.retreat);
     say(t, dwarf.state === 'ok' ? 'dwarf' : elf.state === 'ok' ? 'elf' : 'mage', line, true);
     note(t, `撤退（${why}）`);
-    moment(t + 0.6, 2, dragon ? '抓了就跑' : '撤退', 'party', null, null);
+    moment(t + 0.6, 2, dragon ? '抓了就跑' : '撤退', 'party', null, null, { k: 'retreat' });
     for (const m of mercs) { const p = posAt(m, t); moveTo(m, t, t + 2.2, p.x * 0.5, -1); }
   }
 
@@ -442,11 +459,11 @@ export function planRoom(roll, choice = {}, carry = null) {
 
     if (e.side === 'merc') {
       // 失手
-      if (e === dwarf && m.reach === 'melee' && R() < dwarf.spec.slip) { moment(t, 1, '矮人絆倒', e, null, null); say(t + 0.3, 'dwarf', pickLine(OOPS.slip)); chat(t + 1.7, BANTER.slip, 0.6); return; }
-      if (e === mage && R() < mage.spec.fizzle) { moment(t, 1, '咒語冒煙', e, null, null); say(t + 0.3, 'mage', pickLine(OOPS.fizzle)); chat(t + 1.7, BANTER.fizzle, 0.6); return; }
+      if (e === dwarf && m.reach === 'melee' && R() < dwarf.spec.slip) { moment(t, 1, '矮人絆倒', e, null, null, { k: 'slip' }); say(t + 0.3, 'dwarf', pickLine(OOPS.slip)); chat(t + 1.7, BANTER.slip, 0.6); return; }
+      if (e === mage && R() < mage.spec.fizzle) { moment(t, 1, '咒語冒煙', e, null, null, { k: 'fizzle' }); say(t + 0.3, 'mage', pickLine(OOPS.fizzle)); chat(t + 1.7, BANTER.fizzle, 0.6); return; }
       if (m.bubble) {
         plan.bubbles.push({ x: tp.x, z: tp.z, r: m.bubble[0], t0: t, t1: t + m.bubble[1] });
-        moment(t, 2, '慢動作的泡泡', e, target, null);
+        moment(t, 2, '慢動作的泡泡', e, target, null, { k: 'slow' });
         note(t, '慢動作的泡泡罩住那一帶');
         return;
       }
@@ -459,7 +476,7 @@ export function planRoom(roll, choice = {}, carry = null) {
       if (lit < 0.1) chance -= 0.15;
       if (target.state === 'asleep') chance += 0.3;
       if (R() > chance) {
-        moment(t, e === elf ? 1 : 0, `${e.name}${e === elf ? '射偏' : '落空'}`, e, target, null);
+        moment(t, e === elf ? 1 : 0, `${e.name}${e === elf ? '射偏' : '落空'}`, e, target, null, e === elf ? { k: 'miss' } : {});
         if (e === elf && R() < 0.25) say(t + 0.3, 'elf', pickLine(OOPS.miss));
         if (e === elf) chat(t + 1.5, BANTER.miss, 0.3);
         if (target.state === 'asleep') wake(t);
@@ -468,7 +485,7 @@ export function planRoom(roll, choice = {}, carry = null) {
       const crit = R() < 0.12;
       const size = Math.min(3, m.size + (crit ? 1 : 0));
       // 連三箭只算一個瞬間（第一支）
-      if (!it.i) moment(t, size, `${e.name}${m.name}${crit ? '（重擊）' : ''}`, e, target, null);
+      if (!it.i) moment(t, size, `${e.name}${m.name}${crit ? '（重擊）' : ''}`, e, target, null, { k: ev.move });
       for (const v of victims) damage(v, (m.dmg || 0) * (crit ? 2 : 1), t, e, m);
       if (m.push && up(target)) { const p0 = posAt(e, t); const k = m.push / Math.max(0.3, dist(p0, tp)); moveTo(target, t, t + 0.35, tp.x + (tp.x - p0.x) * k, Math.min(room.d - 0.5, tp.z + (tp.z - p0.z) * k)); }
       if (m.blast || m.area) scatter(t, tp, m.area + 1.5, 0.35);
@@ -477,7 +494,7 @@ export function planRoom(roll, choice = {}, carry = null) {
 
     // 敵人打人
     if (ev.guard && dwarf.state === 'ok') {
-      moment(t, e.spec.big ? 3 : 2, `矮人擋下${e.name}`, dwarf, e, null);
+      moment(t, e.spec.big ? 3 : 2, `矮人擋下${e.name}`, dwarf, e, null, { k: 'guard' });
       note(t, `矮人擋在前面`);
       chat(t + 0.4, BANTER.guard[target.id], 0.55);
       return;
@@ -510,7 +527,7 @@ export function planRoom(roll, choice = {}, carry = null) {
       }
       if (v.hp <= 0) {
         setState(v, t, 'down');
-        moment(t + 0.2, 2, `${v.name}倒下`, e, v, null);
+        moment(t + 0.2, 2, `${v.name}倒下`, e, v, null, { k: 'fallen' });
         note(t, `${v.name} 倒了`);
         if (R() < 0.6) say(t + 0.8, mercs.find((x) => x.state === 'ok')?.id || 'dwarf', pickLine(AFTER.fallen));
       }
@@ -543,7 +560,7 @@ export function planRoom(roll, choice = {}, carry = null) {
     if (v.spec.fear === 'bright') { setState(v, t, 'fled'); moveTo(v, t, t + 1.4, vp.x + (vp.x < 0 ? -1 : 1), room.d + 1); }
     else setState(v, t, 'dead');
     pending.delete(v.id);
-    moment(t + 0.15, v.spec.big ? 3 : 1, `${v.name}${v.spec.down}`, by, v, null);
+    moment(t + 0.15, v.spec.big ? 3 : 1, `${v.name}${v.spec.down}`, by, v, null, { k: v.spec.fear === 'bright' ? 'flee' : 'kill' });
     note(t, `${v.name} ${v.spec.down}`);
     if (v.type === 'troll') { kills[by?.id] !== undefined && kills[by.id]++; chat(t + 0.9, BANTER.ash, 0.8); } else tally(t, by);
     checkEnd(t);
@@ -568,7 +585,7 @@ export function planRoom(roll, choice = {}, carry = null) {
     const dp = posAt(dwarf, t + 0.4);
     plan.lights.push({ id: 'torch-thrown', kind: '火把', col: '#ffad5c', int: 0.9, r: 5.5, h: 'low', t0: t + 0.4, t1: Infinity, fire: true, way: [{ t: t + 0.4, ...dp }, { t: land, ...tgt }] });
     plan.events.push({ who: 'dwarf', target: null, move: 'throwTorch', name: '丟火把', t0: t, tell: 0.4, act: land, end: land + 0.4, size: 2, reach: 'throw', at: tgt });
-    moment(land - 0.2, 2, '火把飛進去', null, null, tgt);
+    moment(land - 0.2, 2, '火把飛進去', null, null, tgt, { k: 'torch' });
     push(land, 'burn', { at: tgt, r: 2.6 });
     queueReady(dwarf, land + R.range(...dwarf.spec.idle));
   }
@@ -582,12 +599,12 @@ export function planRoom(roll, choice = {}, carry = null) {
     plan.events.push({ who: 'elf', target: null, move: kind === 'lamp' ? 'lampShot' : 'barrelShot', name: kind === 'lamp' ? '射吊燈' : '射油桶', t0: t, tell: 0.5, act: hitT, end: hitT + 0.4, size: 2, reach: 'prop', at });
     if (kind === 'lamp') {
       plan.lights.push({ id: 'lamp', kind: '吊燈', col: '#ffc77a', int: 0.6, r: Math.max(room.w, room.d) * 0.8, h: 'high', t0: hitT, fadeIn: 0.7, t1: Infinity, way: [{ t: 0, ...at }], fire: true });
-      moment(hitT + 0.3, 2, '吊燈亮起來', null, null, at);
+      moment(hitT + 0.3, 2, '吊燈亮起來', null, null, at, { k: 'lamp' });
       push(hitT + 0.7, 'scatter', { at, r: room.d, p: 0.2 });
     } else {
       plan.lights.push({ id: 'boom', kind: '爆炸', col: '#ffb070', int: 1.9, r: 9, h: 'mid', t0: hitT, t1: hitT + 0.15, fadeOut: 0.9, way: [{ t: 0, ...at }], fire: true });
       plan.lights.push({ id: 'oilfire', kind: '油火', col: '#ff8f3a', int: 0.75, r: 4.5, h: 'low', t0: hitT, t1: hitT + 9, fadeOut: 2, way: [{ t: 0, ...at }], fire: true });
-      moment(hitT, 3, '油桶爆炸', null, null, at);
+      moment(hitT, 3, '油桶爆炸', null, null, at, { k: 'boom' });
       push(hitT, 'boom', { at });
     }
     queueReady(elf, hitT + R.range(...elf.spec.idle));
@@ -600,7 +617,7 @@ export function planRoom(roll, choice = {}, carry = null) {
     say(t - 0.45, 'mage', pickLine(TELLS.flash), true);
     plan.events.push({ who: 'mage', target: foe?.id || null, move: 'flash', name: '一閃', t0: t - 0.5, tell: 0.5, act: t, end: t + 0.5, size: 3, reach: 'area', at });
     plan.lights.push({ id: 'flash', kind: '一閃', col: '#f2f5ff', int: 2.3, r: 14, h: 'mid', t0: t, t1: t + 0.2, fadeOut: 0.7, way: [{ t: 0, x: at.x * 0.5, z: (at.z + posAt(mage, t).z) / 2 }], holy: true });
-    moment(t + 0.05, 3, foe ? `一閃打斷${foe.name}` : '法師一閃', mage, foe, at);
+    moment(t + 0.05, 3, foe ? `一閃打斷${foe.name}` : '法師一閃', mage, foe, at, { k: 'flash' });
     if (foe) {
       note(t, `法師的光打斷${foe.name}`);
       chat(t + 1.2, BANTER.flash, 0.5);
@@ -693,7 +710,7 @@ export function stateAt(plan, t) {
   return { ents, events, lights, bubbles };
 }
 
-// ── 快門：cam = { x, z, yaw, fov } ──
+// ── 快門：cam = { x, z, yaw, fov, flash }（flash：你的閃光燈這一張有閃） ──
 export function judge(plan, t, cam) {
   const S = stateAt(plan, t);
   const byId = Object.fromEntries(S.ents.map((e) => [e.id, e]));
@@ -729,11 +746,15 @@ export function judge(plan, t, cam) {
   if (!main) { out.page = '不能用'; out.score = 0; out.parts.push('畫面裡沒有人'); return out; }
 
   const lt = lightAt(plan, t, main.x, main.z);
-  out.lit = lt.L;
+  const d = Math.hypot(main.x - cam.x, main.z - cam.z);
+  // 你的閃光燈：夠近就拍得到，可是光是從鏡頭這邊平平打過去的，比他們自己的光差一截
+  const flash = !!cam.flash && d <= FLASH_R && lt.L < 0.35;
+  out.lit = flash ? Math.max(lt.L, 0.4) : lt.L;
   // 光從哪邊來：主光在主角跟相機同一邊是順光，在後面是逆光
   const key = lt.parts.sort((a, b) => b.c - a.c)[0];
   let light = '太暗';
-  if (lt.L >= 0.15 && key) {
+  if (flash) light = '閃光';
+  else if (lt.L >= 0.15 && key) {
     const vx = key.p.x - main.x, vz = key.p.z - main.z, cx = cam.x - main.x, cz = cam.z - main.z;
     const cos = (vx * cx + vz * cz) / (Math.hypot(vx, vz) * Math.hypot(cx, cz) + 1e-6);
     const near = Math.hypot(vx, vz) < 1.2;
@@ -744,14 +765,16 @@ export function judge(plan, t, cam) {
     if (key.c > 1.4) light = '強光' + (light === '剪影' ? '剪影' : '');
   }
   out.light = light;
-  out.key = key?.L.kind || null;
+  out.key = flash ? null : key?.L.kind || null;
+  out.d = d;
+  out.both = false;
 
   let s = best ? best.m.size * best.q : 0.3;
-  const lf = lt.L < 0.15 ? 0.2 : lt.L < 0.35 ? 0.6 : light.includes('剪影') ? 1.1 : 1;
+  const lf = flash ? 0.7 : lt.L < 0.15 ? 0.2 : lt.L < 0.35 ? 0.6 : light.includes('剪影') ? 1.1 : 1;
   s *= lf;
   const both = best && best.sIn && best.tIn && best.tgt && best.tgt.side !== (best.subj?.side);
   if (both) s *= 1.3;
-  const d = Math.hypot(main.x - cam.x, main.z - cam.z);
+  out.both = !!both;
   const df = d <= 6 ? 1.2 : d <= 10 ? 1 : 0.6;
   s *= df;
   // 臉：主角面向相機（打完回頭的那一下一定看得到）

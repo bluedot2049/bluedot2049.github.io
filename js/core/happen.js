@@ -71,7 +71,8 @@ export function happenSight(out, x, z) {
 //   cues：[[秒, 聲音, 音量, 音高, 要不要轉頭看]]，從那一次開始算第幾秒；hear：多遠聽得到（公尺，預設 45）
 //   play(t, dt)：t 是那一次的第幾秒，沒在發生是 null（照 t 算出樣子，不記狀態，中途進來也對）
 //   sight(t)：別人的頭要看的那一點（Vector3）或 null；look：多遠以內的頭會轉（預設 14）
-//   moment()：現在是不是高點（0–1，評分用）
+//   moment(shot)：現在是不是高點（0–1，評分用）；shot 是這一張的快門（有沒有閃光…，見 beast-judge.js），subject 也拿得到
+//   onJudge(r, camera, shot, info)：選用。快門評完這一件回頭說一聲（r 是評出來的那一筆，沒拍到是 null；info 是量到的 { size 佔畫面多大, unblocked 沒被擋住幾成, framed }，沒量到是空的），事件自己要記的在這裡記（洞裡打完看照片）
 //   subject()：{ groups: [[網格]], samples: [Vector3], center: Vector3, hide: [物件] } 或 null（現在沒東西可拍）
 //   size：[小, 夠大]（佔畫面的比例，預設 [0.0015, 0.015]）；glow：自己會發光的，閃光沖淡扣分；air: false 不扣遠處的霧（月球沒有空氣）
 export class Happenings {
@@ -173,7 +174,8 @@ export class Happenings {
     const out = [];
     for (const ev of [...this.list, ...this.more.flatMap((m) => m.list)]) {
       if (ev.t == null) continue;
-      const r = judgeOne(ev, this.scene, renderer, camera, aspect, shot, this.zone);
+      const info = {}, r = judgeOne(ev, this.scene, renderer, camera, aspect, shot, this.zone, info);
+      ev.onJudge?.(r, camera, shot, info);
       if (r) out.push(r);
     }
     return out.length ? out : null;
@@ -181,13 +183,14 @@ export class Happenings {
 }
 
 // 一件拍得怎樣：沒拍到回傳 null。ev 的寫法見上面 Happenings 的清單（subject、moment、size、glow、place）
-function judgeOne(ev, scene, renderer, camera, aspect, shot, zone) {
-  const S = ev.subject?.();
+function judgeOne(ev, scene, renderer, camera, aspect, shot, zone, info = null) {
+  const S = ev.subject?.(shot);
   if (!S) return null;
   const m = measure(renderer, scene, camera, aspect, { ...S, character: shot.character });
   if (!m || m.seen.vis < Math.max(6, m.area * 0.0003)) return null;
   const f = frameFactors(m, camera, S.center, shot), [s0, s1] = ev.size ?? [0.0015, 0.015];
-  const peak = ev.moment?.() ?? 0;
+  if (info) Object.assign(info, { size: f.size, unblocked: f.unblocked, framed: m.framed });
+  const peak = ev.moment?.(shot) ?? 0;
   const flashed = !!ev.glow && shot.fire && f.d < 12;
   const core = f.unblocked ** 0.8 * m.framed ** 1.3 * smooth(s0, s1, f.size) * f.focusK * (ev.air === false ? 1 : f.fogK) * f.compK * (flashed ? 0.8 : 1);
   const score = core + (0.3 * peak + (f.self ? 0.06 : 0)) * smooth(0.15, 0.45, core);

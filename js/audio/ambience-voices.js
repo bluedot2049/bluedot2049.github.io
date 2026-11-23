@@ -1101,6 +1101,27 @@ export const VOICES = {
     return tt - t;
   },
   // 汪：短促的鋸齒波加一點氣音，一到三聲，後面的越叫越低。偶爾尾巴多一聲細細的嗚咿
+  // 黑森林洞裡的哥布林（zones/dong/dong-party.js）：打呼——鼻子吸一口卡卡的、慢慢吐出來
+  snore(ctx, out, t, p, noise) {
+    growl(ctx, out, t, 0.9, 58 * p, 0.022, 0.35, 1.12);
+    breath(ctx, out, noise, t, 0.9, 0.035, 380 * p, 520 * p, 0.4);
+    breath(ctx, out, noise, t + 1.15, 1.3, 0.025, 600 * p, 300 * p, 0.15);
+    return 2.6;
+  },
+  // 哥布林聽到動靜：喉嚨裡短短往上一揚的「嗯？」
+  huh(ctx, out, t, p) {
+    osc(ctx, 'sawtooth', t, 0.28, [[0, 170 * p], [0.2, 260 * p], [0.28, 240 * p]])
+      .connect(biquad(ctx, 'lowpass', 900, 3)).connect(envelope(ctx, t, 0.03, 0.28, 0.45)).connect(out);
+    return 0.4;
+  },
+  // 哥布林發現你：尖聲叫，一聲往上衝再破掉
+  shriek(ctx, out, t, p, noise) {
+    osc(ctx, 'sawtooth', t, 0.55, [[0, 420 * p], [0.12, 980 * p], [0.35, 880 * p], [0.55, 520 * p]])
+      .connect(biquad(ctx, 'bandpass', 1500, 1.4)).connect(envelope(ctx, t, 0.02, 0.55, 0.9)).connect(out);
+    growl(ctx, out, t + 0.05, 0.45, 210 * p, 0.03, 0.02, 1.3);
+    air(ctx, out, noise, t, [[0, 2400], [0.4, 1200]], 0.02, 0.45, 0.06, 1.2, 'bandpass');
+    return 0.7;
+  },
   bark(ctx, out, t, p, noise) {
     const r = Math.random(), n = r < 0.25 ? 1 : r < 0.8 ? 2 : 3;
     let tt = t;
