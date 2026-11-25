@@ -6,7 +6,7 @@
 // 存讀檔是行囊（pack.js），在右上角那排，不在這個面板裡。
 // 畫臉是 64 × 64 的格子，畫的途中直接更新角色臉上的貼圖，放開手才存起來、傳給別人。
 import { RACES, OPTIONS, SLIDERS, SKINS, HAT_COLORS, HAIR_COLORS, CLOTH, GIFTS, TINTED_HATS, FACE, FACE_INK, raceOf, randomLook, presetLook, sanitizeLook, encodeFace, decodeFace, unlockedSet, isOpen, lockedBy, optionName, HOODED,
-  personOf, outfitOf, dress, samePerson, sameOutfit } from './looks.js';
+  personOf, outfitOf, dress, samePerson, sameOutfit, raceAllows } from './looks.js';
 import { getSave, putSave, PEOPLE, OUTFITS } from '../save/progress.js';
 import { faceMap, TUCKED } from './character.js';
 import { DANGLES } from './heads.js';
@@ -279,6 +279,7 @@ export class Creator {
     const cards = list.map(([id, name]) => {
       const open = isOpen(k, id, this.unlocked);
       if (!open && GIFTS[lockedBy(k, id)]?.secret) return '';   // 專屬連結給的（爛熊）：沒拿到的人整格不出現
+      if (!raceAllows(k, id, L.race)) return '';   // 某個種族專屬的（BLUEDOT 的手槍、WIKI 書）：別的種族不列
       const pic = this.thumb(k + ':' + id, { ...base, [k]: id }, FRAME[k]);
       return open
         ? `<button class="tile${L[k] === id ? ' on' : ''}" data-k="${k}" data-v="${id}">${pic}<span>${name}</span></button>`

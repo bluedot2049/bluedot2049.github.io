@@ -22,6 +22,7 @@ export const CLOTH = [
   0xf4f2ec, 0x1e1c1e, 0x3a2414, 0x3a5a8a, 0xf0c830, 0x8a8a90, 0x1f2a4a, 0xb8a070,
   // 海市的染料：中藍、洗舊的淺藍、薯莨黑褐、薯莨赭、麻本色、灰麻、柿澀、苔綠、茜紅、薑黃、硃砂
   0x46628a, 0x8aa4b4, 0x3a2a24, 0x7a4a2e, 0xcfc4a8, 0x9a968a, 0xa0603a, 0x5e6a48, 0xa8443a, 0xc89a3a, 0xc4502e,
+  0xf07f8c,   // 2026-11-25：BLUEDOT2049 太空人的圍巾（珊瑚粉，比第 13 色的桃紅偏橘）
 ];
 const WHITE = 16, BOOT = 18;
 
@@ -84,6 +85,9 @@ export const RACES = [
   // 頭的關節只帶臉和耳朵（character-build.js 傳 o.bean）。turn、nod：轉頭、點頭只動幾成，臉才不會滑出身體。
   // body.leg 照它的屁股高度（lanxiong.js 的 BEAR_HIP / 0.42）；頭的大小滑桿不管用（臉貼在身體上，sizes()）
   { id: 'lanxiong', name: '爛熊', head: 'lanxiong', own: true, ey: 0.248, ex: 0.068, md: 0.088, top: 0.43, hs: 1.1, skin: 17, hood: false, helmet: false, knight: [0.27, 0.3, 0.02], body: { leg: 0.25 / 0.42 }, bean: true, turn: 0.25, nod: 0.25, crowd: false },
+  // 2026-11-25：使用者自己的角色，F:\插畫\BLUEDOT\Character 那個太空人（參考圖 design/bluedot/）。頭就是頭盔：白殼、整片深紫面罩、左上一道橘色反光，看不到臉。
+  // 只給拿到專屬連結的人（GIFTS 的 bluedot），配一套自己的太空衣（one 的 bluedot）。帽子戴在頭盔上；選了別的眼睛會畫在面罩上
+  { id: 'bluedot', name: 'BLUEDOT', head: 'bluedot', own: true, ey: 0.23, ex: 0.085, top: 0.435, hs: 1.12, skin: 4, hood: false, helmet: false, knight: [0.23, 0.3, 0.035], body: { W: 1.15, hs: 1.18 }, crowd: false },
 ];
 // 路人、旅人、演唱會的人群抽種族用的：住在某一區的正經種族不在外面亂逛；crowd: false 的也不抽
 export const crowdRaces = () => RACES.filter((r) => !r.home && r.crowd !== false);
@@ -114,13 +118,13 @@ export const OPTIONS = {
   botPat: [['plain', '素面'], ['stripe', '條紋'], ['dot', '點點'], ['band', '一條線']],
   outer: [['none', '不穿'], ['cape', '披風'], ['cloak', '斗篷'], ['vest', '背心'], ['blazer', '西裝外套'], ['raincoat', '雨衣'], ['apron', '圍裙'], ['haori', '羽織'], ['mino', '蓑衣']],
   shoes: [['boots', '靴子'], ['bare', '赤腳'], ['sneakers', '運動鞋'], ['slippers', '藍白拖'], ['rainboots', '雨鞋'], ['heels', '高跟鞋'], ['ballet', '芭蕾舞鞋'], ['clown', '小丑鞋'], ['geta', '木屐'], ['odd', '只有一隻']],
-  one: [['none', '不穿'], ['dino', '恐龍裝'], ['panda', '熊貓裝'], ['banana', '香蕉裝'], ['astronaut', '太空衣'], ['yukata', '浴衣'], ['fur', '光溜溜']],
+  one: [['none', '不穿'], ['dino', '恐龍裝'], ['panda', '熊貓裝'], ['banana', '香蕉裝'], ['astronaut', '太空衣'], ['yukata', '浴衣'], ['fur', '光溜溜'], ['bluedot', 'BLUEDOT 太空衣']],
   neck: [['scarf', '圍巾'], ['none', '沒有'], ['tie', '領帶'], ['bowtie', '領結'], ['necklace', '項鍊'], ['lei', '花環'], ['bell', '鈴鐺'], ['towel', '毛巾']],
-  back: [['pouch', '腰包'], ['none', '沒有'], ['backpack', '背包'], ['schoolbag', '書包'], ['satchel', '郵差包'], ['guitar', '吉他'], ['sword', '大劍'], ['quiver', '箭筒'], ['wingA', '天使翅膀'], ['wingB', '蝙蝠翅膀'], ['wingC', '蝴蝶翅膀'], ['tail', '尾巴'], ['shell', '龜殼'], ['shield', '圓盾'], ['kite', '騎士盾'], ['bowpack', '弓和箭筒'], ['fishpouch', '魚皮袋'], ['gembox', '零錢盒'], ['katana', '武士刀']],
+  back: [['pouch', '腰包'], ['none', '沒有'], ['backpack', '背包'], ['schoolbag', '書包'], ['satchel', '郵差包'], ['guitar', '吉他'], ['sword', '大劍'], ['quiver', '箭筒'], ['wingA', '天使翅膀'], ['wingB', '蝙蝠翅膀'], ['wingC', '蝴蝶翅膀'], ['tail', '尾巴'], ['shell', '龜殼'], ['shield', '圓盾'], ['kite', '騎士盾'], ['bowpack', '弓和箭筒'], ['fishpouch', '魚皮袋'], ['gembox', '零錢盒'], ['katana', '武士刀'], ['wiki', 'WIKI 書']],
   // 右手拿的東西。左手留著拿點心，之後探索世界撿東西也用左手
   hand: [['none', '空手'], ['staff', '法杖'], ['umbrella', '雨傘'], ['balloon', '氣球'], ['book', '魔法書'], ['flower', '花'], ['boba', '珍奶'], ['chicken', '雞排'], ['selfie', '自拍棒'], ['spatula', '鍋鏟'],
     ['lantern', '燈籠'], ['candle', '蠟燭'], ['fish', '魚'], ['brush', '大畫筆'], ['flask', '燒瓶'], ['frame', '畫框'], ['scope', '望遠鏡'], ['baguette', '法國麵包'], ['teacup', '茶杯'], ['squid', '烤魷魚'],
-    ['sword', '長劍'], ['axe', '斧頭'], ['hammer', '戰鎚'], ['spear', '長矛'], ['bow', '長弓'], ['wand', '魔杖'], ['root', '樹杖'], ['dawn', '還沒升起的太陽']],
+    ['sword', '長劍'], ['axe', '斧頭'], ['hammer', '戰鎚'], ['spear', '長矛'], ['bow', '長弓'], ['wand', '魔杖'], ['root', '樹杖'], ['dawn', '還沒升起的太陽'], ['pistol', '手槍']],
 };
 export const optionName = (k, id) => OPTIONS[k]?.find(([v]) => v === id)?.[1] ?? id;
 // 顏色：存的是色號
@@ -164,7 +168,14 @@ export const GIFTS = {
   // 口令寫在程式裡，讀得到、連結也轉傳得出去：使用者說朋友之間傳開沒關係
   lanxiong: { secret: true, link: 'bossybear', items: [['race', 'lanxiong'], ['one', 'fur']],
     look: { race: 'lanxiong', skin: 17, one: 'fur', shoes: 'bare', hat: 'none', neck: 'none', back: 'none', hand: 'none', glasses: 'none', eyes: 'base', brows: 'none', nose: 'none', mouth: 'none', mark: 'none', face: '', keep: 0 } },
+  // 使用者自己的太空人（插畫 BLUEDOT2049）：頭盔、太空衣、珊瑚粉圍巾（CLOTH 第 35 色）
+  // 手槍、WIKI 書是插畫裡右手拿的、左腋夾的，只有 BLUEDOT 的鏡子裡有（RACE_ONLY）
+  bluedot: { secret: true, link: 'bluedot2049', items: [['race', 'bluedot'], ['one', 'bluedot'], ['hand', 'pistol'], ['back', 'wiki']],
+    look: { race: 'bluedot', skin: 4, one: 'bluedot', neck: 'scarf', neckC: 35, hat: 'none', back: 'wiki', hand: 'pistol', glasses: 'none', eyes: 'base', brows: 'none', nose: 'none', mouth: 'none', mark: 'none', face: '', keep: 0 } },
 };
+// 只有某個種族的鏡子裡才列的東西（「類別:代號」→ 種族 id）。穿著換別的種族不會被脫掉，只是格子不出現、骰子不抽
+export const RACE_ONLY = { 'hand:pistol': 'bluedot', 'back:wiki': 'bluedot' };
+export const raceAllows = (k, id, race) => !RACE_ONLY[k + ':' + id] || RACE_ONLY[k + ':' + id] === race;
 // 上鎖的東西：送禮表的照攤販 id 記，價目表（wares.js）的記 '@店'，接在送禮表後面
 const LOCKS = new Map();
 for (const [v, g] of Object.entries(GIFTS)) for (const [k, id] of g.items) LOCKS.set(k + ':' + id, v);
@@ -387,7 +398,7 @@ export function randomLook(prev, set = new Set()) {
   const races = RACES.filter((r) => isOpen('race', r.id, set)), race = races[R(races.length)];
   const L = { ...prev, race: race.id, skin: Math.random() < 0.6 ? race.skin ?? R(SKINS.length) : R(SKINS.length) };
   for (const k in OPTIONS) {
-    const open = OPTIONS[k].filter(([id]) => isOpen(k, id, set));
+    const open = OPTIONS[k].filter(([id]) => isOpen(k, id, set) && raceAllows(k, id, race.id));
     L[k] = open[R(open.length)][0];
   }
   // 連身裝會蓋掉其他衣服，少抽一點

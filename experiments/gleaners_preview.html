@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="robots" content="noindex, noai, noimageai">
+  <title>原野的撿穗　試做</title>
+  <!-- © 2026 bluedot2049《煉金畫廊》。程式、美術與文字受著作權保護，未經授權禁止重製、改作或用於 AI 訓練，詳見 LICENSE。 -->
+  <!-- 試做頁：把真的遊戲（畫廊這一區）載進框裡，再把 js/zones/gallery/gleaners.js 掛上去看。遊戲本身的程式沒有接這個模組。
+       要 ?debug 才有 __g；網址後面加的參數會原樣帶給遊戲（例如 ?q=mid）。 -->
+  <style>
+    :root { --ink: #1c130d; --paper: #f5e9d4; --gold: #e8b86a; --line: rgba(232, 184, 106, .4); --dim: #b9a98f; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: var(--ink); color: var(--paper); font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+    iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+    #panel { position: fixed; top: 10px; left: 10px; width: min(372px, calc(100vw - 20px)); background: rgba(28, 19, 13, .9); border: 1px solid var(--line); border-radius: 12px; font-size: 13px; line-height: 1.55; user-select: none; }
+    #head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; }
+    #head strong { color: var(--gold); font-weight: 600; flex: 1; }
+    #head span { color: var(--dim); font-size: 12px; }
+    #body { padding: 0 12px 11px; display: grid; gap: 8px; }
+    #panel.shut #body { display: none; }
+    .note { color: var(--dim); font-size: 12px; }
+    .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .lab { color: var(--dim); font-size: 12px; width: 3.4em; flex: none; }
+    button { font: inherit; font-size: 12.5px; color: var(--paper); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; cursor: pointer; white-space: nowrap; }
+    button:hover { border-color: var(--gold); }
+    button.on { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+    button:disabled { opacity: .35; cursor: default; }
+    @media (max-width: 560px) { #panel { font-size: 12px; } button { padding: 4px 9px; font-size: 12px; } .note.more { display: none; } }
+  </style>
+</head>
+<body>
+  <iframe id="game" allow="fullscreen; gamepad" allowfullscreen></iframe>
+  <div id="panel">
+    <div id="head"><strong>原野的撿穗　試做</strong><span id="stat">載入中</span></div>
+    <div id="body">
+      <div class="note">長椅和岸邊之間多了一塊收割過的地。畫家坐在田前面，畫布上是他看出去的畫面，第三個位置畫的是你。</div>
+      <div class="row"><span class="lab">鏡頭</span><button data-view="eye">畫家的眼睛</button><button data-view="walk">自己走</button><button data-view="wide">整塊地</button></div>
+      <div class="row"><span class="lab">第三位</span><button data-third="empty">空著</button><button data-third="me">你站進去</button><button data-third="npc">補一個人</button></div>
+      <div class="row"><span class="lab">撿穗的</span><span id="casts" class="row"></span></div>
+      <div class="row"><span class="lab">其他</span><button id="repaint">重畫畫布</button><button id="show" class="on">田在</button></div>
+      <div class="note more">「畫家的眼睛」鎖住鏡頭，角色照樣走得動，可以自己走進空位。要拍照切回「自己走」，用遊戲本來的相機。標題點一下收起這塊。</div>
+    </div>
+  </div>
+
+  <script>
+    const frame = document.getElementById('game'), stat = document.getElementById('stat'), panel = document.getElementById('panel');
+    const all = () => [...panel.querySelectorAll('button')];
+    document.getElementById('head').addEventListener('click', () => panel.classList.toggle('shut'));
+    all().forEach((b) => { b.disabled = true; });
+
+    // 畫廊、搭船來（不從前門走一遍）、主線序章和白獸不排，免得走到一半被叫走
+    const q = new URLSearchParams({ z: 'gallery', debug: '', from: 'haishi', act: '0', beast: '0', tableau: '0' });   // 遊戲自己的節目表不演，這一頁另外蓋一份
+    for (const [k, v] of new URLSearchParams(location.search)) q.set(k, v);
+    frame.src = '../index.html?' + q;
+
+    let api = null, shown = true;
+    const mark = () => {
+      const s = api.state();
+      panel.querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === s.view));
+      panel.querySelectorAll('[data-third]').forEach((b) => b.classList.toggle('on', b.dataset.third === s.third));
+      panel.querySelectorAll('[data-cast]').forEach((b) => b.classList.toggle('on', +b.dataset.cast === s.cast));
+    };
+    const back = () => { mark(); frame.contentWindow.focus(); };
+
+    function ready() {
+      const casts = document.getElementById('casts');
+      api.casts.forEach((name, i) => {
+        const b = document.createElement('button');
+        b.textContent = name;
+        b.dataset.cast = i;
+        b.addEventListener('click', () => { api.cast(i); back(); });
+        casts.append(b);
+      });
+      panel.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => { api.view(b.dataset.view); back(); }));
+      panel.querySelectorAll('[data-third]').forEach((b) => b.addEventListener('click', () => {
+        api.third(b.dataset.third);
+        if (b.dataset.third === 'me') api.view('eye');   // 站進去以後從畫家那邊看自己
+        back();
+      }));
+      document.getElementById('repaint').addEventListener('click', () => { api.repaint(); back(); });
+      document.getElementById('show').addEventListener('click', (e) => {
+        shown = !shown;
+        api.show(shown);
+        e.currentTarget.classList.toggle('on', shown);
+        e.currentTarget.textContent = shown ? '田在' : '田收起來了';
+        back();
+      });
+      all().forEach((b) => { b.disabled = false; });
+      api.view('walk');
+      stat.textContent = '';
+      mark();
+      // 走開空位、自己放掉姿勢時，按鈕跟著換
+      setInterval(mark, 500);
+    }
+
+    // 等遊戲載完（__g、主迴圈、載入畫面收掉），在框裡掛上模組
+    let asked = false, tries = 0;
+    const wait = setInterval(() => {
+      let w;
+      try { w = frame.contentWindow; } catch { return; }
+      if (++tries > 480) { clearInterval(wait); stat.textContent = '沒載進來，重新整理一次'; return; }
+      if (!w || !w.__g || !w.__g.loop || !w.document.getElementById('loading')?.classList.contains('done')) return;
+      if (!asked) {
+        asked = true;
+        w.document.documentElement.classList.add('no-dev');   // 調色台、幀率藏起來
+        // 在框裡的文件放一個 module script：路徑、importmap、模組都照遊戲那一頁的（從這一頁呼叫 import() 會照這一頁的網址找，載到另一份 three）
+        const s = w.document.createElement('script');
+        s.type = 'module';
+        s.textContent = "import('./js/zones/gallery/gleaners.js').then((m) => { window.__gleaners = m.tryOn(window.__g); }).catch((e) => { window.__gleanersError = String(e && e.stack || e); });";
+        w.document.head.append(s);
+      }
+      if (w.__gleanersError) { clearInterval(wait); stat.textContent = '掛不上去'; console.error(w.__gleanersError); return; }
+      if (w.__gleaners) { clearInterval(wait); api = w.__gleaners; ready(); }
+    }, 250);
+  </script>
+</body>
+</html>

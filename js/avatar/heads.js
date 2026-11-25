@@ -746,6 +746,44 @@ export const HEADS = {
   lanxiong(k, c, _c2, f, o) {
     bearHead(k, c, f, !o?.bean);
   },
+  // BLUEDOT（使用者插畫裡的太空人，參考圖 design/bluedot/）：頭就是頭盔。白殼稍微高一點，正面一整片深紫面罩鼓出殼外，
+  // 左上一道橘色反光（插畫裡那一筆）；右側一塊方形護板、左側一顆旋鈕。看不到臉，眼睛嘴巴都沒有
+  bluedot(k) {
+    const shell = '#f3f2ee', line = '#d6d4d2', visor = '#3e3150', glint = '#f08a5c';
+    const C = 0.22, R = 0.225, SY = 1.04;
+    k.ball(R, shell, 0, C, -0.005, { sy: SY, color2: '#ffffff' });
+    // 面罩：殼外面貼一片球面的窗（圓角方），左右各張開 W、往上 UP、往下 DN（弧度）；底下墊一片大一圈的淺灰當窗框
+    const win = (r, w, up, dn, c) => k.add(new THREE.SphereGeometry(r, 18, 12, Math.PI / 2 - w, 2 * w, Math.PI / 2 - up, up + dn), c, 0, C, -0.005, { sy: SY });
+    win(R * 1.02, 0.98, 0.78, 0.52, line);
+    win(R * 1.045, 0.9, 0.7, 0.44, visor);
+    // 左上的反光（插畫那一筆）：一片貼著面罩弧面的斜帶，左下往右上、兩頭收圓，單一個橘色（使用者定的：不要亮芯和漸層）
+    {
+      const A = [-0.62, 0.04], B = [-0.24, 0.57], HW = 0.09, U = 16, V = 8;
+      const dt = B[0] - A[0], dp = B[1] - A[1], l = Math.hypot(dt, dp), px = -dp / l, py = dt / l;   // px、py：帶子的垂直方向（往左上為正）
+      const orange = new THREE.Color(glint), pos = [], nor = [], col = [], idx = [];
+      for (let i = 0; i <= U; i++) {
+        const u = i / U, w = HW * Math.pow(Math.sin(Math.PI * (0.03 + 0.94 * u)), 0.5);
+        for (let j = 0; j <= V; j++) {
+          const v = (j / V) * 2 - 1, th = A[0] + dt * u + px * w * v, ph = A[1] + dp * u + py * w * v;
+          const nx = Math.sin(th) * Math.cos(ph), ny = Math.sin(ph), nz = Math.cos(th) * Math.cos(ph), r = R * 1.045 + 0.004;
+          pos.push(nx * r, C + ny * r * SY, nz * r - 0.005);
+          nor.push(nx, ny, nz);
+          col.push(orange.r, orange.g, orange.b);
+        }
+      }
+      for (let i = 0; i < U; i++) for (let j = 0; j < V; j++) { const q = i * (V + 1) + j; idx.push(q, q + V + 1, q + 1, q + 1, q + V + 1, q + V + 2); }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      g.setIndex(idx);
+      k.add(g, null, 0, 0, 0, { ao: false });
+    }
+    // 右側護板、左側旋鈕
+    k.box(0.02, 0.11, 0.13, line, 0.222, 0.23, -0.05);
+    k.box(0.008, 0.08, 0.1, shell, 0.234, 0.23, -0.05);
+    k.cyl(0.03, 0.03, 0.03, line, -0.228, 0.21, -0.05, { rz: Math.PI / 2 }, 10);
+  },
   // 胖海獅（只有 NPC：主線的發膏，looks.js 的 NPC_RACES）：圓頭往前收成短吻、又大又圓的黑鼻頭、兩團鼓鼓的鬍鬚墊（沒有鬍鬚）、水汪汪的大眼、
   // 小耳朵、雙下巴。跟胖頭、海牛分開靠大鼻頭、大眼。顏色吃膚色；護目鏡、帽子由 npc/fagao.js 另外掛
   sealion(k, c, c2, f) {

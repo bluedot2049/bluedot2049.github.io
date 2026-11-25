@@ -9,6 +9,10 @@ import { build } from './character-build.js';
 //   segs [{ len, r0, r1, rx, rz, c, c2?, sz? }] 每一節：長度、上下兩端粗細、靜止時往前（rx）往旁（rz）彎多少、顏色（c2 給了就是上端的顏色，往下漸層到 c）、前後壓扁
 //   stiff 多硬（越大回得越快）　hang 頭仰、低時照重力回到朝下多少（0 不管、1 全垂）
 //   sway 走路照步伐擺多大　every 平常每隔幾秒自己甩一下（0 不甩）　deco(k, 第幾節, 那一節) 在那一節上多畫東西
+//   segs 的 w、t：給了就畫成扁的一片（緞帶、圍巾尾巴）：左右寬 w、前後厚 t，不畫棍子和關節的球
+//   flutter 走路時一波一波從上往下傳的抖（弧度，每一節）
+//   stream 走路時整串往後飄多少（弧度，全串加起來）　drag 照移動的速度往反方向拖多少（每公尺／秒幾弧度）
+//   lim { x: [最往前, 最往後], z: [最往 -x, 最往 +x] } 整串加起來最多彎多少（照靜止的樣子算），掛在手臂、身體旁邊的才不會甩進去
 const _w = new THREE.Vector3(), _v = new THREE.Vector3(), _a = new THREE.Vector3(), _g = new THREE.Vector3(), _q = new THREE.Quaternion();
 
 export class Dangle {
@@ -27,9 +31,12 @@ export class Dangle {
       if (mat) {
         const geo = build((k) => {
           const sz = s.sz ?? 1;
-          if (!i) k.ball(s.r0, s.c2 ?? s.c, 0, 0, 0, { sz });
-          k.cyl(s.r0, s.r1, s.len, s.c, 0, -s.len / 2, 0, { sz, color2: s.c2 }, 8);   // c2：上端的顏色（由下往上漸層到它）
-          if (s.r1 > 0.01) k.ball(s.r1 * 0.92, s.c, 0, -s.len, 0, { sz });   // 關節的球比棍子細一點，不然一節一節鼓起來像香腸
+          if (s.w) k.box(s.w, s.len + 0.012, s.t ?? 0.02, s.c, 0, -s.len / 2, 0);   // 扁的一片：多 1.2 公分跟下一節疊著，彎的時候不裂開
+          else {
+            if (!i) k.ball(s.r0, s.c2 ?? s.c, 0, 0, 0, { sz });
+            k.cyl(s.r0, s.r1, s.len, s.c, 0, -s.len / 2, 0, { sz, color2: s.c2 }, 8);   // c2：上端的顏色（由下往上漸層到它）
+            if (s.r1 > 0.01) k.ball(s.r1 * 0.92, s.c, 0, -s.len, 0, { sz });   // 關節的球比棍子細一點，不然一節一節鼓起來像香腸
+          }
           spec.deco?.(k, i, s);
         });
         j.add(new THREE.Mesh(geo, mat));
@@ -69,8 +76,14 @@ export class Dangle {
     _a.applyQuaternion(_q);
     _g.set(0, -1, 0).applyQuaternion(_q);
     // 頭仰、低的時候整串照重力回到朝下；加速度往反方向甩
-    const dx = sp.hang * Math.atan2(-_g.z, -_g.y) + _a.z * 0.065;
-    const dz = sp.hang * Math.atan2(_g.x, -_g.y) - _a.x * 0.065;
+    let dx = sp.hang * Math.atan2(-_g.z, -_g.y) + _a.z * 0.065;
+    let dz = sp.hang * Math.atan2(_g.x, -_g.y) - _a.x * 0.065;
+    // 往前走：往後飄、照速度往後拖（速度換到掛的地方的座標）
+    if (sp.stream || sp.drag) {
+      _v.applyQuaternion(_q);
+      dx += (sp.stream || 0) * walk + (sp.drag || 0) * _v.z;
+      dz -= (sp.drag || 0) * _v.x;
+    }
     if ((this.next -= dt) < 0) {
       this.fling();
       this.next = sp.every * (0.8 + Math.random() * 0.4);
@@ -78,7 +91,7 @@ export class Dangle {
     const sh = this.shake;
     if (sh && (sh.t += dt) > 1.6) this.shake = null;
     this.joints.forEach((j, i) => {
-      let tx = dx / n, tz = dz / n + Math.sin(this.t * 1.3 - i * 0.5) * 0.02 + Math.sin(phase - i * 0.35) * (sp.sway || 0) * walk / n * 3;
+      let tx = dx / n + (sp.flutter || 0) * walk * Math.sin(this.t * 7.5 - i * 1.1), tz = dz / n + Math.sin(this.t * 1.3 - i * 0.5) * 0.02 + Math.sin(phase - i * 0.35) * (sp.sway || 0) * walk / n * 3;
       if (sh) {
         const u = Math.max(0, sh.t - i * 0.06) / 1.4, env = u < 1 ? Math.sin(Math.PI * u) : 0;
         if (sh.kind === 'side') tz += sh.dir * 0.2 * Math.sin(u * Math.PI * 3) * env;
@@ -89,6 +102,11 @@ export class Dangle {
       j.vz += ((tz - j.z) * k - j.vz * d) * dt;
       j.x += j.vx * dt;
       j.z += j.vz * dt;
+      if (sp.lim) {
+        const cl = (v, r, side) => { const a = r[0] / n, b = r[1] / n; if (v < a || v > b) { j[side] = 0; return Math.min(b, Math.max(a, v)); } return v; };
+        if (sp.lim.x) j.x = cl(j.x, sp.lim.x, 'vx');
+        if (sp.lim.z) j.z = cl(j.z, sp.lim.z, 'vz');
+      }
       j.g.rotation.set(j.rx + j.x, 0, j.rz + j.z);
     });
   }

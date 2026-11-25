@@ -1254,7 +1254,7 @@ async function start() {
   // 畫廊：問號立牌的教學（走近說下一步，互動鍵「問」，泡泡底下那行小字照現在的操作方式寫鍵，所以給 keyOf）、收音機、畫架、地下室會說話的畫
   const PAD_OF = { interact: -1, raise: 6, pack: 8, eye: 5, party: 14 };
   fixtures = Object.entries(Z.fixtures?.({
-    world, player, camera, ambience, params, manatee, host, visitors, ui, gate, look: () => look, back: params.has('from'), openEnv: () => ui.guide(),
+    world, player, camera, renderer, ambience, params, manatee, host, visitors, ui, gate, look: () => look, back: params.has('from'), openEnv: () => ui.guide(),
     keyOf: (id) => { const k = inputKind(); return k === 'pad' ? padBtn(PAD_OF[id]) : k === 'touch' ? '' : key(id); },
   }) ?? {}).filter(([, f]) => f);
   for (const [, f] of fixtures) if (f.target) player.actionables.push((x, z) => f.target(x, z));

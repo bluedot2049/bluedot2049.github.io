@@ -7,7 +7,7 @@ import { sunShadow } from '../core/scenery.js';
 import { CONTACT, footShadow } from '../core/footshadow.js';
 import { SKINS, CLOTH, FACE, FACE_INK, raceOf, sizes, sanitizeLook, lookKey, decodeFace } from './looks.js';
 import { CAMERAS, GUI_EYE, cameraModel, cameraPart, cameraParts, chromeMat, isChrome } from '../camera/cameras.js';
-import { HIP, HOODED, itemOf, bodyGeo, armGeo, legGeo, capeGeo, CAPE_BEND, capeT, camStrap, wingGeo, wingAt, hasWings, tailGeo, tailAt, katanaGeo, katanaFit, KATANA_ARM } from './clothes.js';
+import { HIP, HOODED, itemOf, bodyGeo, armGeo, legGeo, capeGeo, CAPE_BEND, capeT, camStrap, wingGeo, wingAt, hasWings, tailGeo, tailAt, katanaGeo, katanaFit, KATANA_ARM, scarfTail, wikiGeo } from './clothes.js';
 import { HandClear, shapeOf, reachAt, shapePoints } from './handclear.js';
 import { Dangle } from './dangle.js';
 import { BEAR_SHOULDER, BEAR_FACES, BEAR_HANDS, bearFaceGeo, smokeAt, SMOKE_PUFFS } from './lanxiong.js';
@@ -193,6 +193,8 @@ export class Character {
     this.footL = pivot(HIP);
     this.footR = pivot(HIP);
     this.limbs = [this.armL, this.armR, this.footL, this.footR].map(mesh);
+    this.bookMesh = mesh(this.armR);   // BLUEDOT 夾在左腋下的 WIKI 書（clothes.js 的 wikiGeo），跟著左手臂擺
+    this.book = false;
     // 右手拿的東西：每一幀抵銷手臂的轉動，一直保持直立。左手留給點心。
     // 底下再掛一層 handSwing：垂著的東西（燈籠、魚）跟著手的加速度盪（update 的最後）
     this.handG = new THREE.Group();
@@ -371,14 +373,18 @@ export class Character {
     swap(aR, armGeo(L, W, skin, 1));
     // 爛熊的肩膀、腿照它自己的形狀擺（lanxiong.js）；身體已經是壓好腿長的樣子，不再壓（legK）
     this.armL.position.y = this.armR.position.y = race.bean ? BEAR_SHOULDER[1] + this.drop : 0.72;
-    const fx = race.bean ? 0.132 * W : 0.09 * Math.max(0.75, W);
+    const fx = race.bean ? 0.132 * W : L.one === 'bluedot' ? 0.115 * W : 0.09 * Math.max(0.75, W);   // BLUEDOT 太空衣的褲管粗，兩腳站開一點
     this.footL.position.x = -fx;
     this.footR.position.x = fx;
     swap(fL, shorten(legGeo(L, W, skin, -1), legK, true));
     swap(fR, shorten(legGeo(L, W, skin, 1), legK, true));
 
-    swap(this.scarfTail, L.neck === 'scarf' ? build((k) => k.box(0.08, 0.28, 0.04, hex(CLOTH[L.neckC]), 0, 0, 0)) : null);
-    this.scarfTail.position.set(0.08, 0.68, -0.17 * W);
+    // 圍巾尾巴（clothes.js）：一般是一片跟著走路擺；穿 BLUEDOT 太空衣的是一串會飄的（dangle.js），掛在身體上
+    const tail = L.neck === 'scarf' ? scarfTail(L, W) : null;
+    swap(this.scarfTail, tail?.geo ?? null);
+    if (tail?.at) this.scarfTail.position.set(...tail.at);
+    this.scarfDangle?.dispose();
+    this.scarfDangle = tail?.dangle ? new Dangle(this.body, this.mat, tail.dangle) : null;
     swap(this.capeMesh, capeG);
     this.wings.forEach(([p, m], i) => {
       const side = i ? 1 : -1;
@@ -389,6 +395,9 @@ export class Character {
     swap(this.tailMesh, tailGeo(L, skin));
     this.tail.position.set(...tailAt(W, HIP - (HIP - 0.32) * S.leg, env));
     // 武士刀擺在左手（armR 照 KATANA_ARM 扣著）底下：手心 = 肩膀的關節 + 手臂往下 0.33 照那個姿勢轉
+    const book = wikiGeo(L);
+    swap(this.bookMesh, book);
+    this.book = !!book;
     const kat = katanaGeo(L);
     swap(this.katMesh, kat);
     this.katana = !!kat;
@@ -757,6 +766,12 @@ export class Character {
       this.armR.rotation.x = KATANA_ARM[0] + s * 0.05 * w;
       this.armR.rotation.y = KATANA_ARM[1];
     }
+    // 夾著 WIKI 書：左手壓著書少擺一點、往外張一點，書才不會擦進身體（後面拿點心、表情那幾層照樣蓋過去；舉相機時書先收起來）
+    if (this.book) {
+      this.armR.rotation.x = -s * 0.2 * w;
+      this.armR.rotation.z = ARM_OUT + 0.08;
+      this.bookMesh.visible = this.aimP < 0.05;
+    }
 
     // 起跳前先蹲一下（膝蓋一沉、身體前傾、手往後甩），蹲完才離地；升空時手舉起來，過了最高點慢慢放下；
     // 落地再沉一下，手微微張開。沉的量疊在走路的身體上，後面坐下、拿東西那幾層照樣蓋得過
@@ -773,7 +788,7 @@ export class Character {
       this.body.scale.y *= 1 - dip * 0.6;
       this.body.rotation.x += crouch * 0.12 + land * 0.1;
       this.armL.rotation.x += crouch * 0.6;
-      if (!this.katana) this.armR.rotation.x += crouch * 0.6;   // 扣著刀柄的手不往後甩，甩下去會穿過刀鞘
+      if (!this.katana && !this.book) this.armR.rotation.x += crouch * 0.6;   // 扣著刀柄、夾著書的手不往後甩，甩下去會穿過刀鞘、書甩進身體
       this.armL.rotation.z -= land * 0.3;
       this.armR.rotation.z += land * 0.3;
       this.hat.position.y -= dip * 0.3;
@@ -1081,6 +1096,7 @@ export class Character {
     this.bendCape(this.capeX + 0.35 * this.sitP + Math.max(0, this.footL.rotation.x - 0.6, this.footR.rotation.x - 0.6), this.capeZ);
     // 頭上會甩的一串：頭的姿勢都擺好了才量它這一幀怎麼動
     for (const d of this.dangles) d.update(dt, this.walk, this.phase);
+    this.scarfDangle?.update(dt, this.walk, this.phase);
   }
 
   // 披風照走路、跳、風往後彎（bx 前後、bz 左右），碰到地就貼著地。肩上不動、越下面彎越多（clothes.js 的 capeGeo、capeT），

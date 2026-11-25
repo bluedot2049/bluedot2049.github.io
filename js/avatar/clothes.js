@@ -12,6 +12,8 @@ import { BEAR_SHELL, bearBody, bearArm, bearLeg } from './lanxiong.js';
 export const HIP = 0.42;
 const WHITE = '#f4f2ec', BLACK = '#1e1c1e', DARK = '#3a2414', GOLD = '#d4a54a', METAL = '#a0a6ae', WOOD = '#7a5432', LEATHER = '#5a3a24';
 const BANANA = '#f0d040', SUIT = '#e8eaee';
+// BLUEDOT 太空衣（使用者插畫的太空人，參考圖 design/bluedot/）：白、接縫的淺灰、面板的米灰，插畫的線是深紫，這裡拿來當面板、腰帶的描邊
+const BD = { suit: '#f3f2ee', seam: '#d4d1ce', panel: '#e6e3de', ink: '#4a3a50' };
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 const mix = (a, b, t) => '#' + new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString();
 const col = (i) => hex(CLOTH[i]);
@@ -46,7 +48,7 @@ const COAT = {
 const SUIT_COAT = [[0.3, 0.8, 0.25, 0.18]];
 // 光溜溜：爛熊（looks.js 的 bean 種族）頭身一體的整顆身體，形狀在 lanxiong.js（Gemini 做的）。BEAR_SHELL 是它在每個高度多寬，背包、腰包照它擺
 const ONE_COAT = { dino: SUIT_COAT, panda: SUIT_COAT, astronaut: SUIT_COAT, banana: [[0.08, 0.8, 0.26, 0.2]], yukata: [[0.08, 0.8, 0.27, 0.17]],
-  fur: BEAR_SHELL };
+  fur: BEAR_SHELL, bluedot: [[0.3, 0.8, 0.25, 0.215]] };
 
 // 身上最外層在 y 高度離中線多遠（前後一樣）。領帶、項鍊、背包、腰包照它擺，穿了斗篷、蓑衣也不會埋進去。
 // 沒穿寬外套時就是 chest()，原本的位置不變
@@ -352,7 +354,7 @@ function outer(k, L, W, P) {
 // 穿了就蓋掉上衣、下身和外套。袖子、腿的顏色另外看 ONE_SLEEVE 和 ONE_LEG
 
 export { HOODED };
-const ONE_LEG = { dino: 'one', panda: BLACK, banana: BANANA, astronaut: SUIT };
+const ONE_LEG = { dino: 'one', panda: BLACK, banana: BANANA, astronaut: SUIT, bluedot: BD.suit };
 
 function onepiece(k, L, W, P) {
   const rr = (y, r0, r1, y0 = 0.08) => lerp(r0, r1, (y - y0) / (0.8 - y0));
@@ -402,6 +404,53 @@ function onepiece(k, L, W, P) {
       // 光溜溜：爛熊整顆身體連頭頂（lanxiong.js），吃膚色。手腳見 armGeo、legGeo 的 fur
       bearBody(k, P.skin, W);
       break;
+    case 'bluedot': {
+      // BLUEDOT 太空衣：胖胖的白筒、圓肩。胸前一塊隨身聽面板（插畫寫 NOW PLAYING／LIVING IN THE SHADOWS：螢幕、等化器、旋鈕、◀■▶），
+      // 底下一個方口袋，腰上一條有描邊的腰帶，背後高高的維生背包頂到頭盔下緣。顏色不吃色票，照插畫
+      const [[b0, b1, r0, r1]] = ONE_COAT.bluedot, R = (y) => rr(y, r0 * W, r1 * W, b0), th = Math.atan(((r0 - r1) * W) / (b1 - b0));
+      const s = Math.min(1.1, Math.max(0.75, W)), on = (y, d = 0) => R(y) + d;   // s：面板跟著胖瘦縮，太瘦太胖都有個限度
+      tube(k, b0, b1, r0 * W, r1 * W, BD.suit, BD.suit, 'plain', 12);
+      k.ball(r1 * W, BD.suit, 0, b1 - 0.01, 0, { sy: 0.42 });
+      k.torus(0.15 * (0.8 + 0.2 * W), 0.03, Math.PI * 2, BD.seam, 0, 0.81, 0, { rx: Math.PI / 2 });
+      // 胸前面板：深紫的底板大一圈當描邊
+      const py = 0.63, tilt = { rx: -th };
+      k.box(0.22 * s, 0.14 * s, 0.02, BD.ink, 0, py, on(py, 0.002), tilt);
+      k.box(0.205 * s, 0.125 * s, 0.02, BD.panel, 0, py, on(py, 0.008), tilt);
+      const at = (x, y, d) => [x * s, py + y * s, on(py + y * s, 0.018 + d)];
+      // 螢幕：描邊、白底、兩行字（短的 NOW PLAYING、長的歌名）
+      k.box(0.104 * s, 0.054 * s, 0.006, BD.ink, ...at(0.035, -0.008, 0), tilt);
+      k.box(0.094 * s, 0.044 * s, 0.006, '#fbfaf6', ...at(0.035, -0.008, 0.002), tilt);
+      k.box(0.04 * s, 0.005 * s, 0.004, BD.ink, ...at(0.035, 0.004, 0.004), tilt);
+      k.box(0.074 * s, 0.008 * s, 0.004, BD.ink, ...at(0.035, -0.012, 0.004), tilt);
+      // ◀ ■ ▶
+      k.cone(0.007 * s, 0.012 * s, BD.ink, ...at(0.02, 0.04, 0.002), { rx: -th, rz: Math.PI / 2 });
+      k.box(0.009 * s, 0.009 * s, 0.004, BD.ink, ...at(0.036, 0.04, 0.002), tilt);
+      k.cone(0.007 * s, 0.012 * s, BD.ink, ...at(0.052, 0.04, 0.002), { rx: -th, rz: -Math.PI / 2 });
+      // 等化器：三排短橫條，高低不一
+      [3, 2, 3].forEach((n, i) => { for (let j = 0; j < n; j++) k.box(0.014 * s, 0.005 * s, 0.004, BD.ink, ...at(-0.074 + i * 0.019, 0.034 - j * 0.01, 0.002), tilt); });
+      // 旋鈕
+      k.cyl(0.014 * s, 0.014 * s, 0.008, BD.ink, ...at(-0.055, -0.03, 0.002), { rx: Math.PI / 2 - th }, 10);
+      k.cyl(0.01 * s, 0.01 * s, 0.01, BD.panel, ...at(-0.055, -0.03, 0.004), { rx: Math.PI / 2 - th }, 10);
+      // 面板底下的方口袋、腰帶兩側的小盒
+      k.box(0.13 * s, 0.085, 0.03, BD.ink, 0, 0.5, on(0.5, 0.008), tilt);
+      k.box(0.12 * s, 0.075, 0.034, BD.suit, 0, 0.5, on(0.5, 0.012), tilt);
+      for (const x of [-1, 1]) {
+        const a = x * 0.62, r = R(0.46) + 0.015;
+        k.box(0.085, 0.09, 0.04, BD.seam, Math.sin(a) * r, 0.47, Math.cos(a) * r, { ry: a });
+        k.box(0.075, 0.08, 0.042, BD.suit, Math.sin(a) * (r + 0.004), 0.47, Math.cos(a) * (r + 0.004), { ry: a });
+      }
+      // 腰帶：深紫描邊夾著一圈淺色
+      k.cyl(R(0.43) + 0.012, R(0.37) + 0.012, 0.068, BD.ink, 0, 0.4, 0, {}, 12);
+      k.cyl(R(0.43) + 0.016, R(0.37) + 0.016, 0.054, BD.panel, 0, 0.4, 0, {}, 12);
+      k.box(0.07, 0.05, 0.02, BD.seam, 0, 0.4, R(0.4) + 0.028);
+      // 背包：高的白箱子，側面一條接縫、底下一格
+      const bz = -R(0.62) - 0.075;
+      k.box(0.34 * W, 0.44, 0.15, BD.suit, 0, 0.64, bz);
+      k.box(0.345 * W, 0.012, 0.155, BD.seam, 0, 0.5, bz);
+      k.box(0.2 * W, 0.1, 0.01, BD.seam, 0, 0.72, bz - 0.077);
+      k.box(0.17 * W, 0.08, 0.012, BD.suit, 0, 0.72, bz - 0.08);
+      break;
+    }
     case 'yukata': {
       // 浴衣：長到腳踝，身上小花，腰上寬寬的帶子，背後打結，領口交叉
       const [[, , a0, a1]] = ONE_COAT.yukata, r0 = a0 * W, r1 = a1 * W, th = Math.atan((r0 - r1) / 0.72);
@@ -670,9 +719,37 @@ export function bodyGeo(L, W, cape = null, head = null) {
 
 // ---------- 會動的部分 ----------
 
+// 圍巾垂下來的那條尾巴：回傳 { geo, at }，geo 的原點是掛點，at 是掛點在身體的哪裡（character.js 掛上去、走路時繞 x 轉往後飄）。
+// 穿 BLUEDOT 太空衣的改回傳 { dangle }：dangle.js 的一串扁片（會飄的長尾巴，末端剪成鬚鬚），掛在身體上（character.js）。
+// 位置是右後方、背包和右手臂中間的空隙：左右在背包外面（背包半寬 0.17W），前後在手臂（揮到最後面）和背包前緣中間，
+// 往內最多到腰帶外面。lim 擋住往前甩進手臂、往內甩進身體；走路時 stream 讓它先往後飄開，手臂往後擺才不會撞到。
+// 左邊那個空隙留給夾在腋下的 WIKI 書（back 的 wiki）
+export function scarfTail(L, W) {
+  const c = col(L.neckC);
+  if (L.one !== 'bluedot') return { geo: build((k) => k.box(0.08, 0.28, 0.04, c, 0, 0, 0)), at: [0.08, 0.68, -0.17 * W] };
+  const N = 5, len = 0.076, x = -0.15 - 0.105 * W;   // 掛點跟著胖瘦往外（手臂在 0.07+0.17W）
+  const segs = Array.from({ length: N }, (_, i) => ({ len, w: 0.085 - i * 0.003, t: 0.022, rx: i ? 0.03 : 0.1, rz: i ? 0 : -0.13, c }));
+  return {
+    dangle: {
+      at: [x, 0.795, -0.16 - 0.02 * W], segs,
+      stiff: 38, hang: 0.9, sway: 0.12, every: 0, stream: 0.95, drag: 0.1, flutter: 0.09,
+      lim: { x: [-0.06, 1.5], z: [-0.9, 0.06] },
+      // 結（貼回脖子那圈）、末端一排鬚鬚
+      deco: (k, i, g) => {
+        if (!i) {
+          k.ball(0.05, c, 0, 0.005, 0.01, { sx: 1.1, sz: 0.8 });
+          k.ball(0.04, c, 0.035, 0.012, 0.02, { sz: 0.8 });
+        }
+        if (i === N - 1) for (let f = 0; f < 5; f++) k.cone(0.009, 0.045 + (f % 2) * 0.022, c, (f - 2) * 0.018, -g.len - 0.022 - (f % 2) * 0.011, 0, { rx: Math.PI, sz: 0.5 });
+      },
+    },
+  };
+}
+
+
 // 袖子：long 長袖、short 短袖、none 露出手臂、wide 和服那種垂下來的大袖子
 function sleeveOf(L, P) {
-  if (L.one !== 'none') return { dino: ['long', P.one], panda: ['long', BLACK], banana: ['long', BANANA], astronaut: ['long', SUIT], yukata: ['wide', P.one], fur: ['none', P.skin] }[L.one];
+  if (L.one !== 'none') return { dino: ['long', P.one], panda: ['long', BLACK], banana: ['long', BANANA], astronaut: ['long', SUIT], yukata: ['wide', P.one], fur: ['none', P.skin], bluedot: ['long', BD.suit] }[L.one];
   if (OUTER_SLEEVE[L.outer]) return [OUTER_SLEEVE[L.outer], P.out];
   return [TOP_SLEEVE[L.top] || 'long', L.top === 'armor' ? METAL : P.top];
 }
@@ -682,6 +759,14 @@ export function armGeo(L, W, skin, armSide = 1) {
   const P = palette(L), r = 0.055 * Math.sqrt(W), [type, c] = sleeveOf(L, P);
   // 光溜溜：爛熊粗短圓的手（lanxiong.js）。拉長到手心 -0.33，相機、雨傘、麥克風照原本的位置拿
   if (L.one === 'fur') return build((k) => bearArm(k, armSide, skin, W));
+  // BLUEDOT 太空衣：粗袖子、手肘一圈接縫、白色大手套（手心一樣在 -0.33，手上的東西照原本的位置拿）
+  if (L.one === 'bluedot') return build((k) => {
+    k.add(new THREE.CapsuleGeometry(r * 1.4, 0.2, 2, 8), BD.suit, 0, -0.14, 0);
+    k.cyl(r * 1.45, r * 1.45, 0.012, BD.seam, 0, -0.16, 0, {}, 8);
+    k.cyl(r * 1.3, r * 1.25, 0.04, BD.seam, 0, -0.275, 0, {}, 8);
+    k.ball(0.066, BD.suit, 0, -0.33, 0.005, { sx: 0.95, sy: 1.1 });
+    k.ball(0.028, BD.suit, armSide * -0.045, -0.31, 0.03);   // 大拇指
+  });
   return build((k) => {
     const cap = (color, rr) => k.add(new THREE.CapsuleGeometry(rr, 0.25, 2, 6), color, 0, -0.16, 0);
     if (type === 'none') cap(skin, r * 0.85);
@@ -701,6 +786,17 @@ export function legGeo(L, W, skin, side) {
   const P = palette(L), lr = 0.045 * Math.sqrt(W);
   // 光溜溜：爛熊粗短的腿、平底腳掌，不穿鞋（lanxiong.js）。腳底在 -BEAR_HIP，character.js 不再壓它的長度
   if (L.one === 'fur') return build((k) => bearLeg(k, side, skin, W));
+  // BLUEDOT 太空衣：粗褲管、膝蓋一圈接縫，套一雙圓頭白靴（不看鞋子那一欄）
+  if (L.one === 'bluedot') return build((k) => {
+    const y = 0.04 - HIP;
+    k.cyl(lr * 2.05, lr * 1.9, 0.36, BD.suit, 0, -0.16, 0, {}, 9);
+    k.cyl(lr * 1.98, lr * 1.98, 0.012, BD.seam, 0, -0.2, 0, {}, 9);
+    k.cyl(lr * 2.1, lr * 2.1, 0.075, BD.seam, 0, y + 0.075, 0.005, {}, 10);
+    k.cyl(lr * 2.05, lr * 2.05, 0.06, BD.suit, 0, y + 0.075, 0.005, {}, 10);
+    k.box(0.15, 0.085, 0.17, BD.suit, 0, y, 0.0);
+    k.ball(0.075, BD.suit, 0, y, 0.085, { sy: 0.6, sz: 0.75 });
+    k.box(0.155, 0.022, 0.24, BD.seam, 0, y - 0.04, 0.03);
+  });
   return build((k) => {
     const bare = (from = 0) => k.cyl(lr * 0.85, lr * 0.75, 0.38 - from, skin, 0, -(from + 0.38) / 2, 0, {}, 6);
     const cloth = (c, to = 0.38, r0 = lr * 1.35, r1 = lr * 1.2) => k.cyl(r0, r1, to + 0.02, c, 0, (0.02 - to) / 2, 0, {}, 7);
@@ -940,6 +1036,37 @@ export function tailGeo(L, skin) {
   });
 }
 
+// BLUEDOT 的 WIKI 書（插畫裡夾在左腋下）：背上那一欄的 wiki，畫在左手臂（armR）上跟著擺，原點在肩膀、手在 -0.33。
+// 書立著、長邊前後，手套壓著前面那截，大半截露在手臂後面；外面那片封面直寫 WIKI（由下往上讀，像書背）。character.js 讓那隻手少擺、往外張一點
+export function wikiGeo(L) {
+  if (L.back !== 'wiki') return null;
+  const cover = BD.suit, edge = '#f8f4ea', ink = BD.ink;
+  const t = 0.046, h = 0.22, d = 0.18, cx = -0.026, cy = -0.245, cz = -0.07, out = cx + t / 2;
+  return build((k) => {
+    k.box(t - 0.012, h - 0.012, d - 0.008, edge, cx, cy, cz + 0.004);
+    for (const s of [-1, 1]) k.box(0.007, h, d, cover, cx + s * (t / 2 - 0.0035), cy, cz);
+    k.box(t, h, 0.01, cover, cx, cy, cz - d / 2 + 0.005);   // 書背朝後
+    // 外面那片封面的描邊（上、下、後；前面藏在手套裡）
+    k.box(0.004, 0.006, d, ink, out + 0.001, cy + h / 2 - 0.003, cz);
+    k.box(0.004, 0.006, d, ink, out + 0.001, cy - h / 2 + 0.003, cz);
+    k.box(0.004, h, 0.006, ink, out + 0.001, cy, cz - d / 2 + 0.003);
+    // WIKI：每個字 [寬, 筆畫]，筆畫是字裡的 [橫, 高] 0–1；橫往上讀（+y），字的上方朝前（+z），從外面看才是正的
+    const S = 0.038, GLYPH = { W: [0.75, [[[0, 1], [0.19, 0], [0.375, 0.62], [0.56, 0], [0.75, 1]]]], I: [0.12, [[[0.06, 0], [0.06, 1]]]],
+      K: [0.55, [[[0, 0], [0, 1]], [[0.55, 1], [0, 0.42]], [[0.17, 0.58], [0.55, 0]]]] };
+    const word = 'WIKI', gap = 0.32, len = [...word].reduce((n, c) => n + GLYPH[c][0] + gap, -gap) * S;
+    let y0 = cy - len / 2;
+    const z0 = cz - d / 2 + 0.035;
+    for (const c of word) {
+      const [w, strokes] = GLYPH[c];
+      for (const line of strokes) for (let j = 0; j + 1 < line.length; j++) {
+        const [a, b] = [line[j], line[j + 1]];
+        rod(k, [out + 0.003, y0 + a[0] * S, z0 + a[1] * S], [out + 0.003, y0 + b[0] * S, z0 + b[1] * S], 0.002, ink, { flat: 0.006 });
+      }
+      y0 += (w + gap) * S;
+    }
+  });
+}
+
 // ---------- 武士刀 ----------
 // 裝飾的武士刀，照使用者另一個遊戲的斗笠浪人（F:\遊戲專案 ronin_model.gd）：插在左腰，刀柄朝前、鞘尾往左後方伸出去，
 // 背影看得到一截像尾巴。不拔。左手（armR）扣在刀柄上，手臂擺成 KATANA_ARM（character.js 套），刀照那隻手擺。
@@ -1028,6 +1155,7 @@ export const ITEMS = {
   wand: { pose: 'hold', kind: 'long', swing: 0.15 },
   root: { pose: 'hang', kind: 'long', swing: 0.35, sit: true, ground: true },
   dawn: { pose: 'hold', kind: 'long', swing: 0.2 },   // 還沒升起的太陽（演唱會台底下升降台上拿的）
+  pistol: { pose: 'hang', kind: 'long', swing: 0.12 },   // BLUEDOT 的手槍（插畫裡垂在右手）：只是打扮，槍口朝下
 };
 const NO_ITEM = {};
 export const itemOf = (id) => ITEMS[id] || NO_ITEM;
@@ -1095,6 +1223,22 @@ export function handGeo(L, reach = 0) {
         rod(k, [0, 0, 0], [0, 0.5 + y, 0.3 + z], 0.01, BLACK);
         k.box(0.07, 0.13, 0.012, BLACK, 0, 0.56 + y, 0.34 + z, { rx: 0.5 });
         k.box(0.06, 0.11, 0.004, '#5a7ab8', 0, 0.56 + y, 0.334 + z, { rx: 0.5 });
+        break;
+      }
+      case 'pistol': {
+        // BLUEDOT 的左輪：垂著拿、槍口朝下（東西一直保持直立，所以直接朝下做）。握把往後藏在手套裡，前面是轉輪、長槍管、槍管底下一條護木；
+        // 白的，細節照插畫的深紫線。大小照插畫：跟前臂差不多長
+        const body = BD.panel, ink = BD.ink;
+        k.box(0.038, 0.05, 0.11, BD.seam, 0, 0.01, -0.035, { rx: -0.3 });
+        k.box(0.04, 0.07, 0.045, body, 0, -0.005, 0.05);
+        k.cyl(0.036, 0.036, 0.065, body, 0, -0.06, 0.058, {}, 8);
+        for (const y of [-0.026, -0.094]) k.cyl(0.037, 0.037, 0.006, ink, 0, y, 0.058, {}, 8);
+        k.cyl(0.018, 0.02, 0.2, body, 0, -0.19, 0.062, {}, 8);
+        k.box(0.02, 0.17, 0.02, body, 0, -0.18, 0.084);
+        k.box(0.004, 0.17, 0.021, ink, 0.0105, -0.18, 0.084);
+        k.cyl(0.021, 0.021, 0.014, ink, 0, -0.295, 0.062, {}, 8);
+        k.box(0.008, 0.02, 0.012, ink, 0, -0.282, 0.096);
+        k.torus(0.026, 0.006, Math.PI, ink, 0, -0.03, 0.012, { ry: Math.PI / 2, rx: Math.PI });
         break;
       }
       case 'spatula':

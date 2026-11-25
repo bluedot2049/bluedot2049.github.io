@@ -20,6 +20,7 @@ import { CellarVoice } from './cellar-voice.js';
 import { Hollow } from './hollow.js';
 import { Garden } from './garden.js';
 import { GardenCard } from './garden-card.js';
+import { Tableaux } from './tableaux.js';
 
 // 背景音樂「星盤夜讀」（study.js，現場合成）：走進「歡迎光臨煉金畫廊」那間才開始放，往後的房間和戶外一路放著。
 // 那間一進門就是落地擺鐘，滴答聲從那裡來
@@ -60,7 +61,7 @@ export const beast = {
     { x: 4, z: -34.4, place: '陽台', room: 3 },
     { x: -10.5, z: -49, place: '原野', room: 3 },   // 原本 (-6, -47)，2026-11-09 那裡放了畫架
     { x: 9, z: -56.5, place: '原野', room: 3 },
-    { x: -11, z: -58, place: '原野', room: 3 },
+    { x: -15.5, z: -49.5, place: '原野', room: 3 },   // 原本 (-11, -58)，2026-11-25 那裡放了撿穗的畫家（tableaux.js）
     { x: 1, z: -50, place: '大樹下', room: 3 },
     { x: -27, z: -38, place: '山坡小徑', room: 3 },
     { x: -35.5, z: -57, place: '涼亭', room: 3 },
@@ -128,6 +129,7 @@ export function acts(ctx) {
 // hollow：大樹的樹洞（hollow.js），互動鍵「聽樹洞」或點洞裡的光打開作者的話和接案卡，接下案子穿門光過去（ctx.gate）；也是演唱會的門（door）
 // camTable：前廳的相機桌（camtable.js），正在看的那一格浮起來；卡片擺哪裡是介面的事，留在 main.js（placeCams）
 // garden：樹下花園（garden-card.js），沒有花的人走近樹洞拿到種子，互動鍵「撿」「種」「照顧」「改」，種和改打開調花卡片
+// tableau：原野的名畫場面（tableaux.js），照星期幾演；畫布要用主畫面的 renderer 畫
 // tableHost：陽台長桌的主人（residents 建的 host），戶外那間看得到才動，看正在跟他說話的訪客；看不到時不說話
 export function fixtures(ctx) {
   const { world, ambience, player, camera, look, host, visitors } = ctx;
@@ -139,6 +141,7 @@ export function fixtures(ctx) {
     voice: world.cellar?.paintings.some((p) => p.data.talks) ? new CellarVoice({ world, player, camera }) : null,
     hollow: world.outdoor?.hollow ? new Hollow(ctx) : null,
     garden: world.garden ? new GardenCard(ctx) : null,
+    tableau: world.outdoor && ctx.renderer ? new Tableaux(ctx) : null,
     camTable: table ? {
       update(dt) {
         table.look(player.focus?.kind === 'cameras' ? player.focus.slot : -1);
