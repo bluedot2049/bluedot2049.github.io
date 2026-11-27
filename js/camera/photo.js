@@ -2342,6 +2342,8 @@ export class PhotoMode {
     if (!dry && this.gear?.instant && !this.postcard && filmLeft() <= 0) return this.empty();   // 明信片是信差站印的，不用片盒
     const lampFire = !dry && this.lampFires(), fire = (!dry && this.fires()) || lampFire, wasLong = dof.long;
     const lit = fire || (!dry && !!this.studio?.light);   // 照相館拍下去那一張有燈
+    // 按下快門（區域聽得到：洞裡的怪物被閃光照到、聽到快門，dongku-watch.js）
+    if (!dry && !this.postcard && !this.studio) dispatchEvent(new CustomEvent('photoshot', { detail: { flash: fire, at: this.pos.clone() } }));
     // 拍到白獸了沒：趁鏡頭和畫布還是平常的樣子先算（下面畫大圖時都會換掉）
     const rare = dry || this.postcard ? null : this.rareShot(fire);
     // 快門聲在畫大圖之前就發：手機畫一張要卡一下，放在後面會比按下去晚。燭火乙式閃光的聲音在 fired()，浮游燈的啪跟快門一起在這裡

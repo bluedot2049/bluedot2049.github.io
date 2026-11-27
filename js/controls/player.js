@@ -210,6 +210,7 @@ export class Player {
     this.raycaster.layers.enable(1);   // 動物在圖層 1
     this.animals = null;            // 主程式建好動物後填進來
     this.blockers = [];             // 其他會擋路的人 (x, z, ox, oz) → 擋不擋（只擋往他身上靠近的那一步），例如序章的發膏（prologue.js）
+    this.jumpAs = null;             // 區域把「跳」換成別的：{ seal: 印章上的字, label, on, act() }（洞裡有燈時是點燈，zones/dongku/dongku-lamp.js）；手機那顆印章跟著換字（main.js）
     this.actionables = [];          // 別的模組掛上來的互動：(x, z) => { kind, p, d } 或 null，按了呼叫 p.act()（黑眼的「跟著」，scene/guide.js）
     this.marker = this.makeMarker();
     this.markerT = 1;
@@ -403,7 +404,7 @@ export class Player {
       }
       if (is(e, 'jump')) {
         e.preventDefault();
-        this.jump();
+        if (!(e.repeat && this.jumpAs)) this.jump();     // 換成開關（洞裡的燈）的時候，按住不放不會一直開關
         return;
       }
       if (is(e, 'sit')) {
@@ -967,6 +968,7 @@ export class Player {
   // 傳給別人的坐姿：0 沒坐、-1 坐在地上、-2 躺著、-3 坐在邊上垂腳、i + 1 坐在第 i 個座位
   get sitCode() {
     if (this.focus?.kind === 'seat') return this.focus.seat + 1;
+    if (this.focus?.kind === 'carried') return this.focus.lie ? -2 : 0;   // 被搬著（黑森林洞裡）：躺著被抬的別人那邊也畫成躺著
     if (this.focus?.kind !== 'ground') return 0;
     return this.focus.lying ? -2 : this.focus.edge ? -3 : -1;
   }
@@ -1042,7 +1044,19 @@ export class Player {
   // 上船：從碼頭跳進繫在旁邊的渡船（harbor.js 的 makeSkiff），坐在艙底面向船頭。
   // 跳的途中和坐好以後都不理會移動、點地面，接著就要換頁渡海了。坐好時呼叫 onSeated
   get boarding() {
-    return this.focus?.kind === 'board';
+    return this.focus?.kind === 'board' || this.focus?.kind === 'carried';
+  }
+
+  // 被別的東西抱著走（洞裡被怪物扛走，dongku-watch.js）：跟上船一樣不理會移動、點地面、互動鍵，
+  // 位置和高度每幀交給 step(dt, player, focus)（在這一幀的移動之後、擺角色之前），focus.n 是要面向的反方向；putDown() 放下
+  carry(step) {
+    this.exitFocus();
+    this.stop();
+    this.focus = { kind: 'carried', step, n: { x: -Math.sin(this.heading), z: -Math.cos(this.heading) } };
+  }
+
+  putDown() {
+    if (this.focus?.kind === 'carried') this.focus = null;
   }
 
   board(boat, onSeated) {
@@ -1196,6 +1210,7 @@ export class Player {
 
   jump() {
     if (this.boarding) return;
+    if (this.jumpAs) { this.jumpAs.act(); this.events.onInput('key'); return; }
     if (this.sitting) this.exitFocus();
     if (this.character.sitP > 0) return;   // 還在站起來的途中
     if (!this.character.jump()) return;
@@ -1757,7 +1772,8 @@ export class Player {
         ch.sitting = true;
       }
     }
-    if (this.boarding) this.updateBoard(dt);
+    if (this.focus?.kind === 'carried') this.focus.step(dt, this, this.focus);
+    else if (this.boarding) this.updateBoard(dt);
     else this.pos.y = w.groundY(this.pos.x, this.pos.z, this.pos.y);
     // 鏡頭跟的高度（越肩、手持相機用）：攝影模式裡也要跟，所以不放在下面的鏡頭那段
     if (Math.abs(this.pos.y - this.sh.y) > SH_STEP_SNAP) { this.sh.y = this.pos.y; this.shVel.y = 0; }

@@ -77,6 +77,7 @@ const ZONES = {
   gorge: { load: () => import('./zones/gorge/zone-gorge.js') },   // 深谷：演唱會的第二個場地，灰模型（places.js 的 dev）   // 演唱會：從畫廊的樹洞進去，不搭船（places.js 的 boat: false）
   dixia: { load: () => import('./zones/dixia/zone-dixia.js') },   // 地下室：靜海後台底下的龐克小場地，灰模型；先從樹洞的接案卡進去（places.js 的 boat: false），之後從靜海後台的門下來
   duel: { load: () => import('./zones/duel/zone-duel.js') },   // 對影：拍照對戰的專用場地，灰模型（places.js 的 dev）
+  dongku: { load: () => import('./zones/dongku/zone-dongku.js') },   // 洞窟：洞裡改走怪物生態的地形灰模型（只留本機，跟 duel 一樣）
   gucheng: { load: () => import('./zones/gucheng/zone-gucheng.js') },   // 古城（暫名）：獵魔教座堂，開了但還在蓋（places.js 的 wip）
 };
 // 渡船能去的地方在 scene/places.js，每個渡口都照那個順序一張一張卡
@@ -766,7 +767,8 @@ async function start() {
     });
   }
   bindJoystick(document.getElementById('joy'), document.getElementById('joy-knob'), (x, y) => (photo.active ? photo.setJoystick(x, y) : player.setJoystick(x, y)));
-  document.getElementById('jump-btn').addEventListener('pointerdown', (e) => { e.preventDefault(); player.jump(); });
+  const jumpBtn = document.getElementById('jump-btn');
+  jumpBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); player.jump(); });
   const sitBtn = document.getElementById('sit-btn');
   sitBtn.addEventListener('click', () => player.toggleSit());
   const actionBtn = document.getElementById('action-btn');
@@ -804,6 +806,10 @@ async function start() {
     const key = t ? (t.kind === 'exit' ? `${t.p.title}:${t.p.label}` : t.kind === 'lens' ? `lens:${t.p.id}:${t.on}` : t.kind === 'follow' ? `follow:${t.p.id}:${t.p.title}` : t.kind === 'painting' || t.kind === 'pet' || t.kind === 'talk' ? t.p : t.kind) : null;
     // 「坐」印章：站著是坐、坐在地上是躺（再按一次躺下）、躺著或坐座位和邊上是起
     const code = player.sitCode, sitting = code !== 0, seal = code === -1 ? '躺' : sitting ? '起' : '坐';
+    // 「跳」印章：區域把跳換成別的（洞裡有燈是「燈」，點著亮金）就換字
+    const jumpSeal = player.jumpAs?.seal ?? '跳';
+    if (jumpSeal !== jumpBtn.textContent) { jumpBtn.textContent = jumpSeal; jumpBtn.setAttribute('aria-label', player.jumpAs?.label ?? '跳躍'); }
+    jumpBtn.classList.toggle('on', !!player.jumpAs?.on);
     if (seal !== sitBtn.textContent) {
       document.body.classList.toggle('sitting', sitting);
       sitBtn.textContent = seal;
@@ -1254,7 +1260,8 @@ async function start() {
   // 畫廊：問號立牌的教學（走近說下一步，互動鍵「問」，泡泡底下那行小字照現在的操作方式寫鍵，所以給 keyOf）、收音機、畫架、地下室會說話的畫
   const PAD_OF = { interact: -1, raise: 6, pack: 8, eye: 5, party: 14 };
   fixtures = Object.entries(Z.fixtures?.({
-    world, player, camera, renderer, ambience, params, manatee, host, visitors, ui, gate, look: () => look, back: params.has('from'), openEnv: () => ui.guide(),
+    world, player, camera, renderer, ambience, params, manatee, host, visitors, ui, gate, photo, look: () => look,
+    isMate: (id) => !!party && [...party.mates.values()].some((o) => o.s === id), back: params.has('from'), openEnv: () => ui.guide(),
     keyOf: (id) => { const k = inputKind(); return k === 'pad' ? padBtn(PAD_OF[id]) : k === 'touch' ? '' : key(id); },
   }) ?? {}).filter(([, f]) => f);
   for (const [, f] of fixtures) if (f.target) player.actionables.push((x, z) => f.target(x, z));
@@ -1505,6 +1512,8 @@ async function start() {
     .add('world', 'camsCard', () => { if (world.camTable && ui.panel === ui.cams && !ui.docked && player.focus?.kind === 'cameras') placeCams(); })
     .add('world', 'ferryCard', () => { if (ui.panel === ui.ferry && !ui.docked && ferryBoat) placeFerry(); })
     .add('people', 'mp', (dt) => { othersMoving = mp ? mp.update(dt, performance.now()) : false; }, () => othersMoving)
+    // 區域裝置要蓋過別人角色擺法的（fixtures 的 late：黑森林洞裡被搬走的人抬高）
+    .add('people', 'fixturesLate', (dt) => { for (const [, f] of fixtures) f.late?.(dt); })
     .add('people', 'mirrorFade', (dt) => { fading = updateMirrorFade(dt); }, () => fading)
     .add('people', 'party', (dt) => party?.update(dt))
     // 手上的燈籠、蠟燭照在腳邊（海市，haze.js 的 handLamps）：自己和在場的人
@@ -1625,7 +1634,16 @@ async function start() {
       crashed = true;
     }
   });
+  // 區域的裝置把整個畫面蓋住了（地下室的機台開著胖頭打架，fixtures 的 covers）：不畫，主迴圈四幀跑一次（多人位置照送、別人照走），時間照算
+  let coveredDt = 0;
   function tick() {
+    if (fixtures.some(([, f]) => f.covers)) {
+      coveredDt += Math.min(clock.getDelta(), 0.05);
+      if (++frame % 4) return;
+      loop.run(Math.min(coveredDt, 0.1));
+      coveredDt = 0;
+      return;
+    }
     hitches?.begin();
     const dt = Math.min(clock.getDelta(), 0.05);
     loop.run(dt);

@@ -9,6 +9,7 @@ import * as TX from '../../core/textures.js';
 import { Kit, PROPS, newBucket, rng } from '../../core/props.js';
 import { bucketObjects, tag } from '../../core/scenery.js';
 import { mergeGeometries } from '../../../vendor/BufferGeometryUtils.js';
+import { buildArcade, BLOCKERS, STATIONS } from './arcade-cabinet.js';
 import { buildCellarBot, BOT_R } from './cellar-bot.js';
 import { BOARD_FOOT, BOARD_W, buildNoticeBoard } from './noticeboard.js';
 import { DOOR_H, DOOR_W, MARGIN, PAINT_SCALE, STUB_H, WALL_H, flatWall, makeEntry, setUV, shared, stubAndCap, wallBox } from './world-rooms.js';
@@ -426,6 +427,19 @@ export function buildCellar(data, doorX, front) {
     low.add(stand);
     for (const t of [-0.35, 0, 0.35]) clutter.push({ x: x0 + 0.3, z: bzc + t * BOARD_W, r: 0.2 });
   }
+  // 雙人機台（arcade-cabinet.js，胖頭打架）：畫具那面牆（+x）靠裡，背貼牆、面朝方廳。按了「玩」交給 arcade.js
+  const arcade = (() => {
+    const ax = x1 - 0.42, az = z0 + 8.4, rot = -Math.PI / 2, c = Math.cos(rot), s = Math.sin(rot);
+    const at = (lx, lz) => ({ x: ax + lx * c + lz * s, z: az - lx * s + lz * c });
+    const a = buildArcade(rng('cellar-arcade')), b = newBucket();
+    a.kit.emit(b, ax, az, rot);
+    for (const o of bucketObjects(b)) low.add(o);
+    a.group.position.set(ax, 0, az);
+    a.group.rotation.y = rot;
+    low.add(a.group);
+    for (const k of BLOCKERS) clutter.push({ ...at(k.x, k.z), r: k.r });
+    return { ...a, x: ax, z: az, stations: STATIONS.map((st) => at(st.x, st.z)) };
+  })();
   const blocked = (x, z) => clutter.some((c) => Math.hypot(x - c.x, z - c.z) < c.r + MARGIN);
 
   // 0 到 1：地下室要看得到幾成。踏進門口一公尺內開始淡進來，下了樓梯就全亮
@@ -438,7 +452,7 @@ export function buildCellar(data, doorX, front) {
   const down = (z) => Math.min(1, Math.max(0, (z - RUN * 0.3) / (RUN * 0.5)));
 
   return {
-    group, porch, entries, paintings, meshes, x0, x1, z0, z1, door: { x: doorX, z: 0 },
+    group, porch, entries, paintings, meshes, arcade, x0, x1, z0, z1, door: { x: doorX, z: 0 },
     place: data.name ? { name: data.name, subtitle: data.subtitle } : null,
     want, down, ground,
     covers: (x, z) => z > 0 && z < z1 && x > x0 && x < x1,
@@ -453,6 +467,8 @@ export function buildCellar(data, doorX, front) {
     update(nearDoor, inFront) {
       if (nearDoor && data.thumbs && !thumbs && !loading) loadThumbs();
       if (!inFront && (thumbs || loading)) releaseThumbs();
+      if (nearDoor) arcade.load();
+      if (!inFront) arcade.release();
     },
   };
 }

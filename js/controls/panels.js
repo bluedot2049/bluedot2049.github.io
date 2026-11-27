@@ -29,6 +29,7 @@ const PANELS = [
   ['#easel.show', 'pad'],
   ['#garden.show', 'pad'],
   ['#lot.show', 'pad'],
+  ['#arcade.show', 'pad kao esc'],
   ['#vol.open', 'pad cursor'],
   ['#eye-card.open', 'pad cursor card'],
   ['#cams.open', 'pad cursor card'],

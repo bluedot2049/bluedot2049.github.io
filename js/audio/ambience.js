@@ -77,7 +77,8 @@ export class Ambience {
   }
 
   // 分頁看不到、而且不在背景播：叫聲、腳步都不用排了
-  get gone() { return document.hidden && !this.background; }
+  // covered：區域的裝置把整個畫面蓋住了（地下室的機台），跟切走一樣不排聲音、整個收掉
+  get gone() { return this.covered || (document.hidden && !this.background); }
   // 全部或音效推到底、靜音、切走：短聲音不用排了
   get hush() { return this.muted || this.gone || !(this.vols.vol > 0) || !(this.vols.fx > 0); }
 
@@ -495,6 +496,12 @@ export class Ambience {
     this.apply();
   }
 
+  setCovered(v) {
+    if (v === !!this.covered) return;
+    this.covered = v;
+    this.apply();
+  }
+
   setMuted(m) {
     this.muted = m;
     setPref('muted', m);
@@ -520,7 +527,7 @@ export class Ambience {
     const live = v > 0 || ((this.murmurGain || this.beds.some((b) => b.on)) && !fxOff) || (this.bgm && !musicOff);
     if (live && ctx.state !== 'running') ctx.resume().catch(() => {});
     const t = ctx.currentTime;
-    this.total.gain.setTargetAtTime(ear(vol), t, 0.05);
+    this.total.gain.setTargetAtTime(this.covered ? 0 : ear(vol), t, 0.05);
     this.fxBus.gain.setTargetAtTime(ear(fx), t, 0.05);
     this.musicBus.gain.setTargetAtTime(ear(music), t, 0.05);
     this.master.gain.setTargetAtTime(v, t, 0.4);

@@ -23,6 +23,8 @@ import { buildStory, tieRibbons } from './heilin-story.js';
 const EARTH = '#5b4b3c', NEEDLE = '#1d2b25', NEEDLE2 = '#355042', BARK = '#3b2f29';
 const WOOD = '#6a5340', CARVED = '#7d654b', WATER = '#1c2a2f';
 const FIRE_I = 9;   // 營火點光多亮（每幀照這個抖）
+// 洞裡換成怪物生態版（js/zones/dongku，2026-11-26 起只留本機）：在自己電腦上開才接新洞、營火三人才換新台詞；新洞窟上線那天改成 true
+export const CAVE_ECO = typeof location !== 'undefined' && ['localhost', '127.0.0.1'].includes(location.hostname);
 const SLICK = '#58723f', RIDGE = ['#25332f', '#33433f', '#46565a'];
 
 // 樹不擋視線（2026-11-13）：鏡頭到角色那條線穿過哪棵樹，那棵就淡成網點（跟 fade.js 一樣丟像素、不用半透明）。
@@ -201,7 +203,9 @@ export function buildHeilin(scene, { coarse = false } = {}) {
   const C = P.clearing, bucket = newBucket();
   const cave = buildCave({ P, T, group, bucket, obstacles });
   // 洞口以裡走到底：往下到洞裡那一區（?z=dong），帶這一趟的種子（每一趟全新，房間、敵人照它抽）
-  exits.push({ x: cave.inside.x, z: cave.inside.z, r: 1.3, to: 'dong', gate: true, title: '洞裡', label: '往下', extra: () => ({ seed: String((Math.random() * 2 ** 31) | 0) }) });
+  // 新洞（CAVE_ECO）不帶種子：同一個洞照伺服器時間跑
+  exits.push(CAVE_ECO ? { x: cave.inside.x, z: cave.inside.z, r: 1.3, to: 'dongku', gate: true, title: '洞裡', label: '往下' }
+    : { x: cave.inside.x, z: cave.inside.z, r: 1.3, to: 'dong', gate: true, title: '洞裡', label: '往下', extra: () => ({ seed: String((Math.random() * 2 ** 31) | 0) }) });
   const home = buildHomeCircle({ x: C.x - 3.6, y: C.y, z: C.z - 0.6, R: rng('heilin:reditus'), obstacles, exits });
   group.add(home.group);
 

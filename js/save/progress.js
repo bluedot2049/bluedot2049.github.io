@@ -65,6 +65,16 @@ export const FIELDS = [
   { key: 'refill', init: () => '', read: (v) => (typeof v === 'string' && /^\d{4}-\d\d-\d\d$/.test(v) ? v : '') },
   // 星廟香油錢（haishi-acts.js 的 offer）上次投的台灣日期 'YYYY-MM-DD'，一天一次。跟著人走、不進存檔碼
   { key: 'offered', init: () => '', read: (v) => (typeof v === 'string' && /^\d{4}-\d\d-\d\d$/.test(v) ? v : '') },
+  // 黑森林營火三人收的洞裡照片（zones/dongku/dongku-jobs.js）：n 收了幾張（換道具的階梯）、done 交過的長期空格 id、day 今天的那題交在哪一天（洞的日子）、fear 給他們看過幾張幕後。
+  // 他們自己進洞被搬出來（dongku-raid.js）：raid 演完幾次、go 哪一天出發了（還沒演完；過了那天作廢）、ask 哪一天問過要不要跟、shot 被搬的照片交過了沒。
+  // 洞窟上線前只在本機用，還沒印進照片；上線時補 wire（ids.js 開一種新的編號給 done）
+  { key: 'cave', init: () => ({ n: 0, done: [], day: -1, fear: 0, raid: 0, go: -1, ask: -1, shot: 0 }),
+    read: (v) => {
+      const int = (x, lo, hi, d) => (Number.isInteger(x) && x >= lo && x <= hi ? x : d);
+      return { n: int(v?.n, 0, 999, 0), done: Array.isArray(v?.done) ? [...new Set(v.done.filter((x) => typeof x === 'string' && /^[a-z-]{1,16}$/.test(x)))] : [],
+        day: Number.isInteger(v?.day) ? v.day : -1, fear: Number.isInteger(v?.fear) && v.fear >= 0 ? Math.min(v.fear, 999) : 0,
+        raid: int(v?.raid, 0, 999, 0), go: Number.isInteger(v?.go) ? v.go : -1, ask: Number.isInteger(v?.ask) ? v.ask : -1, shot: v?.shot ? 1 : 0 };
+    } },
   // 星廟今天抽的籤（haishi-lots.js）：d 台灣日期、n 第幾籤（haishi-lot-lines.js 的 LOTS，從 1 數）、k 下面幾項抽句子的種子、s 放進水鏡了沒有。
   // 一天一支、子夜重來；跟著人走、不進存檔碼
   { key: 'lot', init: () => null, read: (v) => (v && typeof v === 'object' && typeof v.d === 'string' && /^\d{4}-\d\d-\d\d$/.test(v.d) && Number.isInteger(v.n) && v.n > 0 && v.n < 1000 && Number.isInteger(v.k) ? { d: v.d, n: v.n, k: v.k, s: v.s ? 1 : 0 } : null) },

@@ -18,6 +18,7 @@ import { Ask } from './ask.js';
 import { buildPrologue } from './prologue.js';
 import { CellarVoice } from './cellar-voice.js';
 import { Hollow } from './hollow.js';
+import { Arcade } from './arcade.js';
 import { Garden } from './garden.js';
 import { GardenCard } from './garden-card.js';
 import { Tableaux } from './tableaux.js';
@@ -48,6 +49,11 @@ export function build(scene, { gallery, coarse, quality }) {
   if (site) {
     world.garden = new Garden({ site, parent: world.rooms[world.rooms.length - 1].group, realtime: gallery.realtime });
     world.shared = { ...world.shared, garden: world.garden };
+  }
+  // 地下室的機台：誰站在哪一邊、房間碼走 world.shared 的 arcade。fixtures 才建 Arcade（要 player），這裡先開一個轉接（on 由 arcade.js 接）
+  if (world.cellar?.arcade) {
+    const link = { send: null, on: null, receive: (m) => link.on?.(m) };
+    world.shared = { ...world.shared, arcade: link };
   }
   return world;
 }
@@ -130,6 +136,7 @@ export function acts(ctx) {
 // camTable：前廳的相機桌（camtable.js），正在看的那一格浮起來；卡片擺哪裡是介面的事，留在 main.js（placeCams）
 // garden：樹下花園（garden-card.js），沒有花的人走近樹洞拿到種子，互動鍵「撿」「種」「照顧」「改」，種和改打開調花卡片
 // tableau：原野的名畫場面（tableaux.js），照星期幾演；畫布要用主畫面的 renderer 畫
+// arcade：地下室的雙人機台（arcade.js），站到 1P、2P 前互動鍵「玩」（另一邊有人開著房間是「對打」），整個畫面蓋上胖頭打架
 // tableHost：陽台長桌的主人（residents 建的 host），戶外那間看得到才動，看正在跟他說話的訪客；看不到時不說話
 export function fixtures(ctx) {
   const { world, ambience, player, camera, look, host, visitors } = ctx;
@@ -142,6 +149,7 @@ export function fixtures(ctx) {
     hollow: world.outdoor?.hollow ? new Hollow(ctx) : null,
     garden: world.garden ? new GardenCard(ctx) : null,
     tableau: world.outdoor && ctx.renderer ? new Tableaux(ctx) : null,
+    arcade: world.cellar?.arcade ? new Arcade(ctx) : null,
     camTable: table ? {
       update(dt) {
         table.look(player.focus?.kind === 'cameras' ? player.focus.slot : -1);

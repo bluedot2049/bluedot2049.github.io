@@ -58,6 +58,8 @@ const L = {
       [btn(k, 'jump', 3), '跳躍'], [btn(k, 'sit', 2), '坐下'], c.art() && [btn(k, 'interact', -1), '觀看畫作'])) },
   // ── 有事的時候 ──
   stand: { acts: [], ms: 4000, demo: 'walk', on: '#joy', text: (k, c) => say([how(k, c), '起身']) },
+  // 洞裡拿到燈以後，跳的那一下改成點燈（zones/dongku/dongku-lamp.js 的 player.jumpAs；手機那顆印章換成「燈」）
+  lamp: { acts: [], ms: 5000, btn: '#jump-btn', text: (k) => say([k === 'touch' ? '點擊發光按鈕' : btn(k, 'jump', 3), '點燈']) },
   // 觸控和滑鼠都是拖曳，記同一個；手把是右搖桿，另外記
   mirror: { acts: [], ms: 3500, demo: 'look', id: (k) => (k === 'pad' ? 'mirror-turn-pad' : 'mirror-turn'), text: (k) => say([k === 'pad' ? '右搖桿' : '拖曳', '轉身']) },
   camSwipe: { acts: [], ms: 3500, id: () => 'cam-swipe', text: (k) => (k === 'touch' ? say(['左右滑動', '切換相機']) : null) },

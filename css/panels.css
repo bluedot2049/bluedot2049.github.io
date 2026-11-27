@@ -897,3 +897,15 @@ body.flat #list-close, body.flat #top-btns { display: none; }
 @media (prefers-reduced-motion: reduce) { #lot.show, #lot .lot-paper.fresh, #lot .lot-stones.threw i { animation: none; } }
 /* 手機橫拿：矮，籤紙可以捲 */
 @media (max-height: 520px) { #lot { top: 50%; max-height: calc(100% - 24px); } #lot .lot-card { max-height: calc(100vh - 24px); } #lot .lot-poem { font-size: 16px; } #lot .lot-map { width: 96px; height: 96px; } }
+
+/* 地下室的機台（arcade.js）：整個畫面蓋上胖頭打架。全畫面那一層（介面原則第六節 40–46）。讀好之前中間一行字、左上角「離開」 */
+#arcade { display: none; position: fixed; inset: 0; z-index: 45; background: #0a0606; }
+#arcade.show { display: block; }
+/* iframe 疊在字上面：胖頭打架的讀取卡一畫出來就蓋過「機台開機中」 */
+#arcade iframe { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; border: 0; background: transparent; color-scheme: normal; }
+#arcade .note, #arcade .leave { display: none; }
+#arcade.boot .note, #arcade.fail .note { display: block; position: absolute; left: 0; right: 0; top: 50%; margin: 0; transform: translateY(-50%); text-align: center;
+  font: 16px/1.6 var(--font); letter-spacing: .3em; color: var(--muted); pointer-events: none; }
+#arcade.fail iframe { display: none; }
+#arcade.boot .leave, #arcade.fail .leave { display: block; position: absolute; z-index: 2; left: max(14px, env(safe-area-inset-left)); top: max(14px, env(safe-area-inset-top));
+  height: 36px; padding: 0 18px; border: 1px solid var(--line); border-radius: 18px; background: var(--panel-soft); color: var(--text); font: 14px/1 var(--font); letter-spacing: .2em; }

@@ -398,6 +398,8 @@ export function bindGamepad({ player, photo, ui, desk, party, cues, ambience, en
   }
 
   function poll(dt) {
+    // 焦點在嵌進來的頁面裡（地下室機台的胖頭打架，arcade.js）：手把是那一頁的，畫廊不讀
+    if (document.activeElement?.tagName === 'IFRAME') return;
     let list = [];
     try { list = navigator.getGamepads?.() ?? []; } catch {}
     const now = performance.now();

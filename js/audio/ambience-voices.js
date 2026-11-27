@@ -724,6 +724,70 @@ export const VOICES = {
     air(ctx, out, noise, t, [[0, 240 * p], [0.8, 90 * p]], 0.01, 1, 0.35);
     return 1.1;
   },
+  // 洞裡的舊銅鐘：木槌敲一下，鐘的幾個不成和聲的泛音（低嗡、本音、小三度、五度、八度）一起響、慢慢散進洞裡
+  cavebell(ctx, out, t, p, noise) {
+    knock(ctx, out, noise, t, 900 * p, 0.25);
+    for (const [r, g, d] of [[0.5, 0.5, 4.5], [1, 0.45, 3.5], [1.19, 0.3, 2.6], [1.5, 0.18, 2], [2, 0.22, 1.6], [2.74, 0.08, 0.9]]) {
+      ring(ctx, out, t, 220 * p * r, g * 0.32, d);
+      ring(ctx, out, t, 220 * p * r * 1.003, g * 0.2, d * 0.9);    // 鐘不正圓，兩個音差一點點，聽起來在晃
+    }
+    return 4.5;
+  },
+  // 洞裡冒光的火把（dongku-tools.js 的放光）：一擦、嘶一聲燒起來，後面細碎的劈啪
+  flare(ctx, out, t, p, noise) {
+    hiss(ctx, out, noise, t, 0.12, 'bandpass', 1800 * p, 0.3, 1.2);
+    hiss(ctx, out, noise, t + 0.08, 1.8, 'highpass', 3400 * p, 0.2, 0.7);
+    for (let i = 0; i < 7; i++) hiss(ctx, out, noise, t + 0.3 + i * 0.19 + Math.random() * 0.08, 0.03, 'bandpass', (2600 + Math.random() * 2400) * p, 0.16, 3);
+    return 2;
+  },
+  // 洞裡牠們敲你的頭盔（dongku-gear.js）：指節敲在凹過的鐵上，悶、不太響，兩下
+  helmknock(ctx, out, t, p, noise) {
+    for (const d of [0, 0.22]) { knock(ctx, out, noise, t + d, 520 * p, 0.3); metal(ctx, out, t + d, 310 * p, 0.05, 0.25); }
+    return 0.6;
+  },
+  // 倒著走的懷錶（dongku-gear.js）：先尾音再起音的一聲滴答，像倒帶
+  backtick(ctx, out, t, p, noise) {
+    metal(ctx, out, t, 2400 * p * 0.62, 0.02, 0.05);
+    tick(ctx, out, noise, t + 0.045, 2400 * p, 0.12);
+    return 0.1;
+  },
+  // 綁繩子（dongku-tools.js）：麻繩繞過石頭拉緊
+  ropetie(ctx, out, t, p, noise) {
+    rub(ctx, out, noise, t, 900 * p, 500 * p, 0.05, 0.35, 0.18, { type: 'bandpass', Q: 1.2 });
+    rub(ctx, out, noise, t + 0.4, 1200 * p, 700 * p, 0.02, 0.2, 0.22, { type: 'bandpass', Q: 1.5 });
+    return 0.7;
+  },
+  // 柱子倒下來（dongku-tools.js）：石頭磨一下、倒地一聲重的、碎石滾
+  pillarfall(ctx, out, t, p, noise) {
+    rub(ctx, out, noise, t, 300 * p, 160 * p, 0.2, 0.9, 0.25);
+    sub(ctx, out, t + 0.95, 40 * p, 0.01, 1.6, 0.8);
+    air(ctx, out, noise, t + 0.95, [[0, 600 * p], [1.2, 120 * p]], 0.01, 1.3, 0.45);
+    for (let i = 0; i < 6; i++) knock(ctx, out, noise, t + 1.1 + i * 0.13 + Math.random() * 0.1, (400 + Math.random() * 500) * p, 0.12);
+    return 2.6;
+  },
+  // 洞裡背後暗處壓低的一句人話（dongku-watch.js）：只聽得到幾個很輕的氣音
+  hush(ctx, out, t, p, noise) {
+    [0, 0.15, 0.29, 0.5, 0.64, 0.8].forEach((d, i) => hiss(ctx, out, noise, t + d, 0.08 + (i % 2) * 0.05, 'bandpass', (2500 + (i % 3) * 450) * p, 0.14, 2.4));
+    return 1;
+  },
+  // 洞裡怪物自己的話（dongku-talk.js）：幾個音節嘰哩咕嚕，pitch 分族（哥布林高、戰團低一點、巨魔食人魔很低）
+  gibber(ctx, out, t, p) {
+    const n = 2 + Math.floor(Math.random() * 4);
+    let s = t;
+    for (let i = 0; i < n; i++) {
+      const d = 0.06 + Math.random() * 0.09, f = (170 + Math.random() * 150) * p;
+      osc(ctx, 'sawtooth', s, d, [[0, f], [d * 0.45, f * (1.1 + Math.random() * 0.3)], [d, f * 0.85]])
+        .connect(biquad(ctx, 'bandpass', (700 + Math.random() * 600) * Math.sqrt(p), 2.2)).connect(envelope(ctx, s, 0.012, d, 0.4)).connect(out);
+      s += d + 0.025 + Math.random() * 0.06;
+    }
+    return s - t + 0.1;
+  },
+  // 骷髏說話：下巴喀喀喀
+  rattle(ctx, out, t, p, noise) {
+    const n = 4 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < n; i++) clack(ctx, out, noise, t + i * (0.045 + Math.random() * 0.03), (1500 + Math.random() * 500) * p, 0.3, 0.6, 1);
+    return 0.5;
+  },
   // 小馬達嗚一聲轉起來又停下，彈片喀一下（靜海的升降梯）
   whir(ctx, out, t, p, noise) {
     const o = osc(ctx, 'sawtooth', t, 0.3, [[0, 120 * p], [0.08, 230 * p], [0.3, 190 * p]]);
